@@ -1,0 +1,570 @@
+package net.hedinger.prototype.engine;
+
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_FLOOR;
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE;
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN;
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP;
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+
+import net.hedinger.prototype.engine.Tile.TileType;
+import net.hedinger.prototype.entities.Door;
+
+public class WorldGenerator {
+
+	private static final String ALPHABET = "_ABCDEFGHIKLMNOPQRSTUX1234567890";
+
+	private World world;
+	private int cols, rows, lvls;
+
+	public WorldGenerator(int x, int y, int z) {
+		cols = x;
+		rows = y;
+		lvls = z;
+
+		world = new World(cols, rows, lvls);
+	}
+
+	public WorldGenerator(World world) {
+		this.world = world;
+	}
+
+	public void run() {
+		for (int i = 0; i < lvls; i++) {
+			buildSectors(20, i);
+		}
+		cleanup();
+
+		for (int i = 1; i < lvls; i++) {
+			placeRampDown(3 + i * 2, 3, i);
+		}
+
+		build_doors();
+	}
+
+	public World getWorld() {
+		return world;
+	}
+
+	public void placeRampDown(int x, int y, int z) {
+		world.setTile(x, y, z, TYPE_RAMPDOWN);
+		world.setTile(x - 1, y, z, TYPE_HOLE);
+
+		world.setTile(x + 1, y - 1, z, TYPE_FLOOR);
+		world.setTile(x + 1, y + 1, z, TYPE_FLOOR);
+
+		world.setTile(x - 1, y, z - 1, TYPE_RAMPUP);
+		world.setTile(x, y, z - 1, TYPE_WALL);
+	}
+
+	public void buildSectors(int num, int z) {
+		HashMap<Integer, HashSet<Integer>> sectors = new HashMap<Integer, HashSet<Integer>>();
+
+		for (int i = 0; i < num; i++) {
+			HashSet<Integer> sector = new HashSet<Integer>();
+
+			int h = world.hashCode((Math.random() * (world.cols - 2) + 1), (Math.random() * (world.rows - 2) + 1), z);
+
+			if (!sectorCollision(h, h, sectors, 4)) {
+				sector.add(h);
+				sectors.put(h, sector);
+			}
+		}
+
+		// System.out.println("Generated " + sectors.size() + "/" + num + "
+		// sectors");
+
+		int done = 200;
+		while (done > 0) {
+			for (Integer i : sectors.keySet()) {
+				HashSet<Integer> sector = sectors.get(i);
+
+				if (sector == null) {
+					break;
+				}
+
+				int h = random(sector);
+				int x = world.hashCol(h);
+				int y = world.hashRow(h);
+
+				TileType type = TYPE_FLOOR;
+
+				if (!sectorCollision(i, h, sectors, 3)) {
+					if (world.setTile(x, y, z, type)) {
+						sector.add(h);
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x - 1, y - 1, z, type)) {
+							sector.add(world.hashCode(x - 1, y - 1, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x - 1, y, z, type)) {
+							sector.add(world.hashCode(x - 1, y, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x - 1, y + 1, z, type)) {
+							sector.add(world.hashCode(x - 1, y + 1, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x, y - 1, z, type)) {
+							sector.add(world.hashCode(x, y - 1, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x, y + 1, z, type)) {
+							sector.add(world.hashCode(x, y + 1, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x + 1, y - 1, z, type)) {
+							sector.add(world.hashCode(x + 1, y - 1, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x + 1, y, z, type)) {
+							sector.add(world.hashCode(x + 1, y, z));
+						}
+					}
+					if (Math.random() * 3 < 1) {
+						if (world.setTile(x + 1, y + 1, z, type)) {
+							sector.add(world.hashCode(x + 1, y + 1, z));
+						}
+					}
+
+				}
+			}
+
+			done--;
+		}
+
+		for (Integer i : sectors.keySet()) {
+			world.setTile(world.hashCol(i) - 1, world.hashRow(i) - 1, z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i) - 1, world.hashRow(i), z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i) - 1, world.hashRow(i) + 1, z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i), world.hashRow(i) - 1, z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i), world.hashRow(i), z, TYPE_WALL);
+			world.setTile(world.hashCol(i), world.hashRow(i) + 1, z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i) + 1, world.hashRow(i) - 1, z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i) + 1, world.hashRow(i), z, TYPE_FLOOR);
+			world.setTile(world.hashCol(i) + 1, world.hashRow(i) + 1, z, TYPE_FLOOR);
+
+			int s = sectors.get(i).size();
+			for (Integer j : sectors.get(i)) {
+				if (Math.random() * s > Math.sqrt(s) * 6) {
+					world.setTile(world.hashCol(j), world.hashRow(j), z, TYPE_WALL);
+				}
+			}
+		}
+
+		HashSet<Integer> junctions = new HashSet<Integer>();
+		for (int x = 1; x < world.cols - 1; x++) {
+			for (int y = 1; y < world.rows - 1; y++) {
+				Tile t = world.getTile(x, y, z);
+				if (t.getType() == TYPE_WALL) {
+					int h = world.hashCode(x, y, z);
+					if (!sectorCollision(-1, h, sectors, 1)) {
+						if (Math.random() * 1 < 1) {
+							if (!junctionCollision(h, junctions, 5)) {
+								world.setTile(h, TYPE_FLOOR);
+								junctions.add(h);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for (int i : junctions) {
+			int id = -1;
+			int dir1 = closestSector(id, i, sectors);
+			float d1 = dir1 / 10;
+			id = (int) d1;
+			dir1 = Math.round(dir1 - d1 * 10f);
+			int dir2 = closestSector(id, i, sectors);
+			float d2 = dir2 / 10;
+			id = (int) d2;
+			dir2 = Math.round(dir2 - d2 * 10f);
+			int dir3 = closestSector(id, i, sectors);
+			float d3 = dir3 / 10;
+			id = (int) d3;
+			dir3 = Math.round(dir3 - d3 * 10f);
+
+			sectorConnect(dir1, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			if (dir2 >= 0) {
+				sectorConnect(dir2, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			}
+			if (dir3 >= 0) {
+				sectorConnect(dir3, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			}
+
+			sectorConnect(0, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			sectorConnect(1, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			sectorConnect(2, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+			sectorConnect(3, world.hashCol(i), world.hashRow(i), world.hashLvl(i), sectors);
+
+		}
+
+		for (Integer i : sectors.keySet()) {
+			Sector s = new Sector(world, i, z);
+
+			for (Integer j : sectors.get(i)) {
+				s.add(j);
+			}
+
+			world.levels[z].sectors.put(i, s);
+		}
+
+	}
+
+	private void sectorConnect(int dir, int x, int y, int z, HashMap<Integer, HashSet<Integer>> sectors) {
+		if (!sectorCollision(-1, world.hashCode(x, y, z), sectors, 0)) {
+			if (world.setTile(x, y, z, TYPE_FLOOR)) {
+				if (dir == 0) {
+					sectorConnect(dir, x, y - 1, z, sectors);
+				}
+				if (dir == 1) {
+					sectorConnect(dir, x + 1, y, z, sectors);
+				}
+				if (dir == 2) {
+					sectorConnect(dir, x, y + 1, z, sectors);
+				}
+				if (dir == 3) {
+					sectorConnect(dir, x - 1, y, z, sectors);
+				}
+			}
+		}
+	}
+
+	private boolean sectorCollision(int id, int h, HashMap<Integer, HashSet<Integer>> sectors, int r) {
+
+		for (Integer i : sectors.keySet()) {
+			if (i != id) {
+				HashSet<Integer> sector = sectors.get(i);
+
+				for (Integer j : sector) {
+					float d = Math.abs(world.hashCol(h) - world.hashCol(j));
+					d = d + Math.abs(world.hashRow(h) - world.hashRow(j));
+					d = d / 2;
+					if (d <= r) {
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private void connect(int x1, int y1, int x2, int y2, int z) {
+		// System.out.println(x1 + "," + y1 + " to " + x2 + "," + y2);
+
+		if (x1 == x2 && y1 == y2) {
+			return;
+		}
+
+		int x = x1;
+		int y = y1;
+
+		while (!(x == x2 && y == y2)) {
+			world.setTile(x, y, z, TYPE_FLOOR);
+
+			if (Math.random() * 2 < 1) {
+				if (x < x2) {
+					x++;
+				} else if (x > x2) {
+					x--;
+				}
+			} else {
+				if (y < y2) {
+					y++;
+				} else if (y > y2) {
+					y--;
+				}
+			}
+
+		}
+
+	}
+
+	private boolean validSpread(int x, int y) {
+		if (x <= 0 || y <= 0) {
+			return false;
+		}
+		if (x >= world.cols - 1 || y >= world.rows - 1) {
+			return false;
+		}
+
+		if (world.getTile(x, y, 0).getType() == TYPE_FLOOR) {
+			return false;
+		}
+
+		return true;
+	}
+
+	private int Sp = 100;
+	private int Sm = 10;
+
+	private void spread(int x, int y, int r, int[] xs, int[] ys) {
+		spread_rec(x, y, x, y, r, 100);
+	}
+
+	private void spread_rec(int x, int y, int rx, int ry, int r, int p) {
+		if (!validSpread(x, y)) {
+			return;
+		}
+
+		if (x <= 0 || y <= 0) {
+			return;
+		}
+		if (x >= world.cols - 1 || y >= world.rows - 1) {
+			return;
+		}
+
+		if (world.getTile(x, y, 0).getType() == TYPE_FLOOR) {
+			return;
+		}
+
+		if (world.distance(x, y, 0, rx, ry, 0) > r) {
+			return;
+		}
+
+		world.setTile(x, y, 0, TYPE_FLOOR);
+
+		if (Math.random() * Sp < p) {
+			spread_rec(x - 1, y, rx, ry, r, p - Sm);
+			if (validSpread(x, y)) {
+			}
+		}
+		if (Math.random() * Sp < p) {
+			spread_rec(x + 1, y, rx, ry, r, p - Sm);
+			if (validSpread(x, y)) {
+			}
+		}
+		if (Math.random() * Sp < p) {
+			spread_rec(x, y - 1, rx, ry, r, p - Sm);
+			if (validSpread(x, y)) {
+			}
+		}
+		if (Math.random() * Sp < p) {
+			spread_rec(x, y + 1, rx, ry, r, p - Sm);
+			if (validSpread(x, y)) {
+			}
+		}
+
+	}
+
+	public void build_doors() {
+		for (int z = 0; z < world.lvls; z++) {
+			for (int y = 1; y < world.rows - 1; y++) {
+				for (int x = 1; x < world.cols - 1; x++) {
+					Tile t = world.getTile(x, y, z);
+					if (t.getType() == TYPE_FLOOR) // floor
+					{
+						Tile north, east, south, west, ne, se, sw;
+						world.getTile(x - 1, y - 1, z);
+						north = world.getTile(x, y - 1, z);
+						ne = world.getTile(x + 1, y - 1, z);
+						west = world.getTile(x - 1, y, z);
+						east = world.getTile(x + 1, y, z);
+						sw = world.getTile(x - 1, y + 1, z);
+						south = world.getTile(x, y + 1, z);
+						se = world.getTile(x + 1, y + 1, z);
+
+						if (east.getType() == TYPE_FLOOR) {
+							if (north.isSolid() && south.isSolid() && ne.isSolid() && se.isSolid()) {
+								spawnDoor(new Door(x + 1, y, z, 1), z);
+								north.setType(TYPE_WALL);
+								south.setType(TYPE_WALL);
+								ne.setType(TYPE_WALL);
+								se.setType(TYPE_WALL);
+							}
+						}
+						if (south.getType() == TYPE_FLOOR) {
+							if (east.isSolid() && !west.isSolid() && se.isSolid() && sw.isSolid()) {
+								spawnDoor(new Door(x, y + 1, z, 0), z);
+								east.setType(TYPE_WALL);
+								west.setType(TYPE_WALL);
+								se.setType(TYPE_WALL);
+								sw.setType(TYPE_WALL);
+							}
+						}
+
+					}
+
+				}
+			}
+		}
+	}
+
+	public boolean spawnDoor(Door d, int z) {
+		if (d == null) {
+			return false;
+		}
+		if (!world.isValid(d.getCol(), d.getRow(), d.getLvl())) {
+			return false;
+		}
+		if (d.getDirection() == 0) {
+			if (hasNeighborDoor((int) d.getX(), (int) d.getY(), (int) d.getZ(), 0)) {
+				return false;
+			}
+		} else {
+			if (hasNeighborDoor((int) d.getX(), (int) d.getY(), (int) d.getZ(), 1)) {
+				return false;
+			}
+		}
+
+		d.buildID(world, world.spawnCounter);
+		world.spawnCounter++;
+
+		world.levels[z].doors.add(d);
+		return true;
+	}
+
+	public boolean hasNeighborDoor(int x, int y, int z, int d) {
+		int max = (int) (Math.random() * 5) + 1;
+		for (Entity door : world.levels[z].doors) {
+			if (door.getDirection() == d) {
+				if (door.getZ() == z) {
+					if (d == 0 && door.getX() == x) {
+						if (Math.abs(door.getY() - y) <= max) {
+							return true;
+						}
+
+					} else if (door.getY() == y) {
+						if (Math.abs(door.getX() - x) <= max) {
+							return true;
+						}
+					}
+				}
+			}
+
+		}
+		return false;
+	}
+
+	public void cleanup() {
+		boolean rescan = false;
+		int iteration = 0;
+		do {
+			for (int x = 0; x < world.cols; x++) {
+				for (int y = 0; y < world.rows; y++) {
+					for (int z = 0; z < world.lvls; z++) {
+						Tile t = world.getTile(x, y, z);
+
+						if (t.getType() == TYPE_WALL) {
+							if (t.hasLoneDiagonal(world)) {
+								world.setTile(x, y, z, TYPE_FLOOR);
+								rescan = true;
+							}
+						}
+						if (t.getType() == TYPE_HOLE) {
+							if (t.hasLoneDiagonal(world)) {
+								world.setTile(x, y, z, TYPE_FLOOR);
+								rescan = true;
+							}
+						}
+						if (t.getType() == TYPE_FLOOR) {
+							if (t.isAlone(world)) {
+								world.setTile(x, y, z, TYPE_WALL);
+								rescan = true;
+							}
+						}
+					}
+				}
+			}
+			iteration++;
+		} while (rescan && iteration < 100);
+
+		world.setTile(1, 1, 0, TileType.TYPE_FLOOR);
+		world.setTile(2, 1, 0, TileType.TYPE_FLOOR);
+		world.setTile(3, 1, 0, TileType.TYPE_FLOOR);
+		world.setTile(1, 2, 0, TileType.TYPE_FLOOR);
+		world.setTile(2, 2, 0, TileType.TYPE_FLOOR);
+		world.setTile(3, 2, 0, TileType.TYPE_FLOOR);
+		world.setTile(1, 3, 0, TileType.TYPE_FLOOR);
+		world.setTile(2, 3, 0, TileType.TYPE_FLOOR);
+		world.setTile(3, 3, 0, TileType.TYPE_FLOOR);
+
+		for (int x = 2; x <= 3; x++) {
+			for (int y = 2; y <= 4; y++) {
+				world.setTile(x, y, 0, TileType.TYPE_WALL);
+				world.setTile(x, y, 1, TileType.TYPE_WALL);
+			}
+		}
+
+	}
+
+	public int random(Set<Integer> set) {
+		int s = set.size();
+
+		s = (int) (Math.random() * s);
+
+		for (int t : set) {
+			if (s == 0) {
+				return t;
+			}
+			s--;
+		}
+		return -1;
+	}
+
+	private boolean junctionCollision(int h, HashSet<Integer> junctions, int r) {
+		for (Integer j : junctions) {
+			float d = Math.abs(world.hashCol(h) - world.hashCol(j));
+			d = d + Math.abs(world.hashRow(h) - world.hashRow(j));
+			d = d / 2;
+			if (d <= r) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private int closestSector(int id, int h, HashMap<Integer, HashSet<Integer>> sectors) {
+		int dir = -1;
+		int dist = 9999;
+		int c = world.hashCol(h);
+		int r = world.hashRow(h);
+		int tempid = -1;
+		for (Integer i : sectors.keySet()) {
+			if (id != i) {
+				for (Integer j : sectors.get(i)) {
+					int x = world.hashCol(j);
+					int y = world.hashRow(j);
+
+					if (c == x) {
+						if (Math.abs(r - y) < dist) {
+							tempid = i;
+							dist = Math.abs(r - y);
+							dir = 2;
+							if (r > y) {
+								dir = 0;
+							}
+						}
+					} else if (r == y) {
+						if (Math.abs(c - x) < dist) {
+							tempid = i;
+							dist = Math.abs(c - x);
+							dir = 1;
+							if (c > x) {
+								dir = 3;
+							}
+						}
+					}
+
+				}
+			}
+		}
+
+		id = tempid;
+		return dir + 10 * tempid;
+	}
+
+}
