@@ -2,10 +2,8 @@ package net.hedinger.prototype.engine;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,10 +23,7 @@ public class World {
 	protected Calendar clock;
 	protected long gamma = 0;
 	protected final long delta = 1000; // milliseconds
-	private boolean minimap = true;
-	float minimap_scale = 0.5f;
-	int minimap_ping = 0;
-	static int counter = 0;
+
 	boolean fogofwar = false;
 
 	int peepcount = 0;
@@ -92,12 +87,10 @@ public class World {
 
 		if (removecount * 2 > entities.size()) {
 			HashMap<Integer, Entity> clone = new HashMap<Integer, Entity>();
-			counter = 0;
 			for (Integer i : entities.keySet()) {
 				Entity e = entities.get(i);
 				if (e != null) {
 					if (!e.isRemoved()) {
-						counter++;
 						clone.put(i, e);
 					}
 				}
@@ -108,7 +101,6 @@ public class World {
 		if (spawnQueue.size() > 0) {
 			for (Entity e : spawnQueue) {
 				if (e != null) {
-					counter++;
 					entities.put(e.getID(), e);
 				}
 			}
@@ -121,11 +113,11 @@ public class World {
 		}
 	}
 
-	public void render(Graphics g, View view) {
+	public void render(Graphics g, View view, LayerRenderer layerRenderer) {
 		Graphics2D g2 = (Graphics2D) g;
 
 		for (int z = 0; z < lvls; z++) {
-			levels[z].render(g, view, this);
+			levels[z].render(g, view, layerRenderer);
 			g2.setStroke(new BasicStroke(0));
 			g2.setColor(new Color(0, 0, 0, 150));
 			if (z < view.getCamZ()) {
@@ -133,46 +125,12 @@ public class World {
 			}
 		}
 
-		if (minimap) {
-			double widthr = (int) g2.getClipBounds().getWidth();
-			widthr = widthr / (ResourceManager.tileSize * cols);
-			double heightr = (int) g2.getClipBounds().getHeight();
-			heightr = heightr / (ResourceManager.tileSize * rows);
-			double width = cols / minimap_scale;
-			double height = rows / minimap_scale;
-			widthr = widthr * width;
-			heightr = heightr * height;
-			g2.setColor(new Color(0, 0, 0, 150));
-			g2.fillRect(25, 25, (int) Math.round(width), (int) Math.round(height));
-			g2.setColor(Color.BLUE);
-			g2.fillRect(20, 20, (int) Math.round(width), (int) Math.round(height));
-			g2.drawImage(getMiniMap(view), 20, 20, null);
-			g2.setColor(Color.WHITE);
-			g2.setStroke(new BasicStroke(2));
-			g2.drawRect(20 + (int) Math.round(view.getCamX() / minimap_scale - widthr / 2),
-					20 + (int) Math.round(view.getCamY() / minimap_scale - heightr / 2), (int) Math.round(widthr),
-					(int) Math.round(heightr));
-			width = cols / minimap_scale;
-			height = rows / minimap_scale;
-			g2.drawRect(20, 20, (int) Math.round(width), (int) Math.round(height));
-
-			g2.setFont(new Font("Arial", Font.BOLD, 14));
-			g2.drawString(" " + peepcount + " / " + peepcount_max, (int) g2.getClipBounds().getWidth() - 70, 20);
-			g2.drawImage(ResourceManager.getOverlay(5), (int) g2.getClipBounds().getWidth() - 86, 6, null);
-			minimap_ping++;
-			if (minimap_ping > 10) {
-				minimap_ping = -10;
-			}
-		}
 	}
 
-	private BufferedImage getMiniMap(View view) {
-		int z = view.getCamZ();
-		if (z < 0 || z >= levels.length) {
-			return null;
+	public void alignTiles() {
+		for (int z = 0; z < lvls; z++) {
+			levels[z].alignTiles();
 		}
-
-		return levels[z].getMiniMap();
 	}
 
 	/**
@@ -662,30 +620,6 @@ public class World {
 		return stack;
 	}
 
-	public int getMiniMapWidth() {
-		double width = cols / minimap_scale;
-
-		return (int) Math.round(width);
-	}
-
-	public int getMiniMapHeight() {
-		double height = rows / minimap_scale;
-
-		return (int) Math.round(height);
-	}
-
-	public int getMiniMapX() {
-		return 20;
-	}
-
-	public int getMiniMapY() {
-		return 20;
-	}
-
-	public float getMiniMapScale() {
-		return minimap_scale;
-	}
-
 	// ==========================================================================
 	// ==========================================================================
 	// ==========================================================================
@@ -800,10 +734,6 @@ public class World {
 
 	public int hashLvl(int hc) {
 		return hc / (rows * cols);
-	}
-
-	public void toggleMiniMap() {
-		minimap = !minimap;
 	}
 
 	public int getColums() {

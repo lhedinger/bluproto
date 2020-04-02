@@ -18,6 +18,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.WindowConstants;
 
+import net.hedinger.prototype.engine.LayerRenderer;
 import net.hedinger.prototype.engine.ResourceManager;
 import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
@@ -39,6 +40,7 @@ public class PrototypeWorld extends JPanel {
 	private JFrame frame;
 	private World world;
 	private View view;
+	private LayerRenderer layerRenderer;
 	private int frames = 0;
 	private float framerate = 100;
 	private static final int FRAME_WIDTH = 1500, FRAME_HEIGHT = 1000;
@@ -120,10 +122,14 @@ public class PrototypeWorld extends JPanel {
 
 	private void initialize(String hash) {
 		ResourceManager.loadResources();
-		view = new View();
+
 		WorldGenerator generator = new WorldGenerator(cols, rows, lvls);
 		generator.run();
 		world = generator.getWorld();
+		world.alignTiles();
+		layerRenderer = new LayerRenderer(world);
+		layerRenderer.build(world);
+		view = new View(world, layerRenderer);
 
 		// System.out.println("World " + WorldGenerator.hashCodeString(world) +
 		// "\n");
@@ -231,7 +237,7 @@ public class PrototypeWorld extends JPanel {
 			gamma = 0;
 			frames = 0;
 		}
-		world.render(g, view);
+		world.render(g, view, layerRenderer);
 
 		g2.setStroke(new BasicStroke(1));
 		g2.setColor(new Color(0, 250, 0, 100));
@@ -301,12 +307,12 @@ public class PrototypeWorld extends JPanel {
 	// --------------------------------------------------------------------------
 	// ----MOUSELISTENERS
 	public boolean mouseInMiniMap() {
-		if (mouseX <= world.getMiniMapWidth() + world.getMiniMapX()) {
-			if (mouseY <= world.getMiniMapHeight() + world.getMiniMapY()) {
-				if (mouseX >= world.getMiniMapX()) {
-					if (mouseY >= world.getMiniMapY()) {
-						camX = (mouseX - world.getMiniMapX()) * world.getMiniMapScale();
-						camY = (mouseY - world.getMiniMapY()) * world.getMiniMapScale();
+		if (mouseX <= view.getMiniMapWidth() + view.getMiniMapX()) {
+			if (mouseY <= view.getMiniMapHeight() + view.getMiniMapY()) {
+				if (mouseX >= view.getMiniMapX()) {
+					if (mouseY >= view.getMiniMapY()) {
+						camX = (mouseX - view.getMiniMapX()) * view.getMiniMapScale();
+						camY = (mouseY - view.getMiniMapY()) * view.getMiniMapScale();
 						return true;
 					}
 				}
@@ -439,9 +445,6 @@ public class PrototypeWorld extends JPanel {
 			}
 			if (e.getKeyCode() == KeyEvent.VK_H) {
 				// System.out.println(WorldGenerator.hashCodeString(world));
-			}
-			if (e.getKeyCode() == KeyEvent.VK_M) {
-				world.toggleMiniMap();
 			}
 			if (e.getKeyCode() == KeyEvent.VK_S) {
 				for (int i = 0; i < 100; i++) {

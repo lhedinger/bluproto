@@ -1,13 +1,7 @@
 package net.hedinger.prototype.engine;
 
-import static net.hedinger.prototype.engine.ResourceManager.tileSize;
-
-import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.TreeMap;
@@ -19,8 +13,6 @@ public class Grid {
 	private World world;
 	private Tile[][] tiles;
 	private int level;
-	private BufferedImage image_layer, image_layer_thumb;
-	private BufferedImage[] image_layer_downsized;
 
 	HashSet<Entity> doors;
 	HashMap<Integer, Sector> sectors;
@@ -42,25 +34,6 @@ public class Grid {
 		sectors = new HashMap<Integer, Sector>();
 	}
 
-	private BufferedImage compileLayer(BufferedImage[][] img) {
-		int width = tileSize * world.cols;
-		int height = tileSize * world.rows;
-		BufferedImage dimg = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = dimg.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
-				g.drawImage(img[x][y], tileSize * x, tileSize * y, tileSize, tileSize, null);
-			}
-		}
-		g.dispose();
-		return dimg;
-	}
-
-	BufferedImage getMiniMap() {
-		return image_layer_thumb;
-	}
-
 	boolean aligned = false;
 
 	public void think(World w) {
@@ -73,14 +46,9 @@ public class Grid {
 
 	}
 
-	public void render(Graphics g, View v, World w) {
+	public void render(Graphics g, View v, LayerRenderer lr) {
 
 		Graphics2D g2 = (Graphics2D) g;
-
-		if (!aligned) {
-			align(g, w);
-			aligned = true;
-		}
 
 		int camDepth = (v.getCamZ()) - level;
 
@@ -93,9 +61,17 @@ public class Grid {
 		}
 
 		if (camDepth == 0) {
-			g2.drawImage(image_layer, v.pixelX(0, level, 0), v.pixelY(0, level, 0), null);
+			g2.drawImage(
+					lr.mapLayers[level].image_layer,
+					v.pixelX(0, level, 0),
+					v.pixelY(0, level, 0),
+					null);
 		} else {
-			g2.drawImage(image_layer_downsized[camDepth - 1], v.pixelX(0, level, 0), v.pixelY(0, level, 0), null);
+			g2.drawImage(
+					lr.mapLayers[level].image_layer_downsized[camDepth - 1],
+					v.pixelX(0, level, 0),
+					v.pixelY(0, level, 0),
+					null);
 		}
 
 		for (Entity d : doors) {
@@ -109,58 +85,17 @@ public class Grid {
 			}
 		}
 
-		for (Entity e : world.entities.values()) {
-			if (e instanceof NPC) {
-				NPC n = (NPC) e;
-				if (n != null && !n.isDead()) {
-					if (n.isHostile() && n.isDetected()) {
-						g2.setColor(Color.RED);
-						g2.fillOval((int) (19 + Math.round(e.getX() / world.minimap_scale)),
-								(int) (19 + Math.round(e.getY() / world.minimap_scale)), 2, 2);
-						g2.setStroke(new BasicStroke(1));
-
-						g2.drawOval((int) (19 - world.minimap_ping / 2 + Math.round(e.getX() / world.minimap_scale)),
-								(int) (19 - world.minimap_ping / 2 + Math.round(e.getY() / world.minimap_scale)),
-								world.minimap_ping,
-								world.minimap_ping);
-					} else {
-						if (n.isFriendly()) {
-							g2.setColor(Color.GREEN);
-							g2.fillOval((int) (19 + Math.round(e.getX() / world.minimap_scale)),
-									(int) (19 + Math.round(e.getY() / world.minimap_scale)), 2, 2);
-						} else {
-							g2.setColor(Color.WHITE);
-							g2.fillOval((int) (19 + Math.round(e.getX() / world.minimap_scale)),
-									(int) (19 + Math.round(e.getY() / world.minimap_scale)), 1, 1);
-						}
-					}
-				}
-			}
-		}
 	}
 
-	private void align(Graphics g, World w) {
-		BufferedImage[][] img_tiles = new BufferedImage[world.cols][world.rows];
+	public void alignTiles() {
+
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
-				if (tiles[x][y] != null) {
-					img_tiles[x][y] = tiles[x][y].buildMap(g, w);
-				}
+				Tile tile = tiles[x][y];
+				tile.updateTilecode(world);
 			}
 		}
 
-		image_layer = compileLayer(img_tiles);
-		double width = world.cols / world.minimap_scale;
-		double height = world.rows / world.minimap_scale;
-
-		image_layer_downsized = new BufferedImage[world.max_view_depth];
-		for (int i = 0; i < world.max_view_depth; i++) {
-			image_layer_downsized[i] = Utils.resize(image_layer,
-					Math.round(Utils.toPixel(world.cols, -i, 1)),
-					Math.round(Utils.toPixel(world.rows, -i, 1)));
-		}
-
-		image_layer_thumb = Utils.resize(image_layer, (int) Math.round(width), (int) Math.round(height));
 	}
 
 	TreeMap<Double, Entity> searchEntity(double x, double y, double dir, double radius, double fov,

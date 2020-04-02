@@ -15,11 +15,18 @@ import javax.imageio.ImageIO;
 
 public class ResourceManager {
 
-	public final static int tilemapRows = 22;
+	public final static int tilemapCols = 4;
+	public final static int tilemapRows = 3;
 	public final static int tileSize = 64;
+	public final static int subTileSize = 32;
+	public final static int tilePadding = 16;
 	public final static int wall_variations = 2;
 
-	private static BufferedImage[] tilemap = new BufferedImage[tilemapRows * 3];
+	public final static String wallmapFilename = "res/tiles/sandbox.png";
+	public final static String floormapFilename = "res/tiles/floors.png";
+
+	private static BufferedImage[] wallmap = new BufferedImage[tilemapCols * tilemapRows * 4];
+	private static BufferedImage[] floormap = new BufferedImage[tilemapCols * tilemapRows * 4];
 	private static BufferedImage[] propmap = new BufferedImage[11];
 	private static BufferedImage[] npcs = new BufferedImage[3];
 	private static BufferedImage[] npcs_dead = new BufferedImage[3];
@@ -47,16 +54,14 @@ public class ResourceManager {
 		}
 
 		try {
-			loadTileMap();
-			loadPropMap();
+			loadTiles(wallmap, wallmapFilename);
+			loadTiles(floormap, floormapFilename);
+
+			// loadPropMap();
+			formatWallTiles();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-	}
-
-	public static BufferedImage getSubTile(int id, int var) {
-		int i = id + var * tilemapRows;
-		return tilemap[i];
 	}
 
 	public static BufferedImage getPropTile(int id) {
@@ -73,182 +78,169 @@ public class ResourceManager {
 		return img;
 	}
 
-	private static void loadTileMap() throws Exception {
-		String filename = "res/tiles/tilemap" + tileSize + ".png";
+	private static void formatWallTiles() {
 
-		int hts = tileSize / 2;
+		for (int i = 0; i < 4; i++) {
+			wallmap[6 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[7 + i * 12], wallmap[5 + i * 12]),
+					floormap[1]);
+			wallmap[10 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[11 + i * 12], wallmap[9 + i * 12]),
+					floormap[1]);
+		}
+
+		for (int i = 0; i < 4; i++) {
+			floormap[5 + i * 12] = mask(wallmap[4 + i * 12], floormap[0]);
+			floormap[9 + i * 12] = mask(wallmap[8 + i * 12], floormap[0]);
+		}
+
+	}
+
+	private static void loadTiles(BufferedImage[] map, String filename) throws Exception {
 
 		BufferedImage tm = null;
 
 		tm = ImageIO.read(new File(filename));
 		BufferedImage temp = null;
 
-		for (int i = 0; i < tilemap.length; i++) {
-			int y = i / tilemapRows;
-			int x = i % tilemapRows;
-			temp = tm.getSubimage(tileSize * x + hts, hts + tileSize * y, hts, hts);
+		int len = tilemapCols * tilemapRows;
+		for (int i = 0; i < len; i++) {
+			int y = i / tilemapCols;
+			int x = i % tilemapCols;
+			temp = tm.getSubimage(
+					tileSize * x + subTileSize - tilePadding,
+					tileSize * y + subTileSize - tilePadding,
+					subTileSize + tilePadding * 2,
+					subTileSize + tilePadding * 2);
 
 			if (temp != null) {
-				tilemap[i] = temp;
+				map[i] = temp;
+				map[i + len] = rotateClockwise90(temp, 1);
+				map[i + len * 2] = rotateClockwise90(temp, 2);
+				map[i + len * 3] = rotateClockwise90(temp, 3);
 			}
 		}
 	}
 
-	private static void loadPropMap() throws Exception {
-		String filename = "res/tiles/tilemap" + tileSize + ".png";
+	public static BufferedImage getWallSubtile(String tilecode, int loc, int offset) {
+		int i = toTileIndex(tilecode, loc);
 
-		int hts = tileSize / 2;
-
-		BufferedImage tm = null;
-
-		tm = ImageIO.read(new File(filename));
-		BufferedImage temp = null;
-
-		System.out.println(filename + " = " + tm.getWidth() + " x " + tm.getHeight());
-
-		int offsetY = 32 * 9;
-		for (int i = 0; i < propmap.length; i++) {
-			int y = i / 11;
-			int x = i % 11;
-			temp = tm.getSubimage(tileSize * 2 * x + hts, offsetY + tileSize * 2 * y, tileSize, tileSize);
-
-			if (temp != null) {
-				propmap[i] = temp;
-			}
-		}
+		return wallmap[i + offset];
 	}
 
-	public static BufferedImage getSubTile(String tilecode, int loc, int var) {
-		int i = -1;
-		if (loc == 0) // A
-		{
-			if (tilecode.contains("1") && tilecode.contains("2") && tilecode.contains("4")) {
-				i = 0;
-			} else if (tilecode.contains("9")) {
-				i = 0;
-			} else if (tilecode.contains("2") && tilecode.contains("4")) {
-				i = 13;
-			} else if (tilecode.contains("2")) {
-				i = 9;
-			} else if (tilecode.contains("4")) {
-				i = 5;
-			} else if (tilecode.contains("1")) {
-				i = 17;
-			} else {
-				i = 1;
+	public static BufferedImage getFloorSubtile(String tilecode, int loc, int offset) {
+		int i = toTileIndex(tilecode, loc);
+
+		return floormap[i + offset];
+	}
+
+	public static int toTileIndex(String tilecode, int loc) {
+		if (loc == 0) {
+			if (!tilecode.contains("2") && !tilecode.contains("4")) {
+				// corner
+				return 5 + 12 * loc;
 			}
-		} else if (loc == 1) // B
-		{
-			if (tilecode.contains("2") && tilecode.contains("3") && tilecode.contains("5")) {
-				i = 0;
-			} else if (tilecode.contains("9")) {
-				i = 0;
-			} else if (tilecode.contains("2") && tilecode.contains("5")) {
-				i = 14;
-			} else if (tilecode.contains("5")) {
-				i = 10;
-			} else if (tilecode.contains("2")) {
-				i = 6;
-			} else if (tilecode.contains("3")) {
-				i = 18;
-			} else {
-				i = 2;
+			if (!tilecode.contains("2")) {
+				// wall
+				return 9 + 12 * 0;
 			}
-		} else if (loc == 2) // C
-		{
-			if (tilecode.contains("5") && tilecode.contains("7") && tilecode.contains("8")) {
-				i = 0;
-			} else if (tilecode.contains("9")) {
-				i = 0;
-			} else if (tilecode.contains("5") && tilecode.contains("7")) {
-				i = 15;
-			} else if (tilecode.contains("7")) {
-				i = 11;
-			} else if (tilecode.contains("5")) {
-				i = 7;
-			} else if (tilecode.contains("8")) {
-				i = 19;
-			} else {
-				i = 3;
+			if (!tilecode.contains("4")) {
+				// wall
+				return 9 + 12 * 3;
 			}
-		} else if (loc == 3) // D
-		{
-			if (tilecode.contains("4") && tilecode.contains("6") && tilecode.contains("7")) {
-				i = 0;
-			} else if (tilecode.contains("9")) {
-				i = 0;
-			} else if (tilecode.contains("4") && tilecode.contains("7")) {
-				i = 16;
-			} else if (tilecode.contains("4")) {
-				i = 12;
-			} else if (tilecode.contains("7")) {
-				i = 8;
-			} else if (tilecode.contains("6")) {
-				i = 20;
-			} else {
-				i = 4;
+		}
+		if (loc == 1) {
+			if (!tilecode.contains("2") && !tilecode.contains("5")) {
+				// corner
+				return 5 + 12 * loc;
+			}
+			if (!tilecode.contains("2")) {
+				// wall
+				return 9 + 12 * 0;
+			}
+			if (!tilecode.contains("5")) {
+				// wall
+				return 9 + 12 * 1;
+			}
+		}
+		if (loc == 2) {
+			if (!tilecode.contains("5") && !tilecode.contains("7")) {
+				// corner
+				return 5 + 12 * loc;
+			}
+			if (!tilecode.contains("5")) {
+				// wall
+				return 9 + 12 * 1;
+			}
+			if (!tilecode.contains("7")) {
+				// wall
+				return 9 + 12 * 2;
+			}
+		}
+		if (loc == 3) {
+			if (!tilecode.contains("4") && !tilecode.contains("7")) {
+				// corner
+				return 5 + 12 * loc;
+			}
+			if (!tilecode.contains("7")) {
+				// wall
+				return 9 + 12 * 2;
+			}
+			if (!tilecode.contains("4")) {
+				// wall
+				return 9 + 12 * 3;
 			}
 		}
 
-		if (i == -1) {
-			throw new RuntimeException();
-		}
-
-		return getSubTile(i, var);
+		return 1;
 	}
 
 	public static BufferedImage getWallTile(String tilecode) {
-		int varA = (int) (Math.random() * wall_variations);
-		int varB = (int) (Math.random() * wall_variations);
-		int varC = (int) (Math.random() * wall_variations);
-		int varD = (int) (Math.random() * wall_variations);
+		Image subA = getWallSubtile(tilecode, 0, 1);
+		Image subB = getWallSubtile(tilecode, 1, 1);
+		Image subC = getWallSubtile(tilecode, 2, 1);
+		Image subD = getWallSubtile(tilecode, 3, 1);
 
-		if (Math.random() * 2 < 1) {
-			varA = 0;
-		}
-		if (Math.random() * 2 < 1) {
-			varB = 0;
-		}
-		if (Math.random() * 2 < 1) {
-			varC = 0;
-		}
-		if (Math.random() * 2 < 1) {
-			varD = 0;
-		}
-
-		Image subA = getSubTile(tilecode, 0, varA);
-		Image subB = getSubTile(tilecode, 1, varB);
-		Image subC = getSubTile(tilecode, 2, varC);
-		Image subD = getSubTile(tilecode, 3, varD);
-
-		int hts = tileSize / 2;
-		BufferedImage dimg = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = dimg.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-				RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-		g.drawImage(subA, 0, 0, hts, hts, null);
-		g.drawImage(subB, hts, 0, hts, hts, null);
-		g.drawImage(subC, hts, hts, hts, hts, null);
-		g.drawImage(subD, 0, hts, hts, hts, null);
-		g.dispose();
-		return dimg;
+		return combineSubtiles(subA, subB, subC, subD);
 	}
 
 	public static BufferedImage getHoleTile(String tilecode) {
-		Image subA = getSubTile(tilecode, 0, 2);
-		Image subB = getSubTile(tilecode, 1, 2);
-		Image subC = getSubTile(tilecode, 2, 2);
-		Image subD = getSubTile(tilecode, 3, 2);
+		Image subA = getWallSubtile(tilecode, 0, 0);
+		Image subB = getWallSubtile(tilecode, 1, 0);
+		Image subC = getWallSubtile(tilecode, 2, 0);
+		Image subD = getWallSubtile(tilecode, 3, 0);
 
-		int hts = tileSize / 2;
-		BufferedImage dimg = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_ARGB);
+		return combineSubtiles(subA, subB, subC, subD);
+	}
+
+	public static BufferedImage getHoleFloorTile(String tilecode) {
+		Image subA = getFloorSubtile(tilecode, 0, 0);
+		Image subB = getFloorSubtile(tilecode, 1, 0);
+		Image subC = getFloorSubtile(tilecode, 2, 0);
+		Image subD = getFloorSubtile(tilecode, 3, 0);
+
+		return combineSubtiles(subA, subB, subC, subD);
+	}
+
+	public static BufferedImage getFloorTile(String tilecode) {
+		Image subA = floormap[0];
+		Image subB = floormap[0];
+		Image subC = floormap[0];
+		Image subD = floormap[0];
+
+		return combineSubtiles(subA, subB, subC, subD);
+		// return null;
+	}
+
+	public static BufferedImage combineSubtiles(Image subA, Image subB, Image subC, Image subD) {
+		int hts = subTileSize + tilePadding * 2;
+		BufferedImage dimg = new BufferedImage(tileSize + tilePadding * 2, tileSize + tilePadding * 2,
+				BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = dimg.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 		g.drawImage(subA, 0, 0, hts, hts, null);
-		g.drawImage(subB, hts, 0, hts, hts, null);
-		g.drawImage(subC, hts, hts, hts, hts, null);
-		g.drawImage(subD, 0, hts, hts, hts, null);
+		g.drawImage(subB, hts - tilePadding * 2, 0, hts, hts, null);
+		g.drawImage(subC, hts - tilePadding * 2, hts - tilePadding * 2, hts, hts, null);
+		g.drawImage(subD, 0, hts - tilePadding * 2, hts, hts, null);
 		g.dispose();
 		return dimg;
 	}
@@ -267,25 +259,6 @@ public class ResourceManager {
 		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 		g.drawImage(tile, 0, 0, tileSize, tileSize, null);
-		g.dispose();
-		return dimg;
-	}
-
-	public static BufferedImage getFloorTile(String tilecode) {
-		Image subA = getSubTile(tilemapRows - 1, 0);
-		Image subB = getSubTile(tilemapRows - 1, 0);
-		Image subC = getSubTile(tilemapRows - 1, 0);
-		Image subD = getSubTile(tilemapRows - 1, 0);
-
-		int hts = tileSize;
-		BufferedImage dimg = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = dimg.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-				RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-		g.drawImage(subA, 0, 0, hts, hts, null);
-		g.drawImage(subB, hts, 0, hts, hts, null);
-		g.drawImage(subC, hts, hts, hts, hts, null);
-		g.drawImage(subD, 0, hts, hts, hts, null);
 		g.dispose();
 		return dimg;
 	}
@@ -351,21 +324,104 @@ public class ResourceManager {
 		return fadeImage(blurImage(blurImage(blurImage(temp))), 0.5f);
 	}
 
+	public static BufferedImage renderWithMaskedLayers(BufferedImage top, BufferedImage mask, BufferedImage bottom) {
+		BufferedImage maskedTop = mask(mask, top);
+		return squash(maskedTop, bottom);
+	}
+
+	public static BufferedImage squash(BufferedImage top, BufferedImage bottom) {
+
+		if (top.getWidth() != bottom.getWidth()) {
+			throw new RuntimeException();
+		}
+		if (top.getHeight() != bottom.getHeight()) {
+			throw new RuntimeException();
+		}
+
+		BufferedImage finalImg = new BufferedImage(bottom.getWidth(), bottom.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		Graphics2D finalG = finalImg.createGraphics();
+		finalG.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+
+		finalG.drawImage(bottom, 0, 0, bottom.getWidth(), bottom.getHeight(), null);
+		finalG.drawImage(top, 0, 0, top.getWidth(), top.getHeight(), null);
+
+		finalG.dispose();
+		return finalImg;
+	}
+
 	public static BufferedImage blurImage(BufferedImage input) {
+		return blurImage(input, 0.0625f);
+	}
+
+	public static BufferedImage blurImage(BufferedImage input, int iteration) {
+		BufferedImage result = input;
+		for (int i = 0; i < iteration; i++) {
+			result = blurImage(result, 0.0625f);
+		}
+
+		return result;
+	}
+
+	public static BufferedImage blurImage(BufferedImage input, float scale) {
 		if (input == null) {
 			return null;
 		}
-		BufferedImage output = new BufferedImage(input.getWidth(), input.getHeight(),
+		new BufferedImage(input.getWidth(), input.getHeight(),
 				BufferedImage.TYPE_4BYTE_ABGR);
-		float data2[] = {
-				0.0625f, 0.125f, 0.0625f,
-				0.125f, 0.25f, 0.125f,
-				0.0625f, 0.125f, 0.0625f };
 
-		Kernel kernel = new Kernel(3, 3, data2);
+		int radius = 5;
+		int size = radius * 2 + 1;
+		float weight = 1.0f / (size * size);
+		float[] data = new float[size * size];
+
+		for (int i = 0; i < data.length; i++) {
+			data[i] = weight;
+		}
+		Kernel kernel = new Kernel(size, size, data);
 		ConvolveOp convolve = new ConvolveOp(kernel, ConvolveOp.EDGE_NO_OP, null);
-		convolve.filter(input, output);
+		return convolve.filter(input, null);
+	}
+
+	public static BufferedImage mask(BufferedImage mask, BufferedImage image) {
+
+		BufferedImage output = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+
+		final int width = image.getWidth();
+		int[] imgData = new int[width];
+		int[] maskData = new int[width];
+
+		for (int y = 0; y < image.getHeight(); y++) {
+			// fetch a line of data from each image
+			image.getRGB(0, y, width, 1, imgData, 0, 1);
+			mask.getRGB(0, y, width, 1, maskData, 0, 1);
+			// apply the mask
+			for (int x = 0; x < width; x++) {
+				// mask away any alpha present
+				int color = imgData[x];// & 0x00FFFFFF;
+				// shift red into alpha bits
+				int maskColor = (maskData[x] & 0x00FF0000) << 8;
+				int maskColor2 = (maskColor | 0x00FFFFFF);
+				imgData[x] = color & maskColor2;
+			}
+			// replace the data
+			output.setRGB(0, y, width, 1, imgData, 0, 1);
+		}
+
 		return output;
+	}
+
+	public static BufferedImage rotateClockwise90(BufferedImage src, int times) {
+		int width = src.getWidth();
+		int height = src.getHeight();
+
+		BufferedImage dest = new BufferedImage(height, width, src.getType());
+
+		Graphics2D graphics2D = dest.createGraphics();
+		graphics2D.translate((height - width) / 2, (height - width) / 2);
+		graphics2D.rotate(times * Math.PI / 2, height / 2, width / 2);
+		graphics2D.drawRenderedImage(src, null);
+
+		return dest;
 	}
 
 	public static BufferedImage fadeImage(BufferedImage input, float transparency) {

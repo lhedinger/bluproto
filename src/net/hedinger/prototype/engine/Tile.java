@@ -3,8 +3,6 @@ package net.hedinger.prototype.engine;
 import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN;
 import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP;
 
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -16,7 +14,7 @@ public class Tile {
 	private int col, row, lvl;
 	private TileType type;
 	private HashSet<Integer> connected = new HashSet<Integer>();
-	private String tileCode = "";
+	private String tilecode = "";
 	private HashSet<Integer> npcs = new HashSet<Integer>();
 
 	boolean door_N = false; // open
@@ -47,6 +45,14 @@ public class Tile {
 		type = t;
 	}
 
+	public void setTileCode(String tilecode) {
+		this.tilecode = tilecode;
+	}
+
+	public String getTileCode() {
+		return tilecode;
+	}
+
 	public void addEntity(int id) {
 		npcs.add(id);
 	}
@@ -65,32 +71,6 @@ public class Tile {
 
 	public void setType(TileType t) {
 		type = t;
-	}
-
-	public BufferedImage buildMap(Graphics g, World w) {
-		calcConnectedStatic(w);
-		String tilecode = this.getNeighborCombination(w);
-
-		switch (type) {
-		case TYPE_FLOOR:
-			return ResourceManager.getFloorTile(tilecode);
-		case TYPE_WALL:
-			return ResourceManager.getWallTile(tilecode);
-		case TYPE_HOLE:
-			return ResourceManager.getHoleTile(tilecode);
-		case TYPE_RAMPUP:
-			return ResourceManager.getRamptile(tilecode, true);
-		case TYPE_RAMPDOWN:
-			return ResourceManager.getRamptile(tilecode, false);
-		default:
-			break;
-		}
-
-		return null;
-	}
-
-	public String getTileCode() {
-		return tileCode;
 	}
 
 	public TileType getType() {
@@ -142,17 +122,14 @@ public class Tile {
 	}
 
 	public HashSet<Integer> getConnected() {
-		if (connected == null) {
-			connected = new HashSet<Integer>();
-		}
 		return connected;
 	}
 
-	public void calcConnected(World w) {
-		calcConnected(w, false);
+	public HashSet<Integer> calcConnected(World w) {
+		return calcConnected(w, false);
 	}
 
-	public void calcConnected(World w, boolean diagonal) {
+	public HashSet<Integer> calcConnected(World w, boolean diagonal) {
 		connected = new HashSet<Integer>();
 		for (int x = -1; x <= 1; x++) {
 			for (int y = -1; y <= 1; y++) {
@@ -163,19 +140,7 @@ public class Tile {
 				}
 			}
 		}
-	}
-
-	public void calcConnectedStatic(World w) {
-		connected = new HashSet<Integer>();
-		for (int x = -1; x <= 1; x++) {
-			for (int y = -1; y <= 1; y++) {
-				if (!(x == 0 && y == 0)) {
-					if (isConnectedStatic(w, col + x, row + y, lvl)) {
-						connected.add(w.hashCode(col + x, row + y, lvl));
-					}
-				}
-			}
-		}
+		return connected;
 	}
 
 	public boolean isConnected(World w, double x, double y, double z) {
@@ -313,22 +278,6 @@ public class Tile {
 		return !type.isOpen();
 	}
 
-	public boolean hasAdjacent(World w) {
-		calcConnected(w);
-		for (Integer i : getConnected()) {
-			int x = w.hashCol(i) - col;
-			int y = w.hashRow(i) - row;
-
-			// System.out.println(x + "," + y);
-
-			if (Math.abs(y) * Math.abs(x) == 0) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	public boolean hasDiagonal(World w) {
 		calcConnected(w, true);
 		for (Integer i : getConnected()) {
@@ -350,8 +299,8 @@ public class Tile {
 	}
 
 	public boolean hasLoneDiagonal(World w) {
-		calcConnected(w, true);
-		String tilecode = this.getNeighborCombination(w);
+		HashSet<Integer> connected = calcConnected(w, true);
+		String tilecode = this.calcTilecode(w, connected);
 
 		if (tilecode.contains("0")) {
 			return false;
@@ -384,7 +333,26 @@ public class Tile {
 		return false;
 	}
 
-	private String getNeighborCombination(World w) {
+	public void updateTilecode(World world) {
+		HashSet<Integer> connected = calcConnectedStatic(world);
+		tilecode = calcTilecode(world, connected);
+	}
+
+	private HashSet<Integer> calcConnectedStatic(World w) {
+		HashSet<Integer> connected = new HashSet<>();
+		for (int x = -1; x <= 1; x++) {
+			for (int y = -1; y <= 1; y++) {
+				if (!(x == 0 && y == 0)) {
+					if (isConnectedStatic(w, col + x, row + y, lvl)) {
+						connected.add(w.hashCode(col + x, row + y, lvl));
+					}
+				}
+			}
+		}
+		return connected;
+	}
+
+	public String calcTilecode(World w, HashSet<Integer> connected) {
 
 		/*
 		 * \ 123 405 678 \
@@ -393,7 +361,7 @@ public class Tile {
 		TreeSet<Integer> dirs = new TreeSet<Integer>();
 		String combinations = "";
 
-		for (Integer i : getConnected()) {
+		for (Integer i : connected) {
 			int x = w.hashCol(i) - col;
 			int y = w.hashRow(i) - row;
 
