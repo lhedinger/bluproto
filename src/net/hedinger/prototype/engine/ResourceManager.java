@@ -22,7 +22,7 @@ public class ResourceManager {
 	public final static int tilePadding = 16;
 	public final static int wall_variations = 2;
 
-	public final static String wallmapFilename = "res/tiles/sandbox.png";
+	public final static String wallmapFilename = "res/tiles/walls.png";
 	public final static String floormapFilename = "res/tiles/floors.png";
 
 	private static BufferedImage[] wallmap = new BufferedImage[tilemapCols * tilemapRows * 4];
@@ -81,10 +81,10 @@ public class ResourceManager {
 	private static void formatWallTiles() {
 
 		for (int i = 0; i < 4; i++) {
-			wallmap[6 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[7 + i * 12], wallmap[5 + i * 12]),
-					floormap[1]);
-			wallmap[10 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[11 + i * 12], wallmap[9 + i * 12]),
-					floormap[1]);
+			wallmap[6 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[6 + i * 12], wallmap[5 + i * 12]),
+					floormap[3]);
+			wallmap[10 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[10 + i * 12], wallmap[9 + i * 12]),
+					floormap[3]);
 		}
 
 		for (int i = 0; i < 4; i++) {
@@ -133,6 +133,11 @@ public class ResourceManager {
 	}
 
 	public static int toTileIndex(String tilecode, int loc) {
+
+		/*
+		 * 123 405 678
+		 */
+
 		if (loc == 0) {
 			if (!tilecode.contains("2") && !tilecode.contains("4")) {
 				// corner
@@ -190,6 +195,7 @@ public class ResourceManager {
 			}
 		}
 
+		// solid
 		return 1;
 	}
 

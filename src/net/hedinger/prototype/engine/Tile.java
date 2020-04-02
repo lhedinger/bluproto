@@ -45,10 +45,6 @@ public class Tile {
 		type = t;
 	}
 
-	public void setTileCode(String tilecode) {
-		this.tilecode = tilecode;
-	}
-
 	public String getTileCode() {
 		return tilecode;
 	}
@@ -394,9 +390,6 @@ public class Tile {
 
 		if (dirs.size() == 0) {
 			return "0";
-		}
-		if (dirs.size() == 8) {
-			return "9";
 		}
 
 		for (Integer i : dirs) {

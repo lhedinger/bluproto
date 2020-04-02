@@ -38,6 +38,17 @@ public class WorldGenerator {
 		}
 		cleanup();
 
+		// custom stuff
+
+
+		for (int x = 1; x <= 3; x++) {
+			for (int y = 1; y <= 3; y++) {
+				world.setTile(x, y, 0, TileType.TYPE_HOLE);
+			}
+		}
+
+		// end custom stuff
+
 		for (int i = 1; i < lvls; i++) {
 			placeRampDown(3 + i * 2, 3, i);
 		}
@@ -480,23 +491,6 @@ public class WorldGenerator {
 			}
 			iteration++;
 		} while (rescan && iteration < 100);
-
-		world.setTile(1, 1, 0, TileType.TYPE_FLOOR);
-		world.setTile(2, 1, 0, TileType.TYPE_FLOOR);
-		world.setTile(3, 1, 0, TileType.TYPE_FLOOR);
-		world.setTile(1, 2, 0, TileType.TYPE_FLOOR);
-		world.setTile(2, 2, 0, TileType.TYPE_FLOOR);
-		world.setTile(3, 2, 0, TileType.TYPE_FLOOR);
-		world.setTile(1, 3, 0, TileType.TYPE_FLOOR);
-		world.setTile(2, 3, 0, TileType.TYPE_FLOOR);
-		world.setTile(3, 3, 0, TileType.TYPE_FLOOR);
-
-		for (int x = 2; x <= 3; x++) {
-			for (int y = 2; y <= 4; y++) {
-				world.setTile(x, y, 0, TileType.TYPE_WALL);
-				world.setTile(x, y, 1, TileType.TYPE_WALL);
-			}
-		}
 
 	}
 
