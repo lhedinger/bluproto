@@ -16,14 +16,16 @@ import javax.imageio.ImageIO;
 public class ResourceManager {
 
 	public final static int tilemapCols = 4;
-	public final static int tilemapRows = 3;
+	public final static int tilemapRows = 7;
+	public final static int tilemapQuarter = tilemapCols * tilemapRows;
 	public final static int tileSize = 64;
 	public final static int subTileSize = 32;
 	public final static int tilePadding = 16;
-	public final static int wall_variations = 2;
 
 	public final static String wallmapFilename = "res/tiles/walls.png";
 	public final static String floormapFilename = "res/tiles/floors.png";
+
+	private static final int wallVariants = 3;
 
 	private static BufferedImage[] wallmap = new BufferedImage[tilemapCols * tilemapRows * 4];
 	private static BufferedImage[] floormap = new BufferedImage[tilemapCols * tilemapRows * 4];
@@ -80,16 +82,31 @@ public class ResourceManager {
 
 	private static void formatWallTiles() {
 
+		// corners filled
 		for (int i = 0; i < 4; i++) {
-			wallmap[6 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[6 + i * 12], wallmap[5 + i * 12]),
-					floormap[3]);
-			wallmap[10 + i * 12] = squash(renderWithMaskedLayers(wallmap[2], wallmap[10 + i * 12], wallmap[9 + i * 12]),
-					floormap[3]);
+			for (int j = 0; j < wallVariants; j++) {
+				int quarterStart = 6 + j * tilemapCols * 2;
+				wallmap[quarterStart + i * tilemapQuarter] = squash(
+						renderWithMaskedLayers(wallmap[2], wallmap[quarterStart + i * tilemapQuarter],
+								wallmap[quarterStart - 1 + i * tilemapQuarter]),
+						floormap[3]);
+			}
+		}
+
+		// walls filled
+		for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < wallVariants; j++) {
+				int quarterStart = 10 + j * tilemapCols * 2;
+				wallmap[quarterStart + i * tilemapQuarter] = squash(
+						renderWithMaskedLayers(wallmap[2], wallmap[quarterStart + i * tilemapQuarter],
+								wallmap[quarterStart - 1 + i * tilemapQuarter]),
+						floormap[3]);
+			}
 		}
 
 		for (int i = 0; i < 4; i++) {
-			floormap[5 + i * 12] = mask(wallmap[4 + i * 12], floormap[0]);
-			floormap[9 + i * 12] = mask(wallmap[8 + i * 12], floormap[0]);
+			floormap[5 + i * tilemapQuarter] = mask(wallmap[4 + i * tilemapQuarter], floormap[0]);
+			floormap[9 + i * tilemapQuarter] = mask(wallmap[8 + i * tilemapQuarter], floormap[0]);
 		}
 
 	}
@@ -101,8 +118,7 @@ public class ResourceManager {
 		tm = ImageIO.read(new File(filename));
 		BufferedImage temp = null;
 
-		int len = tilemapCols * tilemapRows;
-		for (int i = 0; i < len; i++) {
+		for (int i = 0; i < tilemapQuarter; i++) {
 			int y = i / tilemapCols;
 			int x = i % tilemapCols;
 			temp = tm.getSubimage(
@@ -113,15 +129,29 @@ public class ResourceManager {
 
 			if (temp != null) {
 				map[i] = temp;
-				map[i + len] = rotateClockwise90(temp, 1);
-				map[i + len * 2] = rotateClockwise90(temp, 2);
-				map[i + len * 3] = rotateClockwise90(temp, 3);
+				map[i + tilemapQuarter] = rotateClockwise90(temp, 1);
+				map[i + tilemapQuarter * 2] = rotateClockwise90(temp, 2);
+				map[i + tilemapQuarter * 3] = rotateClockwise90(temp, 3);
 			}
 		}
 	}
 
 	public static BufferedImage getWallSubtile(String tilecode, int loc, int offset) {
 		int i = toTileIndex(tilecode, loc);
+
+		if (i == 1) {
+			return wallmap[2];
+		}
+
+		return wallmap[i + offset];
+	}
+
+	public static BufferedImage getHoleWallSubtile(String tilecode, int loc, int offset) {
+		int i = toTileIndex(tilecode, loc);
+
+		if (i == 1) {
+			return wallmap[1];
+		}
 
 		return wallmap[i + offset];
 	}
@@ -135,63 +165,63 @@ public class ResourceManager {
 	public static int toTileIndex(String tilecode, int loc) {
 
 		/*
-		 * 123 405 678
+		 * 1 2 3 4 O 5 6 7 8
 		 */
 
 		if (loc == 0) {
 			if (!tilecode.contains("2") && !tilecode.contains("4")) {
 				// corner
-				return 5 + 12 * loc;
+				return 5 + tilemapQuarter * loc;
 			}
 			if (!tilecode.contains("2")) {
 				// wall
-				return 9 + 12 * 0;
+				return 9 + tilemapQuarter * 0;
 			}
 			if (!tilecode.contains("4")) {
 				// wall
-				return 9 + 12 * 3;
+				return 9 + tilemapQuarter * 3;
 			}
 		}
 		if (loc == 1) {
 			if (!tilecode.contains("2") && !tilecode.contains("5")) {
 				// corner
-				return 5 + 12 * loc;
+				return 5 + tilemapQuarter * loc;
 			}
 			if (!tilecode.contains("2")) {
 				// wall
-				return 9 + 12 * 0;
+				return 9 + tilemapQuarter * 0;
 			}
 			if (!tilecode.contains("5")) {
 				// wall
-				return 9 + 12 * 1;
+				return 9 + tilemapQuarter * 1;
 			}
 		}
 		if (loc == 2) {
 			if (!tilecode.contains("5") && !tilecode.contains("7")) {
 				// corner
-				return 5 + 12 * loc;
+				return 5 + tilemapQuarter * loc;
 			}
 			if (!tilecode.contains("5")) {
 				// wall
-				return 9 + 12 * 1;
+				return 9 + tilemapQuarter * 1;
 			}
 			if (!tilecode.contains("7")) {
 				// wall
-				return 9 + 12 * 2;
+				return 9 + tilemapQuarter * 2;
 			}
 		}
 		if (loc == 3) {
 			if (!tilecode.contains("4") && !tilecode.contains("7")) {
 				// corner
-				return 5 + 12 * loc;
+				return 5 + tilemapQuarter * loc;
 			}
 			if (!tilecode.contains("7")) {
 				// wall
-				return 9 + 12 * 2;
+				return 9 + tilemapQuarter * 2;
 			}
 			if (!tilecode.contains("4")) {
 				// wall
-				return 9 + 12 * 3;
+				return 9 + tilemapQuarter * 3;
 			}
 		}
 
@@ -200,19 +230,29 @@ public class ResourceManager {
 	}
 
 	public static BufferedImage getWallTile(String tilecode) {
-		Image subA = getWallSubtile(tilecode, 0, 1);
-		Image subB = getWallSubtile(tilecode, 1, 1);
-		Image subC = getWallSubtile(tilecode, 2, 1);
-		Image subD = getWallSubtile(tilecode, 3, 1);
+		int var = 0;
+		if (Utils.random(3) == 1) {
+			var = (1 + Utils.random(wallVariants - 1)) * 2 * tilemapCols;
+		}
+
+		Image subA = getWallSubtile(tilecode, 0, 1 + var);
+		Image subB = getWallSubtile(tilecode, 1, 1 + var);
+		Image subC = getWallSubtile(tilecode, 2, 1 + var);
+		Image subD = getWallSubtile(tilecode, 3, 1 + var);
 
 		return combineSubtiles(subA, subB, subC, subD);
 	}
 
 	public static BufferedImage getHoleTile(String tilecode) {
-		Image subA = getWallSubtile(tilecode, 0, 0);
-		Image subB = getWallSubtile(tilecode, 1, 0);
-		Image subC = getWallSubtile(tilecode, 2, 0);
-		Image subD = getWallSubtile(tilecode, 3, 0);
+		int var = 0;
+		if (Utils.random(2) == 1) {
+			var = (1 + Utils.random(wallVariants - 1)) * 2 * tilemapCols;
+		}
+
+		Image subA = getHoleWallSubtile(tilecode, 0, 0 + var);
+		Image subB = getHoleWallSubtile(tilecode, 1, 0 + var);
+		Image subC = getHoleWallSubtile(tilecode, 2, 0 + var);
+		Image subD = getHoleWallSubtile(tilecode, 3, 0 + var);
 
 		return combineSubtiles(subA, subB, subC, subD);
 	}
@@ -227,10 +267,12 @@ public class ResourceManager {
 	}
 
 	public static BufferedImage getFloorTile(String tilecode) {
-		Image subA = floormap[0];
-		Image subB = floormap[0];
-		Image subC = floormap[0];
-		Image subD = floormap[0];
+		int i = 0;
+
+		Image subA = floormap[i];
+		Image subB = floormap[i];
+		Image subC = floormap[i];
+		Image subD = floormap[i];
 
 		return combineSubtiles(subA, subB, subC, subD);
 		// return null;
@@ -253,20 +295,32 @@ public class ResourceManager {
 
 	public static BufferedImage getRamptile(String tilecode, boolean up) {
 
-		Image tile;
+
+
 		if (up) {
-			tile = getPropTile(0);
+			// currently always faces right
+			Image subA = floormap[14];
+			Image subB = floormap[14];
+			Image subC = floormap[15 + tilemapQuarter];
+			Image subD = floormap[15 + tilemapQuarter];
+			return combineSubtiles(subA, subB, subC, subD);
 		} else {
-			tile = getPropTile(1);
+			// currently always faces left
+			Image subA = floormap[15 + tilemapQuarter * 3];
+			Image subB = floormap[15 + tilemapQuarter * 3];
+			Image subC = floormap[14 + tilemapQuarter * 2];
+			Image subD = floormap[14 + tilemapQuarter * 2];
+			return combineSubtiles(subA, subB, subC, subD);
 		}
 
-		BufferedImage dimg = new BufferedImage(tileSize, tileSize, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = dimg.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-				RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-		g.drawImage(tile, 0, 0, tileSize, tileSize, null);
-		g.dispose();
-		return dimg;
+		// BufferedImage dimg = new BufferedImage(tileSize, tileSize,
+		// BufferedImage.TYPE_INT_ARGB);
+		// Graphics2D g = dimg.createGraphics();
+		// g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+		// RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		// g.drawImage(tile, 0, 0, tileSize, tileSize, null);
+		// g.dispose();
+		// return dimg;
 	}
 
 	public static BufferedImage getOverlay(int index) {

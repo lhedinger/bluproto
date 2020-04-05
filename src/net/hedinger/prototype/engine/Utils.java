@@ -83,6 +83,10 @@ public class Utils {
 		return dimg;
 	}
 
+	public static int random(int range) {
+		return (int) Math.floor(Math.random() * range);
+	}
+
 	public static int parseInt(String s, int invalid) {
 		int i;
 		try {

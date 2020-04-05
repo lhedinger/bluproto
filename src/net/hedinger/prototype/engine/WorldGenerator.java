@@ -40,17 +40,17 @@ public class WorldGenerator {
 
 		// custom stuff
 
-
-		for (int x = 1; x <= 3; x++) {
-			for (int y = 1; y <= 3; y++) {
-				world.setTile(x, y, 0, TileType.TYPE_HOLE);
-			}
-		}
+		//
+		// for (int x = 1; x <= 3; x++) {
+		// for (int y = 1; y <= 3; y++) {
+		// world.setTile(x, y, 0, TileType.TYPE_HOLE);
+		// }
+		// }
 
 		// end custom stuff
 
 		for (int i = 1; i < lvls; i++) {
-			placeRampDown(3 + i * 2, 3, i);
+			placeRampDown(3 + i * 2, 2 + i, i);
 		}
 
 		build_doors();

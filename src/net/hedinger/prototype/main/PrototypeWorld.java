@@ -3,7 +3,6 @@ package net.hedinger.prototype.main;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -53,13 +52,12 @@ public class PrototypeWorld extends JPanel {
 	final static Color corq = new Color(250, 250, 100, 50);
 	final static Color prerq = new Color(250, 250, 250, 50);
 	final static Color select = new Color(255, 255, 255, 255);
-	final static Font font = new Font("Arial", 1, 12);
 	final static BasicStroke stroke = new BasicStroke(4.0f);
 	final static BasicStroke wideStroke = new BasicStroke(8.0f);
 	private int mouseX = 0;
 	private int mouseY = 0;
 	private float camX = -1, camY = -1, camZ = -1;
-	private int cols = 15, rows = 15, lvls = 5;
+	private int cols = 15, rows = 10, lvls = 3;
 
 	public static String arglist = "";
 
@@ -131,9 +129,6 @@ public class PrototypeWorld extends JPanel {
 		layerRenderer.build(world);
 		view = new View(world, layerRenderer);
 
-		// System.out.println("World " + WorldGenerator.hashCodeString(world) +
-		// "\n");
-
 		frames = 0;
 
 		if (camX < 0 || camY < 0 || camZ < 0) {
@@ -149,11 +144,18 @@ public class PrototypeWorld extends JPanel {
 	}
 
 	private void spawnASet(int level) {
-		// spawnEntities(5, 10, level); // drone
-		spawnEntities(4, 20, level); // peeps
-		// spawnEntities(8, 5, level); // zombies
-		spawnEntities(2, 5, level); // soldier
-		// spawnEntities(1, 7, level); // sentries
+
+		spawnEntities(4, 100, level); // peeps
+
+		if (level == 0) {
+			spawnEntities(8, 5, level); // zombies
+		}
+		if (level != 0) {
+			spawnEntities(2, 5, level); // soldier
+			// spawnEntities(1, 7, level); // sentries
+			// spawnEntities(5, 10, level); // drone
+		}
+
 	}
 
 	private void spawnEntities(int type, int num, int level) {
@@ -226,10 +228,10 @@ public class PrototypeWorld extends JPanel {
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		graphics.setColor(bg);
 		graphics.setStroke(stroke);
-		graphics.setFont(font);
 
 		view.think(g, camX, camY, camZ, mouseX, mouseY);
 		view.render(g);
+		view.renderFPS(g, Math.round(framerate));
 		if (gamma > 30) {
 			world.think();
 
@@ -237,21 +239,6 @@ public class PrototypeWorld extends JPanel {
 			gamma = 0;
 			frames = 0;
 		}
-		world.render(g, view, layerRenderer);
-
-		g2.setStroke(new BasicStroke(1));
-		g2.setColor(new Color(0, 250, 0, 100));
-		int px = Utils.pixelX(g, view, 0);
-		int py = Utils.pixelY(g, view, 0);
-		if (dragging) {
-			g2.fillOval(px - 50, py - 50, 128, 128);
-		}
-
-		g2.setColor(Color.white);
-		g2.setFont(font);
-		// g2.drawString(frames + "", 20, 20);
-		g2.drawString("FPS: " + Math.round(framerate), 20, 15);
-		g2.drawString(">> args =" + arglist, 250, 15);
 
 		frames++;
 		repaint();

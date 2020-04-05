@@ -16,6 +16,7 @@ import net.hedinger.prototype.entities.NPC;
 
 public class View {
 
+	final static Font font = new Font("Arial", 1, 12);
 	final static Color bg = new Color(0, 0, 150);
 
 	private ViewMode viewmode = BASIC;
@@ -28,9 +29,9 @@ public class View {
 	private HashMap<Integer, Integer> overlays;
 	private HashMap<Integer, Integer> underlays;
 
-	private boolean showMinimap = true;
-	public static float minimap_scale = 0.5f;
-	int minimap_ping = 0;
+	public static final float minimap_scale = 0.5f;
+	public int minimap_ping = 0;
+	public int minimapX, minimapY;
 
 	World world;
 	LayerRenderer layerRenderer;
@@ -41,6 +42,17 @@ public class View {
 
 		this.world = world;
 		this.layerRenderer = layerRenderer;
+
+		float widthr = windowX / (ResourceManager.tileSize * world.cols);
+		float heightr = windowY / (ResourceManager.tileSize * world.rows);
+		float width = world.cols / minimap_scale;
+		float height = world.rows / minimap_scale;
+		widthr = widthr * width;
+		heightr = heightr * height;
+
+		minimapX = Math.round(width);
+		minimapY = Math.round(height);
+
 	}
 
 	public void think(Graphics g, float cx, float cy, float cz, int mx, int my) {
@@ -67,6 +79,7 @@ public class View {
 
 	public void render(Graphics g) {
 		clearScreen(g);
+		renderWorld(g);
 		renderMinimap(g);
 	}
 
@@ -77,35 +90,43 @@ public class View {
 		graphics.fillRect(0, 0, windowX, windowY);
 	}
 
+	public void renderFPS(Graphics g, int framerate) {
+		Graphics2D g2 = (Graphics2D) g;
+		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setColor(bg);
+		g2.setColor(Color.white);
+		g2.setFont(font);
+		g2.drawString("FPS: " + framerate, 20, 15);
+		// g2.drawString(">> args =" + arglist, 250, 15);
+	}
+
+	public void renderWorld(Graphics g) {
+		world.render(g, this, layerRenderer);
+	}
+
 	public void renderMinimap(Graphics g) {
-		if (showMinimap) {
+		if (viewmode.isAtLeast(BASIC)) {
 			Graphics2D g2 = (Graphics2D) g;
 
 			// FIXME optimize
-			double widthr = (int) g2.getClipBounds().getWidth();
-			widthr = widthr / (ResourceManager.tileSize * world.cols);
-			double heightr = (int) g2.getClipBounds().getHeight();
-			heightr = heightr / (ResourceManager.tileSize * world.rows);
-			double width = world.cols / minimap_scale;
-			double height = world.rows / minimap_scale;
-			widthr = widthr * width;
-			heightr = heightr * height;
+
 			g2.setColor(new Color(0, 0, 0, 150));
-			g2.fillRect(25, 25, (int) Math.round(width), (int) Math.round(height));
+			g2.fillRect(25, 25, minimapX, minimapY);
 			g2.setColor(Color.BLUE);
-			g2.fillRect(20, 20, (int) Math.round(width), (int) Math.round(height));
+			g2.fillRect(20, 20, minimapX, minimapY);
 			g2.drawImage(layerRenderer.mapLayers[(int) camZ].image_layer_thumb, 20, 20, null);
 			g2.setColor(Color.WHITE);
 			g2.setStroke(new BasicStroke(2));
-			g2.drawRect(20 + (int) Math.round(getCamX() / minimap_scale - widthr / 2),
-					20 + (int) Math.round(getCamY() / minimap_scale - heightr / 2), (int) Math.round(widthr),
-					(int) Math.round(heightr));
-			width = world.cols / minimap_scale;
-			height = world.rows / minimap_scale;
-			g2.drawRect(20, 20, (int) Math.round(width), (int) Math.round(height));
+			float widthr = windowX / ResourceManager.tileSize / minimap_scale;
+			float heightr = windowY / ResourceManager.tileSize / minimap_scale;
+			g2.drawRect(20 + Math.round(getCamX() / minimap_scale - widthr / 2),
+					20 + Math.round(getCamY() / minimap_scale - heightr / 2), Math.round(widthr),
+					Math.round(heightr));
+			g2.drawRect(20, 20, minimapX, minimapY);
 
 			g2.setFont(new Font("Arial", Font.BOLD, 14));
 			g2.drawImage(ResourceManager.getOverlay(5), (int) g2.getClipBounds().getWidth() - 86, 6, null);
+			// renderMinimapMarkers(g); // FIXME very slow!
 		}
 	}
 
@@ -119,13 +140,6 @@ public class View {
 						g2.setColor(Color.RED);
 						g2.fillOval((int) (19 + Math.round(e.getX() / minimap_scale)),
 								(int) (19 + Math.round(e.getY() / minimap_scale)), 2, 2);
-						g2.setStroke(new BasicStroke(1));
-
-						g2.drawOval(
-								(int) (19 - minimap_ping / 2 + Math.round(e.getX() / minimap_scale)),
-								(int) (19 - minimap_ping / 2 + Math.round(e.getY() / minimap_scale)),
-								minimap_ping,
-								minimap_ping);
 					} else {
 						if (n.isFriendly()) {
 							g2.setColor(Color.GREEN);
@@ -207,10 +221,11 @@ public class View {
 	}
 
 	public enum ViewMode {
-		BASIC(0),
-		UNDERLAYS(1),
-		OVERLAYS(2),
-		ALL(3);
+		NOHUD(0),
+		BASIC(1), // minimap
+		UNDERLAYS(2),
+		OVERLAYS(3),
+		ALL(4);
 
 		private int index;
 		private static Map<Integer, ViewMode> map = new HashMap<>();
@@ -223,6 +238,10 @@ public class View {
 			for (ViewMode enu : ViewMode.values()) {
 				map.put(enu.index, enu);
 			}
+		}
+
+		public boolean isAtLeast(ViewMode mode) {
+			return this.index >= mode.getIndex();
 		}
 
 		public ViewMode next() {
