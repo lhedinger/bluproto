@@ -22,6 +22,8 @@ public class Tile {
 	boolean door_S = false; // open
 	boolean door_W = false; // open
 
+	private int variant = 0;
+
 	public Tile(World w, int x, int y, int z) {
 		world = w;
 
@@ -36,6 +38,10 @@ public class Tile {
 		lvl = z;
 		type = t;
 
+		if (Utils.random(2) == 1) {
+			variant = (1 + Utils.random(10 - 1));
+		}
+
 	}
 
 	public Tile(int x, int y, int z, TileType t) {
@@ -43,6 +49,14 @@ public class Tile {
 		row = y;
 		lvl = z;
 		type = t;
+
+		if (Utils.random(2) == 1) {
+			variant = (1 + Utils.random(10 - 1));
+		}
+	}
+
+	public int getVariant() {
+		return variant;
 	}
 
 	public String getTileCode() {
@@ -281,47 +295,6 @@ public class Tile {
 			int y = w.hashRow(i) - row;
 
 			if (Math.abs(y) * Math.abs(x) == 1) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	public boolean isAlone(World w) {
-		calcConnected(w, true);
-
-		return getConnected().size() == 0;
-	}
-
-	public boolean hasLoneDiagonal(World w) {
-		HashSet<Integer> connected = calcConnected(w, true);
-		String tilecode = this.calcTilecode(w, connected);
-
-		if (tilecode.contains("0")) {
-			return false;
-		}
-		if (tilecode.contains("9")) {
-			return false;
-		}
-
-		if (tilecode.contains("1")) {
-			if (!(tilecode.contains("2") || tilecode.contains("4"))) {
-				return true;
-			}
-		}
-		if (tilecode.contains("3")) {
-			if (!(tilecode.contains("2") || tilecode.contains("5"))) {
-				return true;
-			}
-		}
-		if (tilecode.contains("6")) {
-			if (!(tilecode.contains("4") || tilecode.contains("7"))) {
-				return true;
-			}
-		}
-		if (tilecode.contains("8")) {
-			if (!(tilecode.contains("5") || tilecode.contains("7"))) {
 				return true;
 			}
 		}

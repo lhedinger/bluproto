@@ -104,9 +104,24 @@ public class ResourceManager {
 			}
 		}
 
+		// corners unfilled
 		for (int i = 0; i < 4; i++) {
-			floormap[5 + i * tilemapQuarter] = mask(wallmap[4 + i * tilemapQuarter], floormap[0]);
-			floormap[9 + i * tilemapQuarter] = mask(wallmap[8 + i * tilemapQuarter], floormap[0]);
+			for (int j = 0; j < wallVariants; j++) {
+				int quarterStart = 4 + j * tilemapCols * 2;
+				wallmap[quarterStart + i * tilemapQuarter] = mask(
+						wallmap[quarterStart + i * tilemapQuarter],
+						floormap[0]);
+			}
+		}
+
+		// walls unfilled
+		for (int i = 0; i < 4; i++) {
+			for (int j = 0; j < wallVariants; j++) {
+				int quarterStart = 8 + j * tilemapCols * 2;
+				wallmap[quarterStart + i * tilemapQuarter] = mask(
+						wallmap[quarterStart + i * tilemapQuarter],
+						floormap[0]);
+			}
 		}
 
 	}
@@ -156,10 +171,10 @@ public class ResourceManager {
 		return wallmap[i + offset];
 	}
 
-	public static BufferedImage getFloorSubtile(String tilecode, int loc, int offset) {
-		int i = toTileIndex(tilecode, loc);
+	public static BufferedImage getPartialFloorSubtile(String tilecode, int loc, int offset) {
+		int i = toTileIndex(tilecode, loc) - 1;
 
-		return floormap[i + offset];
+		return wallmap[i + offset];
 	}
 
 	public static int toTileIndex(String tilecode, int loc) {
@@ -229,11 +244,9 @@ public class ResourceManager {
 		return 1;
 	}
 
-	public static BufferedImage getWallTile(String tilecode) {
-		int var = 0;
-		if (Utils.random(3) == 1) {
-			var = (1 + Utils.random(wallVariants - 1)) * 2 * tilemapCols;
-		}
+	public static BufferedImage getWallTile(String tilecode, int variant) {
+		int var = variant % wallVariants;
+		var = var * 2 * tilemapCols;
 
 		Image subA = getWallSubtile(tilecode, 0, 1 + var);
 		Image subB = getWallSubtile(tilecode, 1, 1 + var);
@@ -243,11 +256,9 @@ public class ResourceManager {
 		return combineSubtiles(subA, subB, subC, subD);
 	}
 
-	public static BufferedImage getHoleTile(String tilecode) {
-		int var = 0;
-		if (Utils.random(2) == 1) {
-			var = (1 + Utils.random(wallVariants - 1)) * 2 * tilemapCols;
-		}
+	public static BufferedImage getHoleTile(String tilecode, int variant) {
+		int var = variant % wallVariants;
+		var = var * 2 * tilemapCols;
 
 		Image subA = getHoleWallSubtile(tilecode, 0, 0 + var);
 		Image subB = getHoleWallSubtile(tilecode, 1, 0 + var);
@@ -257,11 +268,14 @@ public class ResourceManager {
 		return combineSubtiles(subA, subB, subC, subD);
 	}
 
-	public static BufferedImage getHoleFloorTile(String tilecode) {
-		Image subA = getFloorSubtile(tilecode, 0, 0);
-		Image subB = getFloorSubtile(tilecode, 1, 0);
-		Image subC = getFloorSubtile(tilecode, 2, 0);
-		Image subD = getFloorSubtile(tilecode, 3, 0);
+	public static BufferedImage getHoleFloorTile(String tilecode, int variant) {
+		int var = variant % wallVariants;
+		var = var * 2 * tilemapCols;
+
+		Image subA = getPartialFloorSubtile(tilecode, 0, 0 + var);
+		Image subB = getPartialFloorSubtile(tilecode, 1, 0 + var);
+		Image subC = getPartialFloorSubtile(tilecode, 2, 0 + var);
+		Image subD = getPartialFloorSubtile(tilecode, 3, 0 + var);
 
 		return combineSubtiles(subA, subB, subC, subD);
 	}
@@ -294,8 +308,6 @@ public class ResourceManager {
 	}
 
 	public static BufferedImage getRamptile(String tilecode, boolean up) {
-
-
 
 		if (up) {
 			// currently always faces right

@@ -34,7 +34,7 @@ public class WorldGenerator {
 
 	public void run() {
 		for (int i = 0; i < lvls; i++) {
-			buildSectors(20, i);
+			buildSectors(5, i);
 		}
 		cleanup();
 
@@ -466,26 +466,35 @@ public class WorldGenerator {
 			for (int x = 0; x < world.cols; x++) {
 				for (int y = 0; y < world.rows; y++) {
 					for (int z = 0; z < world.lvls; z++) {
-						Tile t = world.getTile(x, y, z);
+						Tile current = world.getTile(x, y, z);
 
-						if (t.getType() == TYPE_WALL) {
-							if (t.hasLoneDiagonal(world)) {
+						if (current.getType() == TYPE_WALL) {
+							if (hasLoneDiagonal(current.getTileCode())) {
 								world.setTile(x, y, z, TYPE_FLOOR);
 								rescan = true;
 							}
 						}
-						if (t.getType() == TYPE_HOLE) {
-							if (t.hasLoneDiagonal(world)) {
+						if (current.getType() == TYPE_HOLE) {
+							if (hasLoneDiagonal(current.getTileCode())) {
 								world.setTile(x, y, z, TYPE_FLOOR);
 								rescan = true;
 							}
 						}
-						if (t.getType() == TYPE_FLOOR) {
-							if (t.isAlone(world)) {
+						if (current.getType() == TYPE_FLOOR) {
+							if (current.getTileCode() == "0") {
 								world.setTile(x, y, z, TYPE_WALL);
 								rescan = true;
 							}
 						}
+
+						if (z > 0) {
+							Tile below = world.getTile(x, y, z - 1);
+							if (current.getType() == TYPE_HOLE && below.getType() == TileType.TYPE_WALL) {
+								world.setTile(x, y, z, TYPE_FLOOR);
+								rescan = true;
+							}
+						}
+
 					}
 				}
 			}
@@ -559,6 +568,32 @@ public class WorldGenerator {
 
 		id = tempid;
 		return dir + 10 * tempid;
+	}
+
+	private boolean hasLoneDiagonal(String tilecode) {
+
+		if (tilecode.contains("1")) {
+			if (!(tilecode.contains("2") || tilecode.contains("4"))) {
+				return true;
+			}
+		}
+		if (tilecode.contains("3")) {
+			if (!(tilecode.contains("2") || tilecode.contains("5"))) {
+				return true;
+			}
+		}
+		if (tilecode.contains("6")) {
+			if (!(tilecode.contains("4") || tilecode.contains("7"))) {
+				return true;
+			}
+		}
+		if (tilecode.contains("8")) {
+			if (!(tilecode.contains("5") || tilecode.contains("7"))) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 }

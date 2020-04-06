@@ -1,0 +1,3 @@
+gaussian blur 8.0 x 8.0
+regular blur
+original layer

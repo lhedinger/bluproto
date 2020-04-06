@@ -17,7 +17,7 @@ import net.hedinger.prototype.entities.NPC;
 public class View {
 
 	final static Font font = new Font("Arial", 1, 12);
-	final static Color bg = new Color(0, 0, 150);
+	final static Color bg = new Color(0, 0, 0);
 
 	private ViewMode viewmode = BASIC;
 

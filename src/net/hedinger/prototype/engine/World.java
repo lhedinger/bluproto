@@ -59,7 +59,7 @@ public class World {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				for (int z = 0; z < lvls; z++) {
-					if (Math.random() * 2 > 1) {
+					if (z > 0 && Math.random() * 3 < 1) {
 						setTile(x, y, z, Tile.TileType.TYPE_HOLE);
 					} else {
 						setTile(x, y, z, Tile.TileType.TYPE_WALL);

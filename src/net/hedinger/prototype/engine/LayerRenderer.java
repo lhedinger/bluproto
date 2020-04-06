@@ -53,13 +53,14 @@ public class LayerRenderer {
 	private BufferedImage getFloorTile(World world, Tile tile) {
 		String tilecode = tile.getTileCode();
 		Tile.TileType type = tile.getType();
+		int variant = tile.getVariant();
 
 		switch (type) {
 		case TYPE_FLOOR:
 		case TYPE_WALL:
 			return ResourceManager.getFloorTile(tilecode);
 		case TYPE_HOLE:
-			return ResourceManager.getHoleFloorTile(tilecode);
+			return ResourceManager.getHoleFloorTile(tilecode, variant);
 		case TYPE_RAMPUP:
 			return ResourceManager.getRamptile(tilecode, true);
 		case TYPE_RAMPDOWN:
@@ -72,12 +73,13 @@ public class LayerRenderer {
 	private BufferedImage getWallTile(World world, Tile tile) {
 		String tilecode = tile.getTileCode();
 		Tile.TileType type = tile.getType();
+		int variant = tile.getVariant();
 
 		switch (type) {
 		case TYPE_WALL:
-			return ResourceManager.getWallTile(tilecode);
+			return ResourceManager.getWallTile(tilecode, variant);
 		case TYPE_HOLE:
-			return ResourceManager.getHoleTile(tilecode);
+			return ResourceManager.getHoleTile(tilecode, variant);
 		default:
 			return null;
 		}
