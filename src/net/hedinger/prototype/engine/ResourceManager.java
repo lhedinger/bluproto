@@ -24,6 +24,7 @@ public class ResourceManager {
 
 	public final static String wallmapFilename = "res/tiles/walls.png";
 	public final static String floormapFilename = "res/tiles/floors.png";
+	public final static String scanline = "res/overlays/scanline_500.png";
 
 	private static final int wallVariants = 3;
 
@@ -32,6 +33,7 @@ public class ResourceManager {
 	private static BufferedImage[] propmap = new BufferedImage[11];
 	private static BufferedImage[] npcs = new BufferedImage[3];
 	private static BufferedImage[] npcs_dead = new BufferedImage[3];
+	private static BufferedImage[] effects = new BufferedImage[10];
 	private static BufferedImage[] overlay = new BufferedImage[10];
 	private static BufferedImage[] overlay_shadow = new BufferedImage[10];
 
@@ -50,6 +52,8 @@ public class ResourceManager {
 		overlay[3] = loadImage("res/overlays/icon_sentry.png");
 		overlay[4] = loadImage("res/overlays/icon_biohazard.png");
 		overlay[5] = loadImage("res/overlays/icon_peep.png");
+
+		effects[0] = loadImage(scanline);
 
 		for (int i = 0; i < overlay.length; i++) {
 			overlay_shadow[i] = shadowImage(overlay[i]);
@@ -333,6 +337,10 @@ public class ResourceManager {
 		// g.drawImage(tile, 0, 0, tileSize, tileSize, null);
 		// g.dispose();
 		// return dimg;
+	}
+
+	public static BufferedImage getEffects(int index) {
+		return effects[index];
 	}
 
 	public static BufferedImage getOverlay(int index) {

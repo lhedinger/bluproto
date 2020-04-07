@@ -5,7 +5,6 @@ import java.awt.image.BufferedImage;
 public class MapLayer {
 
 	BufferedImage image_layer;
-	BufferedImage image_layer_thumb;
 	BufferedImage[] image_layer_downsized;
 	int level;
 

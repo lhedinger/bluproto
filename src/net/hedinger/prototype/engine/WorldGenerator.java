@@ -34,7 +34,7 @@ public class WorldGenerator {
 
 	public void run() {
 		for (int i = 0; i < lvls; i++) {
-			buildSectors(5, i);
+			buildSectors(10, i);
 		}
 		cleanup();
 
@@ -463,6 +463,7 @@ public class WorldGenerator {
 		boolean rescan = false;
 		int iteration = 0;
 		do {
+			world.alignTiles();
 			for (int x = 0; x < world.cols; x++) {
 				for (int y = 0; y < world.rows; y++) {
 					for (int z = 0; z < world.lvls; z++) {

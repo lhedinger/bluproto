@@ -33,8 +33,6 @@ public class LayerRenderer {
 			}
 
 			mapLayers[z].image_layer = compileLayer(wallTiles, floorTiles);
-			double width = world.cols / View.minimap_scale;
-			double height = world.rows / View.minimap_scale;
 
 			mapLayers[z].image_layer_downsized = new BufferedImage[world.max_view_depth];
 			for (int i = 0; i < world.max_view_depth; i++) {
@@ -44,8 +42,6 @@ public class LayerRenderer {
 						Math.round(Utils.toPixel(world.rows, -i, 1)));
 			}
 
-			mapLayers[z].image_layer_thumb = Utils.resize(mapLayers[z].image_layer, (int) Math.round(width),
-					(int) Math.round(height));
 		}
 
 	}

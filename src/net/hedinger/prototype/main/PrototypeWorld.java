@@ -56,8 +56,9 @@ public class PrototypeWorld extends JPanel {
 	final static BasicStroke wideStroke = new BasicStroke(8.0f);
 	private int mouseX = 0;
 	private int mouseY = 0;
-	private float camX = -1, camY = -1, camZ = -1;
 	private int cols = 15, rows = 10, lvls = 3;
+
+	float camDX, camDY, camDZ;
 
 	public static String arglist = "";
 
@@ -130,12 +131,6 @@ public class PrototypeWorld extends JPanel {
 		view = new View(world, layerRenderer);
 
 		frames = 0;
-
-		if (camX < 0 || camY < 0 || camZ < 0) {
-			camX = cols * 0.5f;
-			camY = rows * 0.5f;
-			camZ = 0;
-		}
 
 		for (int i = 0; i < world.getLevels(); i++) {
 			spawnASet(i);
@@ -229,7 +224,11 @@ public class PrototypeWorld extends JPanel {
 		graphics.setColor(bg);
 		graphics.setStroke(stroke);
 
-		view.think(g, camX, camY, camZ, mouseX, mouseY);
+		view.think(g, camDX, camDY, camDZ, mouseX, mouseY);
+		camDX = 0;
+		camDY = 0;
+		camDZ = 0;
+
 		view.render(g);
 		view.renderFPS(g, Math.round(framerate));
 		if (gamma > 30) {
@@ -293,21 +292,6 @@ public class PrototypeWorld extends JPanel {
 
 	// --------------------------------------------------------------------------
 	// ----MOUSELISTENERS
-	public boolean mouseInMiniMap() {
-		if (mouseX <= view.getMiniMapWidth() + view.getMiniMapX()) {
-			if (mouseY <= view.getMiniMapHeight() + view.getMiniMapY()) {
-				if (mouseX >= view.getMiniMapX()) {
-					if (mouseY >= view.getMiniMapY()) {
-						camX = (mouseX - view.getMiniMapX()) * view.getMiniMapScale();
-						camY = (mouseY - view.getMiniMapY()) * view.getMiniMapScale();
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-
 	int entitytype = -1;
 
 	public class mouseListener implements MouseListener {
@@ -336,21 +320,13 @@ public class PrototypeWorld extends JPanel {
 			mouseX = e.getX() - XCORRECTION;
 			mouseY = e.getY() - YCORRECTION;
 
-			if (mouseInMiniMap()) {
-				return;
-			}
+			view.mousePressed();
 
 			if (e.getButton() == MouseEvent.BUTTON1) {
 
 				if (entitytype > -1) {
-					spawnType(view.mouseX, view.mouseY, view.mouseZ, entitytype);
+					spawnType(view.mouseRow, view.mouseCol, view.mouseZ, entitytype);
 				}
-
-			}
-			if (e.getButton() == MouseEvent.BUTTON3) {
-				mx = view.mouseX;
-				my = view.mouseY;
-				mz = view.mouseZ;
 
 			}
 		}
@@ -377,10 +353,7 @@ public class PrototypeWorld extends JPanel {
 			mouseX = e.getX() - XCORRECTION;
 			mouseY = e.getY() - YCORRECTION;
 
-			if (mouseInMiniMap()) {
-				dragging = false;
-				return;
-			}
+			view.mousePressed();
 
 			if (!dragging) {
 				dragX = mouseX;
@@ -406,22 +379,22 @@ public class PrototypeWorld extends JPanel {
 				view.cycleViewMode();
 			}
 			if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_W) {
-				camY -= 0.15;
+				camDY = -0.15f;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_DOWN || e.getKeyCode() == KeyEvent.VK_S) {
-				camY += 0.15;
+				camDY = 0.15f;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_A) {
-				camX -= 0.15;
+				camDX = -0.15f;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_RIGHT || e.getKeyCode() == KeyEvent.VK_D) {
-				camX += 0.15;
+				camDX = 0.15f;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_PAGE_UP) {
-				camZ += 1;
+				camDZ = 1;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_PAGE_DOWN) {
-				camZ -= 1;
+				camDZ = -1;
 			}
 			if (e.getKeyCode() == KeyEvent.VK_R) {
 				initialize();
@@ -432,18 +405,6 @@ public class PrototypeWorld extends JPanel {
 			}
 			if (e.getKeyCode() == KeyEvent.VK_H) {
 				// System.out.println(WorldGenerator.hashCodeString(world));
-			}
-			if (e.getKeyCode() == KeyEvent.VK_S) {
-				for (int i = 0; i < 100; i++) {
-					float x = (float) (Math.random() * cols);
-					float y = (float) (Math.random() * rows);
-
-					if (world.isWalkable(x, y, (int) camZ)) {
-						spawnType(x, y, (int) camZ, entitytype);
-					} else {
-						i--;
-					}
-				}
 			}
 			if (e.getKeyCode() == KeyEvent.VK_0) {
 				entitytype = 0;
@@ -476,12 +437,6 @@ public class PrototypeWorld extends JPanel {
 				entitytype = 9;
 			}
 
-			if (camZ < 0) {
-				camZ = 0;
-			}
-			if (camZ >= world.getLevels() - 1) {
-				camZ = world.getLevels() - 1;
-			}
 		}
 
 		@Override

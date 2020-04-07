@@ -3,7 +3,6 @@ package net.hedinger.prototype.engine;
 import static net.hedinger.prototype.engine.ResourceManager.tileSize;
 import static net.hedinger.prototype.engine.View.ViewMode.BASIC;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
@@ -11,8 +10,6 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.HashMap;
 import java.util.Map;
-
-import net.hedinger.prototype.entities.NPC;
 
 public class View {
 
@@ -23,18 +20,20 @@ public class View {
 
 	int windowX, windowY;
 
-	private float camX, camY, camZ;
-	public float mouseX, mouseY, mouseZ;
+	float camX, camY, camZ;
+	private int mouseX, mouseY;
+	public float mouseCol, mouseRow, mouseZ;
+
+	int chunkX, chunkY;
+	final int chunkSize = 500;
 
 	private HashMap<Integer, Integer> overlays;
 	private HashMap<Integer, Integer> underlays;
 
-	public static final float minimap_scale = 0.5f;
-	public int minimap_ping = 0;
-	public int minimapX, minimapY;
-
 	World world;
 	LayerRenderer layerRenderer;
+
+	Minimap minimap;
 
 	public View(World world, LayerRenderer layerRenderer) {
 		overlays = new HashMap<Integer, Integer>();
@@ -43,32 +42,49 @@ public class View {
 		this.world = world;
 		this.layerRenderer = layerRenderer;
 
-		float widthr = windowX / (ResourceManager.tileSize * world.cols);
-		float heightr = windowY / (ResourceManager.tileSize * world.rows);
-		float width = world.cols / minimap_scale;
-		float height = world.rows / minimap_scale;
-		widthr = widthr * width;
-		heightr = heightr * height;
+		camX = world.cols * 0.5f;
+		camY = world.rows * 0.5f;
+		camZ = 0;
 
-		minimapX = Math.round(width);
-		minimapY = Math.round(height);
+		minimap = new Minimap(world, this);
+		minimap.init(layerRenderer);
+	}
 
+	public void resize() {
+		chunkX = Math.floorDiv(windowX, chunkSize) + 1;
+		chunkY = Math.floorDiv(windowY, chunkSize) + 1;
+
+		minimap.resize();
 	}
 
 	public void think(Graphics g, float cx, float cy, float cz, int mx, int my) {
-		camX = cx;
-		camY = cy;
-		camZ = cz;
-		windowX = (int) g.getClipBounds().getMaxX();
-		windowY = (int) g.getClipBounds().getMaxY();
+		camX += cx;
+		camY += cy;
+		camZ += cz;
 
-		float tilesX = mouseX;
+		mouseX = mx;
+		mouseY = my;
+
+		if (camZ < 0) {
+			camZ = 0;
+		}
+		if (camZ >= world.getLevels() - 1) {
+			camZ = world.getLevels() - 1;
+		}
+
+		if (windowX != (int) g.getClipBounds().getMaxX() || windowY != (int) g.getClipBounds().getMaxY()) {
+			windowX = (int) g.getClipBounds().getMaxX();
+			windowY = (int) g.getClipBounds().getMaxY();
+			resize();
+		}
+
+		float tilesX = mouseCol;
 		tilesX = tilesX / tileSize - 0.5f * windowX / tileSize;
-		float tilesY = mouseY;
+		float tilesY = mouseRow;
 		tilesY = tilesY / tileSize - 0.5f * windowY / tileSize;
 
-		mouseX = camX + tilesX;
-		mouseY = camY + tilesY;
+		mouseCol = camX + tilesX;
+		mouseRow = camY + tilesY;
 		if ((int) (camZ) == camZ) {
 			mouseZ = camZ;
 		} else {
@@ -80,7 +96,12 @@ public class View {
 	public void render(Graphics g) {
 		clearScreen(g);
 		renderWorld(g);
-		renderMinimap(g);
+		renderEffects(g);
+		minimap.render(g);
+	}
+
+	public void mousePressed() {
+		minimap.mouseInMiniMap(mouseX, mouseY);
 	}
 
 	public void clearScreen(Graphics g) {
@@ -88,6 +109,15 @@ public class View {
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		graphics.setColor(bg);
 		graphics.fillRect(0, 0, windowX, windowY);
+	}
+
+	public void renderEffects(Graphics g) {
+		Graphics2D g2 = (Graphics2D) g;
+		for (int x = 0; x < chunkX; x++) {
+			for (int y = 0; y < chunkX; y++) {
+				g2.drawImage(ResourceManager.getEffects(0), chunkSize * x, chunkSize * y, null);
+			}
+		}
 	}
 
 	public void renderFPS(Graphics g, int framerate) {
@@ -104,70 +134,6 @@ public class View {
 		world.render(g, this, layerRenderer);
 	}
 
-	public void renderMinimap(Graphics g) {
-		if (viewmode.isAtLeast(BASIC)) {
-			Graphics2D g2 = (Graphics2D) g;
-
-			// FIXME optimize
-
-			g2.setColor(new Color(0, 0, 0, 150));
-			g2.fillRect(25, 25, minimapX, minimapY);
-			g2.setColor(Color.BLUE);
-			g2.fillRect(20, 20, minimapX, minimapY);
-			g2.drawImage(layerRenderer.mapLayers[(int) camZ].image_layer_thumb, 20, 20, null);
-			g2.setColor(Color.WHITE);
-			g2.setStroke(new BasicStroke(2));
-			float widthr = windowX / ResourceManager.tileSize / minimap_scale;
-			float heightr = windowY / ResourceManager.tileSize / minimap_scale;
-			g2.drawRect(20 + Math.round(getCamX() / minimap_scale - widthr / 2),
-					20 + Math.round(getCamY() / minimap_scale - heightr / 2), Math.round(widthr),
-					Math.round(heightr));
-			g2.drawRect(20, 20, minimapX, minimapY);
-
-			g2.setFont(new Font("Arial", Font.BOLD, 14));
-			g2.drawImage(ResourceManager.getOverlay(5), (int) g2.getClipBounds().getWidth() - 86, 6, null);
-			// renderMinimapMarkers(g); // FIXME very slow!
-		}
-	}
-
-	public void renderMinimapMarkers(Graphics g) {
-		Graphics2D g2 = (Graphics2D) g;
-		for (Entity e : world.entities.values()) {
-			if (e instanceof NPC) {
-				NPC n = (NPC) e;
-				if (n != null && !n.isDead()) {
-					if (n.isHostile() && n.isDetected()) {
-						g2.setColor(Color.RED);
-						g2.fillOval((int) (19 + Math.round(e.getX() / minimap_scale)),
-								(int) (19 + Math.round(e.getY() / minimap_scale)), 2, 2);
-					} else {
-						if (n.isFriendly()) {
-							g2.setColor(Color.GREEN);
-							g2.fillOval((int) (19 + Math.round(e.getX() / minimap_scale)),
-									(int) (19 + Math.round(e.getY() / minimap_scale)), 2, 2);
-						} else {
-							g2.setColor(Color.WHITE);
-							g2.fillOval((int) (19 + Math.round(e.getX() / minimap_scale)),
-									(int) (19 + Math.round(e.getY() / minimap_scale)), 1, 1);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	public int getMiniMapWidth() {
-		double width = world.cols / minimap_scale;
-
-		return (int) Math.round(width);
-	}
-
-	public int getMiniMapHeight() {
-		double height = world.rows / minimap_scale;
-
-		return (int) Math.round(height);
-	}
-
 	public int getMiniMapX() {
 		return 20;
 	}
@@ -176,8 +142,12 @@ public class View {
 		return 20;
 	}
 
-	public float getMiniMapScale() {
-		return minimap_scale;
+	public int getMinimapWidth() {
+		return minimap.minimapX;
+	}
+
+	public int getMinimapHeight() {
+		return minimap.minimapY;
 	}
 
 	public int pixelX(double x, double z, float pixelOffset) {
@@ -202,6 +172,14 @@ public class View {
 
 	public float getCamY() {
 		return camY;
+	}
+
+	public float getCamTlX() {
+		return camX * tileSize - Math.round(windowX * 0.5f);
+	}
+
+	public float getCamTlY() {
+		return camY * tileSize - Math.round(windowY * 0.5f);
 	}
 
 	public int getCamZ() {

@@ -83,6 +83,10 @@ public class Utils {
 		return dimg;
 	}
 
+	public static int divCeil(int value, int divisor) {
+		return (int) Math.ceil((float) value / divisor);
+	}
+
 	public static int random(int range) {
 		return (int) Math.floor(Math.random() * range);
 	}
