@@ -111,7 +111,7 @@ public class Spore extends NPC
 		this.kill();
 	}
 
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Spore";
 	}

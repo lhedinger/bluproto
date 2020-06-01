@@ -141,7 +141,7 @@ public class Drone extends NPC {
 	}
 
 	@Override
-	public String NPCType() {
+	public String getNpcTypeName() {
 		return "Drone";
 	}
 }

@@ -153,7 +153,7 @@ public abstract class Weapon extends Entity
 	public abstract String WeaponType();
 
 	@Override
-	public final String EntityType()
+	public final String getEntityTypeName()
 	{
 		return "Weapon."+WeaponType();
 	}

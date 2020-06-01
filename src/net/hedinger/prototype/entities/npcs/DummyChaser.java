@@ -37,7 +37,7 @@ public class DummyChaser extends NPC {
 	}
 
 	@Override
-	public String NPCType() {
+	public String getNpcTypeName() {
 		return "DummyChaser";
 	}
 

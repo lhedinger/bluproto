@@ -99,7 +99,7 @@ public class Sentry extends NPC
 		tZ = Z;
 	}
 
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Sentry";
 	}

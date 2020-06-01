@@ -115,7 +115,7 @@ public class Houndeye extends NPC
 	private double metabolism = 0.02;
 	private int matingcooldown = 700;
 
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Houndeye";
 	}

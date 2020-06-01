@@ -19,6 +19,7 @@ import javax.swing.WindowConstants;
 
 import net.hedinger.prototype.engine.LayerRenderer;
 import net.hedinger.prototype.engine.ResourceManager;
+import net.hedinger.prototype.engine.StopWatch;
 import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
@@ -56,7 +57,9 @@ public class PrototypeWorld extends JPanel {
 	final static BasicStroke wideStroke = new BasicStroke(8.0f);
 	private int mouseX = 0;
 	private int mouseY = 0;
-	private int cols = 15, rows = 10, lvls = 3;
+	private int cols = 30, rows = 30, lvls = 3;
+
+	public static StopWatch stopwatch;
 
 	float camDX, camDY, camDZ;
 
@@ -122,6 +125,8 @@ public class PrototypeWorld extends JPanel {
 	private void initialize(String hash) {
 		ResourceManager.loadResources();
 
+		stopwatch = new StopWatch();
+
 		WorldGenerator generator = new WorldGenerator(cols, rows, lvls);
 		generator.run();
 		world = generator.getWorld();
@@ -140,13 +145,15 @@ public class PrototypeWorld extends JPanel {
 
 	private void spawnASet(int level) {
 
-		spawnEntities(4, 100, level); // peeps
+		int ratio = (int) Math.round(0.25f * Math.sqrt(rows * cols));
+
+		spawnEntities(4, 100 * ratio, level); // peeps
 
 		if (level == 0) {
-			spawnEntities(8, 5, level); // zombies
+			spawnEntities(8, ratio, level); // zombies
 		}
 		if (level != 0) {
-			spawnEntities(2, 5, level); // soldier
+			spawnEntities(2, 5 * ratio, level); // soldier
 			// spawnEntities(1, 7, level); // sentries
 			// spawnEntities(5, 10, level); // drone
 		}
@@ -195,6 +202,8 @@ public class PrototypeWorld extends JPanel {
 
 	long timeprev = Calendar.getInstance().getTimeInMillis();
 
+	long stopwatchReport = 0;
+
 	private Graphics2D g2;
 
 	@Override
@@ -238,6 +247,13 @@ public class PrototypeWorld extends JPanel {
 			gamma = 0;
 			frames = 0;
 		}
+
+		if (stopwatchReport > 60) {
+			stopwatch.printReport();
+			stopwatchReport = 0;
+		}
+
+		stopwatchReport++;
 
 		frames++;
 		repaint();

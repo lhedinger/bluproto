@@ -94,7 +94,7 @@ public class Grenade extends Entity
 	}
 
 	@Override
-	public String EntityType()
+	public String getEntityTypeName()
 	{
 		return "Grenade";
 	}

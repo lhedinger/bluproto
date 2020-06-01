@@ -220,7 +220,7 @@ public class Door extends Entity
 	}
 
 	@Override
-	public String EntityType()
+	public String getEntityTypeName()
 	{
 		return "Door";
 	}

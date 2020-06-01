@@ -16,6 +16,7 @@ import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.View.ViewMode;
 import net.hedinger.prototype.engine.World;
+import net.hedinger.prototype.main.PrototypeWorld;
 
 public abstract class NPC extends Entity {
 	// misc. variables
@@ -51,8 +52,8 @@ public abstract class NPC extends Entity {
 
 	protected int detected = 0;
 
-	protected TreeMap<Double, NPC> targets = null;
-	private String[] NPC_IGNORE = {};
+	protected TreeMap<Double, NPC> targets = new TreeMap<Double, NPC>();
+	protected TreeMap<Double, NPC> focusTargets = new TreeMap<Double, NPC>();
 
 	public NPC(double x, double y, double z) {
 		super(x, y, z);
@@ -97,7 +98,9 @@ public abstract class NPC extends Entity {
 
 	@Override
 	protected void run_extended() {
-		targets = scanTargets(targets, NPC_IGNORE);
+		PrototypeWorld.stopwatch.start();
+		targets = scanTargets(targets);
+		PrototypeWorld.stopwatch.stop();
 
 		if (status < 0 || status > 3) {
 			status = NPC.STATUS_IDLE;
@@ -108,6 +111,14 @@ public abstract class NPC extends Entity {
 				path = null;
 			}
 		}
+
+		if (D >= 2 * Math.PI) {
+			D -= 2 * Math.PI;
+		}
+		if (D < 0) {
+			D += 2 * Math.PI;
+		}
+
 	}
 
 	@Override
@@ -161,7 +172,30 @@ public abstract class NPC extends Entity {
 			if (ping > LOS_RANGE) {
 				ping = -SEARCH_FREQ;
 			}
+		}
 
+		if (v.getViewMode() == ViewMode.ALL && this.getNpcTypeName() == "Human") {
+			g2.setColor(new Color(255, 255, 255, 50));
+			for (NPC e : targets.values()) {
+				if (e != null) {
+					g2.drawLine(
+							e.pixelX(v, 0),
+							e.pixelY(v, 0),
+							pixelX(v, 0),
+							pixelY(v, 0));
+				}
+			}
+
+			g2.setColor(new Color(255, 100, 100, 140));
+			for (NPC e : focusTargets.values()) {
+				if (e != null) {
+					g2.drawLine(
+							e.pixelX(v, 0),
+							e.pixelY(v, 0),
+							pixelX(v, 0),
+							pixelY(v, 0));
+				}
+			}
 		}
 
 		g2.setColor(col);
@@ -238,6 +272,26 @@ public abstract class NPC extends Entity {
 		age = -1;
 	}
 
+	@Override
+	public void collisionCheck() {
+		float spring = 0.25f;
+		for (NPC npc : targets.values()) {
+			double dx = npc.getX() - getX();
+			double dy = npc.getY() - getY();
+			double distance = Math.sqrt(dx * dx + dy * dy);
+			double minDist = npc.getSize() / 2 + getSize() / 2;
+			if (distance < minDist) {
+				double angle = Math.atan2(-dy, -dx);
+				double targetX = Math.cos(angle) * distance;
+				double targetY = Math.sin(angle) * distance;
+				double ax = (targetX) * spring;
+				double ay = (targetY) * spring;
+				dX += ax;
+				dY += ay;
+			}
+		}
+	}
+
 	// |///////////////////////////////
 	// |///////////////////////////////////////////////////////////////
 	// LOS METHODS
@@ -307,7 +361,40 @@ public abstract class NPC extends Entity {
 			chase(speed, turn);
 		}
 
+	}
 
+	protected void roam(double speed, int turn, double direction) {
+		boolean bool = isInLOS(-1, Math.PI);
+
+		if (!bool || tZ != Z) {
+			tX = X;
+			tY = Y;
+			tZ = Z;
+			dX = 0;
+			dY = 0;
+			dZ = 0;
+		}
+
+		if (isColliding()) {
+			tX = X;
+			tY = Y;
+			tZ = Z;
+		}
+
+		if (distance() < 0.05) {
+			double d = 0.5 + Math.random() * 1;
+			double a = variation(direction, Math.PI * 0.25);
+			if (Math.random() * 10 < 1) {
+				a = Math.random() * 2 * Math.PI;
+			}
+
+			tX = X + d * Math.cos(a);
+			tY = Y + d * Math.sin(a);
+			tZ = Z;
+
+		} else {
+			chase(speed, turn);
+		}
 
 	}
 
@@ -354,7 +441,7 @@ public abstract class NPC extends Entity {
 			dY = 0;
 			dZ = 0;
 		} else {
-			move(speed);
+			move(speed, D);
 			dX = variation(dX, dX * 0.2);
 			dY = variation(dY, dY * 0.2);
 		}
@@ -409,27 +496,16 @@ public abstract class NPC extends Entity {
 			dZ = 0;
 		}
 		if (distance(e.getX(), e.getY(), e.getZ()) < radius) {
-			return false;
+			roam(speed, turn);
 		} else {
-			move(speed);
+			move(speed, D);
 		}
 		return true;
 	}
 
-	int flee_collision = -1;
+	protected boolean flee(double speed, int turn, Entity e, double radius) {
 
-	protected void flee(double speed, int turn) {
-		if (isColliding()) {
-			flee_collision = 0;
-		}
-		double angle = Math.atan2(tY - Y, tX - X);
-
-		if (D >= 2 * Math.PI) {
-			D -= 2 * Math.PI;
-		}
-		if (D < 0) {
-			D += 2 * Math.PI;
-		}
+		double angle = Math.atan2(Y - tY, X - tX) + Math.PI;
 
 		if (angle > 2 * Math.PI) {
 			angle -= 2 * Math.PI;
@@ -438,7 +514,7 @@ public abstract class NPC extends Entity {
 			angle += 2 * Math.PI;
 		}
 
-		double dA = angle - D;
+		double dA = angle - D + Math.PI;
 
 		if (dA > Math.PI) {
 			dA = -2 * Math.PI + dA;
@@ -447,23 +523,17 @@ public abstract class NPC extends Entity {
 			dA = 2 * Math.PI + dA;
 		}
 
+		double dir = D;
+
 		if (dA > 0) {
-			D += (Math.sqrt(Math.abs(dA)) / turn);
+			dir += (Math.sqrt(Math.abs(dA)) / turn);
 		} else if (dA < 0) {
-			D -= (Math.sqrt(Math.abs(dA)) / turn);
+			dir -= (Math.sqrt(Math.abs(dA)) / turn);
 		}
 
-		if (flee_collision > 200) {
-			flee_collision = -1;
-		}
+		roam(speed, turn, dir);
 
-		if (flee_collision == -1) {
-			move(speed);
-		} else {
-			flee_collision++;
-			roam(speed, turn);
-		}
-
+		return true;
 	}
 
 	protected void turn(double speed, int turn) {
@@ -533,6 +603,13 @@ public abstract class NPC extends Entity {
 	}
 
 	protected void move(double speed) {
+		move(speed, D);
+	}
+
+	protected void move(double speed, double dir) {
+
+		D = dir;
+
 		if (D > 2 * Math.PI) {
 			D -= 2 * Math.PI;
 		}
@@ -774,11 +851,11 @@ public abstract class NPC extends Entity {
 			return false;
 		}
 
-		if (!World.includesType(t.EntityType(), types) && include) {
+		if (!World.includesType(t.getEntityTypeName(), types) && include) {
 			return false;
 		}
 
-		if (!World.excludesType(t.EntityType(), types) && !include) {
+		if (!World.excludesType(t.getEntityTypeName(), types) && !include) {
 			return false;
 		}
 
@@ -807,7 +884,7 @@ public abstract class NPC extends Entity {
 			return false;
 		}
 
-		if (!World.filterType(t.EntityType(), types, include)) {
+		if (!World.filterType(t.getEntityTypeName(), types, include)) {
 			return false;
 		}
 
@@ -914,11 +991,11 @@ public abstract class NPC extends Entity {
 		return true;
 	}
 
-	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts, String[] ignore) {
+	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
 		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
 
 		if (Math.random() * SEARCH_FREQ < 1) {
-			temp = getWorld().searchNPC2(X, Y, Z, D, LOS_RANGE, LOS_FOV, ignore, false, getID());
+			return getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID());
 		}
 
 		if (ts != null) {
@@ -930,14 +1007,16 @@ public abstract class NPC extends Entity {
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
 
 		for (NPC e : temp.values()) {
-			if (seeTarget(e, LOS_RANGE, LOS_FOV, ignore, false)) {
+			if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
 				if (isFriendly() && e.isHostile()) {
 					if (!isDead() && !e.isDead()) {
 						e.mark();
 					}
 				}
 
-				output.put(distance(e.getX(), e.getY(), e.getZ()), e);
+				if (e != null) {
+					output.put(distance(e.getX(), e.getY(), e.getZ()), e);
+				}
 			}
 		}
 
@@ -1022,31 +1101,38 @@ public abstract class NPC extends Entity {
 	 */
 	protected TreeMap<Double, NPC> getTargets(int sf, TreeMap<Double, NPC> ts, double range,
 			double fov, String[] types, boolean include) {
+
 		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
 
-		// if (Math.random() * sf < 1)
-		// {
-		// temp = getWorld().searchNPC(X, Y, Z, D, range, fov, types, include,
-		// getID());
-		// }
-
-		temp = targets;
-
 		if (ts != null) {
-			if (ts.size() > 0) {
-				temp.putAll(ts);
-			}
+			// temp.putAll(ts);
 		}
+
+		temp.putAll(targets);
 
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
 
 		for (NPC e : temp.values()) {
-			if (seeTarget(e, range, fov, types, include)) {
+			if (isLegalTarget(e, range, fov, types, include)) {
 				output.put(distance(e.getX(), e.getY(), e.getZ()), e);
 			}
 		}
 
 		return output;
+	}
+
+	protected boolean isLegalTarget(NPC t, double range, double fov, String[] types, boolean include) {
+		if (t == null) {
+			return false;
+		}
+		if (t.isDead()) {
+			return false;
+		}
+		if (!World.filterType(t.getEntityTypeName(), types, include)) {
+			return false;
+		}
+
+		return true;
 	}
 
 	// ======================================================
@@ -1061,8 +1147,13 @@ public abstract class NPC extends Entity {
 		return col;
 	}
 
-	public int getSize() {
+	public int getPixelSize() {
 		return size;
+	}
+
+	@Override
+	public float getSize() {
+		return size / (float) ResourceManager.tileSize;
 	}
 
 	@Override
@@ -1121,6 +1212,10 @@ public abstract class NPC extends Entity {
 		return distance(tX, tY, tZ);
 	}
 
+	protected double distanceTarget(double tx, double ty, double tz) {
+		return getWorld().distance(X, Y, Z, tx, ty, tz);
+	}
+
 	public void mark() {
 		detected = 20;
 	}
@@ -1142,11 +1237,11 @@ public abstract class NPC extends Entity {
 	public final static int STATUS_ALERT = 2;
 	public final static int STATUS_THREAT = 3;
 
-	public abstract String NPCType();
+	public abstract String getNpcTypeName();
 
 	@Override
-	public final String EntityType() {
-		return "NPC." + NPCType();
+	public final String getEntityTypeName() {
+		return "NPC." + getNpcTypeName();
 	}
 
 }

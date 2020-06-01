@@ -182,7 +182,7 @@ public class HeadcrabZombie extends NPC
 		return new Color(fR, fG, fB);
 	}
 	
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Zombie";
 	}

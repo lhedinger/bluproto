@@ -165,7 +165,7 @@ public class Headcrab extends NPC
 	}
 	
 	@Override
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Headcrab";
 	}

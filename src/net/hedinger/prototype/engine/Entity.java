@@ -2,6 +2,8 @@ package net.hedinger.prototype.engine;
 
 import java.awt.Graphics;
 
+import net.hedinger.prototype.entities.Sound;
+
 public abstract class Entity {
 	private World world;
 
@@ -11,6 +13,8 @@ public abstract class Entity {
 	protected double dX, dY, dZ;
 
 	protected double D; // radians
+
+	protected float size = 0; // radius
 
 	protected int size_diameter = 25; // pixels
 
@@ -23,8 +27,15 @@ public abstract class Entity {
 	protected boolean selected = false;
 
 	private Entity attachTarget = null;
+	private double attachAngle = 0;
+
+	protected Sound lastHeardSound = null;
 
 	protected abstract void think();
+
+	protected void collisionCheck() {
+
+	}
 
 	protected abstract void draw(Graphics g, View v);
 
@@ -114,6 +125,7 @@ public abstract class Entity {
 			age++;
 			if (world.isValid(X, Y, Z)) {
 				think(); // determine movement
+				collisionCheck();
 				executeMovement(); // update movement
 			} else {
 				age = -deathspan;
@@ -193,9 +205,16 @@ public abstract class Entity {
 			dY = 0;
 			dZ = 0;
 
-			X = attachTarget.getX();
-			Y = attachTarget.getY();
+			double dist = attachTarget.getSize() + getSize() / 2;
+
+			double dir = attachTarget.getDirection() + attachAngle;
+			float dx = (float) (Math.cos(dir) * dist);
+			float dy = (float) (Math.sin(dir) * dist);
+
+			X = attachTarget.getX() + dx;
+			Y = attachTarget.getY() + dy;
 			Z = attachTarget.getZ();
+			return;
 		}
 
 		if (isOverHole()) {
@@ -266,6 +285,10 @@ public abstract class Entity {
 		selected = false;
 	}
 
+	public void hear(Sound sound) {
+		lastHeardSound = sound;
+	}
+
 	public World getWorld() {
 		return world;
 	}
@@ -302,6 +325,10 @@ public abstract class Entity {
 		return D;
 	}
 
+	public float getSize() {
+		return size;
+	}
+
 	public int getAge() {
 		return age;
 	}
@@ -330,6 +357,23 @@ public abstract class Entity {
 		return remove;
 	}
 
+	public boolean attachToTarget(Entity target) {
+		if (attachTarget != null) {
+			return false;
+		}
+
+		double dx = target.getX() - getX();
+		double dy = target.getY() - getY();
+		attachAngle = Math.atan2(-dy, -dx);
+
+		attachTarget = target;
+		return true;
+	}
+
+	public void detach() {
+		attachTarget = null;
+	}
+
 	/**
 	 * lowers health by a given amount of points
 	 *
@@ -345,6 +389,7 @@ public abstract class Entity {
 	}
 
 	public void remove() {
+		age = -1;
 		remove = true;
 	}
 
@@ -419,10 +464,10 @@ public abstract class Entity {
 		return v.pixelY(Y - offset, Z, round(pixelOffset));
 	}
 
-	public abstract String EntityType();
+	public abstract String getEntityTypeName();
 
 	public String getType() {
-		return "Entity." + EntityType();
+		return "Entity." + getEntityTypeName();
 	}
 
 }

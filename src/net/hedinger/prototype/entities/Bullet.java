@@ -15,7 +15,7 @@ public class Bullet extends Entity {
 	private double accuracy = 1; // 0 = worst, 1 = perfect
 
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
-	private String[] ignoreTypes = { EntityType(), "Entity.Weapon", "Entity.Grenade",
+	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Weapon", "Entity.Grenade",
 	"Entity.Explosion" };
 	private int length = 10;
 
@@ -93,7 +93,7 @@ public class Bullet extends Entity {
 	}
 
 	@Override
-	public String EntityType() {
+	public String getEntityTypeName() {
 		return "Bullet";
 	}
 

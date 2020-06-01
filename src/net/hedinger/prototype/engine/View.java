@@ -1,7 +1,6 @@
 package net.hedinger.prototype.engine;
 
 import static net.hedinger.prototype.engine.ResourceManager.tileSize;
-import static net.hedinger.prototype.engine.View.ViewMode.BASIC;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -16,7 +15,7 @@ public class View {
 	final static Font font = new Font("Arial", 1, 12);
 	final static Color bg = new Color(0, 0, 0);
 
-	private ViewMode viewmode = BASIC;
+	private ViewMode viewmode = ViewMode.BASIC;
 
 	int windowX, windowY;
 
@@ -160,6 +159,7 @@ public class View {
 
 	public void cycleViewMode() {
 		viewmode = viewmode.next();
+		System.out.println("Viewmode = " + viewmode);
 	}
 
 	public ViewMode getViewMode() {

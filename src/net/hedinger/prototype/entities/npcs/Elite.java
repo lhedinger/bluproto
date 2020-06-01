@@ -95,7 +95,7 @@ public class Elite extends NPC
 		}
 	}
 
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Elite";
 	}

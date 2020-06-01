@@ -105,8 +105,8 @@ public class Grid {
 			// TODO consider entities from different levels
 			if (e != null && e.getLvl() == level) {
 				if (!e.isDead()) {
-					if ((World.includesType(e.EntityType(), types) && include)
-							|| (World.excludesType(e.EntityType(), types) && !include)) {
+					if ((World.includesType(e.getEntityTypeName(), types) && include)
+							|| (World.excludesType(e.getEntityTypeName(), types) && !include)) {
 						double dist = world.distance(x, y, level, e.getX(), e.getY(), e.getZ());
 						if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
 							if (ID != e.getID()) {
@@ -129,7 +129,7 @@ public class Grid {
 				if (e instanceof NPC) {
 					NPC npc = (NPC) e;
 					if (!e.isDead() && ID != e.getID()) {
-						if (World.filterType(e.EntityType(), types, include)) {
+						if (World.filterType(e.getEntityTypeName(), types, include)) {
 							double dist = world.distance(x, y, level, e.getX(), e.getY(), e.getZ());
 							if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
 								result.put(dist, npc);

@@ -159,7 +159,7 @@ public class Soldier extends NPC
 		pathFinding = true;
 	}
 
-	public String NPCType()
+	public String getNpcTypeName()
 	{
 		return "Soldier";
 	}

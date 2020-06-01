@@ -102,6 +102,7 @@ public class World {
 			for (Entity e : spawnQueue) {
 				if (e != null) {
 					entities.put(e.getID(), e);
+					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
 				}
 			}
 			spawnQueue = null;
@@ -347,11 +348,36 @@ public class World {
 				if (e instanceof NPC) {
 					NPC npc = (NPC) e;
 					if (!e.isDead() && ID != e.getID()) {
-						if (filterType(e.EntityType(), types, include)) {
+						if (filterType(e.getEntityTypeName(), types, include)) {
 							double dist = distance(x, y, z, e.getX(), e.getY(), e.getZ());
 							if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
 								result.put(dist, npc);
 							}
+						}
+					}
+				}
+			}
+		}
+		return result;
+
+	}
+
+	public TreeMap<Double, NPC> searchNPC3(double x, double y, double z, double dir, double range, double fov, int ID) {
+		if (!isValid(x, y, z)) {
+			return new TreeMap<Double, NPC>();
+		}
+
+		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
+		Set<Integer> ents = getRadialEntities(x, y, z, 1);
+		for (Integer i : ents) {
+			Entity e = entities.get(i);
+			if (e != null && e.getLvl() == (int) z) {
+				if (e instanceof NPC) {
+					NPC npc = (NPC) e;
+					if (!e.isDead() && ID != e.getID()) {
+						double dist = distance(x, y, z, e.getX(), e.getY(), e.getZ());
+						if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
+							result.put(dist, npc);
 						}
 					}
 				}
@@ -757,10 +783,6 @@ public class World {
 	}
 
 	public static boolean includesType(String type, String[] filter) {
-		if (filter == null) {
-			return false;
-		}
-
 		for (int i = 0; i < filter.length; i++) {
 			if (filter[i].toLowerCase().contains(type.toLowerCase())) {
 				return true;
@@ -772,10 +794,6 @@ public class World {
 	}
 
 	public static boolean excludesType(String type, String[] filter) {
-		if (filter == null) {
-			return true;
-		}
-
 		for (int i = 0; i < filter.length; i++) {
 			if (filter[i].toLowerCase().contains(type.toLowerCase())) {
 				// System.out.println(printArr(filter) + " does not exclude " +
