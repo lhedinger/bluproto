@@ -155,7 +155,7 @@ public class PrototypeWorld extends JPanel {
 		if (level != 0) {
 			spawnEntities(2, 5 * ratio, level); // soldier
 			// spawnEntities(1, 7, level); // sentries
-			// spawnEntities(5, 10, level); // drone
+			spawnEntities(5, 3, level); // drone
 		}
 
 	}
@@ -167,7 +167,7 @@ public class PrototypeWorld extends JPanel {
 			float x = (float) (Math.random() * cols);
 			float y = (float) (Math.random() * rows);
 
-			if (world.isWalkable(x, y, level)) {
+			if (world.isOpen(x, y, level)) {
 				spawnType(x, y, level, type);
 				c--;
 			}

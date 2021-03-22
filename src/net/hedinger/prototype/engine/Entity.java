@@ -28,6 +28,7 @@ public abstract class Entity {
 
 	private Entity attachTarget = null;
 	private double attachAngle = 0;
+	private boolean grabbed = false;
 
 	protected Sound lastHeardSound = null;
 
@@ -205,7 +206,7 @@ public abstract class Entity {
 			dY = 0;
 			dZ = 0;
 
-			double dist = attachTarget.getSize() + getSize() / 2;
+			double dist = attachTarget.getSize() / 2 + getSize() / 2;
 
 			double dir = attachTarget.getDirection() + attachAngle;
 			float dx = (float) (Math.cos(dir) * dist);
@@ -217,7 +218,8 @@ public abstract class Entity {
 			return;
 		}
 
-		if (isOverHole()) {
+		if (isOverHole() && !isFlying()) {
+			// FIXME allow flying entities to go down the hole if they wish
 			dZ = -1;
 		} else if (isInWall()) {
 			dZ = 1;
@@ -263,11 +265,7 @@ public abstract class Entity {
 	}
 
 	protected boolean isColliding() {
-		if (!world.isWalkable(X + dX, Y + dY, Z + dZ)) {
-			// return true;
-		}
-
-		if (!world.isConnected(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
+		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
 			return true;
 		}
 
@@ -337,6 +335,10 @@ public abstract class Entity {
 		return ID;
 	}
 
+	public boolean isFlying() {
+		return false;
+	}
+
 	public boolean isHostile() {
 		return false;
 	}
@@ -357,6 +359,10 @@ public abstract class Entity {
 		return remove;
 	}
 
+	public void setGrabbed(boolean grabbed) {
+		this.grabbed = grabbed;
+	}
+
 	public boolean attachToTarget(Entity target) {
 		if (attachTarget != null) {
 			return false;
@@ -364,7 +370,7 @@ public abstract class Entity {
 
 		double dx = target.getX() - getX();
 		double dy = target.getY() - getY();
-		attachAngle = Math.atan2(-dy, -dx);
+		attachAngle = Math.atan2(dy, dx) + Math.PI - target.getDirection();
 
 		attachTarget = target;
 		return true;

@@ -101,4 +101,14 @@ public class Utils {
 		return i;
 	}
 
+	public static double normalizeAngle(double angle) {
+		if (angle > 2 * Math.PI) {
+			return angle - 2 * Math.PI;
+		}
+		if (angle < 0) {
+			return angle + 2 * Math.PI;
+		}
+		return angle;
+	}
+
 }

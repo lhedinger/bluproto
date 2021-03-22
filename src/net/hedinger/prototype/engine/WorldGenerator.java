@@ -54,6 +54,7 @@ public class WorldGenerator {
 		}
 
 		build_doors();
+		removeHolesOverWalls();
 	}
 
 	public World getWorld() {
@@ -69,6 +70,19 @@ public class WorldGenerator {
 
 		world.setTile(x - 1, y, z - 1, TYPE_RAMPUP);
 		world.setTile(x, y, z - 1, TYPE_WALL);
+	}
+
+	public void removeHolesOverWalls() {
+		for (int l = lvls - 1; l > 0; l--) {
+			for (int c = 1; c < cols - 1; c++) {
+				for (int r = 1; r < rows - 1; r++) {
+					if (world.getTile(c, r, l).getType() == TYPE_HOLE
+							&& world.getTile(c, r, l - 1).getType() == TYPE_WALL) {
+						world.setTile(c, r, l, TYPE_FLOOR);
+					}
+				}
+			}
+		}
 	}
 
 	public void buildSectors(int num, int z) {

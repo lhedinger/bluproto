@@ -426,26 +426,19 @@ public class World {
 		return levels[(int) z].hasLOS(x, y, dir, tx, ty, range, fov);
 	}
 
-	public boolean isWalkable(int c, int r, int l) {
-		if (!isValid(c, r, l)) {
-			return false;
-		}
-		return levels[l].isWalkable(c, r);
-	}
-
-	public boolean isWalkable(double x, double y, double z) {
+	public boolean isOpen(double x, double y, double z) {
 		if (!isValid(x, y, z)) {
 			return false;
 		}
-		return levels[(int) z].isWalkable((int) x, (int) y);
+		return !getTile(x, y, z).isSolid();
 	}
 
-	public boolean isConnected(double x, double y, double z, double x2, double y2, double z2) {
+	public boolean isConnectedSpace(double x, double y, double z, double x2, double y2, double z2) {
 		Tile t = getTile(x, y, z);
 		if (t == null) {
 			return false;
 		}
-		return t.isConnected(this, x2, y2, z2);
+		return t.isConnected(this, x2, y2, z2, false, false);
 	}
 
 	public boolean isValid(int c, int r, int l) {
@@ -538,8 +531,7 @@ public class World {
 		if (t == null) {
 			return new HashSet<Integer>();
 		}
-		t.calcConnected(this);
-		return t.getConnected();
+		return t.calcConnected(this, false);
 	}
 
 	public Stack<Integer> findPath(double x, double y, double z, double tx, double ty, double tz) {

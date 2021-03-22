@@ -13,7 +13,6 @@ public class Tile {
 	private World world;
 	private int col, row, lvl;
 	private TileType type;
-	private HashSet<Integer> connected = new HashSet<Integer>();
 	private String tilecode = "";
 	private HashSet<Integer> npcs = new HashSet<Integer>();
 
@@ -131,30 +130,18 @@ public class Tile {
 		}
 	}
 
-	public HashSet<Integer> getConnected() {
-		return connected;
-	}
-
-	public HashSet<Integer> calcConnected(World w) {
-		return calcConnected(w, false);
-	}
-
 	public HashSet<Integer> calcConnected(World w, boolean diagonal) {
-		connected = new HashSet<Integer>();
+		HashSet<Integer> connected = new HashSet<Integer>();
 		for (int x = -1; x <= 1; x++) {
 			for (int y = -1; y <= 1; y++) {
 				if (!(x == 0 && y == 0)) {
-					if (isConnected(w, col + x, row + y, lvl, diagonal)) {
+					if (isConnected(w, col + x, row + y, lvl, diagonal, false)) {
 						connected.add(w.hashCode(col + x, row + y, lvl));
 					}
 				}
 			}
 		}
 		return connected;
-	}
-
-	public boolean isConnected(World w, double x, double y, double z) {
-		return isConnected(w, x, y, z, false);
 	}
 
 	public boolean isConnectedStatic(World w, int x, int y, int z) {
@@ -186,18 +173,12 @@ public class Tile {
 		return true;
 	}
 
-	public boolean isConnected(World w, double x, double y, double z, boolean diagonal) {
+	public boolean isConnected(World w, double x, double y, double z, boolean diagonal, boolean floorsOnly) {
 		Tile temp = w.getTile(World.toCol(x), World.toRow(y), World.toLvl(z));
-		if (temp == null) {
-			System.out.println("error [isConnected]");
-			return false;
-		}
 
 		if (z < 0) {
 			return false;
 		}
-
-		temp.getType();
 
 		int dx = col - World.toCol(x);
 		int dy = row - World.toRow(y);
@@ -236,7 +217,10 @@ public class Tile {
 					return true;
 				}
 			}
-			if (!temp.isWalkable()) {
+			if (floorsOnly && !temp.isWalkable()) {
+				return false;
+			}
+			if (!floorsOnly && temp.isSolid()) {
 				return false;
 			}
 
@@ -270,7 +254,8 @@ public class Tile {
 				if (!isWalkable() && diagonal) {
 					return true;
 				}
-				if (!isConnected(w, col - dx, row, lvl) || !isConnected(w, col, row - dy, lvl)) {
+				if (!isConnected(w, col - dx, row, lvl, false, floorsOnly)
+						|| !isConnected(w, col, row - dy, lvl, false, floorsOnly)) {
 					return false;
 				}
 			}
@@ -284,22 +269,12 @@ public class Tile {
 		return type.isOpen() && type != TileType.TYPE_HOLE;
 	}
 
-	public boolean isSolid() {
-		return !type.isOpen();
+	public boolean isFlyable() {
+		return type.isOpen();
 	}
 
-	public boolean hasDiagonal(World w) {
-		calcConnected(w, true);
-		for (Integer i : getConnected()) {
-			int x = w.hashCol(i) - col;
-			int y = w.hashRow(i) - row;
-
-			if (Math.abs(y) * Math.abs(x) == 1) {
-				return true;
-			}
-		}
-
-		return false;
+	public boolean isSolid() {
+		return !type.isOpen();
 	}
 
 	public void updateTilecode(World world) {

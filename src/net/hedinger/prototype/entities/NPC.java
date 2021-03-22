@@ -52,6 +52,10 @@ public abstract class NPC extends Entity {
 
 	protected int detected = 0;
 
+	protected Entity grabbing = null;
+
+	protected boolean flying = false;
+
 	protected TreeMap<Double, NPC> targets = new TreeMap<Double, NPC>();
 	protected TreeMap<Double, NPC> focusTargets = new TreeMap<Double, NPC>();
 
@@ -260,16 +264,16 @@ public abstract class NPC extends Entity {
 		// tY = getWorld().getMouseY();
 		// tZ = getWorld().getMouseZ();
 
-		if (isInLOS(-1, Math.PI * 0.5)) {
-			col = Color.green;
-		} else {
-			col = Color.red;
-		}
 	}
 
 	@Override
 	public void kill() {
 		age = -1;
+	}
+
+	@Override
+	public boolean isFlying() {
+		return flying;
 	}
 
 	@Override
@@ -279,8 +283,7 @@ public abstract class NPC extends Entity {
 			double dx = npc.getX() - getX();
 			double dy = npc.getY() - getY();
 			double distance = Math.sqrt(dx * dx + dy * dy);
-			double minDist = npc.getSize() / 2 + getSize() / 2;
-			if (distance < minDist) {
+			if (canTouch(npc)) {
 				double angle = Math.atan2(-dy, -dx);
 				double targetX = Math.cos(angle) * distance;
 				double targetY = Math.sin(angle) * distance;
@@ -298,6 +301,12 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////////////////////////////////////
 	// |///////////////////////////////
 
+	protected boolean canTouch(Entity e) {
+		double distance = distance(e);
+		double minDist = e.getSize() / 2 + getSize() / 2;
+		return (distance < minDist);
+	}
+
 	protected boolean isInLOS() {
 		return getWorld().hasLOS(X, Y, Z, D, tX, tY, tZ, LOS_RANGE, LOS_FOV);
 	}
@@ -312,6 +321,16 @@ public abstract class NPC extends Entity {
 
 	protected boolean isInLOS(double dist, double fov) {
 		return getWorld().hasLOS(X, Y, Z, D, tX, tY, tZ, dist, fov);
+	}
+
+	protected boolean isValidMoveDestination() {
+		if (!isFlying() && !getWorld().getTile(tX, tY, tZ).isWalkable()) {
+			return false;
+		}
+		if (isFlying() && !getWorld().getTile(tX, tY, tZ).isFlyable()) {
+			return false;
+		}
+		return getWorld().hasLOS(X, Y, Z, D, tX, tY, tZ, 99, Math.PI);
 	}
 
 	protected boolean isInLOS(double x, double y, double z) {
@@ -329,7 +348,7 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////
 
 	protected void roam(double speed, int turn) {
-		boolean bool = isInLOS(-1, Math.PI);
+		boolean bool = isValidMoveDestination();
 
 		if (!bool || tZ != Z) {
 			tX = X;
@@ -364,7 +383,7 @@ public abstract class NPC extends Entity {
 	}
 
 	protected void roam(double speed, int turn, double direction) {
-		boolean bool = isInLOS(-1, Math.PI);
+		boolean bool = isValidMoveDestination();
 
 		if (!bool || tZ != Z) {
 			tX = X;
@@ -382,7 +401,7 @@ public abstract class NPC extends Entity {
 		}
 
 		if (distance() < 0.05) {
-			double d = 0.5 + Math.random() * 1;
+			double d = 0.5 + Math.random() * 3;
 			double a = variation(direction, Math.PI * 0.25);
 			if (Math.random() * 10 < 1) {
 				a = Math.random() * 2 * Math.PI;
@@ -430,7 +449,9 @@ public abstract class NPC extends Entity {
 			dA = 2 * Math.PI + dA;
 		}
 
-		if (dA > 0) {
+		if (Math.abs(dA) < Math.PI * 0.05f) {
+			D = angle;
+		} else if (dA > 0) {
 			D += (Math.sqrt(Math.abs(dA)) / turn);
 		} else if (dA < 0) {
 			D -= (Math.sqrt(Math.abs(dA)) / turn);
@@ -442,8 +463,6 @@ public abstract class NPC extends Entity {
 			dZ = 0;
 		} else {
 			move(speed, D);
-			dX = variation(dX, dX * 0.2);
-			dY = variation(dY, dY * 0.2);
 		}
 		return true;
 	}
@@ -678,7 +697,7 @@ public abstract class NPC extends Entity {
 			return false;
 		}
 
-		if (getWorld().distance(X, Y, Z, tX, tY, tZ) < 0.2) {
+		if (getWorld().distance(X, Y, Z, tX, tY, tZ) < 0.5) {
 			int next = path.pop();
 
 			int c = getWorld().hashCol(next);
@@ -1178,6 +1197,38 @@ public abstract class NPC extends Entity {
 		if (isDead() && !isRemoved()) {
 			age -= amount;
 		}
+	}
+
+	public boolean grab(Entity ent) {
+
+		double distance = distance(ent);
+		double minDist = ent.getSize() / 2 + getSize() / 2;
+
+		if (distance > minDist) {
+			return false;
+		}
+
+		if (ent.getSize() > getSize()) {
+			return false;
+		}
+		D = Math.atan2(-Y + ent.getY(), -X + ent.getX());
+		if (ent.attachToTarget(this)) {
+			ent.setGrabbed(true);
+			grabbing = ent;
+			return true;
+		}
+		return false;
+	}
+
+	public boolean drop() {
+		if (grabbing == null) {
+			return false;
+		}
+
+		grabbing.setGrabbed(false);
+		grabbing.detach();
+
+		return true;
 	}
 
 	/**

@@ -243,7 +243,7 @@ public class Grid {
 				tx = (x1 - x);
 			}
 
-			if (!isConnected((int) px, (int) py, (int) tx, (int) ty)) {
+			if (!isLosConnected((int) px, (int) py, (int) tx, (int) ty)) {
 				return false;
 			}
 			px = tx;
@@ -268,7 +268,7 @@ public class Grid {
 				ty = (y1 - y);
 			}
 
-			if (!isConnected((int) px, (int) py, (int) tx, (int) ty)) {
+			if (!isLosConnected((int) px, (int) py, (int) tx, (int) ty)) {
 				return false;
 			}
 			px = tx;
@@ -278,21 +278,14 @@ public class Grid {
 		return true;
 	}
 
-	boolean isWalkable(int c, int r) {
-		if (!isValid(c, r)) {
-			return false;
-		}
-		return tiles[c][r].isWalkable();
-	}
-
-	private boolean isConnected(int c, int r, int c2, int r2) {
+	private boolean isLosConnected(int c, int r, int c2, int r2) {
 		if (!isValid(c, r)) {
 			return false;
 		}
 		if (!isValid(c2, r2)) {
 			return false;
 		}
-		return tiles[c][r].isConnected(world, c2, r2, level);
+		return tiles[c][r].isConnected(world, c2, r2, level, false, false);
 	}
 
 	boolean setTile(int c, int r, int l, Tile.TileType t) {

@@ -2,25 +2,32 @@ package net.hedinger.prototype.entities.npcs;
 
 import java.util.TreeMap;
 
+import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Weapon;
 import net.hedinger.prototype.entities.weapons.Gattlingun;
 
 public class Drone extends NPC {
 	private static final double DRONE_RANGE = 5; // los range (pixels)
-	private static final double DRONE_FOV = Math.PI; // los range
+	private static final double DRONE_FOV = 2 * Math.PI; // los range
 	// (pixels)
 	private static final double DRONE_SPEED = 0.07;
 	private static final int DRONE_TURN = 10; // max turn speed
-	private static final int DRONE_SF = 10;
+	private static final int DRONE_SF = 30;
+	private static final int PATROL_COOLDOWN = 1000;
 	private Weapon weapon = null;
-	private boolean malfunction = false;
+
+	private int patrol = PATROL_COOLDOWN;
 
 	private String[] DRONE_IGNORE = { "Entity.NPC.Sentry", "Entity.NPC.Drone",
 			"Entity.NPC.Soldier", "Entity.NPC.Human", "Entity.NPC.Spore" };
 
+	private String[] ABDUCT = { "Entity.NPC.Human" };
+
 	private TreeMap<Double, NPC> enemies = null;
+	private TreeMap<Double, NPC> humans = null;
 	private NPC enemy = null;
+	private NPC human = null;
 
 	public Drone(double x, double y, double z) {
 		super(x, y, z);
@@ -32,6 +39,7 @@ public class Drone extends NPC {
 		LOS_FOV = DRONE_FOV;
 		drawLOS = true;
 		weapon = new Gattlingun(this);
+		flying = true;
 	}
 
 	@Override
@@ -40,34 +48,29 @@ public class Drone extends NPC {
 			weapon.think();
 		}
 
-		if (health < 75) {
-			hostile = 2;
-			// malfunction = true;
-		}
-
 		// gets all targets within range and los
 		// return true if any are found
 
-		if (malfunction) {
-			enemies = getTargets(enemies, getType(), false);
-			detected = 2;
-			selected = false;
-			path = null;
+		if (selected) {
+			say("[x]", 1);
 		} else {
-			if (selected) {
-				say("[x]", 1);
-			} else {
-				say("[ ]", 1);
-			}
-
-			enemies = getTargets(enemies, DRONE_IGNORE, false);
+			say("[ ]", 1);
 		}
+
+		if (patrol < 0 && !pathFinding) {
+
+			int x = Utils.random(getWorld().getColums());
+			int y = Utils.random(getWorld().getRows());
+
+			gotoDest(x, y);
+		}
+
+		enemies = getTargets(enemies, DRONE_IGNORE, false);
+		humans = getTargets(humans, ABDUCT, true);
 
 		if (!enemies.isEmpty()) {
 			say("[!]", 200);
 			enemy = enemies.firstEntry().getValue();
-			drawPing = true;
-		} else if (!malfunction) {
 			drawPing = true;
 		}
 
@@ -75,6 +78,8 @@ public class Drone extends NPC {
 			say(">>!", 20);
 			if (!followPath2(DRONE_SPEED, DRONE_TURN)) {
 				pathFinding = false;
+				patrol = PATROL_COOLDOWN;
+				drop();
 			}
 		} else if (seeTarget(enemy, getType(), false)) {
 			lockTarget(enemy);
@@ -89,16 +94,25 @@ public class Drone extends NPC {
 					weapon.use(distance());
 				}
 			}
+		} else if (!humans.isEmpty()) {
+			say("[@]", 10);
+			human = humans.firstEntry().getValue();
+			lockTarget(human);
+			chase(DRONE_SPEED * 0.5f, DRONE_TURN);
+
+			if (canTouch(human)) {
+				say("[<3]", 100);
+				grab(human);
+				patrol = -1;
+			}
+
 		} else {
-			if (malfunction) {
+			say("[?]", 10);
+			if (!selected) {
+				patrol--;
 				roam(DRONE_SPEED, DRONE_TURN);
 			} else {
-				say("[?]", 10);
-				if (!selected) {
-					roam(DRONE_SPEED, DRONE_TURN);
-				} else {
-					idle();
-				}
+				idle();
 			}
 		}
 	}
@@ -115,9 +129,7 @@ public class Drone extends NPC {
 
 	@Override
 	public void select() {
-		if (!malfunction) {
-			selected = true;
-		}
+		selected = true;
 	}
 
 	@Override
@@ -128,9 +140,6 @@ public class Drone extends NPC {
 	private boolean pathFinding = false;
 
 	public void gotoDest(double x, double y) {
-		if (!selected) {
-			return;
-		}
 
 		if (!getWorld().isValid(x, y, Z)) {
 			return;
