@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.util.TreeMap;
 
 import net.hedinger.prototype.entities.NPC;
@@ -45,8 +47,8 @@ public class Human extends NPC {
 			enemy = focusTargets.firstEntry().getValue();
 			status = NPC.STATUS_THREAT;
 
-			if (Math.random() * 1000 < 1) {
-				say(panic_phrases[(int) (Math.random() * panic_phrases.length)], 200);
+			if (Utils.random() * 1000 < 1) {
+				say(panic_phrases[(int) (Utils.random() * panic_phrases.length)], 200);
 				getWorld().spawnEntity(new Sound(getX(), getY(), getZ()));
 			}
 		} else {

@@ -28,7 +28,7 @@ public class Tile {
 
 		TileType t = TileType.TYPE_FLOOR;
 
-		if (Math.random() * 2 < 1) {
+		if (Utils.random() * 2 < 1) {
 			t = TileType.TYPE_WALL;
 		}
 

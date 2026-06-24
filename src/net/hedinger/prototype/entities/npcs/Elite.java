@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import net.hedinger.prototype.entities.*;
 import net.hedinger.prototype.entities.weapons.*;
 
@@ -32,7 +34,7 @@ public class Elite extends NPC
 		SEARCH_FREQ = ELITE_SF;
 		LOS_RANGE = ELITE_RANGE;
 		LOS_FOV = ELITE_FOV;
-		int n = (int) (Math.random() * 3);
+		int n = (int) (Utils.random() * 3);
 		switch (n)
 		{
 		case (0):

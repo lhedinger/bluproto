@@ -91,7 +91,7 @@ public class WorldGenerator {
 		for (int i = 0; i < num; i++) {
 			HashSet<Integer> sector = new HashSet<Integer>();
 
-			int h = world.hashCode((Math.random() * (world.cols - 2) + 1), (Math.random() * (world.rows - 2) + 1), z);
+			int h = world.hashCode((Utils.random() * (world.cols - 2) + 1), (Utils.random() * (world.rows - 2) + 1), z);
 
 			if (!sectorCollision(h, h, sectors, 4)) {
 				sector.add(h);
@@ -121,42 +121,42 @@ public class WorldGenerator {
 					if (world.setTile(x, y, z, type)) {
 						sector.add(h);
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y - 1, z, type)) {
 							sector.add(world.hashCode(x - 1, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y, z, type)) {
 							sector.add(world.hashCode(x - 1, y, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y + 1, z, type)) {
 							sector.add(world.hashCode(x - 1, y + 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x, y - 1, z, type)) {
 							sector.add(world.hashCode(x, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x, y + 1, z, type)) {
 							sector.add(world.hashCode(x, y + 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y - 1, z, type)) {
 							sector.add(world.hashCode(x + 1, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y, z, type)) {
 							sector.add(world.hashCode(x + 1, y, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y + 1, z, type)) {
 							sector.add(world.hashCode(x + 1, y + 1, z));
 						}
@@ -181,7 +181,7 @@ public class WorldGenerator {
 
 			int s = sectors.get(i).size();
 			for (Integer j : sectors.get(i)) {
-				if (Math.random() * s > Math.sqrt(s) * 6) {
+				if (Utils.random() * s > Math.sqrt(s) * 6) {
 					world.setTile(world.hashCol(j), world.hashRow(j), z, TYPE_WALL);
 				}
 			}
@@ -194,7 +194,7 @@ public class WorldGenerator {
 				if (t.getType() == TYPE_WALL) {
 					int h = world.hashCode(x, y, z);
 					if (!sectorCollision(-1, h, sectors, 1)) {
-						if (Math.random() * 1 < 1) {
+						if (Utils.random() * 1 < 1) {
 							if (!junctionCollision(h, junctions, 5)) {
 								world.setTile(h, TYPE_FLOOR);
 								junctions.add(h);
@@ -299,7 +299,7 @@ public class WorldGenerator {
 		while (!(x == x2 && y == y2)) {
 			world.setTile(x, y, z, TYPE_FLOOR);
 
-			if (Math.random() * 2 < 1) {
+			if (Utils.random() * 2 < 1) {
 				if (x < x2) {
 					x++;
 				} else if (x > x2) {
@@ -361,22 +361,22 @@ public class WorldGenerator {
 
 		world.setTile(x, y, 0, TYPE_FLOOR);
 
-		if (Math.random() * Sp < p) {
+		if (Utils.random() * Sp < p) {
 			spread_rec(x - 1, y, rx, ry, r, p - Sm);
 			if (validSpread(x, y)) {
 			}
 		}
-		if (Math.random() * Sp < p) {
+		if (Utils.random() * Sp < p) {
 			spread_rec(x + 1, y, rx, ry, r, p - Sm);
 			if (validSpread(x, y)) {
 			}
 		}
-		if (Math.random() * Sp < p) {
+		if (Utils.random() * Sp < p) {
 			spread_rec(x, y - 1, rx, ry, r, p - Sm);
 			if (validSpread(x, y)) {
 			}
 		}
-		if (Math.random() * Sp < p) {
+		if (Utils.random() * Sp < p) {
 			spread_rec(x, y + 1, rx, ry, r, p - Sm);
 			if (validSpread(x, y)) {
 			}
@@ -452,7 +452,7 @@ public class WorldGenerator {
 	}
 
 	public boolean hasNeighborDoor(int x, int y, int z, int d) {
-		int max = (int) (Math.random() * 5) + 1;
+		int max = (int) (Utils.random() * 5) + 1;
 		for (Entity door : world.levels[z].doors) {
 			if (door.getDirection() == d) {
 				if (door.getZ() == z) {
@@ -521,7 +521,7 @@ public class WorldGenerator {
 	public int random(Set<Integer> set) {
 		int s = set.size();
 
-		s = (int) (Math.random() * s);
+		s = (int) (Utils.random() * s);
 
 		for (int t : set) {
 			if (s == 0) {

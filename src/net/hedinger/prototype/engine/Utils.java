@@ -87,8 +87,31 @@ public class Utils {
 		return (int) Math.ceil((float) value / divisor);
 	}
 
+	// ------------------------------------------------------------------
+	// Seeded random number source. All simulation randomness routes through
+	// here so that a given seed reproduces the same world generation and
+	// initial population. Call seed(long) before generating a world; read it
+	// back with getSeed() to save/restore a run.
+	// ------------------------------------------------------------------
+	private static long seed = System.nanoTime();
+	private static java.util.Random rng = new java.util.Random(seed);
+
+	public static void seed(long s) {
+		seed = s;
+		rng = new java.util.Random(s);
+	}
+
+	public static long getSeed() {
+		return seed;
+	}
+
+	/** Drop-in replacement for Math.random(): uniform double in [0, 1). */
+	public static double random() {
+		return rng.nextDouble();
+	}
+
 	public static int random(int range) {
-		return (int) Math.floor(Math.random() * range);
+		return (int) Math.floor(rng.nextDouble() * range);
 	}
 
 	public static int parseInt(String s, int invalid) {

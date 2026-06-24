@@ -50,14 +50,14 @@ public abstract class Entity {
 		X = -1;
 		Y = -1;
 		Z = -1;
-		D = Math.random() * 2 * Math.PI;
+		D = Utils.random() * 2 * Math.PI;
 	}
 
 	public Entity(double x, double y, double z) {
 		X = x;
 		Y = y;
 		Z = z;
-		D = Math.random() * 2 * Math.PI;
+		D = Utils.random() * 2 * Math.PI;
 		dX = 0;
 		dY = 0;
 		dZ = 0;
@@ -435,7 +435,7 @@ public abstract class Entity {
 	}
 
 	public static double variation(double origin, double range) {
-		return ((origin + range) - (2 * range * Math.random()));
+		return ((origin + range) - (2 * range * Utils.random()));
 	}
 
 	public double distance(Entity e) {

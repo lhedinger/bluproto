@@ -76,6 +76,8 @@ public class PrototypeWorld extends JPanel {
 			public void run() {
 
 				int c = 0, r = 0, l = 0;
+				long seed = 0;
+				boolean hasSeed = false;
 
 				for (String s : args) {
 					arglist += " -";
@@ -88,17 +90,29 @@ public class PrototypeWorld extends JPanel {
 					} else if (s.startsWith("lvls=")) {
 						l = Utils.parseInt(s.substring(5), 0);
 						arglist += s;
+					} else if (s.startsWith("seed=")) {
+						try {
+							seed = Long.parseLong(s.substring(5));
+							hasSeed = true;
+						} catch (NumberFormatException e) {
+							// ignore, fall back to a fresh random seed
+						}
+						arglist += s;
 					} else {
 						arglist += s;
 					}
 				}
 
-				new PrototypeWorld(c, r, l);
+				new PrototypeWorld(c, r, l, seed, hasSeed);
 			}
 		});
 	}
 
 	public PrototypeWorld(int c, int r, int l) {
+		this(c, r, l, 0, false);
+	}
+
+	public PrototypeWorld(int c, int r, int l, long seed, boolean hasSeed) {
 		if (c > 0) {
 			cols = c;
 		}
@@ -109,7 +123,11 @@ public class PrototypeWorld extends JPanel {
 			lvls = l;
 		}
 
-		initialize();
+		if (hasSeed) {
+			initialize(seed);
+		} else {
+			initialize();
+		}
 
 		createFrame();
 		addMouseMotionListener(new mouseMotionListener());
@@ -119,10 +137,15 @@ public class PrototypeWorld extends JPanel {
 	}
 
 	private void initialize() {
-		initialize(null);
+		// Fresh run: derive a new seed so each restart differs, but is still
+		// recorded (press H to print it, G to replay it).
+		initialize(System.nanoTime());
 	}
 
-	private void initialize(String hash) {
+	private void initialize(long seed) {
+		Utils.seed(seed);
+		System.out.println("World seed: " + seed);
+
 		ResourceManager.loadResources();
 
 		stopwatch = new StopWatch();
@@ -164,8 +187,8 @@ public class PrototypeWorld extends JPanel {
 		int c = num;
 		int count = 0;
 		while (c >= 0) {
-			float x = (float) (Math.random() * cols);
-			float y = (float) (Math.random() * rows);
+			float x = (float) (Utils.random() * cols);
+			float y = (float) (Utils.random() * rows);
 
 			if (world.isOpen(x, y, level)) {
 				spawnType(x, y, level, type);
@@ -416,11 +439,17 @@ public class PrototypeWorld extends JPanel {
 				initialize();
 			}
 			if (e.getKeyCode() == KeyEvent.VK_G) {
-				// initialize(JOptionPane.showInputDialog("Enter HashCode:",
-				// WorldGenerator.hashCodeString(world)));
+				String input = javax.swing.JOptionPane.showInputDialog("Enter seed:", Long.toString(Utils.getSeed()));
+				if (input != null) {
+					try {
+						initialize(Long.parseLong(input.trim()));
+					} catch (NumberFormatException ex) {
+						// invalid seed entered; leave the current world untouched
+					}
+				}
 			}
 			if (e.getKeyCode() == KeyEvent.VK_H) {
-				// System.out.println(WorldGenerator.hashCodeString(world));
+				System.out.println("World seed: " + Utils.getSeed());
 			}
 			if (e.getKeyCode() == KeyEvent.VK_0) {
 				entitytype = 0;

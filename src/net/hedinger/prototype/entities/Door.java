@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -65,7 +67,7 @@ public class Door extends Entity
 	{
 		int r = (int) (this.D % (Math.PI / 2));
 
-		if (Math.random() * 600 < 1) {
+		if (Utils.random() * 600 < 1) {
 			toggle();
 		}
 

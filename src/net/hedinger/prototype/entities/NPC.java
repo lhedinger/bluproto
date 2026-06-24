@@ -97,7 +97,7 @@ public abstract class NPC extends Entity {
 			D += 2 * Math.PI;
 		}
 
-		blink_random = (int) (Math.random() * 0);
+		blink_random = (int) (Utils.random() * 0);
 	}
 
 	@Override
@@ -366,10 +366,10 @@ public abstract class NPC extends Entity {
 		}
 
 		if (distance() < 0.05) {
-			double d = 0.5 + Math.random() * 0.7;
+			double d = 0.5 + Utils.random() * 0.7;
 			double a = variation(D, Math.PI * 0.5);
-			if (Math.random() * 4 < 1) {
-				a = Math.random() * 2 * Math.PI;
+			if (Utils.random() * 4 < 1) {
+				a = Utils.random() * 2 * Math.PI;
 			}
 
 			tX = X + d * Math.cos(a);
@@ -401,10 +401,10 @@ public abstract class NPC extends Entity {
 		}
 
 		if (distance() < 0.05) {
-			double d = 0.5 + Math.random() * 3;
+			double d = 0.5 + Utils.random() * 3;
 			double a = variation(direction, Math.PI * 0.25);
-			if (Math.random() * 10 < 1) {
-				a = Math.random() * 2 * Math.PI;
+			if (Utils.random() * 10 < 1) {
+				a = Utils.random() * 2 * Math.PI;
 			}
 
 			tX = X + d * Math.cos(a);
@@ -603,7 +603,7 @@ public abstract class NPC extends Entity {
 				D += 2 * Math.PI;
 			}
 		} else if (backup_collide == 0) {
-			D = Math.random() * Math.PI * 2;
+			D = Utils.random() * Math.PI * 2;
 			backup_collide = 1;
 		} else {
 			backup_collide++;
@@ -1013,7 +1013,7 @@ public abstract class NPC extends Entity {
 	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
 		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
 
-		if (Math.random() * SEARCH_FREQ < 1) {
+		if (Utils.random() * SEARCH_FREQ < 1) {
 			return getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID());
 		}
 

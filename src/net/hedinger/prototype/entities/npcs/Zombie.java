@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.Color;
 import java.util.TreeMap;
 
@@ -91,7 +93,7 @@ public class Zombie extends NPC {
 
 		if (allies != null) {
 			if (allies.size() < 2
-					&& ZOMBIE_MAX_AGE * 0.5 + Math.random() * ZOMBIE_MAX_AGE * 0.5 < age) {
+					&& ZOMBIE_MAX_AGE * 0.5 + Utils.random() * ZOMBIE_MAX_AGE * 0.5 < age) {
 				move(0);
 			}
 		}
@@ -102,7 +104,7 @@ public class Zombie extends NPC {
 			enemy = enemies.firstEntry().getValue();
 			status = NPC.STATUS_THREAT;
 			status_alert = 1000;
-			if (Math.random() * 1000 < 1) {
+			if (Utils.random() * 1000 < 1) {
 				say("roar!", 100);
 				getWorld().spawnEntity(new Sound(getX(), getY(), getZ()));
 			}
@@ -144,7 +146,7 @@ public class Zombie extends NPC {
 		if (enemy.getType().equalsIgnoreCase("Entity.NPC.Soldier")
 				|| enemy.getType().equalsIgnoreCase("Entity.NPC.Human")) {
 
-			if (Math.random() * 100 < 1) {
+			if (Utils.random() * 100 < 1) {
 				enemy.remove();
 				getWorld().spawnEntity(
 						new Zombie(enemy.getX(), enemy.getY(), enemy.getZ(), enemy.getDirection()));

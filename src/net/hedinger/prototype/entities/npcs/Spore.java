@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import net.hedinger.prototype.entities.NPC;
 
 import java.awt.Color;
@@ -99,13 +101,13 @@ public class Spore extends NPC
 		int n = 4;
 
 		/*
-		 * if(Math.random()1.5 < 1) { n = 3; if(Math.random()2 < 1) { n = 4;
-		 * if(Math.random()2 < 1) { n = 5; } } }
+		 * if(Utils.random()1.5 < 1) { n = 3; if(Utils.random()2 < 1) { n = 4;
+		 * if(Utils.random()2 < 1) { n = 5; } } }
 		 */
 
 		for (int i = 0; i < n; i++)
 		{
-			getWorld().spawnEntity(new Spore(X, Y, Z, Math.random() * 2 * Math.PI));
+			getWorld().spawnEntity(new Spore(X, Y, Z, Utils.random() * 2 * Math.PI));
 		}
 
 		this.kill();

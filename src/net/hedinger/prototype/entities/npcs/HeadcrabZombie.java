@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.*;
 import java.util.TreeMap;
 
@@ -75,7 +77,7 @@ public class HeadcrabZombie extends NPC
 		}
 		if (allies != null && infesting == -1)
 			if (allies.size() < 2
-					&& ZOMBIE_MAX_AGE * 0.5 + Math.random() * ZOMBIE_MAX_AGE * 0.5 < age)
+					&& ZOMBIE_MAX_AGE * 0.5 + Utils.random() * ZOMBIE_MAX_AGE * 0.5 < age)
 				infesting = 0;
 
 		enemies = getTargets(enemies, ZOMBIE_ENEMIES, true);
@@ -141,7 +143,7 @@ public class HeadcrabZombie extends NPC
 		{
 			remove();
 
-			int n = (int) (Math.random() * 4) + 4;
+			int n = (int) (Utils.random() * 4) + 4;
 
 			for (int i = 0; i < n; i++)
 				getWorld().spawnEntity(new Headcrab(variation(X, 0.05), variation(Y, 0.05), Z, D));
@@ -151,7 +153,7 @@ public class HeadcrabZombie extends NPC
 
 	public void kill()
 	{
-		if (Math.random() * 4 < 1)
+		if (Utils.random() * 4 < 1)
 			getWorld().spawnEntity(new Headcrab(X, Y, Z, D));
 		age = -1;
 	}

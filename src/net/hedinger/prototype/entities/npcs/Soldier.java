@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.entities.*;
 import net.hedinger.prototype.entities.weapons.*;
@@ -35,7 +37,7 @@ public class Soldier extends NPC
 		LOS_RANGE = SOLDIER_RANGE;
 		LOS_FOV = SOLDIER_FOV;
 		drawLOS = true;
-		int n = (int) (Math.random() * 3);
+		int n = (int) (Utils.random() * 3);
 		switch (n)
 		{
 		case (0):
