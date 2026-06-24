@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -314,7 +315,28 @@ public class World {
 			return new TreeMap<Double, Entity>();
 		}
 
-		return levels[(int) z].searchEntity(x, y, dir, range, fov, types, include, ID);
+		// Restrict the candidate set to entities bucketed in nearby tiles
+		// instead of scanning every entity in the world. hasLOS() still applies
+		// the exact Euclidean range filter, so widening the tile box by one
+		// guarantees we never miss an in-range entity (identical results, O(k)
+		// instead of O(n)). A negative range means "unbounded" -> full scan.
+		if (range < 0) {
+			return levels[(int) z].searchEntity(x, y, dir, range, fov, types, include, ID);
+		}
+
+		TreeMap<Double, Entity> result = new TreeMap<Double, Entity>();
+		Set<Integer> ents = getRadialEntities(x, y, z, (int) Math.ceil(range) + 1);
+		for (Integer i : ents) {
+			Entity e = entities.get(i);
+			if (e != null && e.getLvl() == (int) z && !e.isDead() && ID != e.getID()) {
+				if (filterType(e.getEntityTypeName(), types, include)) {
+					if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
+						result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), e);
+					}
+				}
+			}
+		}
+		return result;
 	}
 
 	public TreeMap<Double, NPC> searchNPC(double x, double y, double z, double dir, double range, double fov,
@@ -548,34 +570,27 @@ public class World {
 		}
 		HashSet<Integer> closedset = new HashSet<Integer>();
 		HashSet<Integer> openset = new HashSet<Integer>();
-		openset.add(start);// add start node
-		// contains distance for
 		HashMap<Integer, Integer> camefrom = new HashMap<Integer, Integer>();
 		HashMap<Integer, Double> fdist = new HashMap<Integer, Double>();
 		HashMap<Integer, Double> gdist = new HashMap<Integer, Double>();
 		HashMap<Integer, Double> hdist = new HashMap<Integer, Double>();
+		// Order the frontier by f-score with a binary heap instead of rescanning
+		// the whole open set for the minimum on every step (O(E log V) vs the
+		// former O(V^2)). Improved nodes are re-pushed; the closed set skips the
+		// resulting stale duplicates when they surface.
+		PriorityQueue<Integer> frontier = new PriorityQueue<Integer>((a, b) -> Double.compare(fdist.get(a), fdist.get(b)));
 		gdist.put(start, 0.0);
 		hdist.put(start, distance(x, y, z, tx, ty, tz)); // estimate of
 		// distance
 		fdist.put(start, hdist.get(start)); // = hdist[start]
-		while (!openset.isEmpty()) {
-			// System.out.println("looping...");
-			int hash = -1;
-			double shortest = -1;
-			// System.out.println("finding smallest x...");
-			for (Integer i : openset) {
-				if (i != null) {
-					if (fdist.get(i) < shortest || shortest == -1) {
-						hash = i;
-						shortest = fdist.get(i);
-					}
-				}
+		openset.add(start);// add start node
+		frontier.add(start);
+		while (!frontier.isEmpty()) {
+			int hash = frontier.poll();
+			if (closedset.contains(hash)) {
+				continue; // stale duplicate from an earlier decrease-key
 			}
-
-			// System.out.println("comparing hash and goal...");
-			// System.out.println(hash+ " =?= " +goal);
 			if (hash == goal) {
-				// System.out.println("drawing path...");
 				// drawPath(camefrom, goal);
 				return buildStack(camefrom, goal);
 			}
@@ -596,6 +611,7 @@ public class World {
 						gdist.put(i, tempdist);
 						hdist.put(i, distance(i, goal));
 						fdist.put(i, gdist.get(i) + hdist.get(i));
+						frontier.add(i);
 					}
 				}
 			}
