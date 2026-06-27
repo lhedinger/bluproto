@@ -30,11 +30,14 @@ import net.hedinger.prototype.engine.Utils;
  *   java -cp bin net.hedinger.prototype.tools.Capture shot   out=world.png
  *   java -cp bin net.hedinger.prototype.tools.Capture gif    out=run.gif ticks=120 every=2
  *   java -cp bin net.hedinger.prototype.tools.Capture sheet  out=sheet.png ticks=240 every=8 grid=3x3
+ *   java -cp bin net.hedinger.prototype.tools.Capture mp4    out=run.mov ticks=120 every=2 delay=60
  *   java -cp bin net.hedinger.prototype.tools.Capture frames out=frames/ ticks=120 every=2
  * </pre>
  *
  * <p>{@code sheet} tiles sampled frames into one static PNG (each cell labeled
- * with its tick) -- use it when the viewing surface does not autoplay GIFs.</p>
+ * with its tick) -- use it when the viewing surface does not autoplay GIFs.
+ * {@code mp4} writes a Motion-JPEG QuickTime (.mov) video that native mobile
+ * players (notably iOS) play inline; {@code quality} (0..1) tunes JPEG size.</p>
  *
  * <p>All parameters are {@code key=value}; any subset may be supplied.
  * <ul>
@@ -77,6 +80,7 @@ public class Capture {
 		int every = Math.max(1, intArg(a, "every", 2));
 		int delay = intArg(a, "delay", 60);
 		int scale = Math.max(1, intArg(a, "scale", 1));
+		float quality = floatArg(a, "quality", 0.85f);
 
 		System.out.println("Building world: seed=" + seed + " size=" + cols + "x" + rows + "x" + lvls
 				+ " pop=" + pop + " level=" + level);
@@ -134,6 +138,12 @@ public class Capture {
 			ImageIO.write(sheet, "png", out);
 			System.out.println("wrote " + out.getAbsolutePath() + " (" + grid[0] + "x" + grid[1]
 					+ " contact sheet from " + captured + " captured frames, seed " + seed + ")");
+		} else if (mode.equals("mp4") || mode.equals("mov")) {
+			File out = new File(a.getOrDefault("out", "world.mov"));
+			ensureParent(out);
+			MjpegMp4Writer.write(out, capt, delay, quality);
+			System.out.println("wrote " + out.getAbsolutePath() + " (" + captured + " frames @ "
+					+ Math.round(1000.0 / delay) + "fps, MJPEG/QuickTime, seed " + seed + ")");
 		} else {
 			File out = new File(a.getOrDefault("out", "world.gif"));
 			ensureParent(out);
