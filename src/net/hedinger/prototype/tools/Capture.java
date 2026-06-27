@@ -30,14 +30,16 @@ import net.hedinger.prototype.engine.Utils;
  *   java -cp bin net.hedinger.prototype.tools.Capture shot   out=world.png
  *   java -cp bin net.hedinger.prototype.tools.Capture gif    out=run.gif ticks=120 every=2
  *   java -cp bin net.hedinger.prototype.tools.Capture sheet  out=sheet.png ticks=240 every=8 grid=3x3
- *   java -cp bin net.hedinger.prototype.tools.Capture mp4    out=run.mov ticks=120 every=2 delay=60
+ *   java -cp bin net.hedinger.prototype.tools.Capture mp4    out=run.mp4 ticks=120 every=2 delay=50
  *   java -cp bin net.hedinger.prototype.tools.Capture frames out=frames/ ticks=120 every=2
  * </pre>
  *
  * <p>{@code sheet} tiles sampled frames into one static PNG (each cell labeled
  * with its tick) -- use it when the viewing surface does not autoplay GIFs.
- * {@code mp4} writes a Motion-JPEG QuickTime (.mov) video that native mobile
- * players (notably iOS) play inline; {@code quality} (0..1) tunes JPEG size.</p>
+ * {@code mp4} (alias {@code h264}) encodes a universal H.264/yuv420p MP4 via
+ * ffmpeg if present, falling back to a pure-Java Motion-JPEG {@code .mov}; the
+ * {@code mov} mode forces the MJPEG container. {@code quality} (0..1) tunes the
+ * MJPEG JPEG size.</p>
  *
  * <p>All parameters are {@code key=value}; any subset may be supplied.
  * <ul>
@@ -138,12 +140,26 @@ public class Capture {
 			ImageIO.write(sheet, "png", out);
 			System.out.println("wrote " + out.getAbsolutePath() + " (" + grid[0] + "x" + grid[1]
 					+ " contact sheet from " + captured + " captured frames, seed " + seed + ")");
-		} else if (mode.equals("mp4") || mode.equals("mov")) {
+		} else if (mode.equals("mov")) {
 			File out = new File(a.getOrDefault("out", "world.mov"));
 			ensureParent(out);
 			MjpegMp4Writer.write(out, capt, delay, quality);
 			System.out.println("wrote " + out.getAbsolutePath() + " (" + captured + " frames @ "
 					+ Math.round(1000.0 / delay) + "fps, MJPEG/QuickTime, seed " + seed + ")");
+		} else if (mode.equals("mp4") || mode.equals("h264")) {
+			int fps = Math.max(1, (int) Math.round(1000.0 / delay));
+			File out = new File(a.getOrDefault("out", "world.mp4"));
+			ensureParent(out);
+			if (encodeH264(capt, fps, out)) {
+				System.out.println("wrote " + out.getAbsolutePath() + " (" + captured + " frames @ " + fps
+						+ "fps, H.264/yuv420p, seed " + seed + ")");
+			} else {
+				// ffmpeg unavailable: fall back to the pure-Java MJPEG container
+				File mov = new File(out.getPath().replaceFirst("\\.[^.]+$", "") + ".mov");
+				MjpegMp4Writer.write(mov, capt, delay, quality);
+				System.out.println("ffmpeg not found -- wrote pure-Java MJPEG fallback: " + mov.getAbsolutePath());
+				System.out.println("(install ffmpeg, e.g. 'apt-get install -y ffmpeg', for a universal H.264 .mp4)");
+			}
 		} else {
 			File out = new File(a.getOrDefault("out", "world.gif"));
 			ensureParent(out);
@@ -151,6 +167,74 @@ public class Capture {
 			System.out.println("wrote " + out.getAbsolutePath() + " (" + captured + " frames, "
 					+ delay + "ms each, seed " + seed + ")");
 		}
+	}
+
+	// ---- H.264 via ffmpeg ----------------------------------------------
+
+	/**
+	 * Encodes frames to a broadly-compatible H.264 (yuv420p, +faststart) MP4 by
+	 * piping PNGs through ffmpeg. Returns false if ffmpeg is not available, so
+	 * the caller can fall back. Dimensions are forced even (yuv420p requires it).
+	 */
+	private static boolean encodeH264(List<BufferedImage> frames, int fps, File out) throws IOException {
+		String ff = findFfmpeg();
+		if (ff == null) {
+			return false;
+		}
+		File tmp = java.nio.file.Files.createTempDirectory("blu_h264_").toFile();
+		try {
+			int i = 0;
+			for (BufferedImage f : frames) {
+				ImageIO.write(f, "png", new File(tmp, String.format("frame_%05d.png", i++)));
+			}
+			List<String> cmd = new ArrayList<String>();
+			java.util.Collections.addAll(cmd, ff, "-y", "-loglevel", "error",
+					"-framerate", Integer.toString(fps),
+					"-i", new File(tmp, "frame_%05d.png").getPath(),
+					"-c:v", "libx264", "-preset", "medium", "-crf", "20",
+					"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+					"-pix_fmt", "yuv420p", "-movflags", "+faststart",
+					out.getPath());
+			ProcessBuilder pb = new ProcessBuilder(cmd);
+			pb.redirectErrorStream(true);
+			Process p = pb.start();
+			byte[] buf = new byte[4096];
+			java.io.InputStream is = p.getInputStream();
+			StringBuilder log = new StringBuilder();
+			int r;
+			while ((r = is.read(buf)) > 0) {
+				log.append(new String(buf, 0, r));
+			}
+			int code = p.waitFor();
+			if (code != 0) {
+				System.out.println("ffmpeg failed (exit " + code + "):\n" + log);
+				return false;
+			}
+			return true;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		} finally {
+			for (File f : tmp.listFiles()) {
+				f.delete();
+			}
+			tmp.delete();
+		}
+	}
+
+	private static String findFfmpeg() {
+		for (String c : new String[] { "ffmpeg", "/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg" }) {
+			try {
+				Process p = new ProcessBuilder(c, "-version").redirectErrorStream(true).start();
+				p.getInputStream().readAllBytes();
+				if (p.waitFor() == 0) {
+					return c;
+				}
+			} catch (Exception e) {
+				// try next candidate
+			}
+		}
+		return null;
 	}
 
 	// ---- contact sheet --------------------------------------------------
