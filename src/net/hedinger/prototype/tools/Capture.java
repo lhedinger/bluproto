@@ -29,8 +29,12 @@ import net.hedinger.prototype.engine.Utils;
  *   javac -d bin $(find src -name '*.java')
  *   java -cp bin net.hedinger.prototype.tools.Capture shot   out=world.png
  *   java -cp bin net.hedinger.prototype.tools.Capture gif    out=run.gif ticks=120 every=2
+ *   java -cp bin net.hedinger.prototype.tools.Capture sheet  out=sheet.png ticks=240 every=8 grid=3x3
  *   java -cp bin net.hedinger.prototype.tools.Capture frames out=frames/ ticks=120 every=2
  * </pre>
+ *
+ * <p>{@code sheet} tiles sampled frames into one static PNG (each cell labeled
+ * with its tick) -- use it when the viewing surface does not autoplay GIFs.</p>
  *
  * <p>All parameters are {@code key=value}; any subset may be supplied.
  * <ul>
@@ -122,6 +126,14 @@ public class Capture {
 			System.out.println("encode with ffmpeg (if available):");
 			System.out.println("  ffmpeg -framerate " + Math.round(1000.0 / (delay)) + " -i "
 					+ framesDir.getPath() + "/frame_%05d.png -pix_fmt yuv420p out.mp4");
+		} else if (mode.equals("sheet")) {
+			int[] grid = parseGrid(a.getOrDefault("grid", "3x3"));
+			BufferedImage sheet = makeContactSheet(capt, grid[0], grid[1], every);
+			File out = new File(a.getOrDefault("out", "sheet.png"));
+			ensureParent(out);
+			ImageIO.write(sheet, "png", out);
+			System.out.println("wrote " + out.getAbsolutePath() + " (" + grid[0] + "x" + grid[1]
+					+ " contact sheet from " + captured + " captured frames, seed " + seed + ")");
 		} else {
 			File out = new File(a.getOrDefault("out", "world.gif"));
 			ensureParent(out);
@@ -129,6 +141,53 @@ public class Capture {
 			System.out.println("wrote " + out.getAbsolutePath() + " (" + captured + " frames, "
 					+ delay + "ms each, seed " + seed + ")");
 		}
+	}
+
+	// ---- contact sheet --------------------------------------------------
+
+	private static int[] parseGrid(String s) {
+		int x = s.toLowerCase().indexOf('x');
+		if (x > 0) {
+			int c = Utils.parseInt(s.substring(0, x), 3);
+			int r = Utils.parseInt(s.substring(x + 1), 3);
+			return new int[] { Math.max(1, c), Math.max(1, r) };
+		}
+		return new int[] { 3, 3 };
+	}
+
+	/**
+	 * Tiles up to cols*rows captured frames into one static PNG, evenly sampled
+	 * across the run, each cell labeled with its frame index. Useful when the
+	 * viewing surface does not autoplay GIFs.
+	 */
+	private static BufferedImage makeContactSheet(List<BufferedImage> frames, int cols, int rows, int every) {
+		int cells = Math.min(frames.size(), cols * rows);
+		if (cells == 0) {
+			return new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+		}
+		int cw = frames.get(0).getWidth();
+		int ch = frames.get(0).getHeight();
+		int gap = 6;
+		int sheetW = cols * cw + (cols + 1) * gap;
+		int sheetH = rows * ch + (rows + 1) * gap;
+		BufferedImage sheet = new BufferedImage(sheetW, sheetH, BufferedImage.TYPE_INT_RGB);
+		java.awt.Graphics2D g = sheet.createGraphics();
+		g.setColor(new java.awt.Color(20, 20, 28));
+		g.fillRect(0, 0, sheetW, sheetH);
+		g.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 14));
+		for (int idx = 0; idx < cells; idx++) {
+			// evenly sample across the whole capture range
+			int fi = (cells == 1) ? 0 : idx * (frames.size() - 1) / (cells - 1);
+			int gx = idx % cols, gy = idx / cols;
+			int px = gap + gx * (cw + gap), py = gap + gy * (ch + gap);
+			g.drawImage(frames.get(fi), px, py, null);
+			g.setColor(new java.awt.Color(0, 0, 0, 160));
+			g.fillRect(px, py, 70, 18);
+			g.setColor(java.awt.Color.white);
+			g.drawString("t=" + (fi * every), px + 4, py + 14);
+		}
+		g.dispose();
+		return sheet;
 	}
 
 	// ---- image helpers --------------------------------------------------
