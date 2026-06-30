@@ -59,6 +59,18 @@ public abstract class NPC extends Entity {
 	protected TreeMap<Double, NPC> targets = new TreeMap<Double, NPC>();
 	protected TreeMap<Double, NPC> focusTargets = new TreeMap<Double, NPC>();
 
+	// Topological neighbourhood: like real flocks (starlings track ~7 nearest
+	// neighbours regardless of crowding), each NPC only tracks its nearest
+	// MAX_NEIGHBORS. This bounds the per-tick neighbour loops at O(K) instead of
+	// O(local density), so a dense pile-up costs the same per entity as a light
+	// crowd.
+	protected int MAX_NEIGHBORS = Integer.getInteger("blu.k", 7);
+
+	// Staggered-update period multiplier (1 = each NPC re-scans every
+	// SEARCH_FREQ ticks). Tunable via -Dblu.stagger=N for benchmarking the
+	// freshness/speed trade-off.
+	public static int STAGGER = Integer.getInteger("blu.stagger", 1);
+
 	public NPC(double x, double y, double z) {
 		super(x, y, z);
 		initialize();
@@ -1010,11 +1022,33 @@ public abstract class NPC extends Entity {
 		return true;
 	}
 
+	/** Keeps only the nearest k entries of a distance-sorted target map. */
+	private TreeMap<Double, NPC> capNearest(TreeMap<Double, NPC> in, int k) {
+		if (in == null || in.size() <= k) {
+			return in;
+		}
+		TreeMap<Double, NPC> out = new TreeMap<Double, NPC>();
+		for (Double key : in.navigableKeySet()) {
+			out.put(key, in.get(key));
+			if (out.size() >= k) {
+				break;
+			}
+		}
+		return out;
+	}
+
 	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
 		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
 
-		if (Utils.random() * SEARCH_FREQ < 1) {
-			return getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID());
+		// Staggered update: instead of each NPC re-scanning its neighbourhood at
+		// a random ~1/SEARCH_FREQ chance (which clumps -- many can fire on the
+		// same tick), give every NPC a fixed phase from its ID so exactly
+		// 1/period of the population does the expensive full scan each tick. Same
+		// average refresh rate, evenly spread across ticks. STAGGER lengthens the
+		// period to trade perception freshness for speed.
+		int period = Math.max(1, SEARCH_FREQ * STAGGER);
+		if (((getID() + age) % period) == 0) {
+			return capNearest(getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID()), MAX_NEIGHBORS);
 		}
 
 		if (ts != null) {
@@ -1039,7 +1073,7 @@ public abstract class NPC extends Entity {
 			}
 		}
 
-		return output;
+		return capNearest(output, MAX_NEIGHBORS);
 	}
 
 	/**
