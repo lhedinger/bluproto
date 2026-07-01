@@ -1048,7 +1048,8 @@ public abstract class NPC extends Entity {
 		// period to trade perception freshness for speed.
 		int period = Math.max(1, SEARCH_FREQ * STAGGER);
 		if (((getID() + age) % period) == 0) {
-			return capNearest(getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID()), MAX_NEIGHBORS);
+			// Bounded nearest-K gather: cost is O(K), not O(local density).
+			return getWorld().searchNearestNPC(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID(), MAX_NEIGHBORS);
 		}
 
 		if (ts != null) {

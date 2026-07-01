@@ -409,6 +409,53 @@ public class World {
 
 	}
 
+	// Tiles of the 3x3 neighbourhood, nearest-first (centre, then the ring).
+	private static final int[][] NEIGHBOUR_ORDER = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 },
+			{ 1, -1 }, { -1, 1 }, { -1, -1 } };
+
+	/**
+	 * Nearest-K neighbour search that bounds cost to O(k) regardless of local
+	 * density. It walks the surrounding tiles nearest-first and stops once it has
+	 * k results and has examined a fixed candidate budget -- so a dense pile-up
+	 * costs the same as a light crowd. Because the centre tile (closest entities)
+	 * is visited first, the budget is spent on the nearest candidates, making
+	 * this a close approximation of the true nearest-k. At low density (fewer
+	 * than the budget of candidates) it returns exactly what searchNPC3 would.
+	 */
+	public TreeMap<Double, NPC> searchNearestNPC(double x, double y, double z, double dir, double range, double fov,
+			int ID, int k) {
+		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
+		if (!isValid(x, y, z) || k <= 0) {
+			return result;
+		}
+		int budget = k * 8; // density-independent cap on candidates examined
+		int examined = 0;
+		for (int[] d : NEIGHBOUR_ORDER) {
+			Tile t = getTile(x + d[0], y + d[1], z);
+			if (t == null) {
+				continue;
+			}
+			for (Integer i : t.getEntities()) {
+				if (examined >= budget && result.size() >= k) {
+					return result;
+				}
+				examined++;
+				Entity e = entities.get(i);
+				if (e == null || e.getLvl() != (int) z || !(e instanceof NPC) || e.isDead() || ID == e.getID()) {
+					continue;
+				}
+				if (!hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
+					continue;
+				}
+				result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), (NPC) e);
+				if (result.size() > k) {
+					result.remove(result.lastKey()); // keep only the nearest k
+				}
+			}
+		}
+		return result;
+	}
+
 	/**
 	 * Checks to see if there is a clean line of sight between Searcher and
 	 * Target
