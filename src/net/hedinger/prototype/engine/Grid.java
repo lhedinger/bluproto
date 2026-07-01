@@ -3,6 +3,7 @@ package net.hedinger.prototype.engine;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.TreeMap;
 
@@ -14,7 +15,7 @@ public class Grid {
 	private Tile[][] tiles;
 	private int level;
 
-	HashSet<Entity> doors;
+	LinkedHashSet<Entity> doors;
 	HashMap<Integer, Sector> sectors;
 
 	int counter = 0;
@@ -29,7 +30,7 @@ public class Grid {
 
 		level = l;
 
-		doors = new HashSet<Entity>();
+		doors = new LinkedHashSet<Entity>();
 
 		sectors = new HashMap<Integer, Sector>();
 	}

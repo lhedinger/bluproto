@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.Stack;
@@ -31,8 +32,8 @@ public class World {
 	int peepcount_max = 0;
 	int max_view_depth = 3;
 
-	HashMap<Integer, Entity> entities;
-	HashSet<Entity> spawnQueue;
+	IntObjectMap<Entity> entities;
+	LinkedHashSet<Entity> spawnQueue;
 
 	public World(int c, int r, int l) {
 
@@ -44,14 +45,14 @@ public class World {
 		rows = r;
 		lvls = l;
 
-		entities = new HashMap<Integer, Entity>();
+		entities = new IntObjectMap<Entity>();
 
 		levels = new Grid[l];
 		for (int z = 0; z < l; z++) {
 			levels[z] = new Grid(this, c, r, z);
 		}
 
-		spawnQueue = new HashSet<Entity>();
+		spawnQueue = new LinkedHashSet<Entity>();
 
 		init();
 	}
@@ -87,13 +88,10 @@ public class World {
 		}
 
 		if (removecount * 2 > entities.size()) {
-			HashMap<Integer, Entity> clone = new HashMap<Integer, Entity>();
-			for (Integer i : entities.keySet()) {
-				Entity e = entities.get(i);
-				if (e != null) {
-					if (!e.isRemoved()) {
-						clone.put(i, e);
-					}
+			IntObjectMap<Entity> clone = new IntObjectMap<Entity>();
+			for (Entity e : entities.values()) {
+				if (e != null && !e.isRemoved()) {
+					clone.put(e.getID(), e);
 				}
 			}
 			entities = clone;
@@ -107,7 +105,7 @@ public class World {
 				}
 			}
 			spawnQueue = null;
-			spawnQueue = new HashSet<Entity>();
+			spawnQueue = new LinkedHashSet<Entity>();
 		}
 
 		for (int z = 0; z < lvls; z++) {
