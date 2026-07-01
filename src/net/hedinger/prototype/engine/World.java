@@ -858,11 +858,12 @@ public class World {
 	// Target A: allocation-free case-insensitive type matching. The old path
 	// re-lowercased constant strings on every candidate comparison, which the
 	// profiler showed as ~15% of a dense combat tick. Toggle for isolation.
-	public static boolean FAST_FILTER = Boolean.getBoolean("blu.fastfilter");
+	public static boolean FAST_FILTER = Boolean.parseBoolean(System.getProperty("blu.fastfilter", "true"));
 
 	// Target B: iterate tiles directly in searchEntity instead of building an
-	// intermediate HashSet<Integer> via getRadialEntities. Toggle for isolation.
-	public static boolean DIRECT_GATHER = Boolean.getBoolean("blu.directgather");
+	// intermediate HashSet<Integer> via getRadialEntities. Disable with
+	// -Dblu.directgather=false.
+	public static boolean DIRECT_GATHER = Boolean.parseBoolean(System.getProperty("blu.directgather", "true"));
 
 	/** Case-insensitive substring test with no String allocation (ASCII-safe). */
 	static boolean containsIgnoreCase(String haystack, String needle) {
