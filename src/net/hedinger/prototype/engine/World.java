@@ -325,18 +325,44 @@ public class World {
 		}
 
 		TreeMap<Double, Entity> result = new TreeMap<Double, Entity>();
-		Set<Integer> ents = getRadialEntities(x, y, z, (int) Math.ceil(range) + 1);
-		for (Integer i : ents) {
-			Entity e = entities.get(i);
-			if (e != null && e.getLvl() == (int) z && !e.isDead() && ID != e.getID()) {
-				if (filterType(e.getEntityTypeName(), types, include)) {
-					if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
-						result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), e);
+		int r = (int) Math.ceil(range) + 1;
+		if (DIRECT_GATHER) {
+			// Target B: iterate the tile box directly. getRadialEntities()
+			// otherwise allocates a fresh HashSet<Integer> and addAll()s every
+			// tile's contents each call -- pure churn, since each entity lives in
+			// exactly one tile so there is nothing to dedup. Same candidates.
+			for (int dx = -r; dx <= r; dx++) {
+				for (int dy = -r; dy <= r; dy++) {
+					Tile t = getTile(x + dx, y + dy, z);
+					if (t == null) {
+						continue;
+					}
+					for (Integer i : t.getEntities()) {
+						considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
 					}
 				}
 			}
+		} else {
+			Set<Integer> ents = getRadialEntities(x, y, z, r);
+			for (Integer i : ents) {
+				considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
+			}
 		}
 		return result;
+	}
+
+	// Shared per-candidate test for searchEntity's two gather paths, so both
+	// produce identical results.
+	private void considerEntity(Integer i, double x, double y, double z, double dir, double range, double fov,
+			String[] types, boolean include, int ID, TreeMap<Double, Entity> result) {
+		Entity e = entities.get(i);
+		if (e != null && e.getLvl() == (int) z && !e.isDead() && ID != e.getID()) {
+			if (filterType(e.getEntityTypeName(), types, include)) {
+				if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
+					result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), e);
+				}
+			}
+		}
 	}
 
 	public TreeMap<Double, NPC> searchNPC(double x, double y, double z, double dir, double range, double fov,
@@ -829,6 +855,35 @@ public class World {
 		return lvls;
 	}
 
+	// Target A: allocation-free case-insensitive type matching. The old path
+	// re-lowercased constant strings on every candidate comparison, which the
+	// profiler showed as ~15% of a dense combat tick. Toggle for isolation.
+	public static boolean FAST_FILTER = Boolean.getBoolean("blu.fastfilter");
+
+	// Target B: iterate tiles directly in searchEntity instead of building an
+	// intermediate HashSet<Integer> via getRadialEntities. Toggle for isolation.
+	public static boolean DIRECT_GATHER = Boolean.getBoolean("blu.directgather");
+
+	/** Case-insensitive substring test with no String allocation (ASCII-safe). */
+	static boolean containsIgnoreCase(String haystack, String needle) {
+		int n = needle.length();
+		if (n == 0) {
+			return true;
+		}
+		int max = haystack.length() - n;
+		for (int i = 0; i <= max; i++) {
+			if (haystack.regionMatches(true, i, needle, 0, n)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean typeMatch(String filterEntry, String type) {
+		return FAST_FILTER ? containsIgnoreCase(filterEntry, type)
+				: filterEntry.toLowerCase().contains(type.toLowerCase());
+	}
+
 	public static boolean filterType(String type, String[] filter, boolean include) {
 		if (include) {
 			return includesType(type, filter);
@@ -839,7 +894,7 @@ public class World {
 
 	public static boolean includesType(String type, String[] filter) {
 		for (int i = 0; i < filter.length; i++) {
-			if (filter[i].toLowerCase().contains(type.toLowerCase())) {
+			if (typeMatch(filter[i], type)) {
 				return true;
 			}
 		}
@@ -850,7 +905,7 @@ public class World {
 
 	public static boolean excludesType(String type, String[] filter) {
 		for (int i = 0; i < filter.length; i++) {
-			if (filter[i].toLowerCase().contains(type.toLowerCase())) {
+			if (typeMatch(filter[i], type)) {
 				// System.out.println(printArr(filter) + " does not exclude " +
 				// type);
 				return false;
