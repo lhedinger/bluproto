@@ -281,9 +281,19 @@ public class World {
 		return fogofwar;
 	}
 
-	/** Live count of all entities in the world (used by the HUD overlay). */
-	public int getEntityCount() {
-		return entities.size();
+	/**
+	 * Count of living actors (NPCs that are not dead), used by the HUD overlay.
+	 * Excludes transient effects (bullets, explosions, sounds, grenades),
+	 * structural entities (doors) and corpses in their death-span.
+	 */
+	public int getAliveCount() {
+		int n = 0;
+		for (Entity e : entities.values()) {
+			if (e != null && e instanceof NPC && !e.isDead()) {
+				n++;
+			}
+		}
+		return n;
 	}
 
 	/**

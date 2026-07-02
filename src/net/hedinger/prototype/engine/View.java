@@ -107,7 +107,7 @@ public class View {
 		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g2.setFont(font);
 		g2.setColor(Color.white);
-		String s = "Entities: " + world.getEntityCount();
+		String s = "Entities: " + world.getAliveCount();
 		int w = g2.getFontMetrics().stringWidth(s);
 		g2.drawString(s, windowX - w - 15, 18);
 	}
