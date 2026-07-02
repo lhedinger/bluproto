@@ -97,6 +97,19 @@ public class View {
 		renderWorld(g);
 		renderEffects(g);
 		minimap.render(g);
+		renderEntityCount(g);
+	}
+
+	/** Entity-count overlay, top-right corner. Part of render() so it also
+	 * appears in headless captures, not just the live loop. */
+	public void renderEntityCount(Graphics g) {
+		Graphics2D g2 = (Graphics2D) g;
+		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g2.setFont(font);
+		g2.setColor(Color.white);
+		String s = "Entities: " + world.getEntityCount();
+		int w = g2.getFontMetrics().stringWidth(s);
+		g2.drawString(s, windowX - w - 15, 18);
 	}
 
 	public void mousePressed() {

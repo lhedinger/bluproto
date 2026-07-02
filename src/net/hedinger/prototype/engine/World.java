@@ -281,6 +281,11 @@ public class World {
 		return fogofwar;
 	}
 
+	/** Live count of all entities in the world (used by the HUD overlay). */
+	public int getEntityCount() {
+		return entities.size();
+	}
+
 	/**
 	 * Looks for any visible Entity (follows LOS protocols)
 	 *
