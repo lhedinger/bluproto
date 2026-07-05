@@ -4,10 +4,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.HashSet;
 import java.util.TreeMap;
-
-import net.hedinger.prototype.entities.NPC;
 
 public class Grid {
 
@@ -112,28 +109,6 @@ public class Grid {
 						if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
 							if (ID != e.getID()) {
 								result.put(dist, e);
-							}
-						}
-					}
-				}
-			}
-		}
-		return result;
-	}
-
-	TreeMap<Double, NPC> searchNPC(double x, double y, double dir, double radius, double fov,
-			String[] types, boolean include, int ID) {
-		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
-		for (Entity e : world.entities.values()) {
-			// TODO consider entities from different levels
-			if (e != null && e.getLvl() == level) {
-				if (e instanceof NPC) {
-					NPC npc = (NPC) e;
-					if (!e.isDead() && ID != e.getID()) {
-						if (World.filterType(e.getEntityTypeName(), types, include)) {
-							double dist = world.distance(x, y, level, e.getX(), e.getY(), e.getZ());
-							if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
-								result.put(dist, npc);
 							}
 						}
 					}

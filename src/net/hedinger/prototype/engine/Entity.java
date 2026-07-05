@@ -159,7 +159,6 @@ public abstract class Entity {
 
 	public boolean isVisible(Graphics g, View v) {
 		double zk = v.getCamZ() - Z + 1;
-		Math.pow(zk, 0.05);
 		int width = (int) g.getClipBounds().getMaxX();
 		int height = (int) g.getClipBounds().getMaxY();
 

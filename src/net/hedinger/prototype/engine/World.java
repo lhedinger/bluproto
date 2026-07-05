@@ -4,12 +4,10 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
 
@@ -22,14 +20,9 @@ public class World {
 	int rows;
 	int lvls;
 	int spawnCounter = 0;
-	protected Calendar clock;
-	protected long gamma = 0;
-	protected final long delta = 1000; // milliseconds
 
 	boolean fogofwar = false;
 
-	int peepcount = 0;
-	int peepcount_max = 0;
 	int max_view_depth = 3;
 
 	IntObjectMap<Entity> entities;
@@ -104,7 +97,6 @@ public class World {
 					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
 				}
 			}
-			spawnQueue = null;
 			spawnQueue = new LinkedHashSet<Entity>();
 		}
 
@@ -156,125 +148,6 @@ public class World {
 		spawnQueue.add(e);
 
 		return true;
-	}
-
-	public Set<Integer> getRadialEntities(double tx, double ty, double tz, double radius) {
-		// return getEntityTiles(x, y, z, radius);
-		Set<Integer> ent = new HashSet<Integer>();
-		Tile t = getTile(tx, ty, tz);
-		if (t == null) {
-			return ent;
-		}
-
-		ent.addAll(t.getEntities());
-		int r = (int) radius;
-
-		int x = -r;
-		int y = -r;
-
-		do {
-			t = getTile(tx + x, ty + y, tz);
-
-			if (t != null) {
-				ent.addAll(t.getEntities());
-			}
-
-			x++;
-			if (x > r && y < r) {
-				x = -r;
-				y++;
-			}
-
-		} while (x <= r);
-
-		return ent;
-	}
-
-	public Set<Integer> getEntityTiles(double x, double y, double z, double radius) {
-		Set<Integer> list = new HashSet<Integer>();
-
-		list.addAll(getEntityTile(x, y, z));
-
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x - 1, (int) y - 1, (int) z, 1));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x, (int) y - 1, (int) z, 2));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x + 1, (int) y - 1, (int) z, 3));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x - 1, (int) y, (int) z, 4));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x + 1, (int) y, (int) z, 5));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x - 1, (int) y + 1, (int) z, 6));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x, (int) y + 1, (int) z, 7));
-		list.addAll(getEntityTiles(x, y, z, radius, (int) x + 1, (int) y + 1, (int) z, 8));
-
-		return list;
-	}
-
-	public Set<Integer> getEntityTile(double x, double y, double z) {
-		Set<Integer> list = new HashSet<Integer>();
-
-		Tile t = getTile(x, y, z);
-
-		if (t == null) {
-			return list;
-		}
-
-		list = t.getEntities();
-
-		return list;
-	}
-
-	private Set<Integer> getEntityTiles(double x, double y, double z, double radius, int tx, int ty, int tz, int dir) {
-		HashSet<Integer> list = new HashSet<Integer>();
-
-		if (dir == 1)// nw
-		{
-			if (radius >= distance(x, y, z, tx, ty, tz)) {
-				list.addAll(getEntityTile(x, y, z));
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty - 1, tz, dir));
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty - 1, tz, 2));
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty - 1, tz, 4));
-			}
-		} else if (dir == 2)// n
-		{
-			if (y + radius >= ty + 1) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx, ty - 1, tz, dir));
-			}
-		} else if (dir == 3)// ne
-		{
-			if (radius >= distance(x, y, z, tx + 1, ty, tz)) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty - 1, tz, dir));
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty - 1, tz, 2));
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty - 1, tz, 5));
-			}
-		} else if (dir == 4)// w
-		{
-			if (x + radius >= tx + 1) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty, tz, dir));
-			}
-		} else if (dir == 5)// e
-		{
-			if (x - radius <= tx) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty, tz, dir));
-			}
-		} else if (dir == 6)// sw
-		{
-			if (radius >= distance(x, y, z, tx, ty + 1, tz)) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty + 1, tz, dir));
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty + 1, tz, 4));
-				list.addAll(getEntityTiles(x, y, z, radius, tx - 1, ty + 1, tz, 7));
-			}
-		} else if (dir == 7)// s
-		{
-			if (y - radius <= ty) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx, ty + 1, tz, dir));
-			}
-		} else if (dir == 8)// se
-		{
-			if (radius >= distance(x, y, z, tx + 1, ty + 1, tz)) {
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty + 1, tz, dir));
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty + 1, tz, 5));
-				list.addAll(getEntityTiles(x, y, z, radius, tx + 1, ty + 1, tz, 7));
-			}
-		}
-		return list;
 	}
 
 	public boolean hasFog() {
@@ -337,28 +210,20 @@ public class World {
 			return levels[(int) z].searchEntity(x, y, dir, range, fov, types, include, ID);
 		}
 
+		// Gather candidates straight from the tile box around the searcher --
+		// each entity lives in exactly one tile, so there is nothing to dedup.
+		// hasLOS() (inside considerEntity) applies the exact range filter.
 		TreeMap<Double, Entity> result = new TreeMap<Double, Entity>();
 		int r = (int) Math.ceil(range) + 1;
-		if (DIRECT_GATHER) {
-			// Target B: iterate the tile box directly. getRadialEntities()
-			// otherwise allocates a fresh HashSet<Integer> and addAll()s every
-			// tile's contents each call -- pure churn, since each entity lives in
-			// exactly one tile so there is nothing to dedup. Same candidates.
-			for (int dx = -r; dx <= r; dx++) {
-				for (int dy = -r; dy <= r; dy++) {
-					Tile t = getTile(x + dx, y + dy, z);
-					if (t == null) {
-						continue;
-					}
-					for (Integer i : t.getEntities()) {
-						considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
-					}
+		for (int dx = -r; dx <= r; dx++) {
+			for (int dy = -r; dy <= r; dy++) {
+				Tile t = getTile(x + dx, y + dy, z);
+				if (t == null) {
+					continue;
 				}
-			}
-		} else {
-			Set<Integer> ents = getRadialEntities(x, y, z, r);
-			for (Integer i : ents) {
-				considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
+				for (Integer i : t.getEntities()) {
+					considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
+				}
 			}
 		}
 		return result;
@@ -378,76 +243,6 @@ public class World {
 		}
 	}
 
-	public TreeMap<Double, NPC> searchNPC(double x, double y, double z, double dir, double range, double fov,
-			String[] types, boolean include, int ID) {
-		if (!isValid(x, y, z)) {
-			return new TreeMap<Double, NPC>();
-		}
-
-		if (types == null) {
-			return new TreeMap<Double, NPC>();
-		}
-
-		return levels[(int) z].searchNPC(x, y, dir, range, fov, types, include, ID);
-	}
-
-	public TreeMap<Double, NPC> searchNPC2(double x, double y, double z, double dir, double range, double fov,
-			String[] types, boolean include, int ID) {
-		if (!isValid(x, y, z)) {
-			return new TreeMap<Double, NPC>();
-		}
-
-		if (types == null) {
-			return new TreeMap<Double, NPC>();
-		}
-
-		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
-		Set<Integer> ents = getRadialEntities(x, y, z, range);
-		for (Integer i : ents) {
-			Entity e = entities.get(i);
-			if (e != null && e.getLvl() == (int) z) {
-				if (e instanceof NPC) {
-					NPC npc = (NPC) e;
-					if (!e.isDead() && ID != e.getID()) {
-						if (filterType(e.getEntityTypeName(), types, include)) {
-							double dist = distance(x, y, z, e.getX(), e.getY(), e.getZ());
-							if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
-								result.put(dist, npc);
-							}
-						}
-					}
-				}
-			}
-		}
-		return result;
-
-	}
-
-	public TreeMap<Double, NPC> searchNPC3(double x, double y, double z, double dir, double range, double fov, int ID) {
-		if (!isValid(x, y, z)) {
-			return new TreeMap<Double, NPC>();
-		}
-
-		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
-		Set<Integer> ents = getRadialEntities(x, y, z, 1);
-		for (Integer i : ents) {
-			Entity e = entities.get(i);
-			if (e != null && e.getLvl() == (int) z) {
-				if (e instanceof NPC) {
-					NPC npc = (NPC) e;
-					if (!e.isDead() && ID != e.getID()) {
-						double dist = distance(x, y, z, e.getX(), e.getY(), e.getZ());
-						if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
-							result.put(dist, npc);
-						}
-					}
-				}
-			}
-		}
-		return result;
-
-	}
-
 	// Tiles of the 3x3 neighbourhood, nearest-first (centre, then the ring).
 	private static final int[][] NEIGHBOUR_ORDER = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 },
 			{ 1, -1 }, { -1, 1 }, { -1, -1 } };
@@ -459,7 +254,8 @@ public class World {
 	 * costs the same as a light crowd. Because the centre tile (closest entities)
 	 * is visited first, the budget is spent on the nearest candidates, making
 	 * this a close approximation of the true nearest-k. At low density (fewer
-	 * than the budget of candidates) it returns exactly what searchNPC3 would.
+	 * than the budget of candidates) it returns exactly what a full radial scan
+	 * would.
 	 */
 	public TreeMap<Double, NPC> searchNearestNPC(double x, double y, double z, double dir, double range, double fov,
 			int ID, int k) {
@@ -521,9 +317,6 @@ public class World {
 	 */
 	public boolean hasLOS(double x, double y, double z, double dir, double tx, double ty, double tz, double range,
 			double fov) {
-		if ((int) z != (int) z) {
-			return false;
-		}
 		if (!isValid(x, y, z)) {
 			return false;
 		}
@@ -705,22 +498,6 @@ public class World {
 		return new Stack<Integer>();
 	}
 
-	public void drawPath(HashMap<Integer, Integer> camefrom, int node) {
-		if (camefrom == null) {
-			return;
-		}
-		Integer prev = camefrom.get(node);
-		if (prev == null) {
-			return;
-		}
-		if (prev == -1) {
-			return;
-		}
-
-		drawPath(camefrom, prev);
-		// System.out.print(node + ", ");
-	}
-
 	private Stack<Integer> buildStack(HashMap<Integer, Integer> camefrom, int node) {
 		Stack<Integer> stack = new Stack<Integer>();
 		Integer i = node;
@@ -738,74 +515,6 @@ public class World {
 		}
 
 		return stack;
-	}
-
-	// ==========================================================================
-	// ==========================================================================
-	// ==========================================================================
-
-	public boolean isSameTile(double x1, double y1, double z1, double x2, double y2, double z2) {
-		if (!isValid(x1, y1, z1)) {
-			return false;
-		}
-		if (!isValid(x2, y2, z2)) {
-			return false;
-		}
-
-		if ((int) x1 != (int) x2) {
-			return false;
-		}
-		if ((int) y1 != (int) y2) {
-			return false;
-		}
-		if ((int) z1 != (int) z2) {
-			return false;
-		}
-
-		return true;
-	}
-
-	public static double fixAngle(double a) {
-		double angle = a;
-
-		while (angle >= 2 * Math.PI) {
-			angle -= 2 * Math.PI;
-		}
-		while (angle < 0) {
-			angle += 2 * Math.PI;
-		}
-
-		return angle;
-	}
-
-	public static double distanceAngle(double a1, double a2) {
-		double angle1 = a1;
-		double angle2 = a2;
-
-		if (angle1 >= 2 * Math.PI) {
-			angle1 -= 2 * Math.PI;
-		}
-		if (angle1 < 0) {
-			angle1 += 2 * Math.PI;
-		}
-
-		if (angle2 > 2 * Math.PI) {
-			angle2 -= 2 * Math.PI;
-		}
-		if (angle2 < 0) {
-			angle2 += 2 * Math.PI;
-		}
-
-		double dA = angle2 - angle1;
-
-		if (dA > Math.PI) {
-			dA = -2 * Math.PI + dA;
-		}
-		if (dA < -Math.PI) {
-			dA = 2 * Math.PI + dA;
-		}
-
-		return dA;
 	}
 
 	public double distance(int node1, int node2) {
@@ -868,17 +577,12 @@ public class World {
 		return lvls;
 	}
 
-	// Target A: allocation-free case-insensitive type matching. The old path
-	// re-lowercased constant strings on every candidate comparison, which the
-	// profiler showed as ~15% of a dense combat tick. Toggle for isolation.
-	public static boolean FAST_FILTER = Boolean.parseBoolean(System.getProperty("blu.fastfilter", "true"));
-
-	// Target B: iterate tiles directly in searchEntity instead of building an
-	// intermediate HashSet<Integer> via getRadialEntities. Disable with
-	// -Dblu.directgather=false.
-	public static boolean DIRECT_GATHER = Boolean.parseBoolean(System.getProperty("blu.directgather", "true"));
-
-	/** Case-insensitive substring test with no String allocation (ASCII-safe). */
+	/**
+	 * Case-insensitive substring test with no String allocation (ASCII-safe).
+	 * Type names and filters are constant ASCII strings, so this matches
+	 * {@code a.toLowerCase().contains(b.toLowerCase())} without the per-call
+	 * allocations that dominated a dense-tick profile.
+	 */
 	static boolean containsIgnoreCase(String haystack, String needle) {
 		int n = needle.length();
 		if (n == 0) {
@@ -893,11 +597,6 @@ public class World {
 		return false;
 	}
 
-	private static boolean typeMatch(String filterEntry, String type) {
-		return FAST_FILTER ? containsIgnoreCase(filterEntry, type)
-				: filterEntry.toLowerCase().contains(type.toLowerCase());
-	}
-
 	public static boolean filterType(String type, String[] filter, boolean include) {
 		if (include) {
 			return includesType(type, filter);
@@ -908,41 +607,19 @@ public class World {
 
 	public static boolean includesType(String type, String[] filter) {
 		for (int i = 0; i < filter.length; i++) {
-			if (typeMatch(filter[i], type)) {
+			if (containsIgnoreCase(filter[i], type)) {
 				return true;
 			}
 		}
-
-		// System.out.println(printArr(filter) + " does not include " + type);
 		return false;
 	}
 
 	public static boolean excludesType(String type, String[] filter) {
 		for (int i = 0; i < filter.length; i++) {
-			if (typeMatch(filter[i], type)) {
-				// System.out.println(printArr(filter) + " does not exclude " +
-				// type);
+			if (containsIgnoreCase(filter[i], type)) {
 				return false;
 			}
 		}
-
 		return true;
-	}
-
-	public static String printArr(String[] arr) {
-		if (arr == null) {
-			return "[NULL]";
-		}
-
-		String str = "[";
-		for (int i = 0; i < arr.length - 1; i++) {
-			str += arr[i] + ", ";
-		}
-
-		if (arr.length > 0) {
-			str += arr[arr.length - 1];
-		}
-
-		return str + "]";
 	}
 }
