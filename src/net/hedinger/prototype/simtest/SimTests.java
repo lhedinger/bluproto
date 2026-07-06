@@ -53,7 +53,10 @@ public class SimTests {
 			World w = room(9, 9);
 			DummyRoamer r = new DummyRoamer(4.5, 4.5, 0);
 			w.spawnEntity(r);
+			w.think(); // register the spawn so it draws
+			snapshot(w, "before (tick 0)");
 			tick(w, 200);
+			snapshot(w, "after (tick 200)");
 			double moved = Math.hypot(r.getX() - 4.5, r.getY() - 4.5);
 			assertGreater("roamer moved from spawn", moved, 0.5);
 			assertTrue("roamer stays inside the room",
@@ -79,7 +82,10 @@ public class SimTests {
 			Zombie prey = new Zombie(3.7, 2.5, 0); // dormant -> stays put; adjacent tile
 			w.spawnEntity(hunter);
 			w.spawnEntity(prey);
+			w.think();
+			snapshot(w, "before (tick 0)");
 			tick(w, 300);
+			snapshot(w, "after (tick 300)");
 			double after = Math.hypot(hunter.getX() - prey.getX(), hunter.getY() - prey.getY());
 			assertLess("chaser reached its prey (started 1.2 apart)", after, 0.5);
 			assertGreater("chaser actually travelled toward the prey", hunter.getX(), 3.0);
@@ -119,8 +125,10 @@ public class SimTests {
 			w.spawnEntity(h);
 			tick(w, 2);
 			assertEquals("one living actor before the hit", 1, w.getAliveCount());
+			snapshot(w, "alive");
 			h.damage(200); // health is 100
 			tick(w, 1);
+			snapshot(w, "corpse");
 			assertTrue("human dead after lethal damage", h.isDead());
 			assertEquals("no living actors after the kill", 0, w.getAliveCount());
 			tick(w, 1500); // well past deathspan (1000)
@@ -202,6 +210,10 @@ public class SimTests {
 	public static void main(String[] args) {
 		int passed = 0;
 		int failed = 0;
+		String shotsDir = System.getProperty("simtest.shots");
+		if (shotsDir != null) {
+			new java.io.File(shotsDir).mkdirs();
+		}
 		for (Scenario s : all()) {
 			if (args.length > 0 && !s.name().equalsIgnoreCase(args[0])) {
 				continue;
@@ -219,11 +231,28 @@ public class SimTests {
 				e.printStackTrace(System.out);
 				failed++;
 			}
+			writeShots(shotsDir, s);
 		}
 		System.out.println("----");
 		System.out.println(passed + " passed, " + failed + " failed");
 		if (failed > 0) {
 			System.exit(1);
+		}
+	}
+
+	/** Composes a scenario's captured frames into one before/after strip PNG. */
+	private static void writeShots(String shotsDir, Scenario s) {
+		if (shotsDir == null || s.shots().isEmpty()) {
+			return;
+		}
+		try {
+			java.awt.image.BufferedImage strip =
+					SnapshotRenderer.strip(s.name(), s.shotLabels(), s.shots());
+			java.io.File out = new java.io.File(shotsDir, s.name() + ".png");
+			javax.imageio.ImageIO.write(strip, "png", out);
+			System.out.println("      shot -> " + out.getPath());
+		} catch (Exception e) {
+			System.out.println("      shot FAILED: " + e);
 		}
 	}
 }

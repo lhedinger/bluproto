@@ -20,6 +20,9 @@ import net.hedinger.prototype.engine.World;
  */
 public abstract class Scenario {
 
+	private final java.util.List<String> shotLabels = new java.util.ArrayList<String>();
+	private final java.util.List<java.awt.image.BufferedImage> shots = new java.util.ArrayList<java.awt.image.BufferedImage>();
+
 	/** Short name shown in the runner output. */
 	public String name() {
 		return getClass().getSimpleName();
@@ -27,6 +30,36 @@ public abstract class Scenario {
 
 	/** Runs the scenario; throws AssertionError on failure. */
 	public abstract void run();
+
+	// ---- snapshots ---------------------------------------------------------
+
+	/** True when the runner asked for snapshots (-Dsimtest.shots=&lt;dir&gt;). */
+	static boolean captureEnabled() {
+		return System.getProperty("simtest.shots") != null;
+	}
+
+	/**
+	 * Captures a labelled screenshot of the world's ground level. A no-op
+	 * (zero cost) unless capture is enabled, so scenarios can call
+	 * {@code snapshot(w, "before")} / {@code snapshot(w, "after")} freely and
+	 * normal test runs stay fast. The runner composes the captures for a
+	 * scenario into one before/after strip.
+	 */
+	protected void snapshot(World w, String label) {
+		if (!captureEnabled()) {
+			return;
+		}
+		shots.add(SnapshotRenderer.render(w, 0));
+		shotLabels.add(label);
+	}
+
+	java.util.List<String> shotLabels() {
+		return shotLabels;
+	}
+
+	java.util.List<java.awt.image.BufferedImage> shots() {
+		return shots;
+	}
 
 	// ---- world building ---------------------------------------------------
 
