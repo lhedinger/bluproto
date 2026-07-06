@@ -39,10 +39,10 @@ A scenario is a subclass of `Scenario` with one `run()` method. Add it to the
 static class ChaserClosesIn extends Scenario {
     @Override
     public void run() {
-        seed(3);                                   // 1. deterministic RNG
+        seed(3);                                    // 1. deterministic RNG
         World w = room(12, 5);                      // 2. hardcoded world
-        DummyChaser hunter = new DummyChaser(2.5, 2.5, 0);
-        Zombie prey = new Zombie(3.7, 2.5, 0);      //    exact positions
+        TestNPC hunter = TestNPC.chaser(2.5, 2.5, 0);
+        TestNPC prey = TestNPC.inert(3.7, 2.5, 0);  //    exact positions
         w.spawnEntity(hunter);
         w.spawnEntity(prey);
         w.think();                                  //    register spawns
@@ -55,6 +55,34 @@ static class ChaserClosesIn extends Scenario {
     }
 }
 ```
+
+## Use test fixtures, not game species
+
+Scenarios should exercise **engine mechanics** — movement, collision,
+perception, lifecycle, hearing — not the behaviour of any concrete game
+species. The bestiary (Zombie, Houndeye, Human, ...) is expected to change or
+disappear as the project evolves, and this suite must survive that.
+
+`TestNPC` is the fixture for this. It provides the minimal behaviours the
+mechanics need, with per-instance knobs instead of species constants:
+
+| Factory | Behaviour |
+|---|---|
+| `TestNPC.inert(x, y, z)` | Never moves — a stationary target, obstacle or victim |
+| `TestNPC.roamer(x, y, z)` | Wanders randomly |
+| `TestNPC.chaser(x, y, z)` | Chases the closest NPC it can perceive |
+| `TestNPC.listener(x, y, z)` | Inert until it hears a `Sound`, then roams (`hasHeard()` to probe) |
+
+Lifecycle knobs chain fluently:
+
+```java
+TestNPC e = TestNPC.inert(4.5, 4.5, 0).withLifespan(50).withDeathspan(0);
+TestNPC h = TestNPC.inert(4.5, 4.5, 0).withHealth(10).withDeathspan(100);
+```
+
+Only reach for a real game entity when the scenario is deliberately pinning
+that species' behaviour — and expect such scenarios to be deleted with the
+species.
 
 ### Helpers on `Scenario`
 
@@ -99,8 +127,9 @@ for (writing the first tests surfaced them):
 - **Determinism needs a single level.** A one-level `room(...)` consumes no RNG
   during construction, so runs are bit-reproducible. Multi-level world
   generation carves holes with the RNG.
-- **Zombies spawn dormant** and don't move until they hear a `Sound` — handy for
-  a stationary target, but call it out if you expect motion.
+- **`Sound` broadcasts late.** A `Sound` reaches `hear()` on nearby entities at
+  the end of its ~20-tick lifespan, not on spawn — tick past that before
+  asserting a reaction.
 
 Keep scenarios small and single-purpose: one behaviour, a handful of entities,
 a clear assertion. That is what makes a failure point straight at the cause.

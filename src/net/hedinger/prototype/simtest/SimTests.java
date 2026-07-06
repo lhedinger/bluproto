@@ -2,12 +2,7 @@ package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.World;
-import net.hedinger.prototype.entities.Bullet;
 import net.hedinger.prototype.entities.Sound;
-import net.hedinger.prototype.entities.npcs.DummyChaser;
-import net.hedinger.prototype.entities.npcs.DummyRoamer;
-import net.hedinger.prototype.entities.npcs.Human;
-import net.hedinger.prototype.entities.npcs.Zombie;
 
 /**
  * Runner for simulation scenario tests: deterministic mini-worlds with
@@ -18,8 +13,11 @@ import net.hedinger.prototype.entities.npcs.Zombie;
  *   javac -d bin $(find src -name '*.java')
  *   java -cp bin net.hedinger.prototype.simtest.SimTests           # all scenarios
  *   java -cp bin net.hedinger.prototype.simtest.SimTests WallContainment  # by name
+ *   java -Dsimtest.shots=out/shots -cp bin net.hedinger.prototype.simtest.SimTests
  * </pre>
  *
+ * Scenarios use {@link TestNPC} fixtures rather than game species, so the
+ * suite tests engine mechanics and survives changes to the bestiary.
  * Exits non-zero if any scenario fails.
  */
 public class SimTests {
@@ -32,7 +30,7 @@ public class SimTests {
 		public void run() {
 			seed(1);
 			World w = room(3, 3); // interior is exactly the tile (1,1)
-			DummyRoamer r = new DummyRoamer(1.5, 1.5, 0);
+			TestNPC r = TestNPC.roamer(1.5, 1.5, 0);
 			w.spawnEntity(r);
 			for (int i = 0; i < 300; i++) {
 				tick(w, 1);
@@ -51,7 +49,7 @@ public class SimTests {
 		public void run() {
 			seed(2);
 			World w = room(9, 9);
-			DummyRoamer r = new DummyRoamer(4.5, 4.5, 0);
+			TestNPC r = TestNPC.roamer(4.5, 4.5, 0);
 			w.spawnEntity(r);
 			w.think(); // register the spawn so it draws
 			snapshot(w, "before (tick 0)");
@@ -78,8 +76,8 @@ public class SimTests {
 		public void run() {
 			seed(3);
 			World w = room(12, 5);
-			DummyChaser hunter = new DummyChaser(2.5, 2.5, 0);
-			Zombie prey = new Zombie(3.7, 2.5, 0); // dormant -> stays put; adjacent tile
+			TestNPC hunter = TestNPC.chaser(2.5, 2.5, 0);
+			TestNPC prey = TestNPC.inert(3.7, 2.5, 0); // adjacent tile: perceivable
 			w.spawnEntity(hunter);
 			w.spawnEntity(prey);
 			w.think();
@@ -92,19 +90,20 @@ public class SimTests {
 		}
 	}
 
-	/** A bullet expires at the end of its lifespan and is removed. */
-	static class BulletExpires extends Scenario {
+	/** An entity with a finite lifespan ages out, dies and is removed. */
+	static class AgesOutAndIsRemoved extends Scenario {
 		@Override
 		public void run() {
 			seed(4);
 			World w = room(9, 9);
-			Bullet b = new Bullet(4.5, 4.5, 0, 0.0);
-			w.spawnEntity(b);
-			tick(w, 5);
-			assertTrue("bullet alive early in its lifespan", !b.isRemoved());
-			tick(w, 200); // lifespan is 128, deathspan 0
-			assertTrue("bullet removed after lifespan", b.isRemoved());
-			assertEquals("no living actors (bullets are not actors)", 0, w.getAliveCount());
+			TestNPC e = TestNPC.inert(4.5, 4.5, 0).withLifespan(50).withDeathspan(0);
+			w.spawnEntity(e);
+			tick(w, 10);
+			assertTrue("alive during its lifespan", !e.isDead());
+			tick(w, 60); // past lifespan 50; deathspan 0 removes immediately
+			assertTrue("dead after its lifespan", e.isDead());
+			assertTrue("removed (deathspan 0)", e.isRemoved());
+			assertEquals("no living actors left", 0, w.getAliveCount());
 		}
 	}
 
@@ -121,7 +120,7 @@ public class SimTests {
 		public void run() {
 			seed(5);
 			World w = room(9, 9);
-			Human h = new Human(4.5, 4.5, 0);
+			TestNPC h = TestNPC.inert(4.5, 4.5, 0).withDeathspan(100);
 			w.spawnEntity(h);
 			tick(w, 2);
 			assertEquals("one living actor before the hit", 1, w.getAliveCount());
@@ -129,34 +128,36 @@ public class SimTests {
 			h.damage(200); // health is 100
 			tick(w, 1);
 			snapshot(w, "corpse");
-			assertTrue("human dead after lethal damage", h.isDead());
+			assertTrue("dead after lethal damage", h.isDead());
 			assertEquals("no living actors after the kill", 0, w.getAliveCount());
-			tick(w, 1500); // well past deathspan (1000)
+			tick(w, 500); // well past deathspan (100)
 			assertTrue("corpse persists indefinitely without scavengers", !h.isRemoved());
-			h.eat(1001); // consume the full deathspan budget
+			h.eat(101); // consume the full deathspan budget
 			tick(w, 1);
 			assertTrue("scavenged corpse is removed", h.isRemoved());
 		}
 	}
 
-	/** A dormant zombie does not move until a sound wakes it. */
-	static class ZombieWakesOnSound extends Scenario {
+	/** The Sound->hear() channel: a listener is inert until a sound reaches it. */
+	static class SoundWakesListener extends Scenario {
 		@Override
 		public void run() {
 			seed(6);
 			World w = room(9, 9);
-			Zombie z = new Zombie(4.5, 4.5, 0);
+			TestNPC z = TestNPC.listener(4.5, 4.5, 0);
 			w.spawnEntity(z);
 			tick(w, 100);
-			assertNear("dormant zombie did not move (x)", 4.5, z.getX(), 0.001);
-			assertNear("dormant zombie did not move (y)", 4.5, z.getY(), 0.001);
+			assertTrue("listener has heard nothing yet", !z.hasHeard());
+			assertNear("silent listener did not move (x)", 4.5, z.getX(), 0.001);
+			assertNear("silent listener did not move (y)", 4.5, z.getY(), 0.001);
 
 			// A sound broadcasts to everything in earshot at the end of its
-			// 20-tick lifespan; the zombie should wake and start moving.
+			// 20-tick lifespan; the listener should hear it and start moving.
 			w.spawnEntity(new Sound(4.5, 4.5, 0));
 			tick(w, 150);
+			assertTrue("listener heard the sound", z.hasHeard());
 			double moved = Math.hypot(z.getX() - 4.5, z.getY() - 4.5);
-			assertGreater("woken zombie moved", moved, 0.05);
+			assertGreater("woken listener moved", moved, 0.05);
 		}
 	}
 
@@ -166,8 +167,8 @@ public class SimTests {
 			seed(7);
 			World w = room(10, 10);
 			Entity[] cast = {
-					new DummyChaser(2.5, 2.5, 0), new DummyRoamer(7.5, 7.5, 0),
-					new Human(2.5, 7.5, 0), new Zombie(7.5, 2.5, 0) };
+					TestNPC.chaser(2.5, 2.5, 0), TestNPC.roamer(7.5, 7.5, 0),
+					TestNPC.listener(2.5, 7.5, 0), TestNPC.inert(7.5, 2.5, 0) };
 			for (Entity e : cast) {
 				w.spawnEntity(e);
 			}
@@ -200,9 +201,9 @@ public class SimTests {
 				new WallContainment(),
 				new RoamerMoves(),
 				new ChaserClosesIn(),
-				new BulletExpires(),
+				new AgesOutAndIsRemoved(),
 				new LethalDamageAndScavenging(),
-				new ZombieWakesOnSound(),
+				new SoundWakesListener(),
 				new SameSeedSameOutcome(),
 		};
 	}
