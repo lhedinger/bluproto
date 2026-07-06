@@ -27,7 +27,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN
+		INERT, ROAM, CHASE, LISTEN, MOVE
 	}
 
 	private final Behavior behavior;
@@ -70,6 +70,17 @@ public class TestNPC extends NPC {
 	/** Inert until it hears a Sound, then roams. Tests the hear() channel. */
 	public static TestNPC listener(double x, double y, double z) {
 		return new TestNPC(x, y, z, Behavior.LISTEN);
+	}
+
+	/**
+	 * Walks in a straight line along the given heading (radians; 0 = +x).
+	 * Blocked moves are cancelled by the engine, so a mover halts at walls,
+	 * closed doors, etc. -- ideal for probing passability.
+	 */
+	public static TestNPC mover(double x, double y, double z, double heading) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.MOVE);
+		t.D = heading;
+		return t;
 	}
 
 	// ---- fluent lifecycle knobs ---------------------------------------------
@@ -133,6 +144,9 @@ public class TestNPC extends NPC {
 			if (heard) {
 				roam(speed, turn);
 			}
+			return;
+		case MOVE:
+			move(speed);
 			return;
 		}
 	}

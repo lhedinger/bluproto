@@ -72,6 +72,7 @@ mechanics need, with per-instance knobs instead of species constants:
 | `TestNPC.roamer(x, y, z)` | Wanders randomly |
 | `TestNPC.chaser(x, y, z)` | Chases the closest NPC it can perceive |
 | `TestNPC.listener(x, y, z)` | Inert until it hears a `Sound`, then roams (`hasHeard()` to probe) |
+| `TestNPC.mover(x, y, z, heading)` | Walks a straight line (radians, 0 = +x); halts where the engine blocks — ideal for probing passability (doors, walls, ramps) |
 
 Lifecycle and body knobs chain fluently:
 
@@ -141,6 +142,18 @@ for (writing the first tests surfaced them):
   attachment offset with no collision or validity check, and `Entity.run()`
   kills anything positioned outside the world — keep grab scenarios away from
   the map border.
+- **Ramps work by walking into walls.** Standing on a `RAMPUP` tile makes the
+  move onto the next tile east legal even though it is `WALL` at this level;
+  the in-wall check in `executeMovement` then pops the entity up a level
+  (`dZ=+1`). Ramps are x-oriented (`RAMPUP` exits east, `RAMPDOWN` west).
+- **Acquisition can take hundreds of ticks.** A chaser spawns facing a random
+  direction and its FOV must sweep across the target over several perception
+  scans (`SEARCH_FREQ` apart) before it locks on — give chase scenarios a
+  generous tick budget.
+- **Spawn validation truncates toward zero.** `spawnEntity` accepts x/y in
+  (-1, 0) because `(int)` casts truncate toward zero (column -0.5 becomes 0);
+  the runtime validity check then kills the entity on its first tick.
+  `SpawnRejectsOutOfBounds` pins this seam.
 
 Keep scenarios small and single-purpose: one behaviour, a handful of entities,
 a clear assertion. That is what makes a failure point straight at the cause.

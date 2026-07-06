@@ -251,6 +251,168 @@ public class SimTests {
 		}
 	}
 
+	/** Closed doors block passage from both sides; open doors admit. */
+	static class DoorBlocksAndAdmits extends Scenario {
+		@Override
+		public void run() {
+			seed(11);
+			World w = room(10, 5);
+			// Contract level: door flags gate isConnectedSpace. Dirs: 0=N 1=E 2=S 3=W.
+			assertTrue("open passage eastward",
+					w.isConnectedSpace(3.5, 2.5, 0, 4.5, 2.5, 0));
+			w.getTile(3, 2, 0).closeDoor(1); // close the source tile's east door
+			assertTrue("closed east door blocks the move",
+					!w.isConnectedSpace(3.5, 2.5, 0, 4.5, 2.5, 0));
+			w.getTile(3, 2, 0).openDoor(1);
+			w.getTile(4, 2, 0).closeDoor(3); // destination's west door blocks too
+			assertTrue("destination-side closed door blocks the move",
+					!w.isConnectedSpace(3.5, 2.5, 0, 4.5, 2.5, 0));
+			w.getTile(4, 2, 0).openDoor(3);
+			assertTrue("reopened passage admits again",
+					w.isConnectedSpace(3.5, 2.5, 0, 4.5, 2.5, 0));
+
+			// Movement level: a mover halts at a closed door, passes when opened.
+			w.getTile(5, 2, 0).closeDoor(1);
+			TestNPC m = TestNPC.mover(2.5, 2.5, 0, 0); // heading east
+			w.spawnEntity(m);
+			tick(w, 250); // 250 * 0.04 = 10 tiles of travel if unobstructed
+			assertLess("mover halted at the closed door", m.getX(), 6.0);
+			w.getTile(5, 2, 0).openDoor(1);
+			tick(w, 150);
+			assertGreater("mover passed through the opened door", m.getX(), 6.0);
+		}
+	}
+
+	/**
+	 * A walker ascends to the level above via a ramp.
+	 *
+	 * <p>Pins the (non-obvious) ramp mechanic: standing on a RAMPUP tile makes
+	 * the move onto the next tile east legal even though that tile is WALL at
+	 * this level; executeMovement's in-wall check then pops the entity up one
+	 * level (dZ=+1), where it continues on the floor above. A control mover in
+	 * a ramp-less row is simply blocked by the same wall.
+	 */
+	static class RampAscends extends Scenario {
+		@Override
+		public void run() {
+			seed(12);
+			World w = room(10, 6, 2);
+			// Ramp row (y=2): floor, floor, ..., RAMPUP at x=5, WALL at x=6.
+			w.setTile(5, 2, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP);
+			w.setTile(6, 2, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			// Control row (y=4): same wall, no ramp.
+			w.setTile(6, 4, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			TestNPC climber = TestNPC.mover(2.5, 2.5, 0, 0);
+			TestNPC control = TestNPC.mover(2.5, 4.5, 0, 0);
+			w.spawnEntity(climber);
+			w.spawnEntity(control);
+			tick(w, 400);
+			assertEquals("climber ascended to the level above", 1, climber.getLvl());
+			assertGreater("climber kept walking on the upper floor", climber.getX(), 6.5);
+			assertEquals("control (no ramp) is still on the ground level", 0, control.getLvl());
+			assertLess("control is blocked by the wall", control.getX(), 6.0);
+		}
+	}
+
+	/** Diagonal moves are blocked unless BOTH flanking cardinal tiles are open. */
+	static class DiagonalCornerCutBlocked extends Scenario {
+		@Override
+		public void run() {
+			seed(13);
+			World w = room(8, 8);
+			assertTrue("diagonal move with open flanks is allowed",
+					w.isConnectedSpace(2.5, 2.5, 0, 3.5, 3.5, 0));
+			w.setTile(3, 2, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			assertTrue("one blocked flank forbids the diagonal (no corner cutting)",
+					!w.isConnectedSpace(2.5, 2.5, 0, 3.5, 3.5, 0));
+			w.setTile(2, 3, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			assertTrue("both flanks blocked still forbids it",
+					!w.isConnectedSpace(2.5, 2.5, 0, 3.5, 3.5, 0));
+			assertTrue("the cardinal moves themselves are also blocked by the walls",
+					!w.isConnectedSpace(2.5, 2.5, 0, 3.5, 2.5, 0));
+		}
+	}
+
+	/** Walls block perception: a chaser cannot acquire prey it has no line of sight to. */
+	static class WallBlocksPerception extends Scenario {
+		@Override
+		public void run() {
+			seed(14);
+			// Control: prey diagonal-adjacent with open flanks -> acquired and
+			// chased. The chaser spawns facing away and its ~90-degree FOV must
+			// sweep around across several perception scans before it acquires,
+			// so give it a generous window (~600 ticks).
+			World open = room(8, 8);
+			TestNPC hunter1 = TestNPC.chaser(2.5, 2.5, 0);
+			TestNPC prey1 = TestNPC.inert(3.6, 3.6, 0);
+			open.spawnEntity(hunter1);
+			open.spawnEntity(prey1);
+			tick(open, 600);
+			double d1 = Math.hypot(hunter1.getX() - prey1.getX(), hunter1.getY() - prey1.getY());
+			assertLess("open flanks: chaser reached the diagonal prey", d1, 0.5);
+
+			// Same geometry with both flanking tiles walled: no line of sight.
+			World walled = room(8, 8);
+			walled.setTile(3, 2, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			walled.setTile(2, 3, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL);
+			TestNPC hunter2 = TestNPC.chaser(2.5, 2.5, 0);
+			TestNPC prey2 = TestNPC.inert(3.6, 3.6, 0);
+			walled.spawnEntity(hunter2);
+			walled.spawnEntity(prey2);
+			tick(walled, 600);
+			double d2 = Math.hypot(hunter2.getX() - prey2.getX(), hunter2.getY() - prey2.getY());
+			assertGreater("walled corner: prey never acquired, distance stays large", d2, 1.0);
+		}
+	}
+
+	/** Overlapping bodies push apart (the collision spring). */
+	static class CollisionSpringSeparates extends Scenario {
+		@Override
+		public void run() {
+			seed(15);
+			World w = room(8, 8);
+			TestNPC a = TestNPC.inert(4.5, 4.5, 0);
+			TestNPC b = TestNPC.inert(4.52, 4.5, 0); // overlapping (touch range ~0.094)
+			w.spawnEntity(a);
+			w.spawnEntity(b);
+			tick(w, 200);
+			double d = Math.hypot(a.getX() - b.getX(), a.getY() - b.getY());
+			assertGreater("overlapping entities were pushed apart", d, 0.05);
+			assertTrue("both survived the shove", !a.isDead() && !b.isDead());
+		}
+	}
+
+	/**
+	 * spawnEntity rejects positions outside the world -- mostly.
+	 *
+	 * <p>Documents a real seam: spawn validation truncates coordinates with
+	 * (int) casts, and Java truncates toward zero, so x in (-1, 0) truncates
+	 * to column 0 and is ACCEPTED even though it lies outside the world (the
+	 * engine's World.toCol handles negatives correctly, but Entity.getCol does
+	 * not use it). The runtime validity check in Entity.run() then kills the
+	 * entity on its first tick. If spawn validation is ever fixed to reject
+	 * these, flip the marked assertions.
+	 */
+	static class SpawnRejectsOutOfBounds extends Scenario {
+		@Override
+		public void run() {
+			seed(16);
+			World w = room(8, 8);
+			assertTrue("x <= -1 rejected", !w.spawnEntity(TestNPC.inert(-1.5, 4.5, 0)));
+			assertTrue("x past the edge rejected", !w.spawnEntity(TestNPC.inert(8.5, 4.5, 0)));
+			assertTrue("level out of range rejected", !w.spawnEntity(TestNPC.inert(4.5, 4.5, 3)));
+
+			// The truncation quirk: fractionally-negative x is accepted...
+			TestNPC ghost = TestNPC.inert(-0.5, 4.5, 0);
+			assertTrue("x in (-1,0) is ACCEPTED (int-cast truncates toward zero)",
+					w.spawnEntity(ghost));
+			tick(w, 2);
+			// ...but the runtime validity check kills it immediately.
+			assertTrue("the out-of-bounds spawn dies on its first tick", ghost.isDead());
+			assertEquals("no living actors entered the world", 0, w.getAliveCount());
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -297,6 +459,12 @@ public class SimTests {
 				new HoleFallRespectsFlying(),
 				new GrabCarriesSmallerEntity(),
 				new GrabRespectsSizeAndReach(),
+				new DoorBlocksAndAdmits(),
+				new RampAscends(),
+				new DiagonalCornerCutBlocked(),
+				new WallBlocksPerception(),
+				new CollisionSpringSeparates(),
+				new SpawnRejectsOutOfBounds(),
 				new SameSeedSameOutcome(),
 		};
 	}
