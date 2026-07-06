@@ -94,6 +94,18 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Sets the body radius; gates grabbing and the carry offset. */
+	public TestNPC withSize(int s) {
+		size = s;
+		return this;
+	}
+
+	/** Marks this NPC as flying: it hovers over holes instead of falling. */
+	public TestNPC withFlying() {
+		flying = true;
+		return this;
+	}
+
 	/** True once this NPC has heard any Sound. */
 	public boolean hasHeard() {
 		return heard;

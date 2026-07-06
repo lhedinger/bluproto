@@ -73,11 +73,13 @@ mechanics need, with per-instance knobs instead of species constants:
 | `TestNPC.chaser(x, y, z)` | Chases the closest NPC it can perceive |
 | `TestNPC.listener(x, y, z)` | Inert until it hears a `Sound`, then roams (`hasHeard()` to probe) |
 
-Lifecycle knobs chain fluently:
+Lifecycle and body knobs chain fluently:
 
 ```java
 TestNPC e = TestNPC.inert(4.5, 4.5, 0).withLifespan(50).withDeathspan(0);
 TestNPC h = TestNPC.inert(4.5, 4.5, 0).withHealth(10).withDeathspan(100);
+TestNPC f = TestNPC.inert(6.5, 6.5, 1).withFlying();      // hovers over holes
+TestNPC g = TestNPC.roamer(5.5, 5.5, 0).withSize(6);      // pixel radius; gates grab
 ```
 
 Only reach for a real game entity when the scenario is deliberately pinning
@@ -90,6 +92,7 @@ species.
 |---|---|
 | `seed(long)` | Seed the RNG and init the profiling stopwatch. **Call first.** |
 | `room(cols, rows)` | Build a single-level world with an all-open interior (the engine forces a 1-tile wall border). Consumes no RNG. |
+| `room(cols, rows, lvls)` | Multi-level variant, every interior carved open. Punch holes/ramps explicitly with `w.setTile(x, y, z, type)` afterwards. |
 | `tick(w, n)` | Advance the simulation `n` ticks (`world.think()`). |
 | `snapshot(w, label)` | Capture a labelled screenshot (no-op unless `-Dsimtest.shots` is set). |
 | `assertTrue / assertEquals / assertNear / assertLess / assertGreater` | Assertions; the message is printed on failure. |
@@ -130,6 +133,14 @@ for (writing the first tests surfaced them):
 - **`Sound` broadcasts late.** A `Sound` reaches `hear()` on nearby entities at
   the end of its ~20-tick lifespan, not on spawn — tick past that before
   asserting a reaction.
+- **NPC sizes are pixel radii.** `getSize()` converts to tiles as
+  `size / tileSize` (÷64), so a size-6 NPC has a ~0.094-tile radius. Contact,
+  collision-shove and grab reach all work at that ~0.1-tile scale — entities
+  must practically overlap to interact physically.
+- **Carrying ignores walls and bounds.** A grabbed entity is placed at the
+  attachment offset with no collision or validity check, and `Entity.run()`
+  kills anything positioned outside the world — keep grab scenarios away from
+  the map border.
 
 Keep scenarios small and single-purpose: one behaviour, a handful of entities,
 a clear assertion. That is what makes a failure point straight at the cause.

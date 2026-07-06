@@ -161,6 +161,96 @@ public class SimTests {
 		}
 	}
 
+	/** Standing on a hole: walkers fall through to the level below, flyers hover. */
+	static class HoleFallRespectsFlying extends Scenario {
+		@Override
+		public void run() {
+			seed(8);
+			World w = room(9, 9, 2); // two levels, both carved open
+			w.setTile(4, 4, 1, net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
+			w.setTile(6, 6, 1, net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
+			TestNPC walker = TestNPC.inert(4.5, 4.5, 1); // on the first hole
+			TestNPC flyer = TestNPC.inert(6.5, 6.5, 1).withFlying(); // on the second
+			w.spawnEntity(walker);
+			w.spawnEntity(flyer);
+			tick(w, 5);
+			assertEquals("walker fell through the hole to the level below", 0, walker.getLvl());
+			assertEquals("flyer hovers over the hole", 1, flyer.getLvl());
+			tick(w, 50);
+			assertEquals("walker rests on the floor below (falls only once)", 0, walker.getLvl());
+			assertEquals("flyer still hovering", 1, flyer.getLvl());
+			assertNear("walker landed straight down (x)", 4.5, walker.getX(), 0.001);
+			assertNear("walker landed straight down (y)", 4.5, walker.getY(), 0.001);
+		}
+	}
+
+	/**
+	 * grab() attaches a smaller entity, which is then carried along; drop()
+	 * releases it.
+	 *
+	 * <p>Two unit facts this scenario pins: NPC size is a PIXEL radius --
+	 * getSize() converts to tiles as size/tileSize, so a size-6 NPC has a
+	 * ~0.094-tile radius and grab reach is the sum of half-sizes (~0.08 tiles
+	 * for a 6+4 pair). And carried entities are positioned by the attachment
+	 * branch of executeMovement at exactly that offset from the carrier, with
+	 * NO wall or bounds checks -- Entity.run() kills anything placed outside
+	 * the world, so keep grab scenarios away from the border.
+	 */
+	static class GrabCarriesSmallerEntity extends Scenario {
+		@Override
+		public void run() {
+			seed(9);
+			World w = room(12, 12);
+			TestNPC carrier = TestNPC.roamer(5.5, 5.5, 0).withSize(6);
+			TestNPC cargo = TestNPC.inert(5.55, 5.5, 0).withSize(4); // within 0.078 reach
+			w.spawnEntity(carrier);
+			w.spawnEntity(cargo);
+			w.think();
+			assertTrue("grab succeeds on a smaller, in-reach entity", carrier.grab(cargo));
+
+			double offset = (carrier.getSize() + cargo.getSize()) / 2.0;
+			double cargoStartX = cargo.getX();
+			double cargoStartY = cargo.getY();
+			tick(w, 200);
+			double carried = Math.hypot(cargo.getX() - carrier.getX(), cargo.getY() - carrier.getY());
+			assertNear("carried cargo is pinned at the attachment offset", offset, carried, 0.01);
+			assertGreater("cargo was dragged along as the carrier roamed",
+					Math.hypot(cargo.getX() - cargoStartX, cargo.getY() - cargoStartY), 0.5);
+
+			assertTrue("drop releases the cargo", carrier.drop());
+			double maxDist = 0;
+			for (int i = 0; i < 300; i++) {
+				tick(w, 1);
+				maxDist = Math.max(maxDist,
+						Math.hypot(cargo.getX() - carrier.getX(), cargo.getY() - carrier.getY()));
+			}
+			assertGreater("after drop the carrier roams away from the inert cargo "
+					+ "(while attached their distance is pinned)", maxDist, offset + 0.5);
+		}
+	}
+
+	/** grab() refuses targets that are bigger or out of reach. */
+	static class GrabRespectsSizeAndReach extends Scenario {
+		@Override
+		public void run() {
+			seed(10);
+			World w = room(12, 12);
+			TestNPC grabber = TestNPC.inert(5.5, 5.5, 0).withSize(2);
+			// In reach (within (2+6)/2/64 = 0.0625 tiles) but larger: size gate.
+			TestNPC tooBig = TestNPC.inert(5.53, 5.5, 0).withSize(6);
+			// Small enough but 4 tiles away: reach gate.
+			TestNPC tooFar = TestNPC.inert(9.5, 5.5, 0).withSize(1);
+			w.spawnEntity(grabber);
+			w.spawnEntity(tooBig);
+			w.spawnEntity(tooFar);
+			w.think();
+			assertTrue("cannot grab a bigger entity even in reach", !grabber.grab(tooBig));
+			assertTrue("cannot grab beyond reach (sum of half-sizes)", !grabber.grab(tooFar));
+			tick(w, 50);
+			assertNear("refused targets are not dragged (tooFar x)", 9.5, tooFar.getX(), 0.001);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -204,6 +294,9 @@ public class SimTests {
 				new AgesOutAndIsRemoved(),
 				new LethalDamageAndScavenging(),
 				new SoundWakesListener(),
+				new HoleFallRespectsFlying(),
+				new GrabCarriesSmallerEntity(),
+				new GrabRespectsSizeAndReach(),
 				new SameSeedSameOutcome(),
 		};
 	}

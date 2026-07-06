@@ -77,10 +77,22 @@ public abstract class Scenario {
 	 * consumed: with one level, world construction is fully deterministic.
 	 */
 	protected World room(int cols, int rows) {
-		World w = new World(cols, rows, 1);
-		for (int x = 1; x < cols - 1; x++) {
-			for (int y = 1; y < rows - 1; y++) {
-				w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR);
+		return room(cols, rows, 1);
+	}
+
+	/**
+	 * Multi-level variant: every level's interior is carved to open floor, so
+	 * the map is fully determined even though multi-level construction consumes
+	 * RNG for its random holes (the seed pins that anyway). Punch holes or
+	 * ramps explicitly with {@code w.setTile(x, y, z, type)} afterwards.
+	 */
+	protected World room(int cols, int rows, int lvls) {
+		World w = new World(cols, rows, lvls);
+		for (int z = 0; z < lvls; z++) {
+			for (int x = 1; x < cols - 1; x++) {
+				for (int y = 1; y < rows - 1; y++) {
+					w.setTile(x, y, z, Tile.TileType.TYPE_FLOOR);
+				}
 			}
 		}
 		return w;
