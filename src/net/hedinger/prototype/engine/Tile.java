@@ -130,6 +130,23 @@ public class Tile {
 		}
 	}
 
+	/** True if the door on the given edge is closed (0=N, 1=E, 2=S, 3=W). */
+	public boolean isDoorClosed(int dir) {
+		if (dir == 0) {
+			return door_N;
+		}
+		if (dir == 1) {
+			return door_E;
+		}
+		if (dir == 2) {
+			return door_S;
+		}
+		if (dir == 3) {
+			return door_W;
+		}
+		return false;
+	}
+
 	public HashSet<Integer> calcConnected(World w, boolean diagonal) {
 		HashSet<Integer> connected = new HashSet<Integer>();
 		for (int x = -1; x <= 1; x++) {

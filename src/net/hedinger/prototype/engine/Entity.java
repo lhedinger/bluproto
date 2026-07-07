@@ -362,6 +362,11 @@ public abstract class Entity {
 		this.grabbed = grabbed;
 	}
 
+	/** The entity this one is attached to (carried by), or null. */
+	public Entity getAttachTarget() {
+		return attachTarget;
+	}
+
 	public boolean attachToTarget(Entity target) {
 		if (attachTarget != null) {
 			return false;

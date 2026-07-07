@@ -1262,6 +1262,7 @@ public abstract class NPC extends Entity {
 
 		grabbing.setGrabbed(false);
 		grabbing.detach();
+		grabbing = null;
 
 		return true;
 	}

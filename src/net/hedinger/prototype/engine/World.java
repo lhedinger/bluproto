@@ -154,6 +154,11 @@ public class World {
 		return fogofwar;
 	}
 
+	/** Read-only view over all entities currently in the world. */
+	public Iterable<Entity> getEntities() {
+		return entities.values();
+	}
+
 	/**
 	 * Count of living actors (NPCs that are not dead), used by the HUD overlay.
 	 * Excludes transient effects (bullets, explosions, sounds, grenades),

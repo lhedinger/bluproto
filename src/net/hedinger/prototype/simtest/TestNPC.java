@@ -155,4 +155,27 @@ public class TestNPC extends NPC {
 	public String getNpcTypeName() {
 		return "TestNPC";
 	}
+
+	/** One-line state summary for the snapshot debug overlay. */
+	public String debugLabel() {
+		StringBuilder s = new StringBuilder(behavior.name().toLowerCase());
+		if (flying) {
+			s.append(" fly");
+		}
+		if (heard) {
+			s.append(" heard!");
+		}
+		if (grabbing != null) {
+			s.append(" grabbing");
+		}
+		if (getAttachTarget() != null) {
+			s.append(" carried");
+		}
+		if (isDead()) {
+			s.append(" dead");
+		} else if (health < 100) {
+			s.append(" hp").append(health);
+		}
+		return s.toString();
+	}
 }

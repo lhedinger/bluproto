@@ -39,17 +39,18 @@ public abstract class Scenario {
 	}
 
 	/**
-	 * Captures a labelled screenshot of the world's ground level. A no-op
-	 * (zero cost) unless capture is enabled, so scenarios can call
-	 * {@code snapshot(w, "before")} / {@code snapshot(w, "after")} freely and
-	 * normal test runs stay fast. The runner composes the captures for a
-	 * scenario into one before/after strip.
+	 * Captures a labelled screenshot of the world (all levels, side by side)
+	 * with the debug overlay: heading arrows, state labels, carry links and
+	 * closed-door markers. A no-op (zero cost) unless capture is enabled, so
+	 * scenarios can call {@code snapshot(w, "before")} / {@code snapshot(w,
+	 * "after")} freely and normal test runs stay fast. The runner composes the
+	 * captures for a scenario into one before/after strip.
 	 */
 	protected void snapshot(World w, String label) {
 		if (!captureEnabled()) {
 			return;
 		}
-		shots.add(SnapshotRenderer.render(w, 0));
+		shots.add(SnapshotRenderer.render(w));
 		shotLabels.add(label);
 	}
 

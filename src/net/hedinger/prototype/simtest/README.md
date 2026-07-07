@@ -104,17 +104,30 @@ species.
 next `world.think()`. If you want to snapshot or assert on an entity's initial
 state before ticking the behaviour, call `w.think()` once first to register it.
 
-## Screenshots (before/after)
+## Screenshots (before/after, with debug overlay)
 
 Call `snapshot(w, "<label>")` at the interesting moments. Capture is **off by
 default** (so normal runs stay fast); enable it with `-Dsimtest.shots=<dir>`.
 The runner composes each scenario's captures into a single labelled strip named
-`<Scenario>.png` — e.g. `before (tick 0)` next to `after (tick 300)`, with the
-entity-count overlay baked in. Capture also fires on failing scenarios, so a red
-test leaves you a picture of what went wrong.
+`<Scenario>.png` — e.g. `before (tick 0)` next to `after (tick 300)`. Capture
+also fires on failing scenarios, so a red test leaves you a picture of what
+went wrong.
 
-Snapshots render the whole of ground level, integer-upscaled so even a 3×3 world
-is legible.
+On top of the normal game render, snapshots draw a **debug overlay** of state
+that is otherwise invisible:
+
+- a cyan **heading arrow** on every living NPC,
+- a **state label** under each NPC — for fixtures this is `TestNPC.debugLabel()`
+  (behaviour, `fly`, `heard!`, `grabbing`, `carried`, `hpN`, `dead`); colliding
+  labels stack downward instead of overprinting,
+- a magenta **carry link** between a carrier and its cargo (circle on the cargo),
+- **closed door edges** as red bars on the tile border,
+- **every world level, side by side**, so cross-level action (ramp climbs,
+  hole falls) is visible.
+
+Snapshots are integer-upscaled so even a 3×3 world is legible. The overlay
+already earned its keep: it exposed that `drop()` left the carrier's `grabbing`
+reference stale (now fixed and pinned by an assertion).
 
 ## Gotchas worth knowing
 

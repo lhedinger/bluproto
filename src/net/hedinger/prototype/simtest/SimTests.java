@@ -173,7 +173,10 @@ public class SimTests {
 			TestNPC flyer = TestNPC.inert(6.5, 6.5, 1).withFlying(); // on the second
 			w.spawnEntity(walker);
 			w.spawnEntity(flyer);
+			w.think();
+			snapshot(w, "before (both on level 1 holes)");
 			tick(w, 5);
+			snapshot(w, "after (walker fell, flyer hovers)");
 			assertEquals("walker fell through the hole to the level below", 0, walker.getLvl());
 			assertEquals("flyer hovers over the hole", 1, flyer.getLvl());
 			tick(w, 50);
@@ -206,18 +209,21 @@ public class SimTests {
 			w.spawnEntity(carrier);
 			w.spawnEntity(cargo);
 			w.think();
+			snapshot(w, "before grab");
 			assertTrue("grab succeeds on a smaller, in-reach entity", carrier.grab(cargo));
 
 			double offset = (carrier.getSize() + cargo.getSize()) / 2.0;
 			double cargoStartX = cargo.getX();
 			double cargoStartY = cargo.getY();
 			tick(w, 200);
+			snapshot(w, "carrying (tick 200)");
 			double carried = Math.hypot(cargo.getX() - carrier.getX(), cargo.getY() - carrier.getY());
 			assertNear("carried cargo is pinned at the attachment offset", offset, carried, 0.01);
 			assertGreater("cargo was dragged along as the carrier roamed",
 					Math.hypot(cargo.getX() - cargoStartX, cargo.getY() - cargoStartY), 0.5);
 
 			assertTrue("drop releases the cargo", carrier.drop());
+			assertTrue("a second drop is refused (nothing held any more)", !carrier.drop());
 			double maxDist = 0;
 			for (int i = 0; i < 300; i++) {
 				tick(w, 1);
@@ -226,6 +232,7 @@ public class SimTests {
 			}
 			assertGreater("after drop the carrier roams away from the inert cargo "
 					+ "(while attached their distance is pinned)", maxDist, offset + 0.5);
+			snapshot(w, "after drop (tick 500)");
 		}
 	}
 
@@ -276,9 +283,11 @@ public class SimTests {
 			TestNPC m = TestNPC.mover(2.5, 2.5, 0, 0); // heading east
 			w.spawnEntity(m);
 			tick(w, 250); // 250 * 0.04 = 10 tiles of travel if unobstructed
+			snapshot(w, "halted at closed door (red bar)");
 			assertLess("mover halted at the closed door", m.getX(), 6.0);
 			w.getTile(5, 2, 0).openDoor(1);
 			tick(w, 150);
+			snapshot(w, "passed after opening");
 			assertGreater("mover passed through the opened door", m.getX(), 6.0);
 		}
 	}
@@ -306,7 +315,10 @@ public class SimTests {
 			TestNPC control = TestNPC.mover(2.5, 4.5, 0, 0);
 			w.spawnEntity(climber);
 			w.spawnEntity(control);
+			w.think();
+			snapshot(w, "before (both on level 0)");
 			tick(w, 400);
+			snapshot(w, "after (climber up the ramp, control blocked)");
 			assertEquals("climber ascended to the level above", 1, climber.getLvl());
 			assertGreater("climber kept walking on the upper floor", climber.getX(), 6.5);
 			assertEquals("control (no ramp) is still on the ground level", 0, control.getLvl());
