@@ -102,7 +102,7 @@ public class Bullet extends Entity {
 	@Override
 	public void kill() {
 		age = -1;
-		remove = true;
+		markRemoved();
 	}
 
 }

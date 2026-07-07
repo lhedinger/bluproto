@@ -92,7 +92,9 @@ public class World {
 
 		if (spawnQueue.size() > 0) {
 			for (Entity e : spawnQueue) {
-				if (e != null) {
+				// An entity removed while still queued must not claim a tile
+				// slot -- its markRemoved() purge already ran (or never will).
+				if (e != null && !e.isRemoved()) {
 					entities.put(e.getID(), e);
 					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
 				}

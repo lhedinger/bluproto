@@ -119,7 +119,7 @@ public abstract class Entity {
 		}
 
 		if (age < -deathspan) {
-			remove = true;
+			markRemoved();
 		}
 
 		if (age >= 0) {
@@ -400,7 +400,23 @@ public abstract class Entity {
 
 	public void remove() {
 		age = -1;
+		markRemoved();
+	}
+
+	/**
+	 * Marks this entity for removal and frees its tile-occupancy slot. All
+	 * paths that set the remove flag must come through here: nothing else ever
+	 * takes a dead entity's ID out of its tile, so skipping the purge leaks
+	 * stale IDs that every subsequent search iterates.
+	 */
+	protected final void markRemoved() {
+		if (remove) {
+			return;
+		}
 		remove = true;
+		if (world != null) {
+			world.getTile(X, Y, Z).removeEntity(getID());
+		}
 	}
 
 	@Override
