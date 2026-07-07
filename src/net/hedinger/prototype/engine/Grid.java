@@ -151,8 +151,11 @@ public class Grid {
 	}
 
 	boolean hasLOS(double x1, double y1, double dir, double x2, double y2, double dist, double fov) {
-		// check to see if point is in range
-		if (dist >= 0 && world.distance(x1, y1, 0, x2, y2, 0) > dist) {
+		// check to see if point is in range (squared compare: equivalent for
+		// non-negative values, avoids a sqrt per candidate)
+		double rdx = x2 - x1;
+		double rdy = y2 - y1;
+		if (dist >= 0 && rdx * rdx + rdy * rdy > dist * dist) {
 			return false;
 		}
 
