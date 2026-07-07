@@ -218,8 +218,12 @@ public class World {
 		// Gather candidates straight from the tile box around the searcher --
 		// each entity lives in exactly one tile, so there is nothing to dedup.
 		// hasLOS() (inside considerEntity) applies the exact range filter.
+		// floor(range)+1 rings are a provable superset of everything within
+		// Euclidean range (|ex-x| <= range implies a tile-index delta of at
+		// most floor(range)+1), so fractional ranges -- bullets search with
+		// range = velocity <= 0.4 -- scan 3x3 instead of 5x5.
 		TreeMap<Double, Entity> result = new TreeMap<Double, Entity>();
-		int r = (int) Math.ceil(range) + 1;
+		int r = (int) Math.floor(range) + 1;
 		for (int dx = -r; dx <= r; dx++) {
 			for (int dy = -r; dy <= r; dy++) {
 				Tile t = getTile(x + dx, y + dy, z);
