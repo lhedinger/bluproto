@@ -294,15 +294,13 @@ public abstract class NPC extends Entity {
 		for (NPC npc : targets.values()) {
 			double dx = npc.getX() - getX();
 			double dy = npc.getY() - getY();
-			double distance = Math.sqrt(dx * dx + dy * dy);
 			if (canTouch(npc)) {
-				double angle = Math.atan2(-dy, -dx);
-				double targetX = Math.cos(angle) * distance;
-				double targetY = Math.sin(angle) * distance;
-				double ax = (targetX) * spring;
-				double ay = (targetY) * spring;
-				dX += ax;
-				dY += ay;
+				// The old code went angle = atan2(-dy,-dx) and then
+				// cos(angle)*hypot / sin(angle)*hypot -- a transcendental
+				// round-trip that exactly reconstructs (-dx, -dy). Push
+				// directly away from the neighbour instead.
+				dX += -dx * spring;
+				dY += -dy * spring;
 			}
 		}
 	}
@@ -314,9 +312,13 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////
 
 	protected boolean canTouch(Entity e) {
-		double distance = distance(e);
+		// Squared-distance compare: equivalent to distance(e) < minDist for
+		// non-negative values, without the per-neighbour sqrt.
+		double ddx = e.getX() - X;
+		double ddy = e.getY() - Y;
+		double ddz = e.getZ() - Z;
 		double minDist = e.getSize() / 2 + getSize() / 2;
-		return (distance < minDist);
+		return ddx * ddx + ddy * ddy + ddz * ddz < minDist * minDist;
 	}
 
 	protected boolean isInLOS() {
@@ -1038,8 +1040,6 @@ public abstract class NPC extends Entity {
 	}
 
 	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
-		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
-
 		// Staggered update: instead of each NPC re-scanning its neighbourhood at
 		// a random ~1/SEARCH_FREQ chance (which clumps -- many can fire on the
 		// same tick), give every NPC a fixed phase from its ID so exactly
@@ -1052,23 +1052,17 @@ public abstract class NPC extends Entity {
 			return getWorld().searchNearestNPC(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID(), MAX_NEIGHBORS);
 		}
 
-		if (ts != null) {
-			if (ts.size() > 0) {
-				temp.putAll(ts);
-			}
-		}
-
+		// Revalidate the cached list in place -- no defensive copy needed, the
+		// output map is separate and nothing here mutates the source.
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
-
-		for (NPC e : temp.values()) {
-			if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
-				if (isFriendly() && e.isHostile()) {
-					if (!isDead() && !e.isDead()) {
-						e.mark();
+		if (ts != null) {
+			for (NPC e : ts.values()) {
+				if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
+					if (isFriendly() && e.isHostile()) {
+						if (!isDead() && !e.isDead()) {
+							e.mark();
+						}
 					}
-				}
-
-				if (e != null) {
 					output.put(distance(e.getX(), e.getY(), e.getZ()), e);
 				}
 			}
@@ -1156,17 +1150,13 @@ public abstract class NPC extends Entity {
 	protected TreeMap<Double, NPC> getTargets(int sf, TreeMap<Double, NPC> ts, double range,
 			double fov, String[] types, boolean include) {
 
-		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
-
-		if (ts != null) {
-			// temp.putAll(ts);
-		}
-
-		temp.putAll(targets);
-
+		// Filters the current perception list (the targets field -- note the ts
+		// parameter was historically ignored here) into a fresh map. Iterate the
+		// source directly; the old defensive temp copy doubled the boxed-key
+		// TreeMap allocations of every think() tick.
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
 
-		for (NPC e : temp.values()) {
+		for (NPC e : targets.values()) {
 			if (isLegalTarget(e, range, fov, types, include)) {
 				output.put(distance(e.getX(), e.getY(), e.getZ()), e);
 			}

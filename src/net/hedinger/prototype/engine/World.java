@@ -268,6 +268,12 @@ public class World {
 		if (!isValid(x, y, z) || k <= 0) {
 			return result;
 		}
+		// Collect the nearest k in primitive insertion-sorted arrays; the boxed
+		// TreeMap is built once at the end (<= k inserts) instead of paying an
+		// insert-plus-evict of boxed keys per candidate.
+		double[] dist = new double[k];
+		NPC[] found = new NPC[k];
+		int count = 0;
 		int budget = k * 8; // density-independent cap on candidates examined
 		int examined = 0;
 		for (int[] d : NEIGHBOUR_ORDER) {
@@ -276,8 +282,8 @@ public class World {
 				continue;
 			}
 			for (Integer i : t.getEntities()) {
-				if (examined >= budget && result.size() >= k) {
-					return result;
+				if (examined >= budget && count >= k) {
+					return buildResult(result, dist, found, count);
 				}
 				examined++;
 				Entity e = entities.get(i);
@@ -287,11 +293,30 @@ public class World {
 				if (!hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
 					continue;
 				}
-				result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), (NPC) e);
-				if (result.size() > k) {
-					result.remove(result.lastKey()); // keep only the nearest k
+				double dd = distance(x, y, z, e.getX(), e.getY(), e.getZ());
+				if (count == k && dd >= dist[k - 1]) {
+					continue; // farther than the current k nearest
+				}
+				int pos = count < k ? count : k - 1; // slot to place/overwrite
+				while (pos > 0 && dist[pos - 1] > dd) {
+					dist[pos] = dist[pos - 1];
+					found[pos] = found[pos - 1];
+					pos--;
+				}
+				dist[pos] = dd;
+				found[pos] = (NPC) e;
+				if (count < k) {
+					count++;
 				}
 			}
+		}
+		return buildResult(result, dist, found, count);
+	}
+
+	private static TreeMap<Double, NPC> buildResult(TreeMap<Double, NPC> result, double[] dist, NPC[] found,
+			int count) {
+		for (int i = 0; i < count; i++) {
+			result.put(dist[i], found[i]);
 		}
 		return result;
 	}
