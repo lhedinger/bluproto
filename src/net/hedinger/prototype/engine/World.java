@@ -230,8 +230,9 @@ public class World {
 				if (t == null) {
 					continue;
 				}
-				for (Integer i : t.getEntities()) {
-					considerEntity(i, x, y, z, dir, range, fov, types, include, ID, result);
+				int n = t.getEntityCount();
+				for (int i = 0; i < n; i++) {
+					considerEntity(t.getEntityId(i), x, y, z, dir, range, fov, types, include, ID, result);
 				}
 			}
 		}
@@ -240,7 +241,7 @@ public class World {
 
 	// Shared per-candidate test for searchEntity's two gather paths, so both
 	// produce identical results.
-	private void considerEntity(Integer i, double x, double y, double z, double dir, double range, double fov,
+	private void considerEntity(int i, double x, double y, double z, double dir, double range, double fov,
 			String[] types, boolean include, int ID, TreeMap<Double, Entity> result) {
 		Entity e = entities.get(i);
 		if (e != null && e.getLvl() == (int) z && !e.isDead() && ID != e.getID()) {
@@ -285,12 +286,13 @@ public class World {
 			if (t == null) {
 				continue;
 			}
-			for (Integer i : t.getEntities()) {
+			int occ = t.getEntityCount();
+			for (int oi = 0; oi < occ; oi++) {
 				if (examined >= budget && count >= k) {
 					return buildResult(result, dist, found, count);
 				}
 				examined++;
-				Entity e = entities.get(i);
+				Entity e = entities.get(t.getEntityId(oi));
 				if (e == null || e.getLvl() != (int) z || !(e instanceof NPC) || e.isDead() || ID == e.getID()) {
 					continue;
 				}

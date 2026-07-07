@@ -14,7 +14,11 @@ public class Tile {
 	private int col, row, lvl;
 	private TileType type;
 	private String tilecode = "";
-	private HashSet<Integer> npcs = new HashSet<Integer>();
+	// Occupant entity IDs as a primitive array: iterated on every search, so
+	// boxed-set iteration cost matters. Each entity lives in exactly one tile
+	// and IDs are unique, so plain append + swap-remove keeps set semantics.
+	private int[] occupants = new int[4];
+	private int occupantCount = 0;
 
 	boolean door_N = false; // open
 	boolean door_E = false; // open
@@ -63,19 +67,27 @@ public class Tile {
 	}
 
 	public void addEntity(int id) {
-		npcs.add(id);
+		if (occupantCount == occupants.length) {
+			occupants = java.util.Arrays.copyOf(occupants, occupants.length * 2);
+		}
+		occupants[occupantCount++] = id;
 	}
 
 	public void removeEntity(int id) {
-		npcs.remove(id);
+		for (int i = 0; i < occupantCount; i++) {
+			if (occupants[i] == id) {
+				occupants[i] = occupants[--occupantCount]; // swap-remove
+				return;
+			}
+		}
 	}
 
-	public Set<Integer> getEntities() {
-		return npcs;
+	public int getEntityCount() {
+		return occupantCount;
 	}
 
-	public int entityCount() {
-		return npcs.size();
+	public int getEntityId(int idx) {
+		return occupants[idx];
 	}
 
 	public void setType(TileType t) {
