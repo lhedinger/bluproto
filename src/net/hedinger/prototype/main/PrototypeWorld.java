@@ -24,6 +24,7 @@ import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.engine.WorldGenerator;
+import net.hedinger.prototype.entities.npcs.Bullsquid;
 import net.hedinger.prototype.entities.npcs.Drone;
 import net.hedinger.prototype.entities.npcs.DummyChaser;
 import net.hedinger.prototype.entities.npcs.DummyRoamer;
@@ -147,7 +148,7 @@ public class PrototypeWorld extends JPanel {
 
 		int ratio = (int) Math.round(0.25f * Math.sqrt(rows * cols));
 
-		spawnEntities(4, 100 * ratio, level); // peeps
+		spawnEntities(4, 5 * ratio, level); // peeps
 
 		if (level == 0) {
 			spawnEntities(8, ratio, level); // zombies
@@ -157,6 +158,10 @@ public class PrototypeWorld extends JPanel {
 			// spawnEntities(1, 7, level); // sentries
 			spawnEntities(5, 3, level); // drone
 		}
+
+		// the food web: grazing herds and a few predators on every level
+		spawnEntities(7, 3 * ratio, level); // houndeye herds
+		spawnEntities(10, Math.max(2, ratio / 3), level); // bullsquids
 
 	}
 
@@ -302,6 +307,10 @@ public class PrototypeWorld extends JPanel {
 
 		if (type == 9) {
 			world.spawnEntity(new DummyChaser(x, y, z));
+		}
+
+		if (type == 10) {
+			world.spawnEntity(new Bullsquid(x, y, z));
 		}
 
 	}
@@ -451,6 +460,9 @@ public class PrototypeWorld extends JPanel {
 			}
 			if (e.getKeyCode() == KeyEvent.VK_9) {
 				entitytype = 9;
+			}
+			if (e.getKeyCode() == KeyEvent.VK_B) {
+				entitytype = 10;
 			}
 
 		}
