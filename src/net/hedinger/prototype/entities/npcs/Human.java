@@ -4,14 +4,11 @@ import net.hedinger.prototype.engine.Utils;
 
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
 
 public class Human extends NPC {
-	private static final double HUMAN_RANGE = 10; // los range (pixels)
-	private static final double HUMAN_FOV = Math.PI;
-	private static final double HUMAN_SPEED = 0.04; // max speed
-	private static final int HUMAN_TURN = 5; // max turn speed
 	private static final int HUMAN_SF = 50;
 
 	private static final String[] HUMAN_ENEMIES = { "Entity.NPC.Antlion", "Entity.NPC.Headcrab",
@@ -26,13 +23,11 @@ public class Human extends NPC {
 
 	public Human(double x, double y, double z) {
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.04, 5, 10, Math.PI * 2, 3000));
 		hostile = 1;
-		size = 6;
 		health = 100;
 		deathspan = 1000;
 		SEARCH_FREQ = HUMAN_SF;
-		LOS_RANGE = HUMAN_RANGE;
-		LOS_FOV = HUMAN_FOV * 2;
 	}
 
 	@Override
@@ -60,10 +55,10 @@ public class Human extends NPC {
 		}
 
 		if (status == NPC.STATUS_IDLE) {
-			roam(HUMAN_SPEED * 0.5, HUMAN_TURN);
+			roam(speed * 0.5, turnRate);
 		}
 		if (status == NPC.STATUS_ALERT) {
-			roam(HUMAN_SPEED, HUMAN_TURN);
+			roam(speed, turnRate);
 		}
 		if (status == NPC.STATUS_THREAT) {
 			soldiers = getTargets(soldiers, "Entity.NPC.Soldier", true);
@@ -72,15 +67,15 @@ public class Human extends NPC {
 				soldier = soldiers.firstEntry().getValue();
 			}
 
-			if (seeTarget(soldier, HUMAN_RANGE, Math.PI, "Entity.NPC.Soldier", true)) {
-				follow(HUMAN_SPEED, HUMAN_TURN, soldier, 0.25);
+			if (seeTarget(soldier, LOS_RANGE, Math.PI, "Entity.NPC.Soldier", true)) {
+				follow(speed, turnRate, soldier, 0.25);
 			} else {
-				double speed = HUMAN_SPEED;
+				double fleeSpeed = speed;
 				if (stamina > 0) {
-					speed = HUMAN_SPEED * 1.75;
+					fleeSpeed = speed * 1.75;
 				}
 				stamina--;
-				flee(speed, HUMAN_TURN, enemy, 0.25);
+				flee(fleeSpeed, turnRate, enemy, 0.25);
 			}
 
 		}

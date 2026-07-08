@@ -2,6 +2,7 @@ package net.hedinger.prototype.entities.npcs;
 
 import net.hedinger.prototype.engine.Utils;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 
 import java.awt.Color;
@@ -10,8 +11,9 @@ import java.util.TreeMap;
 public class Spore extends NPC
 {
 
+	// RNG-backed per-instance fields: initialiser order matters for
+	// determinism, so leave these ahead of anything that also draws RNG.
 	private final double SPORE_DENSITY = variation(0.5, 0.25);
-	private final double SPORE_SPEED = 0.05;
 	private final int SPORE_MAXAGE = (int) Math.round(variation(1000, 100));
 	private final int SPORE_AIRTIME = (int) Math.round(variation(10, 5));
 	private int airtime = 0;
@@ -23,8 +25,8 @@ public class Spore extends NPC
 	public Spore(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(1, 0.05, 5, 5, Math.PI, SPORE_MAXAGE));
 		col = new Color(100, 0, 0, 200);
-		size = 1;
 		drawLine = false;
 		age = SPORE_MAXAGE / 2;
 		SEARCH_FREQ = 0;
@@ -33,13 +35,11 @@ public class Spore extends NPC
 	public Spore(double x, double y, double z, double a)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(1, 0.05, 5, SPORE_DENSITY, Math.PI, SPORE_MAXAGE));
 		col = new Color(100, 0, 0, 200);
-		size = 1;
 		podmode = true;
 		drawLine = false;
 		SEARCH_FREQ = 0;
-		LOS_RANGE = SPORE_DENSITY;
-		LOS_FOV = Math.PI;
 	}
 
 	protected void think()
@@ -49,7 +49,7 @@ public class Spore extends NPC
 			age = 0;
 			if (!isColliding())
 			{
-				move(SPORE_SPEED);
+				move(speed);
 				airtime++;
 			}
 			if (airtime > SPORE_AIRTIME)

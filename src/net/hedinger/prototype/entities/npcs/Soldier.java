@@ -11,10 +11,6 @@ import java.util.TreeMap;
 
 public class Soldier extends NPC
 {
-	private static final double SOLDIER_RANGE = 2.5; // zombie los range (pixels)
-	private static final double SOLDIER_FOV = Math.PI * 0.25;
-	private static final double SOLDIER_SPEED = 0.05; // max speed
-	private static final int SOLDIER_TURN = 10; // max turn speed
 	private static final int SOLDIER_SF = 25;
 	private Weapon weapon;
 	boolean selected = false;
@@ -30,12 +26,10 @@ public class Soldier extends NPC
 	public Soldier(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.05, 10, 2.5, Math.PI * 0.25, 3000));
 		hostile = 0;
-		size = 6;
 		health = 100;
 		SEARCH_FREQ = SOLDIER_SF;
-		LOS_RANGE = SOLDIER_RANGE;
-		LOS_FOV = SOLDIER_FOV;
 		drawLOS = true;
 		int n = (int) (Utils.random() * 3);
 		switch (n)
@@ -84,7 +78,7 @@ public class Soldier extends NPC
 			if (pathFinding)
 			{
 				say("moving!", 20);
-				if (!followPath(SOLDIER_SPEED, SOLDIER_TURN))
+				if (!followPath(speed, turnRate))
 					pathFinding = false;
 			}
 			status = NPC.STATUS_ALERT;
@@ -97,12 +91,12 @@ public class Soldier extends NPC
 			if (distance() > 2.0)
 			{
 				say("moving in!", 100);
-				chase(SOLDIER_SPEED, SOLDIER_TURN);
+				chase(speed, turnRate);
 			}
 			else
-				chase(0, SOLDIER_TURN);
+				chase(0, turnRate);
 
-			if (isInLOS(SOLDIER_RANGE, Math.PI * 0.2))
+			if (isInLOS(LOS_RANGE, Math.PI * 0.2))
 			{
 				say("engaging!", 50);
 
@@ -111,26 +105,26 @@ public class Soldier extends NPC
 					if (weapon.use(distance()))
 						move(0);
 					if (distance() < 1.0)
-						backup(SOLDIER_SPEED * 0.75);
+						backup(speed * 0.75);
 				}
 			}
 		}
 		else
 		{
 			if (squad.size() < 3 || squad.size() > 6)
-				roam(SOLDIER_SPEED * 0.5, SOLDIER_TURN);
+				roam(speed * 0.5, turnRate);
 			else
 			{
 				Entity sq = getClosestNPC(squad);
 				if (((NPC) sq).getStatus() == NPC.STATUS_THREAT)
 				{
-					if (!follow(SOLDIER_SPEED * 0.8, SOLDIER_TURN, sq, 1))
-						roam(SOLDIER_SPEED * 0.8, SOLDIER_TURN);
+					if (!follow(speed * 0.8, turnRate, sq, 1))
+						roam(speed * 0.8, turnRate);
 				}
 				else
 				{
-					if (!follow(SOLDIER_SPEED * 0.5, SOLDIER_TURN, sq, 3))
-						roam(SOLDIER_SPEED * 0.5, SOLDIER_TURN);
+					if (!follow(speed * 0.5, turnRate, sq, 3))
+						roam(speed * 0.5, turnRate);
 				}
 			}
 

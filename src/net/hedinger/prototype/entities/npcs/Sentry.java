@@ -7,11 +7,6 @@ import java.util.TreeMap;
 
 public class Sentry extends NPC
 {
-	private static final double SENTRY_RANGE = 3; // los range (pixels)
-	private static final double SENTRY_FOV = Math.PI; // los range
-	// (pixels)
-	private static final double SENTRY_SPEED = 0; // immobile
-	private static final int SENTRY_TURN = 10; // max turn speed
 	private static final int SENTRY_SF = 20;
 	private Weapon weapon = null;
 	private boolean malfunction = false;
@@ -28,13 +23,11 @@ public class Sentry extends NPC
 	public Sentry(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(4, 0, 10, 3, Math.PI, 3000));
 		hostile = 0;
-		size = 4;
 		health = 100;
 		drawLOS = true;
 		SEARCH_FREQ = SENTRY_SF;
-		LOS_RANGE = SENTRY_RANGE;
-		LOS_FOV = SENTRY_FOV;
 		weapon = new Gattlingun(this);
 	}
 
@@ -57,7 +50,7 @@ public class Sentry extends NPC
 		if (!enemies.isEmpty())
 		{
 			say("[!]", 200);
-			if (!seeTarget(enemy, SENTRY_RANGE, SENTRY_FOV))
+			if (!seeTarget(enemy, LOS_RANGE, LOS_FOV))
 				enemy = enemies.firstEntry().getValue();
 			drawPing = false;
 		}
@@ -67,7 +60,7 @@ public class Sentry extends NPC
 		if (seeTarget(enemy, getType(), false))
 		{
 			lockTarget(enemy);
-			chase(SENTRY_SPEED, SENTRY_TURN);
+			chase(speed, turnRate);
 			if (isInLOS(-1, Math.PI * 0.1))
 			{
 				say(">!<", 15);

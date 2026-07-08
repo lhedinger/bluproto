@@ -51,6 +51,24 @@ public class Genome {
 	public Genome() {
 	}
 
+	/**
+	 * A founder genome carrying just the body stats. Markers and dispositions
+	 * keep their defaults -- callers that need recognition or emergent
+	 * relationships set those separately. Used to seed a species from the stats
+	 * it historically hardcoded, so the phenotype now flows from the genome.
+	 */
+	public static Genome phenotype(double size, double speed, int turnRate,
+			double losRange, double losFov, int maxAge) {
+		Genome g = new Genome();
+		g.size = size;
+		g.speed = speed;
+		g.turnRate = turnRate;
+		g.losRange = losRange;
+		g.losFov = losFov;
+		g.maxAge = maxAge;
+		return g;
+	}
+
 	/** A random genome (seeded RNG), useful for founding a population. */
 	public static Genome random() {
 		Genome g = new Genome();

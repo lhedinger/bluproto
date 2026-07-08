@@ -3,16 +3,12 @@ package net.hedinger.prototype.entities.npcs;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.engine.Utils;
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Weapon;
 import net.hedinger.prototype.entities.weapons.Gattlingun;
 
 public class Drone extends NPC {
-	private static final double DRONE_RANGE = 5; // los range (pixels)
-	private static final double DRONE_FOV = 2 * Math.PI; // los range
-	// (pixels)
-	private static final double DRONE_SPEED = 0.07;
-	private static final int DRONE_TURN = 10; // max turn speed
 	private static final int DRONE_SF = 30;
 	private static final int PATROL_COOLDOWN = 1000;
 	private Weapon weapon = null;
@@ -31,12 +27,10 @@ public class Drone extends NPC {
 
 	public Drone(double x, double y, double z) {
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.07, 10, 5, 2 * Math.PI, 3000));
 		hostile = 0;
-		size = 6;
 		health = 100;
 		SEARCH_FREQ = DRONE_SF;
-		LOS_RANGE = DRONE_RANGE;
-		LOS_FOV = DRONE_FOV;
 		drawLOS = true;
 		weapon = new Gattlingun(this);
 		flying = true;
@@ -76,7 +70,7 @@ public class Drone extends NPC {
 
 		if (pathFinding) {
 			say(">>!", 20);
-			if (!followPath2(DRONE_SPEED, DRONE_TURN)) {
+			if (!followPath2(speed, turnRate)) {
 				pathFinding = false;
 				patrol = PATROL_COOLDOWN;
 				drop();
@@ -84,11 +78,11 @@ public class Drone extends NPC {
 		} else if (seeTarget(enemy, getType(), false)) {
 			lockTarget(enemy);
 			if (!selected) {
-				chase(0, DRONE_TURN);
+				chase(0, turnRate);
 			} else {
-				chase(DRONE_SPEED, DRONE_TURN);
+				chase(speed, turnRate);
 			}
-			if (isInLOS(DRONE_RANGE, Math.PI * 0.1)) {
+			if (isInLOS(LOS_RANGE, Math.PI * 0.1)) {
 				say(">!<", 15);
 				if (weapon != null) {
 					weapon.use(distance());
@@ -98,7 +92,7 @@ public class Drone extends NPC {
 			say("[@]", 10);
 			human = humans.firstEntry().getValue();
 			lockTarget(human);
-			chase(DRONE_SPEED * 0.5f, DRONE_TURN);
+			chase(speed * 0.5, turnRate);
 
 			if (canTouch(human)) {
 				say("[<3]", 100);
@@ -110,7 +104,7 @@ public class Drone extends NPC {
 			say("[?]", 10);
 			if (!selected) {
 				patrol--;
-				roam(DRONE_SPEED, DRONE_TURN);
+				roam(speed, turnRate);
 			} else {
 				idle();
 			}

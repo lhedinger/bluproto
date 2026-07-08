@@ -11,10 +11,6 @@ import java.util.TreeMap;
 
 public class Elite extends NPC
 {
-	private static final double ELITE_RANGE = 15; // zombie los range (pixels)
-	private static final double ELITE_FOV = Math.PI;
-	private static final double ELITE_SPEED = 0.05; // max speed
-	private static final int ELITE_TURN = 5; // max turn speed
 	private static final int ELITE_SF = 20;
 	private Weapon weapon;
 
@@ -28,12 +24,10 @@ public class Elite extends NPC
 	public Elite(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.05, 5, 15, Math.PI, 3000));
 		col = new Color(0, 0, 250);
-		size = 6;
 		health = 200;
 		SEARCH_FREQ = ELITE_SF;
-		LOS_RANGE = ELITE_RANGE;
-		LOS_FOV = ELITE_FOV;
 		int n = (int) (Utils.random() * 3);
 		switch (n)
 		{
@@ -75,25 +69,25 @@ public class Elite extends NPC
 
 			if (distance() > 2.0)
 			{
-				chase(ELITE_SPEED, ELITE_TURN);
+				chase(speed, turnRate);
 			}
 			else
-				chase(0, ELITE_TURN);
+				chase(0, turnRate);
 
-			if (isInLOS(ELITE_RANGE, Math.PI * 0.2))
+			if (isInLOS(LOS_RANGE, Math.PI * 0.2))
 			{
 				if (distance() < 3.0)
 				{
 					if (weapon.use(distance()))
 						move(0);
 					if (distance() < 1.0)
-						backup(ELITE_SPEED * 0.75);
+						backup(speed * 0.75);
 				}
 			}
 		}
 		else
 		{
-			roam(ELITE_SPEED * 0.7, ELITE_TURN);
+			roam(speed * 0.7, turnRate);
 		}
 	}
 

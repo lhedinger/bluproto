@@ -32,6 +32,9 @@ public abstract class NPC extends Entity {
 	protected double LOS_FOV; // max field of view (radians)
 	protected int status;
 	protected int size;
+	protected double speed = 0.04; // tiles/tick; sourced from the genome
+	protected int turnRate = 5; // steering divisor; sourced from the genome
+	protected int maxAge = 3000; // ticks before old age; sourced from the genome
 	protected Color col = Color.ORANGE;
 
 	/** Heritable trait vector; null for species that do not use one (yet). */
@@ -39,6 +42,23 @@ public abstract class NPC extends Entity {
 
 	public Genome getGenome() {
 		return genome;
+	}
+
+	/**
+	 * Sources this NPC's body stats from a founder {@link Genome} and keeps the
+	 * reference. The genome becomes the single source of truth for the phenotype
+	 * (size, speed, turn rate, perception, lifespan), so offspring can later
+	 * inherit a mutated copy. Anything the genome does not carry -- health,
+	 * SEARCH_FREQ, colour -- stays set by the species directly.
+	 */
+	protected void applyGenome(Genome g) {
+		this.genome = g;
+		this.size = (int) Math.round(g.size);
+		this.speed = g.speed;
+		this.turnRate = g.turnRate;
+		this.LOS_RANGE = g.losRange;
+		this.LOS_FOV = g.losFov;
+		this.maxAge = g.maxAge;
 	}
 
 	private int blink_random = 0;

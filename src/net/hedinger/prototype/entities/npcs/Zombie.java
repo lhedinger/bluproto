@@ -5,15 +5,12 @@ import net.hedinger.prototype.engine.Utils;
 import java.awt.Color;
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
 
 public class Zombie extends NPC {
 	private static final Color ZOMBIE_COLOR = new Color(0, 150, 0);
-	private static final double ZOMBIE_RANGE = 4; // zombie los range (pixels)
-	private static final double ZOMBIE_FOV = Math.PI;
-	private static final double ZOMBIE_SPEED = 0.04; // max speed
-	private static final int ZOMBIE_TURN = 3; // max turn speed
 	private static final int ZOMBIE_SF = 50;
 	private static final int ZOMBIE_MAX_AGE = 10000;
 
@@ -34,28 +31,24 @@ public class Zombie extends NPC {
 
 	public Zombie(double x, double y, double z) {
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.04, 3, 4, Math.PI, ZOMBIE_MAX_AGE));
 		col = ZOMBIE_COLOR;
-		size = 6;
 		health = 200;
 		lifespan = ZOMBIE_MAX_AGE;
 		deathspan = (int) (ZOMBIE_MAX_AGE * 0.5);
 		age = (int) (ZOMBIE_MAX_AGE * 0.5);
 		SEARCH_FREQ = ZOMBIE_SF;
-		LOS_RANGE = ZOMBIE_RANGE;
-		LOS_FOV = ZOMBIE_FOV;
 	}
 
 	public Zombie(double x, double y, double z, double d) {
 		super(x, y, z, d);
+		applyGenome(Genome.phenotype(6, 0.04, 3, 4, Math.PI, ZOMBIE_MAX_AGE));
 		col = ZOMBIE_COLOR;
-		size = 6;
 		health = 200;
 		lifespan = ZOMBIE_MAX_AGE;
 		deathspan = (int) (ZOMBIE_MAX_AGE * 0.5);
 		age = (int) (ZOMBIE_MAX_AGE * 0.5);
 		SEARCH_FREQ = ZOMBIE_SF;
-		LOS_RANGE = ZOMBIE_RANGE;
-		LOS_FOV = ZOMBIE_FOV;
 	}
 
 	@Override
@@ -83,7 +76,7 @@ public class Zombie extends NPC {
 			} else {
 				double ratio = 1 - ratio(age, ZOMBIE_MAX_AGE * 0.07);
 
-				roam(ZOMBIE_SPEED * ratio * 2, ZOMBIE_TURN);
+				roam(speed * ratio * 2, turnRate);
 			}
 
 			return;
@@ -129,16 +122,16 @@ public class Zombie extends NPC {
 		}
 		if (seeTarget(enemy, ZOMBIE_ENEMIES, true)) {
 			lockTarget(enemy);
-			chase(ZOMBIE_SPEED, ZOMBIE_TURN);
+			chase(speed, turnRate);
 			if (seeTarget(enemy, 0.1, Math.PI * 0.1, ZOMBIE_ENEMIES, true)) {
 				bite();
 			} else {
 				enemy = null;
 			}
 		} else if (seeTarget(ally, 5.0, Math.PI, ZOMBIE_ALLIES, true) && status <= NPC.STATUS_THREAT) {
-			follow(ZOMBIE_SPEED, ZOMBIE_TURN, ally, 1);
+			follow(speed, turnRate, ally, 1);
 		} else {
-			roam(ZOMBIE_SPEED * 0.5, ZOMBIE_TURN);
+			roam(speed * 0.5, turnRate);
 		}
 	}
 
