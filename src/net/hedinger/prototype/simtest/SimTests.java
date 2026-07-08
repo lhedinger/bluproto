@@ -616,6 +616,61 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Fertility gates how much grass a tile can hold: poor ground regrows only
+	 * to a low cap, rich ground fills to the full cap. This is what makes the
+	 * substrate patchy -- rich and poor habitats instead of uniform pasture.
+	 */
+	static class FertilityCapsVegetation extends Scenario {
+		@Override
+		public void run() {
+			seed(6);
+			World w = room(5, 5);
+			tick(w, 1);
+			Tile poor = w.getTile(1, 1, 0);
+			poor.setFertility(0.3);
+			Tile rich = w.getTile(3, 3, 0); // default fertility 1.0
+
+			poor.graze(w.getTick(), Tile.VEG_MAX); // strip it bare
+			int ticks = (int) Math.ceil(Tile.VEG_MAX / Tile.VEG_REGROW) + 10;
+			tick(w, ticks);
+			long now = w.getTick();
+
+			assertNear("poor ground regrows only to its fertility cap",
+					0.3 * Tile.VEG_MAX, poor.getVegetation(now), 1e-9);
+			assertNear("rich ground fills to the full cap",
+					Tile.VEG_MAX, rich.getVegetation(now), 1e-9);
+			assertGreater("rich ground carries much more grass than poor ground",
+					rich.getVegetation(now) - poor.getVegetation(now), 0.5);
+		}
+	}
+
+	/**
+	 * A fertility field paints the map into patchy habitats: coherent lush
+	 * blobs separated by poorer ground. Deterministic from the seed.
+	 */
+	static class FertileHabitatPatches extends Scenario {
+		@Override
+		public void run() {
+			seed(11);
+			World w = room(20, 20);
+			w.generateFertility(0.22);
+			w.think(); // advance the clock so grass sits at its per-tile cap
+			snapshot(w, "patchy fertility");
+
+			double min = 1, max = 0;
+			for (int c = 1; c < w.getColums() - 1; c++) {
+				for (int r = 1; r < w.getRows() - 1; r++) {
+					double f = w.getTile(c, r, 0).getFertility();
+					min = Math.min(min, f);
+					max = Math.max(max, f);
+				}
+			}
+			assertLess("some ground is poor", min, 0.4);
+			assertGreater("some ground is rich", max, 0.7);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -673,6 +728,8 @@ public class SimTests {
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
+				new FertilityCapsVegetation(),
+				new FertileHabitatPatches(),
 				new SameSeedSameOutcome(),
 		};
 	}

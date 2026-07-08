@@ -123,8 +123,9 @@ that is otherwise invisible:
   (behaviour, `fly`, `heard!`, `grabbing`, `carried`, `hpN`, `dead`); colliding
   labels stack downward instead of overprinting,
 - a magenta **carry link** between a carrier and its cargo (circle on the cargo),
-- a green **vegetation wash** on the ground (the living substrate) — denser grass
-  is more opaque, so grazed-down patches read as darker tiles,
+- a **vegetation wash** on the ground (the living substrate) — barren ground
+  browns, grass greens and deepens with density, so grazed patches and the
+  poor/rich habitats of a fertility field both read at a glance,
 - **closed door edges** as red bars on the tile border,
 - **every world level, side by side**, so cross-level action (ramp climbs,
   hole falls) is visible.
@@ -176,6 +177,10 @@ for (writing the first tests surfaced them):
   `VEG_REGROW` per tick since the last graze, capped at `VEG_MAX`) — there is no
   per-tick sweep over the map. The clock is `World.getTick()`, advanced once per
   `think()`, so vegetation only changes when the sim is ticked.
+- **Fertility gates the grass cap.** Each tile's `fertility` (default 1) scales
+  how much vegetation it can hold, so grass grows patchy. `World.generateFertility(freq)`
+  paints a coherent field via `Utils.noise2` — deterministic from the seed and
+  drawing no RNG state, so it never perturbs world-generation reproducibility.
 
 Keep scenarios small and single-purpose: one behaviour, a handful of entities,
 a clear assertion. That is what makes a failure point straight at the cause.

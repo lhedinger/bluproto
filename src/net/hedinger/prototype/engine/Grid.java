@@ -100,10 +100,13 @@ public class Grid {
 					continue;
 				}
 				double v = t.getVegetation(now) / Tile.VEG_MAX;
-				if (v <= 0) {
-					continue;
-				}
-				g2.setColor(new Color(40, 190, 60, (int) (v * 150)));
+				// Barren ground washes brown; grass greens up and deepens with
+				// density, so lush blobs and bare patches both read at a glance.
+				int red = (int) (110 - v * 80); // 110 (brown) -> 30 (green)
+				int green = (int) (70 + v * 140); // 70 -> 210
+				int blue = (int) (40 - v * 40); // 40 -> 0
+				int alpha = (int) (70 + v * 185); // 70 -> 255
+				g2.setColor(new Color(red, green, blue, alpha));
 				g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
 			}
 		}

@@ -116,6 +116,23 @@ public class World {
 		}
 	}
 
+	/**
+	 * Paints a coherent fertility field over every tile so vegetation grows
+	 * patchy -- lush blobs separated by poor ground. {@code frequency} sets the
+	 * patch scale (~0.15 gives blobs a handful of tiles across). Deterministic
+	 * from the seed and consumes no RNG state, so it does not perturb the order
+	 * in which the rest of world generation draws from the RNG.
+	 */
+	public void generateFertility(double frequency) {
+		for (int z = 0; z < lvls; z++) {
+			for (int x = 0; x < cols; x++) {
+				for (int y = 0; y < rows; y++) {
+					getTile(x, y, z).setFertility(Utils.noise2(x, y, frequency));
+				}
+			}
+		}
+	}
+
 	public void render(Graphics g, View view, LayerRenderer layerRenderer) {
 		Graphics2D g2 = (Graphics2D) g;
 

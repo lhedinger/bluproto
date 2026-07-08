@@ -33,22 +33,41 @@ public class Tile {
 	// the last-touched tick, so there is no per-tick sweep over the map -- a
 	// tile costs nothing until something grazes or draws it.
 	public static final double VEG_MAX = 1.0;
-	public static final double VEG_REGROW = 0.002; // per tick, up to VEG_MAX
+	public static final double VEG_REGROW = 0.002; // per tick, up to the cap
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
+
+	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
+	// A fertility field (see World.generateFertility) makes grass grow patchy,
+	// so the map has rich and poor habitats instead of uniform pasture.
+	private double fertility = 1.0;
+
+	public double getFertility() {
+		return fertility;
+	}
+
+	public void setFertility(double f) {
+		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
+	}
+
+	/** The most vegetation this tile can hold, given its fertility. */
+	public double vegetationCap() {
+		return VEG_MAX * fertility;
+	}
 
 	/** True where vegetation can grow: open, walkable ground. */
 	public boolean growsVegetation() {
 		return type == TileType.TYPE_FLOOR;
 	}
 
-	/** Current vegetation density [0, VEG_MAX], regrown lazily to {@code now}. */
+	/** Current vegetation density [0, cap], regrown lazily to {@code now}. */
 	public double getVegetation(long now) {
 		if (!growsVegetation()) {
 			return 0;
 		}
+		double cap = vegetationCap();
 		double v = vegStored + VEG_REGROW * (now - vegTick);
-		return v > VEG_MAX ? VEG_MAX : v;
+		return v > cap ? cap : v;
 	}
 
 	/**
