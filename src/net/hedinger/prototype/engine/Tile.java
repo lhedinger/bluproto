@@ -29,7 +29,7 @@ public class Tile {
 	private final float[] scents = new float[Scent.values().length];
 
 	private static final float FLORA_SEED = 0.05f; // regrowth floor
-	private static final float FLORA_GROWTH = 0.003f;
+	private static final float FLORA_GROWTH = 0.0015f;
 	private static final float FERTILITY_MAX = 3f;
 	private static final float SCENT_MAX = 10f;
 	private static final float SCENT_FLOOR = 0.01f;

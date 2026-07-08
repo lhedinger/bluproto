@@ -161,7 +161,7 @@ public class PrototypeWorld extends JPanel {
 
 		// the food web: grazing herds and a few predators on every level
 		spawnEntities(7, 3 * ratio, level); // houndeye herds
-		spawnEntities(10, Math.max(2, ratio / 3), level); // bullsquids
+		spawnEntities(10, Math.max(3, ratio / 2), level); // bullsquids
 
 	}
 

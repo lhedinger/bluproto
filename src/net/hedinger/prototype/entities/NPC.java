@@ -1681,10 +1681,10 @@ public abstract class NPC extends Entity {
 		gestation = (int) Math.max(100, genome != null ? genome.gestation : 400);
 		mateGenome = (partner != null) ? partner.genome : null;
 		energy = Math.max(0, energy - 15);
-		matingCooldown = 800;
+		matingCooldown = 600;
 		if (partner != null) {
 			partner.energy = Math.max(0, partner.energy - 10);
-			partner.matingCooldown = 800;
+			partner.matingCooldown = 600;
 		}
 	}
 
@@ -1698,7 +1698,7 @@ public abstract class NPC extends Entity {
 			Genome g = genome.breed(mateGenome, 0.08);
 			NPC child = createOffspring(variation(X, 0.3), variation(Y, 0.3), (int) Z, g);
 			if (child != null && getWorld().spawnEntity(child)) {
-				energy = Math.max(0, energy - 8);
+				energy = Math.max(0, energy - 12);
 			}
 		}
 		mateGenome = null;

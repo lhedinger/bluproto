@@ -30,9 +30,9 @@ public class Houndeye extends NPC {
 				variation(0.035, 0.005), // speed
 				variation(6, 1), // turn
 				variation(7, 1), // losRange
-				variation(0.028, 0.004), // metabolism
+				variation(0.04, 0.005), // metabolism
 				variation(1.0, 0.1), // sizeScale
-				variation(900, 100), // gestation
+				variation(1100, 150), // gestation
 				0.15)); // mostly diurnal
 		// world-genesis animals start grown up and settled in
 		age = matureAge + (int) (Math.random() * 1000);
@@ -52,8 +52,8 @@ public class Houndeye extends NPC {
 		metabolic = true;
 		susceptible = true;
 		trailScent = Scent.TRAIL_HERBIVORE;
-		matureAge = 800;
-		litterMax = 3;
+		matureAge = 1200;
+		litterMax = 2;
 		energy = 55;
 		hydration = 70;
 
@@ -79,7 +79,7 @@ public class Houndeye extends NPC {
 				say("!", 40);
 				getWorld().spawnEntity(new Sound(getX(), getY(), getZ()));
 			}
-			flee(speed * 1.6, turn, threat, 3);
+			flee(speed * 1.4, turn, threat, 3);
 			return;
 		}
 
@@ -88,7 +88,7 @@ public class Houndeye extends NPC {
 			status = NPC.STATUS_ALERT;
 			double danger = smell(Scent.FEAR);
 			if (!Double.isNaN(danger)) {
-				roam(speed * 1.2, turn, danger + Math.PI);
+				roam(speed * 1.15, turn, danger + Math.PI);
 				return;
 			}
 		}

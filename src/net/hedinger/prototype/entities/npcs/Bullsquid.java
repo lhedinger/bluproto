@@ -31,9 +31,9 @@ public class Bullsquid extends NPC {
 				variation(0.045, 0.006), // speed: faster than its prey
 				variation(8, 1), // turn: but less agile
 				variation(9, 1), // losRange
-				variation(0.04, 0.005), // metabolism: meat is expensive
+				variation(0.03, 0.004), // metabolism
 				variation(1.3, 0.15), // sizeScale
-				variation(1400, 150), // gestation
+				variation(1200, 150), // gestation
 				0.8)); // night hunter
 		age = matureAge + (int) (Math.random() * 1000);
 		energy = 55 + Math.random() * 25;
@@ -47,7 +47,7 @@ public class Bullsquid extends NPC {
 		lifespan = (int) variation(BULLSQUID_MAX_AGE, 2500);
 		deathspan = 3000;
 		SEARCH_FREQ = BULLSQUID_SF;
-		LOS_FOV = Math.PI * 0.6; // forward-facing hunter's eyes
+		LOS_FOV = Math.PI; // all-round senses (sight + smell + hearing)
 
 		metabolic = true;
 		susceptible = false;
@@ -77,7 +77,7 @@ public class Bullsquid extends NPC {
 		prey = getTargets(prey, PREY, true);
 
 		// 1. a carcass in reach is free food: eat, then load up meat to haul
-		NPC corpse = findCorpse(3);
+		NPC corpse = findCorpse(Math.max(3, LOS_RANGE));
 		if (corpse != null && (energy < energyMax - 5 || carriedFood < CARRY_MAX)) {
 			if (distance(corpse) < 0.85) {
 				tX = X;
@@ -98,7 +98,7 @@ public class Bullsquid extends NPC {
 		}
 
 		// 3. hungry: hunt
-		if (energy < 55) {
+		if (energy < 65) {
 			status = NPC.STATUS_THREAT;
 
 			if (!prey.isEmpty()) {
@@ -106,7 +106,7 @@ public class Bullsquid extends NPC {
 			}
 			if (seeTarget(quarry, PREY, true)) {
 				lockTarget(quarry);
-				chase(speed * 1.25, turn); // sprint
+				chase(speed * 1.5, turn); // sprint
 				if (distance(quarry) < 0.5) {
 					bite(quarry);
 				}
@@ -131,7 +131,7 @@ public class Bullsquid extends NPC {
 				}
 				return;
 			}
-			roam(speed * 0.8, turn);
+			roam(speed * 0.6, turn); // conserve energy while searching
 			return;
 		}
 
@@ -151,9 +151,15 @@ public class Bullsquid extends NPC {
 			buildNest();
 		}
 
-		// 5. breed when hunting is good
-		if (canMate() && seekMate(speed, turn)) {
-			return;
+		// 5. breed when hunting is good; solitary hunters find each other
+		// by following the trails other bullsquids leave
+		if (canMate()) {
+			if (seekMate(speed, turn)) {
+				return;
+			}
+			if (followScent(Scent.TRAIL_PREDATOR, speed * 0.8, turn)) {
+				return;
+			}
 		}
 
 		// 6. nocturnal: den up during the day
@@ -167,15 +173,15 @@ public class Bullsquid extends NPC {
 		}
 
 		// night patrol
-		roam(speed * 0.7, turn);
+		roam(speed * 0.5, turn);
 	}
 
 	private void bite(NPC target) {
 		if (biteCooldown > 0 || target == null) {
 			return;
 		}
-		biteCooldown = 30;
-		target.damage((int) variation(45, 15));
+		biteCooldown = 15;
+		target.damage((int) variation(55, 15));
 		energy = Math.max(0, energy - 1);
 	}
 

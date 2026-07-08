@@ -46,6 +46,44 @@ layer.
 A small set of **cross-cutting helpers** (coordinate/angle math, image resizing,
 RNG, profiling) is shared by all of the above.
 
+## The ecosystem layer
+
+Layered on top of the base simulation is a self-sustaining food web, built so
+that resources *flow* rather than appearing and vanishing. It rests on four
+collaborating pieces:
+
+- **The environment has state and memory.** Tiles carry plant cover (flora),
+  soil fertility, and a set of decaying *scent* deposits. Flora grows
+  logistically each tick, scaled by soil fertility and the day/night cycle;
+  fertility falls off with distance from water, so growth clusters into meadows
+  around the ponds the generator carves. A fully decayed corpse returns its
+  biomass to the tile as fertility — closing the loop carcass → soil → flora →
+  grazer → predator → carcass. The engine, not any actor, owns this: `World`
+  runs an environment tick over every `Tile` before the entities think.
+
+- **Needs drive behavior.** Metabolic NPCs spend energy (on metabolism and on
+  moving) and hydration (on thirst), and must forage, drink, and rest to
+  replace them. `think()` becomes a priority decision — flee, then drink, then
+  eat, then breed, then rest — instead of a fixed script. Starvation and
+  dehydration damage; sleeping conserves energy and slowly heals.
+
+- **Stimulus fields let actors sense beyond line of sight.** Animals drip a
+  species trail as they move, fleeing ones deposit fear, wounds leave blood.
+  Predators track prey up a blood or trail gradient; a herd panics off fear
+  scent it never saw the cause of. This is the `Sound`-broadcast idea
+  generalized into typed, decaying tile deposits.
+
+- **Genomes make the population evolve.** Heritable traits (speed, vision,
+  metabolism, size, gestation, nocturnality) pass to offspring by per-gene
+  crossover plus mutation. Breeding is gated on surplus energy, so only
+  well-fed animals reproduce. Over a long run the trait distribution drifts
+  under selection pressure — a measurable predator/prey speed arms race.
+
+The **Houndeye** (grazing herbivore) and **Bullsquid** (apex predator) are the
+reference species that exercise all of this; nests add home sites with a food
+cache that predators stock and raid. `HeadlessSim` runs the whole loop without a
+window and prints population/flora/genome stats for balance testing.
+
 ## The contract that matters
 
 The simulator's defining guarantee — entities don't walk through walls — is not
