@@ -21,6 +21,14 @@ public class World {
 	int lvls;
 	int spawnCounter = 0;
 
+	// Monotonic simulation clock, advanced once per think(). Drives lazy
+	// vegetation regrowth (and, later, day/night and field dynamics).
+	private long tick = 0;
+
+	public long getTick() {
+		return tick;
+	}
+
 	boolean fogofwar = false;
 
 	int max_view_depth = 3;
@@ -65,6 +73,7 @@ public class World {
 	}
 
 	public void think() {
+		tick++;
 		int removecount = 0;
 		for (Entity e : entities.values()) {
 			if (e != null) {

@@ -1,5 +1,6 @@
 package net.hedinger.prototype.engine;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.HashMap;
@@ -59,11 +60,10 @@ public class Grid {
 		}
 
 		if (camDepth == 0) {
-			g2.drawImage(
-					lr.mapLayers[level].image_layer,
-					v.pixelX(0, level, 0),
-					v.pixelY(0, level, 0),
-					null);
+			int ox = v.pixelX(0, level, 0);
+			int oy = v.pixelY(0, level, 0);
+			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
+			renderVegetation(g2, ox, oy);
 		} else {
 			g2.drawImage(
 					lr.mapLayers[level].image_layer_downsized[camDepth - 1],
@@ -83,6 +83,30 @@ public class Grid {
 			}
 		}
 
+	}
+
+	/**
+	 * Green wash showing vegetation density on the ground -- denser grass is
+	 * more opaque. Drawn on the ground layer (under doors and entities) so
+	 * grazed-down patches read correctly beneath the actors standing on them.
+	 */
+	private void renderVegetation(Graphics2D g2, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		long now = world.getTick();
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = tiles[x][y];
+				if (!t.growsVegetation()) {
+					continue;
+				}
+				double v = t.getVegetation(now) / Tile.VEG_MAX;
+				if (v <= 0) {
+					continue;
+				}
+				g2.setColor(new Color(40, 190, 60, (int) (v * 150)));
+				g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+			}
+		}
 	}
 
 	public void alignTiles() {

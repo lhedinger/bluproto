@@ -27,13 +27,17 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE
 	}
+
+	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
+	private static final double GRAZE_DEMAND = 0.05;
 
 	private final Behavior behavior;
 	private double speed = 0.04;
 	private int turn = 5;
 	private boolean heard = false;
+	private double totalIntake = 0;
 	private TreeMap<Double, NPC> prey = null;
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
@@ -80,6 +84,17 @@ public class TestNPC extends NPC {
 	public static TestNPC mover(double x, double y, double z, double heading) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MOVE);
 		t.D = heading;
+		return t;
+	}
+
+	/**
+	 * A herbivore: each tick it eats vegetation from the tile underfoot, and
+	 * wanders on once that patch thins -- so grazing pressure spreads and bare
+	 * patches appear. {@link #totalIntake()} reports how much it has eaten.
+	 */
+	public static TestNPC grazer(double x, double y, double z) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.GRAZE);
+		t.speed = 0.02;
 		return t;
 	}
 
@@ -169,7 +184,26 @@ public class TestNPC extends NPC {
 		case GENOME:
 			thinkGenome();
 			return;
+		case GRAZE:
+			thinkGraze();
+			return;
 		}
+	}
+
+	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */
+	private void thinkGraze() {
+		double intake = graze(GRAZE_DEMAND);
+		totalIntake += intake;
+		// Stay and crop the patch down; only move on when it is nearly bare, so
+		// grazing bores a clear depleted spot before the herbivore wanders off.
+		if (intake < GRAZE_DEMAND * 0.15) {
+			roam(speed, turn);
+		}
+	}
+
+	/** Total vegetation this grazer has eaten (for assertions/overlay). */
+	public double totalIntake() {
+		return totalIntake;
 	}
 
 	/** Reacts to the single most salient perceived neighbour via the genome. */
@@ -236,6 +270,9 @@ public class TestNPC extends NPC {
 			return s.toString();
 		}
 		StringBuilder s = new StringBuilder(behavior.name().toLowerCase());
+		if (behavior == Behavior.GRAZE) {
+			s.append(" ate ").append(String.format("%.2f", totalIntake));
+		}
 		if (flying) {
 			s.append(" fly");
 		}

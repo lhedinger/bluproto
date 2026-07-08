@@ -1,6 +1,7 @@
 package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
+import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Sound;
@@ -560,6 +561,61 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A grazer eats the living substrate: it feeds from the tile underfoot and
+	 * leaves a depleted patch behind. Exercises the NPC.graze() -> Tile link.
+	 */
+	static class GrazerDepletesSubstrate extends Scenario {
+		@Override
+		public void run() {
+			seed(4);
+			World w = room(11, 11);
+			TestNPC g = TestNPC.grazer(5.5, 5.5, 0);
+			w.spawnEntity(g);
+			w.think(); // register the spawn
+			snapshot(w, "before (full grass)");
+			tick(w, 120);
+			snapshot(w, "after (grazed patch)");
+
+			assertGreater("grazer fed on the substrate", g.totalIntake(), 0.5);
+
+			// The hungriest ground it worked over is visibly bare.
+			double lowest = Tile.VEG_MAX;
+			for (int c = 1; c < w.getColums() - 1; c++) {
+				for (int r = 1; r < w.getRows() - 1; r++) {
+					double v = w.getTile(c, r, 0).getVegetation(w.getTick());
+					if (v < lowest) {
+						lowest = v;
+					}
+				}
+			}
+			assertLess("grazing left a bare patch", lowest, 0.5);
+		}
+	}
+
+	/**
+	 * Vegetation regrows over time toward its cap once grazing stops. Pins the
+	 * lazy closed-form regrowth against the world clock (no entity needed).
+	 */
+	static class VegetationRegrows extends Scenario {
+		@Override
+		public void run() {
+			seed(5);
+			World w = room(5, 5);
+			tick(w, 1); // advance the clock off zero
+			Tile t = w.getTile(2, 2, 0);
+
+			double eaten = t.graze(w.getTick(), Tile.VEG_MAX); // strip it bare
+			assertNear("stripped to bare ground", 0.0, t.getVegetation(w.getTick()), 1e-9);
+			assertGreater("grazing consumed the standing crop", eaten, 0.5);
+
+			// Regrowth is linear at VEG_REGROW/tick; run past a full recovery.
+			int ticks = (int) Math.ceil(Tile.VEG_MAX / Tile.VEG_REGROW) + 10;
+			tick(w, ticks);
+			assertNear("vegetation regrew to its cap", Tile.VEG_MAX, t.getVegetation(w.getTick()), 1e-9);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -615,6 +671,8 @@ public class SimTests {
 				new GenomeReactModel(),
 				new GenomePredatorHuntsPrey(),
 				new GenomeInheritance(),
+				new GrazerDepletesSubstrate(),
+				new VegetationRegrows(),
 				new SameSeedSameOutcome(),
 		};
 	}

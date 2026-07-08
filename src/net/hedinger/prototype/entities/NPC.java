@@ -1251,6 +1251,20 @@ public abstract class NPC extends Entity {
 		}
 	}
 
+	/**
+	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
+	 * the living substrate and returns how much was actually eaten (0 on barren
+	 * ground). This is the herbivore's link to the environment -- the base of
+	 * the food chain.
+	 */
+	protected double graze(double demand) {
+		World w = getWorld();
+		if (w == null) {
+			return 0;
+		}
+		return w.getTile(X, Y, Z).graze(w.getTick(), demand);
+	}
+
 	public boolean grab(Entity ent) {
 
 		double distance = distance(ent);

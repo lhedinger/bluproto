@@ -27,6 +27,46 @@ public class Tile {
 
 	private int variant = 0;
 
+	// --- vegetation (the living substrate) ---------------------------------
+	// A regrowing food resource on walkable ground. Grazers deplete it; it
+	// regrows linearly to a cap. Growth is computed lazily in closed form from
+	// the last-touched tick, so there is no per-tick sweep over the map -- a
+	// tile costs nothing until something grazes or draws it.
+	public static final double VEG_MAX = 1.0;
+	public static final double VEG_REGROW = 0.002; // per tick, up to VEG_MAX
+	private double vegStored = VEG_MAX; // density at vegTick
+	private long vegTick = 0; // tick vegStored was last written
+
+	/** True where vegetation can grow: open, walkable ground. */
+	public boolean growsVegetation() {
+		return type == TileType.TYPE_FLOOR;
+	}
+
+	/** Current vegetation density [0, VEG_MAX], regrown lazily to {@code now}. */
+	public double getVegetation(long now) {
+		if (!growsVegetation()) {
+			return 0;
+		}
+		double v = vegStored + VEG_REGROW * (now - vegTick);
+		return v > VEG_MAX ? VEG_MAX : v;
+	}
+
+	/**
+	 * Consumes up to {@code demand} vegetation, returning how much was actually
+	 * eaten. Folds in regrowth since the last touch, then writes the new stored
+	 * value and stamp so growth resumes from here.
+	 */
+	public double graze(long now, double demand) {
+		if (!growsVegetation() || demand <= 0) {
+			return 0;
+		}
+		double v = getVegetation(now);
+		double eaten = demand < v ? demand : v;
+		vegStored = v - eaten;
+		vegTick = now;
+		return eaten;
+	}
+
 	public Tile(World w, int x, int y, int z) {
 		world = w;
 

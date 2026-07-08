@@ -74,6 +74,7 @@ mechanics need, with per-instance knobs instead of species constants:
 | `TestNPC.listener(x, y, z)` | Inert until it hears a `Sound`, then roams (`hasHeard()` to probe) |
 | `TestNPC.mover(x, y, z, heading)` | Walks a straight line (radians, 0 = +x); halts where the engine blocks — ideal for probing passability (doors, walls, ramps) |
 | `TestNPC.genomeDriven(x, y, z, genome)` | Behaviour driven entirely by a `Genome`: reacts to the most salient perceived neighbour (attack/mate/affiliate → chase, flee → flee, else roam). Sources its body stats from the genome and colours its dot by the genome markers; `lastAction()` exposes what it decided |
+| `TestNPC.grazer(x, y, z)` | A herbivore: eats vegetation from the tile underfoot (`NPC.graze`), cropping a patch down before wandering to fresh grass. `totalIntake()` reports how much it has eaten — the base of the food chain |
 
 Lifecycle and body knobs chain fluently:
 
@@ -122,6 +123,8 @@ that is otherwise invisible:
   (behaviour, `fly`, `heard!`, `grabbing`, `carried`, `hpN`, `dead`); colliding
   labels stack downward instead of overprinting,
 - a magenta **carry link** between a carrier and its cargo (circle on the cargo),
+- a green **vegetation wash** on the ground (the living substrate) — denser grass
+  is more opaque, so grazed-down patches read as darker tiles,
 - **closed door edges** as red bars on the tile border,
 - **every world level, side by side**, so cross-level action (ramp climbs,
   hole falls) is visible.
@@ -168,6 +171,11 @@ for (writing the first tests surfaced them):
   (-1, 0) because `(int)` casts truncate toward zero (column -0.5 becomes 0);
   the runtime validity check then kills the entity on its first tick.
   `SpawnRejectsOutOfBounds` pins this seam.
+- **Vegetation regrows lazily, off the world clock.** Only `TYPE_FLOOR` tiles
+  grow grass. `Tile.getVegetation(now)` is a closed-form read (stored density +
+  `VEG_REGROW` per tick since the last graze, capped at `VEG_MAX`) — there is no
+  per-tick sweep over the map. The clock is `World.getTick()`, advanced once per
+  `think()`, so vegetation only changes when the sim is ticked.
 
 Keep scenarios small and single-purpose: one behaviour, a handful of entities,
 a clear assertion. That is what makes a failure point straight at the cause.
