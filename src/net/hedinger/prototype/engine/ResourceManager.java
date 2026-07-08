@@ -296,6 +296,27 @@ public class ResourceManager {
 		// return null;
 	}
 
+	private static BufferedImage waterTile = null;
+
+	/** Floor tile tinted blue: shallow, wadeable water. */
+	public static BufferedImage getWaterTile(String tilecode) {
+		if (waterTile != null) {
+			return waterTile;
+		}
+
+		BufferedImage base = getFloorTile(tilecode);
+		BufferedImage img = new BufferedImage(base.getWidth(), base.getHeight(),
+				BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = img.createGraphics();
+		g.drawImage(base, 0, 0, null);
+		g.setColor(new java.awt.Color(30, 90, 190, 180));
+		g.fillRect(0, 0, img.getWidth(), img.getHeight());
+		g.dispose();
+
+		waterTile = img;
+		return waterTile;
+	}
+
 	public static BufferedImage combineSubtiles(Image subA, Image subB, Image subC, Image subD) {
 		int hts = subTileSize + tilePadding * 2;
 		BufferedImage dimg = new BufferedImage(tileSize + tilePadding * 2, tileSize + tilePadding * 2,

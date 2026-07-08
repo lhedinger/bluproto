@@ -55,6 +55,8 @@ public class LayerRenderer {
 		case TYPE_FLOOR:
 		case TYPE_WALL:
 			return ResourceManager.getFloorTile(tilecode);
+		case TYPE_WATER:
+			return ResourceManager.getWaterTile(tilecode);
 		case TYPE_HOLE:
 			return ResourceManager.getHoleFloorTile(tilecode, variant);
 		case TYPE_RAMPUP:

@@ -23,6 +23,17 @@ public class Tile {
 
 	private int variant = 0;
 
+	// environment state: plant cover, soil richness, stimulus deposits
+	private float flora = 0;
+	private float fertility = 1;
+	private final float[] scents = new float[Scent.values().length];
+
+	private static final float FLORA_SEED = 0.05f; // regrowth floor
+	private static final float FLORA_GROWTH = 0.003f;
+	private static final float FERTILITY_MAX = 3f;
+	private static final float SCENT_MAX = 10f;
+	private static final float SCENT_FLOOR = 0.01f;
+
 	public Tile(World w, int x, int y, int z) {
 		world = w;
 
@@ -265,6 +276,87 @@ public class Tile {
 		return true;
 	}
 
+	// ======================================================
+	// ENVIRONMENT: flora, fertility, scent
+	// ======================================================
+
+	public float getFlora() {
+		return flora;
+	}
+
+	public void addFlora(float amount) {
+		flora = clamp(flora + amount, 0, 1);
+	}
+
+	/**
+	 * Removes up to {@code amount} of plant cover from this tile.
+	 *
+	 * @return how much was actually consumed
+	 */
+	public float consumeFlora(float amount) {
+		float eaten = Math.min(amount, flora);
+		flora -= eaten;
+		return eaten;
+	}
+
+	public float getFertility() {
+		return fertility;
+	}
+
+	public void setFertility(float f) {
+		fertility = clamp(f, 0, FERTILITY_MAX);
+	}
+
+	/** Decay (corpses, droppings) enriches the soil. */
+	public void addFertility(float amount) {
+		fertility = clamp(fertility + amount, 0, FERTILITY_MAX);
+	}
+
+	public float getScent(Scent s) {
+		return scents[s.ordinal()];
+	}
+
+	public void addScent(Scent s, float amount) {
+		int i = s.ordinal();
+		scents[i] = clamp(scents[i] + amount, 0, SCENT_MAX);
+	}
+
+	/**
+	 * One environment tick: scents fade, plants grow. Growth is logistic,
+	 * scaled by soil fertility and daylight, and only happens on open floor.
+	 */
+	public void environmentThink(double daylight) {
+		for (Scent s : Scent.values()) {
+			int i = s.ordinal();
+			if (scents[i] > 0) {
+				scents[i] *= s.getDecay();
+				if (scents[i] < SCENT_FLOOR) {
+					scents[i] = 0;
+				}
+			}
+		}
+
+		if (type == TileType.TYPE_FLOOR) {
+			flora = clamp(flora
+					+ FLORA_GROWTH * (float) daylight * fertility * (FLORA_SEED + flora) * (1 - flora),
+					0, 1);
+		}
+	}
+
+	private static float clamp(float v, float lo, float hi) {
+		if (v < lo) {
+			return lo;
+		}
+		if (v > hi) {
+			return hi;
+		}
+		return v;
+	}
+
+	public boolean isWater() {
+		return type == TileType.TYPE_WATER;
+	}
+
 	public boolean isWalkable() {
 		return type.isOpen() && type != TileType.TYPE_HOLE;
 	}
@@ -352,7 +444,9 @@ public class Tile {
 		TYPE_FLOOR(1, true),
 		TYPE_WALL(2, false),
 		TYPE_RAMPUP(3, true),
-		TYPE_RAMPDOWN(4, true);
+		TYPE_RAMPDOWN(4, true),
+		// shallow water: passable (wading), drinkable, nothing grows on it
+		TYPE_WATER(5, true);
 
 		private int value;
 		private boolean open;

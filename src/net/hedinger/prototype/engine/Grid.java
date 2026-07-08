@@ -46,6 +46,17 @@ public class Grid {
 
 	}
 
+	public void environmentThink(double daylight) {
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = tiles[x][y];
+				if (t != null) {
+					t.environmentThink(daylight);
+				}
+			}
+		}
+	}
+
 	public void render(Graphics g, View v, LayerRenderer lr) {
 
 		Graphics2D g2 = (Graphics2D) g;
@@ -74,6 +85,8 @@ public class Grid {
 					null);
 		}
 
+		renderEnvironment(g2, v);
+
 		for (Entity d : doors) {
 			if (d != null) {
 				d.render(g, v);
@@ -85,6 +98,48 @@ public class Grid {
 			}
 		}
 
+	}
+
+	/** Dynamic tile overlays: plant cover, and scent fields in debug view. */
+	private void renderEnvironment(Graphics2D g2, View v) {
+		int windowW = (int) g2.getClipBounds().getMaxX();
+		int windowH = (int) g2.getClipBounds().getMaxY();
+		int ts = Math.round(Utils.scaleZ(level, v.getCamZ()));
+		boolean debug = v.getViewMode() == View.ViewMode.ALL;
+
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = tiles[x][y];
+				if (t == null) {
+					continue;
+				}
+
+				int px = v.pixelX(x, level, 0);
+				int py = v.pixelY(y, level, 0);
+				if (px > windowW || py > windowH || px + ts < 0 || py + ts < 0) {
+					continue;
+				}
+
+				float flora = t.getFlora();
+				if (flora > 0.04f) {
+					g2.setColor(new java.awt.Color(35, 140, 45, (int) (Math.min(1f, flora) * 110)));
+					g2.fillRect(px, py, ts, ts);
+				}
+
+				if (debug) {
+					float fear = t.getScent(Scent.FEAR);
+					if (fear > 0.05f) {
+						g2.setColor(new java.awt.Color(220, 40, 40, (int) (Math.min(1f, fear / 4) * 90)));
+						g2.fillRect(px, py, ts, ts);
+					}
+					float pred = t.getScent(Scent.TRAIL_PREDATOR);
+					if (pred > 0.05f) {
+						g2.setColor(new java.awt.Color(160, 40, 200, (int) (Math.min(1f, pred / 4) * 70)));
+						g2.fillRect(px, py, ts, ts);
+					}
+				}
+			}
+		}
 	}
 
 	public void alignTiles() {

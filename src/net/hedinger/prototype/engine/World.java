@@ -39,6 +39,10 @@ public class World {
 
 	boolean fogofwar = false;
 
+	// simulation clock: ticks since world start; drives the day/night cycle
+	private long time = 0;
+	public static final int DAY_LENGTH = 2400; // ticks per full day
+
 	int peepcount = 0;
 	int peepcount_max = 0;
 	int max_view_depth = 3;
@@ -83,7 +87,29 @@ public class World {
 		}
 	}
 
+	public long getTime() {
+		return time;
+	}
+
+	/**
+	 * @return 0..1 light level; 1 = high noon, 0 = midnight. The world starts
+	 *         at dawn.
+	 */
+	public double getDaylight() {
+		return 0.5 + 0.5 * Math.sin(2 * Math.PI * time / DAY_LENGTH);
+	}
+
+	public boolean isNight() {
+		return getDaylight() < 0.25;
+	}
+
 	public void think() {
+		time++;
+		double daylight = getDaylight();
+		for (int z = 0; z < lvls; z++) {
+			levels[z].environmentThink(daylight);
+		}
+
 		int removecount = 0;
 		for (Entity e : entities.values()) {
 			if (e != null) {
@@ -147,6 +173,13 @@ public class World {
 			if (z < view.getCamZ()) {
 				g2.fillRect(0, 0, (int) g2.getClipBounds().getWidth(), (int) g2.getClipBounds().getHeight());
 			}
+		}
+
+		// night falls over everything
+		int darkness = (int) ((1 - getDaylight()) * 140);
+		if (darkness > 0) {
+			g2.setColor(new Color(10, 10, 45, darkness));
+			g2.fillRect(0, 0, (int) g2.getClipBounds().getWidth(), (int) g2.getClipBounds().getHeight());
 		}
 
 	}

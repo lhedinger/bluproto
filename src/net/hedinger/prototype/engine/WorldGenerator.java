@@ -5,9 +5,12 @@ import static net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE;
 import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN;
 import static net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP;
 import static net.hedinger.prototype.engine.Tile.TileType.TYPE_WALL;
+import static net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import net.hedinger.prototype.engine.Tile.TileType;
@@ -55,6 +58,83 @@ public class WorldGenerator {
 
 		build_doors();
 		removeHolesOverWalls();
+
+		for (int i = 0; i < lvls; i++) {
+			placeWater(i == 0 ? 3 : 1, i);
+			seedFertility(i);
+		}
+	}
+
+	/**
+	 * Carves small ponds into open floor. Water is shallow: passable, but
+	 * nothing grows on it and animals congregate around it to drink.
+	 */
+	public void placeWater(int pools, int z) {
+		int placed = 0;
+		int attempts = 0;
+		while (placed < pools && attempts < 300) {
+			attempts++;
+			int x = 2 + Utils.random(world.cols - 4);
+			int y = 2 + Utils.random(world.rows - 4);
+			if (world.getTile(x, y, z).getType() != TYPE_FLOOR) {
+				continue;
+			}
+
+			double r = 1 + Math.random() * 1.4;
+			for (int dx = -2; dx <= 2; dx++) {
+				for (int dy = -2; dy <= 2; dy++) {
+					if (Math.sqrt(dx * dx + dy * dy) <= r
+							&& world.getTile(x + dx, y + dy, z).getType() == TYPE_FLOOR) {
+						world.setTile(x + dx, y + dy, z, TYPE_WATER);
+					}
+				}
+			}
+			placed++;
+		}
+	}
+
+	/**
+	 * Soil richness falls off with distance from water (a moisture gradient),
+	 * so plant growth clusters into meadows around the ponds. Also seeds the
+	 * initial plant cover so the world doesn't start barren.
+	 */
+	public void seedFertility(int z) {
+		List<int[]> water = new ArrayList<int[]>();
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				if (world.getTile(x, y, z).getType() == TYPE_WATER) {
+					water.add(new int[] { x, y });
+				}
+			}
+		}
+
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = world.getTile(x, y, z);
+				if (t.getType() != TYPE_FLOOR) {
+					continue;
+				}
+
+				double dist = 9999;
+				for (int[] w : water) {
+					double d = world.distance(x, y, 0, w[0], w[1], 0);
+					if (d < dist) {
+						dist = d;
+					}
+				}
+
+				float fertility;
+				if (water.isEmpty()) {
+					fertility = 0.8f;
+				} else {
+					fertility = (float) (0.5 + 1.6 / (1 + dist * 0.35));
+				}
+				fertility = (float) (fertility * (0.85 + Math.random() * 0.3));
+
+				t.setFertility(fertility);
+				t.addFlora((float) (fertility * 0.35 * Math.random()));
+			}
+		}
 	}
 
 	public World getWorld() {

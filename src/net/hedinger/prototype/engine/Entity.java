@@ -121,6 +121,7 @@ public abstract class Entity {
 
 		if (age < -deathspan) {
 			remove = true;
+			onDecayed();
 		}
 
 		if (age >= 0) {
@@ -152,6 +153,16 @@ public abstract class Entity {
 
 	protected void run_extended() {
 		// to be overwritten by other classes
+	}
+
+	/**
+	 * Called once when the corpse has fully decayed and is removed from the
+	 * world. Default: return the body's biomass to the soil.
+	 */
+	protected void onDecayed() {
+		if (world != null && world.isValid(X, Y, Z)) {
+			world.getTile(X, Y, Z).addFertility(getSize() * 10f);
+		}
 	}
 
 	protected void draw_extended(Graphics g) {
