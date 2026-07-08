@@ -73,6 +73,7 @@ mechanics need, with per-instance knobs instead of species constants:
 | `TestNPC.chaser(x, y, z)` | Chases the closest NPC it can perceive |
 | `TestNPC.listener(x, y, z)` | Inert until it hears a `Sound`, then roams (`hasHeard()` to probe) |
 | `TestNPC.mover(x, y, z, heading)` | Walks a straight line (radians, 0 = +x); halts where the engine blocks — ideal for probing passability (doors, walls, ramps) |
+| `TestNPC.genomeDriven(x, y, z, genome)` | Behaviour driven entirely by a `Genome`: reacts to the most salient perceived neighbour (attack/mate/affiliate → chase, flee → flee, else roam). Sources its body stats from the genome and colours its dot by the genome markers; `lastAction()` exposes what it decided |
 
 Lifecycle and body knobs chain fluently:
 

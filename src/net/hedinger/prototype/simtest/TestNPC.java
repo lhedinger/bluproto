@@ -27,7 +27,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME
 	}
 
 	private final Behavior behavior;
@@ -80,6 +80,24 @@ public class TestNPC extends NPC {
 	public static TestNPC mover(double x, double y, double z, double heading) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MOVE);
 		t.D = heading;
+		return t;
+	}
+
+	/**
+	 * Behaviour driven entirely by its {@link Genome}: each tick it reacts to
+	 * the most salient perceived neighbour (attack/mate/affiliate -> chase,
+	 * flee -> flee, nothing -> roam). Sources its body stats from the genome
+	 * and colours its dot by the genome's markers, so similarity is visible.
+	 */
+	public static TestNPC genomeDriven(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.GENOME);
+		t.genome = g;
+		t.size = (int) Math.round(g.size);
+		t.speed = g.speed;
+		t.turn = g.turnRate;
+		t.LOS_RANGE = g.losRange;
+		t.LOS_FOV = g.losFov;
+		t.col = g.toColor();
 		return t;
 	}
 
@@ -148,7 +166,56 @@ public class TestNPC extends NPC {
 		case MOVE:
 			move(speed);
 			return;
+		case GENOME:
+			thinkGenome();
+			return;
 		}
+	}
+
+	/** Reacts to the single most salient perceived neighbour via the genome. */
+	private void thinkGenome() {
+		net.hedinger.prototype.entities.Genome.Action act = net.hedinger.prototype.entities.Genome.Action.IGNORE;
+		NPC subject = null;
+		double best = 0;
+		for (NPC n : targets.values()) {
+			net.hedinger.prototype.entities.Genome og = n.getGenome();
+			if (og == null || n == this) {
+				continue;
+			}
+			double sizeAdv = getSize() / Math.max(1e-6f, n.getSize());
+			net.hedinger.prototype.entities.Genome.Relation r = genome.react(og, sizeAdv);
+			if (r.strength() > best) {
+				best = r.strength();
+				act = r.action;
+				subject = n;
+			}
+		}
+		lastAction = act;
+		if (subject == null) {
+			roam(speed, turn);
+			return;
+		}
+		switch (act) {
+		case ATTACK:
+		case AFFILIATE:
+		case MATE:
+			lockTarget(subject);
+			chase(speed, turn);
+			return;
+		case FLEE:
+			flee(speed, turn, subject, 0.25);
+			return;
+		default:
+			roam(speed, turn);
+		}
+	}
+
+	private net.hedinger.prototype.entities.Genome.Action lastAction =
+			net.hedinger.prototype.entities.Genome.Action.IGNORE;
+
+	/** The action this genome-driven NPC took on its last think (for tests/overlay). */
+	public net.hedinger.prototype.entities.Genome.Action lastAction() {
+		return lastAction;
 	}
 
 	@Override
@@ -158,6 +225,16 @@ public class TestNPC extends NPC {
 
 	/** One-line state summary for the snapshot debug overlay. */
 	public String debugLabel() {
+		if (behavior == Behavior.GENOME) {
+			StringBuilder s = new StringBuilder(lastAction.name().toLowerCase());
+			if (getAttachTarget() != null) {
+				s.append(" carried");
+			}
+			if (isDead()) {
+				s.append(" dead");
+			}
+			return s.toString();
+		}
 		StringBuilder s = new StringBuilder(behavior.name().toLowerCase());
 		if (flying) {
 			s.append(" fly");

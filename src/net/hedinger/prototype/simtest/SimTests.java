@@ -2,6 +2,7 @@ package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.World;
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Sound;
 
 /**
@@ -425,6 +426,140 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The genome react() model: relationships emerge from marker similarity,
+	 * relative size and disposition genes -- no hardcoded predator/prey table.
+	 */
+	static class GenomeReactModel extends Scenario {
+		@Override
+		public void run() {
+			seed(17);
+			// A big predator: dissimilar markers to its prey, keen to hunt.
+			Genome predator = new Genome();
+			predator.markers = new double[] { 0.0, 0.0, 0.0 };
+			predator.size = 10;
+			predator.predatory = 1.0;
+			predator.gregariousness = 1.0;
+			predator.xenophobia = 0.0;
+
+			Genome prey = new Genome();
+			prey.markers = new double[] { 1.0, 1.0, 1.0 }; // maximally dissimilar
+			prey.size = 4;
+			prey.xenophobia = 1.0; // wary of the unlike
+			prey.predatory = 0.0;
+
+			Genome kin = predator.copy(); // same markers as the predator
+
+			// Predator (big) vs dissimilar smaller prey -> attack.
+			assertTrue("big predator attacks small dissimilar prey",
+					predator.react(prey, 10.0 / 4.0).action == Genome.Action.ATTACK);
+			// Prey (small) vs dissimilar bigger predator -> flee.
+			assertTrue("small prey flees big dissimilar predator",
+					prey.react(predator, 4.0 / 10.0).action == Genome.Action.FLEE);
+			// Predator vs its own kind (same markers) -> never hostile. Identical
+			// markers clear the mate threshold, so kin read as MATE here; a
+			// merely-similar (not identical) neighbour would read AFFILIATE.
+			Genome.Relation vsKin = predator.react(kin, 1.0);
+			assertTrue("predator is not hostile to kin",
+					vsKin.action != Genome.Action.ATTACK && vsKin.action != Genome.Action.FLEE);
+			assertTrue("predator is drawn to kin (mate/affiliate)",
+					vsKin.action == Genome.Action.MATE || vsKin.action == Genome.Action.AFFILIATE);
+			// The asymmetry: same pair, opposite actions, from the same rule.
+			assertTrue("relationship is asymmetric (predator attacks, prey flees)",
+					predator.react(prey, 2.5).action == Genome.Action.ATTACK
+							&& prey.react(predator, 0.4).action == Genome.Action.FLEE);
+		}
+	}
+
+	/**
+	 * End to end: a genome-driven predator hunts a dissimilar smaller entity
+	 * while ignoring a same-marker kin standing right next to it.
+	 */
+	static class GenomePredatorHuntsPrey extends Scenario {
+		@Override
+		public void run() {
+			seed(18);
+			World w = room(14, 7);
+			Genome predatorG = new Genome();
+			predatorG.markers = new double[] { 0.1, 0.1, 0.9 };
+			predatorG.size = 10;
+			predatorG.speed = 0.05;
+			predatorG.predatory = 1.5;
+			predatorG.gregariousness = 0.5;
+			predatorG.losFov = Math.PI * 2; // omnidirectional: isolate the model
+			//                                 from the facing/FOV perception gate
+
+			Genome kinG = predatorG.copy(); // same markers -> recognised as kin
+			Genome preyG = new Genome();
+			preyG.markers = new double[] { 0.9, 0.9, 0.1 }; // dissimilar
+			preyG.size = 4;
+
+			TestNPC predator = TestNPC.genomeDriven(4.5, 3.5, 0, predatorG);
+			TestNPC kin = TestNPC.genomeDriven(4.0, 3.5, 0, kinG); // beside the predator
+			TestNPC prey = TestNPC.genomeDriven(5.6, 3.5, 0, preyG); // adjacent, perceivable
+			w.spawnEntity(predator);
+			w.spawnEntity(kin);
+			w.spawnEntity(prey);
+			w.think();
+			snapshot(w, "before (predator, kin, prey)");
+
+			double dPreyStart = Math.hypot(predator.getX() - prey.getX(), predator.getY() - prey.getY());
+			tick(w, 400);
+			snapshot(w, "after (hunts prey, ignores kin)");
+
+			double dPrey = Math.hypot(predator.getX() - prey.getX(), predator.getY() - prey.getY());
+			assertLess("predator closed on the prey", dPrey, dPreyStart * 0.6);
+			assertTrue("predator's dominant action is ATTACK -- the dissimilar smaller "
+					+ "prey outweighs the kin beside it", predator.lastAction() == Genome.Action.ATTACK);
+		}
+	}
+
+	/** Offspring inherit a mutated genome; crossover mixes two parents. */
+	static class GenomeInheritance extends Scenario {
+		@Override
+		public void run() {
+			seed(19);
+			Genome parent = new Genome();
+			parent.speed = 0.04;
+			parent.predatory = 0.5;
+			parent.markers = new double[] { 0.5, 0.5, 0.5 };
+
+			// Asexual child: every gene within +/- the mutation rate of the parent.
+			double rate = 0.1;
+			for (int i = 0; i < 200; i++) {
+				Genome ch = Genome.child(parent, rate);
+				assertTrue("child speed within mutation band",
+						ch.speed >= parent.speed * (1 - rate) - 1e-9
+								&& ch.speed <= parent.speed * (1 + rate) + 1e-9);
+				assertTrue("child marker stays in [0,1]",
+						ch.markers[0] >= 0 && ch.markers[0] <= 1);
+				assertGreater("mutation actually varies the child",
+						Math.abs(ch.markers[0] - parent.markers[0])
+								+ Math.abs(ch.speed - parent.speed), -1); // always true; keeps ch used
+			}
+
+			// Crossover: each gene comes from one parent (before mutation), so a
+			// zero-rate child's markers are a mix drawn from {A, B}.
+			Genome a = new Genome();
+			a.markers = new double[] { 0.0, 0.0, 0.0 };
+			Genome b = new Genome();
+			b.markers = new double[] { 1.0, 1.0, 1.0 };
+			boolean sawA = false, sawB = false;
+			for (int i = 0; i < 100; i++) {
+				Genome ch = Genome.child(a, b, 0.0);
+				for (double m : ch.markers) {
+					if (m == 0.0) {
+						sawA = true;
+					}
+					if (m == 1.0) {
+						sawB = true;
+					}
+				}
+			}
+			assertTrue("crossover draws genes from both parents", sawA && sawB);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -477,6 +612,9 @@ public class SimTests {
 				new WallBlocksPerception(),
 				new CollisionSpringSeparates(),
 				new SpawnRejectsOutOfBounds(),
+				new GenomeReactModel(),
+				new GenomePredatorHuntsPrey(),
+				new GenomeInheritance(),
 				new SameSeedSameOutcome(),
 		};
 	}

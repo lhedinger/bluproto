@@ -34,6 +34,13 @@ public abstract class NPC extends Entity {
 	protected int size;
 	protected Color col = Color.ORANGE;
 
+	/** Heritable trait vector; null for species that do not use one (yet). */
+	protected Genome genome = null;
+
+	public Genome getGenome() {
+		return genome;
+	}
+
 	private int blink_random = 0;
 	private int blink_on = 50;
 	private int blink_off = 5;
