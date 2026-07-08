@@ -28,6 +28,15 @@ public class Sound extends Entity {
 		deathspan = 2048;
 	}
 
+	/**
+	 * @param radius
+	 *            how far the sound carries (tiles); default is 5
+	 */
+	public Sound(double x, double y, double z, double radius) {
+		this(x, y, z);
+		this.radius = radius;
+	}
+
 	@Override
 	protected void think() {
 		if (age >= lifespan) {
@@ -81,7 +90,7 @@ public class Sound extends Entity {
 
 	@Override
 	public String getEntityTypeName() {
-		return "Bullet";
+		return "Sound";
 	}
 
 }

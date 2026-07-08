@@ -4,9 +4,12 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -14,6 +17,16 @@ import java.util.TreeMap;
 import net.hedinger.prototype.entities.NPC;
 
 public class World {
+
+	/**
+	 * Observer hook for simulation events. Registered via
+	 * {@link World#addListener(WorldListener)}.
+	 */
+	public interface WorldListener {
+		void onSpawn(Entity e);
+
+		void onDeath(Entity e);
+	}
 
 	Grid[] levels;
 	int cols;
@@ -32,6 +45,7 @@ public class World {
 
 	HashMap<Integer, Entity> entities;
 	HashSet<Entity> spawnQueue;
+	private final List<WorldListener> listeners = new ArrayList<WorldListener>();
 
 	public World(int c, int r, int l) {
 
@@ -76,6 +90,12 @@ public class World {
 				if (!e.run()) {
 					removecount++;
 				}
+				if (e.isDead() && !e.deathNotified) {
+					e.deathNotified = true;
+					for (WorldListener l : listeners) {
+						l.onDeath(e);
+					}
+				}
 			}
 		}
 
@@ -103,6 +123,9 @@ public class World {
 				if (e != null) {
 					entities.put(e.getID(), e);
 					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
+					for (WorldListener l : listeners) {
+						l.onSpawn(e);
+					}
 				}
 			}
 			spawnQueue = null;
@@ -157,6 +180,44 @@ public class World {
 		spawnQueue.add(e);
 
 		return true;
+	}
+
+	public void addListener(WorldListener l) {
+		if (l != null && !listeners.contains(l)) {
+			listeners.add(l);
+		}
+	}
+
+	public void removeListener(WorldListener l) {
+		listeners.remove(l);
+	}
+
+	/**
+	 * Resolves an entity ID (as stored in tiles and returned by the radial
+	 * queries) back to the live Entity.
+	 *
+	 * @return the entity, or null if unknown or already removed
+	 */
+	public Entity getEntity(int id) {
+		Entity e = entities.get(id);
+		if (e == null || e.isRemoved()) {
+			return null;
+		}
+		return e;
+	}
+
+	public Collection<Entity> getEntities() {
+		return entities.values();
+	}
+
+	public int getEntityCount() {
+		int count = 0;
+		for (Entity e : entities.values()) {
+			if (e != null && !e.isRemoved()) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	public Set<Integer> getRadialEntities(double tx, double ty, double tz, double radius) {
@@ -282,6 +343,10 @@ public class World {
 		return fogofwar;
 	}
 
+	public void setFog(boolean fog) {
+		fogofwar = fog;
+	}
+
 	/**
 	 * Looks for any visible Entity (follows LOS protocols)
 	 *
@@ -368,7 +433,7 @@ public class World {
 		}
 
 		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
-		Set<Integer> ents = getRadialEntities(x, y, z, 1);
+		Set<Integer> ents = getRadialEntities(x, y, z, Math.max(1, range));
 		for (Integer i : ents) {
 			Entity e = entities.get(i);
 			if (e != null && e.getLvl() == (int) z) {
@@ -413,7 +478,7 @@ public class World {
 	 */
 	public boolean hasLOS(double x, double y, double z, double dir, double tx, double ty, double tz, double range,
 			double fov) {
-		if ((int) z != (int) z) {
+		if ((int) z != (int) tz) {
 			return false;
 		}
 		if (!isValid(x, y, z)) {
@@ -626,7 +691,6 @@ public class World {
 			return null;
 		}
 
-		stack.push(i);
 		while (i != null) {
 			stack.push(i);
 			i = camefrom.get(i);

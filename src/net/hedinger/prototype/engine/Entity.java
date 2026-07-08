@@ -25,6 +25,7 @@ public abstract class Entity {
 	protected int deathspan = 0; // disappear after death
 	protected boolean remove = false;
 	protected boolean selected = false;
+	boolean deathNotified = false; // world has fired onDeath for this entity
 
 	private Entity attachTarget = null;
 	private double attachAngle = 0;

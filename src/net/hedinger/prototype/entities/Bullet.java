@@ -16,7 +16,7 @@ public class Bullet extends Entity {
 
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
 	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Weapon", "Entity.Grenade",
-	"Entity.Explosion" };
+	"Entity.Explosion", "Entity.Sound" };
 	private int length = 10;
 
 	public Bullet(double x, double y, double z, double d) {

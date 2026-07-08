@@ -14,7 +14,8 @@ public class Explosion extends Entity {
 	private static int EXPLOSION_DMG = 200;
 
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
-	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Bullet", "Entity.Grenade" };
+	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Bullet", "Entity.Grenade",
+			"Entity.Sound" };
 
 	public Explosion(double x, double y, double z) {
 
@@ -81,7 +82,7 @@ public class Explosion extends Entity {
 
 	@Override
 	public String getEntityTypeName() {
-		return "Bullet";
+		return "Explosion";
 	}
 
 }

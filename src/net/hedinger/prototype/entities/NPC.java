@@ -524,33 +524,17 @@ public abstract class NPC extends Entity {
 
 	protected boolean flee(double speed, int turn, Entity e, double radius) {
 
-		double angle = Math.atan2(Y - tY, X - tX) + Math.PI;
-
-		if (angle > 2 * Math.PI) {
-			angle -= 2 * Math.PI;
+		// escape vector points from the threat through us; fall back to the
+		// last locked target position when no live threat is given
+		double away;
+		if (e != null) {
+			away = Math.atan2(Y - e.getY(), X - e.getX());
+		} else {
+			away = Math.atan2(Y - tY, X - tX);
 		}
-		if (angle < 0) {
-			angle += 2 * Math.PI;
-		}
+		away = World.fixAngle(away);
 
-		double dA = angle - D + Math.PI;
-
-		if (dA > Math.PI) {
-			dA = -2 * Math.PI + dA;
-		}
-		if (dA < -Math.PI) {
-			dA = 2 * Math.PI + dA;
-		}
-
-		double dir = D;
-
-		if (dA > 0) {
-			dir += (Math.sqrt(Math.abs(dA)) / turn);
-		} else if (dA < 0) {
-			dir -= (Math.sqrt(Math.abs(dA)) / turn);
-		}
-
-		roam(speed, turn, dir);
+		roam(speed, turn, away);
 
 		return true;
 	}
@@ -1145,6 +1129,9 @@ public abstract class NPC extends Entity {
 			return false;
 		}
 		if (t.isDead()) {
+			return false;
+		}
+		if (range >= 0 && distance(t) > range) {
 			return false;
 		}
 		if (!World.filterType(t.getEntityTypeName(), types, include)) {

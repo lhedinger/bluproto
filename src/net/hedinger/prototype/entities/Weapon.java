@@ -85,6 +85,8 @@ public abstract class Weapon extends Entity
 			fire = fire_delay;
 			clip--;
 			fire(owner.getWorld());
+			// gunfire is loud: wakes dormant creatures and draws scavengers
+			owner.getWorld().spawnEntity(new Sound(X, Y, Z, 8));
 		}
 
 		fire--;
