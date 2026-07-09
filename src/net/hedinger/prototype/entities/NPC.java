@@ -1299,6 +1299,54 @@ public abstract class NPC extends Entity {
 		return eaten;
 	}
 
+	/** Lays pheromone on the tile underfoot (stigmergic marking). */
+	protected void depositPheromone(double amount) {
+		World w = getWorld();
+		if (w != null) {
+			w.getTile(X, Y, Z).deposit(w.getTick(), amount);
+		}
+	}
+
+	/** Pheromone level on the tile underfoot. */
+	protected double sensePheromone() {
+		World w = getWorld();
+		return w == null ? 0 : w.getTile(X, Y, Z).getPheromone(w.getTick());
+	}
+
+	/**
+	 * Heading toward the strongest pheromone tile within {@code radius}, for
+	 * homing to a nest. Returns {@code NaN} when this tile is already the local
+	 * peak (or nothing is marked) -- i.e. "you are at the nest".
+	 */
+	protected double nestDirection(int radius) {
+		World w = getWorld();
+		if (w == null) {
+			return Double.NaN;
+		}
+		long now = w.getTick();
+		int cx = (int) X, cy = (int) Y, cz = (int) Z;
+		double best = w.getTile(cx, cy, cz).getPheromone(now);
+		int bx = cx, by = cy;
+		for (int dx = -radius; dx <= radius; dx++) {
+			for (int dy = -radius; dy <= radius; dy++) {
+				int tx = cx + dx, ty = cy + dy;
+				if (!w.isValid(tx, ty, cz)) {
+					continue;
+				}
+				double p = w.getTile(tx, ty, cz).getPheromone(now);
+				if (p > best) {
+					best = p;
+					bx = tx;
+					by = ty;
+				}
+			}
+		}
+		if (bx == cx && by == cy) {
+			return Double.NaN; // already at the peak
+		}
+		return Math.atan2((by + 0.5) - Y, (bx + 0.5) - X);
+	}
+
 	/** Overridden by entities that can breed: a fresh offspring, or null. */
 	protected NPC spawnOffspring() {
 		return null;

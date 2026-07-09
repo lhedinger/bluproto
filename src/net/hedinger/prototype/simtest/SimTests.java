@@ -800,6 +800,74 @@ public class SimTests {
 		}
 	}
 
+	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
+	static class PheromoneDecays extends Scenario {
+		@Override
+		public void run() {
+			seed(40);
+			World w = room(5, 5);
+			tick(w, 1);
+			Tile t = w.getTile(2, 2, 0);
+			t.deposit(w.getTick(), 10.0);
+			double p0 = t.getPheromone(w.getTick());
+			assertNear("deposited pheromone is present", 10.0, p0, 1e-9);
+			tick(w, 200);
+			double p1 = t.getPheromone(w.getTick());
+			assertLess("pheromone evaporated substantially", p1, p0 * 0.5);
+			assertGreater("but has not vanished instantly", p1, 0.0);
+		}
+	}
+
+	/**
+	 * Stigmergic nesting: nesters lay pheromone where they breed, so a peak --
+	 * an emergent nest -- builds up, and the growing lineage clusters around it
+	 * instead of smearing across the map.
+	 */
+	static class NestEmergesFromPheromone extends Scenario {
+		@Override
+		public void run() {
+			seed(41);
+			World w = room(14, 14); // full grass
+			for (int i = 0; i < 2; i++) {
+				Genome g = new Genome();
+				g.markers = new double[] { 0.9, 0.2, 0.6 };
+				w.spawnEntity(TestNPC.nester(6.5 + i, 6.5 + i, 0, g));
+			}
+			w.think();
+			int start = w.getAliveCount();
+			snapshot(w, "founders");
+			tick(w, 800);
+			snapshot(w, "after (colony around the nest)");
+
+			// The nest is the strongest pheromone tile.
+			double maxP = 0;
+			int nx = 0, ny = 0;
+			for (int c = 1; c < w.getColums() - 1; c++) {
+				for (int r = 1; r < w.getRows() - 1; r++) {
+					double p = w.getTile(c, r, 0).getPheromone(w.getTick());
+					if (p > maxP) {
+						maxP = p;
+						nx = c;
+						ny = r;
+					}
+				}
+			}
+			assertGreater("the population grew by breeding", w.getAliveCount(), start);
+			assertGreater("a pheromone nest built up", maxP, 4.0);
+
+			// The living colony clusters near that nest.
+			double sum = 0;
+			int n = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
+					sum += Math.hypot(e.getX() - (nx + 0.5), e.getY() - (ny + 0.5));
+					n++;
+				}
+			}
+			assertLess("the colony clusters around the nest", sum / n, 4.0);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -864,6 +932,8 @@ public class SimTests {
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),
+				new PheromoneDecays(),
+				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
 		};
 	}

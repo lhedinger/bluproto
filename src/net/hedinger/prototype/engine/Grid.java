@@ -122,6 +122,14 @@ public class Grid {
 				default:
 					break;
 				}
+				// Pheromone on top of the ground, as a magenta wash: bright blobs
+				// are nests, faint smears are trails.
+				double ph = t.getPheromone(now);
+				if (ph > 0.05) {
+					int a = (int) Math.min(220, ph * 90);
+					g2.setColor(new Color(230, 40, 190, a));
+					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+				}
 			}
 		}
 	}

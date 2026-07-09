@@ -27,11 +27,15 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST
 	}
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
+	/** Pheromone laid on the nest tile at each birth; >> per-tick evaporation. */
+	private static final double NEST_DEPOSIT = 8.0;
+	/** How far a nester can smell its nest when homing to breed. */
+	private static final int NEST_SENSE_R = 8;
 
 	private final Behavior behavior;
 	private double speed = 0.04;
@@ -106,6 +110,25 @@ public class TestNPC extends NPC {
 	 */
 	public static TestNPC breeder(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.BREEDER);
+		configureGenomeBody(t, g);
+		return t;
+	}
+
+	/**
+	 * A breeder that nests: as it forages it is like any breeder, but when it is
+	 * ready to reproduce it homes up the pheromone gradient to its nest, lays a
+	 * strong pheromone blob, and births the child there. The nest is not an
+	 * object -- it is the emergent pheromone peak the lineage keeps reinforcing,
+	 * so descendants cluster into a colony.
+	 */
+	public static TestNPC nester(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.NEST);
+		configureGenomeBody(t, g);
+		t.reproThreshold = 3.0; // bank a buffer to cover the trip home
+		return t;
+	}
+
+	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
 		t.size = (int) Math.round(g.size);
 		t.speed = g.speed;
@@ -113,7 +136,6 @@ public class TestNPC extends NPC {
 		t.metabolic = true;
 		t.energy = 1.0;
 		t.col = g.toColor();
-		return t;
 	}
 
 	/**
@@ -208,6 +230,9 @@ public class TestNPC extends NPC {
 		case BREEDER:
 			thinkBreeder();
 			return;
+		case NEST:
+			thinkNester();
+			return;
 		}
 	}
 
@@ -223,13 +248,41 @@ public class TestNPC extends NPC {
 		}
 	}
 
+	private boolean homing = false;
+
+	/** Forages; when ready to breed, commits to homing and births at the nest. */
+	private void thinkNester() {
+		double intake = graze(GRAZE_DEMAND);
+		totalIntake += intake;
+		if (!homing && energy >= reproThreshold && reproCooldown == 0) {
+			homing = true; // commit -- don't flip back to foraging mid-trip
+		}
+		if (homing) {
+			double home = nestDirection(NEST_SENSE_R);
+			if (Double.isNaN(home) || sensePheromone() > 1.0) {
+				// At (or in) the nest: reinforce the mark and breed here.
+				depositPheromone(NEST_DEPOSIT);
+				tryReproduce();
+				homing = false;
+			} else {
+				move(speed, home); // walk home up the pheromone gradient
+			}
+			return;
+		}
+		if (intake < GRAZE_DEMAND * 0.15) {
+			roam(speed, turn);
+		}
+	}
+
 	@Override
 	protected net.hedinger.prototype.entities.NPC spawnOffspring() {
 		if (genome == null) {
 			return null;
 		}
 		// Asexual: a mutated copy of this genome, born at the parent's spot.
-		return breeder(X, Y, Z, net.hedinger.prototype.entities.Genome.child(genome, 0.1));
+		net.hedinger.prototype.entities.Genome childG =
+				net.hedinger.prototype.entities.Genome.child(genome, 0.1);
+		return behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
 	}
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */
@@ -315,7 +368,7 @@ public class TestNPC extends NPC {
 		if (behavior == Behavior.GRAZE) {
 			s.append(" ate ").append(String.format("%.2f", totalIntake));
 		}
-		if (behavior == Behavior.BREEDER) {
+		if (behavior == Behavior.BREEDER || behavior == Behavior.NEST) {
 			s.append(String.format(" e%.1f", getEnergy()));
 		}
 		if (flying) {

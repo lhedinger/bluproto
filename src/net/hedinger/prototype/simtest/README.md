@@ -82,6 +82,7 @@ static class ChaserClosesIn extends Scenario {
 | `genomeDriven(x,y,z,genome)` | Reacts via a `Genome` (attack/mate/affiliate→chase, flee→flee, else roam); `lastAction()` |
 | `grazer(x,y,z)` | Eats vegetation underfoot (`NPC.graze`); `totalIntake()` |
 | `breeder(x,y,z,genome)` | Metabolic grazer: burns energy, starves at 0, buds a mutated child when fed (the evolutionary loop); `getEnergy()` |
+| `nester(x,y,z,genome)` | A breeder that lays pheromone where it breeds and homes back to it — so an **emergent nest** (pheromone peak) forms and the lineage clusters into a colony |
 
 Fluent knobs chain: `.withHealth(n)`, `.withLifespan(n)`, `.withDeathspan(n)`,
 `.withSpeed(s)`, `.withSize(px)`, `.withFlying()`.
@@ -127,3 +128,7 @@ closed-door bars, and every level side-by-side.
   burn energy and starve; every other NPC ignores the economy entirely, so the
   bestiary and determinism are unaffected. `graze()` feeds energy; metabolism
   (the genome's rate) drains it in `run_extended`, before the think cycle.
+- **Pheromone is lazy + diffusion-free.** `Tile.getPheromone(now)` decays in
+  closed form (`stored · PHERO_DECAY^Δt`) off the world clock; `deposit()` adds
+  to it. There is no spreading sweep — homing (`NPC.nestDirection`) samples a
+  tile neighbourhood for the strongest cell, so nests are local peaks.

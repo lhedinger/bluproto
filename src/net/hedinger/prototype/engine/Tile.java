@@ -42,6 +42,29 @@ public class Tile {
 	// so the map has rich and poor habitats instead of uniform pasture.
 	private double fertility = 1.0;
 
+	// --- pheromone (stigmergic marking) ------------------------------------
+	// Entities deposit pheromone as they move; it evaporates exponentially.
+	// Where deposition outruns decay a peak builds up -- an emergent nest that
+	// the lineage homes back to. Decay is lazy closed-form (value * decay^dt),
+	// so, like vegetation, a tile costs nothing until touched or drawn.
+	public static final double PHERO_DECAY = 0.99; // retained per tick
+	private double pheroStored = 0;
+	private long pheroTick = 0;
+
+	/** Current pheromone level, evaporated lazily to {@code now}. */
+	public double getPheromone(long now) {
+		if (pheroStored <= 0) {
+			return 0;
+		}
+		return pheroStored * Math.pow(PHERO_DECAY, now - pheroTick);
+	}
+
+	/** Lays down {@code amount} of pheromone on this tile. */
+	public void deposit(long now, double amount) {
+		pheroStored = getPheromone(now) + amount;
+		pheroTick = now;
+	}
+
 	public double getFertility() {
 		return fertility;
 	}
