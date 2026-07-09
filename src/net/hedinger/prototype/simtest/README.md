@@ -81,6 +81,7 @@ static class ChaserClosesIn extends Scenario {
 | `mover(x,y,z,heading)` | Straight line; halts at blockers — probes passability |
 | `genomeDriven(x,y,z,genome)` | Reacts via a `Genome` (attack/mate/affiliate→chase, flee→flee, else roam); `lastAction()` |
 | `grazer(x,y,z)` | Eats vegetation underfoot (`NPC.graze`); `totalIntake()` |
+| `breeder(x,y,z,genome)` | Metabolic grazer: burns energy, starves at 0, buds a mutated child when fed (the evolutionary loop); `getEnergy()` |
 
 Fluent knobs chain: `.withHealth(n)`, `.withLifespan(n)`, `.withDeathspan(n)`,
 `.withSpeed(s)`, `.withSize(px)`, `.withFlying()`.
@@ -122,3 +123,7 @@ closed-door bars, and every level side-by-side.
   `speedFactor()` drags a mover to 0.4×. `TYPE_COVER` is walkable but
   `blocksSight()` — an entity standing in it is invisible to perception (LOS is
   blocked into/through it). Place them with `w.setTile(x, y, z, type)`.
+- **Energy is opt-in.** Only entities with `metabolic = true` (e.g. `breeder`)
+  burn energy and starve; every other NPC ignores the economy entirely, so the
+  bestiary and determinism are unaffected. `graze()` feeds energy; metabolism
+  (the genome's rate) drains it in `run_extended`, before the think cycle.

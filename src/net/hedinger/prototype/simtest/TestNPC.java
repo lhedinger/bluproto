@@ -27,7 +27,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER
 	}
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
@@ -95,6 +95,24 @@ public class TestNPC extends NPC {
 	public static TestNPC grazer(double x, double y, double z) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.GRAZE);
 		t.speed = 0.02;
+		return t;
+	}
+
+	/**
+	 * A metabolic herbivore that evolves: it grazes for energy, burns it each
+	 * tick, starves at zero, and buds a mutated child once well-fed. Offspring
+	 * inherit a mutated copy of its {@link Genome}, so a fed population grows and
+	 * drifts. The whole energy/reproduction loop in one fixture.
+	 */
+	public static TestNPC breeder(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.BREEDER);
+		t.genome = g;
+		t.size = (int) Math.round(g.size);
+		t.speed = g.speed;
+		t.turn = g.turnRate;
+		t.metabolic = true;
+		t.energy = 1.0;
+		t.col = g.toColor();
 		return t;
 	}
 
@@ -187,7 +205,31 @@ public class TestNPC extends NPC {
 		case GRAZE:
 			thinkGraze();
 			return;
+		case BREEDER:
+			thinkBreeder();
+			return;
 		}
+	}
+
+	/** Grazes for energy and buds a mutated child once well-fed. */
+	private void thinkBreeder() {
+		double intake = graze(GRAZE_DEMAND); // feeds energy
+		totalIntake += intake;
+		if (tryReproduce()) {
+			return;
+		}
+		if (intake < GRAZE_DEMAND * 0.15) {
+			roam(speed, turn); // patch thinning -> find fresh grass
+		}
+	}
+
+	@Override
+	protected net.hedinger.prototype.entities.NPC spawnOffspring() {
+		if (genome == null) {
+			return null;
+		}
+		// Asexual: a mutated copy of this genome, born at the parent's spot.
+		return breeder(X, Y, Z, net.hedinger.prototype.entities.Genome.child(genome, 0.1));
 	}
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */
@@ -272,6 +314,9 @@ public class TestNPC extends NPC {
 		StringBuilder s = new StringBuilder(behavior.name().toLowerCase());
 		if (behavior == Behavior.GRAZE) {
 			s.append(" ate ").append(String.format("%.2f", totalIntake));
+		}
+		if (behavior == Behavior.BREEDER) {
+			s.append(String.format(" e%.1f", getEnergy()));
 		}
 		if (flying) {
 			s.append(" fly");

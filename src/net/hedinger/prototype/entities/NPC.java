@@ -37,6 +37,25 @@ public abstract class NPC extends Entity {
 	protected int maxAge = 3000; // ticks before old age; sourced from the genome
 	protected Color col = Color.ORANGE;
 
+	// --- energy economy (opt-in: only entities that set `metabolic` take part) ---
+	// Energy is in vegetation units: graze() feeds it, metabolism burns it each
+	// tick, and an entity that hits zero starves. Real species leave `metabolic`
+	// false, so their behaviour and determinism are untouched.
+	protected boolean metabolic = false;
+	protected double energy = 1.0;
+	protected double reproThreshold = 2.0; // energy needed to bud an offspring
+	protected double reproCost = 1.0; // energy spent per offspring
+	protected int reproCooldown = 0; // ticks until able to reproduce again
+	protected static final int REPRO_COOLDOWN = 100;
+
+	public double getEnergy() {
+		return energy;
+	}
+
+	private double metabolismRate() {
+		return genome != null ? genome.metabolism : 0.02;
+	}
+
 	/** Heritable trait vector; null for species that do not use one (yet). */
 	protected Genome genome = null;
 
@@ -162,6 +181,19 @@ public abstract class NPC extends Entity {
 			D += 2 * Math.PI;
 		}
 
+		// Energy economy: metabolic entities burn energy each tick and starve
+		// at zero. run_extended() runs before the age/think cycle, so a starved
+		// entity is dead before it thinks this tick.
+		if (metabolic && age >= 0) {
+			if (reproCooldown > 0) {
+				reproCooldown--;
+			}
+			energy -= metabolismRate();
+			if (energy <= 0) {
+				energy = 0;
+				kill(); // starved
+			}
+		}
 	}
 
 	@Override
@@ -1262,7 +1294,32 @@ public abstract class NPC extends Entity {
 		if (w == null) {
 			return 0;
 		}
-		return w.getTile(X, Y, Z).graze(w.getTick(), demand);
+		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), demand);
+		energy += eaten; // grass -> energy
+		return eaten;
+	}
+
+	/** Overridden by entities that can breed: a fresh offspring, or null. */
+	protected NPC spawnOffspring() {
+		return null;
+	}
+
+	/**
+	 * Buds an offspring when well-fed and off cooldown: spawns the child, pays
+	 * {@code reproCost}, and starts a cooldown. Returns true if it reproduced.
+	 */
+	protected boolean tryReproduce() {
+		if (!metabolic || reproCooldown > 0 || energy < reproThreshold) {
+			return false;
+		}
+		NPC child = spawnOffspring();
+		if (child == null) {
+			return false;
+		}
+		energy -= reproCost;
+		reproCooldown = REPRO_COOLDOWN;
+		getWorld().spawnEntity(child);
+		return true;
 	}
 
 	public boolean grab(Entity ent) {

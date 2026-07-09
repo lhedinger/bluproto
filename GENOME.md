@@ -63,8 +63,11 @@ Mutation draws from the **seeded RNG**, so evolution is fully reproducible.
   every disposition at their defaults (all `0`), so `react()` between two real
   animals returns `IGNORE`. Targeting still runs on the old string arrays
   (`HOUNDEYE_ENEMIES`, …).
-- ❌ **Inheritance wired to zero spawn points** — `child()` exists but nothing calls
-  it, so nothing evolves yet.
+- ✅ **Asexual inheritance runs** — the energy economy (`NPC.metabolic`) plus
+  `tryReproduce()` → `spawnOffspring()` → `Genome.child(parent)` gives a working
+  evolutionary loop for the `breeder` fixture: fed populations grow and drift
+  (`PopulationGrowsWithFood`). Not yet wired into real species (needs Step 2/3)
+  or sexual mating.
 
 ---
 

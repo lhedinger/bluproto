@@ -68,17 +68,19 @@ The environment has a *write* side (grass grows, fertility varies) but entities
 lack the *read* side and the *economy* that give it stakes. These ship
 alongside the tiers:
 
+- ✅ **Energy / metabolism.** Opt-in energy pool on `NPC` (`metabolic`): `graze()`
+  feeds it, the genome's `metabolism` drains it each tick, zero = starve. Real
+  species leave it off, so they're unaffected.
+- ✅ **Reproduction (asexual).** `tryReproduce()` + `spawnOffspring()` bud a
+  mutated `Genome.child(parent)` when a metabolic entity is well-fed and off
+  cooldown. The `breeder` fixture runs the full loop; a fed population grows and
+  drifts (`PopulationGrowsWithFood`). *Evolution is on.*
+- ▶ **Sexual reproduction.** `canMate(other)` (mate drive + energy + cooldown)
+  and crossover `Genome.child(mom, dad)` — the assortative-mating path to true
+  speciation. Next up.
 - **Environment sensing.** Entities can't perceive fields — `graze()` eats
   blindly. Add `senseVegetation()` / `senseFertility()` / `senseTemperature()` /
-  `senseScent(dir)` so behaviour can *steer toward* food, warmth, trails. Every
-  environment tier needs a matching sense API or entities can't respond to it.
-- **Energy / metabolism.** No cost → no selection. Add an `energy` pool, a
-  per-tick `metabolism` drain (the gene already exists in `Genome`, unused), and
-  `starve()`. Closes the loop: grass → energy → survival.
-- **Reproduction.** `Genome.child()` is built but **wired to zero spawn points**.
-  Add `reproduce(mate)` / `spawnOffspring(genome)` and a working `canMate(other)`
-  (mate drive + cooldown), so heritable variation actually flows to offspring.
-  *This is the keystone that turns "genome" into "evolution."*
+  `senseScent(dir)` so behaviour can *steer toward* food, warmth, trails.
 
 ---
 

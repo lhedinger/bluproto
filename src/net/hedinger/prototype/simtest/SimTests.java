@@ -750,6 +750,56 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Energy economy: a metabolic entity with no food burns its energy down and
+	 * starves. This is the cost side that makes fitness mean something.
+	 */
+	static class StarvesWithoutFood extends Scenario {
+		@Override
+		public void run() {
+			seed(30);
+			World w = room(5, 5);
+			for (int x = 1; x <= 3; x++) {
+				for (int y = 1; y <= 3; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren: no grass to eat
+				}
+			}
+			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome());
+			w.spawnEntity(breeder);
+			w.think();
+			snapshot(w, "before (barren ground)");
+			assertGreater("starts with energy", breeder.getEnergy(), 0.0);
+			tick(w, 90);
+			snapshot(w, "after (starved)");
+			assertTrue("breeder starved with no food", breeder.isDead());
+		}
+	}
+
+	/**
+	 * The evolutionary loop end to end: fed breeders graze for energy and bud
+	 * mutated offspring, so a population on a grassy field grows. Offspring
+	 * inherit a mutated genome, so the lineage also drifts.
+	 */
+	static class PopulationGrowsWithFood extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(20, 20); // full grass everywhere (fertility 1)
+			for (int i = 0; i < 3; i++) {
+				Genome g = new Genome();
+				g.markers = new double[] { 0.2, 0.6, 0.9 };
+				w.spawnEntity(TestNPC.breeder(6.5 + i * 3, 6.5 + i * 3, 0, g));
+			}
+			w.think();
+			int start = w.getAliveCount();
+			snapshot(w, "founders");
+			tick(w, 600);
+			snapshot(w, "after (population grew)");
+			int end = w.getAliveCount();
+			assertGreater("a fed breeder population grows by reproduction", end, start);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -812,6 +862,8 @@ public class SimTests {
 				new WaterBlocksLandPassesFlyers(),
 				new MudSlowsMovement(),
 				new CoverHidesFromPerception(),
+				new StarvesWithoutFood(),
+				new PopulationGrowsWithFood(),
 				new SameSeedSameOutcome(),
 		};
 	}
