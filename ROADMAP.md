@@ -35,7 +35,7 @@ small, deterministic, test-backed slices.
 - Zero-dependency `build → tick → assert` mini-simulations, decoupled from the
   bestiary via `TestNPC` fixtures; before/after debug-overlay screenshots.
 
-**Genome relationship model** — `entities/Genome.java`
+**Genome relationship model** — `entities/Genome.java` (full plan in [GENOME.md](GENOME.md))
 - Heritable trait vector: phenotype · neutral markers · dispositions.
 - `react(other, sizeAdv)` → similarity-based drive (attack / flee / affiliate /
   mate). Inheritance via `child()` (asexual + crossover) and `mutate()`.
