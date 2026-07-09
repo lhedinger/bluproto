@@ -49,6 +49,7 @@ public class Houndeye extends NPC {
 		SEARCH_FREQ = HOUNDEYE_SF;
 		LOS_FOV = Math.PI; // prey watches its back
 
+		hostile = 1; // prey: renders as the neutral sprite, not predator-red
 		metabolic = true;
 		susceptible = true;
 		trailScent = Scent.TRAIL_HERBIVORE;

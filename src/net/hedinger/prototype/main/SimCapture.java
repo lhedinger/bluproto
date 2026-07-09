@@ -1,7 +1,5 @@
 package net.hedinger.prototype.main;
 
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -62,6 +60,7 @@ public class SimCapture {
 		LayerRenderer layerRenderer = new LayerRenderer(world);
 		layerRenderer.build(world);
 		View view = new View(world, layerRenderer);
+		Renderer renderer = new Renderer(W, H);
 
 		// let plants grow in and animals disperse before we start filming
 		System.out.println("warming up " + warmup + " ticks...");
@@ -69,10 +68,8 @@ public class SimCapture {
 			world.think();
 		}
 
-		BufferedImage canvas = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
-
 		if (frames <= 1) {
-			renderFrame(canvas, world, view);
+			BufferedImage canvas = renderer.paint(world, view);
 			File png = new File(dir, "screenshot.png");
 			ImageIO.write(canvas, "png", png);
 			System.out.println("wrote " + png.getPath());
@@ -90,7 +87,7 @@ public class SimCapture {
 			for (int t = 0; t < ticksPerFrame; t++) {
 				world.think();
 			}
-			renderFrame(canvas, world, view);
+			BufferedImage canvas = renderer.paint(world, view);
 			writer.append(canvas);
 			ImageIO.write(canvas, "png", new File(frameDir, String.format("frame_%04d.png", f)));
 
@@ -101,18 +98,6 @@ public class SimCapture {
 		writer.close();
 		System.out.println("wrote " + gif.getPath() + ", " + frames + " PNG frames in "
 				+ frameDir.getPath() + ", and screenshot.png");
-	}
-
-	/** Paints one frame using the same calls PrototypeWorld.paint() makes. */
-	private static void renderFrame(BufferedImage canvas, World world, View view) {
-		Graphics2D g = canvas.createGraphics();
-		g.setClip(0, 0, W, H); // View reads getClipBounds() for the viewport
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-		view.think(g, 0, 0, 0, 0, 0);
-		view.render(g);
-
-		g.dispose();
 	}
 
 	/** Minimal animated-GIF encoder built on the JDK's ImageIO GIF writer. */
