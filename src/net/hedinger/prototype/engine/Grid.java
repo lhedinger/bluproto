@@ -63,7 +63,7 @@ public class Grid {
 			int ox = v.pixelX(0, level, 0);
 			int oy = v.pixelY(0, level, 0);
 			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
-			renderVegetation(g2, ox, oy);
+			renderGround(g2, ox, oy);
 		} else {
 			g2.drawImage(
 					lr.mapLayers[level].image_layer_downsized[camDepth - 1],
@@ -86,28 +86,42 @@ public class Grid {
 	}
 
 	/**
-	 * Green wash showing vegetation density on the ground -- denser grass is
-	 * more opaque. Drawn on the ground layer (under doors and entities) so
-	 * grazed-down patches read correctly beneath the actors standing on them.
+	 * Colour wash for the ground layer (under doors and entities): terrain types
+	 * that have no sprite (water, mud, cover) are tinted, and floor tiles show
+	 * their vegetation density, so grazed patches and habitats read at a glance.
 	 */
-	private void renderVegetation(Graphics2D g2, int ox, int oy) {
+	private void renderGround(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
-				if (!t.growsVegetation()) {
-					continue;
+				switch (t.getType()) {
+				case TYPE_WATER:
+					g2.setColor(new Color(40, 90, 200, 210));
+					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+					break;
+				case TYPE_MUD:
+					g2.setColor(new Color(105, 75, 45, 200));
+					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+					break;
+				case TYPE_COVER:
+					g2.setColor(new Color(25, 110, 40, 220)); // dense tall grass
+					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+					break;
+				case TYPE_FLOOR:
+					double v = t.getVegetation(now) / Tile.VEG_MAX;
+					// Barren browns; grass greens and deepens with density.
+					int red = (int) (110 - v * 80);
+					int green = (int) (70 + v * 140);
+					int blue = (int) (40 - v * 40);
+					int alpha = (int) (70 + v * 185);
+					g2.setColor(new Color(red, green, blue, alpha));
+					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+					break;
+				default:
+					break;
 				}
-				double v = t.getVegetation(now) / Tile.VEG_MAX;
-				// Barren ground washes brown; grass greens up and deepens with
-				// density, so lush blobs and bare patches both read at a glance.
-				int red = (int) (110 - v * 80); // 110 (brown) -> 30 (green)
-				int green = (int) (70 + v * 140); // 70 -> 210
-				int blue = (int) (40 - v * 40); // 40 -> 0
-				int alpha = (int) (70 + v * 185); // 70 -> 255
-				g2.setColor(new Color(red, green, blue, alpha));
-				g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
 			}
 		}
 	}
@@ -289,6 +303,10 @@ public class Grid {
 			return false;
 		}
 		if (!isValid(c2, r2)) {
+			return false;
+		}
+		// Opaque terrain (walls, tall-grass cover) blocks the sightline.
+		if (tiles[c2][r2].blocksSight()) {
 			return false;
 		}
 		return tiles[c][r].isConnected(world, c2, r2, level, false, false);

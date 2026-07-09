@@ -354,7 +354,7 @@ public class Tile {
 	}
 
 	public boolean isWalkable() {
-		return type.isOpen() && type != TileType.TYPE_HOLE;
+		return type.isOpen() && type != TileType.TYPE_HOLE && type != TileType.TYPE_WATER;
 	}
 
 	public boolean isFlyable() {
@@ -363,6 +363,21 @@ public class Tile {
 
 	public boolean isSolid() {
 		return !type.isOpen();
+	}
+
+	/** Water is open (flyers pass) but not walkable — land entities can't enter. */
+	public boolean isWater() {
+		return type == TileType.TYPE_WATER;
+	}
+
+	/** Movement multiplier for an entity standing on this tile (mud drags). */
+	public double speedFactor() {
+		return type == TileType.TYPE_MUD ? 0.4 : 1.0;
+	}
+
+	/** True if this tile blocks line of sight (walls, or tall-grass cover). */
+	public boolean blocksSight() {
+		return isSolid() || type == TileType.TYPE_COVER;
 	}
 
 	public void updateTilecode(World world) {
@@ -440,7 +455,10 @@ public class Tile {
 		TYPE_FLOOR(1, true),
 		TYPE_WALL(2, false),
 		TYPE_RAMPUP(3, true),
-		TYPE_RAMPDOWN(4, true);
+		TYPE_RAMPDOWN(4, true),
+		TYPE_WATER(5, true), // open (flyers pass) but not walkable
+		TYPE_MUD(6, true), // walkable, slows movement
+		TYPE_COVER(7, true); // walkable, blocks line of sight
 
 		private int value;
 		private boolean open;

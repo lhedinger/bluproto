@@ -217,6 +217,13 @@ public abstract class Entity {
 			return;
 		}
 
+		// Mud drags: scale this step by the tile the entity stands on.
+		double drag = world.getTile(X, Y, Z).speedFactor();
+		if (drag != 1.0) {
+			dX *= drag;
+			dY *= drag;
+		}
+
 		if (isOverHole() && !isFlying()) {
 			// FIXME allow flying entities to go down the hole if they wish
 			dZ = -1;
@@ -267,7 +274,13 @@ public abstract class Entity {
 		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
 			return true;
 		}
-
+		// Water is impassable to land entities; flyers skim over it.
+		if (!isFlying()) {
+			Tile dest = world.getTile(X + dX, Y + dY, Z + dZ);
+			if (dest != null && dest.isWater()) {
+				return true;
+			}
+		}
 		return false;
 	}
 

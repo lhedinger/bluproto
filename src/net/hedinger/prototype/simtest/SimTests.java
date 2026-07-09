@@ -671,6 +671,85 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Water is impassable to land entities but flyers skim over it: a walking
+	 * mover halts at the shore while a flying mover crosses.
+	 */
+	static class WaterBlocksLandPassesFlyers extends Scenario {
+		@Override
+		public void run() {
+			seed(20);
+			World w = room(12, 5);
+			for (int y = 1; y <= 3; y++) {
+				w.setTile(6, y, 0, Tile.TileType.TYPE_WATER); // a vertical lake
+			}
+			TestNPC land = TestNPC.mover(2.5, 2.5, 0, 0);       // walks east into the lake
+			TestNPC flyer = TestNPC.mover(2.5, 1.5, 0, 0).withFlying();
+			w.spawnEntity(land);
+			w.spawnEntity(flyer);
+			w.think();
+			snapshot(w, "before (both west of the lake)");
+			tick(w, 150);
+			snapshot(w, "after (land halts, flyer crosses)");
+
+			assertLess("land entity is stopped at the shore", land.getX(), 6.0);
+			assertGreater("land entity walked up to the shore", land.getX(), 5.0);
+			assertGreater("flyer crossed the water", flyer.getX(), 6.5);
+		}
+	}
+
+	/** Mud drags: a mover crossing a mud strip falls behind one on clear floor. */
+	static class MudSlowsMovement extends Scenario {
+		@Override
+		public void run() {
+			seed(21);
+			World w = room(16, 5);
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_MUD); // mud strip on row 2 only
+			}
+			TestNPC muddy = TestNPC.mover(2.5, 2.5, 0, 0); // crosses the mud
+			TestNPC clear = TestNPC.mover(2.5, 3.5, 0, 0); // clear floor alongside
+			w.spawnEntity(muddy);
+			w.spawnEntity(clear);
+			w.think();
+			snapshot(w, "before");
+			tick(w, 200);
+			snapshot(w, "after (muddy lags behind)");
+
+			assertGreater("both movers advanced", muddy.getX(), 2.5);
+			assertGreater("clear mover is well ahead of the muddy one",
+					clear.getX() - muddy.getX(), 0.5);
+		}
+	}
+
+	/**
+	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
+	 * see and ignores an equally-close prey hiding in cover (invisible to it).
+	 */
+	static class CoverHidesFromPerception extends Scenario {
+		@Override
+		public void run() {
+			seed(22);
+			World w = room(9, 5);
+			w.setTile(4, 3, 0, Tile.TileType.TYPE_COVER); // hiding spot to the south
+			TestNPC chaser = TestNPC.chaser(4.5, 2.5, 0);
+			TestNPC visible = TestNPC.inert(4.5, 1.5, 0);       // in the open, to the north
+			TestNPC hidden = TestNPC.inert(4.5, 3.5, 0);        // standing in the cover
+			w.spawnEntity(chaser);
+			w.spawnEntity(visible);
+			w.spawnEntity(hidden);
+			w.think();
+			snapshot(w, "before (prey N in open, prey S in cover)");
+			tick(w, 300);
+			snapshot(w, "after (chaser took the visible prey)");
+
+			double dVisible = Math.hypot(chaser.getX() - visible.getX(), chaser.getY() - visible.getY());
+			double dHidden = Math.hypot(chaser.getX() - hidden.getX(), chaser.getY() - hidden.getY());
+			assertLess("chaser reached the visible prey", dVisible, 0.5);
+			assertGreater("chaser never went for the hidden prey", dHidden, dVisible);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -730,6 +809,9 @@ public class SimTests {
 				new VegetationRegrows(),
 				new FertilityCapsVegetation(),
 				new FertileHabitatPatches(),
+				new WaterBlocksLandPassesFlyers(),
+				new MudSlowsMovement(),
+				new CoverHidesFromPerception(),
 				new SameSeedSameOutcome(),
 		};
 	}

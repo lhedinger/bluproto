@@ -117,3 +117,8 @@ closed-door bars, and every level side-by-side.
   `Tile.getVegetation(now)` is closed-form off `World.getTick()`, so it only
   changes when ticked. `fertility` (default 1) caps density;
   `World.generateFertility(freq)` paints patches without drawing RNG.
+- **Terrain types have distinct rules.** `TYPE_WATER` is open (flyers pass) but
+  not walkable — land entities halt at the shore. `TYPE_MUD` is walkable but
+  `speedFactor()` drags a mover to 0.4×. `TYPE_COVER` is walkable but
+  `blocksSight()` — an entity standing in it is invisible to perception (LOS is
+  blocked into/through it). Place them with `w.setTile(x, y, z, type)`.

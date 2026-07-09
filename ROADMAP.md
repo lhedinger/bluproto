@@ -57,7 +57,7 @@ small, deterministic, test-backed slices.
 | 1 · Living substrate | Regrowing vegetation | Base of the food chain | ✅ done |
 | 2a · Fertility field | Patchy grass capacity | Spatial niches | ✅ done |
 | **2b · Living pressure** | Temperature/light fields + day/night clock that drain energy and can starve/kill | **Real selection pressure — habitat-driven survival** | ▶ next (keystone, higher risk: touches survival + determinism) |
-| 3 · Terrain variety | `WATER` (blocks land / passes flyers), `MUD` (slows), `COVER` (blocks LOS) | Behavioural richness | planned (cheap, safe) |
+| 3 · Terrain variety | `WATER` (blocks land / passes flyers), `MUD` (slows), `COVER` (blocks LOS) | Behavioural richness | ✅ done |
 | 4 · Scent / stigmergy | Deposit + decay field | Emergent trails, foraging | planned |
 
 ---
