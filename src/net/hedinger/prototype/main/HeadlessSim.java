@@ -5,11 +5,7 @@ import java.util.TreeMap;
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.StopWatch;
 import net.hedinger.prototype.engine.World;
-import net.hedinger.prototype.engine.WorldGenerator;
 import net.hedinger.prototype.entities.NPC;
-import net.hedinger.prototype.entities.npcs.Bullsquid;
-import net.hedinger.prototype.entities.npcs.Houndeye;
-import net.hedinger.prototype.entities.npcs.Zombie;
 
 /**
  * Runs the simulation without a window and prints population/flora stats,
@@ -27,10 +23,7 @@ public class HeadlessSim {
 
 		PrototypeWorld.stopwatch = new StopWatch();
 
-		WorldGenerator generator = new WorldGenerator(cols, rows, lvls);
-		generator.run();
-		World world = generator.getWorld();
-		world.alignTiles();
+		World world = Ecosystem.build(cols, rows, lvls);
 
 		final int[] births = { 0 };
 		final int[] deaths = { 0 };
@@ -50,45 +43,12 @@ public class HeadlessSim {
 			}
 		});
 
-		spawn(world, cols, rows, lvls);
-
 		System.out.println("tick | daylight | flora% | water# | populations (alive)");
 		for (int t = 0; t <= ticks; t++) {
 			world.think();
 			if (t % 2000 == 0) {
 				report(world, t, births[0], deaths[0]);
 			}
-		}
-	}
-
-	private static void spawn(World world, int cols, int rows, int lvls) {
-		int ratio = (int) Math.round(0.25f * Math.sqrt(rows * cols));
-		for (int z = 0; z < lvls; z++) {
-			spawnMany(world, cols, rows, z, 3 * ratio, "houndeye");
-			spawnMany(world, cols, rows, z, Math.max(3, ratio / 2), "bullsquid");
-			if (z == 0) {
-				spawnMany(world, cols, rows, z, ratio, "zombie");
-			}
-		}
-	}
-
-	private static void spawnMany(World world, int cols, int rows, int z, int num, String kind) {
-		int attempts = 0;
-		while (num > 0 && attempts < 5000) {
-			attempts++;
-			float x = (float) (Math.random() * cols);
-			float y = (float) (Math.random() * rows);
-			if (!world.isOpen(x, y, z)) {
-				continue;
-			}
-			if (kind.equals("houndeye")) {
-				world.spawnEntity(new Houndeye(x, y, z));
-			} else if (kind.equals("bullsquid")) {
-				world.spawnEntity(new Bullsquid(x, y, z));
-			} else {
-				world.spawnEntity(new Zombie(x, y, z));
-			}
-			num--;
 		}
 	}
 
