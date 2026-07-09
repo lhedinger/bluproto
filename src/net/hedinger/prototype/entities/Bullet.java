@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
@@ -65,7 +67,7 @@ public class Bullet extends Entity {
 			if (!entities.isEmpty()) {
 				for (Entity e : entities.values()) {
 					if (e != null) {
-						if (Math.random() < accuracy) {
+						if (Utils.random() < accuracy) {
 							e.kill();
 						} else {
 							e.damage((int) variation(50, 25));
@@ -100,7 +102,7 @@ public class Bullet extends Entity {
 	@Override
 	public void kill() {
 		age = -1;
-		remove = true;
+		markRemoved();
 	}
 
 }

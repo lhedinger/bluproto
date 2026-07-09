@@ -3,16 +3,12 @@ package net.hedinger.prototype.entities.npcs;
 import java.awt.*;
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 
 
 public class Houndeye extends NPC
 {
-	private static final double HOUNDEYE_RANGE = 10; // HOUNDEYE los range
-	// (pixels)
-	private static final double HOUNDEYE_FOV = Math.PI * 0.5;
-	private static final double HOUNDEYE_SPEED = 0.015; // max speed
-	private static final int HOUNDEYE_TURN = 10; // max turn speed
 	private static final int HOUNDEYE_SF = 50;
 	private int SF = 0;
 	private int HOUNDEYE_MF = 16;
@@ -33,23 +29,19 @@ public class Houndeye extends NPC
 	public Houndeye(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(4, 0.015, 10, 10, Math.PI * 0.5, 3000));
 		col = new Color(0, 180, 0);
-		size = 4;
 		health = 100;
 		SEARCH_FREQ = HOUNDEYE_SF;
-		LOS_RANGE = HOUNDEYE_RANGE;
-		LOS_FOV = HOUNDEYE_FOV;
 	}
 
 	public Houndeye(double x, double y, double z, double d)
 	{
 		super(x, y, z, d);
+		applyGenome(Genome.phenotype(4, 0.015, 10, 10, Math.PI * 0.5, 3000));
 		col = new Color(0, 180, 0);
-		size = 4;
 		health = 100;
 		SEARCH_FREQ = HOUNDEYE_SF;
-		LOS_RANGE = HOUNDEYE_RANGE;
-		LOS_FOV = HOUNDEYE_FOV;
 	}
 
 	public void think()
@@ -62,7 +54,7 @@ public class Houndeye extends NPC
 
 		if (hunger <= 0)
 			kill();
-		if (age > 3000)
+		if (age > maxAge)
 			kill();
 		if (age > 100)
 			size = 3;
@@ -90,11 +82,11 @@ public class Houndeye extends NPC
 					}
 				}
 			}
-			chase(HOUNDEYE_SPEED, 2);
+			chase(speed, 2);
 			return;
 		}
 		else
-			roam(HOUNDEYE_SPEED * 0.7, HOUNDEYE_TURN);
+			roam(speed * 0.7, turnRate);
 
 	}
 

@@ -1,12 +1,11 @@
 package net.hedinger.prototype.engine;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.TreeMap;
-
-import net.hedinger.prototype.entities.NPC;
 
 public class Grid {
 
@@ -14,7 +13,7 @@ public class Grid {
 	private Tile[][] tiles;
 	private int level;
 
-	HashSet<Entity> doors;
+	LinkedHashSet<Entity> doors;
 	HashMap<Integer, Sector> sectors;
 
 	int counter = 0;
@@ -29,7 +28,7 @@ public class Grid {
 
 		level = l;
 
-		doors = new HashSet<Entity>();
+		doors = new LinkedHashSet<Entity>();
 
 		sectors = new HashMap<Integer, Sector>();
 	}
@@ -61,11 +60,10 @@ public class Grid {
 		}
 
 		if (camDepth == 0) {
-			g2.drawImage(
-					lr.mapLayers[level].image_layer,
-					v.pixelX(0, level, 0),
-					v.pixelY(0, level, 0),
-					null);
+			int ox = v.pixelX(0, level, 0);
+			int oy = v.pixelY(0, level, 0);
+			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
+			renderVegetation(g2, ox, oy);
 		} else {
 			g2.drawImage(
 					lr.mapLayers[level].image_layer_downsized[camDepth - 1],
@@ -85,6 +83,33 @@ public class Grid {
 			}
 		}
 
+	}
+
+	/**
+	 * Green wash showing vegetation density on the ground -- denser grass is
+	 * more opaque. Drawn on the ground layer (under doors and entities) so
+	 * grazed-down patches read correctly beneath the actors standing on them.
+	 */
+	private void renderVegetation(Graphics2D g2, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		long now = world.getTick();
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = tiles[x][y];
+				if (!t.growsVegetation()) {
+					continue;
+				}
+				double v = t.getVegetation(now) / Tile.VEG_MAX;
+				// Barren ground washes brown; grass greens up and deepens with
+				// density, so lush blobs and bare patches both read at a glance.
+				int red = (int) (110 - v * 80); // 110 (brown) -> 30 (green)
+				int green = (int) (70 + v * 140); // 70 -> 210
+				int blue = (int) (40 - v * 40); // 40 -> 0
+				int alpha = (int) (70 + v * 185); // 70 -> 255
+				g2.setColor(new Color(red, green, blue, alpha));
+				g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+			}
+		}
 	}
 
 	public void alignTiles() {
@@ -111,28 +136,6 @@ public class Grid {
 						if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
 							if (ID != e.getID()) {
 								result.put(dist, e);
-							}
-						}
-					}
-				}
-			}
-		}
-		return result;
-	}
-
-	TreeMap<Double, NPC> searchNPC(double x, double y, double dir, double radius, double fov,
-			String[] types, boolean include, int ID) {
-		TreeMap<Double, NPC> result = new TreeMap<Double, NPC>();
-		for (Entity e : world.entities.values()) {
-			// TODO consider entities from different levels
-			if (e != null && e.getLvl() == level) {
-				if (e instanceof NPC) {
-					NPC npc = (NPC) e;
-					if (!e.isDead() && ID != e.getID()) {
-						if (World.filterType(e.getEntityTypeName(), types, include)) {
-							double dist = world.distance(x, y, level, e.getX(), e.getY(), e.getZ());
-							if (hasLOS(x, y, dir, e.getX(), e.getY(), radius, fov)) {
-								result.put(dist, npc);
 							}
 						}
 					}
@@ -175,8 +178,11 @@ public class Grid {
 	}
 
 	boolean hasLOS(double x1, double y1, double dir, double x2, double y2, double dist, double fov) {
-		// check to see if point is in range
-		if (dist >= 0 && world.distance(x1, y1, 0, x2, y2, 0) > dist) {
+		// check to see if point is in range (squared compare: equivalent for
+		// non-negative values, avoids a sqrt per candidate)
+		double rdx = x2 - x1;
+		double rdy = y2 - y1;
+		if (dist >= 0 && rdx * rdx + rdy * rdy > dist * dist) {
 			return false;
 		}
 

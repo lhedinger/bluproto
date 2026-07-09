@@ -3,15 +3,14 @@ package net.hedinger.prototype.entities.npcs;
 import java.awt.Color;
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 
 public class Headcrab extends NPC
 {
-	private static final double HEADCRAB_RANGE = 1.5; // HEADCRAB los range
-	private static final double HEADCRAB_FOV = Math.PI;
-	private static final double HEADCRAB_SPEED = 0.02; // max speed
-	private static final int HEADCRAB_TURN = 25; // max turn speed
 	private static final int HEADCRAB_SF = 10;
+	// Randomised per class-load; keeps its own lifecycle semantics (birth-size
+	// growth, isDead threshold) rather than the genome's maxAge.
 	private static final int HEADCRAB_MAX_AGE = (int) variation(5000, 1000);
 	private static final double HEADCRAB_MAXLEAP = 10;
 
@@ -28,22 +27,19 @@ public class Headcrab extends NPC
 	public Headcrab(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(3, 0.02, 25, 1.5, Math.PI, HEADCRAB_MAX_AGE));
 		col = new Color(0, 150, 0);
-		size = 3;
 		age = (int) (HEADCRAB_MAX_AGE * 0.25);
 		SEARCH_FREQ = HEADCRAB_SF;
-		LOS_RANGE = HEADCRAB_RANGE;
-		LOS_FOV = HEADCRAB_FOV;
 	}
 
 	public Headcrab(double x, double y, double z, double d)
 	{
 		super(x, y, z, d);
+		applyGenome(Genome.phenotype(3, 0.02, 25, 1.5, Math.PI, HEADCRAB_MAX_AGE));
 		col = new Color(0, 150, 0);
-		size = 1;
+		size = 1; // hatchling; grows to genome size with age
 		SEARCH_FREQ = HEADCRAB_SF;
-		LOS_RANGE = HEADCRAB_RANGE;
-		LOS_FOV = HEADCRAB_FOV;
 	}
 
 	@Override
@@ -62,7 +58,7 @@ public class Headcrab extends NPC
 
 			size = (int) Math.round(3 * Math.sqrt(temp));
 
-			roam(HEADCRAB_SPEED * 0.05, HEADCRAB_TURN);
+			roam(speed * 0.05, turnRate);
 			return;
 		}
 
@@ -113,9 +109,9 @@ public class Headcrab extends NPC
 			lockTarget(enemy);
 			
 			if(distance() > 1) {
-				chase(HEADCRAB_SPEED, HEADCRAB_TURN);
+				chase(speed, turnRate);
 			} else {
-				chase(0, HEADCRAB_TURN);
+				chase(0, turnRate);
 			}
 			
 			if (isInLOS(2, Math.PI * 0.01)) {
@@ -125,9 +121,9 @@ public class Headcrab extends NPC
 		else if (seeTarget(ally, 3.0, Math.PI, HEADCRAB_ALLIES, true)
 				&& status <= NPC.STATUS_THREAT)
 		{
-			follow(HEADCRAB_SPEED, HEADCRAB_TURN, ally, 2);
+			follow(speed, turnRate, ally, 2);
 		} else {
-			roam(HEADCRAB_SPEED * 0.5, HEADCRAB_TURN);
+			roam(speed * 0.5, turnRate);
 		}
 	}
 

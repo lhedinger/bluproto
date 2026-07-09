@@ -1,5 +1,7 @@
 package net.hedinger.prototype.entities;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
@@ -18,7 +20,7 @@ public class Explosion extends Entity {
 
 	public Explosion(double x, double y, double z) {
 
-		D = Math.random() * 2 * Math.PI;
+		D = Utils.random() * 2 * Math.PI;
 		X = x;
 		Y = y;
 		Z = z;

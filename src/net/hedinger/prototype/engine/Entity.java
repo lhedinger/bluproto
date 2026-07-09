@@ -50,14 +50,14 @@ public abstract class Entity {
 		X = -1;
 		Y = -1;
 		Z = -1;
-		D = Math.random() * 2 * Math.PI;
+		D = Utils.random() * 2 * Math.PI;
 	}
 
 	public Entity(double x, double y, double z) {
 		X = x;
 		Y = y;
 		Z = z;
-		D = Math.random() * 2 * Math.PI;
+		D = Utils.random() * 2 * Math.PI;
 		dX = 0;
 		dY = 0;
 		dZ = 0;
@@ -119,7 +119,7 @@ public abstract class Entity {
 		}
 
 		if (age < -deathspan) {
-			remove = true;
+			markRemoved();
 		}
 
 		if (age >= 0) {
@@ -159,7 +159,6 @@ public abstract class Entity {
 
 	public boolean isVisible(Graphics g, View v) {
 		double zk = v.getCamZ() - Z + 1;
-		Math.pow(zk, 0.05);
 		int width = (int) g.getClipBounds().getMaxX();
 		int height = (int) g.getClipBounds().getMaxY();
 
@@ -363,6 +362,11 @@ public abstract class Entity {
 		this.grabbed = grabbed;
 	}
 
+	/** The entity this one is attached to (carried by), or null. */
+	public Entity getAttachTarget() {
+		return attachTarget;
+	}
+
 	public boolean attachToTarget(Entity target) {
 		if (attachTarget != null) {
 			return false;
@@ -396,7 +400,23 @@ public abstract class Entity {
 
 	public void remove() {
 		age = -1;
+		markRemoved();
+	}
+
+	/**
+	 * Marks this entity for removal and frees its tile-occupancy slot. All
+	 * paths that set the remove flag must come through here: nothing else ever
+	 * takes a dead entity's ID out of its tile, so skipping the purge leaks
+	 * stale IDs that every subsequent search iterates.
+	 */
+	protected final void markRemoved() {
+		if (remove) {
+			return;
+		}
 		remove = true;
+		if (world != null) {
+			world.getTile(X, Y, Z).removeEntity(getID());
+		}
 	}
 
 	@Override
@@ -435,7 +455,7 @@ public abstract class Entity {
 	}
 
 	public static double variation(double origin, double range) {
-		return ((origin + range) - (2 * range * Math.random()));
+		return ((origin + range) - (2 * range * Utils.random()));
 	}
 
 	public double distance(Entity e) {

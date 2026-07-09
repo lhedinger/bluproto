@@ -14,7 +14,11 @@ public class Tile {
 	private int col, row, lvl;
 	private TileType type;
 	private String tilecode = "";
-	private HashSet<Integer> npcs = new HashSet<Integer>();
+	// Occupant entity IDs as a primitive array: iterated on every search, so
+	// boxed-set iteration cost matters. Each entity lives in exactly one tile
+	// and IDs are unique, so plain append + swap-remove keeps set semantics.
+	private int[] occupants = new int[4];
+	private int occupantCount = 0;
 
 	boolean door_N = false; // open
 	boolean door_E = false; // open
@@ -23,12 +27,71 @@ public class Tile {
 
 	private int variant = 0;
 
+	// --- vegetation (the living substrate) ---------------------------------
+	// A regrowing food resource on walkable ground. Grazers deplete it; it
+	// regrows linearly to a cap. Growth is computed lazily in closed form from
+	// the last-touched tick, so there is no per-tick sweep over the map -- a
+	// tile costs nothing until something grazes or draws it.
+	public static final double VEG_MAX = 1.0;
+	public static final double VEG_REGROW = 0.002; // per tick, up to the cap
+	private double vegStored = VEG_MAX; // density at vegTick
+	private long vegTick = 0; // tick vegStored was last written
+
+	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
+	// A fertility field (see World.generateFertility) makes grass grow patchy,
+	// so the map has rich and poor habitats instead of uniform pasture.
+	private double fertility = 1.0;
+
+	public double getFertility() {
+		return fertility;
+	}
+
+	public void setFertility(double f) {
+		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
+	}
+
+	/** The most vegetation this tile can hold, given its fertility. */
+	public double vegetationCap() {
+		return VEG_MAX * fertility;
+	}
+
+	/** True where vegetation can grow: open, walkable ground. */
+	public boolean growsVegetation() {
+		return type == TileType.TYPE_FLOOR;
+	}
+
+	/** Current vegetation density [0, cap], regrown lazily to {@code now}. */
+	public double getVegetation(long now) {
+		if (!growsVegetation()) {
+			return 0;
+		}
+		double cap = vegetationCap();
+		double v = vegStored + VEG_REGROW * (now - vegTick);
+		return v > cap ? cap : v;
+	}
+
+	/**
+	 * Consumes up to {@code demand} vegetation, returning how much was actually
+	 * eaten. Folds in regrowth since the last touch, then writes the new stored
+	 * value and stamp so growth resumes from here.
+	 */
+	public double graze(long now, double demand) {
+		if (!growsVegetation() || demand <= 0) {
+			return 0;
+		}
+		double v = getVegetation(now);
+		double eaten = demand < v ? demand : v;
+		vegStored = v - eaten;
+		vegTick = now;
+		return eaten;
+	}
+
 	public Tile(World w, int x, int y, int z) {
 		world = w;
 
 		TileType t = TileType.TYPE_FLOOR;
 
-		if (Math.random() * 2 < 1) {
+		if (Utils.random() * 2 < 1) {
 			t = TileType.TYPE_WALL;
 		}
 
@@ -63,19 +126,27 @@ public class Tile {
 	}
 
 	public void addEntity(int id) {
-		npcs.add(id);
+		if (occupantCount == occupants.length) {
+			occupants = java.util.Arrays.copyOf(occupants, occupants.length * 2);
+		}
+		occupants[occupantCount++] = id;
 	}
 
 	public void removeEntity(int id) {
-		npcs.remove(id);
+		for (int i = 0; i < occupantCount; i++) {
+			if (occupants[i] == id) {
+				occupants[i] = occupants[--occupantCount]; // swap-remove
+				return;
+			}
+		}
 	}
 
-	public Set<Integer> getEntities() {
-		return npcs;
+	public int getEntityCount() {
+		return occupantCount;
 	}
 
-	public int entityCount() {
-		return npcs.size();
+	public int getEntityId(int idx) {
+		return occupants[idx];
 	}
 
 	public void setType(TileType t) {
@@ -128,6 +199,23 @@ public class Tile {
 			door_W = true;
 			// calcConnected(world);
 		}
+	}
+
+	/** True if the door on the given edge is closed (0=N, 1=E, 2=S, 3=W). */
+	public boolean isDoorClosed(int dir) {
+		if (dir == 0) {
+			return door_N;
+		}
+		if (dir == 1) {
+			return door_E;
+		}
+		if (dir == 2) {
+			return door_S;
+		}
+		if (dir == 3) {
+			return door_W;
+		}
+		return false;
 	}
 
 	public HashSet<Integer> calcConnected(World w, boolean diagonal) {

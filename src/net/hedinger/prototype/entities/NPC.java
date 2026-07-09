@@ -32,7 +32,34 @@ public abstract class NPC extends Entity {
 	protected double LOS_FOV; // max field of view (radians)
 	protected int status;
 	protected int size;
+	protected double speed = 0.04; // tiles/tick; sourced from the genome
+	protected int turnRate = 5; // steering divisor; sourced from the genome
+	protected int maxAge = 3000; // ticks before old age; sourced from the genome
 	protected Color col = Color.ORANGE;
+
+	/** Heritable trait vector; null for species that do not use one (yet). */
+	protected Genome genome = null;
+
+	public Genome getGenome() {
+		return genome;
+	}
+
+	/**
+	 * Sources this NPC's body stats from a founder {@link Genome} and keeps the
+	 * reference. The genome becomes the single source of truth for the phenotype
+	 * (size, speed, turn rate, perception, lifespan), so offspring can later
+	 * inherit a mutated copy. Anything the genome does not carry -- health,
+	 * SEARCH_FREQ, colour -- stays set by the species directly.
+	 */
+	protected void applyGenome(Genome g) {
+		this.genome = g;
+		this.size = (int) Math.round(g.size);
+		this.speed = g.speed;
+		this.turnRate = g.turnRate;
+		this.LOS_RANGE = g.losRange;
+		this.LOS_FOV = g.losFov;
+		this.maxAge = g.maxAge;
+	}
 
 	private int blink_random = 0;
 	private int blink_on = 50;
@@ -58,6 +85,18 @@ public abstract class NPC extends Entity {
 
 	protected TreeMap<Double, NPC> targets = new TreeMap<Double, NPC>();
 	protected TreeMap<Double, NPC> focusTargets = new TreeMap<Double, NPC>();
+
+	// Topological neighbourhood: like real flocks (starlings track ~7 nearest
+	// neighbours regardless of crowding), each NPC only tracks its nearest
+	// MAX_NEIGHBORS. This bounds the per-tick neighbour loops at O(K) instead of
+	// O(local density), so a dense pile-up costs the same per entity as a light
+	// crowd.
+	protected int MAX_NEIGHBORS = Integer.getInteger("blu.k", 7);
+
+	// Staggered-update period multiplier (1 = each NPC re-scans every
+	// SEARCH_FREQ ticks). Tunable via -Dblu.stagger=N for benchmarking the
+	// freshness/speed trade-off.
+	public static int STAGGER = Integer.getInteger("blu.stagger", 1);
 
 	public NPC(double x, double y, double z) {
 		super(x, y, z);
@@ -97,7 +136,7 @@ public abstract class NPC extends Entity {
 			D += 2 * Math.PI;
 		}
 
-		blink_random = (int) (Math.random() * 0);
+		blink_random = (int) (Utils.random() * 0);
 	}
 
 	@Override
@@ -282,15 +321,13 @@ public abstract class NPC extends Entity {
 		for (NPC npc : targets.values()) {
 			double dx = npc.getX() - getX();
 			double dy = npc.getY() - getY();
-			double distance = Math.sqrt(dx * dx + dy * dy);
 			if (canTouch(npc)) {
-				double angle = Math.atan2(-dy, -dx);
-				double targetX = Math.cos(angle) * distance;
-				double targetY = Math.sin(angle) * distance;
-				double ax = (targetX) * spring;
-				double ay = (targetY) * spring;
-				dX += ax;
-				dY += ay;
+				// The old code went angle = atan2(-dy,-dx) and then
+				// cos(angle)*hypot / sin(angle)*hypot -- a transcendental
+				// round-trip that exactly reconstructs (-dx, -dy). Push
+				// directly away from the neighbour instead.
+				dX += -dx * spring;
+				dY += -dy * spring;
 			}
 		}
 	}
@@ -302,9 +339,13 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////
 
 	protected boolean canTouch(Entity e) {
-		double distance = distance(e);
+		// Squared-distance compare: equivalent to distance(e) < minDist for
+		// non-negative values, without the per-neighbour sqrt.
+		double ddx = e.getX() - X;
+		double ddy = e.getY() - Y;
+		double ddz = e.getZ() - Z;
 		double minDist = e.getSize() / 2 + getSize() / 2;
-		return (distance < minDist);
+		return ddx * ddx + ddy * ddy + ddz * ddz < minDist * minDist;
 	}
 
 	protected boolean isInLOS() {
@@ -366,10 +407,10 @@ public abstract class NPC extends Entity {
 		}
 
 		if (distance() < 0.05) {
-			double d = 0.5 + Math.random() * 0.7;
+			double d = 0.5 + Utils.random() * 0.7;
 			double a = variation(D, Math.PI * 0.5);
-			if (Math.random() * 4 < 1) {
-				a = Math.random() * 2 * Math.PI;
+			if (Utils.random() * 4 < 1) {
+				a = Utils.random() * 2 * Math.PI;
 			}
 
 			tX = X + d * Math.cos(a);
@@ -401,10 +442,10 @@ public abstract class NPC extends Entity {
 		}
 
 		if (distance() < 0.05) {
-			double d = 0.5 + Math.random() * 3;
+			double d = 0.5 + Utils.random() * 3;
 			double a = variation(direction, Math.PI * 0.25);
-			if (Math.random() * 10 < 1) {
-				a = Math.random() * 2 * Math.PI;
+			if (Utils.random() * 10 < 1) {
+				a = Utils.random() * 2 * Math.PI;
 			}
 
 			tX = X + d * Math.cos(a);
@@ -603,7 +644,7 @@ public abstract class NPC extends Entity {
 				D += 2 * Math.PI;
 			}
 		} else if (backup_collide == 0) {
-			D = Math.random() * Math.PI * 2;
+			D = Utils.random() * Math.PI * 2;
 			backup_collide = 1;
 		} else {
 			backup_collide++;
@@ -1010,36 +1051,51 @@ public abstract class NPC extends Entity {
 		return true;
 	}
 
-	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
-		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
-
-		if (Math.random() * SEARCH_FREQ < 1) {
-			return getWorld().searchNPC3(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID());
+	/** Keeps only the nearest k entries of a distance-sorted target map. */
+	private TreeMap<Double, NPC> capNearest(TreeMap<Double, NPC> in, int k) {
+		if (in == null || in.size() <= k) {
+			return in;
 		}
-
-		if (ts != null) {
-			if (ts.size() > 0) {
-				temp.putAll(ts);
+		TreeMap<Double, NPC> out = new TreeMap<Double, NPC>();
+		for (Double key : in.navigableKeySet()) {
+			out.put(key, in.get(key));
+			if (out.size() >= k) {
+				break;
 			}
 		}
+		return out;
+	}
 
+	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
+		// Staggered update: instead of each NPC re-scanning its neighbourhood at
+		// a random ~1/SEARCH_FREQ chance (which clumps -- many can fire on the
+		// same tick), give every NPC a fixed phase from its ID so exactly
+		// 1/period of the population does the expensive full scan each tick. Same
+		// average refresh rate, evenly spread across ticks. STAGGER lengthens the
+		// period to trade perception freshness for speed.
+		int period = Math.max(1, SEARCH_FREQ * STAGGER);
+		if (((getID() + age) % period) == 0) {
+			// Bounded nearest-K gather: cost is O(K), not O(local density).
+			return getWorld().searchNearestNPC(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID(), MAX_NEIGHBORS);
+		}
+
+		// Revalidate the cached list in place -- no defensive copy needed, the
+		// output map is separate and nothing here mutates the source.
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
-
-		for (NPC e : temp.values()) {
-			if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
-				if (isFriendly() && e.isHostile()) {
-					if (!isDead() && !e.isDead()) {
-						e.mark();
+		if (ts != null) {
+			for (NPC e : ts.values()) {
+				if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
+					if (isFriendly() && e.isHostile()) {
+						if (!isDead() && !e.isDead()) {
+							e.mark();
+						}
 					}
-				}
-
-				if (e != null) {
 					output.put(distance(e.getX(), e.getY(), e.getZ()), e);
 				}
 			}
 		}
 
-		return output;
+		return capNearest(output, MAX_NEIGHBORS);
 	}
 
 	/**
@@ -1121,17 +1177,13 @@ public abstract class NPC extends Entity {
 	protected TreeMap<Double, NPC> getTargets(int sf, TreeMap<Double, NPC> ts, double range,
 			double fov, String[] types, boolean include) {
 
-		TreeMap<Double, NPC> temp = new TreeMap<Double, NPC>();
-
-		if (ts != null) {
-			// temp.putAll(ts);
-		}
-
-		temp.putAll(targets);
-
+		// Filters the current perception list (the targets field -- note the ts
+		// parameter was historically ignored here) into a fresh map. Iterate the
+		// source directly; the old defensive temp copy doubled the boxed-key
+		// TreeMap allocations of every think() tick.
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
 
-		for (NPC e : temp.values()) {
+		for (NPC e : targets.values()) {
 			if (isLegalTarget(e, range, fov, types, include)) {
 				output.put(distance(e.getX(), e.getY(), e.getZ()), e);
 			}
@@ -1199,6 +1251,20 @@ public abstract class NPC extends Entity {
 		}
 	}
 
+	/**
+	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
+	 * the living substrate and returns how much was actually eaten (0 on barren
+	 * ground). This is the herbivore's link to the environment -- the base of
+	 * the food chain.
+	 */
+	protected double graze(double demand) {
+		World w = getWorld();
+		if (w == null) {
+			return 0;
+		}
+		return w.getTile(X, Y, Z).graze(w.getTick(), demand);
+	}
+
 	public boolean grab(Entity ent) {
 
 		double distance = distance(ent);
@@ -1227,6 +1293,7 @@ public abstract class NPC extends Entity {
 
 		grabbing.setGrabbed(false);
 		grabbing.detach();
+		grabbing = null;
 
 		return true;
 	}

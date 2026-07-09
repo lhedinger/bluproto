@@ -91,7 +91,7 @@ public class WorldGenerator {
 		for (int i = 0; i < num; i++) {
 			HashSet<Integer> sector = new HashSet<Integer>();
 
-			int h = world.hashCode((Math.random() * (world.cols - 2) + 1), (Math.random() * (world.rows - 2) + 1), z);
+			int h = world.hashCode((Utils.random() * (world.cols - 2) + 1), (Utils.random() * (world.rows - 2) + 1), z);
 
 			if (!sectorCollision(h, h, sectors, 4)) {
 				sector.add(h);
@@ -121,42 +121,42 @@ public class WorldGenerator {
 					if (world.setTile(x, y, z, type)) {
 						sector.add(h);
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y - 1, z, type)) {
 							sector.add(world.hashCode(x - 1, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y, z, type)) {
 							sector.add(world.hashCode(x - 1, y, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x - 1, y + 1, z, type)) {
 							sector.add(world.hashCode(x - 1, y + 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x, y - 1, z, type)) {
 							sector.add(world.hashCode(x, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x, y + 1, z, type)) {
 							sector.add(world.hashCode(x, y + 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y - 1, z, type)) {
 							sector.add(world.hashCode(x + 1, y - 1, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y, z, type)) {
 							sector.add(world.hashCode(x + 1, y, z));
 						}
 					}
-					if (Math.random() * 3 < 1) {
+					if (Utils.random() * 3 < 1) {
 						if (world.setTile(x + 1, y + 1, z, type)) {
 							sector.add(world.hashCode(x + 1, y + 1, z));
 						}
@@ -181,7 +181,7 @@ public class WorldGenerator {
 
 			int s = sectors.get(i).size();
 			for (Integer j : sectors.get(i)) {
-				if (Math.random() * s > Math.sqrt(s) * 6) {
+				if (Utils.random() * s > Math.sqrt(s) * 6) {
 					world.setTile(world.hashCol(j), world.hashRow(j), z, TYPE_WALL);
 				}
 			}
@@ -194,7 +194,7 @@ public class WorldGenerator {
 				if (t.getType() == TYPE_WALL) {
 					int h = world.hashCode(x, y, z);
 					if (!sectorCollision(-1, h, sectors, 1)) {
-						if (Math.random() * 1 < 1) {
+						if (Utils.random() * 1 < 1) {
 							if (!junctionCollision(h, junctions, 5)) {
 								world.setTile(h, TYPE_FLOOR);
 								junctions.add(h);
@@ -286,104 +286,6 @@ public class WorldGenerator {
 		return false;
 	}
 
-	private void connect(int x1, int y1, int x2, int y2, int z) {
-		// System.out.println(x1 + "," + y1 + " to " + x2 + "," + y2);
-
-		if (x1 == x2 && y1 == y2) {
-			return;
-		}
-
-		int x = x1;
-		int y = y1;
-
-		while (!(x == x2 && y == y2)) {
-			world.setTile(x, y, z, TYPE_FLOOR);
-
-			if (Math.random() * 2 < 1) {
-				if (x < x2) {
-					x++;
-				} else if (x > x2) {
-					x--;
-				}
-			} else {
-				if (y < y2) {
-					y++;
-				} else if (y > y2) {
-					y--;
-				}
-			}
-
-		}
-
-	}
-
-	private boolean validSpread(int x, int y) {
-		if (x <= 0 || y <= 0) {
-			return false;
-		}
-		if (x >= world.cols - 1 || y >= world.rows - 1) {
-			return false;
-		}
-
-		if (world.getTile(x, y, 0).getType() == TYPE_FLOOR) {
-			return false;
-		}
-
-		return true;
-	}
-
-	private int Sp = 100;
-	private int Sm = 10;
-
-	private void spread(int x, int y, int r, int[] xs, int[] ys) {
-		spread_rec(x, y, x, y, r, 100);
-	}
-
-	private void spread_rec(int x, int y, int rx, int ry, int r, int p) {
-		if (!validSpread(x, y)) {
-			return;
-		}
-
-		if (x <= 0 || y <= 0) {
-			return;
-		}
-		if (x >= world.cols - 1 || y >= world.rows - 1) {
-			return;
-		}
-
-		if (world.getTile(x, y, 0).getType() == TYPE_FLOOR) {
-			return;
-		}
-
-		if (world.distance(x, y, 0, rx, ry, 0) > r) {
-			return;
-		}
-
-		world.setTile(x, y, 0, TYPE_FLOOR);
-
-		if (Math.random() * Sp < p) {
-			spread_rec(x - 1, y, rx, ry, r, p - Sm);
-			if (validSpread(x, y)) {
-			}
-		}
-		if (Math.random() * Sp < p) {
-			spread_rec(x + 1, y, rx, ry, r, p - Sm);
-			if (validSpread(x, y)) {
-			}
-		}
-		if (Math.random() * Sp < p) {
-			spread_rec(x, y - 1, rx, ry, r, p - Sm);
-			if (validSpread(x, y)) {
-			}
-		}
-		if (Math.random() * Sp < p) {
-			spread_rec(x, y + 1, rx, ry, r, p - Sm);
-			if (validSpread(x, y)) {
-			}
-		}
-
-	}
-
 	public void build_doors() {
 		for (int z = 0; z < world.lvls; z++) {
 			for (int y = 1; y < world.rows - 1; y++) {
@@ -452,7 +354,7 @@ public class WorldGenerator {
 	}
 
 	public boolean hasNeighborDoor(int x, int y, int z, int d) {
-		int max = (int) (Math.random() * 5) + 1;
+		int max = (int) (Utils.random() * 5) + 1;
 		for (Entity door : world.levels[z].doors) {
 			if (door.getDirection() == d) {
 				if (door.getZ() == z) {
@@ -521,7 +423,7 @@ public class WorldGenerator {
 	public int random(Set<Integer> set) {
 		int s = set.size();
 
-		s = (int) (Math.random() * s);
+		s = (int) (Utils.random() * s);
 
 		for (int t : set) {
 			if (s == 0) {

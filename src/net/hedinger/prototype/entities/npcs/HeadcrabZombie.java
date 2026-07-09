@@ -1,8 +1,11 @@
 package net.hedinger.prototype.entities.npcs;
 
+import net.hedinger.prototype.engine.Utils;
+
 import java.awt.*;
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 
 
@@ -10,10 +13,6 @@ public class HeadcrabZombie extends NPC
 {
 	private static final Color ZOMBIE_COLOR = new Color(0, 150, 0);
 	private Color ZOMBIE_COLOR_INIT = new Color(0, 150, 0);
-	private static final double ZOMBIE_RANGE = 4; // zombie los range (pixels)
-	private static final double ZOMBIE_FOV = Math.PI;
-	private static final double ZOMBIE_SPEED = 0.03; // max speed
-	private static final int ZOMBIE_TURN = 10; // max turn speed
 	private static final int ZOMBIE_SF = 20;
 	private static final int ZOMBIE_MAX_AGE = 5000;
 	private static final int ZOMBIE_INFEST_DURATION = 250;
@@ -31,27 +30,23 @@ public class HeadcrabZombie extends NPC
 	public HeadcrabZombie(double x, double y, double z)
 	{
 		super(x, y, z);
+		applyGenome(Genome.phenotype(6, 0.03, 10, 4, Math.PI, ZOMBIE_MAX_AGE));
 		col = ZOMBIE_COLOR;
-		size = 6;
 		health = 200;
 		lifespan = ZOMBIE_MAX_AGE;
 		deathspan = (int) (ZOMBIE_MAX_AGE*0.5);
 		age = (int) (ZOMBIE_MAX_AGE * 0.5);
 		SEARCH_FREQ = ZOMBIE_SF;
-		LOS_RANGE = ZOMBIE_RANGE;
-		LOS_FOV = ZOMBIE_FOV;
 	}
 
 	public HeadcrabZombie(double x, double y, double z, double d)
 	{
 		super(x, y, z, d);
-		size = 6;
+		applyGenome(Genome.phenotype(6, 0.03, 10, 4, Math.PI, ZOMBIE_MAX_AGE));
 		health = 200;
 		lifespan = ZOMBIE_MAX_AGE;
 		deathspan = (int) (ZOMBIE_MAX_AGE*0.5);
 		SEARCH_FREQ = ZOMBIE_SF;
-		LOS_RANGE = ZOMBIE_RANGE;
-		LOS_FOV = ZOMBIE_FOV;
 	}
 
 	protected void think()
@@ -75,7 +70,7 @@ public class HeadcrabZombie extends NPC
 		}
 		if (allies != null && infesting == -1)
 			if (allies.size() < 2
-					&& ZOMBIE_MAX_AGE * 0.5 + Math.random() * ZOMBIE_MAX_AGE * 0.5 < age)
+					&& ZOMBIE_MAX_AGE * 0.5 + Utils.random() * ZOMBIE_MAX_AGE * 0.5 < age)
 				infesting = 0;
 
 		enemies = getTargets(enemies, ZOMBIE_ENEMIES, true);
@@ -109,21 +104,21 @@ public class HeadcrabZombie extends NPC
 		{
 			lockTarget(enemy);
 			if (seeTarget(ally, 1.0, Math.PI, "Entity.NPC.Headcrab", true))
-				chase(0, ZOMBIE_TURN);
+				chase(0, turnRate);
 			else
 			{
-				chase(ZOMBIE_SPEED, ZOMBIE_TURN);
+				chase(speed, turnRate);
 				if (seeTarget(enemy, 0.1, Math.PI * 0.1, ZOMBIE_ENEMIES, true))
 					enemy.damage((int) variation(75, 25));
 			}
 		}
 		else if (seeTarget(ally, 3.0, Math.PI, ZOMBIE_ALLIES, true) && status <= NPC.STATUS_THREAT)
 		{
-			follow(ZOMBIE_SPEED, ZOMBIE_TURN, ally, 1);
+			follow(speed, turnRate, ally, 1);
 
 		}
 		else
-			roam(ZOMBIE_SPEED * 0.5, ZOMBIE_TURN);
+			roam(speed * 0.5, turnRate);
 	}
 
 	private int infesting = -1;
@@ -141,7 +136,7 @@ public class HeadcrabZombie extends NPC
 		{
 			remove();
 
-			int n = (int) (Math.random() * 4) + 4;
+			int n = (int) (Utils.random() * 4) + 4;
 
 			for (int i = 0; i < n; i++)
 				getWorld().spawnEntity(new Headcrab(variation(X, 0.05), variation(Y, 0.05), Z, D));
@@ -151,7 +146,7 @@ public class HeadcrabZombie extends NPC
 
 	public void kill()
 	{
-		if (Math.random() * 4 < 1)
+		if (Utils.random() * 4 < 1)
 			getWorld().spawnEntity(new Headcrab(X, Y, Z, D));
 		age = -1;
 	}
