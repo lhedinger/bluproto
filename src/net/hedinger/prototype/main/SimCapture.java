@@ -79,6 +79,10 @@ public class SimCapture {
 			return;
 		}
 
+		// numbered PNG frames for an external encoder (e.g. ffmpeg -> mp4)
+		File frameDir = new File(dir, "frames");
+		frameDir.mkdirs();
+
 		File gif = new File(dir, "sim.gif");
 		GifWriter writer = new GifWriter(gif, 60, true); // ~60ms/frame
 		System.out.println("capturing " + frames + " frames...");
@@ -88,13 +92,15 @@ public class SimCapture {
 			}
 			renderFrame(canvas, world, view);
 			writer.append(canvas);
+			ImageIO.write(canvas, "png", new File(frameDir, String.format("frame_%04d.png", f)));
 
 			if (f == 0) {
 				ImageIO.write(canvas, "png", new File(dir, "screenshot.png"));
 			}
 		}
 		writer.close();
-		System.out.println("wrote " + gif.getPath() + " (" + frames + " frames) and screenshot.png");
+		System.out.println("wrote " + gif.getPath() + ", " + frames + " PNG frames in "
+				+ frameDir.getPath() + ", and screenshot.png");
 	}
 
 	/** Paints one frame using the same calls PrototypeWorld.paint() makes. */
