@@ -98,6 +98,14 @@ screen-position parallax so it reads as height), per-NPC state labels, magenta
 carry links, a vegetation wash (brown=barren → green=lush), red closed-door
 bars, and every level side-by-side.
 
+**Field atlas** (`-Dsimtest.atlas`, alongside `-Dsimtest.shots`): swaps each
+snapshot for a row of **single-field panels** — terrain, vegetation, fertility,
+pheromone — each a clean schematic heatmap with its own colour ramp and legend.
+A tile's fill is one channel but the sim grows many scalar fields; blending them
+collides and can't be decomposed, so the atlas separates them (grazed grass vs
+its underlying fertility become two readable maps). Add a field by adding one
+`FieldAtlas.Field` entry.
+
 ## Gotchas (account for these or tests lie)
 
 - **Perception is myopic.** Scanning only gathers from the 3×3 tile box, so

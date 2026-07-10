@@ -38,6 +38,11 @@ public abstract class Scenario {
 		return System.getProperty("simtest.shots") != null;
 	}
 
+	/** True when snapshots should be the single-field atlas (-Dsimtest.atlas). */
+	static boolean atlasEnabled() {
+		return System.getProperty("simtest.atlas") != null;
+	}
+
 	/**
 	 * Captures a labelled screenshot of the world (all levels, side by side)
 	 * with the debug overlay: heading arrows, state labels, carry links and
@@ -50,7 +55,7 @@ public abstract class Scenario {
 		if (!captureEnabled()) {
 			return;
 		}
-		shots.add(SnapshotRenderer.render(w));
+		shots.add(atlasEnabled() ? FieldAtlas.render(w) : SnapshotRenderer.render(w));
 		shotLabels.add(label);
 	}
 
