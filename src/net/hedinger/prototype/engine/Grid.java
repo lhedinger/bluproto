@@ -86,9 +86,10 @@ public class Grid {
 	}
 
 	/**
-	 * Colour wash for the ground layer (under doors and entities): terrain types
-	 * that have no sprite (water, mud, cover) are tinted, and floor tiles show
-	 * their vegetation density, so grazed patches and habitats read at a glance.
+	 * The ground layer (under doors and entities): each tile draws a monochrome
+	 * terrain texture (grass blades, water ripples, mud speckle, tall-grass
+	 * cover) rather than a flat colour -- grass density follows vegetation, so
+	 * grazed patches thin to bare floor. Pheromone rides on top as a wash.
 	 */
 	private void renderGround(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -96,34 +97,14 @@ public class Grid {
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
-				switch (t.getType()) {
-				case TYPE_WATER:
-					g2.setColor(new Color(40, 90, 200, 210));
-					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
-					break;
-				case TYPE_MUD:
-					g2.setColor(new Color(105, 75, 45, 200));
-					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
-					break;
-				case TYPE_COVER:
-					g2.setColor(new Color(25, 110, 40, 220)); // dense tall grass
-					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
-					break;
-				case TYPE_FLOOR:
-					double v = t.getVegetation(now) / Tile.VEG_MAX;
-					// Barren browns; grass greens and deepens with density.
-					int red = (int) (110 - v * 80);
-					int green = (int) (70 + v * 140);
-					int blue = (int) (40 - v * 40);
-					int alpha = (int) (70 + v * 185);
-					g2.setColor(new Color(red, green, blue, alpha));
-					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
-					break;
-				default:
-					break;
+				// Texture picked by type + a stable per-tile variant hash; a
+				// grazed floor returns null so the bare floor sprite shows.
+				int hash = (x * 73856093) ^ (y * 19349663);
+				java.awt.image.BufferedImage tex = GroundTextures.forTile(t, now, hash);
+				if (tex != null) {
+					g2.drawImage(tex, ox + x * ts, oy + y * ts, ts, ts, null);
 				}
-				// Pheromone on top of the ground, as a magenta wash: bright blobs
-				// are nests, faint smears are trails.
+				// Pheromone on top: bright blobs are nests, faint smears trails.
 				double ph = t.getPheromone(now);
 				if (ph > 0.05) {
 					int a = (int) Math.min(220, ph * 90);
