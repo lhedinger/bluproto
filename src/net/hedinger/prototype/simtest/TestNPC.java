@@ -347,6 +347,38 @@ public class TestNPC extends NPC {
 		return lastAction;
 	}
 
+	/** Canonical action key for the hovering overlay glyph, or null if none. */
+	public String actionKey() {
+		if (isDead()) {
+			return null;
+		}
+		if (grabbing != null) {
+			return "grab";
+		}
+		switch (behavior) {
+		case GENOME:
+			switch (lastAction) {
+			case ATTACK:
+				return "attack";
+			case FLEE:
+				return "flee";
+			case MATE:
+				return "mate";
+			case AFFILIATE:
+				return "affiliate";
+			default:
+				return null;
+			}
+		case GRAZE:
+		case BREEDER:
+			return "graze";
+		case NEST:
+			return homing ? "nest" : "graze";
+		default:
+			return null;
+		}
+	}
+
 	@Override
 	public String getNpcTypeName() {
 		return "TestNPC";

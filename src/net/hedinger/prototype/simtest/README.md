@@ -91,9 +91,12 @@ Fluent knobs chain: `.withHealth(n)`, `.withLifespan(n)`, `.withDeathspan(n)`,
 
 `-Dsimtest.shots=<dir>` composes each scenario's `snapshot()`s into a
 `<Scenario>.png` before/after strip (fires on failures too). The debug overlay
-draws what's otherwise invisible: cyan heading arrows, per-NPC state labels,
-magenta carry links, a vegetation wash (brown=barren → green=lush), red
-closed-door bars, and every level side-by-side.
+draws what's otherwise invisible: cyan heading arrows, a **hovering action
+glyph** (an icon badge floating above each entity — `!` attack, chevron flee,
+heart mate, asterisk graze, house nest, … — with a ground shadow and a
+screen-position parallax so it reads as height), per-NPC state labels, magenta
+carry links, a vegetation wash (brown=barren → green=lush), red closed-door
+bars, and every level side-by-side.
 
 ## Gotchas (account for these or tests lie)
 

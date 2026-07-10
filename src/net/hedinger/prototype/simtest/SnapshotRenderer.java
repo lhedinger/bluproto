@@ -153,6 +153,13 @@ final class SnapshotRenderer {
 				g.fillOval(hx - 3, hy - 3, 6, 6);
 			}
 
+			// Hovering action glyph: an icon floating above the entity, with a
+			// ground shadow and a screen-position parallax so it reads as height.
+			if (e instanceof TestNPC) {
+				drawActionGlyph(g, ex, ey, px, img.getWidth() / 2, w.getTick(),
+						((TestNPC) e).actionKey());
+			}
+
 			// State label under the entity.
 			String label = null;
 			if (e instanceof TestNPC) {
@@ -183,6 +190,110 @@ final class SnapshotRenderer {
 			}
 		}
 		g.dispose();
+	}
+
+	/**
+	 * A small action icon hovering above an entity. Sells "height" with three
+	 * cues: a ground shadow at the entity's feet, a vertical lift (plus a gentle
+	 * tick-driven bob), and a parallax x-shift proportional to distance from
+	 * screen centre -- as if the glyph sat one notch nearer the camera. A faint
+	 * leader ties the floating badge back to the body.
+	 */
+	private static void drawActionGlyph(Graphics2D g, int ex, int ey, double px, int centerX,
+			long tick, String action) {
+		if (action == null) {
+			return;
+		}
+		int gx = ex + (int) ((ex - centerX) * 0.06); // parallax: higher = shifts more
+		double bob = Math.sin(tick * 0.25) * (px * 0.03);
+		int by = (int) (ey - px * 0.62 - bob); // badge centre, lifted above the body
+		int rad = Math.max(7, (int) (px * 0.2));
+
+		// Ground shadow at the entity's feet.
+		g.setColor(new Color(0, 0, 0, 90));
+		g.fillOval(ex - rad / 2, ey + (int) (px * 0.04), rad, Math.max(3, rad / 3));
+
+		// Leader from the badge down to the body.
+		g.setColor(new Color(255, 255, 255, 70));
+		g.setStroke(new BasicStroke(1));
+		g.drawLine(gx, by + rad, ex, ey);
+
+		// Badge.
+		g.setColor(new Color(0, 0, 0, 130));
+		g.fillOval(gx - rad - 1, by - rad - 1, (rad + 1) * 2, (rad + 1) * 2);
+		g.setColor(glyphColor(action));
+		g.fillOval(gx - rad, by - rad, rad * 2, rad * 2);
+		g.setColor(Color.WHITE);
+		g.setStroke(new BasicStroke(2));
+		g.drawOval(gx - rad, by - rad, rad * 2, rad * 2);
+
+		drawSymbol(g, action, gx, by, rad);
+	}
+
+	private static Color glyphColor(String a) {
+		switch (a) {
+		case "attack":
+			return new Color(230, 60, 60);
+		case "flee":
+			return new Color(240, 190, 60);
+		case "mate":
+			return new Color(240, 90, 180);
+		case "affiliate":
+			return new Color(70, 200, 220);
+		case "graze":
+			return new Color(70, 200, 90);
+		case "nest":
+			return new Color(220, 60, 200);
+		case "grab":
+			return new Color(240, 150, 50);
+		default:
+			return new Color(160, 160, 160);
+		}
+	}
+
+	/** Minimal procedural symbols (font-independent) inside the badge. */
+	private static void drawSymbol(Graphics2D g, String a, int cx, int cy, int r) {
+		g.setColor(Color.WHITE);
+		g.setStroke(new BasicStroke(Math.max(2, r / 4)));
+		int u = r;
+		switch (a) {
+		case "attack": // exclamation
+			g.drawLine(cx, cy - u / 2, cx, cy + u / 6);
+			g.fillOval(cx - 2, cy + u / 2 - 2, 4, 4);
+			break;
+		case "flee": // chevron pointing away
+			g.drawLine(cx - u / 2, cy + u / 4, cx, cy - u / 3);
+			g.drawLine(cx, cy - u / 3, cx + u / 2, cy + u / 4);
+			break;
+		case "affiliate": // plus
+			g.drawLine(cx - u / 2, cy, cx + u / 2, cy);
+			g.drawLine(cx, cy - u / 2, cx, cy + u / 2);
+			break;
+		case "graze": // asterisk
+			for (int i = 0; i < 3; i++) {
+				double ang = i * Math.PI / 3;
+				int dx = (int) (Math.cos(ang) * u * 0.6), dy = (int) (Math.sin(ang) * u * 0.6);
+				g.drawLine(cx - dx, cy - dy, cx + dx, cy + dy);
+			}
+			break;
+		case "mate": // heart
+			g.fillOval(cx - u / 2, cy - u / 2, u / 2 + 1, u / 2 + 1);
+			g.fillOval(cx, cy - u / 2, u / 2 + 1, u / 2 + 1);
+			g.fillPolygon(new int[] { cx - u / 2, cx + u / 2, cx },
+					new int[] { cy - u / 8, cy - u / 8, cy + u / 2 }, 3);
+			break;
+		case "nest": // house
+			g.drawRect(cx - u / 3, cy - u / 8, (2 * u) / 3, u / 2);
+			g.drawPolygon(new int[] { cx - u / 2, cx + u / 2, cx },
+					new int[] { cy - u / 8, cy - u / 8, cy - u / 2 }, 3);
+			break;
+		case "grab": // hook
+			g.drawOval(cx - u / 2, cy - u / 2, u, u);
+			g.drawLine(cx, cy, cx + u / 2, cy + u / 2);
+			break;
+		default:
+			break;
+		}
 	}
 
 	private static BufferedImage upscale(BufferedImage src, int scale) {
