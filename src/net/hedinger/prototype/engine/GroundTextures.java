@@ -21,7 +21,7 @@ import java.util.Random;
  */
 public final class GroundTextures {
 
-	private static final int LEVELS = 3; // vegetation density buckets
+	private static final int LEVELS = 4; // vegetation density buckets
 	private static final int VARIANTS = 3; // per-type variety to avoid tiling
 	private static boolean ready = false;
 
@@ -42,7 +42,7 @@ public final class GroundTextures {
 		grass = new BufferedImage[LEVELS][VARIANTS];
 		for (int l = 0; l < LEVELS; l++) {
 			for (int v = 0; v < VARIANTS; v++) {
-				grass[l][v] = makeGrass(ts, 5 + l * 13, rng);
+				grass[l][v] = grassTile(ts, l, rng);
 			}
 		}
 		water = new BufferedImage[VARIANTS];
@@ -76,7 +76,8 @@ public final class GroundTextures {
 			if (veg < 0.12) {
 				return null; // grazed to bare earth
 			}
-			int level = (int) Math.min(LEVELS - 1, veg * LEVELS);
+			// Thin grass is a sparse stipple; lush grass fills in as mottle.
+			int level = veg < 0.35 ? 0 : veg < 0.6 ? 1 : veg < 0.85 ? 2 : 3;
 			return grass[level][v];
 		default:
 			return null;
@@ -92,25 +93,60 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Top-down stipple: grass as scattered dots (blade tips seen from above)
-	 * over a faint earth-green tint. More dots = lusher. Minimalist and abstract,
-	 * so it reads as ground cover from above rather than a side-on lawn.
+	 * Top-down grass by density level: thin grass (0-1) is a sparse-to-dense
+	 * stipple of dots (blade tips from above); lush grass (2-3) fills in as an
+	 * organic mottle. Both share the same green ground so a tile deepening from
+	 * stipple to mottle as it grows in reads as a smooth transition, not a jump.
 	 */
-	private static BufferedImage makeGrass(int ts, int count, Random rng) {
+	private static BufferedImage grassTile(int ts, int level, Random rng) {
+		if (level <= 1) {
+			return makeStipple(ts, level == 0 ? 22 : 42, rng);
+		}
+		return makeMottle(ts, level == 2 ? 12 : 20, rng);
+	}
+
+	private static BufferedImage grassGround(int ts) {
 		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
-		// A near-solid grass-green ground so the tile reads as grass (not the
-		// blue floor showing through), with the stipple as top-down grain.
-		g.setColor(new Color(46, 104, 54, 205));
+		g.setColor(new Color(46, 104, 54, 205)); // near-solid grass-green ground
 		g.fillRect(0, 0, ts, ts);
+		g.dispose();
+		return img;
+	}
+
+	/** Sparse dots as top-down grain. */
+	private static BufferedImage makeStipple(int ts, int count, Random rng) {
+		BufferedImage img = grassGround(ts);
+		Graphics2D g = gfx(img);
 		for (int i = 0; i < count; i++) {
-			int x = rng.nextInt(ts);
-			int y = rng.nextInt(ts);
-			int r = 2 + rng.nextInt(2);
-			// Dots a touch lighter/darker than the ground for a subtle stipple.
+			int x = rng.nextInt(ts), y = rng.nextInt(ts), r = 2 + rng.nextInt(2);
 			boolean light = rng.nextBoolean();
 			g.setColor(light ? new Color(90, 175, 95, 200) : new Color(28, 74, 38, 200));
 			g.fillOval(x, y, r, r);
+		}
+		g.dispose();
+		return img;
+	}
+
+	/**
+	 * Lush grass as organic light/dark blotches over the green ground. Each blob
+	 * is drawn at all nine toroidal offsets so it wraps across the tile edges --
+	 * the texture tiles with itself, killing the hard seams that per-tile clipped
+	 * blobs produced. The uniform ground keeps neighbouring variants from gridding.
+	 */
+	private static BufferedImage makeMottle(int ts, int blobs, Random rng) {
+		BufferedImage img = grassGround(ts);
+		Graphics2D g = gfx(img);
+		for (int i = 0; i < blobs; i++) {
+			int x = rng.nextInt(ts), y = rng.nextInt(ts);
+			int r = ts / 6 + rng.nextInt(ts / 3);
+			boolean light = rng.nextBoolean();
+			g.setColor(light ? new Color(84, 168, 92, 80) : new Color(24, 72, 34, 95));
+			for (int ox = -1; ox <= 1; ox++) {
+				for (int oy = -1; oy <= 1; oy++) {
+					g.fillOval(x - r / 2 + ox * ts, y - r / 2 + oy * ts, r, r);
+				}
+			}
 		}
 		g.dispose();
 		return img;
