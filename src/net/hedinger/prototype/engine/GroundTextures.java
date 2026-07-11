@@ -1,5 +1,6 @@
 package net.hedinger.prototype.engine;
 
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -14,12 +15,14 @@ import java.util.Random;
  * speckle, tall-grass cover -- so terrains are told apart by texture (identity)
  * and a scalar like vegetation density rides on top (magnitude).
  *
- * <p>Grass is split into a flat green {@link #GRASS_GREEN} base (drawn by the
- * caller) plus a transparent pattern overlay, so lush mottle tiles can fade
- * their blob overlay on edges facing thinner neighbours -- the blotches melt
- * into the plain green (which the stipple shares) instead of ending in a hard
- * square. The 16 edge-fade combinations are pre-baked once, from a dedicated
- * {@link Random} that never touches the simulation RNG.
+ * <p>Grass is a flat green {@link #GRASS_GREEN} base (drawn by the caller) plus
+ * a pattern overlay. Lush mottle is sampled from one large, toroidally seamless
+ * <em>world-space</em> field: each tile draws the window of that field at its
+ * world position, so blobs flow continuously across tile boundaries and mottle
+ * neighbours connect. Where a mottle tile borders thinner grass its overlay is
+ * faded on that edge (an alpha ramp composited in), so lush clumps melt into the
+ * plain green the stipple shares instead of ending in a hard square. All of it
+ * is baked once from a dedicated {@link Random} that never touches the sim RNG.
  */
 public final class GroundTextures {
 
@@ -27,10 +30,13 @@ public final class GroundTextures {
 	public static final Color GRASS_GREEN = new Color(46, 104, 54, 205);
 
 	private static final int VARIANTS = 3;
+	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
 	private static boolean ready = false;
 
 	private static BufferedImage[][] stipple;   // [thin level 0..1][variant]
-	private static BufferedImage[][][] mottle;  // [lush level 0..1][variant][edgeMask]
+	private static BufferedImage[] mottleField; // [lush level 0..1] big seamless world-space field
+	private static BufferedImage[] edgeMask;    // [16] per-tile alpha ramp to fade edges
+	private static BufferedImage mottleTmp;     // reused scratch for edge-faded mottle tiles
 	private static BufferedImage[] water;
 	private static BufferedImage[] mud;
 	private static BufferedImage[] cover;
@@ -43,6 +49,7 @@ public final class GroundTextures {
 			return;
 		}
 		int ts = ResourceManager.tileSize;
+		int big = FIELD_TILES * ts;
 		Random rng = new Random(0x6C9A11E5L); // dedicated: not the sim RNG
 
 		stipple = new BufferedImage[2][VARIANTS];
@@ -51,15 +58,15 @@ public final class GroundTextures {
 				stipple[l][v] = makeStipple(ts, l == 0 ? 22 : 42, rng);
 			}
 		}
-		mottle = new BufferedImage[2][VARIANTS][16];
-		for (int l = 0; l < 2; l++) {
-			for (int v = 0; v < VARIANTS; v++) {
-				BufferedImage base = makeMottle(ts, l == 0 ? 12 : 20, rng);
-				for (int mask = 0; mask < 16; mask++) {
-					mottle[l][v][mask] = mask == 0 ? base : fadeEdges(base, mask, ts);
-				}
-			}
+		mottleField = new BufferedImage[2];
+		mottleField[0] = makeMottleField(big, ts, 12 * FIELD_TILES * FIELD_TILES, rng);
+		mottleField[1] = makeMottleField(big, ts, 20 * FIELD_TILES * FIELD_TILES, rng);
+		edgeMask = new BufferedImage[16];
+		for (int m = 0; m < 16; m++) {
+			edgeMask[m] = makeEdgeMask(ts, m);
 		}
+		mottleTmp = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+
 		water = new BufferedImage[VARIANTS];
 		mud = new BufferedImage[VARIANTS];
 		cover = new BufferedImage[VARIANTS];
@@ -83,18 +90,37 @@ public final class GroundTextures {
 		return level >= 2;
 	}
 
-	/**
-	 * The transparent grass pattern overlay for a level/variant. Mottle levels
-	 * use {@code edgeMask} (bits N=1, E=2, S=4, W=8) to fade the blobs on edges
-	 * that face thinner grass; stipple ignores it.
-	 */
-	public static BufferedImage grassPattern(int level, int variant, int edgeMask) {
+	/** The transparent stipple overlay (thin grass) for a level/variant. */
+	public static BufferedImage stipplePattern(int level, int variant) {
 		ensure();
 		int v = (variant & 0x7fffffff) % VARIANTS;
-		if (level <= 1) {
-			return stipple[level][v];
+		return stipple[Math.min(1, level)][v];
+	}
+
+	/**
+	 * Draws the lush mottle overlay for one tile, sampled from the continuous
+	 * world-space field at (worldX, worldY) so it joins its mottle neighbours.
+	 * {@code edgeMask} (bits N=1, E=2, S=4, W=8) fades the overlay on edges that
+	 * face thinner grass.
+	 */
+	public static void drawMottle(Graphics2D g, int sx, int sy, int ts, int level,
+			int worldX, int worldY, int edgeMaskBits) {
+		ensure();
+		BufferedImage field = mottleField[level - 2];
+		int big = FIELD_TILES * ts;
+		int srcX = Math.floorMod(worldX * ts, big);
+		int srcY = Math.floorMod(worldY * ts, big);
+		if ((edgeMaskBits & 15) == 0) {
+			g.drawImage(field, sx, sy, sx + ts, sy + ts, srcX, srcY, srcX + ts, srcY + ts, null);
+			return;
 		}
-		return mottle[level - 2][v][edgeMask & 15];
+		Graphics2D tg = mottleTmp.createGraphics();
+		tg.setComposite(AlphaComposite.Src); // overwrite the scratch with this window
+		tg.drawImage(field, 0, 0, ts, ts, srcX, srcY, srcX + ts, srcY + ts, null);
+		tg.setComposite(AlphaComposite.DstIn); // keep dst alpha * ramp
+		tg.drawImage(edgeMask[edgeMaskBits & 15], 0, 0, null);
+		tg.dispose();
+		g.drawImage(mottleTmp, sx, sy, null);
 	}
 
 	/** Opaque texture for the non-grass terrains (water/mud/cover), else null. */
@@ -136,22 +162,22 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Lush grass as organic light/dark blotches, transparent-backed. Each blob
-	 * is drawn at all nine toroidal offsets so it wraps across the tile edges --
-	 * the texture tiles with itself, killing the hard seams that clipped blobs
-	 * produced.
+	 * One large toroidally seamless field of organic light/dark blotches. Blobs
+	 * are placed over [0, big) and drawn at the nine period offsets so the field
+	 * wraps; the image is padded by one tile so any tile-window inside it is
+	 * fully readable. Tiles sample contiguous windows, so blobs cross boundaries.
 	 */
-	private static BufferedImage makeMottle(int ts, int blobs, Random rng) {
-		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+	private static BufferedImage makeMottleField(int big, int ts, int blobs, Random rng) {
+		BufferedImage img = new BufferedImage(big + ts, big + ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		for (int i = 0; i < blobs; i++) {
-			int x = rng.nextInt(ts), y = rng.nextInt(ts);
+			int x = rng.nextInt(big), y = rng.nextInt(big);
 			int r = ts / 6 + rng.nextInt(ts / 3);
 			boolean light = rng.nextBoolean();
 			g.setColor(light ? new Color(84, 168, 92, 80) : new Color(24, 72, 34, 95));
-			for (int ox = -1; ox <= 1; ox++) {
-				for (int oy = -1; oy <= 1; oy++) {
-					g.fillOval(x - r / 2 + ox * ts, y - r / 2 + oy * ts, r, r);
+			for (int ox = -big; ox <= big; ox += big) {
+				for (int oy = -big; oy <= big; oy += big) {
+					g.fillOval(x - r / 2 + ox, y - r / 2 + oy, r, r);
 				}
 			}
 		}
@@ -159,38 +185,33 @@ public final class GroundTextures {
 		return img;
 	}
 
-	/** Multiplies the alpha by an edge ramp on each flagged edge (N,E,S,W). */
-	private static BufferedImage fadeEdges(BufferedImage src, int mask, int ts) {
-		BufferedImage out = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
-		int fade = ts / 4; // ramp width in px
+	/** White mask whose alpha ramps to 0 on each flagged edge (N=1,E=2,S=4,W=8). */
+	private static BufferedImage makeEdgeMask(int ts, int mask) {
+		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+		int fade = ts / 4;
 		for (int y = 0; y < ts; y++) {
 			for (int x = 0; x < ts; x++) {
-				int argb = src.getRGB(x, y);
-				int a = argb >>> 24;
-				if (a == 0) {
-					continue;
-				}
 				double f = 1.0;
 				if ((mask & 1) != 0) {
-					f = Math.min(f, y / (double) fade); // N
+					f = Math.min(f, y / (double) fade);
 				}
 				if ((mask & 2) != 0) {
-					f = Math.min(f, (ts - 1 - x) / (double) fade); // E
+					f = Math.min(f, (ts - 1 - x) / (double) fade);
 				}
 				if ((mask & 4) != 0) {
-					f = Math.min(f, (ts - 1 - y) / (double) fade); // S
+					f = Math.min(f, (ts - 1 - y) / (double) fade);
 				}
 				if ((mask & 8) != 0) {
-					f = Math.min(f, x / (double) fade); // W
+					f = Math.min(f, x / (double) fade);
 				}
 				if (f > 1) {
 					f = 1;
 				}
-				int na = (int) (a * f);
-				out.setRGB(x, y, (na << 24) | (argb & 0xFFFFFF));
+				int a = (int) (255 * f);
+				img.setRGB(x, y, (a << 24) | 0xFFFFFF);
 			}
 		}
-		return out;
+		return img;
 	}
 
 	/** Opaque blue with lighter horizontal ripple lines. */

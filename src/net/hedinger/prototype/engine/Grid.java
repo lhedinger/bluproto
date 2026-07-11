@@ -108,8 +108,13 @@ public class Grid {
 					if (level >= 0) {
 						g2.setColor(GroundTextures.GRASS_GREEN);
 						g2.fillRect(sx, sy, ts, ts);
-						int mask = GroundTextures.isMottle(level) ? mottleEdgeMask(x, y, now) : 0;
-						g2.drawImage(GroundTextures.grassPattern(level, hash, mask), sx, sy, ts, ts, null);
+						if (GroundTextures.isMottle(level)) {
+							// Sampled from one world-space field so it joins its
+							// mottle neighbours; faded toward thinner grass.
+							GroundTextures.drawMottle(g2, sx, sy, ts, level, x, y, mottleEdgeMask(x, y, now));
+						} else {
+							g2.drawImage(GroundTextures.stipplePattern(level, hash), sx, sy, ts, ts, null);
+						}
 					}
 				} else {
 					java.awt.image.BufferedImage tex = GroundTextures.terrain(t, hash);
