@@ -10,9 +10,9 @@ import java.util.Random;
 /**
  * Procedurally generated ground tile textures. Instead of painting each field
  * as a flat colour, the ground gets a monochrome *pattern* per terrain type --
- * grass blades, water ripples, mud speckle, tall-grass cover -- so terrains are
- * told apart by texture (identity), and a scalar value like vegetation density
- * rides on top by choosing a denser variant (magnitude).
+ * top-down grass stipple, water ripples, mud speckle, tall-grass cover -- so
+ * terrains are told apart by texture (identity), and a scalar value like
+ * vegetation density rides on top by choosing a denser variant (magnitude).
  *
  * <p>Generated once at first use from a dedicated {@link Random} so it never
  * draws from the simulation RNG (determinism is untouched). Grass is
@@ -91,20 +91,26 @@ public final class GroundTextures {
 		return g;
 	}
 
-	/** Green blades over a faint earth-green tint; more blades = lusher. */
+	/**
+	 * Top-down stipple: grass as scattered dots (blade tips seen from above)
+	 * over a faint earth-green tint. More dots = lusher. Minimalist and abstract,
+	 * so it reads as ground cover from above rather than a side-on lawn.
+	 */
 	private static BufferedImage makeGrass(int ts, int count, Random rng) {
 		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
-		g.setColor(new Color(40, 90, 45, 55)); // subtle ground tint so it reads green
+		// A near-solid grass-green ground so the tile reads as grass (not the
+		// blue floor showing through), with the stipple as top-down grain.
+		g.setColor(new Color(46, 104, 54, 205));
 		g.fillRect(0, 0, ts, ts);
 		for (int i = 0; i < count; i++) {
-			int bx = rng.nextInt(ts);
-			int by = ts - rng.nextInt(ts / 4 + 1);
-			int len = ts / 6 + rng.nextInt(ts / 3);
-			int dx = rng.nextInt(7) - 3;
-			g.setColor(new Color(40 + rng.nextInt(35), 150 + rng.nextInt(70), 50 + rng.nextInt(45)));
-			g.setStroke(new BasicStroke(1 + rng.nextInt(2)));
-			g.drawLine(bx, by, bx + dx, by - len);
+			int x = rng.nextInt(ts);
+			int y = rng.nextInt(ts);
+			int r = 2 + rng.nextInt(2);
+			// Dots a touch lighter/darker than the ground for a subtle stipple.
+			boolean light = rng.nextBoolean();
+			g.setColor(light ? new Color(90, 175, 95, 200) : new Color(28, 74, 38, 200));
+			g.fillOval(x, y, r, r);
 		}
 		g.dispose();
 		return img;
