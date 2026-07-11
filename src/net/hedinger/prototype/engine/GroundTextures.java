@@ -10,22 +10,27 @@ import java.util.Random;
 /**
  * Procedurally generated ground tile textures. Instead of painting each field
  * as a flat colour, the ground gets a monochrome *pattern* per terrain type --
- * top-down grass stipple, water ripples, mud speckle, tall-grass cover -- so
- * terrains are told apart by texture (identity), and a scalar value like
- * vegetation density rides on top by choosing a denser variant (magnitude).
+ * top-down grass (stipple when thin, mottle when lush), water ripples, mud
+ * speckle, tall-grass cover -- so terrains are told apart by texture (identity)
+ * and a scalar like vegetation density rides on top (magnitude).
  *
- * <p>Generated once at first use from a dedicated {@link Random} so it never
- * draws from the simulation RNG (determinism is untouched). Grass is
- * transparent-backed so the floor sprite shows between blades; water/mud/cover
- * are opaque tiles that stand in for the floor.
+ * <p>Grass is split into a flat green {@link #GRASS_GREEN} base (drawn by the
+ * caller) plus a transparent pattern overlay, so lush mottle tiles can fade
+ * their blob overlay on edges facing thinner neighbours -- the blotches melt
+ * into the plain green (which the stipple shares) instead of ending in a hard
+ * square. The 16 edge-fade combinations are pre-baked once, from a dedicated
+ * {@link Random} that never touches the simulation RNG.
  */
 public final class GroundTextures {
 
-	private static final int LEVELS = 4; // vegetation density buckets
-	private static final int VARIANTS = 3; // per-type variety to avoid tiling
+	/** Flat grass ground; the caller fills this before the pattern overlay. */
+	public static final Color GRASS_GREEN = new Color(46, 104, 54, 205);
+
+	private static final int VARIANTS = 3;
 	private static boolean ready = false;
 
-	private static BufferedImage[][] grass; // [density][variant]
+	private static BufferedImage[][] stipple;   // [thin level 0..1][variant]
+	private static BufferedImage[][][] mottle;  // [lush level 0..1][variant][edgeMask]
 	private static BufferedImage[] water;
 	private static BufferedImage[] mud;
 	private static BufferedImage[] cover;
@@ -39,10 +44,20 @@ public final class GroundTextures {
 		}
 		int ts = ResourceManager.tileSize;
 		Random rng = new Random(0x6C9A11E5L); // dedicated: not the sim RNG
-		grass = new BufferedImage[LEVELS][VARIANTS];
-		for (int l = 0; l < LEVELS; l++) {
+
+		stipple = new BufferedImage[2][VARIANTS];
+		for (int l = 0; l < 2; l++) {
 			for (int v = 0; v < VARIANTS; v++) {
-				grass[l][v] = grassTile(ts, l, rng);
+				stipple[l][v] = makeStipple(ts, l == 0 ? 22 : 42, rng);
+			}
+		}
+		mottle = new BufferedImage[2][VARIANTS][16];
+		for (int l = 0; l < 2; l++) {
+			for (int v = 0; v < VARIANTS; v++) {
+				BufferedImage base = makeMottle(ts, l == 0 ? 12 : 20, rng);
+				for (int mask = 0; mask < 16; mask++) {
+					mottle[l][v][mask] = mask == 0 ? base : fadeEdges(base, mask, ts);
+				}
 			}
 		}
 		water = new BufferedImage[VARIANTS];
@@ -56,12 +71,34 @@ public final class GroundTextures {
 		ready = true;
 	}
 
+	/** Grass density level for a vegetation fraction: -1 bare, 0-1 stipple, 2-3 mottle. */
+	public static int grassLevel(double veg) {
+		if (veg < 0.12) {
+			return -1;
+		}
+		return veg < 0.35 ? 0 : veg < 0.6 ? 1 : veg < 0.85 ? 2 : 3;
+	}
+
+	public static boolean isMottle(int level) {
+		return level >= 2;
+	}
+
 	/**
-	 * The texture for a tile, or null for bare ground (let the floor show). The
-	 * {@code hash} is a stable per-tile value so a tile always draws the same
-	 * variant.
+	 * The transparent grass pattern overlay for a level/variant. Mottle levels
+	 * use {@code edgeMask} (bits N=1, E=2, S=4, W=8) to fade the blobs on edges
+	 * that face thinner grass; stipple ignores it.
 	 */
-	public static BufferedImage forTile(Tile t, long now, int hash) {
+	public static BufferedImage grassPattern(int level, int variant, int edgeMask) {
+		ensure();
+		int v = (variant & 0x7fffffff) % VARIANTS;
+		if (level <= 1) {
+			return stipple[level][v];
+		}
+		return mottle[level - 2][v][edgeMask & 15];
+	}
+
+	/** Opaque texture for the non-grass terrains (water/mud/cover), else null. */
+	public static BufferedImage terrain(Tile t, int hash) {
 		ensure();
 		int v = (hash & 0x7fffffff) % VARIANTS;
 		switch (t.getType()) {
@@ -71,14 +108,6 @@ public final class GroundTextures {
 			return mud[v];
 		case TYPE_COVER:
 			return cover[v];
-		case TYPE_FLOOR:
-			double veg = t.getVegetation(now) / Tile.VEG_MAX;
-			if (veg < 0.12) {
-				return null; // grazed to bare earth
-			}
-			// Thin grass is a sparse stipple; lush grass fills in as mottle.
-			int level = veg < 0.35 ? 0 : veg < 0.6 ? 1 : veg < 0.85 ? 2 : 3;
-			return grass[level][v];
 		default:
 			return null;
 		}
@@ -92,31 +121,9 @@ public final class GroundTextures {
 		return g;
 	}
 
-	/**
-	 * Top-down grass by density level: thin grass (0-1) is a sparse-to-dense
-	 * stipple of dots (blade tips from above); lush grass (2-3) fills in as an
-	 * organic mottle. Both share the same green ground so a tile deepening from
-	 * stipple to mottle as it grows in reads as a smooth transition, not a jump.
-	 */
-	private static BufferedImage grassTile(int ts, int level, Random rng) {
-		if (level <= 1) {
-			return makeStipple(ts, level == 0 ? 22 : 42, rng);
-		}
-		return makeMottle(ts, level == 2 ? 12 : 20, rng);
-	}
-
-	private static BufferedImage grassGround(int ts) {
-		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = gfx(img);
-		g.setColor(new Color(46, 104, 54, 205)); // near-solid grass-green ground
-		g.fillRect(0, 0, ts, ts);
-		g.dispose();
-		return img;
-	}
-
-	/** Sparse dots as top-down grain. */
+	/** Sparse dots as top-down grain, transparent-backed. */
 	private static BufferedImage makeStipple(int ts, int count, Random rng) {
-		BufferedImage img = grassGround(ts);
+		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		for (int i = 0; i < count; i++) {
 			int x = rng.nextInt(ts), y = rng.nextInt(ts), r = 2 + rng.nextInt(2);
@@ -129,13 +136,13 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Lush grass as organic light/dark blotches over the green ground. Each blob
+	 * Lush grass as organic light/dark blotches, transparent-backed. Each blob
 	 * is drawn at all nine toroidal offsets so it wraps across the tile edges --
-	 * the texture tiles with itself, killing the hard seams that per-tile clipped
-	 * blobs produced. The uniform ground keeps neighbouring variants from gridding.
+	 * the texture tiles with itself, killing the hard seams that clipped blobs
+	 * produced.
 	 */
 	private static BufferedImage makeMottle(int ts, int blobs, Random rng) {
-		BufferedImage img = grassGround(ts);
+		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		for (int i = 0; i < blobs; i++) {
 			int x = rng.nextInt(ts), y = rng.nextInt(ts);
@@ -150,6 +157,40 @@ public final class GroundTextures {
 		}
 		g.dispose();
 		return img;
+	}
+
+	/** Multiplies the alpha by an edge ramp on each flagged edge (N,E,S,W). */
+	private static BufferedImage fadeEdges(BufferedImage src, int mask, int ts) {
+		BufferedImage out = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+		int fade = ts / 4; // ramp width in px
+		for (int y = 0; y < ts; y++) {
+			for (int x = 0; x < ts; x++) {
+				int argb = src.getRGB(x, y);
+				int a = argb >>> 24;
+				if (a == 0) {
+					continue;
+				}
+				double f = 1.0;
+				if ((mask & 1) != 0) {
+					f = Math.min(f, y / (double) fade); // N
+				}
+				if ((mask & 2) != 0) {
+					f = Math.min(f, (ts - 1 - x) / (double) fade); // E
+				}
+				if ((mask & 4) != 0) {
+					f = Math.min(f, (ts - 1 - y) / (double) fade); // S
+				}
+				if ((mask & 8) != 0) {
+					f = Math.min(f, x / (double) fade); // W
+				}
+				if (f > 1) {
+					f = 1;
+				}
+				int na = (int) (a * f);
+				out.setRGB(x, y, (na << 24) | (argb & 0xFFFFFF));
+			}
+		}
+		return out;
 	}
 
 	/** Opaque blue with lighter horizontal ripple lines. */

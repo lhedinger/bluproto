@@ -97,22 +97,64 @@ public class Grid {
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
-				// Texture picked by type + a stable per-tile variant hash; a
-				// grazed floor returns null so the bare floor sprite shows.
 				int hash = (x * 73856093) ^ (y * 19349663);
-				java.awt.image.BufferedImage tex = GroundTextures.forTile(t, now, hash);
-				if (tex != null) {
-					g2.drawImage(tex, ox + x * ts, oy + y * ts, ts, ts, null);
+				int sx = ox + x * ts, sy = oy + y * ts;
+				if (t.getType() == Tile.TileType.TYPE_FLOOR) {
+					// Grass: flat green base + a pattern overlay whose density
+					// follows vegetation. Lush (mottle) tiles fade their overlay
+					// on edges facing thinner grass so they don't end in a hard
+					// square; a grazed floor draws nothing (bare sprite shows).
+					int level = GroundTextures.grassLevel(t.getVegetation(now) / Tile.VEG_MAX);
+					if (level >= 0) {
+						g2.setColor(GroundTextures.GRASS_GREEN);
+						g2.fillRect(sx, sy, ts, ts);
+						int mask = GroundTextures.isMottle(level) ? mottleEdgeMask(x, y, now) : 0;
+						g2.drawImage(GroundTextures.grassPattern(level, hash, mask), sx, sy, ts, ts, null);
+					}
+				} else {
+					java.awt.image.BufferedImage tex = GroundTextures.terrain(t, hash);
+					if (tex != null) {
+						g2.drawImage(tex, sx, sy, ts, ts, null);
+					}
 				}
 				// Pheromone on top: bright blobs are nests, faint smears trails.
 				double ph = t.getPheromone(now);
 				if (ph > 0.05) {
 					int a = (int) Math.min(220, ph * 90);
 					g2.setColor(new Color(230, 40, 190, a));
-					g2.fillRect(ox + x * ts, oy + y * ts, ts, ts);
+					g2.fillRect(sx, sy, ts, ts);
 				}
 			}
 		}
+	}
+
+	/** Edge-fade bits (N=1, E=2, S=4, W=8) for edges whose neighbour isn't mottle. */
+	private int mottleEdgeMask(int x, int y, long now) {
+		int mask = 0;
+		if (!neighbourMottle(x, y - 1, now)) {
+			mask |= 1;
+		}
+		if (!neighbourMottle(x + 1, y, now)) {
+			mask |= 2;
+		}
+		if (!neighbourMottle(x, y + 1, now)) {
+			mask |= 4;
+		}
+		if (!neighbourMottle(x - 1, y, now)) {
+			mask |= 8;
+		}
+		return mask;
+	}
+
+	private boolean neighbourMottle(int nx, int ny, long now) {
+		if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+			return false;
+		}
+		Tile n = tiles[nx][ny];
+		if (n.getType() != Tile.TileType.TYPE_FLOOR) {
+			return false;
+		}
+		return GroundTextures.isMottle(GroundTextures.grassLevel(n.getVegetation(now) / Tile.VEG_MAX));
 	}
 
 	public void alignTiles() {
