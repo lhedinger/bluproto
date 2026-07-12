@@ -44,6 +44,7 @@ public final class GroundTextures {
 	private static BufferedImage[] mottleField; // [lush level 0..1] big seamless world-space field
 	private static BufferedImage[] edgeMask;    // [16] per-tile alpha ramp to fade edges
 	private static BufferedImage mottleTmp;     // reused scratch for edge-faded mottle tiles
+	private static BufferedImage featherTmp;    // reused scratch for edge-feathered opaque fills
 	private static BufferedImage waterField;    // big seamless world-space ripple field
 	private static BufferedImage[] mud;
 	private static BufferedImage[] cover;
@@ -73,6 +74,7 @@ public final class GroundTextures {
 			edgeMask[m] = makeEdgeMask(ts, m);
 		}
 		mottleTmp = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+		featherTmp = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		waterField = makeWaterField(big, ts, rng);
 
 		mud = new BufferedImage[VARIANTS];
@@ -127,6 +129,39 @@ public final class GroundTextures {
 		tg.drawImage(edgeMask[edgeMaskBits & 15], 0, 0, null);
 		tg.dispose();
 		g.drawImage(mottleTmp, sx, sy, null);
+	}
+
+	/**
+	 * Fills a tile with an opaque colour or texture, but fades ({@code edgeMask}
+	 * bits N=1, E=2, S=4, W=8) the edges that face a different terrain, so the
+	 * fill melts into whatever substrate is already drawn underneath rather than
+	 * ending in a hard straight tile seam. Interior tiles (mask 0) draw the plain
+	 * opaque fill unchanged. Pass a colour or an image; the other is null.
+	 */
+	public static void drawFeathered(Graphics2D g, int sx, int sy, int ts,
+			Color color, BufferedImage img, int edgeMaskBits) {
+		ensure();
+		if ((edgeMaskBits & 15) == 0) {
+			if (img != null) {
+				g.drawImage(img, sx, sy, ts, ts, null);
+			} else {
+				g.setColor(color);
+				g.fillRect(sx, sy, ts, ts);
+			}
+			return;
+		}
+		Graphics2D tg = featherTmp.createGraphics();
+		tg.setComposite(AlphaComposite.Src); // overwrite the scratch fully
+		if (img != null) {
+			tg.drawImage(img, 0, 0, ts, ts, null);
+		} else {
+			tg.setColor(color);
+			tg.fillRect(0, 0, ts, ts);
+		}
+		tg.setComposite(AlphaComposite.DstIn); // keep dst alpha * ramp
+		tg.drawImage(edgeMask[edgeMaskBits & 15], 0, 0, null);
+		tg.dispose();
+		g.drawImage(featherTmp, sx, sy, null);
 	}
 
 	/** Opaque per-tile texture for mud/cover, else null. */

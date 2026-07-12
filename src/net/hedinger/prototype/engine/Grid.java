@@ -105,14 +105,17 @@ public class Grid {
 				if (t.getType() == Tile.TileType.TYPE_FLOOR) {
 					// Soil base over the blue floor sprite, then opaque grass
 					// where vegetation grows: bare/grazed ground reads as earth,
-					// grassy ground as green. The overlay density follows
-					// vegetation; lush (mottle) tiles fade toward thinner grass.
+					// grassy ground as green. The green base is feathered where it
+					// meets non-green ground (bare soil, mud, water) so it melts
+					// into the soil instead of ending in a hard tile seam; the
+					// overlay density follows vegetation, lush (mottle) tiles fade
+					// toward thinner grass.
 					g2.setColor(GroundTextures.SOIL);
 					g2.fillRect(sx, sy, ts, ts);
 					int level = GroundTextures.grassLevel(t.getVegetation(now) / Tile.VEG_MAX);
 					if (level >= 0) {
-						g2.setColor(GroundTextures.GRASS_GREEN);
-						g2.fillRect(sx, sy, ts, ts);
+						GroundTextures.drawFeathered(g2, sx, sy, ts, GroundTextures.GRASS_GREEN, null,
+								greenEdgeMask(x, y, now));
 						if (GroundTextures.isMottle(level)) {
 							// Sampled from one world-space field so it joins its
 							// mottle neighbours; faded toward thinner grass.
@@ -129,6 +132,21 @@ public class Grid {
 					g2.fillRect(sx, sy, ts, ts);
 					GroundTextures.drawWater(g2, sx, sy, ts, x, y);
 					roundWaterCorners(g2, x, y, sx, sy, ts);
+				} else if (t.getType() == Tile.TileType.TYPE_MUD) {
+					// Soil substrate, then the mud texture feathered where it meets
+					// non-mud so the patch melts into the earth at its border.
+					g2.setColor(GroundTextures.SOIL);
+					g2.fillRect(sx, sy, ts, ts);
+					GroundTextures.drawFeathered(g2, sx, sy, ts, null, GroundTextures.terrain(t, hash),
+							typeEdgeMask(x, y, Tile.TileType.TYPE_MUD));
+				} else if (t.getType() == Tile.TileType.TYPE_COVER) {
+					// Grass substrate (cover is lush), then the cover texture
+					// feathered where it meets non-cover so the tall grass melts
+					// into the surrounding sward instead of a hard square.
+					g2.setColor(GroundTextures.GRASS_GREEN);
+					g2.fillRect(sx, sy, ts, ts);
+					GroundTextures.drawFeathered(g2, sx, sy, ts, null, GroundTextures.terrain(t, hash),
+							typeEdgeMask(x, y, Tile.TileType.TYPE_COVER));
 				} else {
 					java.awt.image.BufferedImage tex = GroundTextures.terrain(t, hash);
 					if (tex != null) {
@@ -173,6 +191,64 @@ public class Grid {
 			mask |= 8;
 		}
 		return mask;
+	}
+
+	/** Edge-fade bits for edges whose neighbour isn't green ground (grass or cover). */
+	private int greenEdgeMask(int x, int y, long now) {
+		int mask = 0;
+		if (!greenNeighbour(x, y - 1, now)) {
+			mask |= 1;
+		}
+		if (!greenNeighbour(x + 1, y, now)) {
+			mask |= 2;
+		}
+		if (!greenNeighbour(x, y + 1, now)) {
+			mask |= 4;
+		}
+		if (!greenNeighbour(x - 1, y, now)) {
+			mask |= 8;
+		}
+		return mask;
+	}
+
+	/** A neighbour reads as green if it is tall-grass cover or grassed floor. */
+	private boolean greenNeighbour(int nx, int ny, long now) {
+		if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+			return false;
+		}
+		Tile n = tiles[nx][ny];
+		if (n.getType() == Tile.TileType.TYPE_COVER) {
+			return true;
+		}
+		if (n.getType() != Tile.TileType.TYPE_FLOOR) {
+			return false;
+		}
+		return GroundTextures.grassLevel(n.getVegetation(now) / Tile.VEG_MAX) >= 0;
+	}
+
+	/** Edge-fade bits for edges whose neighbour isn't the given terrain type. */
+	private int typeEdgeMask(int x, int y, Tile.TileType type) {
+		int mask = 0;
+		if (!isType(x, y - 1, type)) {
+			mask |= 1;
+		}
+		if (!isType(x + 1, y, type)) {
+			mask |= 2;
+		}
+		if (!isType(x, y + 1, type)) {
+			mask |= 4;
+		}
+		if (!isType(x - 1, y, type)) {
+			mask |= 8;
+		}
+		return mask;
+	}
+
+	private boolean isType(int nx, int ny, Tile.TileType type) {
+		if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+			return false;
+		}
+		return tiles[nx][ny].getType() == type;
 	}
 
 	private boolean neighbourMottle(int nx, int ny, long now) {
