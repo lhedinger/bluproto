@@ -31,10 +31,10 @@ public final class GroundTextures {
 	/** Opaque grass ground the caller fills before the pattern overlay; it hides
 	 * the blue floor sprite so grass reads green, not murky teal. */
 	public static final Color GRASS_GREEN = new Color(58, 120, 60);
-	/** Opaque water surface the caller fills before the ripple overlay. */
-	public static final Color WATER_BLUE = new Color(40, 96, 175);
-	/** Lighter shallow/foam rim drawn where water meets land. */
-	public static final Color SHORE = new Color(120, 180, 225);
+	/** Opaque deep-water surface the caller fills before the overlay. */
+	public static final Color WATER_BLUE = new Color(30, 78, 150);
+	/** Turquoise shallows drawn where water meets land. */
+	public static final Color SHORE = new Color(96, 190, 205);
 
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
@@ -232,30 +232,36 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * One large seamless field of lighter-blue ripple lines, transparent-backed
-	 * (drawn over the {@link #WATER_BLUE} base). Each line is a gentle sine wave
-	 * with an integer number of periods across the field, so it tiles in x; drawn
-	 * at the three y-period offsets so it wraps in y. Tiles sample contiguous
-	 * windows, so ripples flow continuously across water tiles.
+	 * One large seamless top-down water surface, transparent-backed (drawn over
+	 * the {@link #WATER_BLUE} base). Not ripple lines (which read side-on) but a
+	 * satellite look: subtle low-contrast reflectance/depth mottle plus a sparse
+	 * scatter of bright sun-glint specks. Blobs are drawn at the nine period
+	 * offsets so the field wraps; tiles sample contiguous windows, so it flows
+	 * continuously across water tiles.
 	 */
 	private static BufferedImage makeWaterField(int big, int ts, Random rng) {
 		BufferedImage img = new BufferedImage(big + ts, big + ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
-		g.setStroke(new BasicStroke(2));
-		int lines = big / 7;
-		for (int i = 0; i < lines; i++) {
-			int y0 = rng.nextInt(big);
-			double amp = 2 + rng.nextInt(4);
-			int periods = 1 + rng.nextInt(3);
-			g.setColor(new Color(150, 205, 240, 55 + rng.nextInt(70)));
-			for (int yoff = -big; yoff <= big; yoff += big) {
-				int px = 0;
-				double py = y0 + yoff;
-				for (int x = 6; x <= big + ts; x += 6) {
-					double yy = y0 + yoff + amp * Math.sin(2 * Math.PI * periods * x / big);
-					g.drawLine(px, (int) Math.round(py), x, (int) Math.round(yy));
-					px = x;
-					py = yy;
+		int blobs = 14 * FIELD_TILES * FIELD_TILES;
+		for (int i = 0; i < blobs; i++) {
+			int x = rng.nextInt(big), y = rng.nextInt(big);
+			int r = ts / 4 + rng.nextInt(ts / 2);
+			boolean light = rng.nextBoolean();
+			g.setColor(light ? new Color(120, 175, 230, 30) : new Color(16, 50, 118, 48));
+			for (int ox = -big; ox <= big; ox += big) {
+				for (int oy = -big; oy <= big; oy += big) {
+					g.fillOval(x - r / 2 + ox, y - r / 2 + oy, r, r);
+				}
+			}
+		}
+		int glints = 3 * FIELD_TILES * FIELD_TILES; // specular sun sparkle
+		for (int i = 0; i < glints; i++) {
+			int x = rng.nextInt(big), y = rng.nextInt(big);
+			int r = 2 + rng.nextInt(3);
+			g.setColor(new Color(205, 232, 255, 90 + rng.nextInt(90)));
+			for (int ox = -big; ox <= big; ox += big) {
+				for (int oy = -big; oy <= big; oy += big) {
+					g.fillOval(x - r / 2 + ox, y - r / 2 + oy, r, r);
 				}
 			}
 		}

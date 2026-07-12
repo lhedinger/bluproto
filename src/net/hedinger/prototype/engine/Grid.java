@@ -1,9 +1,11 @@
 package net.hedinger.prototype.engine;
 
 import java.awt.Color;
-import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.RadialGradientPaint;
+import java.awt.Shape;
+import java.awt.geom.Point2D;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.TreeMap;
@@ -119,6 +121,9 @@ public class Grid {
 							g2.drawImage(GroundTextures.stipplePattern(level, hash), sx, sy, ts, ts, null);
 						}
 					}
+					// Wet margin where land meets water: softens the tile-step
+					// shoreline from the land side, so it doesn't stair-step.
+					drawWetMargin(g2, x, y, sx, sy, ts);
 				} else if (t.getType() == Tile.TileType.TYPE_WATER) {
 					// Opaque blue base + world-space ripples that flow across
 					// water tiles, with a lighter shore rim where it meets land.
@@ -173,10 +178,10 @@ public class Grid {
 	}
 
 	/**
-	 * Shore treatment on any water edge that meets non-water: a gradient of
-	 * shallows that fades from the waterline into deep water, plus a scatter of
-	 * foam flecks along the boundary. Reads as a soft shoreline rather than a
-	 * hard painted border; overlapping gradients at corners brighten naturally.
+	 * Shore treatment on any water edge that meets non-water. Rather than a
+	 * straight gradient band (too even), it scatters soft radial "shallow" blobs
+	 * of varying reach along the waterline, clipped to the water tile -- so the
+	 * inner edge of the shallows wanders organically. Foam flecks sit on top.
 	 */
 	private void drawShoreRim(Graphics2D g2, int x, int y, int sx, int sy, int ts) {
 		boolean n = !neighbourWater(x, y - 1);
@@ -186,30 +191,27 @@ public class Grid {
 		if (!(n || e || s || w)) {
 			return;
 		}
-		int fade = ts / 3;
 		Color c = GroundTextures.SHORE;
-		Color lit = new Color(c.getRed(), c.getGreen(), c.getBlue(), 185);
+		Color core = new Color(c.getRed(), c.getGreen(), c.getBlue(), 150);
 		Color clear = new Color(c.getRed(), c.getGreen(), c.getBlue(), 0);
 
+		Shape oldClip = g2.getClip();
+		g2.clipRect(sx, sy, ts, ts); // keep shallows inside the water tile
 		if (n) {
-			g2.setPaint(new GradientPaint(sx, sy, lit, sx, sy + fade, clear));
-			g2.fillRect(sx, sy, ts, fade);
+			shallowBlobs(g2, x, y, 0, sx, sy, 1, 0, 0, 1, ts, core, clear);
 		}
 		if (s) {
-			g2.setPaint(new GradientPaint(sx, sy + ts, lit, sx, sy + ts - fade, clear));
-			g2.fillRect(sx, sy + ts - fade, ts, fade);
+			shallowBlobs(g2, x, y, 1, sx, sy + ts, 1, 0, 0, -1, ts, core, clear);
 		}
 		if (w) {
-			g2.setPaint(new GradientPaint(sx, sy, lit, sx + fade, sy, clear));
-			g2.fillRect(sx, sy, fade, ts);
+			shallowBlobs(g2, x, y, 2, sx, sy, 0, 1, 1, 0, ts, core, clear);
 		}
 		if (e) {
-			g2.setPaint(new GradientPaint(sx + ts, sy, lit, sx + ts - fade, sy, clear));
-			g2.fillRect(sx + ts - fade, sy, fade, ts);
+			shallowBlobs(g2, x, y, 3, sx + ts, sy, 0, 1, -1, 0, ts, core, clear);
 		}
+		g2.setClip(oldClip);
 
-		// Foam flecks along each waterline, at stable per-tile positions,
-		// jittered inward off the boundary (into the water).
+		// Foam flecks along each waterline, jittered inward off the boundary.
 		g2.setColor(new Color(215, 238, 250, 210));
 		if (n) {
 			foam(g2, x, y, 0, sx, sy, ts, true, +1);
@@ -222,6 +224,59 @@ public class Grid {
 		}
 		if (e) {
 			foam(g2, x, y, 3, sx + ts, sy, ts, false, -1);
+		}
+	}
+
+	/**
+	 * The land-side companion to {@link #drawShoreRim}: a subtle wet fringe on a
+	 * land tile's edges that face water, reaching inward onto the land. Together
+	 * the two make the shoreline a soft irregular band straddling the tile line
+	 * instead of a hard tile step.
+	 */
+	private void drawWetMargin(Graphics2D g2, int x, int y, int sx, int sy, int ts) {
+		boolean n = neighbourWater(x, y - 1);
+		boolean e = neighbourWater(x + 1, y);
+		boolean s = neighbourWater(x, y + 1);
+		boolean w = neighbourWater(x - 1, y);
+		if (!(n || e || s || w)) {
+			return;
+		}
+		Color c = GroundTextures.SHORE;
+		Color core = new Color(c.getRed(), c.getGreen(), c.getBlue(), 85);
+		Color clear = new Color(c.getRed(), c.getGreen(), c.getBlue(), 0);
+		Shape oldClip = g2.getClip();
+		g2.clipRect(sx, sy, ts, ts);
+		if (n) {
+			shallowBlobs(g2, x, y, 4, sx, sy, 1, 0, 0, 1, ts, core, clear);
+		}
+		if (s) {
+			shallowBlobs(g2, x, y, 5, sx, sy + ts, 1, 0, 0, -1, ts, core, clear);
+		}
+		if (w) {
+			shallowBlobs(g2, x, y, 6, sx, sy, 0, 1, 1, 0, ts, core, clear);
+		}
+		if (e) {
+			shallowBlobs(g2, x, y, 7, sx + ts, sy, 0, 1, -1, 0, ts, core, clear);
+		}
+		g2.setClip(oldClip);
+	}
+
+	/**
+	 * Soft radial shallows blobs along one waterline edge. Origin (bx,by) with an
+	 * along-axis (dax,day) and an inward-axis (ix,iy); each blob's reach varies
+	 * from the tile hash so the shallows edge is irregular.
+	 */
+	private void shallowBlobs(Graphics2D g2, int x, int y, int edge, int bx, int by,
+			int dax, int day, int ix, int iy, int ts, Color core, Color clear) {
+		for (int i = 0; i < 6; i++) {
+			int h = ((x * 928371) ^ (y * 1299709) ^ (edge * 40503) ^ (i * 2654435)) & 0x7fffffff;
+			int along = (h % 100) * ts / 100;
+			int r = ts / 5 + (h / 100) % (ts / 2);
+			int cx = bx + dax * along + ix * (r / 4);
+			int cy = by + day * along + iy * (r / 4);
+			g2.setPaint(new RadialGradientPaint(new Point2D.Float(cx, cy), Math.max(2, r),
+					new float[] { 0f, 1f }, new Color[] { core, clear }));
+			g2.fillOval(cx - r, cy - r, 2 * r, 2 * r);
 		}
 	}
 
