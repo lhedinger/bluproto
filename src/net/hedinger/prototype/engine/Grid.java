@@ -1,6 +1,7 @@
 package net.hedinger.prototype.engine;
 
 import java.awt.Color;
+import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.HashMap;
@@ -171,21 +172,70 @@ public class Grid {
 		return GroundTextures.isMottle(GroundTextures.grassLevel(n.getVegetation(now) / Tile.VEG_MAX));
 	}
 
-	/** Lighter shallows/foam rim on any water edge that meets non-water. */
+	/**
+	 * Shore treatment on any water edge that meets non-water: a gradient of
+	 * shallows that fades from the waterline into deep water, plus a scatter of
+	 * foam flecks along the boundary. Reads as a soft shoreline rather than a
+	 * hard painted border; overlapping gradients at corners brighten naturally.
+	 */
 	private void drawShoreRim(Graphics2D g2, int x, int y, int sx, int sy, int ts) {
-		int w = Math.max(2, ts / 12);
-		g2.setColor(GroundTextures.SHORE);
-		if (!neighbourWater(x, y - 1)) {
-			g2.fillRect(sx, sy, ts, w); // N
+		boolean n = !neighbourWater(x, y - 1);
+		boolean e = !neighbourWater(x + 1, y);
+		boolean s = !neighbourWater(x, y + 1);
+		boolean w = !neighbourWater(x - 1, y);
+		if (!(n || e || s || w)) {
+			return;
 		}
-		if (!neighbourWater(x + 1, y)) {
-			g2.fillRect(sx + ts - w, sy, w, ts); // E
+		int fade = ts / 3;
+		Color c = GroundTextures.SHORE;
+		Color lit = new Color(c.getRed(), c.getGreen(), c.getBlue(), 185);
+		Color clear = new Color(c.getRed(), c.getGreen(), c.getBlue(), 0);
+
+		if (n) {
+			g2.setPaint(new GradientPaint(sx, sy, lit, sx, sy + fade, clear));
+			g2.fillRect(sx, sy, ts, fade);
 		}
-		if (!neighbourWater(x, y + 1)) {
-			g2.fillRect(sx, sy + ts - w, ts, w); // S
+		if (s) {
+			g2.setPaint(new GradientPaint(sx, sy + ts, lit, sx, sy + ts - fade, clear));
+			g2.fillRect(sx, sy + ts - fade, ts, fade);
 		}
-		if (!neighbourWater(x - 1, y)) {
-			g2.fillRect(sx, sy, w, ts); // W
+		if (w) {
+			g2.setPaint(new GradientPaint(sx, sy, lit, sx + fade, sy, clear));
+			g2.fillRect(sx, sy, fade, ts);
+		}
+		if (e) {
+			g2.setPaint(new GradientPaint(sx + ts, sy, lit, sx + ts - fade, sy, clear));
+			g2.fillRect(sx + ts - fade, sy, fade, ts);
+		}
+
+		// Foam flecks along each waterline, at stable per-tile positions,
+		// jittered inward off the boundary (into the water).
+		g2.setColor(new Color(215, 238, 250, 210));
+		if (n) {
+			foam(g2, x, y, 0, sx, sy, ts, true, +1);
+		}
+		if (s) {
+			foam(g2, x, y, 1, sx, sy + ts, ts, true, -1);
+		}
+		if (w) {
+			foam(g2, x, y, 2, sx, sy, ts, false, +1);
+		}
+		if (e) {
+			foam(g2, x, y, 3, sx + ts, sy, ts, false, -1);
+		}
+	}
+
+	/** Small light dots scattered along one waterline edge (deterministic). */
+	private void foam(Graphics2D g2, int x, int y, int edge, int ex, int ey, int ts, boolean horizontal, int inward) {
+		for (int i = 0; i < 5; i++) {
+			int h = (x * 928371) ^ (y * 1299709) ^ (edge * 40503) ^ (i * 2654435);
+			h &= 0x7fffffff;
+			int along = (h % 100) * ts / 100;
+			int off = inward * ((h / 100) % 5); // small inward jitter off the boundary
+			int r = 2 + (h / 500) % 2;
+			int cx = horizontal ? ex + along : ex + off;
+			int cy = horizontal ? ey + off : ey + along;
+			g2.fillOval(cx - r / 2, cy - r / 2, r, r);
 		}
 	}
 
