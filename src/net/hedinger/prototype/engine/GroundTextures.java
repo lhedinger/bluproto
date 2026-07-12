@@ -26,8 +26,11 @@ import java.util.Random;
  */
 public final class GroundTextures {
 
-	/** Flat grass ground; the caller fills this before the pattern overlay. */
-	public static final Color GRASS_GREEN = new Color(46, 104, 54, 205);
+	/** Opaque earth under everything, so bare/grazed ground reads as soil. */
+	public static final Color SOIL = new Color(78, 64, 46);
+	/** Opaque grass ground the caller fills before the pattern overlay; it hides
+	 * the blue floor sprite so grass reads green, not murky teal. */
+	public static final Color GRASS_GREEN = new Color(58, 120, 60);
 
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating

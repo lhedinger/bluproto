@@ -100,10 +100,12 @@ public class Grid {
 				int hash = (x * 73856093) ^ (y * 19349663);
 				int sx = ox + x * ts, sy = oy + y * ts;
 				if (t.getType() == Tile.TileType.TYPE_FLOOR) {
-					// Grass: flat green base + a pattern overlay whose density
-					// follows vegetation. Lush (mottle) tiles fade their overlay
-					// on edges facing thinner grass so they don't end in a hard
-					// square; a grazed floor draws nothing (bare sprite shows).
+					// Soil base over the blue floor sprite, then opaque grass
+					// where vegetation grows: bare/grazed ground reads as earth,
+					// grassy ground as green. The overlay density follows
+					// vegetation; lush (mottle) tiles fade toward thinner grass.
+					g2.setColor(GroundTextures.SOIL);
+					g2.fillRect(sx, sy, ts, ts);
 					int level = GroundTextures.grassLevel(t.getVegetation(now) / Tile.VEG_MAX);
 					if (level >= 0) {
 						g2.setColor(GroundTextures.GRASS_GREEN);
