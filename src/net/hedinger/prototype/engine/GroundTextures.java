@@ -1,7 +1,6 @@
 package net.hedinger.prototype.engine;
 
 import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -320,20 +319,29 @@ public final class GroundTextures {
 		return img;
 	}
 
-	/** Opaque dark green with dense tall blades. */
+	/**
+	 * Dense dark canopy, top-down: a shadowy green base with many overlapping
+	 * clumps so it reads as a thicket you can hide in (it blocks sight), distinct
+	 * from open grass by being darker and busier -- no side-view blades.
+	 */
 	private static BufferedImage makeCover(int ts, Random rng) {
 		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
-		g.setColor(new Color(24, 74, 34, 240));
+		g.setColor(new Color(26, 72, 34, 245));
 		g.fillRect(0, 0, ts, ts);
-		for (int i = 0; i < 44; i++) {
-			int bx = rng.nextInt(ts);
-			int by = ts - rng.nextInt(ts / 3 + 1);
-			int len = ts / 3 + rng.nextInt(ts / 2);
-			int dx = rng.nextInt(5) - 2;
-			g.setColor(new Color(30 + rng.nextInt(30), 120 + rng.nextInt(80), 40 + rng.nextInt(40)));
-			g.setStroke(new BasicStroke(1 + rng.nextInt(2)));
-			g.drawLine(bx, by, bx + dx, by - len);
+		// Overlapping blobs -> a bushy canopy seen from above.
+		for (int i = 0; i < 64; i++) {
+			int x = rng.nextInt(ts), y = rng.nextInt(ts);
+			int r = ts / 8 + rng.nextInt(ts / 4);
+			boolean light = rng.nextInt(3) == 0;
+			g.setColor(light ? new Color(66, 146, 72, 110) : new Color(15, 52, 24, 140));
+			g.fillOval(x - r / 2, y - r / 2, r, r);
+		}
+		// A few bright tips for sparkle, still round (no strokes).
+		for (int i = 0; i < 10; i++) {
+			int x = rng.nextInt(ts), y = rng.nextInt(ts), r = 1 + rng.nextInt(2);
+			g.setColor(new Color(120, 200, 120, 150));
+			g.fillOval(x, y, r, r);
 		}
 		g.dispose();
 		return img;
