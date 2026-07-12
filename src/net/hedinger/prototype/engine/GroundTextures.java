@@ -31,6 +31,10 @@ public final class GroundTextures {
 	/** Opaque grass ground the caller fills before the pattern overlay; it hides
 	 * the blue floor sprite so grass reads green, not murky teal. */
 	public static final Color GRASS_GREEN = new Color(58, 120, 60);
+	/** Opaque water surface the caller fills before the ripple overlay. */
+	public static final Color WATER_BLUE = new Color(40, 96, 175);
+	/** Lighter shallow/foam rim drawn where water meets land. */
+	public static final Color SHORE = new Color(120, 180, 225);
 
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
@@ -40,7 +44,7 @@ public final class GroundTextures {
 	private static BufferedImage[] mottleField; // [lush level 0..1] big seamless world-space field
 	private static BufferedImage[] edgeMask;    // [16] per-tile alpha ramp to fade edges
 	private static BufferedImage mottleTmp;     // reused scratch for edge-faded mottle tiles
-	private static BufferedImage[] water;
+	private static BufferedImage waterField;    // big seamless world-space ripple field
 	private static BufferedImage[] mud;
 	private static BufferedImage[] cover;
 
@@ -69,12 +73,11 @@ public final class GroundTextures {
 			edgeMask[m] = makeEdgeMask(ts, m);
 		}
 		mottleTmp = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+		waterField = makeWaterField(big, ts, rng);
 
-		water = new BufferedImage[VARIANTS];
 		mud = new BufferedImage[VARIANTS];
 		cover = new BufferedImage[VARIANTS];
 		for (int v = 0; v < VARIANTS; v++) {
-			water[v] = makeWater(ts, rng);
 			mud[v] = makeMud(ts, rng);
 			cover[v] = makeCover(ts, rng);
 		}
@@ -126,13 +129,11 @@ public final class GroundTextures {
 		g.drawImage(mottleTmp, sx, sy, null);
 	}
 
-	/** Opaque texture for the non-grass terrains (water/mud/cover), else null. */
+	/** Opaque per-tile texture for mud/cover, else null. */
 	public static BufferedImage terrain(Tile t, int hash) {
 		ensure();
 		int v = (hash & 0x7fffffff) % VARIANTS;
 		switch (t.getType()) {
-		case TYPE_WATER:
-			return water[v];
 		case TYPE_MUD:
 			return mud[v];
 		case TYPE_COVER:
@@ -140,6 +141,19 @@ public final class GroundTextures {
 		default:
 			return null;
 		}
+	}
+
+	/**
+	 * Draws the water ripple overlay for one tile, sampled from the continuous
+	 * world-space field at (worldX, worldY) so ripples flow across water tiles.
+	 * The caller fills {@link #WATER_BLUE} first.
+	 */
+	public static void drawWater(Graphics2D g, int sx, int sy, int ts, int worldX, int worldY) {
+		ensure();
+		int big = FIELD_TILES * ts;
+		int srcX = Math.floorMod(worldX * ts, big);
+		int srcY = Math.floorMod(worldY * ts, big);
+		g.drawImage(waterField, sx, sy, sx + ts, sy + ts, srcX, srcY, srcX + ts, srcY + ts, null);
 	}
 
 	// ---- generators --------------------------------------------------------
@@ -217,24 +231,32 @@ public final class GroundTextures {
 		return img;
 	}
 
-	/** Opaque blue with lighter horizontal ripple lines. */
-	private static BufferedImage makeWater(int ts, Random rng) {
-		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
+	/**
+	 * One large seamless field of lighter-blue ripple lines, transparent-backed
+	 * (drawn over the {@link #WATER_BLUE} base). Each line is a gentle sine wave
+	 * with an integer number of periods across the field, so it tiles in x; drawn
+	 * at the three y-period offsets so it wraps in y. Tiles sample contiguous
+	 * windows, so ripples flow continuously across water tiles.
+	 */
+	private static BufferedImage makeWaterField(int big, int ts, Random rng) {
+		BufferedImage img = new BufferedImage(big + ts, big + ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
-		g.setColor(new Color(38, 88, 172, 240));
-		g.fillRect(0, 0, ts, ts);
 		g.setStroke(new BasicStroke(2));
-		for (int i = 0; i < 5; i++) {
-			int y = rng.nextInt(ts);
-			g.setColor(new Color(120, 180, 235, 90 + rng.nextInt(80)));
-			int x = 0;
-			int py = y;
-			while (x < ts) {
-				int nx = x + ts / 4;
-				int ny = y + rng.nextInt(7) - 3;
-				g.drawLine(x, py, Math.min(nx, ts), ny);
-				x = nx;
-				py = ny;
+		int lines = big / 7;
+		for (int i = 0; i < lines; i++) {
+			int y0 = rng.nextInt(big);
+			double amp = 2 + rng.nextInt(4);
+			int periods = 1 + rng.nextInt(3);
+			g.setColor(new Color(150, 205, 240, 55 + rng.nextInt(70)));
+			for (int yoff = -big; yoff <= big; yoff += big) {
+				int px = 0;
+				double py = y0 + yoff;
+				for (int x = 6; x <= big + ts; x += 6) {
+					double yy = y0 + yoff + amp * Math.sin(2 * Math.PI * periods * x / big);
+					g.drawLine(px, (int) Math.round(py), x, (int) Math.round(yy));
+					px = x;
+					py = yy;
+				}
 			}
 		}
 		g.dispose();

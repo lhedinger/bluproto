@@ -118,6 +118,13 @@ public class Grid {
 							g2.drawImage(GroundTextures.stipplePattern(level, hash), sx, sy, ts, ts, null);
 						}
 					}
+				} else if (t.getType() == Tile.TileType.TYPE_WATER) {
+					// Opaque blue base + world-space ripples that flow across
+					// water tiles, with a lighter shore rim where it meets land.
+					g2.setColor(GroundTextures.WATER_BLUE);
+					g2.fillRect(sx, sy, ts, ts);
+					GroundTextures.drawWater(g2, sx, sy, ts, x, y);
+					drawShoreRim(g2, x, y, sx, sy, ts);
 				} else {
 					java.awt.image.BufferedImage tex = GroundTextures.terrain(t, hash);
 					if (tex != null) {
@@ -162,6 +169,31 @@ public class Grid {
 			return false;
 		}
 		return GroundTextures.isMottle(GroundTextures.grassLevel(n.getVegetation(now) / Tile.VEG_MAX));
+	}
+
+	/** Lighter shallows/foam rim on any water edge that meets non-water. */
+	private void drawShoreRim(Graphics2D g2, int x, int y, int sx, int sy, int ts) {
+		int w = Math.max(2, ts / 12);
+		g2.setColor(GroundTextures.SHORE);
+		if (!neighbourWater(x, y - 1)) {
+			g2.fillRect(sx, sy, ts, w); // N
+		}
+		if (!neighbourWater(x + 1, y)) {
+			g2.fillRect(sx + ts - w, sy, w, ts); // E
+		}
+		if (!neighbourWater(x, y + 1)) {
+			g2.fillRect(sx, sy + ts - w, ts, w); // S
+		}
+		if (!neighbourWater(x - 1, y)) {
+			g2.fillRect(sx, sy, w, ts); // W
+		}
+	}
+
+	private boolean neighbourWater(int nx, int ny) {
+		if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+			return false;
+		}
+		return tiles[nx][ny].getType() == Tile.TileType.TYPE_WATER;
 	}
 
 	public void alignTiles() {
