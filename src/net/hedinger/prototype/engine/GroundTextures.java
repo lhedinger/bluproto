@@ -62,7 +62,7 @@ public final class GroundTextures {
 		stipple = new BufferedImage[2][VARIANTS];
 		for (int l = 0; l < 2; l++) {
 			for (int v = 0; v < VARIANTS; v++) {
-				stipple[l][v] = makeStipple(ts, l == 0 ? 22 : 42, rng);
+				stipple[l][v] = makeStipple(ts, l == 0 ? 55 : 105, rng);
 			}
 		}
 		mottleField = new BufferedImage[2];
@@ -198,14 +198,19 @@ public final class GroundTextures {
 		return g;
 	}
 
-	/** Sparse dots as top-down grain, transparent-backed. */
+	/**
+	 * Dots as top-down grass grain, transparent-backed. Dense and fairly high
+	 * contrast (bright tips + dark shade) so thin grass clearly reads as a
+	 * stippled texture rather than flat green -- it has to stay legible under the
+	 * global scanline overlay the view composites on top.
+	 */
 	private static BufferedImage makeStipple(int ts, int count, Random rng) {
 		BufferedImage img = new BufferedImage(ts, ts, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		for (int i = 0; i < count; i++) {
-			int x = rng.nextInt(ts), y = rng.nextInt(ts), r = 2 + rng.nextInt(2);
+			int x = rng.nextInt(ts), y = rng.nextInt(ts), r = 2 + rng.nextInt(3);
 			boolean light = rng.nextBoolean();
-			g.setColor(light ? new Color(90, 175, 95, 200) : new Color(28, 74, 38, 200));
+			g.setColor(light ? new Color(116, 200, 112, 230) : new Color(18, 56, 26, 230));
 			g.fillOval(x, y, r, r);
 		}
 		g.dispose();
