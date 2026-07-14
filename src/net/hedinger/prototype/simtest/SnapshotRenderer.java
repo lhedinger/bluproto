@@ -50,6 +50,11 @@ final class SnapshotRenderer {
 
 	/** Renders every level of the world side by side, with the debug overlay. */
 	static BufferedImage render(World w) {
+		// Recompute tile connectivity codes so wall/hole/ramp autotiling picks the
+		// right connector sub-tiles. Scenario worlds are built with setTile+think,
+		// and think() never aligns tiles (only real world-gen does), so without
+		// this every wall renders as an isolated rounded blob.
+		w.alignTiles();
 		List<BufferedImage> levels = new ArrayList<BufferedImage>();
 		List<String> labels = new ArrayList<String>();
 		for (int z = 0; z < w.getLevels(); z++) {
