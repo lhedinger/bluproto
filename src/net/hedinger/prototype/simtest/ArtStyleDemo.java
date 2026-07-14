@@ -109,17 +109,18 @@ public class ArtStyleDemo {
 	static BufferedImage reference(double[][] elev) {
 		int s = 6, w = AW * s, h = AH * s;
 		int pad = 18, lab = 26, gap = 18;
-		List<int[]> spots = entitySpots(elev); // {tileCol, tileRow, colorIndex}
-		int[] genomeColors = { 0xd8483a, 0xe8c84a, 0x8a56d0 }; // three "species"
+		List<int[]> spots = entitySpots(elev); // {tileCol, tileRow, colorIndex, radius}
+		// Five "species" colours from a genome would drive these.
+		int[] genomeColors = { 0xd8483a, 0xe8c84a, 0x8a56d0, 0x3fb6c8, 0xe08a2a };
 
 		BufferedImage[] panels = new BufferedImage[2];
-		String[] labels = { "5. Full — tile grid + entities", "6. Full + CRT — tile grid + entities" };
+		String[] labels = { "5. Full — tile grid + sub-tile entities", "6. Full + CRT — tile grid + sub-tile entities" };
 		V[] vs = { V.FULL, V.CRT };
 		for (int k = 0; k < 2; k++) {
 			BufferedImage p = upscale(renderArt(V.FULL, elev), s);
 			drawGrid(p, s);
 			for (int[] sp : spots) {
-				drawEntity(p, s, sp[0] * TILE + TILE / 2, sp[1] * TILE + TILE / 2, genomeColors[sp[2]]);
+				drawEntity(p, s, sp[0] * TILE + TILE / 2, sp[1] * TILE + TILE / 2, sp[3], genomeColors[sp[2]]);
 			}
 			if (vs[k] == V.CRT) {
 				crt(p);
@@ -203,58 +204,59 @@ public class ArtStyleDemo {
 		}
 	}
 
-	/** A small round critter in the pixel/palette style: shadow, body ramp, eyes. */
-	static void drawEntity(BufferedImage img, int scale, int cxArt, int cyArt, int base) {
-		int r = 5;
-		// ground shadow: a flat dark ellipse under the body
+	/**
+	 * A sub-tile critter in the pixel/palette style. At ~1/8 tile it is a small
+	 * genome-coloured dot; {@code r} (art-px radius, from a size attribute) sets
+	 * how big. Bigger ones get shading, a rim and eyes; tiny ones stay a clean dot.
+	 */
+	static void drawEntity(BufferedImage img, int scale, int cxArt, int cyArt, int r, int base) {
+		// Ground shadow: a flat dark sliver under the body.
 		for (int dx = -r; dx <= r; dx++) {
-			for (int dy = 0; dy <= 2; dy++) {
-				if ((dx * dx) / (double) (r * r) + (dy * dy) / 2.0 <= 1) {
-					blendBlock(img, scale, cxArt + dx, cyArt + r - 1 + dy, 0x000000, 0.30);
-				}
+			if (dx * dx <= r * r) {
+				blendBlock(img, scale, cxArt + dx, cyArt + r, 0x000000, 0.28);
 			}
 		}
 		for (int dx = -r; dx <= r; dx++) {
 			for (int dy = -r; dy <= r; dy++) {
 				double d = Math.sqrt(dx * dx + dy * dy);
-				if (d > r + 0.3) {
+				if (d > r + 0.25) {
 					continue;
 				}
 				int col;
-				if (d > r - 1.0) {
-					col = shade(base, 0.30); // outline
+				if (r >= 2 && d > r - 1.0) {
+					col = shade(base, 0.35); // rim on larger bodies
 				} else {
 					double ts = (dy + r) / (2.0 * r);
-					col = ts < 0.34 ? mixWhite(base, 0.38) : (ts > 0.7 ? shade(base, 0.6) : base);
+					col = ts < 0.4 ? mixWhite(base, 0.4) : (ts > 0.72 ? shade(base, 0.62) : base);
 				}
 				stamp(img, scale, cxArt + dx, cyArt + dy, col);
 			}
 		}
-		// eyes
-		stamp(img, scale, cxArt - 2, cyArt - 2, 0xf4f6ff);
-		stamp(img, scale, cxArt + 2, cyArt - 2, 0xf4f6ff);
-		stamp(img, scale, cxArt - 2, cyArt - 1, 0x101018);
-		stamp(img, scale, cxArt + 2, cyArt - 1, 0x101018);
+		if (r >= 3) { // eyes only when there's room
+			stamp(img, scale, cxArt - 1, cyArt - 1, 0xf4f6ff);
+			stamp(img, scale, cxArt + 1, cyArt - 1, 0xf4f6ff);
+		}
 	}
 
-	/** Pick a few grass tiles, spread out, to place reference entities. */
+	/**
+	 * Scatter a small population across land tiles with varied sizes -- most
+	 * around an eighth of a tile, a few bigger, to show the attribute range.
+	 */
 	static List<int[]> entitySpots(double[][] elev) {
-		List<int[]> grass = new ArrayList<int[]>();
+		List<int[]> land = new ArrayList<int[]>();
 		for (int tc = 1; tc < AW / TILE - 1; tc++) {
 			for (int tr = 1; tr < AH / TILE - 1; tr++) {
-				double e = elev[tc * TILE + TILE / 2][tr * TILE + TILE / 2];
-				if (bandOf(e) == 2) { // grass
-					grass.add(new int[] { tc, tr, 0 });
+				int b = bandOf(elev[tc * TILE + TILE / 2][tr * TILE + TILE / 2]);
+				if (b == 2 || b == 3) { // grass or dirt
+					land.add(new int[] { tc, tr });
 				}
 			}
 		}
+		int[] radii = { 1, 1, 2, 1, 2, 1, 3, 1, 2 }; // mostly small (~1/8 tile), a few larger
 		List<int[]> out = new ArrayList<int[]>();
-		if (!grass.isEmpty()) {
-			int[] idx = { grass.size() / 6, grass.size() / 2, (grass.size() * 5) / 6 };
-			for (int k = 0; k < 3; k++) {
-				int[] s = grass.get(Math.min(grass.size() - 1, idx[k]));
-				out.add(new int[] { s[0], s[1], k });
-			}
+		for (int k = 0; k < radii.length && !land.isEmpty(); k++) {
+			int[] t = land.get((k * 37 + 5) % land.size());
+			out.add(new int[] { t[0], t[1], k % 5, radii[k] });
 		}
 		return out;
 	}
