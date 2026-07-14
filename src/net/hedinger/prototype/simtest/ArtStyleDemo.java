@@ -3,7 +3,6 @@ package net.hedinger.prototype.simtest;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -13,142 +12,146 @@ import java.util.List;
 import javax.imageio.ImageIO;
 
 /**
- * Art-style prototype harness (scratch tool, not a scenario test). Renders the
- * same procedural island (water -> beach -> grass -> dirt -> stone) with a calm,
- * base-dominant terrain texture and noise-dithered transitions, under several
- * alternative palettes -- one full-size image per palette (with a tile grid and
- * sub-tile entities) plus a contact sheet. Pure code, deterministic, no assets.
+ * Art-style prototype harness (scratch tool, not a scenario test). Sweeps the
+ * two main dials -- art-pixel resolution and intra-terrain texture strength --
+ * on the natural palette, and shows the CRT pass as a separate toggleable
+ * overlay. Pure code, deterministic, no assets. Writes several out/art_*.png.
  */
 public class ArtStyleDemo {
 
-	static final int TILE = 12;
-	static final int AW = 12 * TILE, AH = 9 * TILE; // 144x108 art-px = 12x9 tiles
+	static final int WT = 12, HT = 9; // world size in tiles
 
-	static double[] bnd; // elevation boundaries between the 5 terrains
-	static double bw;    // transition half-width
+	// Natural palette: 5 terrain ramps {shadow, base, highlight}.
+	static final int[][] NATURAL = {
+			{ 0x1a3a60, 0x24568c, 0x3172b0 }, { 0x8a6d3c, 0xb59a5f, 0xdcc48c },
+			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, { 0x40301f, 0x63472e, 0x866543 },
+			{ 0x3a3d47, 0x585d69, 0x82879a } };
 
-	// Entity "species" colours (would come from a genome); fixed across palettes.
 	static final int[] SPECIES = { 0xd8483a, 0xe8c84a, 0x8a56d0, 0x3fb6c8, 0xe08a2a };
+	static final double[] EMULT = { 1.0, 1.0, 1.6, 1.0, 2.2, 1.0, 1.3, 1.0, 1.7 };
 
-	/** A palette = 5 terrain ramps {shadow, base, highlight}: water,sand,grass,dirt,stone. */
-	static final String[] NAMES = { "natural", "muted", "arcade", "cold" };
-	static final int[][][] PALETTES = {
-			{ // natural (calm water)
-					{ 0x1a3a60, 0x24568c, 0x3172b0 }, { 0x8a6d3c, 0xb59a5f, 0xdcc48c },
-					{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, { 0x40301f, 0x63472e, 0x866543 },
-					{ 0x3a3d47, 0x585d69, 0x82879a } },
-			{ // muted / earthy
-					{ 0x3a5566, 0x4f7488, 0x6b93a5 }, { 0x9a8a63, 0xbcaf88, 0xd6cda6 },
-					{ 0x465a3e, 0x647c58, 0x849a72 }, { 0x574636, 0x76624f, 0x927e68 },
-					{ 0x545a5e, 0x73787f, 0x969ba0 } },
-			{ // arcade / vivid
-					{ 0x143caa, 0x2f6fe0, 0x55a0ff }, { 0xc89028, 0xf0c040, 0xffe486 },
-					{ 0x1c8a1c, 0x34b034, 0x70e060 }, { 0x7a3e18, 0xb0602a, 0xe28c42 },
-					{ 0x44506a, 0x6a7aa0, 0x9ab0e0 } },
-			{ // cold / dusk
-					{ 0x16233f, 0x28406e, 0x44669a }, { 0x6a6f7a, 0x8a90a0, 0xaab2c4 },
-					{ 0x2a4a46, 0x3e6e62, 0x5c8e7c }, { 0x3a3a4a, 0x545468, 0x707088 },
-					{ 0x2c2e3a, 0x474b5c, 0x6a6e84 } },
-	};
+	/** Everything that depends on the chosen resolution R (art-px per tile). */
+	static class Field {
+		int R, AW, AH;
+		double[][] elev;
+		double[] bnd;
+		double bw;
+		List<int[]> spots; // {tileCol, tileRow, speciesIdx, multIdx}
+	}
 
 	public static void main(String[] args) throws Exception {
-		double[][] elev = new double[AW][AH];
-		double[] flat = new double[AW * AH];
+		new File("out").mkdirs();
+
+		// --- Resolution dial: fixed calm texture, varying art-px per tile ---
+		int[] res = { 8, 12, 20, 32 };
+		BufferedImage[] rp = new BufferedImage[res.length];
+		String[] rl = new String[res.length];
+		for (int i = 0; i < res.length; i++) {
+			Field f = buildField(res[i]);
+			int scale = Math.max(1, Math.round(700f / f.AW));
+			rp[i] = scene(f, scale, NATURAL, 0.7, 1.44, 0.30, 0.82, false);
+			rl[i] = res[i] + " px/tile   (" + f.AW + "x" + f.AH + " art-px, " + scale + "x)";
+		}
+		ImageIO.write(grid2(rp, rl, "Resolution dial - natural palette, calm texture"),
+				"png", new File("out/art_resolution.png"));
+
+		// --- Texture dial: fixed resolution, varying shading strength ---
+		Field f12 = buildField(12);
+		double[][] tex = { // {strength, freqTile, loThresh, hiThresh}
+				{ 0.0, 1.2, 0.30, 0.82 }, { 0.45, 1.2, 0.24, 0.86 },
+				{ 0.7, 1.44, 0.30, 0.82 }, { 1.0, 1.9, 0.36, 0.72 } };
+		String[] tl = { "flat (base only)", "subtle", "calm", "textured" };
+		BufferedImage[] tp = new BufferedImage[tex.length];
+		for (int i = 0; i < tex.length; i++) {
+			tp[i] = scene(f12, 5, NATURAL, tex[i][0], tex[i][1], tex[i][2], tex[i][3], false);
+		}
+		ImageIO.write(grid2(tp, tl, "Texture dial - natural palette, 12 px/tile"),
+				"png", new File("out/art_texture.png"));
+
+		// --- CRT as a separate toggleable overlay: off vs on ---
+		BufferedImage crtOff = scene(f12, 5, NATURAL, 0.7, 1.44, 0.30, 0.82, false);
+		BufferedImage crtOn = scene(f12, 5, NATURAL, 0.7, 1.44, 0.30, 0.82, true);
+		ImageIO.write(grid2(new BufferedImage[] { crtOff, crtOn },
+				new String[] { "CRT overlay OFF", "CRT overlay ON" },
+				"CRT post-process (toggleable) - same base frame"), "png", new File("out/art_crt.png"));
+
+		System.out.println("wrote out/art_resolution.png, art_texture.png, art_crt.png");
+	}
+
+	// ---- scene assembly ----------------------------------------------------
+
+	static BufferedImage scene(Field f, int scale, int[][] pal,
+			double s, double freqT, double lo, double hi, boolean crt) {
+		int[][] a = renderGround(f, pal, s, freqT, lo, hi);
+		BufferedImage p = upscale(a, f.AW, f.AH, scale);
+		drawGrid(p, f.R * scale);
+		for (int[] sp : f.spots) {
+			int r = Math.max(1, (int) Math.round(f.R / 8.0 * EMULT[sp[3]]));
+			drawEntity(p, scale, sp[0] * f.R + f.R / 2, sp[1] * f.R + f.R / 2, r, SPECIES[sp[2]]);
+		}
+		if (crt) {
+			crt(p);
+		}
+		return p;
+	}
+
+	static Field buildField(int R) {
+		Field f = new Field();
+		f.R = R;
+		f.AW = WT * R;
+		f.AH = HT * R;
+		f.elev = new double[f.AW][f.AH];
+		double[] flat = new double[f.AW * f.AH];
 		double min = 1e9, max = -1e9;
-		for (int x = 0; x < AW; x++) {
-			for (int y = 0; y < AH; y++) {
-				double e = islandElevation(x, y);
-				elev[x][y] = e;
-				flat[x * AH + y] = e;
+		for (int x = 0; x < f.AW; x++) {
+			for (int y = 0; y < f.AH; y++) {
+				double e = islandElevation(x, y, R);
+				f.elev[x][y] = e;
+				flat[x * f.AH + y] = e;
 				min = Math.min(min, e);
 				max = Math.max(max, e);
 			}
 		}
 		double[] sorted = flat.clone();
 		Arrays.sort(sorted);
-		bnd = new double[] { pct(sorted, 0.30), pct(sorted, 0.38), pct(sorted, 0.74), pct(sorted, 0.89) };
-		bw = (max - min) * 0.028;
-
-		List<int[]> spots = entitySpots(elev);
-		new File("out").mkdirs();
-
-		// One full-size image per palette.
-		BufferedImage[] big = new BufferedImage[NAMES.length];
-		for (int i = 0; i < NAMES.length; i++) {
-			BufferedImage panel = upscale(renderGround(PALETTES[i], elev), 6);
-			drawGrid(panel, 6);
-			for (int[] sp : spots) {
-				drawEntity(panel, 6, sp[0] * TILE + TILE / 2, sp[1] * TILE + TILE / 2, sp[3], SPECIES[sp[2]]);
-			}
-			big[i] = labelled(panel, "Palette: " + NAMES[i] + "  (calm texture, grid, sub-tile entities)");
-			ImageIO.write(big[i], "png", new File("out/art_" + NAMES[i] + ".png"));
-		}
-
-		// Contact sheet: all palettes at a smaller scale, 2x2.
-		int cols = 2, pad = 16, gap = 16, lab = 24;
-		BufferedImage[] small = new BufferedImage[NAMES.length];
-		for (int i = 0; i < NAMES.length; i++) {
-			BufferedImage panel = upscale(renderGround(PALETTES[i], elev), 4);
-			drawGrid(panel, 4);
-			for (int[] sp : spots) {
-				drawEntity(panel, 4, sp[0] * TILE + TILE / 2, sp[1] * TILE + TILE / 2, sp[3], SPECIES[sp[2]]);
-			}
-			small[i] = panel;
-		}
-		int pw = small[0].getWidth(), ph = small[0].getHeight();
-		int rows = (NAMES.length + cols - 1) / cols;
-		int W = pad * 2 + cols * pw + (cols - 1) * gap;
-		int H = pad * 2 + rows * (ph + lab) + (rows - 1) * gap;
-		BufferedImage sheet = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
-		Graphics2D g = sheet.createGraphics();
-		g.setColor(new Color(16, 16, 20));
-		g.fillRect(0, 0, W, H);
-		g.setFont(new Font("SansSerif", Font.BOLD, 15));
-		for (int i = 0; i < NAMES.length; i++) {
-			int cx = pad + (i % cols) * (pw + gap);
-			int cy = pad + (i / cols) * (ph + lab + gap);
-			g.setColor(new Color(210, 214, 224));
-			g.drawString(NAMES[i], cx, cy + 17);
-			g.drawImage(small[i], cx, cy + lab, null);
-		}
-		g.dispose();
-		ImageIO.write(sheet, "png", new File("out/art_palettes.png"));
-		System.out.println("wrote out/art_palettes.png + per-palette images");
+		f.bnd = new double[] { pct(sorted, 0.30), pct(sorted, 0.38), pct(sorted, 0.74), pct(sorted, 0.89) };
+		f.bw = (max - min) * 0.028;
+		f.spots = entitySpots(f);
+		return f;
 	}
 
-	// ---- terrain rendering -------------------------------------------------
-
-	/** Calm, base-dominant intra-terrain texture + noise-dithered transitions. */
-	static int[][] renderGround(int[][] pal, double[][] elev) {
-		int[][] a = new int[AW][AH];
-		for (int x = 0; x < AW; x++) {
-			for (int y = 0; y < AH; y++) {
-				double e = elev[x][y];
-				int terr = bandOf(e);
-				for (int i = 0; i < bnd.length; i++) {
-					if (Math.abs(e - bnd[i]) < bw) {
-						double t = (e - (bnd[i] - bw)) / (2 * bw);
+	/** Base-dominant intra-terrain shading (strength s) + noise-dithered edges. */
+	static int[][] renderGround(Field f, int[][] pal, double s, double freqT, double lo, double hi) {
+		int[][] a = new int[f.AW][f.AH];
+		for (int x = 0; x < f.AW; x++) {
+			for (int y = 0; y < f.AH; y++) {
+				double e = f.elev[x][y];
+				int terr = bandOf(e, f.bnd);
+				for (int i = 0; i < f.bnd.length; i++) {
+					if (Math.abs(e - f.bnd[i]) < f.bw) {
+						double t = (e - (f.bnd[i] - f.bw)) / (2 * f.bw);
 						terr = hash(x, y, 7) < t ? i + 1 : i;
 						break;
 					}
 				}
-				// Low-frequency, base-dominant shading: most pixels are the base
-				// colour, with occasional large soft shadow/highlight patches.
-				double f = fbm(x * 0.12, y * 0.12, 2, 91);
-				int idx = f < 0.30 ? 0 : (f > 0.82 ? 2 : 1);
-				a[x][y] = pal[terr][idx];
+				double wx = x / (double) f.R, wy = y / (double) f.R;
+				double n = fbm(wx * freqT, wy * freqT, 2, 91);
+				int base = pal[terr][1];
+				int col = n < lo ? mix(base, pal[terr][0], s) : (n > hi ? mix(base, pal[terr][2], s) : base);
+				a[x][y] = col;
 			}
 		}
 		return a;
 	}
 
-	static double islandElevation(double x, double y) {
-		double nx = x / AW, ny = y / AH, cx = nx - 0.5, cy = ny - 0.5;
+	static double islandElevation(int x, int y, int R) {
+		double wx = x / (double) R, wy = y / (double) R; // tile units
+		double nx = wx / WT, ny = wy / HT, cx = nx - 0.5, cy = ny - 0.5;
 		double dist = Math.sqrt(cx * cx + cy * cy) * 1.85;
-		return fbm(x * 0.055, y * 0.055, 5, 1) * 0.72 + (1.0 - dist) * 0.6;
+		return fbm(wx * 0.66, wy * 0.66, 5, 1) * 0.72 + (1.0 - dist) * 0.6;
 	}
 
-	static int bandOf(double e) {
+	static int bandOf(double e, double[] bnd) {
 		int k = 0;
 		for (double b : bnd) {
 			if (e >= b) {
@@ -158,32 +161,36 @@ public class ArtStyleDemo {
 		return k;
 	}
 
-	// ---- overlays ----------------------------------------------------------
-
-	static BufferedImage labelled(BufferedImage panel, String text) {
-		int lab = 26;
-		BufferedImage out = new BufferedImage(panel.getWidth(), panel.getHeight() + lab, BufferedImage.TYPE_INT_RGB);
-		Graphics2D g = out.createGraphics();
-		g.setColor(new Color(16, 16, 20));
-		g.fillRect(0, 0, out.getWidth(), out.getHeight());
-		g.setFont(new Font("SansSerif", Font.BOLD, 16));
-		g.setColor(new Color(214, 218, 228));
-		g.drawString(text, 6, 18);
-		g.drawImage(panel, 0, lab, null);
-		g.dispose();
+	static List<int[]> entitySpots(Field f) {
+		List<int[]> land = new ArrayList<int[]>();
+		for (int tc = 1; tc < WT - 1; tc++) {
+			for (int tr = 1; tr < HT - 1; tr++) {
+				int b = bandOf(f.elev[tc * f.R + f.R / 2][tr * f.R + f.R / 2], f.bnd);
+				if (b == 2 || b == 3) {
+					land.add(new int[] { tc, tr });
+				}
+			}
+		}
+		List<int[]> out = new ArrayList<int[]>();
+		for (int k = 0; k < 9 && !land.isEmpty(); k++) {
+			int[] t = land.get((k * 37 + 5) % land.size());
+			out.add(new int[] { t[0], t[1], k % SPECIES.length, k % EMULT.length });
+		}
 		return out;
 	}
 
-	static void drawGrid(BufferedImage img, int scale) {
-		int step = TILE * scale, w = img.getWidth(), h = img.getHeight();
+	// ---- overlays / post ---------------------------------------------------
+
+	static void drawGrid(BufferedImage img, int step) {
+		int w = img.getWidth(), h = img.getHeight();
 		for (int x = 0; x <= w; x += step) {
 			for (int y = 0; y < h; y++) {
-				blend(img, x, y, 0x000000, 0.26);
+				blend(img, x, y, 0x000000, 0.24);
 			}
 		}
 		for (int y = 0; y <= h; y += step) {
 			for (int x = 0; x < w; x++) {
-				blend(img, x, y, 0x000000, 0.26);
+				blend(img, x, y, 0x000000, 0.24);
 			}
 		}
 	}
@@ -211,36 +218,64 @@ public class ArtStyleDemo {
 			}
 		}
 		if (r >= 3) {
-			stamp(img, scale, cxArt - 1, cyArt - 1, 0xf4f6ff);
-			stamp(img, scale, cxArt + 1, cyArt - 1, 0xf4f6ff);
+			stamp(img, scale, cxArt - Math.max(1, r / 3), cyArt - 1, 0xf4f6ff);
+			stamp(img, scale, cxArt + Math.max(1, r / 3), cyArt - 1, 0xf4f6ff);
 		}
 	}
 
-	static List<int[]> entitySpots(double[][] elev) {
-		List<int[]> land = new ArrayList<int[]>();
-		for (int tc = 1; tc < AW / TILE - 1; tc++) {
-			for (int tr = 1; tr < AH / TILE - 1; tr++) {
-				int b = bandOf(elev[tc * TILE + TILE / 2][tr * TILE + TILE / 2]);
-				if (b == 2 || b == 3) {
-					land.add(new int[] { tc, tr });
-				}
+	static void crt(BufferedImage img) {
+		int w = img.getWidth(), h = img.getHeight();
+		double cx = w / 2.0, cy = h / 2.0, rmax = Math.sqrt(cx * cx + cy * cy);
+		for (int y = 0; y < h; y++) {
+			double scan = (y % 3 == 0) ? 0.80 : 1.0;
+			for (int x = 0; x < w; x++) {
+				double dx = (x - cx) / rmax, dy = (y - cy) / rmax;
+				double f = scan * (1.0 - 0.5 * (dx * dx + dy * dy));
+				int rgb = img.getRGB(x, y);
+				img.setRGB(x, y, (clamp((int) (((rgb >> 16) & 255) * f)) << 16)
+						| (clamp((int) (((rgb >> 8) & 255) * f)) << 8) | clamp((int) ((rgb & 255) * f)));
 			}
 		}
-		int[] radii = { 1, 1, 2, 1, 2, 1, 3, 1, 2 };
-		List<int[]> out = new ArrayList<int[]>();
-		for (int k = 0; k < radii.length && !land.isEmpty(); k++) {
-			int[] t = land.get((k * 37 + 5) % land.size());
-			out.add(new int[] { t[0], t[1], k % SPECIES.length, radii[k] });
+	}
+
+	// ---- composition -------------------------------------------------------
+
+	/** Lay panels (possibly different sizes) into a titled 2-column grid. */
+	static BufferedImage grid2(BufferedImage[] panels, String[] labels, String title) {
+		int cols = 2, pad = 18, gap = 16, lab = 22, top = 30;
+		int cw = 0, ch = 0;
+		for (BufferedImage p : panels) {
+			cw = Math.max(cw, p.getWidth());
+			ch = Math.max(ch, p.getHeight());
 		}
+		int rows = (panels.length + cols - 1) / cols;
+		int W = pad * 2 + cols * cw + (cols - 1) * gap;
+		int H = top + pad + rows * (ch + lab) + (rows - 1) * gap + pad;
+		BufferedImage out = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(new Color(16, 16, 20));
+		g.fillRect(0, 0, W, H);
+		g.setColor(new Color(235, 238, 245));
+		g.setFont(new Font("SansSerif", Font.BOLD, 17));
+		g.drawString(title, pad, 21);
+		g.setFont(new Font("SansSerif", Font.BOLD, 14));
+		for (int i = 0; i < panels.length; i++) {
+			int cx = pad + (i % cols) * (cw + gap);
+			int cy = top + pad + (i / cols) * (ch + lab + gap);
+			g.setColor(new Color(200, 205, 216));
+			g.drawString(labels[i], cx, cy + 15);
+			g.drawImage(panels[i], cx, cy + lab, null);
+		}
+		g.dispose();
 		return out;
 	}
 
-	// ---- helpers -----------------------------------------------------------
+	// ---- pixel helpers -----------------------------------------------------
 
-	static BufferedImage upscale(int[][] a, int scale) {
-		BufferedImage img = new BufferedImage(AW * scale, AH * scale, BufferedImage.TYPE_INT_RGB);
-		for (int x = 0; x < AW; x++) {
-			for (int y = 0; y < AH; y++) {
+	static BufferedImage upscale(int[][] a, int aw, int ah, int scale) {
+		BufferedImage img = new BufferedImage(aw * scale, ah * scale, BufferedImage.TYPE_INT_RGB);
+		for (int x = 0; x < aw; x++) {
+			for (int y = 0; y < ah; y++) {
 				stamp(img, scale, x, y, a[x][y]);
 			}
 		}
@@ -278,16 +313,20 @@ public class ArtStyleDemo {
 		img.setRGB(x, y, (r << 16) | (g << 8) | b);
 	}
 
+	static int mix(int a, int b, double t) {
+		int r = (int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
+		int g = (int) (((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
+		int bl = (int) ((a & 255) * (1 - t) + (b & 255) * t);
+		return (r << 16) | (g << 8) | bl;
+	}
+
 	static int shade(int rgb, double f) {
 		return (clamp((int) (((rgb >> 16) & 255) * f)) << 16)
 				| (clamp((int) (((rgb >> 8) & 255) * f)) << 8) | clamp((int) ((rgb & 255) * f));
 	}
 
 	static int mixWhite(int rgb, double t) {
-		int r = (int) (((rgb >> 16) & 255) * (1 - t) + 255 * t);
-		int g = (int) (((rgb >> 8) & 255) * (1 - t) + 255 * t);
-		int b = (int) ((rgb & 255) * (1 - t) + 255 * t);
-		return (r << 16) | (g << 8) | b;
+		return mix(rgb, 0xffffff, t);
 	}
 
 	static double pct(double[] sorted, double p) {
