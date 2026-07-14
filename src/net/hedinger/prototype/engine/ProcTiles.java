@@ -33,9 +33,13 @@ public final class ProcTiles {
 	private static final int SZ = TS + PAD * 2; // padded canvas
 	private static final int X0 = PAD, Y0 = PAD; // tile footprint origin
 
-	// Stone wall: cool grey body over a dark base that reads as the bevelled side.
+	// Stone wall: cool grey body sitting on the ground. The base fills the tile
+	// with the grass colour so the rounded convex corners and concave pockets
+	// carved out of the body blend into the surrounding grass instead of showing
+	// a dark notch (walls are baked separately from the procedural ground, so the
+	// tile has to supply its own backdrop).
 	private static final Color WALL_BODY = new Color(104, 108, 120);
-	private static final Color WALL_BASE = new Color(46, 48, 58);
+	private static final Color WALL_BASE = GroundTextures.GRASS_GREEN;
 	// Pit: near-black void framed by an earth lip (the hole-floor layer below).
 	private static final Color HOLE_DARK = new Color(10, 11, 16);
 	// Ramp: an earthy slope, light at the high end, with uphill chevrons.
@@ -92,7 +96,10 @@ public final class ProcTiles {
 		Graphics2D g = gfx(img);
 		int r = (int) (TS * 0.40);
 		int lip = 7; // earth rim shown on open sides
-		Area pit = blob(N, E, S, W, NW, NE, SE, SW, lip, r);
+		// No concave carving for pits: it fights the lip inset and leaves a hooked
+		// nub at inner bends. Passing all diagonals "connected" keeps the convex
+		// outer rounding but gives clean square inner corners, framed by the lip.
+		Area pit = blob(N, E, S, W, true, true, true, true, lip, r);
 
 		g.setColor(HOLE_DARK);
 		g.fill(pit);
