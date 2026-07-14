@@ -54,14 +54,13 @@ public final class ProcTiles {
 	/** A wall tile: a stone mass that merges with connected wall neighbours. */
 	public static BufferedImage wall(String code, int variant) {
 		boolean N = has(code, '2'), E = has(code, '5'), S = has(code, '7'), W = has(code, '4');
-		boolean NW = has(code, '1'), NE = has(code, '3'), SE = has(code, '8'), SW = has(code, '6');
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		int r = (int) (TS * 0.40);
-		Area body = blob(N, E, S, W, NW, NE, SE, SW, 0, r);
+		Area body = blob(N, E, S, W, 0, r);
 
-		// Opaque dark base over the whole footprint: hides the floor sprite under
-		// the wall and becomes the bevelled dark corner where the body rounds off.
+		// Grass base over the whole footprint: hides the floor sprite under the
+		// wall and fills the rounded-off convex corners so they blend into grass.
 		g.setColor(WALL_BASE);
 		g.fillRect(X0, Y0, TS, TS);
 		// Drop shadow down-right into the pad. Connected right/below neighbours are
@@ -91,15 +90,11 @@ public final class ProcTiles {
 	/** The pit (top layer) of a hole: a dark void inset to leave an earth lip. */
 	public static BufferedImage hole(String code, int variant) {
 		boolean N = has(code, '2'), E = has(code, '5'), S = has(code, '7'), W = has(code, '4');
-		boolean NW = has(code, '1'), NE = has(code, '3'), SE = has(code, '8'), SW = has(code, '6');
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		int r = (int) (TS * 0.40);
 		int lip = 7; // earth rim shown on open sides
-		// No concave carving for pits: it fights the lip inset and leaves a hooked
-		// nub at inner bends. Passing all diagonals "connected" keeps the convex
-		// outer rounding but gives clean square inner corners, framed by the lip.
-		Area pit = blob(N, E, S, W, true, true, true, true, lip, r);
+		Area pit = blob(N, E, S, W, lip, r);
 
 		g.setColor(HOLE_DARK);
 		g.fill(pit);
@@ -175,19 +170,21 @@ public final class ProcTiles {
 
 	/**
 	 * The autotiled body shape for the tile footprint. {@code inset} shrinks the
-	 * mass on each open (unconnected) side; {@code r} is the corner radius. Open
-	 * corners round convex; corners whose two cardinals connect but whose diagonal
-	 * does not round concave (wrapping an open pocket); everything else stays
-	 * flush so like neighbours merge seamlessly.
+	 * mass on each open (unconnected) side; {@code r} is the corner radius. Only
+	 * convex (outer) corners round; inner corners stay square and connected sides
+	 * stay flush so like neighbours merge seamlessly.
 	 */
-	private static Area blob(boolean N, boolean E, boolean S, boolean W,
-			boolean NW, boolean NE, boolean SE, boolean SW, int inset, int r) {
+	private static Area blob(boolean N, boolean E, boolean S, boolean W, int inset, int r) {
 		// Connected sides extend 1px past the tile boundary so neighbouring masses
 		// overlap and their anti-aliased edges don't leave a hairline seam.
 		int ov = 1;
 		int x = X0 + (W ? -ov : inset), y = Y0 + (N ? -ov : inset);
 		int x2 = X0 + TS + (E ? ov : -inset), y2 = Y0 + TS + (S ? ov : -inset);
 		Area a = new Area(new Rectangle(x, y, x2 - x, y2 - y));
+		// Round only the convex (outer) corners -- both cardinals open. Inner
+		// corners stay square: the pocket is a separate ground tile that fills it,
+		// and per-tile concave rounding only rounds one of the corner's two tiles,
+		// which reads as a mismatched notch rather than a clean curve.
 		if (!N && !W) {
 			a.subtract(convex(x, y, r, 0));
 		}
@@ -199,18 +196,6 @@ public final class ProcTiles {
 		}
 		if (!S && !W) {
 			a.subtract(convex(x, y2 - r, r, 3));
-		}
-		if (N && W && !NW) {
-			a.subtract(concave(x, y, r));
-		}
-		if (N && E && !NE) {
-			a.subtract(concave(x2, y, r));
-		}
-		if (S && E && !SE) {
-			a.subtract(concave(x2, y2, r));
-		}
-		if (S && W && !SW) {
-			a.subtract(concave(x, y2, r));
 		}
 		return a;
 	}
@@ -227,11 +212,6 @@ public final class ProcTiles {
 		}
 		sq.subtract(new Area(new Ellipse2D.Double(ex - r, ey - r, 2 * r, 2 * r)));
 		return sq;
-	}
-
-	/** A quarter disc centred on a footprint corner, removed for a concave round. */
-	private static Area concave(int px, int py, int r) {
-		return new Area(new Ellipse2D.Double(px - r, py - r, 2 * r, 2 * r));
 	}
 
 	// ---- helpers -----------------------------------------------------------
