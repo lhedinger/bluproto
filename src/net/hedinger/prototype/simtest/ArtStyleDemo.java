@@ -75,7 +75,215 @@ public class ArtStyleDemo {
 				new String[] { "CRT overlay OFF", "CRT overlay ON" },
 				"CRT post-process (toggleable) - same base frame"), "png", new File("out/art_crt.png"));
 
-		System.out.println("wrote out/art_resolution.png, art_texture.png, art_crt.png");
+		// --- Creative entity variations at the 12 px/tile scale ---
+		ImageIO.write(bestiary(), "png", new File("out/art_entities.png"));
+		ImageIO.write(population(f12), "png", new File("out/art_population.png"));
+
+		System.out.println("wrote art_resolution/texture/crt.png + art_entities/population.png");
+	}
+
+	// ---- creative entities -------------------------------------------------
+
+	static final int[] ECOLORS = {
+			0xd8483a, 0xe8a53a, 0xe8c84a, 0x8fbf3a, 0x3fb36a, 0x3fb6c8,
+			0x4a86d8, 0x8a56d0, 0xd05fb0, 0xb0836a, 0x9aa0ad, 0xdfe2ea };
+
+	/** A procedural critter: silhouette + features, sized in art-px. */
+	static class Critter {
+		int r, color, shape, eyes, top, pattern, tail;
+		boolean feet, outline;
+
+		Critter(int r, int color, int shape, int eyes, int top, int pattern, boolean feet, int tail) {
+			this.r = r;
+			this.color = color;
+			this.shape = shape;
+			this.eyes = eyes;
+			this.top = top;
+			this.pattern = pattern;
+			this.feet = feet;
+			this.tail = tail;
+			this.outline = true;
+		}
+	}
+
+	/** shape: 0 round 1 tall 2 wide 3 diamond 4 two-lobed 5 rounded-square. */
+	static boolean inside(int shape, double dx, double dy, int r) {
+		switch (shape) {
+		case 1:
+			return sq(dx / (r - 0.5)) + sq(dy / (r + 0.8)) <= 1.08;
+		case 2:
+			return sq(dx / (r + 0.8)) + sq(dy / (r - 0.5)) <= 1.08;
+		case 3:
+			return Math.abs(dx) + Math.abs(dy) <= r + 0.4;
+		case 4:
+			double o = Math.max(1, r - 1);
+			return Math.min(sq(dx - o) + dy * dy, sq(dx + o) + dy * dy) <= sq(r - 0.4);
+		case 5:
+			return Math.pow(Math.abs(dx) / r, 3) + Math.pow(Math.abs(dy) / r, 3) <= 1.0;
+		default:
+			return dx * dx + dy * dy <= r * r + r * 0.6;
+		}
+	}
+
+	static double sq(double v) {
+		return v * v;
+	}
+
+	static boolean edge(int shape, int dx, int dy, int r) {
+		return inside(shape, dx, dy, r) && (!inside(shape, dx + 1, dy, r) || !inside(shape, dx - 1, dy, r)
+				|| !inside(shape, dx, dy + 1, r) || !inside(shape, dx, dy - 1, r));
+	}
+
+	static void drawCritter(BufferedImage img, int scale, int cx, int cy, Critter c) {
+		int r = c.r;
+		// ground shadow
+		for (int dx = -r; dx <= r; dx++) {
+			if (dx * dx <= r * r) {
+				blendBlock(img, scale, cx + dx, cy + r + 1, 0x000000, 0.26);
+			}
+		}
+		// body
+		for (int dx = -r - 1; dx <= r + 1; dx++) {
+			for (int dy = -r - 1; dy <= r + 1; dy++) {
+				if (!inside(c.shape, dx, dy, r)) {
+					continue;
+				}
+				int col;
+				if (c.outline && edge(c.shape, dx, dy, r)) {
+					col = shade(c.color, 0.34);
+				} else {
+					double ts = (dy + r) / (2.0 * r);
+					col = ts < 0.4 ? mixWhite(c.color, 0.42) : (ts > 0.72 ? shade(c.color, 0.6) : c.color);
+					if (c.pattern == 1 && dy >= 1) {
+						col = mixWhite(col, 0.22); // pale belly
+					} else if (c.pattern == 2 && Math.abs(dx) <= 0 && Math.abs(dy) <= 0) {
+						col = shade(c.color, 0.5); // centre spot
+					} else if (c.pattern == 3 && dx == 0) {
+						col = shade(col, 0.72); // back stripe
+					}
+				}
+				stamp(img, scale, cx + dx, cy + dy, col);
+			}
+		}
+		// eyes
+		int ex = Math.max(1, r / 2);
+		if (c.eyes == 2) {
+			eye(img, scale, cx - ex, cy - 1, r);
+			eye(img, scale, cx + ex, cy - 1, r);
+		} else if (c.eyes == 1) {
+			eye(img, scale, cx, cy - 1, r);
+		}
+		// top feature
+		int ty = cy - r - 1;
+		switch (c.top) {
+		case 1: // antenna
+			stamp(img, scale, cx, ty, shade(c.color, 0.4));
+			stamp(img, scale, cx, ty - 1, mixWhite(c.color, 0.5));
+			break;
+		case 2: // spikes
+			stamp(img, scale, cx, ty, shade(c.color, 0.45));
+			stamp(img, scale, cx - r + 1, cy - r, shade(c.color, 0.45));
+			stamp(img, scale, cx + r - 1, cy - r, shade(c.color, 0.45));
+			break;
+		case 3: // ears / horns
+			stamp(img, scale, cx - r + 1, ty, c.color);
+			stamp(img, scale, cx + r - 1, ty, c.color);
+			break;
+		case 4: // fin / crest
+			stamp(img, scale, cx, ty, mixWhite(c.color, 0.3));
+			if (r >= 3) {
+				stamp(img, scale, cx, ty - 1, mixWhite(c.color, 0.3));
+			}
+			break;
+		default:
+			break;
+		}
+		// tail
+		if (c.tail == 1) {
+			stamp(img, scale, cx + r + 1, cy, shade(c.color, 0.72));
+			if (r >= 3) {
+				stamp(img, scale, cx + r + 2, cy, shade(c.color, 0.6));
+			}
+		}
+		// feet
+		if (c.feet) {
+			stamp(img, scale, cx - (r - 1), cy + r, shade(c.color, 0.45));
+			stamp(img, scale, cx + (r - 1), cy + r, shade(c.color, 0.45));
+		}
+	}
+
+	static void eye(BufferedImage img, int scale, int x, int y, int r) {
+		stamp(img, scale, x, y, 0x14141c); // pupil
+		if (r >= 3) {
+			stamp(img, scale, x, y - 1, 0xf4f6ff); // highlight above
+		}
+	}
+
+	/** Zoomed grid of varied critters (as they would look at 12 px/tile). */
+	static BufferedImage bestiary() {
+		int cols = 6, rows = 4, thumb = 13, scale = 9, cell = thumb * scale;
+		int pad = 18, gap = 8, top = 30;
+		int W = pad * 2 + cols * cell + (cols - 1) * gap;
+		int H = top + pad * 2 + rows * cell + (rows - 1) * gap;
+		BufferedImage out = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(new Color(20, 21, 27));
+		g.fillRect(0, 0, W, H);
+		g.setColor(new Color(235, 238, 245));
+		g.setFont(new Font("SansSerif", Font.BOLD, 17));
+		g.drawString("Entity variations - shown as at 12 px/tile (radius 2-3 art-px), zoomed", pad, 21);
+		for (int i = 0; i < cols * rows; i++) {
+			int r = 2 + (i % 3 == 2 ? 1 : 0);
+			Critter c = new Critter(r, ECOLORS[i % ECOLORS.length], i % 6, 1 + (i / 2) % 2,
+					i % 5, (i / 3) % 4, i % 3 == 0, (i % 4 == 0) ? 1 : 0);
+			BufferedImage t = new BufferedImage(cell, cell, BufferedImage.TYPE_INT_RGB);
+			Graphics2D tg = t.createGraphics();
+			tg.setColor(new Color(34, 36, 44));
+			tg.fillRect(0, 0, cell, cell);
+			tg.dispose();
+			drawCritter(t, scale, thumb / 2, thumb / 2, c);
+			int cx = pad + (i % cols) * (cell + gap);
+			int cy = top + pad + (i / cols) * (cell + gap);
+			g.drawImage(t, cx, cy, null);
+		}
+		g.dispose();
+		return out;
+	}
+
+	/** The natural island populated with a diverse set of critters at true scale. */
+	static BufferedImage population(Field f) {
+		int scale = 6;
+		int[][] a = renderGround(f, NATURAL, 0.6, 1.44, 0.30, 0.82);
+		BufferedImage p = upscale(a, f.AW, f.AH, scale);
+		drawGrid(p, f.R * scale);
+		int placed = 0;
+		for (int tc = 1; tc < WT - 1 && placed < 16; tc++) {
+			for (int tr = 1; tr < HT - 1 && placed < 16; tr++) {
+				int b = bandOf(f.elev[tc * f.R + f.R / 2][tr * f.R + f.R / 2], f.bnd);
+				if ((b == 2 || b == 3) && ((tc * 7 + tr * 5) % 3 == 0)) {
+					int s = tc * 31 + tr * 17;
+					Critter c = new Critter(2 + (s % 3 == 0 ? 1 : 0), ECOLORS[(s / 7) % ECOLORS.length],
+							s % 6, 1 + (s / 6) % 2, (s / 2) % 5, (s / 4) % 4, s % 3 == 0, (s % 5 == 0) ? 1 : 0);
+					drawCritter(p, scale, tc * f.R + f.R / 2, tr * f.R + f.R / 2, c);
+					placed++;
+				}
+			}
+		}
+		return labelBar(p, "Natural island populated with varied critters (true 12 px/tile scale)");
+	}
+
+	static BufferedImage labelBar(BufferedImage panel, String text) {
+		int lab = 26;
+		BufferedImage out = new BufferedImage(panel.getWidth(), panel.getHeight() + lab, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(new Color(16, 16, 20));
+		g.fillRect(0, 0, out.getWidth(), out.getHeight());
+		g.setColor(new Color(214, 218, 228));
+		g.setFont(new Font("SansSerif", Font.BOLD, 16));
+		g.drawString(text, 6, 18);
+		g.drawImage(panel, 0, lab, null);
+		g.dispose();
+		return out;
 	}
 
 	// ---- scene assembly ----------------------------------------------------
