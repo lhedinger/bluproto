@@ -90,11 +90,16 @@ public final class ProcTiles {
 	/** The pit (top layer) of a hole: a dark void inset to leave an earth lip. */
 	public static BufferedImage hole(String code, int variant) {
 		boolean N = has(code, '2'), E = has(code, '5'), S = has(code, '7'), W = has(code, '4');
+		boolean NW = has(code, '1'), NE = has(code, '3'), SE = has(code, '8'), SW = has(code, '6');
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		int r = (int) (TS * 0.40);
 		int lip = 7; // earth rim shown on open sides
 		Area pit = blob(N, E, S, W, lip, r);
+		// Continue the lip around inner (pocket) corners: where two cardinals
+		// connect but the diagonal is open, the corner tile would otherwise fill
+		// flush and bulge past the thinner inset arms. Notch it back by the lip.
+		lipNotch(pit, N, E, S, W, NW, NE, SE, SW, lip);
 
 		g.setColor(HOLE_DARK);
 		g.fill(pit);
@@ -198,6 +203,29 @@ public final class ProcTiles {
 			a.subtract(convex(x, y2 - r, r, 3));
 		}
 		return a;
+	}
+
+	/**
+	 * Insets an inner (pocket) corner by {@code lip} with a square notch: at a
+	 * corner whose two cardinals connect but whose diagonal is open, the tile
+	 * would fill flush and overhang the thinner inset arms, so cut a lip-sized
+	 * square out of that corner to keep the rim uniform around the pocket.
+	 */
+	private static void lipNotch(Area a, boolean N, boolean E, boolean S, boolean W,
+			boolean NW, boolean NE, boolean SE, boolean SW, int lip) {
+		int ov = 1, c = lip + ov;
+		if (N && W && !NW) {
+			a.subtract(new Area(new Rectangle(X0 - ov, Y0 - ov, c, c)));
+		}
+		if (N && E && !NE) {
+			a.subtract(new Area(new Rectangle(X0 + TS - lip, Y0 - ov, c, c)));
+		}
+		if (S && E && !SE) {
+			a.subtract(new Area(new Rectangle(X0 + TS - lip, Y0 + TS - lip, c, c)));
+		}
+		if (S && W && !SW) {
+			a.subtract(new Area(new Rectangle(X0 - ov, Y0 + TS - lip, c, c)));
+		}
 	}
 
 	/** The corner sliver to remove for a convex round: the r-square minus its disc. */
