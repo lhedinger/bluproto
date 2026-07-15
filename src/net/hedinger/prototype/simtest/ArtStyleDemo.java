@@ -45,6 +45,10 @@ public class ArtStyleDemo {
 			animate();
 			return;
 		}
+		if (args.length > 0 && args[0].equals("actions")) {
+			animateActions();
+			return;
+		}
 
 		// --- Resolution dial: fixed calm texture, varying art-px per tile ---
 		int[] res = { 8, 12, 20, 32 };
@@ -83,8 +87,80 @@ public class ArtStyleDemo {
 		ImageIO.write(bestiary(), "png", new File("out/art_entities.png"));
 		ImageIO.write(population(f12), "png", new File("out/art_population.png"));
 		ImageIO.write(motion(), "png", new File("out/art_motion.png"));
+		ImageIO.write(actionsSheet(), "png", new File("out/art_actions.png"));
 
-		System.out.println("wrote art_resolution/texture/crt.png + art_entities/population/motion.png");
+		System.out.println("wrote art_resolution/texture/crt/entities/population/motion/actions.png");
+	}
+
+	/** Strip sheet: each generic action across frames, on a different form per row. */
+	static BufferedImage actionsSheet() {
+		int thumb = 17, scale = 8, cell = thumb * scale, pad = 18, gap = 8, top = 30, labW = 130;
+		int cols = 8, rows = ACTION_NAME.length;
+		int W = pad + labW + cols * cell + (cols - 1) * gap + pad;
+		int H = top + pad + rows * cell + (rows - 1) * (gap + 14) + pad;
+		BufferedImage out = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(new Color(20, 21, 27));
+		g.fillRect(0, 0, W, H);
+		g.setColor(new Color(235, 238, 245));
+		g.setFont(new Font("SansSerif", Font.BOLD, 17));
+		g.drawString("Generic action animations (form-agnostic) - one modifier system on every body", pad, 21);
+		g.setFont(new Font("SansSerif", Font.BOLD, 13));
+		for (int a = 0; a < rows; a++) {
+			int form = a % 6, color = ECOLORS[a % ECOLORS.length];
+			int cy = top + pad + a * (cell + gap + 14);
+			g.setColor(new Color(200, 205, 216));
+			g.drawString(ACTION_NAME[a], pad, cy + cell / 2);
+			for (int col = 0; col < cols; col++) {
+				double t = col / (double) (cols - 1);
+				TD c = new TD(3, color, form, 3, form == 0, 1, 1, false, -Math.PI / 2);
+				BufferedImage tImg = new BufferedImage(cell, cell, BufferedImage.TYPE_INT_RGB);
+				Graphics2D tg = tImg.createGraphics();
+				tg.setColor(new Color(34, 36, 44));
+				tg.fillRect(0, 0, cell, cell);
+				tg.dispose();
+				drawTopdown(tImg, scale, thumb / 2, thumb / 2, c, t * 6.0, actionMod(a, t, color));
+				g.drawImage(tImg, pad + labW + col * (cell + gap), cy, null);
+			}
+		}
+		g.dispose();
+		return out;
+	}
+
+	/** Animated lineup: several forms each looping through the action set. */
+	static void animateActions() throws Exception {
+		int aw = 220, ah = 60, scale = 6;
+		// Flat calm-grass background (force every tile to grass).
+		Field f = new Field();
+		f.R = 12;
+		f.AW = aw;
+		f.AH = ah;
+		f.bnd = new double[] { -1, -1, 1e9, 1e9 };
+		f.elev = new double[aw][ah];
+		BufferedImage base = upscale(renderGround(f, NATURAL, 0.6, 1.44, 0.30, 0.82), aw, ah, scale);
+
+		int n = ACTION_NAME.length; // one demonstrator per action
+		int frames = 150, period = 150;
+		File dir = new File("out/frames");
+		dir.mkdirs();
+		for (File old : dir.listFiles()) {
+			old.delete();
+		}
+		for (int fr = 0; fr < frames; fr++) {
+			BufferedImage img = new BufferedImage(base.getWidth(), base.getHeight(), BufferedImage.TYPE_INT_RGB);
+			Graphics2D g = img.createGraphics();
+			g.drawImage(base, 0, 0, null);
+			g.dispose();
+			double t = (fr % period) / (double) period;
+			for (int i = 0; i < n; i++) {
+				int color = ECOLORS[i % ECOLORS.length], form = i % 6;
+				TD c = new TD(3, color, form, 3, form == 0, 1, 1, false, -Math.PI / 2);
+				int cx = 16 + i * ((aw - 24) / n);
+				drawTopdown(img, scale, cx, ah / 2, c, t * 6.0, actionMod(i, t, color));
+			}
+			ImageIO.write(img, "png", new File(dir, String.format("f%04d.png", fr)));
+		}
+		System.out.println("wrote " + frames + " action frames to out/frames/");
 	}
 
 	/** Renders an animated clip: organisms wander the island, turning to their
@@ -274,17 +350,39 @@ public class ArtStyleDemo {
 		return (dx + 32) * 128 + (dy + 32);
 	}
 
+	/**
+	 * A generic, form-agnostic action modifier: a transform envelope over the
+	 * draw (squash/stretch, offset, extra rotation, colour tint, dither-dissolve)
+	 * plus an optional hovering glyph / expanding ring. The same envelope works on
+	 * any silhouette, so one set of actions animates every entity type.
+	 */
+	static class Mod {
+		double sA = 1, sP = 1, offA = 0, offP = 0, rot = 0, tintAmt = 0, dissolve = 0, ringT = -1;
+		int tint = 0xffffff, glyph = 0;
+	}
+
+	static final Mod IDENTITY = new Mod();
+
 	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c) {
-		drawTopdown(img, scale, cx, cy, c, 0);
+		drawTopdown(img, scale, cx, cy, c, 0, IDENTITY);
 	}
 
 	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c, double phase) {
-		double ux = Math.cos(c.heading), uy = Math.sin(c.heading), rx = -uy, ry = ux;
-		int r = c.r;
+		drawTopdown(img, scale, cx, cy, c, phase, IDENTITY);
+	}
+
+	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c, double phase, Mod m) {
+		double h = c.heading + m.rot;
+		double ux = Math.cos(h), uy = Math.sin(h), rx = -uy, ry = ux;
+		int ox = cx + (int) Math.round(m.offA * ux + m.offP * rx);
+		int oy = cy + (int) Math.round(m.offA * uy + m.offP * ry);
+		int r = c.r, seed = c.color;
+		double sA = m.sA, sP = m.sP;
 		java.util.HashSet<Integer> body = new java.util.HashSet<Integer>();
-		for (double la = -r - 2; la <= r + 2; la += 0.5) {
-			for (double pe = -r - 2; pe <= r + 2; pe += 0.5) {
-				if (inForm(c.form, la, pe, r, c.color, phase)) {
+		int rng = (int) ((r + 2) * Math.max(sA, sP)) + 1;
+		for (double la = -rng; la <= rng; la += 0.5) {
+			for (double pe = -rng; pe <= rng; pe += 0.5) {
+				if (inForm(c.form, la / sA, pe / sP, r, seed, phase)) {
 					int[] w = wpt(la, pe, ux, uy, rx, ry);
 					body.add(key(w[0], w[1]));
 				}
@@ -294,29 +392,29 @@ public class ArtStyleDemo {
 		for (int p : body) {
 			int dx = p / 128 - 32, dy = p % 128 - 32;
 			if (!body.contains(key(dx, dy + 1))) {
-				blendBlock(img, scale, cx + dx, cy + dy + 1, 0x000000, 0.22);
+				blendBlock(img, scale, ox + dx, oy + dy + 1, 0x000000, 0.22 * (1 - m.dissolve));
 			}
 		}
 		// Appendages (drawn under the body's edge).
 		if (c.form == 0 || c.form == 4) { // bilateral legs, scuttling
 			int pairs = c.legs;
-			double half = (c.form == 4 ? r - 1 : r - 0.2), len = (c.form == 4 ? 2.4 : 1.4);
+			double half = (c.form == 4 ? r - 1 : r - 0.2) * sP, len = (c.form == 4 ? 2.4 : 1.4) * sP;
 			for (int i = 0; i < pairs; i++) {
-				double la = pairs == 1 ? 0 : lerp(-r + 0.6, r - 0.6, i / (double) (pairs - 1));
-				double drive = 0.55 + 0.45 * Math.sin(phase + i * 2.1); // per-leg gait
+				double la = (pairs == 1 ? 0 : lerp(-r + 0.6, r - 0.6, i / (double) (pairs - 1))) * sA;
+				double drive = 0.55 + 0.45 * Math.sin(phase + i * 2.1);
 				for (double e = half; e <= half + len * drive; e += 0.7) {
 					int[] a = wpt(la, e, ux, uy, rx, ry), b = wpt(la, -e, ux, uy, rx, ry);
-					stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
-					stamp(img, scale, cx + b[0], cy + b[1], shade(c.color, 0.5));
+					stampMod(img, scale, ox, oy, a[0], a[1], shade(c.color, 0.5), m, seed);
+					stampMod(img, scale, ox, oy, b[0], b[1], shade(c.color, 0.5), m, seed);
 				}
 			}
 		} else if (c.form == 1) { // radial cilia, rotating + pulsing
 			int n = c.legs * 2 + 5;
-			double base = r + 0.8 + 0.35 * Math.sin(phase * 1.5);
+			double base = (r + 0.8) * ((sA + sP) / 2) + 0.35 * Math.sin(phase * 1.5);
 			for (int i = 0; i < n; i++) {
 				double ang = 2 * Math.PI * i / n + phase * 0.25;
 				int[] a = wpt(Math.cos(ang) * base, Math.sin(ang) * base, ux, uy, rx, ry);
-				stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
+				stampMod(img, scale, ox, oy, a[0], a[1], shade(c.color, 0.5), m, seed);
 			}
 		}
 		// Body, lit from screen-north (world dy) regardless of heading.
@@ -324,35 +422,172 @@ public class ArtStyleDemo {
 			int dx = p / 128 - 32, dy = p % 128 - 32;
 			double ts = (dy + r) / (2.0 * r);
 			int col = ts < 0.4 ? mixWhite(c.color, 0.4) : (ts > 0.72 ? shade(c.color, 0.6) : c.color);
-			stamp(img, scale, cx + dx, cy + dy, col);
+			stampMod(img, scale, ox, oy, dx, dy, col, m, seed);
 		}
-		// Nucleus / core.
 		if (c.core > 0) {
-			stamp(img, scale, cx, cy, c.core == 1 ? shade(c.color, 0.5) : mixWhite(c.color, 0.55));
+			stampMod(img, scale, ox, oy, 0, 0, c.core == 1 ? shade(c.color, 0.5) : mixWhite(c.color, 0.55), m, seed);
 		}
 		// Dorsal stripe along heading, or a lit head at the front.
 		if (c.pattern == 1) {
 			for (double la = -r; la <= r; la += 0.5) {
-				int[] a = wpt(la, 0, ux, uy, rx, ry);
+				int[] a = wpt(la * sA, 0, ux, uy, rx, ry);
 				if (body.contains(key(a[0], a[1]))) {
-					stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.72));
+					stampMod(img, scale, ox, oy, a[0], a[1], shade(c.color, 0.72), m, seed);
 				}
 			}
 		} else if (c.pattern == 2) {
-			int[] a = wpt(r - 0.3, 0, ux, uy, rx, ry);
+			int[] a = wpt((r - 0.3) * sA, 0, ux, uy, rx, ry);
 			if (body.contains(key(a[0], a[1]))) {
-				stamp(img, scale, cx + a[0], cy + a[1], mixWhite(c.color, 0.55));
+				stampMod(img, scale, ox, oy, a[0], a[1], mixWhite(c.color, 0.55), m, seed);
 			}
 		}
-		// Antennae forward, tail aft.
 		if (c.antennae) {
-			int[] a = wpt(r + 0.9, 0.9, ux, uy, rx, ry), b = wpt(r + 0.9, -0.9, ux, uy, rx, ry);
-			stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.55));
-			stamp(img, scale, cx + b[0], cy + b[1], shade(c.color, 0.55));
+			int[] a = wpt((r + 0.9) * sA, 0.9 * sP, ux, uy, rx, ry), b = wpt((r + 0.9) * sA, -0.9 * sP, ux, uy, rx, ry);
+			stampMod(img, scale, ox, oy, a[0], a[1], shade(c.color, 0.55), m, seed);
+			stampMod(img, scale, ox, oy, b[0], b[1], shade(c.color, 0.55), m, seed);
 		}
 		if (c.tail) {
-			int[] t = wpt(-(r + 0.9), 0, ux, uy, rx, ry);
-			stamp(img, scale, cx + t[0], cy + t[1], shade(c.color, 0.6));
+			int[] t = wpt(-(r + 0.9) * sA, 0, ux, uy, rx, ry);
+			stampMod(img, scale, ox, oy, t[0], t[1], shade(c.color, 0.6), m, seed);
+		}
+		// Overlays: expanding ring (spawn/sense) and a hovering glyph (screen-north).
+		if (m.ringT >= 0) {
+			drawRing(img, scale, cx, cy, m.ringT * (r + 5), 1 - m.ringT);
+		}
+		if (m.glyph > 0) {
+			drawGlyph(img, scale, cx, cy - r - 3, m.glyph);
+		}
+	}
+
+	/** Stamps one entity pixel through the modifier (dither-dissolve + tint). */
+	static void stampMod(BufferedImage img, int scale, int ox, int oy, int dx, int dy, int rgb, Mod m, int seed) {
+		if (m.dissolve > 0 && hash(dx + 40, dy + 40, seed) < m.dissolve) {
+			return;
+		}
+		stamp(img, scale, ox + dx, oy + dy, m.tintAmt > 0 ? mix(rgb, m.tint, Math.min(1, m.tintAmt)) : rgb);
+	}
+
+	// action kinds
+	static final int A_IDLE = 0, A_LUNGE = 1, A_HURT = 2, A_EAT = 3, A_COURT = 4, A_ALARM = 5,
+			A_DEATH = 6, A_SPAWN = 7;
+	static final String[] ACTION_NAME = { "idle", "lunge/attack", "hurt", "eat", "court/mate",
+			"alarm/flee", "death", "spawn" };
+
+	/** Maps an action + progress t in [0,1] to a generic modifier envelope. */
+	static Mod actionMod(int action, double t, int seed) {
+		Mod m = new Mod();
+		switch (action) {
+		case A_LUNGE:
+			if (t < 0.28) { // wind up: squash and pull back
+				double u = t / 0.28;
+				m.sA = 1 - 0.2 * u;
+				m.sP = 1 + 0.16 * u;
+				m.offA = -1.0 * u;
+			} else if (t < 0.5) { // strike: stretch and lunge forward
+				double u = (t - 0.28) / 0.22;
+				m.sA = 0.8 + 0.75 * u;
+				m.sP = 1.16 - 0.36 * u;
+				m.offA = -1.0 + 3.0 * u;
+				if (u > 0.75) {
+					m.glyph = 1; // impact spark
+				}
+			} else { // recover
+				double u = (t - 0.5) / 0.5;
+				m.sA = 1.55 - 0.55 * u;
+				m.sP = 0.8 + 0.2 * u;
+				m.offA = 2.0 * (1 - u);
+			}
+			break;
+		case A_HURT: {
+			double dcy = Math.max(0, 1 - t * 1.5);
+			m.tint = 0xff4030;
+			m.tintAmt = 0.75 * dcy;
+			m.offP = (hash((int) (t * 40), seed, 5) - 0.5) * 2.4 * dcy;
+			m.offA = (hash((int) (t * 40) + 7, seed, 5) - 0.5) * 2.4 * dcy;
+			m.sA = 1 - 0.14 * dcy;
+			m.sP = 1 + 0.12 * dcy;
+			break;
+		}
+		case A_EAT: {
+			double c = Math.abs(Math.sin(t * Math.PI * 3)); // chomp
+			m.sA = 1 - 0.24 * c;
+			m.sP = 1 + 0.16 * c;
+			m.offA = 0.6 * Math.sin(t * Math.PI * 3);
+			break;
+		}
+		case A_COURT: {
+			double p = Math.sin(t * Math.PI * 2);
+			m.sA = 1 + 0.13 * p;
+			m.sP = 1 + 0.13 * p;
+			m.tintAmt = 0.14 + 0.14 * Math.max(0, p);
+			m.glyph = 3; // heart
+			break;
+		}
+		case A_ALARM: {
+			double j = t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) * 2.2);
+			m.offP = (hash((int) (t * 60), seed, 6) - 0.5) * 2.4 * j;
+			m.sP = 1 - 0.1 * j;
+			m.sA = 1 + 0.14 * j;
+			m.glyph = 2; // exclamation
+			break;
+		}
+		case A_DEATH:
+			m.rot = t * Math.PI * 3;
+			m.sA = Math.max(0.05, 1 - t);
+			m.sP = Math.max(0.05, 1 - t);
+			m.dissolve = t;
+			break;
+		case A_SPAWN:
+			m.sA = Math.min(1, t * 1.25);
+			m.sP = m.sA;
+			m.dissolve = Math.max(0, 1 - t * 1.5);
+			m.ringT = t;
+			break;
+		default:
+			break;
+		}
+		return m;
+	}
+
+	static void drawGlyph(BufferedImage img, int scale, int gx, int gy, int type) {
+		switch (type) {
+		case 1: { // impact spark (light)
+			int c = 0xfff2b0;
+			stamp(img, scale, gx, gy, c);
+			stamp(img, scale, gx - 1, gy, c);
+			stamp(img, scale, gx + 1, gy, c);
+			stamp(img, scale, gx, gy - 1, c);
+			stamp(img, scale, gx, gy + 1, c);
+			break;
+		}
+		case 2: { // exclamation
+			int c = 0xffe14a;
+			stamp(img, scale, gx, gy - 2, c);
+			stamp(img, scale, gx, gy - 1, c);
+			stamp(img, scale, gx, gy + 1, c);
+			break;
+		}
+		case 3: { // heart
+			int c = 0xff6ab0;
+			stamp(img, scale, gx - 1, gy - 1, c);
+			stamp(img, scale, gx + 1, gy - 1, c);
+			stamp(img, scale, gx - 1, gy, c);
+			stamp(img, scale, gx, gy, c);
+			stamp(img, scale, gx + 1, gy, c);
+			stamp(img, scale, gx, gy + 1, c);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
+	static void drawRing(BufferedImage img, int scale, int cx, int cy, double radius, double alpha) {
+		int n = Math.max(8, (int) (radius * 4));
+		for (int i = 0; i < n; i++) {
+			double a = 2 * Math.PI * i / n;
+			int dx = (int) Math.round(Math.cos(a) * radius), dy = (int) Math.round(Math.sin(a) * radius);
+			blendBlock(img, scale, cx + dx, cy + dy, 0xbfe0ff, 0.55 * alpha);
 		}
 	}
 
