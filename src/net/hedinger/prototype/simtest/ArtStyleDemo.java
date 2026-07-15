@@ -78,8 +78,63 @@ public class ArtStyleDemo {
 		// --- Creative entity variations at the 12 px/tile scale ---
 		ImageIO.write(bestiary(), "png", new File("out/art_entities.png"));
 		ImageIO.write(population(f12), "png", new File("out/art_population.png"));
+		ImageIO.write(motion(), "png", new File("out/art_motion.png"));
 
-		System.out.println("wrote art_resolution/texture/crt.png + art_entities/population.png");
+		System.out.println("wrote art_resolution/texture/crt.png + art_entities/population/motion.png");
+	}
+
+	/**
+	 * Demonstrates rotation (8 quantised directions) and phase-driven animation
+	 * (leg scuttle, worm undulation, cilia rotation) -- all from the same
+	 * parametric draw function, no sprite sheets.
+	 */
+	static BufferedImage motion() {
+		int thumb = 15, scale = 9, cell = thumb * scale, pad = 18, gap = 8, top = 30, labW = 150;
+		// rows: rotation (8 dirs), then 3 animation cycles at 8 frames each.
+		int rowN = 8;
+		String[] rowLabel = { "rotation (8 dir)", "walk cycle (arthropod)", "undulate (worm)", "pulse (microbe)" };
+		int rows = rowLabel.length;
+		int W = pad + labW + rowN * cell + (rowN - 1) * gap + pad;
+		int H = top + pad + rows * cell + (rows - 1) * (gap + 16) + pad;
+		BufferedImage out = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(new Color(20, 21, 27));
+		g.fillRect(0, 0, W, H);
+		g.setColor(new Color(235, 238, 245));
+		g.setFont(new Font("SansSerif", Font.BOLD, 17));
+		g.drawString("Rotation + animation from one parametric function (no sprite sheets), zoomed", pad, 21);
+		g.setFont(new Font("SansSerif", Font.BOLD, 13));
+		int red = ECOLORS[0], green = 0x8fbf3a, cyan = 0x3fb6c8;
+		for (int row = 0; row < rows; row++) {
+			int cy = top + pad + row * (cell + gap + 16);
+			g.setColor(new Color(200, 205, 216));
+			g.drawString(rowLabel[row], pad, cy + cell / 2);
+			for (int col = 0; col < rowN; col++) {
+				TD c;
+				double phase = 0;
+				if (row == 0) { // rotation: face each of 8 directions, static
+					c = new TD(3, red, 0, 3, true, 1, 0, true, 2 * Math.PI * col / rowN);
+				} else if (row == 1) { // walk cycle
+					c = new TD(3, red, 0, 3, true, 1, 0, true, -Math.PI / 2);
+					phase = 2 * Math.PI * col / rowN;
+				} else if (row == 2) { // worm undulation
+					c = new TD(3, green, 3, 2, false, 0, 1, true, -Math.PI / 2);
+					phase = 2 * Math.PI * col / rowN;
+				} else { // microbe pulse
+					c = new TD(3, cyan, 1, 3, false, 2, 0, false, -Math.PI / 2);
+					phase = 2 * Math.PI * col / rowN;
+				}
+				BufferedImage t = new BufferedImage(cell, cell, BufferedImage.TYPE_INT_RGB);
+				Graphics2D tg = t.createGraphics();
+				tg.setColor(new Color(34, 36, 44));
+				tg.fillRect(0, 0, cell, cell);
+				tg.dispose();
+				drawTopdown(t, scale, thumb / 2, thumb / 2, c, phase);
+				g.drawImage(t, pad + labW + col * (cell + gap), cy, null);
+			}
+		}
+		g.dispose();
+		return out;
 	}
 
 	// ---- creative entities -------------------------------------------------
@@ -116,21 +171,26 @@ public class ArtStyleDemo {
 		}
 	}
 
-	/** True if local (along-heading, perpendicular) is inside the body silhouette. */
-	static boolean inForm(int form, double la, double pe, int r, int seed) {
+	/**
+	 * True if local (along-heading, perpendicular) is inside the body silhouette.
+	 * {@code phase} animates the shape: worms undulate, amoebas wobble.
+	 */
+	static boolean inForm(int form, double la, double pe, int r, int seed, double phase) {
 		switch (form) {
 		case 1:
 			return la * la + pe * pe <= r * r + r * 0.5;
 		case 2:
 			return la <= r + 0.3 && la >= -r - 0.3 && Math.abs(pe) <= (r - la) * 0.5 + 0.4;
-		case 3:
-			double d = Math.max(1.2, r), r2 = Math.max(1, r - 0.6);
-			return Math.min(sq(la - d) + pe * pe, Math.min(la * la + pe * pe, sq(la + d) + pe * pe)) <= r2 * r2;
+		case 3: // segmented worm, undulating
+			double d = Math.max(1.2, r), r2 = Math.max(1, r - 0.6), amp = 0.8;
+			double o0 = amp * Math.sin(phase + 1.3), o1 = amp * Math.sin(phase), o2 = amp * Math.sin(phase - 1.3);
+			return Math.min(sq(la - d) + sq(pe - o2),
+					Math.min(sq(la) + sq(pe - o1), sq(la + d) + sq(pe - o0))) <= r2 * r2;
 		case 4:
 			return la * la + pe * pe <= sq(r - 1) + (r - 1) * 0.5;
 		case 5:
 			int q = (int) Math.floor((Math.atan2(pe, la) + Math.PI) / (2 * Math.PI) * 6);
-			double pr = r + 0.7 * (hash(q, seed, 4) - 0.5) * 2;
+			double pr = r + 0.6 * (hash(q, seed, 4) - 0.5) * 2 + 0.5 * Math.sin(phase + q);
 			return la * la + pe * pe <= pr * pr;
 		default: // streamlined oval, longer along heading
 			return sq(la / (r + 0.8)) + sq(pe / Math.max(0.7, r - 0.3)) <= 1.05;
@@ -146,12 +206,16 @@ public class ArtStyleDemo {
 	}
 
 	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c) {
+		drawTopdown(img, scale, cx, cy, c, 0);
+	}
+
+	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c, double phase) {
 		double ux = Math.cos(c.heading), uy = Math.sin(c.heading), rx = -uy, ry = ux;
 		int r = c.r;
 		java.util.HashSet<Integer> body = new java.util.HashSet<Integer>();
 		for (double la = -r - 2; la <= r + 2; la += 0.5) {
 			for (double pe = -r - 2; pe <= r + 2; pe += 0.5) {
-				if (inForm(c.form, la, pe, r, c.color)) {
+				if (inForm(c.form, la, pe, r, c.color, phase)) {
 					int[] w = wpt(la, pe, ux, uy, rx, ry);
 					body.add(key(w[0], w[1]));
 				}
@@ -165,22 +229,24 @@ public class ArtStyleDemo {
 			}
 		}
 		// Appendages (drawn under the body's edge).
-		if (c.form == 0 || c.form == 4) { // bilateral legs
+		if (c.form == 0 || c.form == 4) { // bilateral legs, scuttling
 			int pairs = c.legs;
 			double half = (c.form == 4 ? r - 1 : r - 0.2), len = (c.form == 4 ? 2.4 : 1.4);
 			for (int i = 0; i < pairs; i++) {
 				double la = pairs == 1 ? 0 : lerp(-r + 0.6, r - 0.6, i / (double) (pairs - 1));
-				for (double e = half; e <= half + len; e += 0.7) {
+				double drive = 0.55 + 0.45 * Math.sin(phase + i * 2.1); // per-leg gait
+				for (double e = half; e <= half + len * drive; e += 0.7) {
 					int[] a = wpt(la, e, ux, uy, rx, ry), b = wpt(la, -e, ux, uy, rx, ry);
 					stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
 					stamp(img, scale, cx + b[0], cy + b[1], shade(c.color, 0.5));
 				}
 			}
-		} else if (c.form == 1) { // radial cilia
+		} else if (c.form == 1) { // radial cilia, rotating + pulsing
 			int n = c.legs * 2 + 5;
+			double base = r + 0.8 + 0.35 * Math.sin(phase * 1.5);
 			for (int i = 0; i < n; i++) {
-				double ang = 2 * Math.PI * i / n;
-				int[] a = wpt(Math.cos(ang) * (r + 0.8), Math.sin(ang) * (r + 0.8), ux, uy, rx, ry);
+				double ang = 2 * Math.PI * i / n + phase * 0.25;
+				int[] a = wpt(Math.cos(ang) * base, Math.sin(ang) * base, ux, uy, rx, ry);
 				stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
 			}
 		}
