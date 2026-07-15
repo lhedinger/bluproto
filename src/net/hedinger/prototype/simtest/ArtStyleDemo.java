@@ -88,140 +88,142 @@ public class ArtStyleDemo {
 			0xd8483a, 0xe8a53a, 0xe8c84a, 0x8fbf3a, 0x3fb36a, 0x3fb6c8,
 			0x4a86d8, 0x8a56d0, 0xd05fb0, 0xb0836a, 0x9aa0ad, 0xdfe2ea };
 
-	/** A procedural critter: silhouette + features, sized in art-px. */
-	static class Critter {
-		int r, color, shape, eyes, top, pattern, tail;
-		boolean feet, outline;
-
-		Critter(int r, int color, int shape, int eyes, int top, int pattern, boolean feet, int tail) {
-			this.r = r;
-			this.color = color;
-			this.shape = shape;
-			this.eyes = eyes;
-			this.top = top;
-			this.pattern = pattern;
-			this.feet = feet;
-			this.tail = tail;
-			this.outline = true;
-		}
-	}
-
-	/** shape: 0 round 1 tall 2 wide 3 diamond 4 two-lobed 5 rounded-square. */
-	static boolean inside(int shape, double dx, double dy, int r) {
-		switch (shape) {
-		case 1:
-			return sq(dx / (r - 0.5)) + sq(dy / (r + 0.8)) <= 1.08;
-		case 2:
-			return sq(dx / (r + 0.8)) + sq(dy / (r - 0.5)) <= 1.08;
-		case 3:
-			return Math.abs(dx) + Math.abs(dy) <= r + 0.4;
-		case 4:
-			double o = Math.max(1, r - 1);
-			return Math.min(sq(dx - o) + dy * dy, sq(dx + o) + dy * dy) <= sq(r - 0.4);
-		case 5:
-			return Math.pow(Math.abs(dx) / r, 3) + Math.pow(Math.abs(dy) / r, 3) <= 1.0;
-		default:
-			return dx * dx + dy * dy <= r * r + r * 0.6;
-		}
-	}
-
 	static double sq(double v) {
 		return v * v;
 	}
 
-	static boolean edge(int shape, int dx, int dy, int r) {
-		return inside(shape, dx, dy, r) && (!inside(shape, dx + 1, dy, r) || !inside(shape, dx - 1, dy, r)
-				|| !inside(shape, dx, dy + 1, r) || !inside(shape, dx, dy - 1, r));
+	/**
+	 * A top-down abstract organism: a dorsal silhouette oriented to a heading,
+	 * with appendages splaying outward. form: 0 arthropod (streamlined + bilateral
+	 * legs), 1 radial (round + cilia), 2 dart (heading triangle), 3 segmented
+	 * (worm), 4 spider (small body + long legs), 5 amoeba (irregular + nucleus).
+	 */
+	static class TD {
+		int r, color, form, legs, core, pattern;
+		boolean antennae, tail;
+		double heading;
+
+		TD(int r, int color, int form, int legs, boolean antennae, int core, int pattern, boolean tail, double h) {
+			this.r = r;
+			this.color = color;
+			this.form = form;
+			this.legs = legs;
+			this.antennae = antennae;
+			this.core = core;
+			this.pattern = pattern;
+			this.tail = tail;
+			this.heading = h;
+		}
 	}
 
-	static void drawCritter(BufferedImage img, int scale, int cx, int cy, Critter c) {
+	/** True if local (along-heading, perpendicular) is inside the body silhouette. */
+	static boolean inForm(int form, double la, double pe, int r, int seed) {
+		switch (form) {
+		case 1:
+			return la * la + pe * pe <= r * r + r * 0.5;
+		case 2:
+			return la <= r + 0.3 && la >= -r - 0.3 && Math.abs(pe) <= (r - la) * 0.5 + 0.4;
+		case 3:
+			double d = Math.max(1.2, r), r2 = Math.max(1, r - 0.6);
+			return Math.min(sq(la - d) + pe * pe, Math.min(la * la + pe * pe, sq(la + d) + pe * pe)) <= r2 * r2;
+		case 4:
+			return la * la + pe * pe <= sq(r - 1) + (r - 1) * 0.5;
+		case 5:
+			int q = (int) Math.floor((Math.atan2(pe, la) + Math.PI) / (2 * Math.PI) * 6);
+			double pr = r + 0.7 * (hash(q, seed, 4) - 0.5) * 2;
+			return la * la + pe * pe <= pr * pr;
+		default: // streamlined oval, longer along heading
+			return sq(la / (r + 0.8)) + sq(pe / Math.max(0.7, r - 0.3)) <= 1.05;
+		}
+	}
+
+	static int[] wpt(double la, double pe, double ux, double uy, double rx, double ry) {
+		return new int[] { (int) Math.round(la * ux + pe * rx), (int) Math.round(la * uy + pe * ry) };
+	}
+
+	static int key(int dx, int dy) {
+		return (dx + 32) * 128 + (dy + 32);
+	}
+
+	static void drawTopdown(BufferedImage img, int scale, int cx, int cy, TD c) {
+		double ux = Math.cos(c.heading), uy = Math.sin(c.heading), rx = -uy, ry = ux;
 		int r = c.r;
-		// ground shadow
-		for (int dx = -r; dx <= r; dx++) {
-			if (dx * dx <= r * r) {
-				blendBlock(img, scale, cx + dx, cy + r + 1, 0x000000, 0.26);
-			}
-		}
-		// body
-		for (int dx = -r - 1; dx <= r + 1; dx++) {
-			for (int dy = -r - 1; dy <= r + 1; dy++) {
-				if (!inside(c.shape, dx, dy, r)) {
-					continue;
+		java.util.HashSet<Integer> body = new java.util.HashSet<Integer>();
+		for (double la = -r - 2; la <= r + 2; la += 0.5) {
+			for (double pe = -r - 2; pe <= r + 2; pe += 0.5) {
+				if (inForm(c.form, la, pe, r, c.color)) {
+					int[] w = wpt(la, pe, ux, uy, rx, ry);
+					body.add(key(w[0], w[1]));
 				}
-				int col;
-				if (c.outline && edge(c.shape, dx, dy, r)) {
-					col = shade(c.color, 0.34);
-				} else {
-					double ts = (dy + r) / (2.0 * r);
-					col = ts < 0.4 ? mixWhite(c.color, 0.42) : (ts > 0.72 ? shade(c.color, 0.6) : c.color);
-					if (c.pattern == 1 && dy >= 1) {
-						col = mixWhite(col, 0.22); // pale belly
-					} else if (c.pattern == 2 && Math.abs(dx) <= 0 && Math.abs(dy) <= 0) {
-						col = shade(c.color, 0.5); // centre spot
-					} else if (c.pattern == 3 && dx == 0) {
-						col = shade(col, 0.72); // back stripe
-					}
+			}
+		}
+		// Ambient shadow: faint halo just outside the silhouette (south-biased).
+		for (int p : body) {
+			int dx = p / 128 - 32, dy = p % 128 - 32;
+			if (!body.contains(key(dx, dy + 1))) {
+				blendBlock(img, scale, cx + dx, cy + dy + 1, 0x000000, 0.22);
+			}
+		}
+		// Appendages (drawn under the body's edge).
+		if (c.form == 0 || c.form == 4) { // bilateral legs
+			int pairs = c.legs;
+			double half = (c.form == 4 ? r - 1 : r - 0.2), len = (c.form == 4 ? 2.4 : 1.4);
+			for (int i = 0; i < pairs; i++) {
+				double la = pairs == 1 ? 0 : lerp(-r + 0.6, r - 0.6, i / (double) (pairs - 1));
+				for (double e = half; e <= half + len; e += 0.7) {
+					int[] a = wpt(la, e, ux, uy, rx, ry), b = wpt(la, -e, ux, uy, rx, ry);
+					stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
+					stamp(img, scale, cx + b[0], cy + b[1], shade(c.color, 0.5));
 				}
-				stamp(img, scale, cx + dx, cy + dy, col);
+			}
+		} else if (c.form == 1) { // radial cilia
+			int n = c.legs * 2 + 5;
+			for (int i = 0; i < n; i++) {
+				double ang = 2 * Math.PI * i / n;
+				int[] a = wpt(Math.cos(ang) * (r + 0.8), Math.sin(ang) * (r + 0.8), ux, uy, rx, ry);
+				stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.5));
 			}
 		}
-		// eyes
-		int ex = Math.max(1, r / 2);
-		if (c.eyes == 2) {
-			eye(img, scale, cx - ex, cy - 1, r);
-			eye(img, scale, cx + ex, cy - 1, r);
-		} else if (c.eyes == 1) {
-			eye(img, scale, cx, cy - 1, r);
+		// Body, lit from screen-north (world dy) regardless of heading.
+		for (int p : body) {
+			int dx = p / 128 - 32, dy = p % 128 - 32;
+			double ts = (dy + r) / (2.0 * r);
+			int col = ts < 0.4 ? mixWhite(c.color, 0.4) : (ts > 0.72 ? shade(c.color, 0.6) : c.color);
+			stamp(img, scale, cx + dx, cy + dy, col);
 		}
-		// top feature
-		int ty = cy - r - 1;
-		switch (c.top) {
-		case 1: // antenna
-			stamp(img, scale, cx, ty, shade(c.color, 0.4));
-			stamp(img, scale, cx, ty - 1, mixWhite(c.color, 0.5));
-			break;
-		case 2: // spikes
-			stamp(img, scale, cx, ty, shade(c.color, 0.45));
-			stamp(img, scale, cx - r + 1, cy - r, shade(c.color, 0.45));
-			stamp(img, scale, cx + r - 1, cy - r, shade(c.color, 0.45));
-			break;
-		case 3: // ears / horns
-			stamp(img, scale, cx - r + 1, ty, c.color);
-			stamp(img, scale, cx + r - 1, ty, c.color);
-			break;
-		case 4: // fin / crest
-			stamp(img, scale, cx, ty, mixWhite(c.color, 0.3));
-			if (r >= 3) {
-				stamp(img, scale, cx, ty - 1, mixWhite(c.color, 0.3));
+		// Nucleus / core.
+		if (c.core > 0) {
+			stamp(img, scale, cx, cy, c.core == 1 ? shade(c.color, 0.5) : mixWhite(c.color, 0.55));
+		}
+		// Dorsal stripe along heading, or a lit head at the front.
+		if (c.pattern == 1) {
+			for (double la = -r; la <= r; la += 0.5) {
+				int[] a = wpt(la, 0, ux, uy, rx, ry);
+				if (body.contains(key(a[0], a[1]))) {
+					stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.72));
+				}
 			}
-			break;
-		default:
-			break;
-		}
-		// tail
-		if (c.tail == 1) {
-			stamp(img, scale, cx + r + 1, cy, shade(c.color, 0.72));
-			if (r >= 3) {
-				stamp(img, scale, cx + r + 2, cy, shade(c.color, 0.6));
+		} else if (c.pattern == 2) {
+			int[] a = wpt(r - 0.3, 0, ux, uy, rx, ry);
+			if (body.contains(key(a[0], a[1]))) {
+				stamp(img, scale, cx + a[0], cy + a[1], mixWhite(c.color, 0.55));
 			}
 		}
-		// feet
-		if (c.feet) {
-			stamp(img, scale, cx - (r - 1), cy + r, shade(c.color, 0.45));
-			stamp(img, scale, cx + (r - 1), cy + r, shade(c.color, 0.45));
+		// Antennae forward, tail aft.
+		if (c.antennae) {
+			int[] a = wpt(r + 0.9, 0.9, ux, uy, rx, ry), b = wpt(r + 0.9, -0.9, ux, uy, rx, ry);
+			stamp(img, scale, cx + a[0], cy + a[1], shade(c.color, 0.55));
+			stamp(img, scale, cx + b[0], cy + b[1], shade(c.color, 0.55));
+		}
+		if (c.tail) {
+			int[] t = wpt(-(r + 0.9), 0, ux, uy, rx, ry);
+			stamp(img, scale, cx + t[0], cy + t[1], shade(c.color, 0.6));
 		}
 	}
 
-	static void eye(BufferedImage img, int scale, int x, int y, int r) {
-		stamp(img, scale, x, y, 0x14141c); // pupil
-		if (r >= 3) {
-			stamp(img, scale, x, y - 1, 0xf4f6ff); // highlight above
-		}
-	}
-
-	/** Zoomed grid of varied critters (as they would look at 12 px/tile). */
+	/** Zoomed grid of top-down organisms (all facing up so forms are comparable). */
 	static BufferedImage bestiary() {
-		int cols = 6, rows = 4, thumb = 13, scale = 9, cell = thumb * scale;
+		int cols = 6, rows = 4, thumb = 15, scale = 9, cell = thumb * scale;
 		int pad = 18, gap = 8, top = 30;
 		int W = pad * 2 + cols * cell + (cols - 1) * gap;
 		int H = top + pad * 2 + rows * cell + (rows - 1) * gap;
@@ -231,17 +233,18 @@ public class ArtStyleDemo {
 		g.fillRect(0, 0, W, H);
 		g.setColor(new Color(235, 238, 245));
 		g.setFont(new Font("SansSerif", Font.BOLD, 17));
-		g.drawString("Entity variations - shown as at 12 px/tile (radius 2-3 art-px), zoomed", pad, 21);
+		g.drawString("Top-down organisms - facing up, at 12 px/tile (radius 2-3 art-px), zoomed", pad, 21);
+		double up = -Math.PI / 2;
 		for (int i = 0; i < cols * rows; i++) {
 			int r = 2 + (i % 3 == 2 ? 1 : 0);
-			Critter c = new Critter(r, ECOLORS[i % ECOLORS.length], i % 6, 1 + (i / 2) % 2,
-					i % 5, (i / 3) % 4, i % 3 == 0, (i % 4 == 0) ? 1 : 0);
+			TD c = new TD(r, ECOLORS[i % ECOLORS.length], i % 6, 2 + (i / 6) % 3,
+					i % 2 == 0, (i / 3) % 3, (i / 2) % 3, i % 4 == 0, up);
 			BufferedImage t = new BufferedImage(cell, cell, BufferedImage.TYPE_INT_RGB);
 			Graphics2D tg = t.createGraphics();
 			tg.setColor(new Color(34, 36, 44));
 			tg.fillRect(0, 0, cell, cell);
 			tg.dispose();
-			drawCritter(t, scale, thumb / 2, thumb / 2, c);
+			drawTopdown(t, scale, thumb / 2, thumb / 2, c);
 			int cx = pad + (i % cols) * (cell + gap);
 			int cy = top + pad + (i / cols) * (cell + gap);
 			g.drawImage(t, cx, cy, null);
@@ -250,7 +253,7 @@ public class ArtStyleDemo {
 		return out;
 	}
 
-	/** The natural island populated with a diverse set of critters at true scale. */
+	/** The natural island populated with varied top-down organisms at true scale. */
 	static BufferedImage population(Field f) {
 		int scale = 6;
 		int[][] a = renderGround(f, NATURAL, 0.6, 1.44, 0.30, 0.82);
@@ -262,14 +265,15 @@ public class ArtStyleDemo {
 				int b = bandOf(f.elev[tc * f.R + f.R / 2][tr * f.R + f.R / 2], f.bnd);
 				if ((b == 2 || b == 3) && ((tc * 7 + tr * 5) % 3 == 0)) {
 					int s = tc * 31 + tr * 17;
-					Critter c = new Critter(2 + (s % 3 == 0 ? 1 : 0), ECOLORS[(s / 7) % ECOLORS.length],
-							s % 6, 1 + (s / 6) % 2, (s / 2) % 5, (s / 4) % 4, s % 3 == 0, (s % 5 == 0) ? 1 : 0);
-					drawCritter(p, scale, tc * f.R + f.R / 2, tr * f.R + f.R / 2, c);
+					TD c = new TD(2 + (s % 3 == 0 ? 1 : 0), ECOLORS[(s / 7) % ECOLORS.length],
+							s % 6, 2 + (s / 6) % 3, s % 2 == 0, (s / 4) % 3, (s / 2) % 3, s % 5 == 0,
+							(s % 16) / 16.0 * 2 * Math.PI);
+					drawTopdown(p, scale, tc * f.R + f.R / 2, tr * f.R + f.R / 2, c);
 					placed++;
 				}
 			}
 		}
-		return labelBar(p, "Natural island populated with varied critters (true 12 px/tile scale)");
+		return labelBar(p, "Natural island populated with top-down organisms (true 12 px/tile scale)");
 	}
 
 	static BufferedImage labelBar(BufferedImage panel, String text) {
