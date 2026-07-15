@@ -41,6 +41,10 @@ public class ArtStyleDemo {
 
 	public static void main(String[] args) throws Exception {
 		new File("out").mkdirs();
+		if (args.length > 0 && args[0].equals("anim")) {
+			animate();
+			return;
+		}
 
 		// --- Resolution dial: fixed calm texture, varying art-px per tile ---
 		int[] res = { 8, 12, 20, 32 };
@@ -81,6 +85,71 @@ public class ArtStyleDemo {
 		ImageIO.write(motion(), "png", new File("out/art_motion.png"));
 
 		System.out.println("wrote art_resolution/texture/crt.png + art_entities/population/motion.png");
+	}
+
+	/** Renders an animated clip: organisms wander the island, turning to their
+	 * heading and animating from the phase clock. Writes PNG frames for ffmpeg. */
+	static void animate() throws Exception {
+		Field f = buildField(12);
+		int scale = 6;
+		BufferedImage base = upscale(renderGround(f, NATURAL, 0.6, 1.44, 0.30, 0.82), f.AW, f.AH, scale);
+		drawGrid(base, f.R * scale);
+
+		int n = 16;
+		double[] x = new double[n], y = new double[n], hd = new double[n];
+		TD[] td = new TD[n];
+		List<int[]> land = new ArrayList<int[]>();
+		for (int tc = 1; tc < WT - 1; tc++) {
+			for (int tr = 1; tr < HT - 1; tr++) {
+				int b = bandOf(f.elev[tc * f.R + f.R / 2][tr * f.R + f.R / 2], f.bnd);
+				if (b >= 2) {
+					land.add(new int[] { tc, tr });
+				}
+			}
+		}
+		for (int i = 0; i < n; i++) {
+			int[] t = land.get((i * 41 + 3) % land.size());
+			x[i] = t[0] * f.R + f.R / 2.0;
+			y[i] = t[1] * f.R + f.R / 2.0;
+			hd[i] = 2 * Math.PI * hash(i, 9, 2);
+			td[i] = new TD(2 + (i % 3 == 0 ? 1 : 0), ECOLORS[i % ECOLORS.length], i % 6,
+					2 + (i / 6) % 3, i % 2 == 0, (i / 4) % 3, (i / 2) % 3, i % 5 == 0, hd[i]);
+		}
+
+		File dir = new File("out/frames");
+		dir.mkdirs();
+		for (File old : dir.listFiles()) {
+			old.delete();
+		}
+		int frames = 160;
+		for (int fr = 0; fr < frames; fr++) {
+			BufferedImage img = new BufferedImage(base.getWidth(), base.getHeight(), BufferedImage.TYPE_INT_RGB);
+			Graphics2D g = img.createGraphics();
+			g.drawImage(base, 0, 0, null);
+			g.dispose();
+			for (int i = 0; i < n; i++) {
+				hd[i] += (hash(fr, i, 3) - 0.5) * 0.35; // gentle wander
+				double nx = x[i] + Math.cos(hd[i]) * 0.4, ny = y[i] + Math.sin(hd[i]) * 0.4;
+				if (onLand(f, nx, ny)) {
+					x[i] = nx;
+					y[i] = ny;
+				} else {
+					hd[i] += Math.PI * 0.75; // turn away from water/edge
+				}
+				td[i].heading = hd[i];
+				drawTopdown(img, scale, (int) Math.round(x[i]), (int) Math.round(y[i]), td[i], fr * 0.35 + i * 1.3);
+			}
+			ImageIO.write(img, "png", new File(dir, String.format("f%04d.png", fr)));
+		}
+		System.out.println("wrote " + frames + " frames to out/frames/");
+	}
+
+	static boolean onLand(Field f, double x, double y) {
+		int ix = (int) x, iy = (int) y;
+		if (ix < 2 || iy < 2 || ix >= f.AW - 2 || iy >= f.AH - 2) {
+			return false;
+		}
+		return bandOf(f.elev[ix][iy], f.bnd) >= 1; // sand..stone, avoid deep water
 	}
 
 	/**
