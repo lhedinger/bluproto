@@ -11,6 +11,7 @@ import java.util.Stack;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.engine.Entity;
+import net.hedinger.prototype.engine.ProcCreature;
 import net.hedinger.prototype.engine.ResourceManager;
 import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
@@ -300,8 +301,16 @@ public abstract class NPC extends Entity {
 		float relativeSize = Utils.scaleZ2((int) Z, v.getCamZ(), size);
 		int relativeSize2 = round(relativeSize * 2);
 
-		g2.drawImage(ResourceManager.getNpcSprite(hostile), pixelX(v, relativeSize2), pixelY(v,
-				relativeSize2), relativeSize2 * 2, relativeSize2 * 2, null);
+		if (genome != null) {
+			// Genome-driven top-down organism: oriented to the heading, animated
+			// by a per-entity phase clock (offset by id so they aren't in lockstep).
+			double phase = getWorld().getTick() * 0.3 + getID();
+			ProcCreature.draw(g2, pixelX(v, 0), pixelY(v, 0), relativeSize2,
+					ProcCreature.phenotype(genome), D, phase);
+		} else {
+			g2.drawImage(ResourceManager.getNpcSprite(hostile), pixelX(v, relativeSize2), pixelY(v,
+					relativeSize2), relativeSize2 * 2, relativeSize2 * 2, null);
+		}
 
 		if (message_fade > 0) {
 			g2.setFont(new Font("Arial", Font.BOLD, 10));
