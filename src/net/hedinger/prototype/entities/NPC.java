@@ -309,12 +309,10 @@ public abstract class NPC extends Entity {
 			double phase = getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + getID();
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(genome);
 			int cx = pixelX(v, 0), cy = pixelY(v, 0);
-			if (age >= 0 && age < 24) {
-				ProcCreature.draw(g2, cx, cy, relativeSize2, ph, D, phase,
-						ProcCreature.actionMod(ProcCreature.A_SPAWN, age / 24.0, ph.color));
-			} else {
-				ProcCreature.draw(g2, cx, cy, relativeSize2, ph, D, phase);
-			}
+			boolean spawning = age >= 0 && age < 24;
+			int action = spawning ? ProcCreature.A_SPAWN : ProcCreature.A_IDLE;
+			double actionT = spawning ? age / 24.0 : 0;
+			ProcCreature.drawCached(g2, cx, cy, relativeSize2, ph, D, phase, action, actionT);
 		} else {
 			g2.drawImage(ResourceManager.getNpcSprite(hostile), pixelX(v, relativeSize2), pixelY(v,
 					relativeSize2), relativeSize2 * 2, relativeSize2 * 2, null);

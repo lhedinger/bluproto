@@ -15,6 +15,8 @@ public final class RenderFx {
 	public static boolean crt = false;
 	/** Draw the scenario debug overlay (heading arrows, labels, glyphs). */
 	public static boolean debugOverlay = true;
+	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
+	public static boolean cacheSprites = true;
 
 	private RenderFx() {
 	}

@@ -2,6 +2,7 @@ package net.hedinger.prototype.engine;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.util.HashSet;
 
 import net.hedinger.prototype.entities.Genome;
@@ -43,10 +44,18 @@ public final class ProcCreature {
 
 	// ---- genome -> appearance ---------------------------------------------
 
+	// Sprite cache: memoises draw() output keyed by a quantised descriptor so
+	// identical (species, direction, animation frame, action, size) creatures are
+	// rendered once and blitted thereafter. The cache is content-agnostic (see
+	// SpriteCache); only phenoKey/drawCached below know what affects the pixels.
+	private static final double TWO_PI = Math.PI * 2;
+	private static final int DIRS = 8, ANIM = 8, ACTF = 12, MAX_CACHE_RADIUS = 48;
+	private static final SpriteCache CACHE = new SpriteCache(1536);
+
 	/** Derives a stable, heritable phenotype from a genome (markers = identity). */
 	public static Phenotype phenotype(Genome g) {
 		Phenotype p = new Phenotype();
-		p.color = g.toColor().getRGB();
+		p.color = snap(g.toColor().getRGB()); // 5 bits/channel: palette-ish, bounds the cache
 		double m0 = clamp01(g.markers[0]), m1 = clamp01(g.markers[1]), m2 = clamp01(g.markers[2]);
 		p.form = (int) (m0 * 5.999);
 		p.legs = 2 + (int) (m1 * 3);
@@ -135,6 +144,87 @@ public final class ProcCreature {
 	}
 
 	// ---- drawing -----------------------------------------------------------
+
+	/**
+	 * Cached draw: renders through the {@link SpriteCache}. Direction, animation
+	 * phase, action progress and on-screen size are quantised into a key; the
+	 * sprite for a given key is drawn once (via {@link #draw}) into a small buffer
+	 * and blitted thereafter. Falls back to a direct draw for very large sprites
+	 * (rare, zoomed in) or when caching is disabled.
+	 */
+	public static void drawCached(Graphics2D g, int cx, int cy, double onScreenRadius,
+			Phenotype ph, double heading, double phase, int action, double actionT) {
+		if (!RenderFx.cacheSprites || onScreenRadius > MAX_CACHE_RADIUS || onScreenRadius < 1) {
+			draw(g, cx, cy, onScreenRadius, ph, heading, phase,
+					action == A_IDLE ? IDENTITY : actionMod(action, actionT, ph.color));
+			return;
+		}
+		int sizeB = (int) Math.round(onScreenRadius);
+		int dir = ((int) Math.round(heading / (TWO_PI / DIRS)) % DIRS + DIRS) % DIRS;
+		int anim = action == A_IDLE ? (int) Math.floor(frac(phase / TWO_PI) * ANIM) : 0;
+		int actF = action == A_IDLE ? 0 : clampI((int) (actionT * ACTF), 0, ACTF - 1);
+		long key = phenoKey(ph);
+		key = key * 131 + dir;
+		key = key * 131 + anim;
+		key = key * 131 + action;
+		key = key * 131 + actF;
+		key = key * 131 + sizeB;
+		BufferedImage sp = CACHE.get(key, () -> renderSprite(ph, dir, anim, action, actF, sizeB));
+		int artPx = Math.max(1, Math.round(sizeB / (float) ph.r));
+		int center = (ph.r + 7) * artPx + artPx / 2;
+		g.drawImage(sp, cx - center, cy - center, null);
+	}
+
+	/** Renders one sprite for a cache miss: reconstructs the draw params from the
+	 * quantised key and calls {@link #draw} into a tight transparent buffer. */
+	private static BufferedImage renderSprite(Phenotype ph, int dir, int anim, int action, int actF, int sizeB) {
+		int artPx = Math.max(1, Math.round(sizeB / (float) ph.r));
+		int half = ph.r + 7; // art-px radius incl appendages / glyph / ring / action offset
+		int dim = (2 * half + 1) * artPx;
+		int center = half * artPx + artPx / 2;
+		BufferedImage buf = new BufferedImage(dim, dim, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D bg = buf.createGraphics();
+		double heading = dir * (TWO_PI / DIRS);
+		double phase = (anim + 0.5) / ANIM * TWO_PI;
+		Mod m = action == A_IDLE ? IDENTITY : actionMod(action, (actF + 0.5) / ACTF, ph.color);
+		draw(bg, center, center, artPx * ph.r, ph, heading, phase, m);
+		bg.dispose();
+		return buf;
+	}
+
+	/** Packs everything about a phenotype that affects the pixels into a key. */
+	private static long phenoKey(Phenotype ph) {
+		long k = ph.color & 0xFFFFFFL;
+		k = (k << 3) | (ph.form & 7);
+		k = (k << 3) | (ph.legs & 7);
+		k = (k << 2) | (ph.core & 3);
+		k = (k << 2) | (ph.pattern & 3);
+		k = (k << 1) | (ph.antennae ? 1 : 0);
+		k = (k << 1) | (ph.tail ? 1 : 0);
+		k = (k << 3) | (ph.r & 7);
+		return k;
+	}
+
+	/** Cache stats for diagnostics. */
+	public static String cacheStats() {
+		return "sprites=" + CACHE.size() + " hits=" + CACHE.hits() + " misses=" + CACHE.misses();
+	}
+
+	private static int snap(int rgb) {
+		return (snapCh((rgb >> 16) & 255) << 16) | (snapCh((rgb >> 8) & 255) << 8) | snapCh(rgb & 255);
+	}
+
+	private static int snapCh(int v) {
+		return Math.min(255, (v & 0xF8) + 4); // 5 bits/channel, centred
+	}
+
+	private static double frac(double v) {
+		return v - Math.floor(v);
+	}
+
+	private static int clampI(int v, int lo, int hi) {
+		return v < lo ? lo : (v > hi ? hi : v);
+	}
 
 	public static void draw(Graphics2D g, int cx, int cy, double onScreenRadius,
 			Phenotype ph, double heading, double phase) {
