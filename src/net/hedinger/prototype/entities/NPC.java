@@ -302,11 +302,19 @@ public abstract class NPC extends Entity {
 		int relativeSize2 = round(relativeSize * 2);
 
 		if (genome != null) {
-			// Genome-driven top-down organism: oriented to the heading, animated
-			// by a per-entity phase clock (offset by id so they aren't in lockstep).
-			double phase = getWorld().getTick() * 0.3 + getID();
-			ProcCreature.draw(g2, pixelX(v, 0), pixelY(v, 0), relativeSize2,
-					ProcCreature.phenotype(genome), D, phase);
+			// Genome-driven top-down organism: oriented to the heading; animated
+			// faster while moving, gently while idle (offset by id so they aren't
+			// in lockstep). Newborns pop in with the generic spawn action.
+			double spd = Math.hypot(dX, dY);
+			double phase = getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + getID();
+			ProcCreature.Phenotype ph = ProcCreature.phenotype(genome);
+			int cx = pixelX(v, 0), cy = pixelY(v, 0);
+			if (age >= 0 && age < 24) {
+				ProcCreature.draw(g2, cx, cy, relativeSize2, ph, D, phase,
+						ProcCreature.actionMod(ProcCreature.A_SPAWN, age / 24.0, ph.color));
+			} else {
+				ProcCreature.draw(g2, cx, cy, relativeSize2, ph, D, phase);
+			}
 		} else {
 			g2.drawImage(ResourceManager.getNpcSprite(hostile), pixelX(v, relativeSize2), pixelY(v,
 					relativeSize2), relativeSize2 * 2, relativeSize2 * 2, null);

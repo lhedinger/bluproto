@@ -95,6 +95,10 @@ public class Grid {
 	 * grazed patches thin to bare floor. Pheromone rides on top as a wash.
 	 */
 	private void renderGround(Graphics2D g2, int ox, int oy) {
+		if (RenderFx.pixelGround) {
+			renderGroundPixel(g2, ox, oy);
+			return;
+		}
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		for (int x = 0; x < world.cols; x++) {
@@ -173,6 +177,58 @@ public class Grid {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Low-res pixel ground: each tile is drawn as A×A chunky art-pixels, each
+	 * coloured from its terrain-class ramp by a world-space shade noise. The
+	 * terrain lookup is jittered by noise so class boundaries wander and dither
+	 * across tile edges instead of snapping to the grid -- water bleeds onto the
+	 * shore, grass into bare soil, etc. Structural tiles (walls/holes/ramps) are
+	 * skipped; they come from the baked layer underneath.
+	 */
+	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		long now = world.getTick();
+		int A = 12; // art-pixels per tile
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile t = tiles[x][y];
+				int cls = GroundTextures.groundClass(t, now);
+				if (cls < 0) {
+					continue; // structural: baked layer shows through
+				}
+				int sx = ox + x * ts, sy = oy + y * ts;
+				for (int aj = 0; aj < A; aj++) {
+					int by0 = aj * ts / A, by1 = (aj + 1) * ts / A;
+					for (int ai = 0; ai < A; ai++) {
+						int bx0 = ai * ts / A, bx1 = (ai + 1) * ts / A;
+						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
+						double jx = wx + (Utils.noise2(wx + 3.1, wy, 1.1) - 0.5) * 0.9;
+						double jy = wy + (Utils.noise2(wx, wy + 5.7, 1.1) - 0.5) * 0.9;
+						int cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
+						if (cl < 0) {
+							cl = cls;
+						}
+						g2.setColor(new Color(GroundTextures.groundColor(cl, wx, wy)));
+						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+					}
+				}
+				double ph = t.getPheromone(now);
+				if (ph > 0.05) {
+					int a = (int) Math.min(200, ph * 90);
+					g2.setColor(new Color(230, 40, 190, a));
+					g2.fillRect(sx, sy, ts, ts);
+				}
+			}
+		}
+	}
+
+	private int groundClassAt(int cx, int cy, long now) {
+		if (cx < 0 || cy < 0 || cx >= world.cols || cy >= world.rows) {
+			return -1;
+		}
+		return GroundTextures.groundClass(tiles[cx][cy], now);
 	}
 
 	/** Edge-fade bits (N=1, E=2, S=4, W=8) for edges whose neighbour isn't mottle. */

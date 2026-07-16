@@ -61,10 +61,11 @@ final class SnapshotRenderer {
 			levels.add(renderLevel(w, z));
 			labels.add("level " + z);
 		}
-		if (levels.size() == 1) {
-			return levels.get(0);
+		BufferedImage out = levels.size() == 1 ? levels.get(0) : strip(null, labels, levels);
+		if (net.hedinger.prototype.engine.RenderFx.crt) {
+			net.hedinger.prototype.engine.RenderFx.crt(out);
 		}
-		return strip(null, labels, levels);
+		return out;
 	}
 
 	private static BufferedImage renderLevel(World w, int level) {
@@ -92,7 +93,9 @@ final class SnapshotRenderer {
 
 		int scale = Math.max(1, (int) Math.ceil(480.0 / Math.max(worldW, worldH)));
 		BufferedImage img = upscale(raw, scale);
-		drawDebugOverlay(img, w, level, ts * scale);
+		if (net.hedinger.prototype.engine.RenderFx.debugOverlay) {
+			drawDebugOverlay(img, w, level, ts * scale);
+		}
 		return img;
 	}
 

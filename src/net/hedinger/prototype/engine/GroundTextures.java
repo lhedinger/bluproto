@@ -35,6 +35,40 @@ public final class GroundTextures {
 	/** Turquoise shallows drawn where water meets land. */
 	public static final Color SHORE = new Color(96, 190, 205);
 
+	// ---- pixel-ground palette (RenderFx.pixelGround) -----------------------
+	// Per terrain class: {shadow, base, highlight}, natural palette from the
+	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
+	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4;
+	private static final int[][] RAMP = {
+			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
+			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
+			{ 0x40301f, 0x63472e, 0x866543 }, // soil / bare
+			{ 0x38291a, 0x574024, 0x775a38 }, // mud
+			{ 0x1b3a16, 0x2b5422, 0x456c36 }, // cover (dark grass)
+	};
+
+	/** Terrain colour class for a tile, or -1 for structural (wall/hole/ramp). */
+	public static int groundClass(Tile t, long now) {
+		switch (t.getType()) {
+		case TYPE_WATER:
+			return CLS_WATER;
+		case TYPE_MUD:
+			return CLS_MUD;
+		case TYPE_COVER:
+			return CLS_COVER;
+		case TYPE_FLOOR:
+			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
+		default:
+			return -1;
+		}
+	}
+
+	/** Colour for a ground class at a world position: base-dominant shade ramp. */
+	public static int groundColor(int cls, double wx, double wy) {
+		double sh = Utils.noise2(wx, wy, 0.9);
+		return RAMP[cls][sh < 0.30 ? 0 : (sh > 0.82 ? 2 : 1)];
+	}
+
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
 	private static boolean ready = false;
