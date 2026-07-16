@@ -30,7 +30,7 @@ public final class ProcCreature {
 	/** Heritable appearance: silhouette form + features + size, plus colour. */
 	public static final class Phenotype {
 		public int color, form, legs, core, pattern, r;
-		public boolean antennae, tail;
+		public boolean antennae, tail, flying;
 	}
 
 	/** A form-agnostic action envelope: squash/stretch, offset, rotation, tint,
@@ -63,6 +63,7 @@ public final class ProcCreature {
 		p.pattern = (int) (((m0 + m1) * 0.5) * 2.999);
 		p.antennae = m1 > 0.45;
 		p.tail = m2 > 0.5;
+		p.flying = g.flying;
 		p.r = clamp((int) Math.round(g.size / 3.0), 2, 4);
 		return p;
 	}
@@ -171,7 +172,7 @@ public final class ProcCreature {
 		key = key * 131 + sizeB;
 		BufferedImage sp = CACHE.get(key, () -> renderSprite(ph, dir, anim, action, actF, sizeB));
 		int artPx = Math.max(1, Math.round(sizeB / (float) ph.r));
-		int center = (ph.r + 7) * artPx + artPx / 2;
+		int center = (ph.r + spriteMargin(ph)) * artPx + artPx / 2;
 		g.drawImage(sp, cx - center, cy - center, null);
 	}
 
@@ -179,7 +180,7 @@ public final class ProcCreature {
 	 * quantised key and calls {@link #draw} into a tight transparent buffer. */
 	private static BufferedImage renderSprite(Phenotype ph, int dir, int anim, int action, int actF, int sizeB) {
 		int artPx = Math.max(1, Math.round(sizeB / (float) ph.r));
-		int half = ph.r + 7; // art-px radius incl appendages / glyph / ring / action offset
+		int half = ph.r + spriteMargin(ph); // art-px radius incl appendages / glyph / ring / shadow
 		int dim = (2 * half + 1) * artPx;
 		int center = half * artPx + artPx / 2;
 		BufferedImage buf = new BufferedImage(dim, dim, BufferedImage.TYPE_INT_ARGB);
@@ -201,8 +202,15 @@ public final class ProcCreature {
 		k = (k << 2) | (ph.pattern & 3);
 		k = (k << 1) | (ph.antennae ? 1 : 0);
 		k = (k << 1) | (ph.tail ? 1 : 0);
+		k = (k << 1) | (ph.flying ? 1 : 0);
 		k = (k << 3) | (ph.r & 7);
 		return k;
+	}
+
+	/** Art-px margin around the body: room for appendages/glyph/ring, plus extra
+	 * headroom below/above for a flyer's lifted body and its detached shadow. */
+	private static int spriteMargin(Phenotype ph) {
+		return ph.flying ? 11 : 7;
 	}
 
 	/** Cache stats for diagnostics. */
@@ -237,9 +245,22 @@ public final class ProcCreature {
 		int px = Math.max(1, (int) Math.round(onScreenRadius / r)); // screen px per art-px
 		double h = heading + m.rot;
 		double ux = Math.cos(h), uy = Math.sin(h), rx = -uy, ry = ux;
+		// Airborne bodies are drawn lifted north of their ground point; the cast
+		// shadow stays on the ground below, so the gap between them reads as height.
+		int lift = ph.flying ? 5 : 0;
 		int ox = cx + (int) Math.round((m.offA * ux + m.offP * rx) * px);
-		int oy = cy + (int) Math.round((m.offA * uy + m.offP * ry) * px);
+		int oy = cy + (int) Math.round((m.offA * uy + m.offP * ry) * px) - lift * px;
 		double sA = m.sA, sP = m.sP;
+
+		// Cast ground shadow at the contact point (light from screen-north), under
+		// everything. A grounded body sits on a tight, dark shadow tucked just
+		// south; a flyer's shadow is displaced further south and a touch smaller,
+		// so the detached shadow distinguishes airborne from land at a glance.
+		int shAlpha = (int) Math.round((ph.flying ? 78 : 108) * (1 - m.dissolve));
+		if (shAlpha > 0) {
+			drawShadow(g, cx, cy + (ph.flying ? 4 : 1) * px, px,
+					r * (ph.flying ? 0.85 : 1.05), r * (ph.flying ? 0.42 : 0.55), shAlpha);
+		}
 
 		HashSet<Integer> body = new HashSet<Integer>();
 		int rng = (int) ((r + 2) * Math.max(sA, sP)) + 1;
@@ -395,6 +416,21 @@ public final class ProcCreature {
 			break;
 		default:
 			break;
+		}
+	}
+
+	/** A soft dark ground ellipse: solid core plus a half-alpha penumbra ring. */
+	private static void drawShadow(Graphics2D g, int cx, int cy, int px, double rx, double ry, int alpha) {
+		int rr = (int) Math.ceil(Math.max(rx, ry));
+		for (int dy = -rr; dy <= rr; dy++) {
+			for (int dx = -rr; dx <= rr; dx++) {
+				double e = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+				if (e > 1.0) {
+					continue;
+				}
+				g.setColor(new Color(0, 0, 0, e < 0.55 ? alpha : alpha / 2));
+				g.fillRect(cx + dx * px - px / 2, cy + dy * px - px / 2, px, px);
+			}
 		}
 	}
 

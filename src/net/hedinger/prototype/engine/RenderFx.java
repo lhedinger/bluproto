@@ -17,6 +17,10 @@ public final class RenderFx {
 	public static boolean debugOverlay = true;
 	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
 	public static boolean cacheSprites = true;
+	/** Render holes as translucent pits, so the layer beneath shows through. */
+	public static boolean holeTranslucent = true;
+	/** How opaque the pit shade is over the revealed layer (0 clear .. 1 black). */
+	public static double holeDepth = 0.68;
 
 	private RenderFx() {
 	}

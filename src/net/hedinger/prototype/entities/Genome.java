@@ -37,6 +37,7 @@ public class Genome {
 	public double losFov = Math.PI * 0.5;
 	public double metabolism = 0.02;
 	public int maxAge = 3000;
+	public boolean flying = false; // locomotion: airborne (a detached shadow) vs ground
 
 	// --- markers (neutral recognition barcode, each in [0,1]) ---
 	public double[] markers = new double[MARKER_DIMS];
@@ -92,6 +93,7 @@ public class Genome {
 		g.losFov = losFov;
 		g.metabolism = metabolism;
 		g.maxAge = maxAge;
+		g.flying = flying;
 		g.markers = markers.clone();
 		g.predatory = predatory;
 		g.xenophobia = xenophobia;
@@ -124,6 +126,7 @@ public class Genome {
 		g.losFov = pick(a.losFov, b.losFov);
 		g.metabolism = pick(a.metabolism, b.metabolism);
 		g.maxAge = (int) pick(a.maxAge, b.maxAge);
+		g.flying = a.flying; // locomotion inherited (no RNG draw: keeps the sim stream stable)
 		for (int i = 0; i < MARKER_DIMS; i++) {
 			g.markers[i] = pick(a.markers[i], b.markers[i]);
 		}
@@ -149,6 +152,8 @@ public class Genome {
 		losFov = clamp(losFov * (1 + jitter(rate)), 0, 2 * Math.PI);
 		metabolism = pos(metabolism * (1 + jitter(rate)));
 		maxAge = Math.max(1, (int) Math.round(maxAge * (1 + jitter(rate))));
+		// flying is inherited as-is (no RNG draw here) so adding it does not shift
+		// the deterministic sim stream; evolvable flight can come later.
 		for (int i = 0; i < MARKER_DIMS; i++) {
 			markers[i] = clamp(markers[i] + jitter(rate), 0, 1);
 		}

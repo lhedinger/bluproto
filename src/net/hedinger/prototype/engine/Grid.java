@@ -227,7 +227,16 @@ public class Grid {
 							col = GroundTextures.rampColor(cl,
 									(!wallN && aj < A * 0.28) ? 2 : (!wallS && aj >= A * 0.72) ? 0 : 1);
 						} else if (cl == GroundTextures.CLS_HOLE) {
-							col = GroundTextures.rampColor(cl, (!holeN && aj < A * 0.3) ? 2 : 1);
+							if (!holeN && aj < A * 0.3) {
+								col = GroundTextures.rampColor(cl, 2); // lit north rim stays opaque
+							} else if (RenderFx.holeTranslucent) {
+								// Translucent pit: shade the layer revealed below instead of a
+								// solid fill, so what is underneath shows through the darkness.
+								int below = GroundTextures.substrateColor(x, y, wx, wy, now);
+								col = mix(below, GroundTextures.rampColor(cl, 0), RenderFx.holeDepth);
+							} else {
+								col = GroundTextures.rampColor(cl, 1);
+							}
 						} else {
 							col = GroundTextures.groundColor(cl, wx, wy); // organic blobs for open ground
 							if (wallN && aj < A * 0.32) {
@@ -251,6 +260,14 @@ public class Grid {
 	private static int darken(int rgb, double f) {
 		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
 		return (r << 16) | (g << 8) | b;
+	}
+
+	/** Blends a over b by t (0 -> a, 1 -> b), per channel. */
+	private static int mix(int a, int b, double t) {
+		int r = (int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
+		int g = (int) (((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
+		int bl = (int) ((a & 255) * (1 - t) + (b & 255) * t);
+		return (r << 16) | (g << 8) | bl;
 	}
 
 	private int groundClassAt(int cx, int cy, long now) {

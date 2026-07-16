@@ -86,6 +86,15 @@ public final class GroundTextures {
 		return RAMP[cls][idx];
 	}
 
+	/**
+	 * The layer revealed at the bottom of a translucent hole. Today this is an
+	 * earthy substrate (a pit dug into soil); it is the single seam where a real
+	 * lower z-level would later be sampled, so the pit shade composites over it.
+	 */
+	public static int substrateColor(int tx, int ty, double wx, double wy, long now) {
+		return groundColor(CLS_SOIL, wx, wy);
+	}
+
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
 	private static boolean ready = false;
