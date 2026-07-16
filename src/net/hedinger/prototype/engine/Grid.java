@@ -193,12 +193,6 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		int A = 12; // art-pixels per tile
-		// Camera-relative parallax for the layer beneath a translucent hole: ox/oy
-		// is the screen position of world-origin (it moves with the camera), so
-		// sampling the substrate at a world coord biased by it makes the deeper
-		// layer lag the surface as the camera pans -- the pit reads as depth.
-		double parX = (ox / (double) ts) * RenderFx.holeParallax;
-		double parY = (oy / (double) ts) * RenderFx.holeParallax;
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
@@ -230,6 +224,7 @@ public class Grid {
 							cl = cls; // structures don't bleed out onto open ground
 						}
 						int col;
+						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
 							// Flat stone (no ground blobs) + a top-lit bevel, so it reads
 							// as a solid raised mass rather than mottled camouflage.
@@ -249,12 +244,12 @@ public class Grid {
 							} else if (sRim || wRim || eRim) {
 								col = darken(GroundTextures.rampColor(cl, 2), 0.6); // dimmer side lips
 							} else if (RenderFx.holeTranslucent) {
-								// Translucent pit: shade the layer revealed below instead of a
-								// solid fill, so what is underneath shows through the darkness.
-								// The substrate is sampled with a camera-relative parallax bias
-								// so the deeper layer slides against the surface as you pan.
-								int below = GroundTextures.substrateColor(x, y, wx + parX, wy + parY, now);
-								col = mix(below, GroundTextures.rampColor(cl, 0), RenderFx.holeDepth);
+								// Translucent pit: a semi-transparent shade over the real level
+								// below (composited underneath, and left unoccluded because the
+								// baked hole tile is a cut-out). Its parallax comes for free from
+								// the engine's per-level projection (Utils.scaleZ).
+								col = GroundTextures.rampColor(cl, 0);
+								alpha = (int) Math.round(RenderFx.holeDepth * 255);
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
@@ -264,7 +259,8 @@ public class Grid {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						}
-						g2.setColor(new Color(col));
+						g2.setColor(alpha == 255 ? new Color(col)
+								: new Color((col >> 16) & 255, (col >> 8) & 255, col & 255, alpha));
 						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 					}
 				}
@@ -281,14 +277,6 @@ public class Grid {
 	private static int darken(int rgb, double f) {
 		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
 		return (r << 16) | (g << 8) | b;
-	}
-
-	/** Blends a over b by t (0 -> a, 1 -> b), per channel. */
-	private static int mix(int a, int b, double t) {
-		int r = (int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-		int g = (int) (((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-		int bl = (int) ((a & 255) * (1 - t) + (b & 255) * t);
-		return (r << 16) | (g << 8) | bl;
 	}
 
 	private int groundClassAt(int cx, int cy, long now) {

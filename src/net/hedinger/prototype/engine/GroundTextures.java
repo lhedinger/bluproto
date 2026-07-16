@@ -86,27 +86,6 @@ public final class GroundTextures {
 		return RAMP[cls][idx];
 	}
 
-	/**
-	 * The layer revealed at the bottom of a translucent hole. Today this is an
-	 * earthy substrate (a pit dug into soil) with big calm shade blobs and sparse
-	 * darker rocks -- the rocks give the layer trackable landmarks so its parallax
-	 * against the surface actually reads. It is the single seam where a real lower
-	 * z-level would later be sampled, so the pit shade composites over it.
-	 */
-	public static int substrateColor(int tx, int ty, double wx, double wy, long now) {
-		double sh = Utils.noise2(wx, wy, 0.45); // low frequency: large, legible blobs
-		int base = RAMP[CLS_SOIL][sh < 0.36 ? 0 : (sh > 0.78 ? 2 : 1)];
-		if (Utils.noise2(wx + 17.3, wy + 4.1, 2.3) > 0.85) {
-			base = shadeRgb(base, 0.6); // a scattered rock: a clear moving landmark
-		}
-		return base;
-	}
-
-	private static int shadeRgb(int rgb, double f) {
-		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
-		return (r << 16) | (g << 8) | b;
-	}
-
 	private static final int VARIANTS = 3;
 	private static final int FIELD_TILES = 4; // mottle field spans this many tiles before repeating
 	private static boolean ready = false;

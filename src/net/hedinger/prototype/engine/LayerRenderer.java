@@ -49,7 +49,6 @@ public class LayerRenderer {
 	private BufferedImage getFloorTile(World world, Tile tile) {
 		String tilecode = tile.getTileCode();
 		Tile.TileType type = tile.getType();
-		int variant = tile.getVariant();
 
 		switch (type) {
 		case TYPE_FLOOR:
@@ -58,8 +57,9 @@ public class LayerRenderer {
 		case TYPE_MUD:
 		case TYPE_COVER:
 			return ResourceManager.getFloorTile(tilecode);
-		case TYPE_HOLE:
-			return ResourceManager.getHoleFloorTile(tilecode, variant);
+		// TYPE_HOLE is intentionally omitted: a hole bakes to nothing so it is a
+		// see-through cut-out, letting the level below show (and parallax) through.
+		// The pit shade and lip are drawn live by Grid.renderGroundPixel instead.
 		case TYPE_RAMPUP:
 			return ResourceManager.getRamptile(tilecode, true);
 		case TYPE_RAMPDOWN:
@@ -77,8 +77,7 @@ public class LayerRenderer {
 		switch (type) {
 		case TYPE_WALL:
 			return ResourceManager.getWallTile(tilecode, variant);
-		case TYPE_HOLE:
-			return ResourceManager.getHoleTile(tilecode, variant);
+		// TYPE_HOLE omitted: see getFloorTile -- the pit is a see-through cut-out.
 		default:
 			return null;
 		}

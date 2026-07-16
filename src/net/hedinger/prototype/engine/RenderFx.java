@@ -19,11 +19,11 @@ public final class RenderFx {
 	public static boolean cacheSprites = true;
 	/** Render holes as translucent pits, so the layer beneath shows through. */
 	public static boolean holeTranslucent = true;
-	/** How opaque the pit shade is over the revealed layer (0 clear .. 1 black). */
-	public static double holeDepth = 0.5;
-	/** Depth factor for hole parallax: how much the layer beneath a translucent
-	 * hole lags the surface as the camera pans (0 = pinned to the surface). */
-	public static double holeParallax = 0.28;
+	/** How opaque the pit shade is over the revealed level (0 clear .. 1 black).
+	 * The layer beneath a hole is the real level below (already dimmed by the
+	 * per-level depth-fog), so its parallax comes for free from the engine's
+	 * per-level projection (Utils.scaleZ) and only a light shade is wanted. */
+	public static double holeDepth = 0.2;
 
 	private RenderFx() {
 	}
