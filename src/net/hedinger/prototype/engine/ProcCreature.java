@@ -253,13 +253,16 @@ public final class ProcCreature {
 		double sA = m.sA, sP = m.sP;
 
 		// Cast ground shadow at the contact point (light from screen-north), under
-		// everything. A grounded body sits on a tight, dark shadow tucked just
-		// south; a flyer's shadow is displaced further south and a touch smaller,
-		// so the detached shadow distinguishes airborne from land at a glance.
+		// everything. A grounded body sits on a shadow whose footprint is a touch
+		// larger than the body and nudged south, so a rim of it shows all round and
+		// grows with the body; a flyer's shadow is displaced clear and a touch
+		// smaller, so the detached shadow reads as height. Both offsets scale with
+		// r, so the shadow tracks the entity's size instead of a fixed sliver.
 		int shAlpha = (int) Math.round((ph.flying ? 78 : 108) * (1 - m.dissolve));
 		if (shAlpha > 0) {
-			drawShadow(g, cx, cy + (ph.flying ? 4 : 1) * px, px,
-					r * (ph.flying ? 0.85 : 1.05), r * (ph.flying ? 0.42 : 0.55), shAlpha);
+			int drop = ph.flying ? r + 2 : Math.max(1, (int) Math.round(r * 0.5));
+			drawShadow(g, cx, cy + drop * px, px,
+					r * (ph.flying ? 0.85 : 1.15), r * (ph.flying ? 0.42 : 0.65), shAlpha);
 		}
 
 		HashSet<Integer> body = new HashSet<Integer>();

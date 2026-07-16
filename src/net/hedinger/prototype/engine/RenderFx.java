@@ -20,7 +20,7 @@ public final class RenderFx {
 	/** Render holes as translucent pits, so the layer beneath shows through. */
 	public static boolean holeTranslucent = true;
 	/** How opaque the pit shade is over the revealed layer (0 clear .. 1 black). */
-	public static double holeDepth = 0.68;
+	public static double holeDepth = 0.5;
 
 	private RenderFx() {
 	}

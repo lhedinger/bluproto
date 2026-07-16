@@ -204,6 +204,9 @@ public class Grid {
 				boolean wallN = isType(x, y - 1, Tile.TileType.TYPE_WALL);
 				boolean wallS = isType(x, y + 1, Tile.TileType.TYPE_WALL);
 				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
+				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
+				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
+				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE);
 				int sx = ox + x * ts, sy = oy + y * ts;
 				for (int aj = 0; aj < A; aj++) {
 					int by0 = aj * ts / A, by1 = (aj + 1) * ts / A;
@@ -227,8 +230,18 @@ public class Grid {
 							col = GroundTextures.rampColor(cl,
 									(!wallN && aj < A * 0.28) ? 2 : (!wallS && aj >= A * 0.72) ? 0 : 1);
 						} else if (cl == GroundTextures.CLS_HOLE) {
-							if (!holeN && aj < A * 0.3) {
-								col = GroundTextures.rampColor(cl, 2); // lit north rim stays opaque
+							// Rim on every side the pit meets ground: the north lip catches
+							// the screen-north light brightest, the other three lips are the
+							// same stone lip a touch dimmer, so the pit edge reads all round.
+							int band = 3; // art-px rim thickness
+							boolean nRim = !holeN && aj < band;
+							boolean sRim = !holeS && aj >= A - band;
+							boolean wRim = !holeW && ai < band;
+							boolean eRim = !holeE && ai >= A - band;
+							if (nRim) {
+								col = GroundTextures.rampColor(cl, 2); // bright lit top lip
+							} else if (sRim || wRim || eRim) {
+								col = darken(GroundTextures.rampColor(cl, 2), 0.6); // dimmer side lips
 							} else if (RenderFx.holeTranslucent) {
 								// Translucent pit: shade the layer revealed below instead of a
 								// solid fill, so what is underneath shows through the darkness.
