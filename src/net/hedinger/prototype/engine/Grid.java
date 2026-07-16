@@ -183,9 +183,11 @@ public class Grid {
 	 * Low-res pixel ground: each tile is drawn as A×A chunky art-pixels, each
 	 * coloured from its terrain-class ramp by a world-space shade noise. The
 	 * terrain lookup is jittered by noise so class boundaries wander and dither
-	 * across tile edges instead of snapping to the grid -- water bleeds onto the
-	 * shore, grass into bare soil, etc. Structural tiles (walls/holes/ramps) are
-	 * skipped; they come from the baked layer underneath.
+	 * across tile edges instead of snapping to the grid. Open ground (grass, soil,
+	 * water, mud, cover) jitters hard for organic coastlines; walls and holes
+	 * jitter only slightly (a couple of pixels) so they stay solid, never bleed
+	 * out onto open ground, and get a simple top-lit bevel / rim for depth, plus a
+	 * cast shadow on the ground just south of a wall.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -196,21 +198,43 @@ public class Grid {
 				Tile t = tiles[x][y];
 				int cls = GroundTextures.groundClass(t, now);
 				if (cls < 0) {
-					continue; // structural: baked layer shows through
+					continue; // ramps: baked layer shows through
 				}
+				boolean ownTight = cls == GroundTextures.CLS_WALL || cls == GroundTextures.CLS_HOLE;
+				boolean wallN = isType(x, y - 1, Tile.TileType.TYPE_WALL);
+				boolean wallS = isType(x, y + 1, Tile.TileType.TYPE_WALL);
+				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
 				int sx = ox + x * ts, sy = oy + y * ts;
 				for (int aj = 0; aj < A; aj++) {
 					int by0 = aj * ts / A, by1 = (aj + 1) * ts / A;
 					for (int ai = 0; ai < A; ai++) {
 						int bx0 = ai * ts / A, bx1 = (ai + 1) * ts / A;
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
-						double jx = wx + (Utils.noise2(wx + 3.1, wy, 1.1) - 0.5) * 0.9;
-						double jy = wy + (Utils.noise2(wx, wy + 5.7, 1.1) - 0.5) * 0.9;
+						double amp = ownTight ? 0.22 : 0.9;
+						double jx = wx + (Utils.noise2(wx + 3.1, wy, 1.1) - 0.5) * amp;
+						double jy = wy + (Utils.noise2(wx, wy + 5.7, 1.1) - 0.5) * amp;
 						int cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
 						if (cl < 0) {
 							cl = cls;
 						}
-						g2.setColor(new Color(GroundTextures.groundColor(cl, wx, wy)));
+						if (!ownTight && (cl == GroundTextures.CLS_WALL || cl == GroundTextures.CLS_HOLE)) {
+							cl = cls; // structures don't bleed out onto open ground
+						}
+						int col;
+						if (cl == GroundTextures.CLS_WALL) {
+							// Flat stone (no ground blobs) + a top-lit bevel, so it reads
+							// as a solid raised mass rather than mottled camouflage.
+							col = GroundTextures.rampColor(cl,
+									(!wallN && aj < A * 0.28) ? 2 : (!wallS && aj >= A * 0.72) ? 0 : 1);
+						} else if (cl == GroundTextures.CLS_HOLE) {
+							col = GroundTextures.rampColor(cl, (!holeN && aj < A * 0.3) ? 2 : 1);
+						} else {
+							col = GroundTextures.groundColor(cl, wx, wy); // organic blobs for open ground
+							if (wallN && aj < A * 0.32) {
+								col = darken(col, 0.62); // shadow cast by the wall to the north
+							}
+						}
+						g2.setColor(new Color(col));
 						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 					}
 				}
@@ -222,6 +246,11 @@ public class Grid {
 				}
 			}
 		}
+	}
+
+	private static int darken(int rgb, double f) {
+		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
+		return (r << 16) | (g << 8) | b;
 	}
 
 	private int groundClassAt(int cx, int cy, long now) {

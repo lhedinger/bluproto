@@ -38,16 +38,24 @@ public final class GroundTextures {
 	// ---- pixel-ground palette (RenderFx.pixelGround) -----------------------
 	// Per terrain class: {shadow, base, highlight}, natural palette from the
 	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
-	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4;
+	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
+			CLS_WALL = 5, CLS_HOLE = 6;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
 			{ 0x40301f, 0x63472e, 0x866543 }, // soil / bare
 			{ 0x38291a, 0x574024, 0x775a38 }, // mud
 			{ 0x1b3a16, 0x2b5422, 0x456c36 }, // cover (dark grass)
+			{ 0x3a3e49, 0x565b69, 0x7c828f }, // wall (stone)
+			{ 0x090a0e, 0x14161f, 0x222634 }, // hole (pit)
 	};
 
-	/** Terrain colour class for a tile, or -1 for structural (wall/hole/ramp). */
+	/** Whether a class is a solid structure (wall) rather than open ground. */
+	public static boolean isStructure(int cls) {
+		return cls == CLS_WALL;
+	}
+
+	/** Terrain colour class for a tile: ground, structure, or -1 (ramp). */
 	public static int groundClass(Tile t, long now) {
 		switch (t.getType()) {
 		case TYPE_WATER:
@@ -56,6 +64,10 @@ public final class GroundTextures {
 			return CLS_MUD;
 		case TYPE_COVER:
 			return CLS_COVER;
+		case TYPE_WALL:
+			return CLS_WALL;
+		case TYPE_HOLE:
+			return CLS_HOLE;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -67,6 +79,11 @@ public final class GroundTextures {
 	public static int groundColor(int cls, double wx, double wy) {
 		double sh = Utils.noise2(wx, wy, 0.9);
 		return RAMP[cls][sh < 0.30 ? 0 : (sh > 0.82 ? 2 : 1)];
+	}
+
+	/** A specific ramp shade (0 shadow, 1 base, 2 highlight) for a class. */
+	public static int rampColor(int cls, int idx) {
+		return RAMP[cls][idx];
 	}
 
 	private static final int VARIANTS = 3;
