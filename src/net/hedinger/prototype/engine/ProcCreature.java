@@ -258,11 +258,11 @@ public final class ProcCreature {
 		// grows with the body; a flyer's shadow is displaced clear and a touch
 		// smaller, so the detached shadow reads as height. Both offsets scale with
 		// r, so the shadow tracks the entity's size instead of a fixed sliver.
-		int shAlpha = (int) Math.round((ph.flying ? 78 : 108) * (1 - m.dissolve));
+		int shAlpha = (int) Math.round((ph.flying ? 82 : 125) * (1 - m.dissolve));
 		if (shAlpha > 0) {
-			int drop = ph.flying ? r + 2 : Math.max(1, (int) Math.round(r * 0.5));
+			int drop = ph.flying ? r + 2 : Math.max(1, (int) Math.round(r * 0.75));
 			drawShadow(g, cx, cy + drop * px, px,
-					r * (ph.flying ? 0.85 : 1.15), r * (ph.flying ? 0.42 : 0.65), shAlpha);
+					r * (ph.flying ? 0.9 : 1.5), r * (ph.flying ? 0.45 : 0.95), shAlpha);
 		}
 
 		HashSet<Integer> body = new HashSet<Integer>();
