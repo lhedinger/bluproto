@@ -193,6 +193,12 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		int A = 12; // art-pixels per tile
+		// Camera-relative parallax for the layer beneath a translucent hole: ox/oy
+		// is the screen position of world-origin (it moves with the camera), so
+		// sampling the substrate at a world coord biased by it makes the deeper
+		// layer lag the surface as the camera pans -- the pit reads as depth.
+		double parX = (ox / (double) ts) * RenderFx.holeParallax;
+		double parY = (oy / (double) ts) * RenderFx.holeParallax;
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
@@ -245,7 +251,9 @@ public class Grid {
 							} else if (RenderFx.holeTranslucent) {
 								// Translucent pit: shade the layer revealed below instead of a
 								// solid fill, so what is underneath shows through the darkness.
-								int below = GroundTextures.substrateColor(x, y, wx, wy, now);
+								// The substrate is sampled with a camera-relative parallax bias
+								// so the deeper layer slides against the surface as you pan.
+								int below = GroundTextures.substrateColor(x, y, wx + parX, wy + parY, now);
 								col = mix(below, GroundTextures.rampColor(cl, 0), RenderFx.holeDepth);
 							} else {
 								col = GroundTextures.rampColor(cl, 1);

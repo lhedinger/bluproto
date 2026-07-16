@@ -21,6 +21,9 @@ public final class RenderFx {
 	public static boolean holeTranslucent = true;
 	/** How opaque the pit shade is over the revealed layer (0 clear .. 1 black). */
 	public static double holeDepth = 0.5;
+	/** Depth factor for hole parallax: how much the layer beneath a translucent
+	 * hole lags the surface as the camera pans (0 = pinned to the surface). */
+	public static double holeParallax = 0.28;
 
 	private RenderFx() {
 	}
