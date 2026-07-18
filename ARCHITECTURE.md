@@ -74,6 +74,30 @@ engine step every entity: decide, then resolve movement against the rules, then
 retire the dead and admit anything newly spawned. Decoupling the two keeps the
 display smooth while the simulation ticks at a steady rate.
 
+## Levels, depth, and holes
+
+The world is a stack of elevation *levels*, and the camera sits on exactly one
+of them. That level is the integer `camZ` — there is no fractional camera
+height, so **changing level is a hard cut, not a smooth zoom**: the camera
+descends or climbs one whole level at a time and the view switches in a single
+frame. (This is intended; smoothly interpolating between levels would require a
+fractional-level projection the renderer deliberately doesn't have.)
+
+Each frame, the camera's own level is drawn full, and levels *below* it are
+composited underneath first (deeper = smaller index), each drawn through the
+shared per-level projection: `Utils.scaleZ` scales a level's world-to-screen
+mapping by its distance from the camera, so a lower level is slightly smaller
+and shifts against the surface as the camera pans — the engine's built-in,
+gentle **inter-level parallax**. Every level below the camera is also given a
+translucent black **depth-fog** wash, so the deeper you look the dimmer it gets.
+
+**Holes reuse this directly.** A hole tile bakes to nothing — it is a
+see-through cut-out in its level — so the level below (already composited and
+projected) simply shows through it and parallaxes for free via `scaleZ`, dimmed
+by the same depth-fog. The pixel-ground pass only adds a light translucent pit
+shade and a lit lip around the rim; it invents no separate substrate or parallax
+of its own. On the bottom level a hole reveals nothing and reads as a dark pit.
+
 ## Dependency direction
 
 Dependencies point downward and inward. Application sits on top and wires the
