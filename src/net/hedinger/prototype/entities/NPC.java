@@ -1362,8 +1362,14 @@ public abstract class NPC extends Entity {
 		return Math.atan2((by + 0.5) - Y, (bx + 0.5) - X);
 	}
 
-	/** Overridden by entities that can breed: a fresh offspring, or null. */
+	/** Overridden by entities that can breed asexually: a fresh offspring, or null. */
 	protected NPC spawnOffspring() {
+		return null;
+	}
+
+	/** Overridden by entities that can breed sexually: a crossover child of this
+	 * entity and a compatible partner, or null. */
+	protected NPC spawnOffspring(NPC partner) {
 		return null;
 	}
 
@@ -1381,6 +1387,54 @@ public abstract class NPC extends Entity {
 		}
 		energy -= reproCost;
 		reproCooldown = REPRO_COOLDOWN;
+		getWorld().spawnEntity(child);
+		return true;
+	}
+
+	/**
+	 * Ready to take part in reproduction this tick: a fed, off-cooldown metabolic
+	 * entity that carries a genome. The gate both budding and mating share.
+	 */
+	protected boolean fertile() {
+		return metabolic && !isDead() && reproCooldown == 0
+				&& energy >= reproThreshold && genome != null;
+	}
+
+	/**
+	 * Whether this entity and a partner can produce sexual offspring right now:
+	 * both fertile and genome-compatible above the mate threshold. Compatibility
+	 * is mutual -- each must find the other similar enough (marker-based, the same
+	 * recognition {@link Genome#similarityTo} drives mate choice in {@code react})
+	 * -- so a pair only breeds when both would choose to.
+	 */
+	public boolean canMateWith(NPC other) {
+		if (other == null || other == this || !fertile() || !other.fertile()) {
+			return false;
+		}
+		double sim = genome.similarityTo(other.genome);
+		return sim >= genome.mateThreshold && sim >= other.genome.mateThreshold;
+	}
+
+	/**
+	 * Sexual reproduction with a chosen, compatible partner: spawns a crossover
+	 * child (each gene drawn from one parent, then mutated) and charges BOTH
+	 * parents {@code reproCost} and a cooldown. Putting the partner on cooldown
+	 * here means that when it is stepped later this same tick it will not breed
+	 * again -- one child per pair per encounter, regardless of stepping order.
+	 * Returns true if a child was produced.
+	 */
+	protected boolean reproduceWith(NPC partner) {
+		if (!canMateWith(partner)) {
+			return false;
+		}
+		NPC child = spawnOffspring(partner);
+		if (child == null) {
+			return false;
+		}
+		energy -= reproCost;
+		partner.energy -= partner.reproCost;
+		reproCooldown = REPRO_COOLDOWN;
+		partner.reproCooldown = REPRO_COOLDOWN;
 		getWorld().spawnEntity(child);
 		return true;
 	}

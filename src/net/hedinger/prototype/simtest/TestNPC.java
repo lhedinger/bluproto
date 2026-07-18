@@ -27,7 +27,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER
 	}
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
@@ -36,6 +36,8 @@ public class TestNPC extends NPC {
 	private static final double NEST_DEPOSIT = 8.0;
 	/** How far a nester can smell its nest when homing to breed. */
 	private static final int NEST_SENSE_R = 8;
+	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */
+	private static final double MATE_REACH = 0.5;
 
 	private final Behavior behavior;
 	private double speed = 0.04;
@@ -43,6 +45,7 @@ public class TestNPC extends NPC {
 	private boolean heard = false;
 	private double totalIntake = 0;
 	private TreeMap<Double, NPC> prey = null;
+	private TreeMap<Double, NPC> mates = null;
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
@@ -128,6 +131,25 @@ public class TestNPC extends NPC {
 		return t;
 	}
 
+	/**
+	 * A metabolic herbivore that breeds <em>sexually</em>: it grazes for energy
+	 * like a breeder, but instead of budding it seeks a genome-compatible partner
+	 * and produces a crossover child of the two. No partner (or only dissimilar
+	 * ones) means no offspring -- the defining difference from the asexual
+	 * {@link #breeder}. Perception is myopic, so partners must be close to pair.
+	 */
+	public static TestNPC mater(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.MATER);
+		configureGenomeBody(t, g);
+		// Omnidirectional, frequent perception so pairing is reliable -- this
+		// isolates the reproduction mechanic from the facing/FOV perception gate
+		// (the same move GenomePredatorHuntsPrey makes for its predator).
+		t.LOS_FOV = Math.PI * 2;
+		t.LOS_RANGE = Math.max(g.losRange, 3);
+		t.SEARCH_FREQ = 5;
+		return t;
+	}
+
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
 		t.size = (int) Math.round(g.size);
@@ -190,6 +212,12 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
+	public TestNPC withEnergy(double e) {
+		energy = e;
+		return this;
+	}
+
 	/** True once this NPC has heard any Sound. */
 	public boolean hasHeard() {
 		return heard;
@@ -233,7 +261,45 @@ public class TestNPC extends NPC {
 		case NEST:
 			thinkNester();
 			return;
+		case MATER:
+			thinkMater();
+			return;
 		}
+	}
+
+	/** Forages for energy; when fertile, seeks a compatible partner and breeds
+	 * sexually (a crossover child). Falls back to grazing/roaming otherwise. */
+	private void thinkMater() {
+		double intake = graze(GRAZE_DEMAND);
+		totalIntake += intake;
+		if (fertile()) {
+			NPC partner = findMate();
+			if (partner != null) {
+				double reach = (getSize() + partner.getSize()) / 2.0 + MATE_REACH;
+				if (distance(partner) <= reach) {
+					if (reproduceWith(partner)) {
+						return;
+					}
+				} else {
+					move(speed, Math.atan2(partner.getY() - Y, partner.getX() - X));
+					return;
+				}
+			}
+		}
+		if (intake < GRAZE_DEMAND * 0.15) {
+			roam(speed, turn); // patch thinning (or no partner) -> wander
+		}
+	}
+
+	/** The nearest perceivable NPC this one can mate with, or null. */
+	private NPC findMate() {
+		mates = getTargets(mates, "", false);
+		for (NPC other : mates.values()) {
+			if (canMateWith(other)) {
+				return other;
+			}
+		}
+		return null;
 	}
 
 	/** Grazes for energy and buds a mutated child once well-fed. */
@@ -283,6 +349,17 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, 0.1);
 		return behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
+	}
+
+	@Override
+	protected net.hedinger.prototype.entities.NPC spawnOffspring(net.hedinger.prototype.entities.NPC partner) {
+		if (genome == null || partner.getGenome() == null) {
+			return null;
+		}
+		// Sexual: a mutated crossover of both parents' genomes, born at this spot.
+		net.hedinger.prototype.entities.Genome childG =
+				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
+		return mater(X, Y, Z, childG);
 	}
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */
@@ -371,6 +448,7 @@ public class TestNPC extends NPC {
 			}
 		case GRAZE:
 		case BREEDER:
+		case MATER:
 			return "graze";
 		case NEST:
 			return homing ? "nest" : "graze";
@@ -400,7 +478,7 @@ public class TestNPC extends NPC {
 		if (behavior == Behavior.GRAZE) {
 			s.append(" ate ").append(String.format("%.2f", totalIntake));
 		}
-		if (behavior == Behavior.BREEDER || behavior == Behavior.NEST) {
+		if (behavior == Behavior.BREEDER || behavior == Behavior.NEST || behavior == Behavior.MATER) {
 			s.append(String.format(" e%.1f", getEnergy()));
 		}
 		if (flying) {

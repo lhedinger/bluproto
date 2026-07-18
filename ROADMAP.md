@@ -75,9 +75,12 @@ alongside the tiers:
   mutated `Genome.child(parent)` when a metabolic entity is well-fed and off
   cooldown. The `breeder` fixture runs the full loop; a fed population grows and
   drifts (`PopulationGrowsWithFood`). *Evolution is on.*
-- ▶ **Sexual reproduction.** `canMate(other)` (mate drive + energy + cooldown)
-  and crossover `Genome.child(mom, dad)` — the assortative-mating path to true
-  speciation. Next up.
+- ✅ **Sexual reproduction.** `canMateWith(other)` (mutual, marker-based mate
+  choice + energy + cooldown) and `reproduceWith(partner)` bear a crossover
+  `Genome.child(mom, dad)`; both parents pay and go on cooldown. The `mater`
+  fixture runs it, and `SexualReproductionNeedsPartner` pins the three defining
+  facts: a partner is required, dissimilar maters refuse, offspring recombine
+  both parents. The assortative-mating path to true speciation is open.
 - **Environment sensing.** Entities can't perceive fields — `graze()` eats
   blindly. Add `senseVegetation()` / `senseFertility()` / `senseTemperature()` /
   `senseScent(dir)` so behaviour can *steer toward* food, warmth, trails.

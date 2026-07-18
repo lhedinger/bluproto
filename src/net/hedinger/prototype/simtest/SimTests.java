@@ -800,6 +800,104 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Sexual reproduction: a metabolic entity breeds only with a genome-compatible
+	 * partner, and the child is a crossover of both parents. Three facts pin it
+	 * apart from the asexual budder -- a partner is required, dissimilar maters
+	 * refuse, and offspring recombine genes from both parents.
+	 */
+	static class SexualReproductionNeedsPartner extends Scenario {
+		@Override
+		public void run() {
+			seed(50);
+
+			// 1) A lone, well-fed mater has no partner, so it never reproduces --
+			//    the defining difference from asexual budding.
+			World lone = room(12, 12); // full grass: energy is never the limiter
+			Genome solo = new Genome();
+			solo.markers = new double[] { 0.5, 0.5, 0.5 };
+			lone.spawnEntity(TestNPC.mater(6.5, 6.5, 0, solo));
+			lone.think();
+			snapshot(lone, "lone mater (no partner)");
+			tick(lone, 400);
+			assertEquals("a lone mater cannot reproduce without a partner", 1, lone.getAliveCount());
+
+			// 2) Two well-fed maters that are too dissimilar refuse to pair (mate
+			//    choice keys on marker similarity, like react()).
+			World strangers = room(12, 12);
+			Genome ga = new Genome();
+			ga.markers = new double[] { 0.0, 0.0, 0.0 };
+			Genome gb = new Genome();
+			gb.markers = new double[] { 1.0, 1.0, 1.0 }; // maximally dissimilar
+			strangers.spawnEntity(TestNPC.mater(6.3, 6.5, 0, ga));
+			strangers.spawnEntity(TestNPC.mater(6.7, 6.5, 0, gb));
+			strangers.think();
+			tick(strangers, 400);
+			assertEquals("incompatible (dissimilar) maters do not breed", 2, strangers.getAliveCount());
+
+			// 3) A cluster of compatible maters breeds sexually, and crossover mixes
+			//    the parents. Both types share markers (so they mate) but carry
+			//    opposite speed and losRange, so a recombinant child (fast+far or
+			//    slow+near) proves the offspring is a crossover, not a clone.
+			World colony = room(24, 24);
+			// Two compatible pairs, each a slow+far with a fast+near partner, spaced
+			// apart so a pair shares grass without the whole colony overgrazing.
+			// Founders start well-fed so they pair before a patch thins.
+			double[][] pairs = { { 8.5, 8.5 }, { 16.5, 16.5 } };
+			for (double[] p : pairs) {
+				Genome slowFar = new Genome();
+				slowFar.markers = new double[] { 0.5, 0.5, 0.5 };
+				slowFar.speed = 0.02;
+				slowFar.losRange = 20;
+				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).withEnergy(3.0));
+				Genome fastNear = new Genome();
+				fastNear.markers = new double[] { 0.5, 0.5, 0.5 };
+				fastNear.speed = 0.08;
+				fastNear.losRange = 4;
+				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).withEnergy(3.0));
+			}
+			colony.think();
+			int founders = colony.getAliveCount();
+			snapshot(colony, "founders (two compatible gene-types)");
+
+			// Sexual breeders must cluster to pair, so a colony breeds fast and then
+			// overgrazes back down -- the lasting proof is that it rose above the
+			// founder count at all, and that crossover produced a recombinant.
+			int peak = founders;
+			boolean sawRecombinant = false;
+			for (int step = 0; step < 30; step++) {
+				tick(colony, 20);
+				peak = Math.max(peak, colony.getAliveCount());
+				sawRecombinant |= hasRecombinant(colony);
+			}
+			snapshot(colony, "after (bred sexually)");
+
+			assertGreater("a compatible mater colony reproduces sexually "
+					+ "(population rose above the founders)", peak, founders);
+			assertTrue("crossover produced a recombinant child -- one type's speed with the "
+					+ "other's losRange, a mix neither parent has", sawRecombinant);
+		}
+
+		/** True if any living entity's genome recombines the two founder types: a
+		 * fast+far or slow+near mix that neither pure parent line carries. */
+		private static boolean hasRecombinant(World w) {
+			for (Entity e : w.getEntities()) {
+				if (!(e instanceof net.hedinger.prototype.entities.NPC) || e.isDead()) {
+					continue;
+				}
+				Genome g = ((net.hedinger.prototype.entities.NPC) e).getGenome();
+				if (g == null) {
+					continue;
+				}
+				boolean fast = g.speed > 0.05, far = g.losRange > 12;
+				if ((fast && far) || (!fast && !far)) { // fast+far or slow+near
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -932,6 +1030,7 @@ public class SimTests {
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),
+				new SexualReproductionNeedsPartner(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
