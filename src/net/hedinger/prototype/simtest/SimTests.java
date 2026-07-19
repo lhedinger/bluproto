@@ -1164,6 +1164,113 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Evolution discovers a behaviour from noise. Starting from random LGP brains
+	 * that gather no food, a generational GA -- fitness is food a brain forages in
+	 * a fixed window, truncation-select the top half, crossover + mutate to refill
+	 * -- drives the population to forage. The selection pressure is the fitness
+	 * gradient; the behaviour (eat while moving to fresh grass) is not authored, it
+	 * emerges. The mind's own heredity (Brain crossover/mutation) does the varying.
+	 */
+	static class EvolutionDiscoversForaging extends Scenario {
+		static final int P = 24, K = 300, G = 20, LEN = 24, BUDGET = 4;
+
+		@Override
+		public void run() {
+			seed(66);
+			Brain[] brains = new Brain[P];
+			for (int i = 0; i < P; i++) {
+				brains[i] = Brain.random(LEN);
+			}
+			double initialMean = 0, bestEver = 0, lateSum = 0;
+			for (int gen = 0; gen <= G; gen++) {
+				double[] fit = evaluate(brains);
+				double m = mean(fit), best = max(fit);
+				if (gen == 0) {
+					initialMean = m;
+				}
+				bestEver = Math.max(bestEver, best);
+				if (gen >= G - 2) {
+					lateSum += m;
+				}
+				if (gen < G) {
+					brains = nextGen(brains, order(fit));
+				}
+			}
+			double finalMean = lateSum / 3.0;
+			assertLess("random founder brains forage almost nothing", initialMean, 0.2);
+			assertGreater("evolution found a strong forager (a champion gathered real food)",
+					bestEver, 4.0);
+			assertGreater("mean foraging rose far above the random start under selection",
+					finalMean, initialMean + 1.0);
+		}
+
+		/** Fitness = food each brain forages over K ticks on full grass. Bodies are
+		 * non-metabolic here so they don't starve -- we measure behaviour, and the
+		 * GA (not survival) does the selecting. */
+		private double[] evaluate(Brain[] brains) {
+			World w = room(24, 24);
+			TestNPC[] ag = new TestNPC[brains.length];
+			for (int i = 0; i < brains.length; i++) {
+				Genome g = new Genome();
+				g.markers = new double[] { 0.5, 0.5, 0.5 };
+				g.brain = brains[i];
+				double x = 2.5 + (i % 10) * 2.0, y = 2.5 + (i / 10) * 2.4;
+				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET));
+				w.spawnEntity(ag[i]);
+			}
+			w.think();
+			tick(w, K);
+			double[] fit = new double[brains.length];
+			for (int i = 0; i < brains.length; i++) {
+				fit[i] = ag[i].totalIntake();
+			}
+			return fit;
+		}
+
+		/** Truncation selection with elitism: keep the top 2, refill from the top
+		 * half by crossover + mutation. */
+		private static Brain[] nextGen(Brain[] brains, int[] order) {
+			int half = brains.length / 2;
+			Brain[] next = new Brain[brains.length];
+			next[0] = brains[order[0]].copy();
+			next[1] = brains[order[1]].copy();
+			for (int j = 2; j < brains.length; j++) {
+				next[j] = Brain.child(brains[order[(j - 2) % half]], brains[order[(j - 1) % half]], 0.15);
+			}
+			return next;
+		}
+
+		private static int[] order(double[] fit) {
+			Integer[] idx = new Integer[fit.length];
+			for (int i = 0; i < idx.length; i++) {
+				idx[i] = i;
+			}
+			java.util.Arrays.sort(idx, (a, b) -> Double.compare(fit[b], fit[a]));
+			int[] out = new int[idx.length];
+			for (int i = 0; i < out.length; i++) {
+				out[i] = idx[i];
+			}
+			return out;
+		}
+
+		private static double mean(double[] a) {
+			double s = 0;
+			for (double v : a) {
+				s += v;
+			}
+			return s / a.length;
+		}
+
+		private static double max(double[] a) {
+			double m = a[0];
+			for (double v : a) {
+				m = Math.max(m, v);
+			}
+			return m;
+		}
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -1314,6 +1421,7 @@ public class SimTests {
 				new MindDrivesAgent(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
+				new EvolutionDiscoversForaging(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
