@@ -3,7 +3,11 @@ package net.hedinger.prototype.simtest;
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
+import net.hedinger.prototype.entities.AgentIO;
+import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.LgpMind;
+import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.Sound;
 
 /**
@@ -1011,6 +1015,72 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A pluggable mind drives a body through the sensor/actuator contract. The same
+	 * body pursues a target under three interchangeable minds -- an LGP brain, a
+	 * hand-written controller, and a do-nothing dummy -- proving the interface is
+	 * swappable without touching how the body senses or acts.
+	 */
+	static class MindDrivesAgent extends Scenario {
+		@Override
+		public void run() {
+			// An LGP "pursue the nearest" program: turn = relative bearing to the
+			// neighbour, throttle = 1. Four instructions, run as a full pass/tick.
+			int[][] pursue = {
+					{ Brain.SENSE, 0, AgentIO.S_NEAR_BEARING, 0 }, // R0 = near_bearing
+					{ Brain.WRITE, AgentIO.A_TURN, 0, 0 },         // turn = R0
+					{ Brain.SET, 1, 9, 0 },                        // R1 = 1.0 (const[9])
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 },     // throttle = R1
+			};
+			firstMind = new LgpMind(new Brain(deepCopy(pursue)), 4);
+			double lgp = pursuitDistance(firstMind);
+			assertLess("an LGP-brained body steers to its target through the sensor vector", lgp, 0.5);
+
+			// The SAME body with a hand-written controller -- swapped behind the Mind
+			// interface, sensing/acting untouched -- pursues identically.
+			Mind scripted = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_TURN] = s[AgentIO.S_NEAR_BEARING];
+					a[AgentIO.A_THROTTLE] = 1.0;
+				}
+			};
+			assertLess("a scripted (dummy) mind on the same body pursues identically",
+					pursuitDistance(scripted), 0.5);
+
+			// A do-nothing mind leaves the body inert -- the trivial case works too.
+			Mind idle = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			};
+			assertGreater("an idle mind never moves the body", pursuitDistance(idle), 1.0);
+		}
+
+		/** Runs one mind against a fixed pursuit setup; returns the final distance
+		 * between the minded body and its stationary target. */
+		private double pursuitDistance(Mind mind) {
+			seed(63); // identical world/perception for every mind
+			World w = room(12, 12);
+			Genome g = Genome.phenotype(6, 0.05, 5, 6, Math.PI, 3000);
+			TestNPC agent = TestNPC.minded(4.5, 4.5, 0, g, mind);
+			TestNPC target = TestNPC.inert(5.6, 4.5, 0); // adjacent tile: perceivable
+			w.spawnEntity(agent);
+			w.spawnEntity(target);
+			w.think();
+			if (mind == firstMind) {
+				snapshot(w, "before (agent SW of target)");
+			}
+			tick(w, 250);
+			if (mind == firstMind) {
+				snapshot(w, "after (brain steered onto the target)");
+			}
+			return Math.hypot(agent.getX() - target.getX(), agent.getY() - target.getY());
+		}
+
+		private Mind firstMind; // labels the snapshot for the LGP run only
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -1158,6 +1228,7 @@ public class SimTests {
 				new BrainMemoryIsDeterministic(),
 				new BrainLengthSetsThoughtRate(),
 				new BrainHeredityCrossesAndMutates(),
+				new MindDrivesAgent(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),

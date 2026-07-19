@@ -2,6 +2,8 @@ package net.hedinger.prototype.simtest;
 
 import java.util.TreeMap;
 
+import net.hedinger.prototype.entities.AgentIO;
+import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.NPC;
 
 /**
@@ -27,7 +29,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED
 	}
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
@@ -39,6 +41,9 @@ public class TestNPC extends NPC {
 	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */
 	private static final double MATE_REACH = 0.5;
 
+	/** Max steering per tick (radians) applied by the mind's turn actuator. */
+	private static final double MAX_TURN = 0.35;
+
 	private final Behavior behavior;
 	private double speed = 0.04;
 	private int turn = 5;
@@ -46,6 +51,9 @@ public class TestNPC extends NPC {
 	private double totalIntake = 0;
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
+	private Mind mind = null;
+	private final double[] sensors = new double[AgentIO.NUM_SENSORS];
+	private final double[] actuators = new double[AgentIO.NUM_ACT];
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
@@ -147,6 +155,29 @@ public class TestNPC extends NPC {
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 3);
 		t.SEARCH_FREQ = 5;
+		return t;
+	}
+
+	/**
+	 * A body driven by a pluggable {@link Mind}: each tick it fills the
+	 * {@link AgentIO} sensor vector from what it perceives, lets the mind write the
+	 * actuator vector, and applies that as movement/actions. The mind can be an
+	 * LGP brain, a hand-written controller, or nothing -- the body is identical, so
+	 * this is the seam where the decision method is swapped. Perception is
+	 * omnidirectional here so the mechanic isn't masked by the facing gate.
+	 */
+	public static TestNPC minded(double x, double y, double z,
+			net.hedinger.prototype.entities.Genome g, Mind mind) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
+		t.genome = g;
+		t.size = (int) Math.round(g.size);
+		t.speed = g.speed;
+		t.turn = g.turnRate;
+		t.col = g.toColor();
+		t.LOS_FOV = Math.PI * 2;
+		t.LOS_RANGE = Math.max(g.losRange, 3);
+		t.SEARCH_FREQ = 2;
+		t.mind = mind;
 		return t;
 	}
 
@@ -264,7 +295,99 @@ public class TestNPC extends NPC {
 		case MATER:
 			thinkMater();
 			return;
+		case MINDED:
+			thinkMinded();
+			return;
 		}
+	}
+
+	/** The body/mind loop: sense the world into the vector, let the mind decide,
+	 * then apply the actuator vector as intent. The mind never sees the world. */
+	private void thinkMinded() {
+		if (mind == null) {
+			return;
+		}
+		senseInto(sensors);
+		mind.think(sensors, actuators);
+		actFrom(actuators);
+	}
+
+	/** Fills the egocentric, normalized {@link AgentIO} sensor vector. */
+	private void senseInto(double[] s) {
+		long now = getWorld().getTick();
+		s[AgentIO.S_BIAS] = 1.0;
+		s[AgentIO.S_ENERGY] = clampUnit(getEnergy() / 4.0);
+		s[AgentIO.S_FOOD] = getWorld().getTile(X, Y, Z).getVegetation(now)
+				/ net.hedinger.prototype.engine.Tile.VEG_MAX;
+		s[AgentIO.S_PHERO] = Math.tanh(sensePheromone());
+		NPC near = nearestPerceived();
+		if (near != null) {
+			double dx = near.getX() - X, dy = near.getY() - Y;
+			double dist = Math.hypot(dx, dy);
+			s[AgentIO.S_NEAR_PROX] = 1.0 / (1.0 + dist);
+			s[AgentIO.S_NEAR_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
+			net.hedinger.prototype.entities.Genome og = near.getGenome();
+			s[AgentIO.S_NEAR_SIM] = (genome != null && og != null) ? genome.similarityTo(og) : 0;
+			s[AgentIO.S_NEAR_SIZEADV] = Math.tanh(getSize() / Math.max(1e-6f, near.getSize()) - 1);
+		} else {
+			s[AgentIO.S_NEAR_PROX] = 0;
+			s[AgentIO.S_NEAR_BEARING] = 0;
+			s[AgentIO.S_NEAR_SIM] = 0;
+			s[AgentIO.S_NEAR_SIZEADV] = 0;
+		}
+		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
+	}
+
+	/** Applies the actuator vector as engine intent (movement + gated actions). */
+	private void actFrom(double[] a) {
+		double t = clamp(a[AgentIO.A_TURN], -1, 1);
+		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
+		D = wrap(D + t * MAX_TURN); // steer
+		if (throttle > 0.02) {
+			move(throttle * speed, D);
+		}
+		if (a[AgentIO.A_EAT] > 0.5) {
+			totalIntake += graze(GRAZE_DEMAND);
+		}
+		if (a[AgentIO.A_DEPOSIT] > 0.5) {
+			depositPheromone(NEST_DEPOSIT * 0.25);
+		}
+		// A_ATTACK / A_MATE: reserved slots, wired in a later slice.
+	}
+
+	/** Nearest living perceived neighbour (excluding self), or null. */
+	private NPC nearestPerceived() {
+		NPC near = null;
+		double best = Double.MAX_VALUE;
+		for (NPC n : targets.values()) {
+			if (n == this || n.isDead()) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < best) {
+				best = d;
+				near = n;
+			}
+		}
+		return near;
+	}
+
+	private static double clamp(double v, double lo, double hi) {
+		return v < lo ? lo : (v > hi ? hi : v);
+	}
+
+	private static double clampUnit(double v) {
+		return v < 0 ? 0 : (v > 1 ? 1 : v);
+	}
+
+	private static double wrap(double a) {
+		while (a > Math.PI) {
+			a -= 2 * Math.PI;
+		}
+		while (a < -Math.PI) {
+			a += 2 * Math.PI;
+		}
+		return a;
 	}
 
 	/** Forages for energy; when fertile, seeks a compatible partner and breeds
