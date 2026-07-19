@@ -45,6 +45,12 @@ public class TestNPC extends NPC {
 
 	/** Max steering per tick (radians) applied by the mind's turn actuator. */
 	private static final double MAX_TURN = 0.35;
+	/** Reach (tiles, beyond touching) of the mind's attack actuator. */
+	private static final double ATTACK_REACH = 0.5;
+	/** Health removed per tick from a neighbour the mind attacks. */
+	private static final int ATTACK_DAMAGE = 4;
+	/** Energy a successful bite feeds the attacker (predation payoff). */
+	private static final double BITE_ENERGY = 0.03;
 
 	private final Behavior behavior;
 	private double speed = 0.04;
@@ -338,9 +344,6 @@ public class TestNPC extends NPC {
 		senseInto(sensors);
 		mind.think(sensors, actuators);
 		actFrom(actuators);
-		if (metabolic) {
-			tryReproduce(); // bud when well-fed; the child inherits a mutated brain
-		}
 	}
 
 	/** Fills the egocentric, normalized {@link AgentIO} sensor vector. */
@@ -383,7 +386,47 @@ public class TestNPC extends NPC {
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
-		// A_ATTACK / A_MATE: reserved slots, wired in a later slice.
+		if (a[AgentIO.A_ATTACK] > 0.5) {
+			attackNearest();
+		}
+		if (a[AgentIO.A_MATE] > 0.5) {
+			reproduce();
+		}
+	}
+
+	/** Bites the nearest perceived neighbour if it is in reach: it takes damage
+	 * (and dies once its health is gone) and the attacker gains a little energy. */
+	private void attackNearest() {
+		NPC near = nearestPerceived();
+		if (near == null || near == this || near.isDead()) {
+			return;
+		}
+		double reach = (getSize() + near.getSize()) / 2.0 + ATTACK_REACH;
+		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
+			return;
+		}
+		near.damage(ATTACK_DAMAGE);
+		energy += BITE_ENERGY; // predation feeds the attacker
+	}
+
+	/** The reproduce actuator: mates with the nearest perceived compatible partner
+	 * in reach (a crossover child inheriting both crossed minds); with no partner
+	 * in reach it buds asexually instead. Reproduction is entirely brain-driven --
+	 * nothing reproduces unless its mind fires this actuator. */
+	private void reproduce() {
+		if (!fertile()) {
+			return;
+		}
+		for (NPC n : targets.values()) {
+			if (canMateWith(n)) {
+				double reach = (getSize() + n.getSize()) / 2.0 + MATE_REACH;
+				if (distance(n.getX(), n.getY(), n.getZ()) <= reach) {
+					reproduceWith(n); // sexual: crossover child
+					return;
+				}
+			}
+		}
+		tryReproduce(); // no compatible partner in reach -> bud asexually
 	}
 
 	/** Nearest living perceived neighbour (excluding self), or null. */
@@ -513,10 +556,11 @@ public class TestNPC extends NPC {
 		if (genome == null || partner.getGenome() == null) {
 			return null;
 		}
-		// Sexual: a mutated crossover of both parents' genomes, born at this spot.
+		// Sexual: a mutated crossover of both parents' genomes (including their
+		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
-		return mater(X, Y, Z, childG);
+		return behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 	}
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */

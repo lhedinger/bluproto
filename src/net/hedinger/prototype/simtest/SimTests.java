@@ -1126,6 +1126,7 @@ public class SimTests {
 					{ Brain.SENSE, 1, AgentIO.S_CLOCK, 0 },       // R1 = clock
 					{ Brain.WRITE, AgentIO.A_TURN, 1, 0 },        // turn = clock (wander)
 					{ Brain.WRITE, AgentIO.A_THROTTLE, 0, 0 },    // throttle = 1
+					{ Brain.WRITE, AgentIO.A_MATE, 0, 0 },        // reproduce (asexual: spread out)
 			};
 			World w = room(20, 20); // full grass
 			for (int i = 0; i < 3; i++) {
@@ -1137,21 +1138,26 @@ public class SimTests {
 			w.think();
 			int start = w.getAliveCount();
 			snapshot(w, "founders (one shared mind)");
-			tick(w, 600);
-			snapshot(w, "after (bred; minds mutated apart)");
-			assertGreater("brained foragers reproduced", w.getAliveCount(), start);
 
+			// Brain-driven reproduction is spiky (boom then bust), so track the peak
+			// population and every distinct mind seen across the run.
+			int peak = start;
 			java.util.Set<String> minds = new java.util.HashSet<String>();
-			for (Entity e : w.getEntities()) {
-				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
-					Brain b = ((net.hedinger.prototype.entities.NPC) e).getGenome().brain;
-					if (b != null) {
-						minds.add(programOf(b));
+			for (int step = 0; step < 30; step++) {
+				tick(w, 20);
+				peak = Math.max(peak, w.getAliveCount());
+				for (Entity e : w.getEntities()) {
+					if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
+						Brain b = ((net.hedinger.prototype.entities.NPC) e).getGenome().brain;
+						if (b != null) {
+							minds.add(programOf(b));
+						}
 					}
 				}
 			}
-			assertGreater("living minds inherited and then diversified by mutation",
-					minds.size(), 1);
+			snapshot(w, "after (bred; minds mutated apart)");
+			assertGreater("brained foragers reproduced (population rose above the founders)", peak, start);
+			assertGreater("inherited minds diversified by mutation", minds.size(), 1);
 		}
 
 		/** The brain's instructions as a string, ignoring the runtime PC marker. */
@@ -1268,6 +1274,97 @@ public class SimTests {
 				m = Math.max(m, v);
 			}
 			return m;
+		}
+	}
+
+	/** The attack actuator: a mind that fires A_ATTACK bites the neighbour in reach
+	 * until its health is gone, killing it -- combat driven by the brain. */
+	static class BrainAttacksNeighbour extends Scenario {
+		@Override
+		public void run() {
+			seed(67);
+			World w = room(10, 10);
+			int[][] attack = {
+					{ Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, // R0 = 1
+					{ Brain.WRITE, AgentIO.A_ATTACK, 0, 0 }, // attack = 1
+			};
+			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI, 3000); // stationary
+			TestNPC attacker = TestNPC.minded(4.5, 4.5, 0, g, new LgpMind(new Brain(deepCopy(attack)), 2));
+			TestNPC victim = TestNPC.inert(5.0, 4.5, 0); // adjacent, within reach
+			w.spawnEntity(attacker);
+			w.spawnEntity(victim);
+			w.think();
+			snapshot(w, "before (attacker beside victim)");
+			assertTrue("victim starts alive", !victim.isDead());
+			tick(w, 120);
+			snapshot(w, "after (victim bitten to death)");
+			assertTrue("the mind's attack actuator killed the neighbour", victim.isDead());
+			assertTrue("the attacker survived", !attacker.isDead());
+		}
+	}
+
+	/**
+	 * The mate actuator: brained foragers whose brains fire A_MATE reproduce
+	 * sexually with a compatible neighbour in reach. Two founder types share
+	 * markers (so they pair) but carry a distinctive instruction each; a crossover
+	 * child that carries BOTH signatures can only come from sexual mating (asexual
+	 * budding copies a single parent), so it proves the actuator drove crossover.
+	 */
+	static class BrainMatesViaActuator extends Scenario {
+		@Override
+		public void run() {
+			seed(68);
+			int SENSE = Brain.SENSE, WRITE = Brain.WRITE, NEG = Brain.NEG, TANH = Brain.TANH, NOP = Brain.NOP;
+			int[][] mateA = { { SENSE, 0, AgentIO.S_BIAS, 0 }, { WRITE, AgentIO.A_MATE, 0, 0 },
+					{ NEG, 7, 7, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 } }; // sig A: "= -R7"
+			int[][] mateB = { { SENSE, 0, AgentIO.S_BIAS, 0 }, { WRITE, AgentIO.A_MATE, 0, 0 },
+					{ NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { TANH, 8, 8, 0 } }; // sig B: "tanh R8"
+			World w = room(12, 12);
+			for (int i = 0; i < 8; i++) {
+				Genome g = new Genome();
+				g.markers = new double[] { 0.5, 0.5, 0.5 }; // identical -> mate-compatible
+				g.brain = new Brain(deepCopy(i % 2 == 0 ? mateA : mateB));
+				// Interleaved A B A B... in a line so each one's nearest is the
+				// opposite type -> cross-type matings that can recombine.
+				double x = 5.0 + i * 0.4 + (i % 2) * 0.07, y = 5.5;
+				w.spawnEntity(TestNPC.brainedBreeder(x, y, 0, g).withEnergy(12.0));
+			}
+			w.think();
+			int start = w.getAliveCount();
+			snapshot(w, "founders (two brain types, shared markers)");
+
+			// These minds mate but don't forage, so they breed then starve; measure
+			// the peak population and whether a recombinant mind ever appeared.
+			int peak = start;
+			boolean recombinant = false;
+			for (int step = 0; step < 45; step++) {
+				tick(w, 10);
+				peak = Math.max(peak, w.getAliveCount());
+				recombinant |= hasRecombinantMind(w);
+			}
+			snapshot(w, "after (mated: recombinant minds)");
+			assertGreater("the mate actuator drove reproduction (population rose)", peak, start);
+			assertTrue("a child carries both parents' signatures -- sexual crossover via A_MATE",
+					recombinant);
+		}
+
+		/** True if any living mind carries both founder signatures at once -- a
+		 * crossover only sexual mating (not asexual budding) can produce. */
+		private static boolean hasRecombinantMind(World w) {
+			for (Entity e : w.getEntities()) {
+				if (!(e instanceof net.hedinger.prototype.entities.NPC) || e.isDead()) {
+					continue;
+				}
+				Brain b = ((net.hedinger.prototype.entities.NPC) e).getGenome().brain;
+				if (b == null) {
+					continue;
+				}
+				String dis = String.join("\n", b.disassemble(null, null));
+				if (dis.contains("= -R7") && dis.contains("tanh R8")) {
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 
@@ -1422,6 +1519,8 @@ public class SimTests {
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),
+				new BrainAttacksNeighbour(),
+				new BrainMatesViaActuator(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
