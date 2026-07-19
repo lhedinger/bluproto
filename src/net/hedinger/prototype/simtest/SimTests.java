@@ -898,6 +898,119 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The LGP brain's register bank is memory: it accumulates across ticks. A tiny
+	 * hand-authored program (R0 += sense0 each pass, write R0 to an actuator) turns
+	 * a constant input into a running count, and the run is bit-for-bit repeatable.
+	 */
+	static class BrainMemoryIsDeterministic extends Scenario {
+		@Override
+		public void run() {
+			seed(60);
+			int[][] prog = {
+					{ net.hedinger.prototype.entities.Brain.SENSE, 1, 0, 0 }, // R1 = sense[0]
+					{ net.hedinger.prototype.entities.Brain.ADD, 0, 0, 1 },   // R0 += R1  (persists)
+					{ net.hedinger.prototype.entities.Brain.WRITE, 0, 0, 0 }, // act[0] = R0
+			};
+			double got = runCount(prog, 25);
+			assertNear("register R0 accumulated the constant input across 25 ticks (memory)",
+					25.0, got, 1e-9);
+			assertNear("same program + inputs -> identical output (determinism)",
+					got, runCount(prog, 25), 1e-9);
+		}
+
+		private static double runCount(int[][] prog, int ticks) {
+			net.hedinger.prototype.entities.Brain b =
+					new net.hedinger.prototype.entities.Brain(deepCopy(prog));
+			double[] sensors = { 1.0 };
+			double[] act = new double[1];
+			for (int t = 0; t < ticks; t++) {
+				b.step(sensors, act, prog.length); // one full pass per tick
+			}
+			return act[0];
+		}
+	}
+
+	/**
+	 * Program length sets the thought cycle: with a fixed per-tick budget, a longer
+	 * brain takes more ticks to complete a pass, so it re-decides less often. Two
+	 * brains with the same logic -- one padded with NOPs -- accumulate at rates set
+	 * by their lengths, so over equal ticks the short brain counts far higher.
+	 */
+	static class BrainLengthSetsThoughtRate extends Scenario {
+		@Override
+		public void run() {
+			seed(61);
+			int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
+			int ADD = net.hedinger.prototype.entities.Brain.ADD;
+			int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
+			int NOP = net.hedinger.prototype.entities.Brain.NOP;
+			int[][] shortProg = { { SENSE, 1, 0, 0 }, { ADD, 0, 0, 1 }, { WRITE, 0, 0, 0 } };
+			int[][] longProg = { { SENSE, 1, 0, 0 }, { ADD, 0, 0, 1 }, { WRITE, 0, 0, 0 },
+					{ NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 },
+					{ NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 } };
+			double shortCount = runFixedBudget(shortProg, 90);
+			double longCount = runFixedBudget(longProg, 90);
+			assertGreater("the shorter brain thinks (and so counts) faster", shortCount, longCount);
+			assertGreater("length-3 brain runs its pass ~3x as often as the length-9 one",
+					shortCount, longCount * 2.0);
+		}
+
+		private static double runFixedBudget(int[][] prog, int ticks) {
+			net.hedinger.prototype.entities.Brain b =
+					new net.hedinger.prototype.entities.Brain(deepCopy(prog));
+			double[] sensors = { 1.0 };
+			double[] act = new double[1];
+			for (int t = 0; t < ticks; t++) {
+				b.step(sensors, act, net.hedinger.prototype.entities.Brain.DEFAULT_STEPS_PER_TICK);
+			}
+			return act[0];
+		}
+	}
+
+	/**
+	 * Brain heredity: unequal crossover splices a slice of one parent into the
+	 * other, so children mix both parents' code and their length varies; mutation
+	 * then changes the program. Pins the genetic operators the evolving mind uses.
+	 */
+	static class BrainHeredityCrossesAndMutates extends Scenario {
+		@Override
+		public void run() {
+			seed(62);
+			int NOP = net.hedinger.prototype.entities.Brain.NOP;
+			int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
+			int[][] aCode = new int[5][];
+			int[][] bCode = new int[5][];
+			for (int i = 0; i < 5; i++) {
+				aCode[i] = new int[] { NOP, 0, 0, 0 };   // parent A: all nop
+				bCode[i] = new int[] { WRITE, 1, 2, 0 };  // parent B: all write
+			}
+			net.hedinger.prototype.entities.Brain A = new net.hedinger.prototype.entities.Brain(aCode);
+			net.hedinger.prototype.entities.Brain B = new net.hedinger.prototype.entities.Brain(bCode);
+
+			boolean sawMixedChild = false, sawVariedLength = false;
+			for (int i = 0; i < 100 && !(sawMixedChild && sawVariedLength); i++) {
+				net.hedinger.prototype.entities.Brain ch =
+						net.hedinger.prototype.entities.Brain.child(A, B, 0.0); // crossover only
+				String dis = String.join("\n", ch.disassemble(null, null));
+				if (dis.contains("nop") && dis.contains("act ")) {
+					sawMixedChild = true; // carries code from both parents
+				}
+				if (ch.length() != 5) {
+					sawVariedLength = true; // unequal crossover changed the length
+				}
+			}
+			assertTrue("crossover produces children carrying code from both parents", sawMixedChild);
+			assertTrue("unequal crossover varies the child's program length", sawVariedLength);
+
+			net.hedinger.prototype.entities.Brain m = net.hedinger.prototype.entities.Brain.random(6);
+			String before = String.join("\n", m.disassemble(null, null));
+			m.mutate(1.0);
+			String after = String.join("\n", m.disassemble(null, null));
+			assertTrue("mutation changes the program", !before.equals(after));
+		}
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -999,6 +1112,17 @@ public class SimTests {
 		}
 	}
 
+	// ---- helpers -----------------------------------------------------------
+
+	/** Deep-copies a program (array of {op,x,y,z} rows) so a Brain owns its code. */
+	private static int[][] deepCopy(int[][] prog) {
+		int[][] c = new int[prog.length][];
+		for (int i = 0; i < prog.length; i++) {
+			c[i] = prog[i].clone();
+		}
+		return c;
+	}
+
 	// ---- runner ------------------------------------------------------------
 
 	private static Scenario[] all() {
@@ -1031,6 +1155,9 @@ public class SimTests {
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),
 				new SexualReproductionNeedsPartner(),
+				new BrainMemoryIsDeterministic(),
+				new BrainLengthSetsThoughtRate(),
+				new BrainHeredityCrossesAndMutates(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
