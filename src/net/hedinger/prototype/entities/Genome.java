@@ -39,6 +39,13 @@ public class Genome {
 	public int maxAge = 3000;
 	public boolean flying = false; // locomotion: airborne (a detached shadow) vs ground
 
+	// --- mind (optional evolvable behaviour; null = no brain) ---
+	/** The creature's decision program. Heritable alongside the body: copied and
+	 * mutated for asexual young, crossed over for sexual young. Kept null on the
+	 * genomes that don't use it, so adding it draws no RNG for brain-less lineages
+	 * and the deterministic sim stream is unchanged. */
+	public Brain brain = null;
+
 	// --- markers (neutral recognition barcode, each in [0,1]) ---
 	public double[] markers = new double[MARKER_DIMS];
 
@@ -100,6 +107,7 @@ public class Genome {
 		g.gregariousness = gregariousness;
 		g.boldness = boldness;
 		g.mateThreshold = mateThreshold;
+		g.brain = (brain == null) ? null : brain.copy();
 		return g;
 	}
 
@@ -109,6 +117,9 @@ public class Genome {
 	public static Genome child(Genome parent, double rate) {
 		Genome g = parent.copy();
 		g.mutate(rate);
+		if (g.brain != null) {
+			g.brain.mutate(rate); // mutate the inherited program (guarded: no brain -> no RNG)
+		}
 		return g;
 	}
 
@@ -136,6 +147,15 @@ public class Genome {
 		g.boldness = pick(a.boldness, b.boldness);
 		g.mateThreshold = pick(a.mateThreshold, b.mateThreshold);
 		g.mutate(rate);
+		// Crossover the minds when both parents have one; otherwise inherit whichever
+		// exists. Guarded so brain-less pairs draw no extra RNG.
+		if (a.brain != null && b.brain != null) {
+			g.brain = Brain.child(a.brain, b.brain, rate);
+		} else if (a.brain != null) {
+			g.brain = a.brain.copy();
+		} else if (b.brain != null) {
+			g.brain = b.brain.copy();
+		}
 		return g;
 	}
 

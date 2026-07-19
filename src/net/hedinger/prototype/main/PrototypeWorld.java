@@ -29,6 +29,8 @@ import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.engine.WorldGenerator;
+import net.hedinger.prototype.entities.AgentIO;
+import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.npcs.Drone;
@@ -404,11 +406,39 @@ public class PrototypeWorld extends JPanel {
 				for (String s : gen.describe()) {
 					lines.add(s);
 				}
+				if (gen.brain != null) {
+					appendMind(lines, gen.brain);
+				}
 			} else {
 				lines.add("(no genome)");
 			}
 		}
 		drawPanel(g, lines);
+	}
+
+	/** Appends the live LGP mind: a window of its disassembly around the running
+	 * program counter (marked '>'), plus the first registers (its memory). */
+	private void appendMind(List<String> lines, Brain brain) {
+		String[] dis = brain.disassemble(AgentIO.SENSOR_NAMES, AgentIO.ACT_NAMES);
+		lines.add("--- mind (pc " + brain.pc() + " / len " + brain.length() + ") ---");
+		int win = 14, n = dis.length;
+		int start = Math.max(0, Math.min(brain.pc() - 4, Math.max(0, n - win)));
+		if (start > 0) {
+			lines.add("   ... " + start + " above");
+		}
+		int end = Math.min(n, start + win);
+		for (int i = start; i < end; i++) {
+			lines.add(dis[i]);
+		}
+		if (end < n) {
+			lines.add("   ... +" + (n - end) + " below");
+		}
+		double[] r = brain.registers();
+		StringBuilder rb = new StringBuilder("reg");
+		for (int i = 0; i < Math.min(6, r.length); i++) {
+			rb.append(String.format(" R%d=%.1f", i, r[i]));
+		}
+		lines.add(rb.toString());
 	}
 
 	private void drawPanel(Graphics2D g, List<String> lines) {

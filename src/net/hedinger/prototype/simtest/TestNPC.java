@@ -3,6 +3,8 @@ package net.hedinger.prototype.simtest;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.entities.AgentIO;
+import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.NPC;
 
@@ -166,8 +168,7 @@ public class TestNPC extends NPC {
 	 * this is the seam where the decision method is swapped. Perception is
 	 * omnidirectional here so the mechanic isn't masked by the facing gate.
 	 */
-	public static TestNPC minded(double x, double y, double z,
-			net.hedinger.prototype.entities.Genome g, Mind mind) {
+	public static TestNPC minded(double x, double y, double z, Genome g, Mind mind) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
 		t.genome = g;
 		t.size = (int) Math.round(g.size);
@@ -179,6 +180,33 @@ public class TestNPC extends NPC {
 		t.SEARCH_FREQ = 2;
 		t.mind = mind;
 		return t;
+	}
+
+	/** A minded body whose mind is the genome's own evolvable {@link Brain} (an
+	 * {@link LgpMind}), so it is inherited on reproduction; an inert mind if the
+	 * genome carries no brain. */
+	public static TestNPC minded(double x, double y, double z, Genome g) {
+		return minded(x, y, z, g, mindOf(g));
+	}
+
+	/** A metabolic brained forager: runs its genome's brain, grazes and burns
+	 * energy, and buds mutated offspring that inherit (a crossed/mutated copy of)
+	 * the brain -- so the mind itself evolves. */
+	public static TestNPC brainedBreeder(double x, double y, double z, Genome g) {
+		TestNPC t = minded(x, y, z, g, mindOf(g));
+		t.metabolic = true;
+		t.energy = 1.0;
+		return t;
+	}
+
+	private static final Mind INERT_MIND = new Mind() {
+		@Override
+		public void think(double[] sensors, double[] actuators) {
+		}
+	};
+
+	private static Mind mindOf(Genome g) {
+		return g.brain != null ? new LgpMind(g.brain) : INERT_MIND;
 	}
 
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
@@ -310,6 +338,9 @@ public class TestNPC extends NPC {
 		senseInto(sensors);
 		mind.think(sensors, actuators);
 		actFrom(actuators);
+		if (metabolic) {
+			tryReproduce(); // bud when well-fed; the child inherits a mutated brain
+		}
 	}
 
 	/** Fills the egocentric, normalized {@link AgentIO} sensor vector. */
@@ -468,9 +499,12 @@ public class TestNPC extends NPC {
 		if (genome == null) {
 			return null;
 		}
-		// Asexual: a mutated copy of this genome, born at the parent's spot.
-		net.hedinger.prototype.entities.Genome childG =
-				net.hedinger.prototype.entities.Genome.child(genome, 0.1);
+		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
+		// genome carries a brain, Genome.child mutates the inherited program too.
+		Genome childG = Genome.child(genome, 0.1);
+		if (behavior == Behavior.MINDED) {
+			return brainedBreeder(X, Y, Z, childG);
+		}
 		return behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
 	}
 

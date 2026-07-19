@@ -1081,6 +1081,89 @@ public class SimTests {
 		private Mind firstMind; // labels the snapshot for the LGP run only
 	}
 
+	/**
+	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
+	 * the parent's program, a sexual child crosses both parents' programs, and a
+	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
+	 * -- and the emergent scenarios -- are unchanged).
+	 */
+	static class BrainInheritedThroughReproduction extends Scenario {
+		@Override
+		public void run() {
+			seed(64);
+			Genome pa = new Genome();
+			pa.brain = Brain.random(6);
+			Genome asexual = Genome.child(pa, 0.2);
+			assertTrue("asexual child inherits a brain", asexual.brain != null);
+			assertTrue("the child's brain is its own instance, not the parent's",
+					asexual.brain != pa.brain);
+
+			Genome pb = new Genome();
+			pb.brain = Brain.random(6);
+			assertTrue("sexual child inherits a brain crossed from both parents",
+					Genome.child(pa, pb, 0.2).brain != null);
+
+			assertTrue("brain-less crossover stays brain-less",
+					Genome.child(new Genome(), new Genome(), 0.2).brain == null);
+			assertTrue("brain-less budding stays brain-less",
+					Genome.child(new Genome(), 0.2).brain == null);
+		}
+	}
+
+	/**
+	 * The mind evolves end to end: metabolic brained foragers -- all seeded with
+	 * one hand-authored "graze while wandering" program -- feed, bud, and pass a
+	 * mutated copy of the brain to their young, so the living population's programs
+	 * diversify away from the single founder mind.
+	 */
+	static class BrainedPopulationDiversifies extends Scenario {
+		@Override
+		public void run() {
+			seed(65);
+			int[][] graze = {
+					{ Brain.SET, 0, 9, 0 },                       // R0 = 1.0
+					{ Brain.WRITE, AgentIO.A_EAT, 0, 0 },         // eat = 1
+					{ Brain.SENSE, 1, AgentIO.S_CLOCK, 0 },       // R1 = clock
+					{ Brain.WRITE, AgentIO.A_TURN, 1, 0 },        // turn = clock (wander)
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 0, 0 },    // throttle = 1
+			};
+			World w = room(20, 20); // full grass
+			for (int i = 0; i < 3; i++) {
+				Genome g = new Genome();
+				g.markers = new double[] { 0.2, 0.6, 0.9 };
+				g.brain = new Brain(deepCopy(graze));
+				w.spawnEntity(TestNPC.brainedBreeder(6.5 + i * 3, 6.5 + i * 3, 0, g));
+			}
+			w.think();
+			int start = w.getAliveCount();
+			snapshot(w, "founders (one shared mind)");
+			tick(w, 600);
+			snapshot(w, "after (bred; minds mutated apart)");
+			assertGreater("brained foragers reproduced", w.getAliveCount(), start);
+
+			java.util.Set<String> minds = new java.util.HashSet<String>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
+					Brain b = ((net.hedinger.prototype.entities.NPC) e).getGenome().brain;
+					if (b != null) {
+						minds.add(programOf(b));
+					}
+				}
+			}
+			assertGreater("living minds inherited and then diversified by mutation",
+					minds.size(), 1);
+		}
+
+		/** The brain's instructions as a string, ignoring the runtime PC marker. */
+		private static String programOf(Brain b) {
+			StringBuilder s = new StringBuilder();
+			for (String line : b.disassemble(null, null)) {
+				s.append(line.substring(2)).append('|');
+			}
+			return s.toString();
+		}
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -1229,6 +1312,8 @@ public class SimTests {
 				new BrainLengthSetsThoughtRate(),
 				new BrainHeredityCrossesAndMutates(),
 				new MindDrivesAgent(),
+				new BrainInheritedThroughReproduction(),
+				new BrainedPopulationDiversifies(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),
