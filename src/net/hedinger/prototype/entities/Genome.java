@@ -256,6 +256,31 @@ public class Genome {
 		return r;
 	}
 
+	/** A compact one-line summary of the whole genome, for console logging. */
+	@Override
+	public String toString() {
+		return String.format(
+				"size %.1f spd %.3f turn %d los %.1f/%.0fdeg meta %.3f age %d%s "
+						+ "m[%.2f %.2f %.2f] pred %.2f xeno %.2f greg %.2f bold %.2f mate %.2f",
+				size, speed, turnRate, losRange, Math.toDegrees(losFov), metabolism, maxAge,
+				flying ? " fly" : "", markers[0], markers[1], markers.length > 2 ? markers[2] : 0.5,
+				predatory, xenophobia, gregariousness, boldness, mateThreshold);
+	}
+
+	/** Labelled lines for an on-screen inspector panel (one gene group per line). */
+	public String[] describe() {
+		return new String[] {
+				String.format("size %.1f   speed %.3f   turn %d", size, speed, turnRate),
+				String.format("los %.1f / %.0fdeg   meta %.3f", losRange, Math.toDegrees(losFov), metabolism),
+				String.format("maxAge %d   %s", maxAge, flying ? "flying" : "ground"),
+				String.format("markers  %.2f  %.2f  %.2f",
+						markers[0], markers[1], markers.length > 2 ? markers[2] : 0.5),
+				String.format("predatory %.2f   xeno %.2f", predatory, xenophobia),
+				String.format("gregarious %.2f   bold %.2f", gregariousness, boldness),
+				String.format("mateThreshold %.2f", mateThreshold),
+		};
+	}
+
 	/** Maps the first three markers to an RGB colour for the debug view. */
 	public Color toColor() {
 		int red = (int) (clamp(markers[0], 0, 1) * 255);

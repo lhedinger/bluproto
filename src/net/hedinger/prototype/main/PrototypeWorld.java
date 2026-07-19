@@ -3,9 +3,13 @@ package net.hedinger.prototype.main;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.util.ArrayList;
+import java.util.List;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -17,6 +21,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.WindowConstants;
 
+import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.LayerRenderer;
 import net.hedinger.prototype.engine.ResourceManager;
 import net.hedinger.prototype.engine.StopWatch;
@@ -24,6 +29,8 @@ import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.engine.WorldGenerator;
+import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.npcs.Drone;
 import net.hedinger.prototype.entities.npcs.DummyChaser;
 import net.hedinger.prototype.entities.npcs.DummyRoamer;
@@ -58,6 +65,8 @@ public class PrototypeWorld extends JPanel {
 	private int mouseX = 0;
 	private int mouseY = 0;
 	private int cols = 30, rows = 30, lvls = 3;
+	/** The entity the user clicked to inspect (its genome/state is shown live). */
+	private Entity selectedEntity;
 
 	public static StopWatch stopwatch;
 
@@ -263,6 +272,7 @@ public class PrototypeWorld extends JPanel {
 
 		view.render(g);
 		view.renderFPS(g, Math.round(framerate));
+		drawInspector(g2);
 		if (gamma > 30) {
 			world.think();
 
@@ -330,6 +340,100 @@ public class PrototypeWorld extends JPanel {
 	}
 
 	// --------------------------------------------------------------------------
+	// ----ENTITY INSPECTOR (click to select; its genome + state is drawn live)
+
+	/** Selects the entity nearest the click on the current camera level, if any is
+	 * close enough. Inverts the world-to-screen projection via the camera's
+	 * top-left pixel offset (camera-level scale is one tile = tileSize px). */
+	private void pickEntity(int mx, int my) {
+		if (world == null || view == null) {
+			return;
+		}
+		float ts = ResourceManager.tileSize;
+		double wx = (mx + view.getCamTlX()) / ts;
+		double wy = (my + view.getCamTlY()) / ts;
+		int level = view.getCamZ();
+		Entity best = null;
+		double bestD = 1.2; // pick radius in tiles
+		for (Entity e : world.getEntities()) {
+			if (e == null || e.isRemoved() || e.getLvl() != level) {
+				continue;
+			}
+			double d = Math.hypot(e.getX() - wx, e.getY() - wy);
+			if (d < bestD) {
+				bestD = d;
+				best = e;
+			}
+		}
+		selectedEntity = best;
+		if (best instanceof NPC && ((NPC) best).getGenome() != null) {
+			System.out.println(best.getEntityTypeName() + " #" + best.getID()
+					+ " genome: " + ((NPC) best).getGenome());
+		}
+	}
+
+	/** Draws a selection ring on the picked entity and a live panel of its genome
+	 * and state. Clears the selection once the entity is removed. */
+	private void drawInspector(Graphics2D g) {
+		if (selectedEntity == null) {
+			return;
+		}
+		if (selectedEntity.isRemoved()) {
+			selectedEntity = null;
+			return;
+		}
+		if (selectedEntity.getLvl() == view.getCamZ()) {
+			int sx = view.pixelX(selectedEntity.getX(), selectedEntity.getLvl(), 0);
+			int sy = view.pixelY(selectedEntity.getY(), selectedEntity.getLvl(), 0);
+			g.setStroke(new BasicStroke(2f));
+			g.setColor(select);
+			g.drawOval(sx - 14, sy - 14, 28, 28);
+		}
+		List<String> lines = new ArrayList<String>();
+		String head = selectedEntity.getEntityTypeName() + "  #" + selectedEntity.getID()
+				+ (selectedEntity.isDead() ? "  [dead]" : "");
+		lines.add(head);
+		lines.add(String.format("lvl %d   pos %.1f, %.1f",
+				selectedEntity.getLvl(), selectedEntity.getX(), selectedEntity.getY()));
+		if (selectedEntity instanceof NPC) {
+			NPC n = (NPC) selectedEntity;
+			Genome gen = n.getGenome();
+			if (gen != null) {
+				lines.add(String.format("energy %.2f", n.getEnergy()));
+				lines.add("--- genome ---");
+				for (String s : gen.describe()) {
+					lines.add(s);
+				}
+			} else {
+				lines.add("(no genome)");
+			}
+		}
+		drawPanel(g, lines);
+	}
+
+	private void drawPanel(Graphics2D g, List<String> lines) {
+		g.setFont(new Font("Monospaced", Font.PLAIN, 13));
+		FontMetrics fm = g.getFontMetrics();
+		int pad = 8, lineH = fm.getHeight(), w = 0;
+		for (String s : lines) {
+			w = Math.max(w, fm.stringWidth(s));
+		}
+		int boxW = w + pad * 2, boxH = lines.size() * lineH + pad * 2;
+		int x = 12, y = getHeight() - boxH - 12;
+		g.setColor(new Color(0, 0, 0, 190));
+		g.fillRect(x, y, boxW, boxH);
+		g.setColor(new Color(120, 200, 255));
+		g.setStroke(new BasicStroke(1f));
+		g.drawRect(x, y, boxW, boxH);
+		g.setColor(Color.WHITE);
+		int ty = y + pad + fm.getAscent();
+		for (String s : lines) {
+			g.drawString(s, x + pad, ty);
+			ty += lineH;
+		}
+	}
+
+	// --------------------------------------------------------------------------
 	// ----MOUSELISTENERS
 	int entitytype = -1;
 
@@ -362,11 +466,7 @@ public class PrototypeWorld extends JPanel {
 			view.mousePressed();
 
 			if (e.getButton() == MouseEvent.BUTTON1) {
-
-				if (entitytype > -1) {
-					spawnType(view.mouseRow, view.mouseCol, view.mouseZ, entitytype);
-				}
-
+				pickEntity(mouseX, mouseY); // click to inspect the entity there
 			}
 		}
 
