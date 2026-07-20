@@ -1179,7 +1179,11 @@ public class SimTests {
 	 * emerges. The mind's own heredity (Brain crossover/mutation) does the varying.
 	 */
 	static class EvolutionDiscoversForaging extends Scenario {
-		static final int P = 24, K = 300, G = 20, LEN = 24, BUDGET = 4;
+		// G=40: with the actuator vector grown (grab/attach added), random founders
+		// start weaker -- more operands land on the new no-op-for-foraging slots --
+		// so discovery needs a few more generations. At 40 it is robust across
+		// seeds (swept), not tuned to one lucky seed.
+		static final int P = 24, K = 300, G = 40, LEN = 24, BUDGET = 4;
 
 		@Override
 		public void run() {
@@ -1365,6 +1369,86 @@ public class SimTests {
 				}
 			}
 			return false;
+		}
+	}
+
+	/**
+	 * The grab actuator: a minded creature whose brain fires A_GRAB seizes the
+	 * nearest <i>smaller</i> neighbour in reach and carries it -- the captive
+	 * rides the grabber and is dragged along, released when the actuator drops.
+	 */
+	static class BrainGrabsSmallerNeighbour extends Scenario {
+		@Override
+		public void run() {
+			seed(73);
+			World w = room(16, 16);
+			int[][] grab = {
+					{ Brain.SENSE, 0, AgentIO.S_BIAS, 0 },    // R0 = 1
+					{ Brain.WRITE, AgentIO.A_GRAB, 0, 0 },     // hold grab
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 0, 0 }, // roam so the captive is dragged
+			};
+			// Bigger grabber (body 6, wide FOV so it perceives the neighbour); a
+			// smaller inert cargo (body 4) just inside grab reach. Reach is the sum
+			// of half-body-radii (~0.078 tiles here), so they start ~0.05 apart.
+			Genome g = Genome.phenotype(6, 0.05, 5, 6, Math.PI * 2, 3000);
+			TestNPC grabber = TestNPC.minded(8.0, 8.0, 0, g, new LgpMind(new Brain(deepCopy(grab)), 2));
+			TestNPC cargo = TestNPC.inert(8.05, 8.0, 0).withSize(4);
+			w.spawnEntity(grabber);
+			w.spawnEntity(cargo);
+			w.think();
+			snapshot(w, "before (grabber beside a smaller creature)");
+
+			double startX = cargo.getX(), startY = cargo.getY();
+			tick(w, 60);
+			snapshot(w, "after (smaller creature seized and carried)");
+			assertTrue("the mind's grab actuator seized the smaller neighbour",
+					cargo.getAttachTarget() == grabber);
+			assertTrue("the captive is marked grabbed", cargo.isGrabbed());
+			double offset = (grabber.getSize() + cargo.getSize()) / 2.0;
+			double held = Math.hypot(cargo.getX() - grabber.getX(), cargo.getY() - grabber.getY());
+			assertNear("the captive is pinned at the carry offset", offset, held, 0.05);
+			assertGreater("the captive was dragged along as the grabber moved",
+					Math.hypot(cargo.getX() - startX, cargo.getY() - startY), 0.5);
+		}
+	}
+
+	/**
+	 * The attach actuator (the inverse of grab): a small minded creature whose
+	 * brain fires A_ATTACH latches onto a <i>larger</i> neighbour and rides it,
+	 * dragged along by the host until it lets go. It rides voluntarily -- unlike
+	 * a captive it is not marked grabbed, and it self-releases.
+	 */
+	static class BrainAttachesToLargerHost extends Scenario {
+		@Override
+		public void run() {
+			seed(74);
+			World w = room(16, 16);
+			int[][] attach = {
+					{ Brain.SENSE, 0, AgentIO.S_BIAS, 0 },   // R0 = 1
+					{ Brain.WRITE, AgentIO.A_ATTACH, 0, 0 },  // hold attach
+			};
+			// A small stationary rider (body 10, wide FOV) beside a larger host
+			// (body 20) that roams slowly, so it stays in reach long enough for the
+			// rider to latch on, then drags it around. Reach ~0.23 tiles here.
+			Genome g = Genome.phenotype(10, 0.0, 5, 6, Math.PI * 2, 3000);
+			TestNPC rider = TestNPC.minded(8.1, 8.0, 0, g, new LgpMind(new Brain(deepCopy(attach)), 2));
+			TestNPC host = TestNPC.roamer(8.0, 8.0, 0).withSize(20).withSpeed(0.02);
+			w.spawnEntity(rider);
+			w.spawnEntity(host);
+			w.think();
+			snapshot(w, "before (small creature beside a larger one)");
+
+			double startX = rider.getX(), startY = rider.getY();
+			tick(w, 80);
+			snapshot(w, "after (riding the larger host)");
+			assertTrue("the mind's attach actuator latched onto the larger host",
+					rider.getAttachTarget() == host);
+			assertTrue("it rides voluntarily, not as a captive", !rider.isGrabbed());
+			double offset = (host.getSize() + rider.getSize()) / 2.0;
+			double held = Math.hypot(rider.getX() - host.getX(), rider.getY() - host.getY());
+			assertNear("the rider is pinned at the ride offset", offset, held, 0.05);
+			assertGreater("the rider was carried along as the host roamed",
+					Math.hypot(rider.getX() - startX, rider.getY() - startY), 0.5);
 		}
 	}
 
@@ -1555,6 +1639,8 @@ public class SimTests {
 				new EvolutionDiscoversForaging(),
 				new BrainAttacksNeighbour(),
 				new BrainMatesViaActuator(),
+				new BrainGrabsSmallerNeighbour(),
+				new BrainAttachesToLargerHost(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),

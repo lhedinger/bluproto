@@ -51,13 +51,19 @@ public final class AgentIO {
 	public static final int A_EAT = 2;
 	/** Lay pheromone when > 0.5. */
 	public static final int A_DEPOSIT = 3;
-	/** Attack the nearest neighbour when > 0.5 (reserved; wired later). */
+	/** Attack the nearest neighbour when > 0.5. */
 	public static final int A_ATTACK = 4;
-	/** Mate with the nearest compatible neighbour when > 0.5 (reserved). */
+	/** Mate with the nearest compatible neighbour when > 0.5. */
 	public static final int A_MATE = 5;
-	public static final int NUM_ACT = 6;
+	/** Grab the nearest <i>smaller</i> neighbour in reach and carry it while
+	 *  &gt; 0.5 (a predatory seize); dropping below releases it. */
+	public static final int A_GRAB = 6;
+	/** Latch onto the nearest <i>larger</i> neighbour in reach and ride it while
+	 *  &gt; 0.5 (a voluntary hitch-hike); dropping below lets go. */
+	public static final int A_ATTACH = 7;
+	public static final int NUM_ACT = 8;
 	public static final String[] ACT_NAMES = {
-			"turn", "throttle", "eat", "deposit", "attack", "mate" };
+			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach" };
 
 	private AgentIO() {
 	}

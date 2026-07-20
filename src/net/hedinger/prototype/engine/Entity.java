@@ -375,6 +375,12 @@ public abstract class Entity {
 		this.grabbed = grabbed;
 	}
 
+	/** True while another entity is carrying this one (a captive grab), as
+	 *  opposed to this entity voluntarily riding a host (see attachTarget). */
+	public boolean isGrabbed() {
+		return grabbed;
+	}
+
 	/** The entity this one is attached to (carried by), or null. */
 	public Entity getAttachTarget() {
 		return attachTarget;

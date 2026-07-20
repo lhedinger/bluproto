@@ -1450,6 +1450,28 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
+	 * Voluntarily latches onto a <i>larger</i> host in reach and rides it (the
+	 * inverse of {@link #grab}: here this creature is the one that moves onto the
+	 * other). Refuses a host that is not bigger, out of reach, or if already
+	 * attached. The rider's position is then slaved to the host until it
+	 * {@link #detach() lets go}.
+	 */
+	public boolean attachTo(Entity host) {
+		if (host == null || getAttachTarget() != null) {
+			return false;
+		}
+		double dist = distance(host);
+		double minDist = host.getSize() / 2 + getSize() / 2;
+		if (dist > minDist) {
+			return false;
+		}
+		if (host.getSize() <= getSize()) {
+			return false; // only ride something larger than yourself
+		}
+		return attachToTarget(host);
+	}
+
+	/**
 	 * draws a text over Entity that will fade out for a given amount of frames
 	 *
 	 * @param msg

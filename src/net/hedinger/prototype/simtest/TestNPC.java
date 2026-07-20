@@ -396,6 +396,57 @@ public class TestNPC extends NPC {
 		if (a[AgentIO.A_MATE] > 0.5) {
 			reproduce();
 		}
+		// Grab: seize and carry a smaller neighbour while the actuator is high,
+		// release the moment it drops (or the captive is gone).
+		if (grabbing != null && grabbing.isRemoved()) {
+			drop();
+		}
+		if (a[AgentIO.A_GRAB] > 0.5) {
+			grabNearestSmaller();
+		} else {
+			drop();
+		}
+		// Attach: latch onto and ride a larger host while the actuator is high,
+		// let go when it drops (or the host is gone). Only ever self-release a
+		// voluntary ride -- never a captive grab held by someone else.
+		if (getAttachTarget() != null && !isGrabbed() && getAttachTarget().isRemoved()) {
+			detach();
+		}
+		if (a[AgentIO.A_ATTACH] > 0.5) {
+			attachToLarger();
+		} else if (getAttachTarget() != null && !isGrabbed()) {
+			detach();
+		}
+	}
+
+	/** Grabs the nearest perceived smaller neighbour in reach (predatory seize). */
+	private void grabNearestSmaller() {
+		if (grabbing != null) {
+			return; // already carrying one
+		}
+		for (NPC n : targets.values()) { // nearest-first (keyed by distance)
+			if (n == this || n.isDead() || n.isRemoved()) {
+				continue;
+			}
+			if (n.getSize() <= getSize() && grab(n)) {
+				return;
+			}
+		}
+	}
+
+	/** Latches onto the nearest perceived larger neighbour in reach (hitch-hike). */
+	private void attachToLarger() {
+		if (getAttachTarget() != null) {
+			return; // already riding something
+		}
+		for (NPC n : targets.values()) { // nearest-first
+			if (n == this || n.isDead() || n.isRemoved()) {
+				continue;
+			}
+			if (n.getSize() > getSize() && attachTo(n)) {
+				return;
+			}
+		}
 	}
 
 	/** Bites the nearest perceived neighbour if it is in reach: it takes damage
@@ -634,8 +685,8 @@ public class TestNPC extends NPC {
 		if (isDead()) {
 			return null;
 		}
-		if (grabbing != null) {
-			return "grab";
+		if (grabbing != null || (getAttachTarget() != null && !isGrabbed())) {
+			return "grab"; // carrying a captive, or riding a host
 		}
 		switch (behavior) {
 		case GENOME:
@@ -696,7 +747,7 @@ public class TestNPC extends NPC {
 			s.append(" grabbing");
 		}
 		if (getAttachTarget() != null) {
-			s.append(" carried");
+			s.append(isGrabbed() ? " carried" : " riding");
 		}
 		if (isDead()) {
 			s.append(" dead");
