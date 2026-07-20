@@ -1368,6 +1368,39 @@ public class SimTests {
 		}
 	}
 
+	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
+	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
+	static class BlockedSensorSeesWalls extends Scenario {
+		@Override
+		public void run() {
+			seed(72);
+			double[] boxed = new double[AgentIO.NUM_SENSORS];
+			double[] open = new double[AgentIO.NUM_SENSORS];
+
+			World box = room(3, 3); // interior is the single tile (1,1), walls all around
+			box.spawnEntity(TestNPC.minded(1.5, 1.5, 0,
+					Genome.phenotype(6, 0, 5, 6, Math.PI, 3000), capture(boxed)));
+			tick(box, 3);
+
+			World field = room(11, 11);
+			field.spawnEntity(TestNPC.minded(5.5, 5.5, 0,
+					Genome.phenotype(6, 0, 5, 6, Math.PI, 3000), capture(open)));
+			tick(field, 3);
+
+			assertNear("a walled-in mind senses a wall ahead", 1.0, boxed[AgentIO.S_BLOCKED], 1e-9);
+			assertNear("a mind in the open senses no wall ahead", 0.0, open[AgentIO.S_BLOCKED], 1e-9);
+		}
+
+		private static Mind capture(double[] out) {
+			return new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					System.arraycopy(s, 0, out, 0, s.length);
+				}
+			};
+		}
+	}
+
 	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
 	static class PheromoneDecays extends Scenario {
 		@Override
@@ -1521,6 +1554,7 @@ public class SimTests {
 				new EvolutionDiscoversForaging(),
 				new BrainAttacksNeighbour(),
 				new BrainMatesViaActuator(),
+				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
 				new SameSeedSameOutcome(),

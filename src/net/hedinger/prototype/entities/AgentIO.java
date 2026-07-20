@@ -34,10 +34,13 @@ public final class AgentIO {
 	public static final int S_NEAR_SIZEADV = 7;
 	/** A slow oscillator (from tick + id), for RNG-free rhythm/exploration. */
 	public static final int S_CLOCK = 8;
-	public static final int NUM_SENSORS = 9;
+	/** 1 if the tile straight ahead (in the heading) is impassable, else 0 -- so a
+	 * mind can perceive walls/edges and evolve to steer around them. */
+	public static final int S_BLOCKED = 9;
+	public static final int NUM_SENSORS = 10;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
-			"near_sim", "near_sizeadv", "clock" };
+			"near_sim", "near_sizeadv", "clock", "blocked" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

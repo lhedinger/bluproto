@@ -370,6 +370,9 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_NEAR_SIZEADV] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
+		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
+		s[AgentIO.S_BLOCKED] = getWorld().isConnectedSpace(getX(), getY(), getLvl(), ax, ay, getLvl())
+				? 0.0 : 1.0; // wall/edge one tile ahead in the heading
 	}
 
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
