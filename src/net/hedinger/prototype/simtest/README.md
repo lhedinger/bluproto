@@ -139,7 +139,12 @@ its underlying fertility become two readable maps). Add a field by adding one
   burn energy and starve; every other NPC ignores the economy entirely, so the
   bestiary and determinism are unaffected. `graze()` feeds energy; metabolism
   (the genome's rate) drains it in `run_extended`, before the think cycle.
-- **Pheromone is lazy + diffusion-free.** `Tile.getPheromone(now)` decays in
-  closed form (`stored · PHERO_DECAY^Δt`) off the world clock; `deposit()` adds
-  to it. There is no spreading sweep — homing (`NPC.nestDirection`) samples a
-  tile neighbourhood for the strongest cell, so nests are local peaks.
+- **Pheromone is a cloud of entities, not a tile field.** A deposit
+  (`World.depositPheromone`) reinforces the nearest `PheromoneCloud` within a
+  merge radius or spawns a fresh one — a cloud has a centre, a radius that grows
+  with strength, and a strength that decays each tick. Sensing
+  (`World.pheromoneAt`) sums nearby clouds with radial falloff; homing
+  (`World.pheromoneDirection`, via `NPC.nestDirection`) heads for the strongest
+  cloud in range, so a repeatedly-marked spot builds a persistent nest. Clouds
+  draw no RNG and never move/collide, so scattering them is determinism-safe.
+  Graphically each renders as a translucent radial haze under the creatures.

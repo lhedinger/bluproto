@@ -36,8 +36,9 @@ public class TestNPC extends NPC {
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
-	/** Pheromone laid on the nest tile at each birth; >> per-tick evaporation. */
-	private static final double NEST_DEPOSIT = 8.0;
+	/** Pheromone laid at the nest at each birth; >> per-tick evaporation, so a
+	 *  repeatedly-marked nest cloud builds a strong persistent peak. */
+	private static final double NEST_DEPOSIT = 12.0;
 	/** How far a nester can smell its nest when homing to breed. */
 	private static final int NEST_SENSE_R = 8;
 	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */

@@ -80,8 +80,14 @@ public class Grid {
 				d.render(g, v);
 			}
 		}
+		// Pheromone clouds first, so the haze sits under the creatures.
 		for (Entity e : world.entities.values()) {
-			if (e != null && e.getLvl() == level) {
+			if (e instanceof PheromoneCloud && e.getLvl() == level) {
+				e.render(g, v);
+			}
+		}
+		for (Entity e : world.entities.values()) {
+			if (e != null && !(e instanceof PheromoneCloud) && e.getLvl() == level) {
 				e.render(g, v);
 			}
 		}
@@ -156,13 +162,6 @@ public class Grid {
 					if (tex != null) {
 						g2.drawImage(tex, sx, sy, ts, ts, null);
 					}
-				}
-				// Pheromone on top: bright blobs are nests, faint smears trails.
-				double ph = t.getPheromone(now);
-				if (ph > 0.05) {
-					int a = (int) Math.min(220, ph * 90);
-					g2.setColor(new Color(230, 40, 190, a));
-					g2.fillRect(sx, sy, ts, ts);
 				}
 			}
 		}
@@ -263,12 +262,6 @@ public class Grid {
 								: new Color((col >> 16) & 255, (col >> 8) & 255, col & 255, alpha));
 						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 					}
-				}
-				double ph = t.getPheromone(now);
-				if (ph > 0.05) {
-					int a = (int) Math.min(200, ph * 90);
-					g2.setColor(new Color(230, 40, 190, a));
-					g2.fillRect(sx, sy, ts, ts);
 				}
 			}
 		}

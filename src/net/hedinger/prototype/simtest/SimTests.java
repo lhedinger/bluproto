@@ -1401,19 +1401,18 @@ public class SimTests {
 		}
 	}
 
-	/** Pheromone evaporates over time (lazy exponential decay off the clock). */
+	/** A pheromone cloud evaporates over time (its strength decays each tick). */
 	static class PheromoneDecays extends Scenario {
 		@Override
 		public void run() {
 			seed(40);
 			World w = room(5, 5);
-			tick(w, 1);
-			Tile t = w.getTile(2, 2, 0);
-			t.deposit(w.getTick(), 10.0);
-			double p0 = t.getPheromone(w.getTick());
-			assertNear("deposited pheromone is present", 10.0, p0, 1e-9);
+			w.depositPheromone(2.5, 2.5, 0, 10.0);
+			tick(w, 1); // drain the spawn queue so the cloud is live
+			double p0 = w.pheromoneAt(2.5, 2.5, 0);
+			assertNear("deposited pheromone is present at its centre", 10.0, p0, 1e-6);
 			tick(w, 200);
-			double p1 = t.getPheromone(w.getTick());
+			double p1 = w.pheromoneAt(2.5, 2.5, 0);
 			assertLess("pheromone evaporated substantially", p1, p0 * 0.5);
 			assertGreater("but has not vanished instantly", p1, 0.0);
 		}
@@ -1440,28 +1439,30 @@ public class SimTests {
 			tick(w, 800);
 			snapshot(w, "after (colony around the nest)");
 
-			// The nest is the strongest pheromone tile.
-			double maxP = 0;
-			int nx = 0, ny = 0;
-			for (int c = 1; c < w.getColums() - 1; c++) {
-				for (int r = 1; r < w.getRows() - 1; r++) {
-					double p = w.getTile(c, r, 0).getPheromone(w.getTick());
-					if (p > maxP) {
-						maxP = p;
-						nx = c;
-						ny = r;
+			// The nest is the strongest pheromone cloud.
+			double maxP = 0, nx = w.getColums() / 2.0, ny = w.getRows() / 2.0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.engine.PheromoneCloud && !e.isRemoved()) {
+					double s = ((net.hedinger.prototype.engine.PheromoneCloud) e).getStrength();
+					if (s > maxP) {
+						maxP = s;
+						nx = e.getX();
+						ny = e.getY();
 					}
 				}
 			}
+			// Nest intensity is what a homing creature actually smells there: the
+			// summed concentration of every cloud overlapping the peak.
+			double nestIntensity = w.pheromoneAt(nx, ny, 0);
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
-			assertGreater("a pheromone nest built up", maxP, 4.0);
+			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
 
 			// The living colony clusters near that nest.
 			double sum = 0;
 			int n = 0;
 			for (Entity e : w.getEntities()) {
 				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
-					sum += Math.hypot(e.getX() - (nx + 0.5), e.getY() - (ny + 0.5));
+					sum += Math.hypot(e.getX() - nx, e.getY() - ny);
 					n++;
 				}
 			}

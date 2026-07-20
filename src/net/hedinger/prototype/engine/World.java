@@ -187,6 +187,73 @@ public class World {
 		return entities.values();
 	}
 
+	// ---- Pheromone: clouds are entities, not a per-tile scalar field --------
+
+	/**
+	 * Lays pheromone at a world point. If a {@link PheromoneCloud} on this level
+	 * is already within {@link PheromoneCloud#MERGE_RADIUS}, it is reinforced (so
+	 * repeated deposits build one growing peak); otherwise a fresh cloud spawns.
+	 */
+	public void depositPheromone(double x, double y, int z, double amount) {
+		PheromoneCloud nearest = null;
+		double best = PheromoneCloud.MERGE_RADIUS * PheromoneCloud.MERGE_RADIUS;
+		for (Entity e : entities.values()) {
+			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
+				double dx = e.getX() - x, dy = e.getY() - y, d = dx * dx + dy * dy;
+				if (d < best) {
+					best = d;
+					nearest = (PheromoneCloud) e;
+				}
+			}
+		}
+		if (nearest != null) {
+			nearest.reinforce(amount);
+		} else {
+			spawnEntity(new PheromoneCloud(x, y, z, amount));
+		}
+	}
+
+	/** Pheromone concentration sensed at a world point: the sum of every cloud on
+	 *  this level, each with its radial falloff. */
+	public double pheromoneAt(double x, double y, int z) {
+		double sum = 0;
+		for (Entity e : entities.values()) {
+			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
+				sum += ((PheromoneCloud) e).concentrationAt(x, y);
+			}
+		}
+		return sum;
+	}
+
+	/**
+	 * Heading from a point toward the strongest pheromone cloud whose centre is
+	 * within {@code radius} tiles, for homing to a nest. Returns {@code NaN} when
+	 * nothing is in range or the point is already essentially at that cloud's
+	 * centre ("you are at the nest").
+	 */
+	public double pheromoneDirection(double x, double y, int z, double radius) {
+		PheromoneCloud best = null;
+		double bestStr = 0, rr = radius * radius;
+		for (Entity e : entities.values()) {
+			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
+				PheromoneCloud c = (PheromoneCloud) e;
+				double dx = c.getX() - x, dy = c.getY() - y;
+				if (dx * dx + dy * dy <= rr && c.getStrength() > bestStr) {
+					bestStr = c.getStrength();
+					best = c;
+				}
+			}
+		}
+		if (best == null) {
+			return Double.NaN;
+		}
+		double dx = best.getX() - x, dy = best.getY() - y;
+		if (dx * dx + dy * dy < 0.36) {
+			return Double.NaN; // already at the nest (~0.6 tile)
+		}
+		return Math.atan2(dy, dx);
+	}
+
 	/**
 	 * Count of living actors (NPCs that are not dead), used by the HUD overlay.
 	 * Excludes transient effects (bullets, explosions, sounds, grenades),

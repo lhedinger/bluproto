@@ -102,7 +102,7 @@ public class FieldAtlas {
 				g.setColor(baseColor(t, f));
 				g.fillRect(px, py, CELL, CELL);
 				if (f.hue != null && !t.isSolid()) {
-					double v = fieldValue(t, f, now);
+					double v = fieldValue(w, t, c, r, level, f, now);
 					double norm = max > 0 ? v / max : 0;
 					if (norm > 0.02) {
 						g.setColor(ramp(f.hue, Math.min(1, norm)));
@@ -150,14 +150,14 @@ public class FieldAtlas {
 		}
 	}
 
-	private static double fieldValue(Tile t, Field f, long now) {
+	private static double fieldValue(World w, Tile t, int c, int r, int level, Field f, long now) {
 		switch (f) {
 		case VEGETATION:
 			return t.getVegetation(now);
 		case FERTILITY:
 			return t.getFertility();
 		case PHEROMONE:
-			return t.getPheromone(now);
+			return w.pheromoneAt(c + 0.5, r + 0.5, level);
 		default:
 			return 0;
 		}
@@ -174,7 +174,7 @@ public class FieldAtlas {
 			double m = 0;
 			for (int c = 0; c < w.getColums(); c++) {
 				for (int r = 0; r < w.getRows(); r++) {
-					m = Math.max(m, w.getTile(c, r, level).getPheromone(now));
+					m = Math.max(m, w.pheromoneAt(c + 0.5, r + 0.5, level));
 				}
 			}
 			return m;
