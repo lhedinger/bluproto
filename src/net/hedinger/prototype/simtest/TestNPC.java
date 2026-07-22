@@ -293,6 +293,17 @@ public class TestNPC extends NPC {
 
 	@Override
 	protected void think() {
+		// If whoever was carrying us is gone, we're free again.
+		if (getAttachTarget() != null && getAttachTarget().isRemoved()) {
+			setGrabbed(false);
+			detach();
+		}
+		// A grabbed captive is immobilized -- no actions while held. A voluntary
+		// rider (attached but not grabbed) is NOT frozen: it keeps grazing,
+		// attacking, breeding, and can let go, all while being carried.
+		if (isGrabbed()) {
+			return;
+		}
 		switch (behavior) {
 		case INERT:
 			return;
@@ -406,12 +417,9 @@ public class TestNPC extends NPC {
 		} else {
 			drop();
 		}
-		// Attach: latch onto and ride a larger host while the actuator is high,
-		// let go when it drops (or the host is gone). Only ever self-release a
-		// voluntary ride -- never a captive grab held by someone else.
-		if (getAttachTarget() != null && !isGrabbed() && getAttachTarget().isRemoved()) {
-			detach();
-		}
+		// Attach: latch onto and ride a larger host while the actuator is high, let
+		// go when it drops. A rider self-releases; a captive stays held (release is
+		// the captor's call, via drop()).
 		if (a[AgentIO.A_ATTACH] > 0.5) {
 			attachToLarger();
 		} else if (getAttachTarget() != null && !isGrabbed()) {

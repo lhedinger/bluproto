@@ -1452,6 +1452,110 @@ public class SimTests {
 		}
 	}
 
+	/** Carrying costs energy: a metabolic carrier holding a captive burns more
+	 *  energy per tick than an identical one carrying nothing -- the extra scales
+	 *  with the carried body weight. */
+	static class CarryingCostsEnergy extends Scenario {
+		@Override
+		public void run() {
+			seed(75);
+			World w = room(12, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] idle = { { Brain.NOP, 0, 0, 0 } };
+			Genome cg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			cg.metabolism = 0.02;
+			cg.brain = new Brain(deepCopy(hold));
+			Genome kg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			kg.metabolism = 0.02;
+			kg.brain = new Brain(deepCopy(idle));
+			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).withEnergy(6.0);
+			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).withEnergy(6.0);
+			TestNPC cargo = TestNPC.inert(6.05, 6.0, 0).withSize(6);
+			w.spawnEntity(carrier);
+			w.spawnEntity(control);
+			w.spawnEntity(cargo);
+			tick(w, 6); // let the carrier pick the cargo up and hold it
+			assertTrue("the carrier is holding the cargo", cargo.getAttachTarget() == carrier);
+			double eCarry = carrier.getEnergy(), eFree = control.getEnergy();
+			tick(w, 100);
+			double lossCarry = eCarry - carrier.getEnergy();
+			double lossFree = eFree - control.getEnergy();
+			assertGreater("carrying a body burns more energy than carrying nothing",
+					lossCarry, lossFree + 0.5);
+		}
+	}
+
+	/** A grabbed captive is immobilized -- it cannot even feed -- while a
+	 *  voluntary rider keeps acting: it still grazes while being carried. */
+	static class CaptiveFrozenRiderActs extends Scenario {
+		@Override
+		public void run() {
+			seed(76);
+			World w = room(20, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] graze = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
+			int[][] rideGraze = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 },
+					{ Brain.WRITE, AgentIO.A_ATTACH, 0, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
+
+			// Pair 1: a grazer captive, grabbed by a bigger carrier -> frozen.
+			Genome carrierG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			carrierG.brain = new Brain(deepCopy(hold));
+			Genome captiveG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			captiveG.brain = new Brain(deepCopy(graze));
+			TestNPC carrier = TestNPC.minded(4.0, 6.0, 0, carrierG);
+			TestNPC captive = TestNPC.minded(4.05, 6.0, 0, captiveG);
+			// Pair 2 (far away): a grazer rider on a bigger, stationary host.
+			Genome riderG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			riderG.brain = new Brain(deepCopy(rideGraze));
+			TestNPC rider = TestNPC.minded(15.05, 6.0, 0, riderG);
+			TestNPC host = TestNPC.roamer(15.0, 6.0, 0).withSize(16).withSpeed(0.0);
+			w.spawnEntity(carrier);
+			w.spawnEntity(captive);
+			w.spawnEntity(rider);
+			w.spawnEntity(host);
+			tick(w, 6); // carrier grabs the captive; rider latches onto the host
+			assertTrue("the captive was grabbed", captive.isGrabbed());
+			assertTrue("the rider latched on voluntarily (not grabbed)",
+					rider.getAttachTarget() == host && !rider.isGrabbed());
+			tick(w, 60);
+			assertNear("a grabbed captive is frozen -- it cannot graze", 0.0, captive.totalIntake(), 1e-9);
+			assertGreater("a voluntary rider keeps grazing while carried", rider.totalIntake(), 0.0);
+		}
+	}
+
+	/** The rider's bonus: a creature riding a host spends less energy than an
+	 *  equivalent one under its own power (reduced metabolism while carried). */
+	static class RiderSpendsLessEnergy extends Scenario {
+		@Override
+		public void run() {
+			seed(77);
+			World w = room(14, 12);
+			int[][] cling = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_ATTACH, 0, 0 } };
+			int[][] idle = { { Brain.NOP, 0, 0, 0 } };
+			Genome riderG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			riderG.metabolism = 0.02;
+			riderG.brain = new Brain(deepCopy(cling));
+			Genome ctrlG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			ctrlG.metabolism = 0.02;
+			ctrlG.brain = new Brain(deepCopy(idle));
+			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withEnergy(6.0);
+			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
+			TestNPC control = TestNPC.brainedBreeder(10.0, 6.0, 0, ctrlG).withEnergy(6.0);
+			w.spawnEntity(rider);
+			w.spawnEntity(host);
+			w.spawnEntity(control);
+			tick(w, 6); // let the rider latch on
+			assertTrue("the rider is riding the host",
+					rider.getAttachTarget() == host && !rider.isGrabbed());
+			double eRide = rider.getEnergy(), eWalk = control.getEnergy();
+			tick(w, 100);
+			double lossRide = eRide - rider.getEnergy();
+			double lossWalk = eWalk - control.getEnergy();
+			assertGreater("riding spends less energy than moving under your own power",
+					lossWalk, lossRide + 0.3);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1641,6 +1745,9 @@ public class SimTests {
 				new BrainMatesViaActuator(),
 				new BrainGrabsSmallerNeighbour(),
 				new BrainAttachesToLargerHost(),
+				new CarryingCostsEnergy(),
+				new CaptiveFrozenRiderActs(),
+				new RiderSpendsLessEnergy(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),

@@ -48,6 +48,11 @@ public abstract class NPC extends Entity {
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	protected static final int REPRO_COOLDOWN = 100;
+	/** Extra energy per tick a carrier burns per unit of carried body weight. */
+	protected static final double CARRY_ENERGY = 0.15;
+	/** Fraction of normal metabolism a voluntary rider pays while carried (its
+	 *  bonus for hitching a ride instead of walking). */
+	protected static final double RIDER_METABOLISM = 0.5;
 
 	public double getEnergy() {
 		return energy;
@@ -189,7 +194,15 @@ public abstract class NPC extends Entity {
 			if (reproCooldown > 0) {
 				reproCooldown--;
 			}
-			energy -= metabolismRate();
+			double base = metabolismRate();
+			// Rider bonus: a creature voluntarily riding a host spends less energy
+			// (it is carried, not walking). A grabbed captive gets no such break.
+			if (getAttachTarget() != null && !isGrabbed()) {
+				base *= RIDER_METABOLISM;
+			}
+			// Carrying burden: pay extra for the total body weight riding on you --
+			// a grabbed captive or a latched-on hitch-hiker both count.
+			energy -= base + getCarriedLoad() * CARRY_ENERGY;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved

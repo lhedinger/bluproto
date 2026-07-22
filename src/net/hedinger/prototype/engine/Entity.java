@@ -29,6 +29,10 @@ public abstract class Entity {
 	private Entity attachTarget = null;
 	private double attachAngle = 0;
 	private boolean grabbed = false;
+	/** Total body weight of everything currently attached to (riding on) this
+	 *  entity -- the load a carrier pays to haul around. Kept as a running sum so
+	 *  a carrier need not scan the world for its riders each tick. */
+	private double carriedLoad = 0;
 
 	protected Sound lastHeardSound = null;
 
@@ -396,11 +400,20 @@ public abstract class Entity {
 		attachAngle = Math.atan2(dy, dx) + Math.PI - target.getDirection();
 
 		attachTarget = target;
+		target.carriedLoad += getSize(); // this body now weighs on the carrier
 		return true;
 	}
 
 	public void detach() {
-		attachTarget = null;
+		if (attachTarget != null) {
+			attachTarget.carriedLoad -= getSize();
+			attachTarget = null;
+		}
+	}
+
+	/** Total weight of everything riding on this entity (0 if it carries nothing). */
+	public double getCarriedLoad() {
+		return carriedLoad;
 	}
 
 	/**
@@ -436,6 +449,7 @@ public abstract class Entity {
 		if (world != null) {
 			world.getTile(X, Y, Z).removeEntity(getID());
 		}
+		detach(); // if we were being carried, stop weighing on the carrier
 	}
 
 	@Override
