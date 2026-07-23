@@ -42,6 +42,20 @@ public class Tile {
 	// so the map has rich and poor habitats instead of uniform pasture.
 	private double fertility = 1.0;
 
+	// Tall grass is a purely cosmetic overlay: blades drawn on top of the ground
+	// that bend aside as entities pass through. It has NO effect on movement,
+	// perception, vegetation, or anything the simulation reads -- it is only a
+	// render flag (unlike TYPE_COVER, which does hide entities from perception).
+	private boolean tallGrass = false;
+
+	public boolean hasTallGrass() {
+		return tallGrass;
+	}
+
+	public void setTallGrass(boolean on) {
+		tallGrass = on;
+	}
+
 	// Pheromone is no longer a per-tile field: it lives as PheromoneCloud
 	// entities (a centre + radius + decaying strength), deposited and sensed
 	// through World.depositPheromone / pheromoneAt / pheromoneDirection.

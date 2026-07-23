@@ -62,17 +62,13 @@ public class Grid {
 			return;
 		}
 
+		int ox = v.pixelX(0, level, 0);
+		int oy = v.pixelY(0, level, 0);
 		if (camDepth == 0) {
-			int ox = v.pixelX(0, level, 0);
-			int oy = v.pixelY(0, level, 0);
 			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
 			renderGround(g2, ox, oy);
 		} else {
-			g2.drawImage(
-					lr.mapLayers[level].image_layer_downsized[camDepth - 1],
-					v.pixelX(0, level, 0),
-					v.pixelY(0, level, 0),
-					null);
+			g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
 		}
 
 		for (Entity d : doors) {
@@ -92,6 +88,95 @@ public class Grid {
 			}
 		}
 
+		if (camDepth == 0) {
+			renderTallGrass(g2, ox, oy);
+		}
+	}
+
+	/**
+	 * Draws the cosmetic tall-grass overlay on top of everything: on every
+	 * {@link Tile#hasTallGrass() tall-grass} tile a few blades rise from the
+	 * ground, sway gently with a wind oscillation, and -- the point of it -- bend
+	 * aside from any entity passing through, so creatures visibly part the grass
+	 * as they move. Purely visual: nothing here is read by the simulation.
+	 */
+	private void renderTallGrass(Graphics2D g2, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		long tick = world.getTick();
+		final double R = 1.1;         // tiles: how close an entity must be to bend a blade
+		final double MAX_BEND = 0.35; // tiles: cap on how far a blade tip is pushed
+		final int BLADES = 7;
+
+		// Entity foot positions on this level, gathered once for the bend test.
+		java.util.ArrayList<double[]> feet = new java.util.ArrayList<double[]>();
+		for (Entity e : world.entities.values()) {
+			if (e != null && e.getLvl() == level && !e.isRemoved()) {
+				feet.add(new double[] { e.getX(), e.getY() });
+			}
+		}
+
+		Object aa = g2.getRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING);
+		g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				if (!tiles[x][y].hasTallGrass()) {
+					continue;
+				}
+				for (int b = 0; b < BLADES; b++) {
+					int h = ((x * 73856093) ^ (y * 19349663) ^ (b * 83492791));
+					double fx = 0.16 + 0.68 * frac(h * 0.001);          // blade base within tile
+					double fy = 0.55 + 0.4 * frac(h * 0.00037);
+					double height = 0.55 + 0.35 * frac(h * 0.0009);     // blade height in tiles
+					double baseWx = x + fx, baseWy = y + fy;
+
+					double push = 0;
+					for (double[] f : feet) {
+						double dx = baseWx - f[0], dy = baseWy - f[1];
+						double d = Math.hypot(dx, dy);
+						if (d < R && d > 1e-4) {
+							double infl = (1 - d / R);
+							push += (dx / d) * infl * infl; // lean away from the entity
+						}
+					}
+					push = Math.max(-1, Math.min(1, push)) * MAX_BEND; // cap the lean
+					double wind = Math.sin(tick * 0.06 + baseWx * 0.8 + baseWy * 0.5) * 0.07;
+					double tipWx = baseWx + push + wind;
+					double tipWy = baseWy - height;
+
+					int bx = ox + (int) (baseWx * ts), by = oy + (int) (baseWy * ts);
+					int tx = ox + (int) (tipWx * ts), tyy = oy + (int) (tipWy * ts);
+					int wpx = Math.max(3, ts / 16); // blade base half-width in px
+					drawBlade(g2, bx, by, tx, tyy, wpx, h);
+				}
+			}
+		}
+		if (aa != null) {
+			g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, aa);
+		}
+	}
+
+	private void drawBlade(Graphics2D g2, int bx, int by, int tx, int ty, int w, int hash) {
+		// A tapered blade: wide at the root, a point at the tip, lit brighter toward
+		// the top. Colour varies a touch per blade so a clump isn't uniform.
+		int tint = (hash & 31) - 16;
+		java.awt.Color root = new java.awt.Color(clampc(46 + tint), clampc(112 + tint), clampc(52 + tint));
+		java.awt.Color tip = new java.awt.Color(clampc(104 + tint), clampc(182 + tint), clampc(92 + tint));
+		java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
+		p.moveTo(bx - w, by);
+		p.lineTo(bx + w, by);
+		p.lineTo(tx, ty);
+		p.closePath();
+		g2.setPaint(new java.awt.GradientPaint(bx, by, root, tx, ty, tip));
+		g2.fill(p);
+	}
+
+	private static double frac(double v) {
+		v = Math.abs(v);
+		return v - Math.floor(v);
+	}
+
+	private static int clampc(int c) {
+		return c < 0 ? 0 : (c > 255 ? 255 : c);
 	}
 
 	/**
