@@ -61,9 +61,13 @@ public final class AgentIO {
 	/** Latch onto the nearest <i>larger</i> neighbour in reach and ride it while
 	 *  &gt; 0.5 (a voluntary hitch-hike); dropping below lets go. */
 	public static final int A_ATTACH = 7;
-	public static final int NUM_ACT = 8;
+	/** Resist being carried, 0..1. While grabbed, a captive struggles to make
+	 *  itself costlier to haul -- the harder it fights the more energy its captor
+	 *  spends and the more it tires itself. Ignored when not grabbed. */
+	public static final int A_STRUGGLE = 8;
+	public static final int NUM_ACT = 9;
 	public static final String[] ACT_NAMES = {
-			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach" };
+			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle" };
 
 	private AgentIO() {
 	}

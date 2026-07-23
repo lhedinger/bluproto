@@ -53,6 +53,21 @@ public abstract class NPC extends Entity {
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
 	protected static final double RIDER_METABOLISM = 0.5;
+	/** Extra energy a captor burns per tick per unit of (weight x struggle) -- the
+	 *  surcharge for hauling an unwilling captive over a consenting passenger. */
+	protected static final double STRUGGLE_CARRIER_COST = 0.35;
+	/** Energy a struggling captive burns itself per tick per unit of struggle --
+	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
+	protected static final double STRUGGLE_SELF_COST = 0.02;
+
+	/** Removes energy (never below zero); used when another entity imposes a cost,
+	 *  e.g. a struggling captive draining its captor. */
+	public void drainEnergy(double amount) {
+		energy -= amount;
+		if (energy < 0) {
+			energy = 0;
+		}
+	}
 
 	public double getEnergy() {
 		return energy;

@@ -298,10 +298,11 @@ public class TestNPC extends NPC {
 			setGrabbed(false);
 			detach();
 		}
-		// A grabbed captive is immobilized -- no actions while held. A voluntary
-		// rider (attached but not grabbed) is NOT frozen: it keeps grazing,
-		// attacking, breeding, and can let go, all while being carried.
+		// A grabbed captive can do only two things: struggle and communicate. A
+		// voluntary rider (attached but not grabbed) is NOT frozen -- it keeps
+		// grazing, attacking, breeding, and can let go, all while carried.
 		if (isGrabbed()) {
+			struggleWhileHeld();
 			return;
 		}
 		switch (behavior) {
@@ -454,6 +455,33 @@ public class TestNPC extends NPC {
 			if (n.getSize() > getSize() && attachTo(n)) {
 				return;
 			}
+		}
+	}
+
+	/** A grabbed captive's only outlet: it senses, then may struggle -- making
+	 * itself costlier to haul while tiring itself -- and communicate (lay a
+	 * distress pheromone). It cannot move, feed, fight, mate, or break free. */
+	private void struggleWhileHeld() {
+		if (mind == null) {
+			return; // a mindless captive just goes limp
+		}
+		senseInto(sensors);
+		mind.think(sensors, actuators);
+		double s = clampUnit(actuators[AgentIO.A_STRUGGLE]);
+		if (s > 0) {
+			if (getAttachTarget() instanceof NPC) {
+				// Fighting makes the captive heavier to hold for its captor...
+				((NPC) getAttachTarget()).drainEnergy(getSize() * s * STRUGGLE_CARRIER_COST);
+			}
+			energy -= s * STRUGGLE_SELF_COST; // ...and exhausts the captive itself
+			if (energy < 0) {
+				energy = 0;
+			}
+		}
+		// Communicate: even pinned, a captive can still lay pheromone -- a distress
+		// marker other creatures could read.
+		if (actuators[AgentIO.A_DEPOSIT] > 0.5) {
+			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
 	}
 

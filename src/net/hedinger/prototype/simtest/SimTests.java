@@ -1556,6 +1556,77 @@ public class SimTests {
 		}
 	}
 
+	/** Struggle vs consent: hauling a captive that fights (A_STRUGGLE) costs its
+	 *  captor more energy than an equally heavy captive that consents, and the
+	 *  struggling captive tires itself out in the process. */
+	static class StrugglingCostsMoreThanConsenting extends Scenario {
+		@Override
+		public void run() {
+			seed(78);
+			World w = room(20, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] fight = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_STRUGGLE, 0, 0 } };
+			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
+
+			// Pair A: captor + a struggling captive.
+			Genome capAG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			capAG.metabolism = 0.02;
+			capAG.brain = new Brain(deepCopy(hold));
+			Genome vicAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vicAG.brain = new Brain(deepCopy(fight));
+			TestNPC captorA = TestNPC.brainedBreeder(4.0, 6.0, 0, capAG).withEnergy(9.0);
+			TestNPC struggler = TestNPC.minded(4.05, 6.0, 0, vicAG).withEnergy(6.0);
+			// Pair B (far off): captor + a consenting (limp) captive.
+			Genome capBG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			capBG.metabolism = 0.02;
+			capBG.brain = new Brain(deepCopy(hold));
+			Genome vicBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vicBG.brain = new Brain(deepCopy(limp));
+			TestNPC captorB = TestNPC.brainedBreeder(15.0, 6.0, 0, capBG).withEnergy(9.0);
+			TestNPC consenter = TestNPC.minded(15.05, 6.0, 0, vicBG).withEnergy(6.0);
+			w.spawnEntity(captorA);
+			w.spawnEntity(struggler);
+			w.spawnEntity(captorB);
+			w.spawnEntity(consenter);
+			tick(w, 6); // captors grab their captives and hold
+			assertTrue("the struggler is held", struggler.isGrabbed() && struggler.getAttachTarget() == captorA);
+			assertTrue("the consenter is held", consenter.isGrabbed() && consenter.getAttachTarget() == captorB);
+			double capA0 = captorA.getEnergy(), capB0 = captorB.getEnergy();
+			double vicA0 = struggler.getEnergy(), vicB0 = consenter.getEnergy();
+			tick(w, 80);
+			double capALoss = capA0 - captorA.getEnergy(), capBLoss = capB0 - captorB.getEnergy();
+			double vicALoss = vicA0 - struggler.getEnergy(), vicBLoss = vicB0 - consenter.getEnergy();
+			assertGreater("hauling a struggling captive costs the captor more than a consenting one",
+					capALoss, capBLoss + 0.5);
+			assertGreater("struggling drains the captive's own energy too", vicALoss, vicBLoss + 0.5);
+		}
+	}
+
+	/** A grabbed captive is otherwise frozen, but it can still communicate: it may
+	 *  lay a pheromone (a distress marker) while held. */
+	static class CaptiveCanStillCommunicate extends Scenario {
+		@Override
+		public void run() {
+			seed(79);
+			World w = room(12, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] signal = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_DEPOSIT, 0, 0 } };
+			Genome capG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			capG.brain = new Brain(deepCopy(hold));
+			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vicG.brain = new Brain(deepCopy(signal));
+			TestNPC captor = TestNPC.minded(6.0, 6.0, 0, capG);
+			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG);
+			w.spawnEntity(captor);
+			w.spawnEntity(captive);
+			tick(w, 6);
+			assertTrue("the captive is held", captive.isGrabbed());
+			tick(w, 30);
+			double phero = w.pheromoneAt(captive.getX(), captive.getY(), 0);
+			assertGreater("a held captive can still lay a distress pheromone", phero, 0.0);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1748,6 +1819,8 @@ public class SimTests {
 				new CarryingCostsEnergy(),
 				new CaptiveFrozenRiderActs(),
 				new RiderSpendsLessEnergy(),
+				new StrugglingCostsMoreThanConsenting(),
+				new CaptiveCanStillCommunicate(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
