@@ -181,6 +181,13 @@ public abstract class NPC extends Entity {
 
 	@Override
 	protected void run_extended() {
+		// A corpse holds no prisoners: if we died while carrying a captive, let it
+		// go so it isn't clamped to a dead body (the captive also frees itself when
+		// it sees its carrier is dead -- this clears our stale grip either way).
+		if (isDead() && grabbing != null) {
+			drop();
+		}
+
 		PrototypeWorld.stopwatch.start();
 		targets = scanTargets(targets);
 		PrototypeWorld.stopwatch.stop();

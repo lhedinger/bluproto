@@ -293,8 +293,9 @@ public class TestNPC extends NPC {
 
 	@Override
 	protected void think() {
-		// If whoever was carrying us is gone, we're free again.
-		if (getAttachTarget() != null && getAttachTarget().isRemoved()) {
+		// If whoever was carrying us is dead or gone, we're free again -- a captive
+		// isn't clamped to a corpse.
+		if (getAttachTarget() != null && (getAttachTarget().isDead() || getAttachTarget().isRemoved())) {
 			setGrabbed(false);
 			detach();
 		}

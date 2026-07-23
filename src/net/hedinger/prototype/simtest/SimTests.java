@@ -1627,6 +1627,37 @@ public class SimTests {
 		}
 	}
 
+	/** A captive is freed the moment its captor dies -- it is not left clamped to
+	 *  the corpse, and it no longer weighs on it. */
+	static class CaptiveFreedWhenCaptorDies extends Scenario {
+		@Override
+		public void run() {
+			seed(80);
+			World w = room(12, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
+			// A captor that will starve shortly after grabbing (little energy, fast
+			// metabolism), holding a smaller captive.
+			Genome capG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			capG.metabolism = 0.05;
+			capG.brain = new Brain(deepCopy(hold));
+			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vicG.brain = new Brain(deepCopy(limp));
+			TestNPC captor = TestNPC.brainedBreeder(6.0, 6.0, 0, capG).withEnergy(0.6);
+			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG);
+			w.spawnEntity(captor);
+			w.spawnEntity(captive);
+			tick(w, 4);
+			assertTrue("the captive is grabbed while the captor lives", captive.isGrabbed());
+			assertTrue("the captor still lives at this point", !captor.isDead());
+			tick(w, 40); // the captor starves
+			assertTrue("the captor died", captor.isDead());
+			assertTrue("the captive was released from the dead captor", captive.getAttachTarget() == null);
+			assertTrue("the captive is no longer marked grabbed", !captive.isGrabbed());
+			assertNear("the corpse carries no load", 0.0, captor.getCarriedLoad(), 1e-9);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1821,6 +1852,7 @@ public class SimTests {
 				new RiderSpendsLessEnergy(),
 				new StrugglingCostsMoreThanConsenting(),
 				new CaptiveCanStillCommunicate(),
+				new CaptiveFreedWhenCaptorDies(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
