@@ -1658,6 +1658,66 @@ public class SimTests {
 		}
 	}
 
+	/** Carrying a body aloft is far costlier: a flying carrier burns much more
+	 *  energy per tick than a grounded one hauling the same weight. */
+	static class FlyingCarrierPaysMore extends Scenario {
+		@Override
+		public void run() {
+			seed(83);
+			World w = room(16, 12);
+			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
+			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
+			Genome fG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			fG.metabolism = 0.02;
+			fG.brain = new Brain(deepCopy(hold));
+			Genome gG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			gG.metabolism = 0.02;
+			gG.brain = new Brain(deepCopy(hold));
+			TestNPC flier = TestNPC.brainedBreeder(4.0, 6.0, 0, fG).withEnergy(14.0).withFlying();
+			TestNPC ground = TestNPC.brainedBreeder(12.0, 6.0, 0, gG).withEnergy(14.0);
+			Genome vAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vAG.brain = new Brain(deepCopy(limp));
+			Genome vBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			vBG.brain = new Brain(deepCopy(limp));
+			TestNPC preyA = TestNPC.minded(4.05, 6.0, 0, vAG);
+			TestNPC preyB = TestNPC.minded(12.05, 6.0, 0, vBG);
+			w.spawnEntity(flier);
+			w.spawnEntity(ground);
+			w.spawnEntity(preyA);
+			w.spawnEntity(preyB);
+			tick(w, 6);
+			assertTrue("the flier grabbed its prey", preyA.isGrabbed());
+			assertTrue("the ground carrier grabbed its prey", preyB.isGrabbed());
+			double f0 = flier.getEnergy(), g0 = ground.getEnergy();
+			tick(w, 80);
+			double fLoss = f0 - flier.getEnergy(), gLoss = g0 - ground.getEnergy();
+			assertGreater("hauling a body aloft costs a flier far more than a ground carrier",
+					fLoss, gLoss + 1.5);
+		}
+	}
+
+	/** A grounded creature cannot seize a flyer out of the air, though it can still
+	 *  grab grounded creatures, and a flyer can seize another flyer. */
+	static class GroundCannotGrabFlyer extends Scenario {
+		@Override
+		public void run() {
+			seed(82);
+			World w = room(12, 12);
+			TestNPC ground = TestNPC.inert(5.5, 5.5, 0).withSize(8);
+			TestNPC flyer = TestNPC.inert(5.54, 5.5, 0).withSize(4).withFlying();
+			TestNPC walker = TestNPC.inert(5.5, 5.54, 0).withSize(4);
+			TestNPC airGrabber = TestNPC.inert(5.54, 5.54, 0).withSize(8).withFlying();
+			w.spawnEntity(ground);
+			w.spawnEntity(flyer);
+			w.spawnEntity(walker);
+			w.spawnEntity(airGrabber);
+			w.think();
+			assertTrue("a grounded creature cannot seize a flyer", !ground.grab(flyer));
+			assertTrue("a grounded creature can still seize a grounded one", ground.grab(walker));
+			assertTrue("a flyer can seize another flyer", airGrabber.grab(flyer));
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1853,6 +1913,8 @@ public class SimTests {
 				new StrugglingCostsMoreThanConsenting(),
 				new CaptiveCanStillCommunicate(),
 				new CaptiveFreedWhenCaptorDies(),
+				new FlyingCarrierPaysMore(),
+				new GroundCannotGrabFlyer(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),

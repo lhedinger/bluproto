@@ -59,6 +59,9 @@ public abstract class NPC extends Entity {
 	/** Energy a struggling captive burns itself per tick per unit of struggle --
 	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
 	protected static final double STRUGGLE_SELF_COST = 0.02;
+	/** Multiplier on the carry cost when the carrier is flying: hauling a body
+	 *  through the air burns far more than dragging it over the ground. */
+	protected static final double FLIER_CARRY_MULTIPLIER = 5.0;
 
 	/** Removes energy (never below zero); used when another entity imposes a cost,
 	 *  e.g. a struggling captive draining its captor. */
@@ -223,8 +226,13 @@ public abstract class NPC extends Entity {
 				base *= RIDER_METABOLISM;
 			}
 			// Carrying burden: pay extra for the total body weight riding on you --
-			// a grabbed captive or a latched-on hitch-hiker both count.
-			energy -= base + getCarriedLoad() * CARRY_ENERGY;
+			// a grabbed captive or a latched-on hitch-hiker both count. Holding a
+			// body aloft is far costlier than dragging it along the ground.
+			double carry = getCarriedLoad() * CARRY_ENERGY;
+			if (isFlying()) {
+				carry *= FLIER_CARRY_MULTIPLIER;
+			}
+			energy -= base + carry;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved
@@ -1462,6 +1470,9 @@ public abstract class NPC extends Entity {
 
 		if (ent.getSize() > getSize()) {
 			return false;
+		}
+		if (ent.isFlying() && !isFlying()) {
+			return false; // a grounded creature can't seize a flyer out of the air
 		}
 		D = Math.atan2(-Y + ent.getY(), -X + ent.getX());
 		if (ent.attachToTarget(this)) {
