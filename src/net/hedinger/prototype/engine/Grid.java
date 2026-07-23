@@ -67,6 +67,7 @@ public class Grid {
 		if (camDepth == 0) {
 			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
 			renderGround(g2, ox, oy);
+			renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
 		} else {
 			g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
 		}
@@ -87,27 +88,25 @@ public class Grid {
 				e.render(g, v);
 			}
 		}
-
-		if (camDepth == 0) {
-			renderTallGrass(g2, ox, oy);
-		}
 	}
 
 	/**
-	 * Draws the cosmetic tall-grass overlay on top of everything: on every
-	 * {@link Tile#hasTallGrass() tall-grass} tile a few blades rise from the
-	 * ground, sway gently with a wind oscillation, and -- the point of it -- bend
-	 * aside from any entity passing through, so creatures visibly part the grass
-	 * as they move. Purely visual: nothing here is read by the simulation.
+	 * Draws the cosmetic tall-grass overlay as a top-down field: on every
+	 * {@link Tile#hasTallGrass() tall-grass} tile a scatter of little pixel tufts.
+	 * A tuft slides aside from a nearby entity (the grass parts as a creature
+	 * passes) and, when a creature is right on top of it, is pressed flat -- drawn
+	 * as a smaller, darker mark -- so a walked-over trail of trampled grass is left
+	 * behind. Purely visual: nothing here is read by the simulation.
 	 */
 	private void renderTallGrass(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
 		long tick = world.getTick();
-		final double R = 1.1;         // tiles: how close an entity must be to bend a blade
-		final double MAX_BEND = 0.35; // tiles: cap on how far a blade tip is pushed
-		final int BLADES = 7;
+		final double R = 0.9;          // tiles: how close an entity parts a tuft aside
+		final double MAX_SHIFT = 0.32; // tiles: how far a tuft can slide
+		final double FOOT = 0.45;      // tiles: an entity within this flattens the grass
+		final int TUFTS = 10;
+		int dot = Math.max(4, ts / 8);
 
-		// Entity foot positions on this level, gathered once for the bend test.
 		java.util.ArrayList<double[]> feet = new java.util.ArrayList<double[]>();
 		for (Entity e : world.entities.values()) {
 			if (e != null && e.getLvl() == level && !e.isRemoved()) {
@@ -115,59 +114,63 @@ public class Grid {
 			}
 		}
 
-		Object aa = g2.getRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING);
-		g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				if (!tiles[x][y].hasTallGrass()) {
 					continue;
 				}
-				for (int b = 0; b < BLADES; b++) {
-					int h = ((x * 73856093) ^ (y * 19349663) ^ (b * 83492791));
-					double fx = 0.16 + 0.68 * frac(h * 0.001);          // blade base within tile
-					double fy = 0.55 + 0.4 * frac(h * 0.00037);
-					double height = 0.55 + 0.35 * frac(h * 0.0009);     // blade height in tiles
-					double baseWx = x + fx, baseWy = y + fy;
+				for (int t = 0; t < TUFTS; t++) {
+					int h = ((x * 73856093) ^ (y * 19349663) ^ (t * 83492791));
+					double wx = x + 0.12 + 0.76 * frac(h * 0.001);
+					double wy = y + 0.12 + 0.76 * frac(h * 0.00037);
 
-					double push = 0;
+					double sx = 0, sy = 0, flat = 0;
 					for (double[] f : feet) {
-						double dx = baseWx - f[0], dy = baseWy - f[1];
+						double dx = wx - f[0], dy = wy - f[1];
 						double d = Math.hypot(dx, dy);
 						if (d < R && d > 1e-4) {
 							double infl = (1 - d / R);
-							push += (dx / d) * infl * infl; // lean away from the entity
+							infl *= infl;
+							sx += (dx / d) * infl; // slide away from the entity
+							sy += (dy / d) * infl;
+						}
+						if (d < FOOT) {
+							flat = Math.max(flat, 1 - d / FOOT); // pressed down underfoot
 						}
 					}
-					push = Math.max(-1, Math.min(1, push)) * MAX_BEND; // cap the lean
-					double wind = Math.sin(tick * 0.06 + baseWx * 0.8 + baseWy * 0.5) * 0.07;
-					double tipWx = baseWx + push + wind;
-					double tipWy = baseWy - height;
-
-					int bx = ox + (int) (baseWx * ts), by = oy + (int) (baseWy * ts);
-					int tx = ox + (int) (tipWx * ts), tyy = oy + (int) (tipWy * ts);
-					int wpx = Math.max(3, ts / 16); // blade base half-width in px
-					drawBlade(g2, bx, by, tx, tyy, wpx, h);
+					double m = Math.hypot(sx, sy);
+					if (m > 1) {
+						sx /= m;
+						sy /= m;
+					}
+					double wind = Math.sin(tick * 0.07 + wx * 0.9 + wy * 0.6) * 0.05;
+					double px = wx + sx * MAX_SHIFT + wind, py = wy + sy * MAX_SHIFT;
+					int cx = ox + (int) (px * ts), cy = oy + (int) (py * ts);
+					drawTuft(g2, cx, cy, dot, flat, h);
 				}
 			}
 		}
-		if (aa != null) {
-			g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, aa);
-		}
 	}
 
-	private void drawBlade(Graphics2D g2, int bx, int by, int tx, int ty, int w, int hash) {
-		// A tapered blade: wide at the root, a point at the tip, lit brighter toward
-		// the top. Colour varies a touch per blade so a clump isn't uniform.
-		int tint = (hash & 31) - 16;
-		java.awt.Color root = new java.awt.Color(clampc(46 + tint), clampc(112 + tint), clampc(52 + tint));
-		java.awt.Color tip = new java.awt.Color(clampc(104 + tint), clampc(182 + tint), clampc(92 + tint));
-		java.awt.geom.Path2D.Double p = new java.awt.geom.Path2D.Double();
-		p.moveTo(bx - w, by);
-		p.lineTo(bx + w, by);
-		p.lineTo(tx, ty);
-		p.closePath();
-		g2.setPaint(new java.awt.GradientPaint(bx, by, root, tx, ty, tip));
-		g2.fill(p);
+	private void drawTuft(Graphics2D g2, int cx, int cy, int dot, double flat, int hash) {
+		int tint = (hash & 15) - 7;
+		if (flat > 0.15) {
+			// Trampled: a small dark mark pressed flat against the ground.
+			int s = Math.max(2, (int) (dot * (1.0 - 0.5 * flat)));
+			g2.setColor(new java.awt.Color(clampc(28 + tint), clampc(54 + tint), clampc(28 + tint)));
+			g2.fillRect(cx - s / 2, cy, s, Math.max(2, s / 3));
+			return;
+		}
+		int s = dot;
+		// A drop shadow just below sells the tuft as standing above the ground.
+		g2.setColor(new java.awt.Color(18, 36, 20, 150));
+		g2.fillRect(cx - s / 2, cy + s / 4, s, Math.max(2, s / 3));
+		// Body + a bright, sunlit top so tall grass reads distinctly against the
+		// finer ground texture.
+		g2.setColor(new java.awt.Color(clampc(70 + tint), clampc(138 + tint), clampc(64 + tint)));
+		g2.fillRect(cx - s / 2, cy - s / 2, s, s);
+		g2.setColor(new java.awt.Color(clampc(150 + tint), clampc(206 + tint), clampc(112 + tint)));
+		g2.fillRect(cx - s / 2, cy - s / 2, s, Math.max(1, s / 2));
 	}
 
 	private static double frac(double v) {

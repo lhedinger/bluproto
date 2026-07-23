@@ -75,36 +75,13 @@ public final class GroundTextures {
 		}
 	}
 
-	/** Colour for a ground class at a world position. A broad, gentle noise nudges
-	 *  the base colour slightly toward its shadow or highlight and blends
-	 *  continuously -- soft meadow shading rather than hard, high-contrast camo
-	 *  patches. */
+	/** Colour for a ground class at a world position. Keeps the full three-shade
+	 *  contrast (crisp, pixelated) but samples a finer-grained noise, so shadow and
+	 *  highlight scatter as small speckles/clumps -- a textured surface rather than
+	 *  the tile-sized blobs that read as camouflage. */
 	public static int groundColor(int cls, double wx, double wy) {
-		double sh = Utils.noise2(wx, wy, 0.45);     // broader, softer blobs
-		double d = (sh - 0.5) * 2.0 * SHADE_AMP;    // small signed deviation from base
-		int base = RAMP[cls][1];
-		int target = d < 0 ? RAMP[cls][0] : RAMP[cls][2];
-		return lerpRgb(base, target, Math.abs(d));
-	}
-
-	/** How far the shade noise pushes toward shadow/highlight (0 = flat, 1 = full
-	 *  ramp). Kept low so ground reads smooth. */
-	private static final double SHADE_AMP = 0.4;
-
-	/** Linear blend between two packed 0xRRGGBB colours. */
-	private static int lerpRgb(int a, int b, double t) {
-		if (t <= 0) {
-			return a;
-		}
-		if (t >= 1) {
-			return b;
-		}
-		int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-		int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-		int r = (int) (ar + (br - ar) * t);
-		int gg = (int) (ag + (bg - ag) * t);
-		int bl = (int) (ab + (bb - ab) * t);
-		return (r << 16) | (gg << 8) | bl;
+		double sh = Utils.noise2(wx, wy, 3.7);
+		return RAMP[cls][sh < 0.32 ? 0 : (sh > 0.80 ? 2 : 1)];
 	}
 
 	/** A specific ramp shade (0 shadow, 1 base, 2 highlight) for a class. */
