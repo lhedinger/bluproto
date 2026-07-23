@@ -62,6 +62,23 @@ public abstract class NPC extends Entity {
 	/** Multiplier on the carry cost when the carrier is flying: hauling a body
 	 *  through the air burns far more than dragging it over the ground. */
 	protected static final double FLIER_CARRY_MULTIPLIER = 5.0;
+	/** Energy a carrier burns per tick per unit of buck effort (shaking riders
+	 *  off is exhausting, just like a captive's struggle). */
+	protected static final double BUCK_SELF_COST = 0.02;
+	/** Buck effort needed to throw a same-size rider; scaled by host/rider size,
+	 *  so a much smaller rider (tighter relative grip) is far harder to dislodge. */
+	protected static final double BUCK_GRIP = 8.0;
+	/** Ticks a just-bucked rider cannot re-attach, so it is actually thrown clear. */
+	protected static final int BUCK_COOLDOWN = 200;
+
+	/** Ticks remaining before this creature may latch onto a host again (set when
+	 *  it is bucked off). */
+	protected int attachCooldown = 0;
+
+	/** Bars this creature from re-attaching for a while (used when it is bucked off). */
+	public void startAttachCooldown(int ticks) {
+		attachCooldown = ticks;
+	}
 
 	/** Removes energy (never below zero); used when another entity imposes a cost,
 	 *  e.g. a struggling captive draining its captor. */
@@ -189,6 +206,9 @@ public abstract class NPC extends Entity {
 		// it sees its carrier is dead -- this clears our stale grip either way).
 		if (isDead() && grabbing != null) {
 			drop();
+		}
+		if (attachCooldown > 0) {
+			attachCooldown--;
 		}
 
 		PrototypeWorld.stopwatch.start();
@@ -1474,6 +1494,9 @@ public abstract class NPC extends Entity {
 		if (ent.isFlying() && !isFlying()) {
 			return false; // a grounded creature can't seize a flyer out of the air
 		}
+		if (ent.getCarriedLoad() > 0) {
+			return false; // can't seize something already carrying others
+		}
 		D = Math.atan2(-Y + ent.getY(), -X + ent.getX());
 		if (ent.attachToTarget(this)) {
 			ent.setGrabbed(true);
@@ -1505,6 +1528,12 @@ public abstract class NPC extends Entity {
 	public boolean attachTo(Entity host) {
 		if (host == null || getAttachTarget() != null) {
 			return false;
+		}
+		if (attachCooldown > 0) {
+			return false; // just bucked off -- can't grab back on yet
+		}
+		if (getCarriedLoad() > 0 || grabbing != null) {
+			return false; // can't be carried while carrying (no carry-and-be-carried)
 		}
 		double dist = distance(host);
 		double minDist = host.getSize() / 2 + getSize() / 2;

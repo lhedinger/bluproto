@@ -33,6 +33,9 @@ public abstract class Entity {
 	 *  entity -- the load a carrier pays to haul around. Kept as a running sum so
 	 *  a carrier need not scan the world for its riders each tick. */
 	private double carriedLoad = 0;
+	/** Accumulated force a carrier has applied trying to buck this entity off its
+	 *  back; when it exceeds this rider's grip it is thrown clear. Reset on detach. */
+	private double buckPressure = 0;
 
 	protected Sound lastHeardSound = null;
 
@@ -409,11 +412,21 @@ public abstract class Entity {
 			attachTarget.carriedLoad -= getSize();
 			attachTarget = null;
 		}
+		buckPressure = 0;
 	}
 
 	/** Total weight of everything riding on this entity (0 if it carries nothing). */
 	public double getCarriedLoad() {
 		return carriedLoad;
+	}
+
+	public double getBuckPressure() {
+		return buckPressure;
+	}
+
+	/** Adds to the bucking force accumulated against this rider's grip. */
+	public void addBuckPressure(double amount) {
+		buckPressure += amount;
 	}
 
 	/**

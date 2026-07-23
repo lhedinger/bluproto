@@ -61,9 +61,11 @@ public final class AgentIO {
 	/** Latch onto the nearest <i>larger</i> neighbour in reach and ride it while
 	 *  &gt; 0.5 (a voluntary hitch-hike); dropping below lets go. */
 	public static final int A_ATTACH = 7;
-	/** Resist being carried, 0..1. While grabbed, a captive struggles to make
-	 *  itself costlier to haul -- the harder it fights the more energy its captor
-	 *  spends and the more it tires itself. Ignored when not grabbed. */
+	/** Resist an attachment, 0..1 -- role-dependent, since a creature can't carry
+	 *  and be carried at once. While grabbed, a captive <b>struggles</b>: it makes
+	 *  itself costlier to haul and tires itself. While carrying riders, the same
+	 *  signal <b>bucks</b>: it spends energy trying to throw them off (a bigger
+	 *  parasite comes loose sooner than a small one that clings tighter). */
 	public static final int A_STRUGGLE = 8;
 	public static final int NUM_ACT = 9;
 	public static final String[] ACT_NAMES = {

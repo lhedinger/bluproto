@@ -427,12 +427,43 @@ public class TestNPC extends NPC {
 		} else if (getAttachTarget() != null && !isGrabbed()) {
 			detach();
 		}
+		// Buck: the same struggle actuator, seen from the carrier's side. When we
+		// are carrying riders (and not carried ourselves), struggling means trying
+		// to shake them off -- which tires us and, per rider, builds up buck effort.
+		if (getCarriedLoad() > 0 && getAttachTarget() == null && a[AgentIO.A_STRUGGLE] > 0) {
+			buckRiders(clampUnit(a[AgentIO.A_STRUGGLE]));
+		}
+	}
+
+	/** Shakes at riders clinging to this creature. Bucking costs energy every tick;
+	 * for each voluntary rider it accumulates effort against that rider's grip
+	 * (a smaller rider clings tighter, so it is far harder to throw). A rider whose
+	 * grip is overcome is flung clear and cannot re-attach for a while. Its own
+	 * grabbed captive (which it wants to keep) is never bucked. */
+	private void buckRiders(double s) {
+		energy -= s * BUCK_SELF_COST;
+		if (energy < 0) {
+			energy = 0;
+		}
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (e.getAttachTarget() != this || e.isGrabbed() || e.isRemoved()) {
+				continue; // not a voluntary rider of ours
+			}
+			e.addBuckPressure(s);
+			double grip = BUCK_GRIP * (getSize() / e.getSize()); // smaller rider -> tighter grip
+			if (e.getBuckPressure() >= grip) {
+				e.detach(); // thrown clear (resets its buck pressure)
+				if (e instanceof NPC) {
+					((NPC) e).startAttachCooldown(BUCK_COOLDOWN);
+				}
+			}
+		}
 	}
 
 	/** Grabs the nearest perceived smaller neighbour in reach (predatory seize). */
 	private void grabNearestSmaller() {
-		if (grabbing != null) {
-			return; // already carrying one
+		if (grabbing != null || getAttachTarget() != null) {
+			return; // already carrying one, or being carried (can't do both)
 		}
 		for (NPC n : targets.values()) { // nearest-first (keyed by distance)
 			if (n == this || n.isDead() || n.isRemoved()) {

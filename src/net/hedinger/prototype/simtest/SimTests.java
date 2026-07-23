@@ -1718,6 +1718,43 @@ public class SimTests {
 		}
 	}
 
+	/** Bucking (the same struggle actuator, from the carrier's side): a host shakes
+	 *  off its riders, throwing the larger one clear first while the smaller one
+	 *  clings tighter and holds on far longer. */
+	static class HostBucksOffRiders extends Scenario {
+		@Override
+		public void run() {
+			seed(84);
+			World w = room(16, 12);
+			int[][] buck = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_STRUGGLE, 0, 0 } };
+			int[][] cling = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_ATTACH, 0, 0 } };
+			Genome hG = Genome.phenotype(20, 0.0, 5, 6, Math.PI * 2, 100000);
+			hG.brain = new Brain(deepCopy(buck));
+			Genome bigG = Genome.phenotype(14, 0.0, 5, 6, Math.PI * 2, 100000);
+			bigG.brain = new Brain(deepCopy(cling));
+			Genome smG = Genome.phenotype(5, 0.0, 5, 6, Math.PI * 2, 100000);
+			smG.brain = new Brain(deepCopy(cling));
+			TestNPC host = TestNPC.minded(8.0, 6.0, 0, hG);
+			TestNPC bigRider = TestNPC.minded(8.08, 6.0, 0, bigG);
+			TestNPC smallRider = TestNPC.minded(8.0, 6.08, 0, smG);
+			w.spawnEntity(host);
+			w.spawnEntity(bigRider);
+			w.spawnEntity(smallRider);
+			tick(w, 5);
+			assertTrue("both riders latched on",
+					bigRider.getAttachTarget() == host && smallRider.getAttachTarget() == host);
+			tick(w, 24); // the host bucks; the bigger rider comes loose first
+			assertTrue("the larger rider is bucked off", bigRider.getAttachTarget() == null);
+			assertTrue("the smaller rider clings on (tighter grip, harder to throw)",
+					smallRider.getAttachTarget() == host);
+			tick(w, 60); // keep bucking
+			assertTrue("eventually even the small rider is thrown clear",
+					smallRider.getAttachTarget() == null);
+			assertTrue("a bucked-off rider cannot immediately climb back on",
+					bigRider.getAttachTarget() == null);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1915,6 +1952,7 @@ public class SimTests {
 				new CaptiveFreedWhenCaptorDies(),
 				new FlyingCarrierPaysMore(),
 				new GroundCannotGrabFlyer(),
+				new HostBucksOffRiders(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
