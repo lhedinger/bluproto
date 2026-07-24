@@ -109,15 +109,20 @@ public class TestNPC extends NPC {
 	 * and {@link #chase} steers toward it -- so it demonstrates remembered-goal
 	 * navigation plus carrying.
 	 */
-	public static TestNPC hauler(double x, double y, double z, double destX, double destY) {
+	public static TestNPC hauler(double x, double y, double z,
+			double pickX, double pickY, double destX, double destY) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.HAUL);
+		t.haulPickX = pickX; // where to go to find the item to fetch
+		t.haulPickY = pickY;
 		t.haulDestX = destX;
 		t.haulDestY = destY;
+		t.haulHomeX = x; // where it started, and where it returns after dropping
+		t.haulHomeY = y;
 		t.size = 12; // big enough to grab a standard crate
-		t.speed = 0.03;
+		t.speed = 0.04;
 		t.turn = 6;
 		t.LOS_FOV = Math.PI * 2;
-		t.LOS_RANGE = 16;
+		t.LOS_RANGE = 24;
 		t.SEARCH_FREQ = 2;
 		return t;
 	}
@@ -374,31 +379,46 @@ public class TestNPC extends NPC {
 		}
 	}
 
+	private double haulPickX, haulPickY;
 	private double haulDestX, haulDestY;
+	private double haulHomeX, haulHomeY;
 	private boolean haulDropped = false;
+	private boolean haulReturned = false;
 
-	/** Fetch-and-carry to a stored destination: approach an item, grab it, then
-	 * navigate to the remembered drop-off and set it down. */
+	/** A round trip: walk to the pickup spot, grab the item there, carry it to the
+	 * remembered drop-off, set it down, then walk back home empty-handed.
+	 * Perception is short-range (adjacent tiles only), so the courier navigates by
+	 * remembered coordinates and grabs whatever item is in reach once it arrives. */
 	private void thinkHaul() {
+		// Phase 1 -- fetch: head to the pickup coordinate; grab the item on arrival.
 		if (grabbing == null && !haulDropped) {
 			Item crate = nearestItem();
-			if (crate == null) {
-				return; // nothing perceived to fetch
+			if (crate != null) {
+				double reach = (getSize() + crate.getSize()) / 2.0;
+				if (distance(crate) <= reach) {
+					grab(crate);
+					return;
+				}
 			}
-			double reach = (getSize() + crate.getSize()) / 2.0;
-			if (distance(crate) <= reach) {
-				grab(crate);
-			} else {
-				moveToward(crate.getX(), crate.getY()); // walk to the item
-			}
+			moveToward(haulPickX, haulPickY); // walk to where the item is
 			return;
 		}
+		// Phase 2 -- deliver: carry it to the drop-off coordinate and set it down.
 		if (grabbing != null) {
 			if (distance(haulDestX, haulDestY, Z) < 0.3) {
 				drop(); // arrived: set the load down
 				haulDropped = true;
 			} else {
 				moveToward(haulDestX, haulDestY); // carry it to the drop-off
+			}
+			return;
+		}
+		// Phase 3 -- return: walk back home, now empty-handed.
+		if (!haulReturned) {
+			if (distance(haulHomeX, haulHomeY, Z) < 0.3) {
+				haulReturned = true; // home again -- stop
+			} else {
+				moveToward(haulHomeX, haulHomeY);
 			}
 		}
 	}

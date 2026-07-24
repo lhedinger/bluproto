@@ -1934,25 +1934,33 @@ public class SimTests {
 		}
 	}
 
-	/** A courier fetches a crate and hauls it to a remembered coordinate: it walks
-	 * to the object, grabs it, carries it across the room via the engine's move-to
-	 * target machinery, and sets it down at the destination. */
+	/** A courier round-trip: the hauler starts well away from the crate, walks over
+	 * to it, grabs it, carries it to a remembered drop-off coordinate, sets it
+	 * down, and returns home empty-handed -- all via the engine's move-to-target
+	 * machinery (store a goal coordinate, head for it). */
 	static class CarrierHaulsCrate extends Scenario {
 		@Override
 		public void run() {
 			seed(96);
-			World w = room(24, 10);
-			Item crate = Item.crate(5.0, 5.0, 0);
-			TestNPC courier = TestNPC.hauler(4.6, 5.0, 0, 18.0, 5.0);
+			World w = room(26, 10);
+			// Hauler at the left, crate in the middle, drop-off on the right: three
+			// distinct places, so the fetch, the haul and the return are all visible.
+			double homeX = 3.0, homeY = 5.0;
+			double crateX = 11.0;
+			Item crate = Item.crate(crateX, 5.0, 0);
+			TestNPC courier = TestNPC.hauler(homeX, homeY, 0, crateX, 5.0, 20.0, 5.0);
 			w.spawnEntity(crate);
 			w.spawnEntity(courier);
 			w.think();
-			snapshot(w, "before (courier beside a crate)");
-			tick(w, 560); // approach, grab, haul across the room, set down
-			snapshot(w, "after (crate hauled to the drop-off)");
-			assertGreater("the crate was carried a good distance", crate.getX() - 5.0, 6.0);
-			assertNear("the crate was set down at the drop-off", 18.0, crate.getX(), 1.0);
+			snapshot(w, "before (hauler far from the crate)");
+			tick(w, 850); // fetch, haul to the drop-off, return home
+			snapshot(w, "after (crate delivered, hauler back home)");
+			assertNear("the crate was delivered to the drop-off", 20.0, crate.getX(), 1.0);
 			assertTrue("the crate was set down, not still held", crate.getAttachTarget() == null);
+			assertGreater("the crate really was moved from where it started",
+					crate.getX() - 11.0, 6.0);
+			assertNear("the hauler returned home empty-handed", homeX, courier.getX(), 1.0);
+			assertTrue("the hauler is no longer carrying anything", courier.getCarriedLoad() == 0);
 		}
 	}
 
