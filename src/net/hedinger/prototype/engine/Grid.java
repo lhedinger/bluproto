@@ -241,7 +241,7 @@ public class Grid {
 				}
 				double jx = x + 0.32 + 0.36 * frac(h * 0.0013);
 				double jy = y + 0.40 + 0.34 * frac(h * 0.0021);
-				int R = (int) (ts * (0.58 + 0.4 * frac(h * 0.0009)));
+				int R = (int) (ts * (0.29 + 0.2 * frac(h * 0.0009)));
 				drawShrub(g2, ox + (int) (jx * ts), oy + (int) (jy * ts), R, ts, h);
 			}
 		}
@@ -268,15 +268,16 @@ public class Grid {
 			}
 			orgLobe(g2, (int) lx, (int) ly, (int) rx, (int) ry, lobe[i][4], wobble, style, pix, hash + i * 9);
 		}
-		// Berries or flowers on some shrubs (deterministic).
-		if (frac(hash * 0.00037) < 0.5) {
-			int[] cols = { SH_BERRY, SH_FLOWER, SH_BERRY, SH_FLOWER, SH_BERRY };
+		// Berries (with the odd flower) on most shrubs -- deterministic per tile.
+		if (frac(hash * 0.00037) < 0.62) {
+			int[] cols = { SH_BERRY, SH_BERRY, SH_BERRY, SH_FLOWER, SH_BERRY, SH_BERRY, SH_BERRY, SH_FLOWER };
 			for (int k = 0; k < cols.length; k++) {
 				double a = k * 2.399963 + hash;
-				int ax = cx + (int) (Math.cos(a) * R * 0.6);
-				int ay = cy + (int) (Math.sin(a) * R * 0.32) - R / 6;
+				double rr = 0.35 + 0.5 * frac(hash * 0.0007 + k * 0.31);
+				int ax = cx + (int) (Math.cos(a) * R * rr);
+				int ay = cy + (int) (Math.sin(a) * R * rr * 0.6) - R / 8;
 				g2.setColor(new java.awt.Color(cols[k]));
-				g2.fillRect(ax, ay, pix + 1, pix + 1);
+				g2.fillRect(ax, ay, pix, pix);
 			}
 		}
 	}
