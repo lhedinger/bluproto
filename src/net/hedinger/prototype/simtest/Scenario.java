@@ -108,6 +108,45 @@ public abstract class Scenario {
 	protected void tick(World w, int n) {
 		for (int i = 0; i < n; i++) {
 			w.think();
+			if (recording()) {
+				captureFrame(w);
+			}
+		}
+	}
+
+	// ---- real-time recording ----------------------------------------------
+	// The live game steps the simulation about every 30 ms (PrototypeWorld only
+	// calls world.think() when >30 ms have accrued), so ~33 ticks/sec. Recording
+	// captures every tick; encode the frames at this rate for true real-time.
+	public static final int REALTIME_FPS = 33;
+
+	private int recFrame = -1;
+	private java.io.File recDir;
+
+	/** Whether to record every tick of this scenario, via
+	 *  {@code -Dsimtest.record=<ScenarioName>} (or {@code *} for all). */
+	private boolean recording() {
+		String want = System.getProperty("simtest.record");
+		return want != null && (want.equals("*") || want.equalsIgnoreCase(name()));
+	}
+
+	/** Writes one full-world frame per tick to {@code out/rec/<name>/}. */
+	private void captureFrame(World w) {
+		try {
+			if (recFrame < 0) {
+				recDir = new java.io.File("out/rec/" + name());
+				recDir.mkdirs();
+				for (java.io.File f : recDir.listFiles()) {
+					f.delete();
+				}
+				recFrame = 0;
+				System.out.println("recording " + name() + " -> " + recDir.getPath()
+						+ "  (encode at " + REALTIME_FPS + " fps for real time)");
+			}
+			javax.imageio.ImageIO.write(SnapshotRenderer.render(w), "png",
+					new java.io.File(recDir, String.format("f%05d.png", recFrame++)));
+		} catch (java.io.IOException e) {
+			throw new RuntimeException(e);
 		}
 	}
 

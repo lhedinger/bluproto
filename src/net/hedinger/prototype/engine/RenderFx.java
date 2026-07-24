@@ -15,6 +15,9 @@ public final class RenderFx {
 	public static boolean crt = false;
 	/** Draw the scenario debug overlay (heading arrows, labels, glyphs). */
 	public static boolean debugOverlay = true;
+	/** Draw the decorative tall grass and shrubs on fertile tiles. Off for
+	 *  behaviour-test rendering, where they would only clutter the subject. */
+	public static boolean foliage = true;
 	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
 	public static boolean cacheSprites = true;
 	/** Render holes as translucent pits, so the layer beneath shows through. */

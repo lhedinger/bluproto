@@ -67,8 +67,10 @@ public class Grid {
 		if (camDepth == 0) {
 			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
 			renderGround(g2, ox, oy);
-			renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
-			renderShrubs(g2, ox, oy);    // decorative bushes on the lushest tiles
+			if (RenderFx.foliage) {
+				renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
+				renderShrubs(g2, ox, oy);    // decorative bushes on the lushest tiles
+			}
 		} else {
 			g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
 		}

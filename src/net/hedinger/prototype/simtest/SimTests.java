@@ -1963,6 +1963,9 @@ public class SimTests {
 	public static void main(String[] args) {
 		int passed = 0;
 		int failed = 0;
+		// Behaviour tests render clean: no decorative grass/shrubs cluttering the
+		// subject (scenario worlds are fully fertile, so foliage would blanket them).
+		net.hedinger.prototype.engine.RenderFx.foliage = false;
 		String shotsDir = System.getProperty("simtest.shots");
 		if (shotsDir != null) {
 			new java.io.File(shotsDir).mkdirs();
