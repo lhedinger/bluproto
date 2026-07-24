@@ -89,6 +89,12 @@ public abstract class NPC extends Entity {
 		}
 	}
 
+	/** Adds energy; used when an external source feeds this creature, e.g. eating
+	 *  a food {@link Item}. */
+	public void addEnergy(double amount) {
+		energy += amount;
+	}
+
 	public double getEnergy() {
 		return energy;
 	}

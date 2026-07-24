@@ -4,6 +4,7 @@ import java.util.TreeMap;
 
 import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.Item;
 import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.NPC;
@@ -387,6 +388,19 @@ public class TestNPC extends NPC {
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
 		s[AgentIO.S_BLOCKED] = getWorld().isConnectedSpace(getX(), getY(), getLvl(), ax, ay, getLvl())
 				? 0.0 : 1.0; // wall/edge one tile ahead in the heading
+		// Dedicated item sense: nearest inanimate object, its bearing and kind.
+		Item item = nearestItem();
+		if (item != null) {
+			double dx = item.getX() - X, dy = item.getY() - Y;
+			double dist = Math.hypot(dx, dy);
+			s[AgentIO.S_ITEM_PROX] = 1.0 / (1.0 + dist);
+			s[AgentIO.S_ITEM_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
+			s[AgentIO.S_ITEM_KIND] = item.kindSignal();
+		} else {
+			s[AgentIO.S_ITEM_PROX] = 0;
+			s[AgentIO.S_ITEM_BEARING] = 0;
+			s[AgentIO.S_ITEM_KIND] = 0;
+		}
 	}
 
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
@@ -399,12 +413,14 @@ public class TestNPC extends NPC {
 		}
 		if (a[AgentIO.A_EAT] > 0.5) {
 			totalIntake += graze(GRAZE_DEMAND);
+			eatNearestItem(); // also devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
 		if (a[AgentIO.A_ATTACK] > 0.5) {
 			attackNearest();
+			attackNearestItem(); // an object in reach can be smashed too
 		}
 		if (a[AgentIO.A_MATE] > 0.5) {
 			reproduce();
@@ -552,12 +568,13 @@ public class TestNPC extends NPC {
 		tryReproduce(); // no compatible partner in reach -> bud asexually
 	}
 
-	/** Nearest living perceived neighbour (excluding self), or null. */
+	/** Nearest living perceived neighbour (excluding self and inanimate items), or
+	 * null. Items have their own dedicated sense/interaction path. */
 	private NPC nearestPerceived() {
 		NPC near = null;
 		double best = Double.MAX_VALUE;
 		for (NPC n : targets.values()) {
-			if (n == this || n.isDead()) {
+			if (n == this || n.isDead() || n instanceof Item) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
@@ -567,6 +584,50 @@ public class TestNPC extends NPC {
 			}
 		}
 		return near;
+	}
+
+	/** Nearest perceived inanimate {@link Item}, or null. */
+	private Item nearestItem() {
+		Item near = null;
+		double best = Double.MAX_VALUE;
+		for (NPC n : targets.values()) {
+			if (!(n instanceof Item) || n.isRemoved()) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < best) {
+				best = d;
+				near = (Item) n;
+			}
+		}
+		return near;
+	}
+
+	/** Nearest item within interaction reach (touching + a small margin), or null. */
+	private Item itemInReach() {
+		Item item = nearestItem();
+		if (item == null) {
+			return null;
+		}
+		double reach = (getSize() + item.getSize()) / 2.0 + ATTACK_REACH;
+		return distance(item.getX(), item.getY(), item.getZ()) <= reach ? item : null;
+	}
+
+	/** Eats the nearest food/hazard item in reach: food feeds, a hazard bites back. */
+	private void eatNearestItem() {
+		Item item = itemInReach();
+		if (item != null && item.isEdible()) {
+			item.beEatenBy(this);
+		}
+	}
+
+	/** Strikes the nearest item in reach: whittles a crate down (spilling food when
+	 * it breaks), or takes a wound from a hazard. */
+	private void attackNearestItem() {
+		Item item = itemInReach();
+		if (item != null) {
+			item.beAttackedBy(this, ATTACK_DAMAGE);
+		}
 	}
 
 	private static double clamp(double v, double lo, double hi) {

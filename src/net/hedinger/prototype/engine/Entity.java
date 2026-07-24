@@ -350,6 +350,10 @@ public abstract class Entity {
 		return age;
 	}
 
+	public int getHealth() {
+		return health;
+	}
+
 	public int getID() {
 		return ID;
 	}

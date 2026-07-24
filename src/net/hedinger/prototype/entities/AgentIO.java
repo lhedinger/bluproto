@@ -37,10 +37,18 @@ public final class AgentIO {
 	/** 1 if the tile straight ahead (in the heading) is impassable, else 0 -- so a
 	 * mind can perceive walls/edges and evolve to steer around them. */
 	public static final int S_BLOCKED = 9;
-	public static final int NUM_SENSORS = 10;
+	/** Proximity of the nearest perceived inanimate {@link Item}: 1/(1+dist), 0 if
+	 * none -- a dedicated object sense, separate from the living-neighbour channel. */
+	public static final int S_ITEM_PROX = 10;
+	/** Relative bearing to that item in the heading frame, -1..1 (of PI). */
+	public static final int S_ITEM_BEARING = 11;
+	/** What kind of item it is: +1 food (eat), -1 hazard (avoid), 0 crate/none. */
+	public static final int S_ITEM_KIND = 12;
+	public static final int NUM_SENSORS = 13;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
-			"near_sim", "near_sizeadv", "clock", "blocked" };
+			"near_sim", "near_sizeadv", "clock", "blocked",
+			"item_prox", "item_bearing", "item_kind" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

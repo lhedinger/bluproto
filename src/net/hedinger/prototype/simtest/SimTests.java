@@ -6,6 +6,7 @@ import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.Item;
 import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.Sound;
@@ -1755,6 +1756,184 @@ public class SimTests {
 		}
 	}
 
+	// ---- inanimate items ---------------------------------------------------
+
+	/** The dedicated item sense: a mind that throttles on {@code S_ITEM_PROX}
+	 * moves only when an inanimate object is nearby -- proving items register on
+	 * their own perception channel, distinct from the living-neighbour one. */
+	static class ItemSensedOnDedicatedChannel extends Scenario {
+		@Override
+		public void run() {
+			seed(90);
+			World w = room(16, 16);
+			int[][] prog = {
+					{ Brain.SENSE, 0, AgentIO.S_ITEM_PROX, 0 }, // R0 = item proximity
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 0, 0 },   // walk when it sees one
+			};
+			Genome g = Genome.phenotype(6, 0.05, 5, 6, Math.PI * 2, 100000);
+			// One creature beside a crate, an identical control alone.
+			TestNPC seer = TestNPC.minded(4.0, 4.0, 0, g, new LgpMind(new Brain(deepCopy(prog)), 2));
+			TestNPC control = TestNPC.minded(12.0, 12.0, 0, g, new LgpMind(new Brain(deepCopy(prog)), 2));
+			Item crate = Item.crate(4.15, 4.0, 0);
+			w.spawnEntity(seer);
+			w.spawnEntity(control);
+			w.spawnEntity(crate);
+			w.think();
+			double sx = seer.getX(), sy = seer.getY();
+			double cx = control.getX(), cy = control.getY();
+			tick(w, 40);
+			snapshot(w, "seer walks toward the crate; control sits idle");
+			assertGreater("the creature that senses a nearby item moves",
+					Math.hypot(seer.getX() - sx, seer.getY() - sy), 0.2);
+			assertLess("the control with no item in range stays put",
+					Math.hypot(control.getX() - cx, control.getY() - cy), 0.02);
+		}
+	}
+
+	/** Eating a food item: a mind firing A_EAT beside a food object consumes it
+	 * and gains its {@code foodEnergy}; the item is removed once eaten. */
+	static class FoodItemEatenForEnergy extends Scenario {
+		@Override
+		public void run() {
+			seed(91);
+			World w = room(12, 12);
+			int[][] eat = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
+			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			// Non-metabolic minded body: energy only changes from what it eats.
+			TestNPC eater = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(eat)), 2));
+			Item food = Item.food(6.1, 6.0, 0).withFoodEnergy(5.0);
+			w.spawnEntity(eater);
+			w.spawnEntity(food);
+			w.think();
+			snapshot(w, "before (beside a food item)");
+			// Tick until the food is consumed, measuring the energy jump on that very
+			// tick so a stray graze from the ground can't inflate the reading.
+			double delta = 0;
+			for (int i = 0; i < 40 && !food.isRemoved(); i++) {
+				double before = eater.getEnergy();
+				tick(w, 1);
+				if (food.isRemoved()) {
+					delta = eater.getEnergy() - before;
+				}
+			}
+			snapshot(w, "after (food eaten, energy up)");
+			assertTrue("the food item was eaten (removed)", food.isRemoved());
+			assertNear("eating the food yielded its foodEnergy", 5.0, delta, 0.1);
+		}
+	}
+
+	/** Smashing a crate: a mind firing A_ATTACK beside a crate whittles its
+	 * durability down and, when it breaks, the crate spills loose food items. */
+	static class CrateBrokenSpillsFood extends Scenario {
+		@Override
+		public void run() {
+			seed(92);
+			World w = room(12, 12);
+			int[][] hit = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_ATTACK, 0, 0 } };
+			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC smasher = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(hit)), 2));
+			Item crate = Item.crate(6.18, 6.0, 0).withDurability(8).withSpill(4);
+			w.spawnEntity(smasher);
+			w.spawnEntity(crate);
+			w.think();
+			snapshot(w, "before (beside an intact crate)");
+			// Tick until the crate shatters, then count the food it spilled right away
+			// (the smasher would otherwise start destroying the loose food next).
+			int foodCount = -1;
+			for (int i = 0; i < 40 && !crate.isRemoved(); i++) {
+				tick(w, 1);
+				if (crate.isRemoved()) {
+					foodCount = countFood(w);
+				}
+			}
+			snapshot(w, "after (crate broken, food spilled)");
+			assertTrue("the crate broke under repeated attacks", crate.isRemoved());
+			assertEquals("the broken crate spilled its food", 4, foodCount);
+		}
+
+		private int countFood(World w) {
+			int n = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof Item && !e.isRemoved() && ((Item) e).getKind() == Item.Kind.FOOD) {
+					n++;
+				}
+			}
+			return n;
+		}
+	}
+
+	/** A hazard bites back: eating a hazard item damages the eater (and consumes
+	 * the hazard), so a creature pays for swallowing something dangerous. */
+	static class HazardHarmsEater extends Scenario {
+		@Override
+		public void run() {
+			seed(93);
+			World w = room(12, 12);
+			int[][] eat = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
+			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC eater = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(eat)), 2));
+			Item hazard = Item.hazard(6.1, 6.0, 0).withHazardDamage(25);
+			w.spawnEntity(eater);
+			w.spawnEntity(hazard);
+			w.think();
+			int hpBefore = eater.getHealth();
+			for (int i = 0; i < 40 && !hazard.isRemoved(); i++) {
+				tick(w, 1);
+			}
+			assertTrue("the hazard was consumed", hazard.isRemoved());
+			assertEquals("eating the hazard cost the eater its hazardDamage in health",
+					hpBefore - 25, eater.getHealth());
+		}
+	}
+
+	/** A hazard also bites an attacker: striking a hazard object wounds the
+	 * striker, so hitting one is as costly as eating it. */
+	static class HazardHarmsAttacker extends Scenario {
+		@Override
+		public void run() {
+			seed(94);
+			World w = room(12, 12);
+			int[][] hit = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_ATTACK, 0, 0 } };
+			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC striker = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(hit)), 2));
+			Item hazard = Item.hazard(6.18, 6.0, 0).withHazardDamage(10).withDurability(1000);
+			w.spawnEntity(striker);
+			w.spawnEntity(hazard);
+			w.think();
+			snapshot(w, "before (striker beside a hazard)");
+			int hpBefore = striker.getHealth();
+			tick(w, 30); // hardy hazard survives, biting back on every strike
+			snapshot(w, "after (attacker wounded by the hazard)");
+			assertTrue("the tough hazard survived the strikes", !hazard.isRemoved());
+			assertLess("striking the hazard wounded the attacker", striker.getHealth(), hpBefore);
+		}
+	}
+
+	/** Items are shoved aside: a creature walking through where an item rests
+	 * displaces it (the same spring that separates creatures), without carrying it. */
+	static class ItemPushedAsideByPasserby extends Scenario {
+		@Override
+		public void run() {
+			seed(95);
+			World w = room(20, 8);
+			// A crate sitting in the lane; a mover trudging into it, slow enough that
+			// it stays in contact and shoves the crate along ahead of it (the same
+			// spring that separates two creatures) rather than blowing past.
+			Item crate = Item.crate(10.0, 4.0, 0);
+			TestNPC walker = TestNPC.mover(9.0, 4.0, 0, 0.0).withSpeed(0.02); // heading +x, into the crate
+			w.spawnEntity(crate);
+			w.spawnEntity(walker);
+			w.think();
+			snapshot(w, "before (crate in the walker's path)");
+			double startX = crate.getX(), startY = crate.getY();
+			tick(w, 400);
+			snapshot(w, "after (crate shoved aside)");
+			double moved = Math.hypot(crate.getX() - startX, crate.getY() - startY);
+			assertGreater("the passer-by shoved the crate along", moved, 0.3);
+			assertTrue("the crate was displaced, not picked up", crate.getAttachTarget() == null);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -1953,6 +2132,12 @@ public class SimTests {
 				new FlyingCarrierPaysMore(),
 				new GroundCannotGrabFlyer(),
 				new HostBucksOffRiders(),
+				new ItemSensedOnDedicatedChannel(),
+				new FoodItemEatenForEnergy(),
+				new CrateBrokenSpillsFood(),
+				new HazardHarmsEater(),
+				new HazardHarmsAttacker(),
+				new ItemPushedAsideByPasserby(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
