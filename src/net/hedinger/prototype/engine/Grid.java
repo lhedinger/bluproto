@@ -98,13 +98,17 @@ public class Grid {
 	 * as a smaller, darker mark -- so a walked-over trail of trampled grass is left
 	 * behind. Purely visual: nothing here is read by the simulation.
 	 */
+	/** Fertility at/above which floor tiles grow tall grass on their own. */
+	private static final double FERT_GRASS = 0.5;
+	/** Tufts on a fully-vegetated grass tile (fewer as vegetation is grazed down). */
+	private static final int MAX_TUFTS = 10;
+
 	private void renderTallGrass(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
-		long tick = world.getTick();
+		long now = world.getTick();
 		final double R = 0.9;          // tiles: how close an entity parts a tuft aside
 		final double MAX_SHIFT = 0.32; // tiles: how far a tuft can slide
 		final double FOOT = 0.45;      // tiles: an entity within this flattens the grass
-		final int TUFTS = 10;
 		int dot = Math.max(4, ts / 8);
 
 		java.util.ArrayList<double[]> feet = new java.util.ArrayList<double[]>();
@@ -114,18 +118,39 @@ public class Grid {
 			}
 		}
 
+		java.util.ArrayList<double[]> near = new java.util.ArrayList<double[]>();
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
-				if (!tiles[x][y].hasTallGrass()) {
+				Tile tile = tiles[x][y];
+				if (tile.getType() != Tile.TileType.TYPE_FLOOR) {
 					continue;
 				}
-				for (int t = 0; t < TUFTS; t++) {
+				// Fertile ground (or an explicitly-flagged tile) grows tall grass;
+				// its density follows current vegetation, so grazing thins it out and
+				// it fills back in as the grass regrows.
+				if (!tile.hasTallGrass() && tile.getFertility() < FERT_GRASS) {
+					continue;
+				}
+				double vegFrac = tile.getVegetation(now) / Tile.VEG_MAX;
+				int count = (int) Math.round(MAX_TUFTS * vegFrac);
+				if (count <= 0) {
+					continue;
+				}
+				// Only entities that could reach into this tile matter for the bend.
+				near.clear();
+				double cxT = x + 0.5, cyT = y + 0.5;
+				for (double[] f : feet) {
+					if (Math.abs(f[0] - cxT) < R + 0.7 && Math.abs(f[1] - cyT) < R + 0.7) {
+						near.add(f);
+					}
+				}
+				for (int t = 0; t < count; t++) {
 					int h = ((x * 73856093) ^ (y * 19349663) ^ (t * 83492791));
 					double wx = x + 0.12 + 0.76 * frac(h * 0.001);
 					double wy = y + 0.12 + 0.76 * frac(h * 0.00037);
 
 					double sx = 0, sy = 0, flat = 0;
-					for (double[] f : feet) {
+					for (double[] f : near) {
 						double dx = wx - f[0], dy = wy - f[1];
 						double d = Math.hypot(dx, dy);
 						if (d < R && d > 1e-4) {
@@ -143,7 +168,7 @@ public class Grid {
 						sx /= m;
 						sy /= m;
 					}
-					double wind = Math.sin(tick * 0.07 + wx * 0.9 + wy * 0.6) * 0.05;
+					double wind = Math.sin(now * 0.07 + wx * 0.9 + wy * 0.6) * 0.05;
 					double px = wx + sx * MAX_SHIFT + wind, py = wy + sy * MAX_SHIFT;
 					int cx = ox + (int) (px * ts), cy = oy + (int) (py * ts);
 					drawTuft(g2, cx, cy, dot, flat, h);
