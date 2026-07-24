@@ -1934,32 +1934,35 @@ public class SimTests {
 		}
 	}
 
-	/** A courier round-trip: the hauler starts well away from the crate, walks over
-	 * to it, grabs it, carries it to a remembered drop-off coordinate, sets it
-	 * down, and returns home empty-handed -- all via the engine's move-to-target
-	 * machinery (store a goal coordinate, head for it). */
+	/** A courier round-trip over offset waypoints: the hauler starts at one corner,
+	 * walks (turning in smooth arcs) to the crate's spot, grabs it, carries it to a
+	 * drop-off elsewhere, sets it down, and eases back home empty-handed. The three
+	 * points are at different rows and columns, so each leg heads a different way. */
 	static class CarrierHaulsCrate extends Scenario {
 		@Override
 		public void run() {
 			seed(96);
-			World w = room(26, 10);
-			// Hauler at the left, crate in the middle, drop-off on the right: three
-			// distinct places, so the fetch, the haul and the return are all visible.
-			double homeX = 3.0, homeY = 5.0;
-			double crateX = 11.0;
-			Item crate = Item.crate(crateX, 5.0, 0);
-			TestNPC courier = TestNPC.hauler(homeX, homeY, 0, crateX, 5.0, 20.0, 5.0);
+			World w = room(26, 12);
+			// A zig-zag: home lower-left, crate lower-right-ish, drop-off upper-right --
+			// no two legs share a heading, so the courier visibly turns at each stop.
+			double homeX = 4.0, homeY = 5.0;
+			double pickX = 13.0, pickY = 9.0;
+			double dropX = 22.0, dropY = 3.0;
+			Item crate = Item.crate(pickX, pickY, 0);
+			TestNPC courier = TestNPC.hauler(homeX, homeY, 0, pickX, pickY, dropX, dropY);
 			w.spawnEntity(crate);
 			w.spawnEntity(courier);
 			w.think();
 			snapshot(w, "before (hauler far from the crate)");
-			tick(w, 850); // fetch, haul to the drop-off, return home
+			tick(w, 1100); // fetch, haul to the drop-off, return home
 			snapshot(w, "after (crate delivered, hauler back home)");
-			assertNear("the crate was delivered to the drop-off", 20.0, crate.getX(), 1.0);
+			assertNear("the crate was delivered to the drop-off (x)", dropX, crate.getX(), 1.5);
+			assertNear("the crate was delivered to the drop-off (y)", dropY, crate.getY(), 1.5);
 			assertTrue("the crate was set down, not still held", crate.getAttachTarget() == null);
-			assertGreater("the crate really was moved from where it started",
-					crate.getX() - 11.0, 6.0);
-			assertNear("the hauler returned home empty-handed", homeX, courier.getX(), 1.0);
+			assertGreater("the crate really was carried a long way",
+					Math.hypot(crate.getX() - pickX, crate.getY() - pickY), 6.0);
+			assertNear("the hauler returned home empty-handed (x)", homeX, courier.getX(), 1.5);
+			assertNear("the hauler returned home empty-handed (y)", homeY, courier.getY(), 1.5);
 			assertTrue("the hauler is no longer carrying anything", courier.getCarriedLoad() == 0);
 		}
 	}

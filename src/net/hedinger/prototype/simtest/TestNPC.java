@@ -119,8 +119,8 @@ public class TestNPC extends NPC {
 		t.haulHomeX = x; // where it started, and where it returns after dropping
 		t.haulHomeY = y;
 		t.size = 12; // big enough to grab a standard crate
-		t.speed = 0.04;
-		t.turn = 6;
+		t.speed = 0.05;
+		t.turn = 10; // gentle, wide turns
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = 24;
 		t.SEARCH_FREQ = 2;
@@ -400,7 +400,7 @@ public class TestNPC extends NPC {
 					return;
 				}
 			}
-			moveToward(haulPickX, haulPickY); // walk to where the item is
+			steerToward(haulPickX, haulPickY); // walk to where the item is
 			return;
 		}
 		// Phase 2 -- deliver: carry it to the drop-off coordinate and set it down.
@@ -409,7 +409,7 @@ public class TestNPC extends NPC {
 				drop(); // arrived: set the load down
 				haulDropped = true;
 			} else {
-				moveToward(haulDestX, haulDestY); // carry it to the drop-off
+				steerToward(haulDestX, haulDestY); // carry it to the drop-off
 			}
 			return;
 		}
@@ -418,20 +418,51 @@ public class TestNPC extends NPC {
 			if (distance(haulHomeX, haulHomeY, Z) < 0.3) {
 				haulReturned = true; // home again -- stop
 			} else {
-				moveToward(haulHomeX, haulHomeY);
+				steerToward(haulHomeX, haulHomeY);
 			}
 		}
 	}
 
-	/** Steers straight for a remembered world coordinate and steps toward it. This
-	 * is the engine's move-to-target primitive at its simplest: store the goal in
-	 * {@code (tX, tY)} and head for it (no line-of-sight gate, unlike {@link
-	 * #chase}, which pursues only a currently-visible target). */
-	private void moveToward(double gx, double gy) {
+	/**
+	 * Eases toward a remembered world coordinate: it turns its heading toward the
+	 * goal at a limited rate (so course changes are smooth arcs, not instant
+	 * snaps) and glides forward once roughly facing it -- the same steering
+	 * {@link #chase} uses. It deliberately omits chase's line-of-sight gate, which
+	 * is meant for pursuing a <em>visible</em> target and (given the engine's
+	 * orthogonal-only sight raycast) fails on any diagonal line, stalling a courier
+	 * that is merely navigating to a known coordinate.
+	 */
+	private void steerToward(double gx, double gy) {
 		tX = gx;
 		tY = gy;
 		tZ = Z;
-		move(speed, Math.atan2(gy - Y, gx - X));
+		double angle = Math.atan2(gy - Y, gx - X);
+		if (D >= 2 * Math.PI) {
+			D -= 2 * Math.PI;
+		}
+		if (D < 0) {
+			D += 2 * Math.PI;
+		}
+		if (angle < 0) {
+			angle += 2 * Math.PI;
+		}
+		double dA = angle - D;
+		if (dA > Math.PI) {
+			dA -= 2 * Math.PI;
+		}
+		if (dA < -Math.PI) {
+			dA += 2 * Math.PI;
+		}
+		if (Math.abs(dA) < Math.PI * 0.05) {
+			D = angle; // locked on
+		} else if (dA > 0) {
+			D += Math.sqrt(Math.abs(dA)) / turn; // ease clockwise
+		} else {
+			D -= Math.sqrt(Math.abs(dA)) / turn; // ease counter-clockwise
+		}
+		if (Math.abs(dA) <= Math.PI * 0.25) {
+			move(speed, D); // glide forward once roughly aimed (pivot first if not)
+		}
 	}
 
 	/** The body/mind loop: sense the world into the vector, let the mind decide,
