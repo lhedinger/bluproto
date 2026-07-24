@@ -68,6 +68,7 @@ public class Grid {
 			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
 			renderGround(g2, ox, oy);
 			renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
+			renderShrubs(g2, ox, oy);    // decorative bushes on the lushest tiles
 		} else {
 			g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
 		}
@@ -205,6 +206,129 @@ public class Grid {
 
 	private static int clampc(int c) {
 		return c < 0 ? 0 : (c > 255 ? 255 : c);
+	}
+
+	// ---- decorative shrubs (lush tiles) -----------------------------------
+	/** Fertility at/above which a floor tile may grow a shrub. */
+	private static final double SHRUB_FERT = 0.72;
+	/** Fraction of eligible tiles that actually carry a shrub (scattered, not a hedge). */
+	private static final double SHRUB_DENSITY = 0.13;
+	private static final int SH_BASE = 0x2f6b28, SH_DARK = 0x123a0f, SH_LIGHT = 0x82c268;
+	private static final int SH_BERRY = 0xE0455F, SH_FLOWER = 0xF0E8C6;
+	// Wide, low lobe layout: {dx, dy, rx, ry, rot} in units of the shrub radius.
+	private static final double[][] SH_LOBES = {
+			{ 0, 0, 1.05, 0.9, 0 }, { -0.72, 0.12, 0.78, 0.66, 0.2 }, { 0.72, 0.08, 0.82, 0.62, -0.3 },
+			{ -0.32, -0.28, 0.62, 0.6, 0.5 }, { 0.36, -0.22, 0.66, 0.58, -0.6 } };
+
+	/**
+	 * Decorative shrubs on the lushest tiles: a scattered, deterministic mix of
+	 * three organic shapes (soft mound / leafy / irregular), wide and low with a
+	 * tight ground shadow and the odd berry or flower. Purely cosmetic -- placed
+	 * from the tile hash, read by nothing in the simulation -- and drawn under the
+	 * creatures (shrubs are low; trees, later, will occlude instead).
+	 */
+	private void renderShrubs(Graphics2D g2, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				Tile tile = tiles[x][y];
+				if (tile.getType() != Tile.TileType.TYPE_FLOOR || tile.getFertility() < SHRUB_FERT) {
+					continue;
+				}
+				int h = (x * 73856093) ^ (y * 19349663);
+				if (frac(h * 0.00061) > SHRUB_DENSITY) {
+					continue; // scatter: not every lush tile
+				}
+				double jx = x + 0.32 + 0.36 * frac(h * 0.0013);
+				double jy = y + 0.40 + 0.34 * frac(h * 0.0021);
+				int R = (int) (ts * (0.58 + 0.4 * frac(h * 0.0009)));
+				drawShrub(g2, ox + (int) (jx * ts), oy + (int) (jy * ts), R, ts, h);
+			}
+		}
+	}
+
+	private void drawShrub(Graphics2D g2, int cx, int cy, int R, int ts, int hash) {
+		int pix = Math.max(4, ts / 11);
+		int style = Math.floorMod(hash, 3); // 0 soft mound, 1 leafy, 2 irregular
+		// Tight shadow tucked under the base so the shrub doesn't float.
+		g2.setColor(new java.awt.Color(0, 0, 0, 120));
+		g2.fillOval(cx - (int) (R * 1.05), cy + (int) (R * 0.18), (int) (R * 2.1), (int) (R * 0.55));
+
+		double[][] lobe = new double[SH_LOBES.length][];
+		for (int i = 0; i < lobe.length; i++) {
+			lobe[i] = SH_LOBES[i];
+		}
+		java.util.Arrays.sort(lobe, (a, b) -> Double.compare(a[1], b[1])); // back-to-front
+		double wobble = style == 1 ? 0.55 : (style == 2 ? 0.38 : 0.22);
+		for (int i = 0; i < lobe.length; i++) {
+			double lx = cx + lobe[i][0] * R, ly = cy + lobe[i][1] * R;
+			double rx = lobe[i][2] * R, ry = lobe[i][3] * R;
+			if (style == 1) {
+				ry *= 0.9;
+			}
+			orgLobe(g2, (int) lx, (int) ly, (int) rx, (int) ry, lobe[i][4], wobble, style, pix, hash + i * 9);
+		}
+		// Berries or flowers on some shrubs (deterministic).
+		if (frac(hash * 0.00037) < 0.5) {
+			int[] cols = { SH_BERRY, SH_FLOWER, SH_BERRY, SH_FLOWER, SH_BERRY };
+			for (int k = 0; k < cols.length; k++) {
+				double a = k * 2.399963 + hash;
+				int ax = cx + (int) (Math.cos(a) * R * 0.6);
+				int ay = cy + (int) (Math.sin(a) * R * 0.32) - R / 6;
+				g2.setColor(new java.awt.Color(cols[k]));
+				g2.fillRect(ax, ay, pix + 1, pix + 1);
+			}
+		}
+	}
+
+	/** An organic pixel lobe: an ellipse (rx,ry) rotated by {@code rot}, its rim
+	 *  wobbled by angular noise so the outline is leafy rather than a clean circle.
+	 *  A thin, soft rim outlines the mass against the ground. */
+	private void orgLobe(Graphics2D g2, int cx, int cy, int rx, int ry, double rot, double wobble, int style,
+			int pix, int salt) {
+		int rmax = (int) (Math.max(rx, ry) * 1.35);
+		double cr = Math.cos(rot), sr = Math.sin(rot);
+		for (int py = -rmax; py <= rmax; py += pix) {
+			for (int px = -rmax; px <= rmax; px += pix) {
+				double lx = px * cr + py * sr, ly = -px * sr + py * cr;
+				double ang = Math.atan2(ly, lx);
+				double rad = Math.hypot(lx, ly);
+				double ca = Math.cos(ang), sa = Math.sin(ang);
+				double rell = 1.0 / Math.sqrt((ca / rx) * (ca / rx) + (sa / ry) * (sa / ry));
+				double boundary = rell * (1 + wobble * (shAngNoise(ang, salt, style) - 0.5));
+				if (rad > boundary) {
+					continue;
+				}
+				double d = rad / boundary;
+				double t = -0.4 * d * d;
+				if (d > 0.9) {
+					t -= 0.42; // thin, soft outline (not a heavy border)
+				}
+				double lit = (-px - py) / (2.0 * Math.max(rx, ry));
+				if (lit > 0) {
+					t += 0.7 * lit;
+				}
+				int hh = (px * 928371) ^ (py * 12377) ^ salt;
+				t += ((hh & 7) - 3) / 90.0;
+				int col = t < 0 ? shMix(SH_BASE, SH_DARK, Math.min(1, -t)) : shMix(SH_BASE, SH_LIGHT, Math.min(1, t));
+				g2.setColor(new java.awt.Color(col));
+				g2.fillRect(cx + px, cy + py, pix, pix);
+			}
+		}
+	}
+
+	private static double shAngNoise(double ang, double salt, int style) {
+		double n = 0.5 + 0.28 * Math.sin(ang * 3 + salt) + 0.16 * Math.sin(ang * 5 - salt * 1.7 + 1.3);
+		if (style == 1) {
+			n += 0.22 * Math.sin(ang * 9 + salt * 2.1); // extra spikes -> leafy
+		}
+		return n;
+	}
+
+	private static int shMix(int a, int b, double t) {
+		int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+		int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+		return ((int) (ar + (br - ar) * t) << 16) | ((int) (ag + (bg - ag) * t) << 8) | (int) (ab + (bb - ab) * t);
 	}
 
 	/**
