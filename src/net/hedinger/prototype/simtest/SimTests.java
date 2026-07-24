@@ -1934,6 +1934,28 @@ public class SimTests {
 		}
 	}
 
+	/** A courier fetches a crate and hauls it to a remembered coordinate: it walks
+	 * to the object, grabs it, carries it across the room via the engine's move-to
+	 * target machinery, and sets it down at the destination. */
+	static class CarrierHaulsCrate extends Scenario {
+		@Override
+		public void run() {
+			seed(96);
+			World w = room(24, 10);
+			Item crate = Item.crate(5.0, 5.0, 0);
+			TestNPC courier = TestNPC.hauler(4.6, 5.0, 0, 18.0, 5.0);
+			w.spawnEntity(crate);
+			w.spawnEntity(courier);
+			w.think();
+			snapshot(w, "before (courier beside a crate)");
+			tick(w, 560); // approach, grab, haul across the room, set down
+			snapshot(w, "after (crate hauled to the drop-off)");
+			assertGreater("the crate was carried a good distance", crate.getX() - 5.0, 6.0);
+			assertNear("the crate was set down at the drop-off", 18.0, crate.getX(), 1.0);
+			assertTrue("the crate was set down, not still held", crate.getAttachTarget() == null);
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -2138,6 +2160,7 @@ public class SimTests {
 				new HazardHarmsEater(),
 				new HazardHarmsAttacker(),
 				new ItemPushedAsideByPasserby(),
+				new CarrierHaulsCrate(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),

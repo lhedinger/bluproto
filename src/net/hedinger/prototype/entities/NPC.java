@@ -435,6 +435,12 @@ public abstract class NPC extends Entity {
 	public void collisionCheck() {
 		float spring = 0.25f;
 		for (NPC npc : targets.values()) {
+			// Never shove against something bound to us: a captive/rider we carry, or
+			// the host we ride. They move together, so the separation spring would
+			// just fight the carry (and stall a hauler pushing against its own load).
+			if (npc.getAttachTarget() == this || getAttachTarget() == npc) {
+				continue;
+			}
 			double dx = npc.getX() - getX();
 			double dy = npc.getY() - getY();
 			if (canTouch(npc)) {

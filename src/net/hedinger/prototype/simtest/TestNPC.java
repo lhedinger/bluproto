@@ -32,7 +32,7 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL
 	}
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
@@ -99,6 +99,27 @@ public class TestNPC extends NPC {
 	/** Inert until it hears a Sound, then roams. Tests the hear() channel. */
 	public static TestNPC listener(double x, double y, double z) {
 		return new TestNPC(x, y, z, Behavior.LISTEN);
+	}
+
+	/**
+	 * A courier: it walks to the nearest {@link Item} it can perceive, grabs it,
+	 * then hauls it to a remembered drop-off coordinate and sets it down. Unlike
+	 * the mind's reactive turn/throttle actuators, this uses the engine's
+	 * move-to-target machinery -- it stores the destination in {@code (tX, tY)}
+	 * and {@link #chase} steers toward it -- so it demonstrates remembered-goal
+	 * navigation plus carrying.
+	 */
+	public static TestNPC hauler(double x, double y, double z, double destX, double destY) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.HAUL);
+		t.haulDestX = destX;
+		t.haulDestY = destY;
+		t.size = 12; // big enough to grab a standard crate
+		t.speed = 0.03;
+		t.turn = 6;
+		t.LOS_FOV = Math.PI * 2;
+		t.LOS_RANGE = 16;
+		t.SEARCH_FREQ = 2;
+		return t;
 	}
 
 	/**
@@ -347,7 +368,50 @@ public class TestNPC extends NPC {
 		case MINDED:
 			thinkMinded();
 			return;
+		case HAUL:
+			thinkHaul();
+			return;
 		}
+	}
+
+	private double haulDestX, haulDestY;
+	private boolean haulDropped = false;
+
+	/** Fetch-and-carry to a stored destination: approach an item, grab it, then
+	 * navigate to the remembered drop-off and set it down. */
+	private void thinkHaul() {
+		if (grabbing == null && !haulDropped) {
+			Item crate = nearestItem();
+			if (crate == null) {
+				return; // nothing perceived to fetch
+			}
+			double reach = (getSize() + crate.getSize()) / 2.0;
+			if (distance(crate) <= reach) {
+				grab(crate);
+			} else {
+				moveToward(crate.getX(), crate.getY()); // walk to the item
+			}
+			return;
+		}
+		if (grabbing != null) {
+			if (distance(haulDestX, haulDestY, Z) < 0.3) {
+				drop(); // arrived: set the load down
+				haulDropped = true;
+			} else {
+				moveToward(haulDestX, haulDestY); // carry it to the drop-off
+			}
+		}
+	}
+
+	/** Steers straight for a remembered world coordinate and steps toward it. This
+	 * is the engine's move-to-target primitive at its simplest: store the goal in
+	 * {@code (tX, tY)} and head for it (no line-of-sight gate, unlike {@link
+	 * #chase}, which pursues only a currently-visible target). */
+	private void moveToward(double gx, double gy) {
+		tX = gx;
+		tY = gy;
+		tZ = Z;
+		move(speed, Math.atan2(gy - Y, gx - X));
 	}
 
 	/** The body/mind loop: sense the world into the vector, let the mind decide,
