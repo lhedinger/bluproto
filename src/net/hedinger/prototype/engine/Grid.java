@@ -840,60 +840,32 @@ public class Grid {
 
 		}
 
-		// tracing vector
-
-		int xtiles = Math.abs((int) x2 - (int) x1);
-		int ytiles = Math.abs((int) y2 - (int) y1);
-		double tan = (y2 - y1) / (x2 - x1);
-		double cot = (x2 - x1) / (y2 - y1);
-
-		double px = x1, py = y1;
-		for (int x = 1; x <= xtiles; x++) {
-			double tx;
-			if (x1 < x2) {
-				tx = x - ((x1) - (int) x1);
-			} else {
-				// x1>x2
-				tx = -((x - 1) + ((x1) - (int) x1));
+		// Trace the sightline tile by tile, requiring every step to be an open,
+		// connected transition. The previous version swept the x-crossings and the
+		// y-crossings in two independent passes; for a line that is more horizontal
+		// than vertical (or vice versa) the second pass jumped several columns (or
+		// rows) between samples, handing isLosConnected two non-adjacent tiles
+		// (|dx| > 1), which it rejects -- so ANY diagonal sightline failed even over
+		// perfectly clear floor. Instead, sample the segment finely (>= 8 samples per
+		// tile of length) so every tile the ray enters is visited in order and each
+		// consecutive pair is genuinely adjacent: an orthogonal step, or a diagonal
+		// one whose corner-cut isLosConnected still checks.
+		double sdx = x2 - x1, sdy = y2 - y1;
+		double slen = Math.sqrt(sdx * sdx + sdy * sdy);
+		int steps = (int) Math.ceil(slen * 8);
+		int pc = (int) x1, pr = (int) y1;
+		for (int i = 1; i <= steps; i++) {
+			double f = (double) i / steps;
+			int c = (int) (x1 + sdx * f);
+			int r = (int) (y1 + sdy * f);
+			if (c == pc && r == pr) {
+				continue; // still inside the same tile
 			}
-			double ty = (tan * tx) + y1;
-
-			if (x1 < x2) {
-				tx = (x1 + x);
-			} else {
-				tx = (x1 - x);
-			}
-
-			if (!isLosConnected((int) px, (int) py, (int) tx, (int) ty)) {
+			if (!isLosConnected(pc, pr, c, r)) {
 				return false;
 			}
-			px = tx;
-			py = ty;
-		}
-
-		px = x1;
-		py = y1;
-		for (int y = 1; y <= ytiles; y++) {
-			double ty;
-			if (y1 < y2) {
-				ty = y - ((y1) - (int) y1);
-			} else {
-				// y1>y2
-				ty = -((y - 1) + ((y1) - (int) y1));
-			}
-			double tx = (cot * ty) + x1;
-
-			if (y1 < y2) {
-				ty = (y1 + y);
-			} else {
-				ty = (y1 - y);
-			}
-
-			if (!isLosConnected((int) px, (int) py, (int) tx, (int) ty)) {
-				return false;
-			}
-			px = tx;
-			py = ty;
+			pc = c;
+			pr = r;
 		}
 
 		return true;

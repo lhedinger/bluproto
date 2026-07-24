@@ -1967,6 +1967,44 @@ public class SimTests {
 		}
 	}
 
+	/** Line-of-sight over open floor must carry in every direction -- rows, columns
+	 * AND diagonals -- and a wall on the line must block it. Guards the sight
+	 * raycast, which historically traced correctly only along pure rows/columns and
+	 * reported no sight for any diagonal even over perfectly clear ground. */
+	static class DiagonalLineOfSight extends Scenario {
+		@Override
+		public void run() {
+			seed(101);
+			World w = room(16, 16);
+			double dir = 0; // heading irrelevant here: fov = PI means all-round sight
+
+			// Clear open floor: sight carries every way, diagonals included.
+			assertTrue("clear sight along a row",
+					w.hasLOS(2.5, 8.5, 0, dir, 12.5, 8.5, 0, -1, Math.PI));
+			assertTrue("clear sight along a column",
+					w.hasLOS(8.5, 2.5, 0, dir, 8.5, 12.5, 0, -1, Math.PI));
+			assertTrue("clear sight along a 45-degree diagonal",
+					w.hasLOS(2.5, 2.5, 0, dir, 12.5, 12.5, 0, -1, Math.PI));
+			assertTrue("clear sight along a shallow diagonal",
+					w.hasLOS(3.5, 5.5, 0, dir, 11.5, 3.5, 0, -1, Math.PI));
+			assertTrue("clear sight is symmetric (reversed shallow diagonal)",
+					w.hasLOS(11.5, 3.5, 0, dir, 3.5, 5.5, 0, -1, Math.PI));
+
+			// A wall sitting on the diagonal blocks it; a parallel line that misses
+			// the wall stays clear.
+			w.setTile(7, 7, 0, Tile.TileType.TYPE_WALL);
+			assertTrue("a wall on the 45-degree diagonal blocks sight",
+					!w.hasLOS(2.5, 2.5, 0, dir, 12.5, 12.5, 0, -1, Math.PI));
+			assertTrue("a parallel diagonal that misses the wall is still clear",
+					w.hasLOS(2.5, 4.5, 0, dir, 10.5, 12.5, 0, -1, Math.PI));
+
+			// Regression guard: a wall across a row still blocks the common case.
+			w.setTile(8, 8, 0, Tile.TileType.TYPE_WALL);
+			assertTrue("a wall across a row blocks sight",
+					!w.hasLOS(2.5, 8.5, 0, dir, 12.5, 8.5, 0, -1, Math.PI));
+		}
+	}
+
 	/** The blocked sensor: a mind reads 1 when a wall/edge is one tile ahead and 0
 	 * in the open, so it can perceive obstacles (and evolve to steer around them). */
 	static class BlockedSensorSeesWalls extends Scenario {
@@ -2172,6 +2210,7 @@ public class SimTests {
 				new HazardHarmsAttacker(),
 				new ItemPushedAsideByPasserby(),
 				new CarrierHaulsCrate(),
+				new DiagonalLineOfSight(),
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
