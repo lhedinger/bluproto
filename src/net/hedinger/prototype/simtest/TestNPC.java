@@ -400,7 +400,7 @@ public class TestNPC extends NPC {
 					return;
 				}
 			}
-			steerToward(haulPickX, haulPickY); // walk to where the item is
+			headFor(haulPickX, haulPickY); // walk to where the item is
 			return;
 		}
 		// Phase 2 -- deliver: carry it to the drop-off coordinate and set it down.
@@ -409,7 +409,7 @@ public class TestNPC extends NPC {
 				drop(); // arrived: set the load down
 				haulDropped = true;
 			} else {
-				steerToward(haulDestX, haulDestY); // carry it to the drop-off
+				headFor(haulDestX, haulDestY); // carry it to the drop-off
 			}
 			return;
 		}
@@ -418,51 +418,24 @@ public class TestNPC extends NPC {
 			if (distance(haulHomeX, haulHomeY, Z) < 0.3) {
 				haulReturned = true; // home again -- stop
 			} else {
-				steerToward(haulHomeX, haulHomeY);
+				headFor(haulHomeX, haulHomeY);
 			}
 		}
 	}
 
 	/**
-	 * Eases toward a remembered world coordinate: it turns its heading toward the
-	 * goal at a limited rate (so course changes are smooth arcs, not instant
-	 * snaps) and glides forward once roughly facing it -- the same steering
-	 * {@link #chase} uses. It deliberately omits chase's line-of-sight gate, which
-	 * is meant for pursuing a <em>visible</em> target and (given the engine's
-	 * orthogonal-only sight raycast) fails on any diagonal line, stalling a courier
-	 * that is merely navigating to a known coordinate.
+	 * Heads for a remembered world coordinate using the engine's own move-to-target
+	 * steering: it stores the goal in {@code (tX, tY)} and lets {@link #chase} ease
+	 * the heading toward it (limited turn rate, so course changes are smooth arcs)
+	 * and glide forward. Chase gates on line of sight to the target -- which now
+	 * works on diagonals too -- so a courier can drive straight to an off-axis
+	 * coordinate across open ground.
 	 */
-	private void steerToward(double gx, double gy) {
+	private void headFor(double gx, double gy) {
 		tX = gx;
 		tY = gy;
 		tZ = Z;
-		double angle = Math.atan2(gy - Y, gx - X);
-		if (D >= 2 * Math.PI) {
-			D -= 2 * Math.PI;
-		}
-		if (D < 0) {
-			D += 2 * Math.PI;
-		}
-		if (angle < 0) {
-			angle += 2 * Math.PI;
-		}
-		double dA = angle - D;
-		if (dA > Math.PI) {
-			dA -= 2 * Math.PI;
-		}
-		if (dA < -Math.PI) {
-			dA += 2 * Math.PI;
-		}
-		if (Math.abs(dA) < Math.PI * 0.05) {
-			D = angle; // locked on
-		} else if (dA > 0) {
-			D += Math.sqrt(Math.abs(dA)) / turn; // ease clockwise
-		} else {
-			D -= Math.sqrt(Math.abs(dA)) / turn; // ease counter-clockwise
-		}
-		if (Math.abs(dA) <= Math.PI * 0.25) {
-			move(speed, D); // glide forward once roughly aimed (pivot first if not)
-		}
+		chase(speed, turn);
 	}
 
 	/** The body/mind loop: sense the world into the vector, let the mind decide,
