@@ -299,6 +299,12 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Tints the body (purely cosmetic; the snapshot carries it as the entity rgb). */
+	public TestNPC withColor(java.awt.Color c) {
+		col = c;
+		return this;
+	}
+
 	/** Marks this NPC as flying: it hovers over holes instead of falling. */
 	public TestNPC withFlying() {
 		flying = true;

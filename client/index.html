@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#14161a" />
+  <title>bluproto — live world</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #14161a; color: #cfd3da;
+                 font: 14px system-ui, sans-serif; overflow: hidden;
+                 overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 6px;
+           align-items: center; padding: max(6px, env(safe-area-inset-top)) 8px 6px;
+           background: linear-gradient(#14161ae0, #14161a00); z-index: 2; flex-wrap: wrap; }
+    #bar button, #bar select { background: #2a2e36cc; color: #cfd3da; border: 1px solid #3a3f4a;
+           border-radius: 6px; padding: 6px 12px; font: inherit; backdrop-filter: blur(3px); }
+    #bar button.on { background: #2f6b28; border-color: #3f8f35; }
+    #follow { display: none; background: #24404acc; border: 1px solid #2f6b7a; border-radius: 6px;
+              padding: 6px 10px; cursor: pointer; }
+    #stats { margin-left: auto; opacity: .75; font-variant-numeric: tabular-nums; }
+    #toast { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
+             transform: translateX(-50%); background: #2a2e36ee; border: 1px solid #3a3f4a;
+             border-radius: 8px; padding: 8px 14px; opacity: 0; transition: opacity .25s;
+             pointer-events: none; z-index: 3; }
+  </style>
+</head>
+<body>
+  <div id="app"><canvas id="cv"></canvas></div>
+  <div id="bar">
+    <button id="pause">pause</button>
+    <select id="speed" title="simulation speed">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+    <select id="spawn" title="what a tap on open ground drops">
+      <option value="" selected>tap: follow</option>
+      <option value="food">tap: food</option>
+      <option value="crate">tap: crate</option>
+      <option value="hazard">tap: hazard</option>
+    </select>
+    <span id="follow"></span>
+    <span id="stats">connecting…</span>
+  </div>
+  <div id="toast"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

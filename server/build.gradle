@@ -27,6 +27,43 @@ tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 }
 
+// Fold the Vite/TS client's dist/ into the server jar's static files, so a
+// packaged server serves the finished site with no separate step. `buildClient`
+// (needs npm) regenerates dist; `copyClient` folds whatever dist exists into the
+// resources. Decoupled so a Docker build can produce dist/ in a Node stage and
+// have the (Node-less) Gradle stage still copy it in. With neither npm nor a
+// prebuilt dist, the bundled debug page remains — a bare checkout still runs.
+def clientDir = file("${rootDir}/client")
+def clientDist = file("${clientDir}/dist")
+def npm = org.gradle.internal.os.OperatingSystem.current().isWindows() ? 'npm.cmd' : 'npm'
+def haveNpm = ["bash", "-lc", "command -v ${npm}"].with {
+	try { exec { commandLine it; standardOutput = new ByteArrayOutputStream() }.exitValue == 0 }
+	catch (ignored) { false }
+}
+
+tasks.register('buildClient', Exec) {
+	group = 'build'
+	description = 'npm install + vite build of the web client'
+	enabled = haveNpm
+	workingDir = clientDir
+	inputs.dir("${clientDir}/src")
+	inputs.file("${clientDir}/index.html")
+	inputs.file("${clientDir}/package.json")
+	outputs.dir(clientDist)
+	commandLine 'bash', '-lc', "${npm} install --no-audit --no-fund && ${npm} run build"
+}
+
+tasks.register('copyClient', Copy) {
+	if (haveNpm) {
+		dependsOn 'buildClient'
+	}
+	onlyIf { clientDist.exists() } // freshly built, prebuilt (Docker), or skip
+	from(clientDist)
+	into("${layout.buildDirectory.get()}/resources/main/public")
+}
+tasks.named('processResources') { finalizedBy 'copyClient' }
+tasks.named('classes') { dependsOn 'copyClient' }
+
 application {
 	mainClass = 'net.hedinger.prototype.server.ServerMain'
 }

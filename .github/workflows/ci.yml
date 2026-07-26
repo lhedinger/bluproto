@@ -16,6 +16,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Node so the server's buildClient step compiles the Vite/TS web client.
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Set up Gradle (with build cache)
         uses: gradle/actions/setup-gradle@v4
 

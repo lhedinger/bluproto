@@ -47,6 +47,15 @@ public final class ServerMain {
 
 		Javalin app = Javalin.create(c -> {
 			c.showJavalinBanner = false;
+			// The real client (client/dist, built by `npm run build`) wins when
+			// present; the bundled Phase 2 debug page remains the fallback so the
+			// server is usable straight from a bare checkout. Handlers resolve in
+			// the order added.
+			String clientDir = cfg(args, "CLIENT_DIR", "client/dist");
+			if (java.nio.file.Files.isDirectory(java.nio.file.Path.of(clientDir))) {
+				c.staticFiles.add(clientDir, Location.EXTERNAL);
+				System.out.println("serving web client from " + clientDir);
+			}
 			c.staticFiles.add("/public", Location.CLASSPATH);
 		});
 
