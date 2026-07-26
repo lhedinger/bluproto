@@ -1,0 +1,32 @@
+# bluproto world server + TLS edge, for the Hetzner VPS (see deploy/README.md).
+# Caddy terminates HTTPS with a Cloudflare Origin Certificate (Cloudflare
+# proxies the domain in "Full (strict)" mode) and proxies HTTP+WebSocket
+# traffic to the world server.
+
+services:
+  server:
+    build:
+      context: ..
+    restart: unless-stopped
+    environment:
+      SEED: "${SEED:-42}"
+      PORT: "7070"
+      COMMAND_TOKEN: "${COMMAND_TOKEN:?set in .env — gate for mutating commands}"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy-data:/data
+    environment:
+      DOMAIN: "${DOMAIN:?set in .env — your Cloudflare-managed domain}"
+    depends_on:
+      - server
+
+volumes:
+  caddy-data:

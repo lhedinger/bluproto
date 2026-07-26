@@ -1,0 +1,31 @@
+name: Deploy
+
+# Manual deploy to the Hetzner VPS (deploy/README.md). Requires two repo
+# secrets: DEPLOY_HOST (e.g. root@1.2.3.4) and DEPLOY_SSH_KEY (private key
+# whose public half is authorized on the VPS). The VPS-side script pulls the
+# branch and rebuilds the containers.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        default: main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push latest code to the VPS and rebuild
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "DEPLOY_HOST / DEPLOY_SSH_KEY secrets not configured"; exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$DEPLOY_HOST" \
+            "BRANCH=$BRANCH bash /opt/bluproto/deploy/setup.sh"

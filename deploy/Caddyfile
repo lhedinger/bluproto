@@ -1,0 +1,15 @@
+# TLS edge for the world server. The certificate is a Cloudflare Origin
+# Certificate (deploy/certs/origin.pem + origin.key): Cloudflare terminates
+# public TLS at its edge and connects here over TLS in "Full (strict)" mode.
+# WebSockets are proxied transparently.
+
+{$DOMAIN} {
+	tls /certs/origin.pem /certs/origin.key
+	encode zstd gzip
+	reverse_proxy server:7070
+}
+
+# Plain-HTTP requests (e.g. health probes from inside the VPS) get redirected.
+http:// {
+	redir https://{$DOMAIN}{uri}
+}

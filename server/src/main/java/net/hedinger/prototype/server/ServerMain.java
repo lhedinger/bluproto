@@ -38,6 +38,10 @@ public final class ServerMain {
 	public static void main(String[] args) {
 		long seed = Long.parseLong(cfg(args, "SEED", "42"));
 		int port = Integer.parseInt(cfg(args, "PORT", "7070"));
+		// Public-deploy gate (MODERNIZATION.md Phase 5): when COMMAND_TOKEN is
+		// set, viewing stays open but every mutating verb — WS commands and the
+		// reset endpoint — requires the token. Unset (local dev) means open.
+		String token = cfg(args, "COMMAND_TOKEN", "");
 
 		WorldHost host = new WorldHost(seed);
 
@@ -66,6 +70,10 @@ public final class ServerMain {
 		});
 
 		app.post("/api/world/reset", ctx -> {
+			if (!token.isEmpty() && !token.equals(ctx.header("X-Command-Token"))) {
+				ctx.status(403).json(Map.of("ok", false, "error", "command token required"));
+				return;
+			}
 			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
 			long s = body.path("seed").asLong(System.nanoTime() & 0xFFFFFF);
 			host.reset(s);
@@ -88,6 +96,10 @@ public final class ServerMain {
 				try {
 					JsonNode m = Protocol.read(ctx.message());
 					String cmd = m.path("cmd").asText("");
+					if (!token.isEmpty() && !token.equals(m.path("token").asText(""))) {
+						ctx.send(Protocol.write(Protocol.Error.of("command token required")));
+						return;
+					}
 					switch (cmd) {
 					case "spawnItem" -> {
 						SimCommand c = SpawnItemCommand.parse(m.path("kind").asText(""),

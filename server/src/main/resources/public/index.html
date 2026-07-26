@@ -47,6 +47,10 @@ let ents = new Map();        // id -> entity state
 let layer = new Image();
 let paused = false, speed = 1;
 
+// Command token for public deploys: open the page as /#t=SECRET and every
+// command carries it. Viewing needs no token.
+const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+const send = m => ws.send(JSON.stringify(token ? { ...m, token } : m));
 const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://')
                          + location.host + '/api/world/stream');
 ws.onmessage = ev => {
@@ -141,13 +145,13 @@ cv.addEventListener('click', ev => {
   const dpr = window.devicePixelRatio || 1;
   const x = (ev.clientX * dpr - v.ox) / v.s, y = (ev.clientY * dpr - v.oy) / v.s;
   if (x < 0 || y < 0 || x > world.cols || y > world.rows) return;
-  ws.send(JSON.stringify({ cmd: 'spawnItem', kind: document.getElementById('kind').value, x, y, z: 0 }));
+  send({ cmd: 'spawnItem', kind: document.getElementById('kind').value, x, y, z: 0 });
 });
 
 const pauseBtn = document.getElementById('pause');
-pauseBtn.onclick = () => ws.send(JSON.stringify({ cmd: paused ? 'resume' : 'pause' }));
+pauseBtn.onclick = () => send({ cmd: paused ? 'resume' : 'pause' });
 document.getElementById('speed').onchange = ev =>
-  ws.send(JSON.stringify({ cmd: 'speed', value: parseFloat(ev.target.value) }));
+  send({ cmd: 'speed', value: parseFloat(ev.target.value) });
 function reflectControls() {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
   pauseBtn.classList.toggle('on', paused);
