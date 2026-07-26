@@ -49,7 +49,7 @@ public class RenderHarness {
 		Utils.seed(seed);
 		// NPC.run_extended() profiles itself against this static stopwatch; the
 		// GUI normally creates it in PrototypeWorld.initialize().
-		net.hedinger.prototype.main.PrototypeWorld.stopwatch = new StopWatch();
+		net.hedinger.prototype.engine.Perf.stopwatch = new StopWatch();
 		ResourceManager.loadResources();
 
 		WorldGenerator generator = new WorldGenerator(cols, rows, lvls);

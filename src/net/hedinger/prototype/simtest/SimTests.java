@@ -2107,6 +2107,75 @@ public class SimTests {
 		}
 	}
 
+	// ---- the observation seam (MODERNIZATION.md Phase 1) --------------------
+
+	/** The snapshot stream is deterministic and read-only: two runs of the same
+	 * seeded world produce bit-identical per-tick snapshot checksums, and taking
+	 * a snapshot twice without ticking yields the same capture (observing the
+	 * world never perturbs it). */
+	static class SnapshotStreamDeterministic extends Scenario {
+		private long[] stream(long seed, int ticks) {
+			net.hedinger.prototype.sim.SimulationRunner r =
+					new net.hedinger.prototype.sim.SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(seed));
+			long[] sums = new long[ticks];
+			for (int i = 0; i < ticks; i++) {
+				r.tickOnce();
+				sums[i] = r.snapshot().checksum();
+			}
+			return sums;
+		}
+
+		@Override
+		public void run() {
+			long[] a = stream(7, 120);
+			long[] b = stream(7, 120);
+			for (int i = 0; i < a.length; i++) {
+				assertEquals("snapshot checksum at tick " + i + " identical across runs", a[i], b[i]);
+			}
+			// Observing is free of side effects: snapshot twice, no tick between.
+			net.hedinger.prototype.sim.SimulationRunner r =
+					new net.hedinger.prototype.sim.SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(7));
+			r.advance(10);
+			long first = net.hedinger.prototype.sim.WorldSnapshot.of(r.world()).checksum();
+			long second = net.hedinger.prototype.sim.WorldSnapshot.of(r.world()).checksum();
+			assertEquals("re-observing an unticked world captures the same state", first, second);
+			assertGreater("the demo world is populated", r.snapshot().entities().size(), 10);
+		}
+	}
+
+	/** seed + command log reproduces the world exactly: an interactive run
+	 * (commands enqueued mid-flight) replayed from its log against a fresh
+	 * world of the same seed ends bit-identical — the invariant that lets web
+	 * viewers meddle without breaking reproducibility. */
+	static class CommandLogReplayReproduces extends Scenario {
+		@Override
+		public void run() {
+			net.hedinger.prototype.sim.SimulationRunner live =
+					new net.hedinger.prototype.sim.SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(13));
+			live.advance(30);
+			live.enqueue(net.hedinger.prototype.sim.SpawnItemCommand.parse("food", 10.5, 10.5, 0));
+			live.advance(40);
+			live.enqueue(net.hedinger.prototype.sim.SpawnItemCommand.parse("crate", 20.5, 12.5, 0));
+			live.enqueue(net.hedinger.prototype.sim.SpawnItemCommand.parse("hazard", 30.5, 14.5, 0));
+			live.advance(30);
+
+			assertEquals("all three commands were applied and logged", 3, live.commandLog().size());
+			int items = 0;
+			for (net.hedinger.prototype.sim.EntityState e : live.snapshot().entities()) {
+				if (e.kind().startsWith("item.")) {
+					items++;
+				}
+			}
+			assertGreater("the spawned items are visible in the snapshot", items, 3);
+
+			World fresh = net.hedinger.prototype.sim.Worlds.demo(13);
+			net.hedinger.prototype.sim.SimulationRunner.replay(fresh, live.commandLog(), 100);
+			assertEquals("replaying seed + command log reproduces the exact world state",
+					live.snapshot().checksum(),
+					net.hedinger.prototype.sim.WorldSnapshot.of(fresh).checksum());
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -2214,6 +2283,8 @@ public class SimTests {
 				new BlockedSensorSeesWalls(),
 				new PheromoneDecays(),
 				new NestEmergesFromPheromone(),
+				new SnapshotStreamDeterministic(),
+				new CommandLogReplayReproduces(),
 				new SameSeedSameOutcome(),
 		};
 	}

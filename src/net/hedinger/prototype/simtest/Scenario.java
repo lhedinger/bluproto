@@ -74,7 +74,7 @@ public abstract class Scenario {
 	 */
 	protected void seed(long seed) {
 		Utils.seed(seed);
-		net.hedinger.prototype.main.PrototypeWorld.stopwatch = new StopWatch();
+		net.hedinger.prototype.engine.Perf.stopwatch = new StopWatch();
 	}
 
 	/**

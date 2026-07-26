@@ -17,7 +17,7 @@ import net.hedinger.prototype.engine.Utils;
 import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.View.ViewMode;
 import net.hedinger.prototype.engine.World;
-import net.hedinger.prototype.main.PrototypeWorld;
+import net.hedinger.prototype.engine.Perf;
 
 public abstract class NPC extends Entity {
 	// misc. variables
@@ -217,9 +217,9 @@ public abstract class NPC extends Entity {
 			attachCooldown--;
 		}
 
-		PrototypeWorld.stopwatch.start();
+		Perf.stopwatch.start();
 		targets = scanTargets(targets);
-		PrototypeWorld.stopwatch.stop();
+		Perf.stopwatch.stop();
 
 		if (status < 0 || status > 3) {
 			status = NPC.STATUS_IDLE;

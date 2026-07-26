@@ -23,6 +23,7 @@ import javax.swing.WindowConstants;
 
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.LayerRenderer;
+import net.hedinger.prototype.engine.Perf;
 import net.hedinger.prototype.engine.ResourceManager;
 import net.hedinger.prototype.engine.StopWatch;
 import net.hedinger.prototype.engine.Utils;
@@ -70,7 +71,6 @@ public class PrototypeWorld extends JPanel {
 	/** The entity the user clicked to inspect (its genome/state is shown live). */
 	private Entity selectedEntity;
 
-	public static StopWatch stopwatch;
 
 	float camDX, camDY, camDZ;
 
@@ -159,7 +159,7 @@ public class PrototypeWorld extends JPanel {
 
 		ResourceManager.loadResources();
 
-		stopwatch = new StopWatch();
+		Perf.stopwatch = new StopWatch();
 
 		WorldGenerator generator = new WorldGenerator(cols, rows, lvls);
 		generator.run();
@@ -284,7 +284,7 @@ public class PrototypeWorld extends JPanel {
 		}
 
 		if (stopwatchReport > 60) {
-			stopwatch.printReport();
+			Perf.stopwatch.printReport();
 			stopwatchReport = 0;
 		}
 
