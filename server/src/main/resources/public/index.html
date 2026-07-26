@@ -1,0 +1,158 @@
+<!doctype html>
+<!-- Phase 2 debug viewer: the smallest page that proves the whole pipeline —
+     baked layer under live entities, tap to spawn, pause/speed controls.
+     Deliberately crude and dependency-free; the Phase 3 Vite/TS client
+     replaces it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>bluproto — live world</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14161a; color: #cfd3da;
+               font: 13px system-ui, sans-serif; overflow: hidden; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 6px;
+         align-items: center; padding: 6px 8px; background: #1d2026cc;
+         backdrop-filter: blur(4px); z-index: 2; flex-wrap: wrap; }
+  #bar button, #bar select { background: #2a2e36; color: #cfd3da; border: 1px solid #3a3f4a;
+         border-radius: 4px; padding: 4px 10px; font: inherit; }
+  #bar .on { background: #2f6b28; }
+  #stats { margin-left: auto; opacity: .8; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: manipulation;
+           image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="pause">pause</button>
+  <select id="speed">
+    <option value="0.5">0.5×</option>
+    <option value="1" selected>1×</option>
+    <option value="2">2×</option>
+    <option value="4">4×</option>
+  </select>
+  <select id="kind">
+    <option value="food" selected>tap: food</option>
+    <option value="crate">tap: crate</option>
+    <option value="hazard">tap: hazard</option>
+  </select>
+  <span id="stats">connecting…</span>
+</div>
+<canvas id="cv"></canvas>
+<script>
+const cv = document.getElementById('cv'), g = cv.getContext('2d');
+const stats = document.getElementById('stats');
+let world = null;            // hello message
+let ents = new Map();        // id -> entity state
+let layer = new Image();
+let paused = false, speed = 1;
+
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://')
+                         + location.host + '/api/world/stream');
+ws.onmessage = ev => {
+  const m = JSON.parse(ev.data);
+  if (m.type === 'hello') {
+    world = m; paused = m.paused; speed = m.speed;
+    layer.src = m.layers[0];
+    reflectControls();
+  } else if (m.type === 'full') {
+    ents = new Map(m.entities.map(e => [e.id, e]));
+  } else if (m.type === 'delta') {
+    for (const e of m.upsert) ents.set(e.id, e);
+    for (const id of m.gone) ents.delete(id);
+  } else if (m.type === 'status') {
+    paused = m.paused; speed = m.speed; reflectControls();
+  }
+  if (m.tick !== undefined && world) {
+    stats.textContent = `tick ${m.tick} · ${ents.size} entities`;
+  }
+};
+ws.onclose = () => stats.textContent = 'disconnected';
+
+// Fit the whole world on screen; the transform tap-inverts for spawning.
+function view() {
+  if (!world) return null;
+  const wpx = world.cols, hpx = world.rows;                 // world units: tiles
+  const s = Math.min(cv.width / wpx, cv.height / hpx);
+  return { s, ox: (cv.width - wpx * s) / 2, oy: (cv.height - hpx * s) / 2 };
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== innerWidth * dpr) { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
+  g.fillStyle = '#14161a'; g.fillRect(0, 0, cv.width, cv.height);
+  const v = view();
+  if (v) {
+    if (layer.complete && layer.naturalWidth) {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(layer, v.ox, v.oy, world.cols * v.s, world.rows * v.s);
+    }
+    for (const e of ents.values()) {
+      const x = v.ox + e.x * v.s, y = v.oy + e.y * v.s;
+      // True body radii are fractions of a tile (a creature is ~0.1 tiles):
+      // honest scale would be invisible specks, so the debug view enforces a
+      // readable floor. The Phase 3 client gets real zoom instead.
+      const r = Math.max(5, e.size * v.s * (e.kind === 'phero' ? 1 : 3));
+      const col = '#' + e.rgb.toString(16).padStart(6, '0');
+      if (e.kind === 'phero') {
+        g.fillStyle = col + '30';
+        g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      } else if (e.kind.startsWith('item.')) {
+        g.fillStyle = col;
+        if (e.kind === 'item.crate') g.fillRect(x - r, y - r, r * 2, r * 2);
+        else if (e.kind === 'item.hazard') { spike(x, y, r); }
+        else { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      } else { // creature
+        g.fillStyle = (e.flags & 1) ? '#555a63' : col;      // dead = grey
+        g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+        g.strokeStyle = '#00000060'; g.lineWidth = 1;       // ground contrast
+        g.stroke();
+        if (!(e.flags & 1)) {                                // heading tick
+          g.strokeStyle = '#ffffffb0'; g.lineWidth = 1.5;
+          g.beginPath(); g.moveTo(x, y);
+          g.lineTo(x + Math.cos(e.dir) * r * 1.8, y + Math.sin(e.dir) * r * 1.8);
+          g.stroke();
+        }
+      }
+      if (e.attachedTo >= 0 && ents.has(e.attachedTo)) {     // carry link
+        const c = ents.get(e.attachedTo);
+        g.strokeStyle = '#00e5ff90'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y);
+        g.lineTo(v.ox + c.x * v.s, v.oy + c.y * v.s); g.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(draw);
+}
+function spike(x, y, r) {
+  g.beginPath();
+  for (let i = 0; i < 16; i++) {
+    const a = Math.PI * i / 8, rr = (i % 2 ? 0.45 : 1) * r * 1.3;
+    g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath(); g.fill();
+}
+requestAnimationFrame(draw);
+
+// Tap → spawn the selected item kind at the tapped tile.
+cv.addEventListener('click', ev => {
+  const v = view();
+  if (!v || ws.readyState !== 1) return;
+  const dpr = window.devicePixelRatio || 1;
+  const x = (ev.clientX * dpr - v.ox) / v.s, y = (ev.clientY * dpr - v.oy) / v.s;
+  if (x < 0 || y < 0 || x > world.cols || y > world.rows) return;
+  ws.send(JSON.stringify({ cmd: 'spawnItem', kind: document.getElementById('kind').value, x, y, z: 0 }));
+});
+
+const pauseBtn = document.getElementById('pause');
+pauseBtn.onclick = () => ws.send(JSON.stringify({ cmd: paused ? 'resume' : 'pause' }));
+document.getElementById('speed').onchange = ev =>
+  ws.send(JSON.stringify({ cmd: 'speed', value: parseFloat(ev.target.value) }));
+function reflectControls() {
+  pauseBtn.textContent = paused ? 'resume' : 'pause';
+  pauseBtn.classList.toggle('on', paused);
+  document.getElementById('speed').value = String(speed);
+}
+</script>
+</body>
+</html>

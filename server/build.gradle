@@ -1,0 +1,49 @@
+// The web backend (MODERNIZATION.md Phase 2): hosts one live world behind
+// Javalin — REST for world info/control, a WebSocket streaming snapshots out
+// and taking commands in, and the baked static layers + debug page as files.
+
+plugins {
+	id 'application'
+}
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation project(':engine')
+	implementation 'io.javalin:javalin:6.6.0'
+	implementation 'org.slf4j:slf4j-simple:2.0.16'
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+application {
+	mainClass = 'net.hedinger.prototype.server.ServerMain'
+}
+tasks.named('run') {
+	workingDir = rootDir // sprites/ground textures load from filesystem-relative res/
+	systemProperty 'java.awt.headless', 'true'
+}
+
+// Plain-main test harness (same convention as the engine's SimTests).
+tasks.register('serverTest', JavaExec) {
+	group = 'verification'
+	description = 'Runs the server-layer tests (delta encoding, protocol JSON).'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'net.hedinger.prototype.server.ServerTests'
+	workingDir = rootDir
+	systemProperty 'java.awt.headless', 'true'
+}
+tasks.named('check') {
+	dependsOn 'serverTest'
+}

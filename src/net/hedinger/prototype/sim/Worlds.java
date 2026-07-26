@@ -27,12 +27,13 @@ public final class Worlds {
 	}
 
 	/**
-	 * A self-contained living arena, fully determined by the seed: patchy
-	 * fertile grassland, a founder population of grazing breeders, and a
-	 * scatter of items. The returned world has ticked once, so every spawn is
-	 * admitted and the snapshot stream starts populated.
+	 * Only the demo world's terrain — same seed, same tiles, same fertility,
+	 * zero entities. Terrain construction consumes no RNG (single level, all
+	 * tiles set explicitly, fertility sampled from coordinate noise), so this
+	 * is an exact twin of {@link #demo}'s ground: the server bakes its static
+	 * layer images from it without an entity in sight.
 	 */
-	public static World demo(long seed) {
+	public static World demoTerrain(long seed) {
 		Utils.seed(seed);
 		Perf.stopwatch = new StopWatch();
 
@@ -44,6 +45,18 @@ public final class Worlds {
 			}
 		}
 		w.generateFertility(0.22); // patchy habitats: rich meadows, poor scrub
+		return w;
+	}
+
+	/**
+	 * A self-contained living arena, fully determined by the seed: patchy
+	 * fertile grassland, a founder population of grazing breeders, and a
+	 * scatter of items. The returned world has ticked once, so every spawn is
+	 * admitted and the snapshot stream starts populated.
+	 */
+	public static World demo(long seed) {
+		World w = demoTerrain(seed);
+		int cols = w.getColums(), rows = w.getRows();
 
 		// Founder herbivores: metabolic breeders that graze, starve, and bud —
 		// the population finds its own level against the grass.

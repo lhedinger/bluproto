@@ -4,3 +4,4 @@
 rootProject.name = 'bluproto'
 
 include 'engine'
+include 'server'

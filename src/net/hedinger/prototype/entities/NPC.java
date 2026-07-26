@@ -170,7 +170,7 @@ public abstract class NPC extends Entity {
 	}
 
 	protected NPC(double x, double y, double z, double d) {
-		super(x, y, z);
+		super(x, y, z, d); // honour the given heading: draws no RNG (items, clouds)
 		initialize();
 	}
 
