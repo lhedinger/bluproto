@@ -1,0 +1,6 @@
+// bluproto — multi-module build (MODERNIZATION.md Phase 0).
+// engine: the headless simulation + the (legacy) Swing desktop app.
+// server: added in Phase 2 — the web backend that hosts a live world.
+rootProject.name = 'bluproto'
+
+include 'engine'
