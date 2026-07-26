@@ -24,6 +24,23 @@
              transform: translateX(-50%); background: #2a2e36ee; border: 1px solid #3a3f4a;
              border-radius: 8px; padding: 8px 14px; opacity: 0; transition: opacity .25s;
              pointer-events: none; z-index: 3; }
+    #inspect { position: fixed; left: max(8px, env(safe-area-inset-left));
+               bottom: max(8px, env(safe-area-inset-bottom)); width: min(240px, 46vw);
+               background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
+               padding: 10px 12px; z-index: 3; display: none; backdrop-filter: blur(4px); }
+    #inspect h3 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    #inspect .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #0006; }
+    #inspect .x { margin-left: auto; cursor: pointer; opacity: .7; }
+    #inspect table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    #inspect td { padding: 1px 0; }
+    #inspect td.k { opacity: .6; }
+    #inspect td.v { text-align: right; font-variant-numeric: tabular-nums; }
+    #inspect .bar { height: 5px; border-radius: 3px; background: #3a3f4a; overflow: hidden; margin-top: 2px; }
+    #inspect .bar > i { display: block; height: 100%; background: #6fb6e0; }
+    #minimap { position: fixed; right: max(8px, env(safe-area-inset-right));
+               bottom: max(8px, env(safe-area-inset-bottom)); z-index: 3;
+               border: 1px solid #3a3f4a; border-radius: 6px; background: #10121688;
+               width: 150px; height: auto; cursor: crosshair; }
   </style>
 </head>
 <body>
@@ -46,6 +63,8 @@
     <span id="stats">connecting…</span>
   </div>
   <div id="toast"></div>
+  <div id="inspect"></div>
+  <canvas id="minimap" width="150" height="90"></canvas>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -49,7 +49,11 @@ public final class ProcCreature {
 	// rendered once and blitted thereafter. The cache is content-agnostic (see
 	// SpriteCache); only phenoKey/drawCached below know what affects the pixels.
 	private static final double TWO_PI = Math.PI * 2;
-	private static final int DIRS = 8, ANIM = 8, ACTF = 12, MAX_CACHE_RADIUS = 48;
+	/** Heading buckets and idle-animation frames a sprite is quantised into. Public
+	 *  so an off-line baker (the web server's sprite atlas) lays cells out the same
+	 *  way the live cache does, and the browser samples them by the same rule. */
+	public static final int DIRS = 8, ANIM = 8;
+	private static final int ACTF = 12, MAX_CACHE_RADIUS = 48;
 	private static final SpriteCache CACHE = new SpriteCache(1536);
 
 	/** Derives a stable, heritable phenotype from a genome (markers = identity). */
@@ -193,8 +197,10 @@ public final class ProcCreature {
 		return buf;
 	}
 
-	/** Packs everything about a phenotype that affects the pixels into a key. */
-	private static long phenoKey(Phenotype ph) {
+	/** Packs everything about a phenotype that affects the pixels into a key. Public
+	 *  so the web layer can name a phenotype's atlas by the same stable id the live
+	 *  sprite cache uses. Two genomes that render identically share a key. */
+	public static long phenoKey(Phenotype ph) {
 		long k = ph.color & 0xFFFFFFL;
 		k = (k << 3) | (ph.form & 7);
 		k = (k << 3) | (ph.legs & 7);

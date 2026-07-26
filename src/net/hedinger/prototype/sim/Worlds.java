@@ -23,10 +23,36 @@ public final class Worlds {
 	private Worlds() {
 	}
 
-	/** A warm palette so the herd reads as distinct individuals, not a swarm. */
-	private static final java.awt.Color[] GRAZER_COLORS = {
-			new java.awt.Color(0xE8A33D), new java.awt.Color(0xE86A5B), new java.awt.Color(0xD9C35A),
-			new java.awt.Color(0xC98BE0), new java.awt.Color(0x6FB6E0), new java.awt.Color(0x8FD07A) };
+	/**
+	 * Six deterministic "species" for the herd: distinct marker barcodes (which
+	 * drive the procedural body — form, legs, pattern, colour) and a couple of
+	 * fliers, so the world reads as a small menagerie rather than clones. Built
+	 * without RNG (fixed literals), so the demo world stays seed-determined.
+	 */
+	private static net.hedinger.prototype.entities.Genome[] herdSpecies() {
+		double[][] markers = {
+				{ 0.85, 0.55, 0.20 }, // warm, few legs
+				{ 0.20, 0.70, 0.85 }, // cool, antennae
+				{ 0.60, 0.25, 0.55 }, // magenta core
+				{ 0.35, 0.85, 0.35 }, // green, leggy
+				{ 0.90, 0.80, 0.30 }, // gold, tailed
+				{ 0.15, 0.40, 0.75 }, // slate flyer
+		};
+		double[] sizes = { 7, 9, 6, 8, 11, 6 };
+		boolean[] fly = { false, false, false, false, false, true };
+		net.hedinger.prototype.entities.Genome[] out =
+				new net.hedinger.prototype.entities.Genome[markers.length];
+		for (int i = 0; i < markers.length; i++) {
+			net.hedinger.prototype.entities.Genome g = new net.hedinger.prototype.entities.Genome();
+			g.markers = markers[i];
+			g.size = sizes[i];
+			g.speed = 0.018 + 0.004 * (i % 3);
+			g.turnRate = 5;
+			g.flying = fly[i];
+			out[i] = g;
+		}
+		return out;
+	}
 
 	/**
 	 * Only the demo world's terrain — same seed, same tiles, same fertility,
@@ -76,12 +102,15 @@ public final class Worlds {
 		World w = demoTerrain(seed);
 		int cols = w.getColums(), rows = w.getRows();
 
-		// A wandering herd: each grazer crops the tile underfoot and roams on
-		// when a patch thins, so the herd drifts across the meadows forever.
+		// A wandering herd drawn from a handful of species: each grazer renders as
+		// its genome's procedural organism (distinct forms, colours, a flyer or
+		// two) but keeps the stable graze-and-wander behaviour, so the herd drifts
+		// across the meadows forever without breeding or starving.
+		net.hedinger.prototype.entities.Genome[] species = herdSpecies();
 		for (int i = 0; i < 16; i++) {
 			double x = 3 + Utils.random() * (cols - 6);
 			double y = 3 + Utils.random() * (rows - 6);
-			w.spawnEntity(TestNPC.grazer(x, y, 0).withColor(GRAZER_COLORS[i % GRAZER_COLORS.length]));
+			w.spawnEntity(TestNPC.grazer(x, y, 0, species[i % species.length]));
 		}
 
 		// A sprinkle of the inanimate world: food to find, crates to break,

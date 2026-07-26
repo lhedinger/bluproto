@@ -4,6 +4,7 @@
 // channel). Panning hands the camera back.
 
 import { Camera } from './camera';
+import { drawMinimap, minimapToWorld } from './minimap';
 import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
@@ -18,6 +19,8 @@ const speedSel = document.getElementById('speed') as HTMLSelectElement;
 const spawnSel = document.getElementById('spawn') as HTMLSelectElement;
 const followEl = document.getElementById('follow')!;
 const toastEl = document.getElementById('toast')!;
+const inspectEl = document.getElementById('inspect') as HTMLElement;
+const mm = document.getElementById('minimap') as HTMLCanvasElement;
 
 const state = new WorldState();
 const cam = new Camera(cv);
@@ -74,29 +77,110 @@ net.connect();
 // ---- interaction -----------------------------------------------------------
 
 cam.attach(tap => {
-  // Prefer following: pick the nearest living creature within a finger-sized
-  // radius of the tap.
+  // Prefer selecting an entity under the finger: follow it and open its
+  // inspector. Both creatures and items are selectable to inspect.
   const fingerTiles = Math.max(0.35, 14 / cam.scale);
   let best: number | null = null;
   let bestD = Infinity;
   for (const [id, t] of state.tracks) {
     const e = t.curr;
-    if (e.kind === 'phero' || e.flags & F_DEAD) continue;
+    if (e.kind === 'phero') continue;
     const d = Math.hypot(e.x - tap.x, e.y - tap.y);
-    if (d < Math.max(fingerTiles, e.size * 2) && d < bestD) {
+    if (d < Math.max(fingerTiles, e.size * 2.5) && d < bestD) {
       best = id;
       bestD = d;
     }
   }
   if (best !== null) {
-    cam.followId = best;
-    reflect();
+    select(best);
     return;
   }
   const kind = spawnSel.value;
   if (kind && meta && tap.x > 0 && tap.y > 0 && tap.x < meta.cols && tap.y < meta.rows) {
     net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: 0 });
+  } else {
+    deselect(); // tap on empty ground clears the selection
   }
+});
+
+// ---- selection + inspect ---------------------------------------------------
+
+let selectedId: number | null = null;
+let detailTimer = 0;
+
+function select(id: number): void {
+  selectedId = id;
+  const t = state.tracks.get(id);
+  if (t && t.curr.kind.startsWith('npc.') && !(t.curr.flags & F_DEAD)) {
+    cam.followId = id; // follow living creatures; items stay put
+  }
+  refreshDetail();
+  clearInterval(detailTimer);
+  detailTimer = window.setInterval(refreshDetail, 1000); // energy/state tick live
+  reflect();
+}
+
+function deselect(): void {
+  selectedId = null;
+  clearInterval(detailTimer);
+  inspectEl.style.display = 'none';
+}
+
+async function refreshDetail(): Promise<void> {
+  if (selectedId === null) return;
+  try {
+    const r = await fetch(`/api/world/entity/${selectedId}`);
+    if (!r.ok) { deselect(); return; }
+    renderInspect(await r.json());
+  } catch {
+    /* transient; keep the last panel */
+  }
+}
+
+function renderInspect(d: Record<string, any>): void {
+  const rows: string[] = [];
+  const kind = String(d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
+  const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
+  if ('energy' in d) {
+    const pct = Math.max(0, Math.min(1, d.energy / 4));
+    rows.push(row('energy', d.energy.toFixed(2)) +
+      `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`);
+  }
+  if ('durability' in d) rows.push(row('durability', d.durability));
+  if ('edible' in d) rows.push(row('edible', d.edible ? 'yes' : 'no'));
+  if (d.flying) rows.push(row('locomotion', 'flying'));
+  if (d.carrying) rows.push(row('state', 'carrying'));
+  if (d.grabbed) rows.push(row('state', 'grabbed'));
+  if (d.dead) rows.push(row('state', 'dead'));
+  const gm = d.genome;
+  if (gm) {
+    rows.push(row('size', gm.size));
+    rows.push(row('speed', gm.speed));
+    rows.push(row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')));
+    if (gm.predatory > 0) rows.push(row('predatory', gm.predatory));
+    if (gm.gregariousness > 0) rows.push(row('gregarious', gm.gregariousness));
+    if (gm.hasBrain) rows.push(row('brain', 'yes'));
+  }
+  inspectEl.innerHTML =
+    `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
+    `${kind} <span class="mono">#${d.id}</span><span class="x">✕</span></h3>` +
+    `<table>${rows.join('')}</table>`;
+  inspectEl.style.display = 'block';
+  inspectEl.querySelector('.x')!.addEventListener('click', deselect);
+}
+
+function row(k: string, v: unknown): string {
+  return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+}
+
+// Minimap: tap to recentre the camera there (drops follow).
+mm.addEventListener('click', ev => {
+  if (!meta) return;
+  const w = minimapToWorld(mm, meta, ev.clientX, ev.clientY);
+  cam.cx = w.x;
+  cam.cy = w.y;
+  cam.followId = null;
+  reflect();
 });
 
 pauseBtn.onclick = () => net.send({ cmd: paused ? 'resume' : 'pause' });
@@ -149,7 +233,8 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, layer, renderTime);
+  render(g, cam, state, meta, layer, renderTime, now);
+  if (meta) drawMinimap(mm, cam, state, meta, cv);
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;

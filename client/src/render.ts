@@ -3,6 +3,7 @@
 // keeps distant creatures visible when zoomed out. Pixel-art stays crisp via
 // nearest-neighbour scaling of the layer.
 
+import { ART_RADIUS, CELL, atlasFor, cell } from './atlas';
 import type { Camera } from './camera';
 import { F_CARRYING, F_DEAD, F_GRABBED } from './protocol';
 import type { Track, WorldState } from './state';
@@ -16,6 +17,7 @@ export function render(
   meta: WorldMeta | null,
   layer: HTMLImageElement | null,
   renderTime: number,
+  nowMs: number,
 ): void {
   const cv = g.canvas;
   g.fillStyle = '#14161a';
@@ -81,18 +83,27 @@ export function render(
       g.stroke();
       continue;
     }
-    g.fillStyle = col;
-    g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,0.45)';
-    g.lineWidth = 1;
-    g.stroke();
-    // Heading wedge: a nose so orientation reads at any zoom.
-    g.fillStyle = 'rgba(255,255,255,0.85)';
-    g.beginPath();
-    g.moveTo(s.x + Math.cos(p.dir) * r * 1.35, s.y + Math.sin(p.dir) * r * 1.35);
-    g.lineTo(s.x + Math.cos(p.dir + 2.5) * r * 0.55, s.y + Math.sin(p.dir + 2.5) * r * 0.55);
-    g.lineTo(s.x + Math.cos(p.dir - 2.5) * r * 0.55, s.y + Math.sin(p.dir - 2.5) * r * 0.55);
-    g.closePath(); g.fill();
+    // The real procedural organism, if its atlas has loaded; else a dot with a
+    // heading wedge so it still reads while the sprite is in flight.
+    const atlas = atlasFor(e.pheno);
+    if (atlas) {
+      const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
+      const { col: cc, row: rr } = cell(p.dir, nowMs);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+    } else {
+      g.fillStyle = col;
+      g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.45)';
+      g.lineWidth = 1;
+      g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(p.dir) * r * 1.35, s.y + Math.sin(p.dir) * r * 1.35);
+      g.lineTo(s.x + Math.cos(p.dir + 2.5) * r * 0.55, s.y + Math.sin(p.dir + 2.5) * r * 0.55);
+      g.lineTo(s.x + Math.cos(p.dir - 2.5) * r * 0.55, s.y + Math.sin(p.dir - 2.5) * r * 0.55);
+      g.closePath(); g.fill();
+    }
     if (e.flags & F_GRABBED) {
       g.strokeStyle = 'rgba(255,160,60,0.9)';
       g.lineWidth = Math.max(1, r * 0.2);

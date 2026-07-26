@@ -150,6 +150,24 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * A grazer that carries a {@link Genome} purely for its <em>body</em>: it
+	 * renders as the genome's procedural organism (and colours/sizes/flies to
+	 * match) but keeps the plain, non-metabolic graze-and-wander behaviour, so a
+	 * herd of these stays alive indefinitely while looking like distinct species.
+	 * The genome drives no decisions here — reproduction/energy stay off.
+	 */
+	public static TestNPC grazer(double x, double y, double z, Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.GRAZE);
+		t.genome = g;
+		t.size = (int) Math.round(g.size);
+		t.speed = g.speed > 0 ? g.speed : 0.02;
+		t.turn = g.turnRate;
+		t.flying = g.flying;
+		t.col = g.toColor();
+		return t;
+	}
+
+	/**
 	 * A metabolic herbivore that evolves: it grazes for energy, burns it each
 	 * tick, starves at zero, and buds a mutated child once well-fed. Offspring
 	 * inherit a mutated copy of its {@link Genome}, so a fed population grows and

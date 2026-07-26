@@ -89,6 +89,29 @@ public final class ServerMain {
 			ctx.json(Map.of("ok", true, "seed", s));
 		});
 
+		// Baked procedural-creature sprite atlas for a phenotype key (the `pheno`
+		// field on streamed entities). Immutable per key -> cache hard.
+		app.get("/api/world/atlas/{key}.png", ctx -> {
+			byte[] png = AtlasBaker.atlas(Long.parseLong(ctx.pathParam("key").replace(".png", "")));
+			if (png == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.contentType(ContentType.IMAGE_PNG)
+					.header("Cache-Control", "public, max-age=86400")
+					.result(png);
+		});
+
+		// Tap-to-inspect: full detail for one entity (genome, energy, state).
+		app.get("/api/world/entity/{id}", ctx -> {
+			var d = host.entityDetail(Integer.parseInt(ctx.pathParam("id")));
+			if (d == null) {
+				ctx.status(404).json(Map.of("error", "no such entity"));
+				return;
+			}
+			ctx.json(d);
+		});
+
 		app.get("/api/world/layers/{z}.png", ctx -> {
 			byte[] png = host.layer(Integer.parseInt(ctx.pathParam("z").replace(".png", "")));
 			if (png == null) {

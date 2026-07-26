@@ -140,6 +140,57 @@ final class WorldHost {
 		announceStatus();
 	}
 
+	/**
+	 * A detail record for one entity, for the tap-to-inspect panel: identity,
+	 * live energy/health/state, and — for a genome-bearing creature — a readable
+	 * summary of its heritable traits. Returns null if the id is gone. Reads live
+	 * fields without locking the sim: a momentarily stale number in an info panel
+	 * is harmless, and it never mutates anything.
+	 */
+	java.util.Map<String, Object> entityDetail(int id) {
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e == null || e.getID() != id || e.isRemoved()) {
+				continue;
+			}
+			java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
+			d.put("id", id);
+			d.put("x", e.getX());
+			d.put("y", e.getY());
+			d.put("dead", e.isDead());
+			d.put("flying", e.isFlying());
+			d.put("health", e.getHealth());
+			if (e instanceof net.hedinger.prototype.entities.Item it) {
+				d.put("kind", "item." + it.getKind().name().toLowerCase());
+				d.put("edible", it.isEdible());
+				d.put("durability", it.getHealth());
+			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
+				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
+				d.put("energy", round(n.getEnergy()));
+				d.put("carrying", n.getCarriedLoad() > 0);
+				d.put("grabbed", n.isGrabbed());
+				net.hedinger.prototype.entities.Genome g = n.getGenome();
+				if (g != null) {
+					java.util.Map<String, Object> gm = new java.util.LinkedHashMap<String, Object>();
+					gm.put("size", g.size);
+					gm.put("speed", round(g.speed));
+					gm.put("markers", new double[] { round(g.markers[0]), round(g.markers[1]),
+							g.markers.length > 2 ? round(g.markers[2]) : 0.0 });
+					gm.put("flying", g.flying);
+					gm.put("predatory", round(g.predatory));
+					gm.put("gregariousness", round(g.gregariousness));
+					gm.put("hasBrain", g.brain != null);
+					d.put("genome", gm);
+				}
+			}
+			return d;
+		}
+		return null;
+	}
+
+	private static double round(double v) {
+		return Math.round(v * 1000.0) / 1000.0;
+	}
+
 	SimulationRunner runner() {
 		return runner;
 	}

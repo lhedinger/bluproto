@@ -27,7 +27,8 @@ public record EntityState(
 		int rgb,
 		int flags,
 		int attachedTo,
-		double aux) {
+		double aux,
+		long pheno) {
 
 	public static final int F_DEAD = 1;
 	public static final int F_FLYING = 2;
@@ -39,6 +40,7 @@ public record EntityState(
 		String kind;
 		int rgb = 0xFFFFFF;
 		double aux = 0;
+		long pheno = 0;
 		if (e instanceof PheromoneCloud p) {
 			kind = "phero";
 			rgb = 0xE628BE;
@@ -51,6 +53,9 @@ public record EntityState(
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;
 			aux = n.getEnergy();
+			if (n.getGenome() != null) {
+				pheno = PhenoRegistry.register(n.getGenome()); // procedural body: name its atlas
+			}
 		} else {
 			kind = "entity";
 		}
@@ -69,7 +74,7 @@ public record EntityState(
 		}
 		int attachedTo = e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID();
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),
-				e.getDirection(), e.getSize(), rgb, flags, attachedTo, aux);
+				e.getDirection(), e.getSize(), rgb, flags, attachedTo, aux, pheno);
 	}
 
 	/** Order-sensitive bit-exact fold of every field, for determinism tests. */
@@ -85,6 +90,7 @@ public record EntityState(
 		h = h * 31 + flags;
 		h = h * 31 + attachedTo;
 		h = h * 31 + Double.doubleToLongBits(aux);
+		h = h * 31 + pheno;
 		return h;
 	}
 }
