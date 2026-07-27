@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # One-shot VPS setup for the bluproto world server (Ubuntu 24.04, Hetzner CX22).
 # Run as root on the fresh VPS:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/lhedinger/bluproto/main/deploy/setup.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/lhedinger/bluproto/master/deploy/setup.sh)
 # or clone the repo first and run deploy/setup.sh from it. Idempotent: safe to
 # re-run for updates (git pull + rebuild).
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/lhedinger/bluproto.git}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-master}"
 APP_DIR=/opt/bluproto
 
 echo "== bluproto deploy =="

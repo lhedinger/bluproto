@@ -9,7 +9,7 @@ on:
     inputs:
       branch:
         description: Branch to deploy
-        default: main
+        default: master
 
 jobs:
   deploy:
