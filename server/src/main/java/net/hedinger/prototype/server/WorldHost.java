@@ -171,7 +171,7 @@ final class WorldHost {
 				net.hedinger.prototype.entities.Genome g = n.getGenome();
 				if (g != null) {
 					java.util.Map<String, Object> gm = new java.util.LinkedHashMap<String, Object>();
-					gm.put("size", g.size);
+					gm.put("size", round(g.size));
 					gm.put("speed", round(g.speed));
 					gm.put("markers", new double[] { round(g.markers[0]), round(g.markers[1]),
 							g.markers.length > 2 ? round(g.markers[2]) : 0.0 });

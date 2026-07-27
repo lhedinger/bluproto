@@ -22,8 +22,8 @@ public record WorldSnapshot(long tick, List<EntityState> entities) {
 	public static WorldSnapshot of(World w) {
 		List<EntityState> out = new ArrayList<EntityState>();
 		for (Entity e : w.getEntities()) {
-			if (e == null || e.isRemoved()) {
-				continue;
+			if (e == null || e.isRemoved() || e instanceof WorldSteward) {
+				continue; // the steward is invisible machinery, not a creature
 			}
 			out.add(EntityState.of(e));
 		}

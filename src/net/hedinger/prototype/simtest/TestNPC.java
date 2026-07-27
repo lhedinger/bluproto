@@ -32,8 +32,13 @@ import net.hedinger.prototype.entities.NPC;
 public class TestNPC extends NPC {
 
 	private enum Behavior {
-		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL
+		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL, PREDATOR
 	}
+
+	/** Damage a predator's bite does to prey (prey health 100 -> a few-second kill). */
+	private static final int PRED_DAMAGE = 20;
+	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost). */
+	private static final double PRED_BITE_ENERGY = 0.5;
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
@@ -176,6 +181,25 @@ public class TestNPC extends NPC {
 	public static TestNPC breeder(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.BREEDER);
 		configureGenomeBody(t, g);
+		return t;
+	}
+
+	/**
+	 * A metabolic predator that hunts, eats, evolves and starves: it chases the
+	 * nearest smaller creature, bites it for energy, buds a mutated child when
+	 * well-fed, and dies if it cannot catch enough. Bigger and faster than the
+	 * prey (so it can catch and out-mass them), with wide, frequent perception.
+	 */
+	public static TestNPC predator(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.PREDATOR);
+		configureGenomeBody(t, g);
+		t.energy = 5.0;
+		t.reproThreshold = 6.0; // a kill or two before breeding
+		t.reproCost = 3.0;
+		t.LOS_FOV = Math.PI * 2;
+		t.LOS_RANGE = Math.max(g.losRange, 12);
+		t.SEARCH_FREQ = 3;
+		t.turn = 8;
 		return t;
 	}
 
@@ -400,7 +424,52 @@ public class TestNPC extends NPC {
 		case HAUL:
 			thinkHaul();
 			return;
+		case PREDATOR:
+			thinkPredator();
+			return;
 		}
+	}
+
+	/**
+	 * A hunter: it chases the nearest smaller creature (its prey), bites it when
+	 * in reach for a chunk of energy, and buds a mutated child when well-fed --
+	 * so a predator lineage evolves too. Metabolic: it starves if it cannot
+	 * catch enough, which is what keeps predator numbers in check when prey are
+	 * scarce. Never targets its own kind (only strictly smaller bodies).
+	 */
+	private void thinkPredator() {
+		NPC prey = nearestPrey();
+		if (prey != null) {
+			lockTarget(prey);
+			double reach = (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
+			if (distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
+				prey.damage(PRED_DAMAGE);
+				energy += PRED_BITE_ENERGY; // predation feeds the hunter
+			} else {
+				chase(speed, turn);
+			}
+		} else {
+			roam(speed, turn); // nothing to hunt: wander
+		}
+		tryReproduce();
+	}
+
+	/** Nearest strictly-smaller living creature in perception (its prey); skips
+	 * items, corpses, and same-or-larger bodies (other predators). */
+	private NPC nearestPrey() {
+		NPC best = null;
+		double bestD = Double.MAX_VALUE;
+		for (NPC n : targets.values()) {
+			if (n == this || n.isDead() || n instanceof Item || !(n.getSize() < getSize())) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < bestD) {
+				bestD = d;
+				best = n;
+			}
+		}
+		return best;
 	}
 
 	private double haulPickX, haulPickY;
@@ -844,7 +913,11 @@ public class TestNPC extends NPC {
 		if (behavior == Behavior.MINDED) {
 			return brainedBreeder(X, Y, Z, childG);
 		}
-		return behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
+		if (behavior == Behavior.PREDATOR) {
+			return predator(X, Y, Z, childG).withDeathspan(deathspan); // lineage shares corpse lifespan
+		}
+		TestNPC child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
+		return child.withDeathspan(deathspan);
 	}
 
 	@Override
@@ -952,6 +1025,15 @@ public class TestNPC extends NPC {
 		default:
 			return null;
 		}
+	}
+
+	/** Ecosystem role, for the world steward's population census: {@code
+	 *  "predator"}, {@code "prey"}, or {@code ""} for anything else. */
+	public String ecoRole() {
+		if (behavior == Behavior.PREDATOR) {
+			return "predator";
+		}
+		return behavior == Behavior.BREEDER ? "prey" : "";
 	}
 
 	@Override

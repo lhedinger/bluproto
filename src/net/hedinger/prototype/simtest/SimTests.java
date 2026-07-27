@@ -115,12 +115,13 @@ public class SimTests {
 	}
 
 	/**
-	 * Lethal damage kills; the corpse is then scavenged away.
+	 * Lethal damage kills; the corpse then decays on its own after its
+	 * deathspan, and scavenging clears it sooner.
 	 *
-	 * <p>Documents the real corpse-decay contract: kill() pins age at -1 and
-	 * nothing ever decrements it, so a corpse NEVER decays on its own --
-	 * deathspan is a scavenging budget, not a timer. Only eat() pushes age
-	 * past -deathspan, at which point the engine removes the body.
+	 * <p>Corpse-decay contract: a dead body ages toward removal one tick at a
+	 * time, so after {@code deathspan} ticks the engine purges it even with no
+	 * scavengers -- deathspan is how long a corpse lingers. Scavenging ({@code
+	 * eat()} decrements age) still clears it early.
 	 */
 	static class LethalDamageAndScavenging extends Scenario {
 		@Override
@@ -137,11 +138,21 @@ public class SimTests {
 			snapshot(w, "corpse");
 			assertTrue("dead after lethal damage", h.isDead());
 			assertEquals("no living actors after the kill", 0, w.getAliveCount());
-			tick(w, 500); // well past deathspan (100)
-			assertTrue("corpse persists indefinitely without scavengers", !h.isRemoved());
-			h.eat(101); // consume the full deathspan budget
+			tick(w, 50); // partway through the 100-tick deathspan
+			assertTrue("corpse lingers while within its deathspan", !h.isRemoved());
+			tick(w, 80); // total 130 ticks dead, past the deathspan
+			assertTrue("corpse decays on its own once its deathspan elapses", h.isRemoved());
+
+			// Scavenging clears a body well before its deathspan would.
+			TestNPC h2 = TestNPC.inert(4.5, 4.5, 0).withDeathspan(1000);
+			w.spawnEntity(h2);
+			tick(w, 2);
+			h2.damage(200);
 			tick(w, 1);
-			assertTrue("scavenged corpse is removed", h.isRemoved());
+			assertTrue("fresh corpse present", !h2.isRemoved());
+			h2.eat(1001); // scavenge the whole deathspan budget at once
+			tick(w, 1);
+			assertTrue("a scavenged corpse is removed early", h2.isRemoved());
 		}
 	}
 

@@ -138,6 +138,13 @@ public abstract class Entity {
 			} else {
 				age = -deathspan;
 			}
+		} else {
+			// A corpse ages toward removal: after `deathspan` ticks it drops past
+			// -deathspan and is purged next run. Without this a dead body with a
+			// positive deathspan only ever cleared if something scavenged it
+			// (eat() decrements age), so corpses accumulated forever in a
+			// long-running world. Scavenging still speeds it up.
+			age--;
 		}
 		return true;
 	}

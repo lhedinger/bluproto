@@ -10,8 +10,10 @@ import net.hedinger.prototype.simtest.TestNPC;
 
 /**
  * Deterministic world factories for headless hosting: seed in, living world
- * out. The demo world is the one the web server serves — a walled fertile
- * grassland roamed by a herd of grazers, with scattered items to interact with.
+ * out. The demo world the web server serves is a living, evolving ecosystem —
+ * a fertile grassland grazed by breeding herbivores, hunted by predators, kept
+ * inside sane population bounds by a {@link WorldSteward} so a public,
+ * always-on world never dies out or swarms.
  *
  * <p>Uses {@code TestNPC} fixtures for the population — deliberately: the
  * roadmap retires the legacy bestiary in favour of genome-driven species, and
@@ -23,32 +25,53 @@ public final class Worlds {
 	private Worlds() {
 	}
 
-	/**
-	 * Six deterministic "species" for the herd: distinct marker barcodes (which
-	 * drive the procedural body — form, legs, pattern, colour) and a couple of
-	 * fliers, so the world reads as a small menagerie rather than clones. Built
-	 * without RNG (fixed literals), so the demo world stays seed-determined.
-	 */
-	private static net.hedinger.prototype.entities.Genome[] herdSpecies() {
+	/** How long an ecosystem corpse lingers before it clears (ticks ≈ 3 s), so a
+	 *  predator's kills read as brief bodies rather than a growing grey field. */
+	private static final int ECO_DEATHSPAN = 90;
+
+	/** Herbivore "species": small, grazing prey — distinct marker barcodes drive
+	 *  distinct procedural bodies/colours; all metabolic breeders (they evolve). */
+	private static net.hedinger.prototype.entities.Genome[] preySpecies() {
+		// Warm/cool hues, deliberately NOT green — herbivores should read clearly
+		// against the green meadow, not camouflage into it.
 		double[][] markers = {
-				{ 0.85, 0.55, 0.20 }, // warm, few legs
-				{ 0.20, 0.70, 0.85 }, // cool, antennae
-				{ 0.60, 0.25, 0.55 }, // magenta core
-				{ 0.35, 0.85, 0.35 }, // green, leggy
-				{ 0.90, 0.80, 0.30 }, // gold, tailed
-				{ 0.15, 0.40, 0.75 }, // slate flyer
+				{ 0.90, 0.72, 0.40 }, // sand
+				{ 0.55, 0.72, 0.92 }, // sky blue
+				{ 0.74, 0.46, 0.86 }, // violet
+				{ 0.95, 0.60, 0.35 }, // amber
 		};
-		double[] sizes = { 7, 9, 6, 8, 11, 6 };
-		boolean[] fly = { false, false, false, false, false, true };
+		double[] sizes = { 7, 8, 6, 9 };
+		// Metabolism tuned to the world's grass carrying capacity (~15-20 grazers
+		// on this map): hardy enough to sit off the floor, not so hardy they
+		// overgraze into a breed-and-starve churn that carpets the field in
+		// corpses.
+		return species(markers, sizes, 0.018, 0.03, 0.02);
+	}
+
+	/** Predator "species": bigger, faster hunters — reddish barcodes so they read
+	 *  as menacing against the green prey. Metabolic; they hunt, breed, starve. */
+	private static net.hedinger.prototype.entities.Genome[] predSpecies() {
+		double[][] markers = {
+				{ 0.90, 0.20, 0.22 }, // red hunter
+				{ 0.78, 0.28, 0.48 }, // crimson hunter
+		};
+		double[] sizes = { 14, 13 };
+		// Predators must keep hunting to live (moderate metabolism), so prey
+		// scarcity thins them and the two populations track each other.
+		return species(markers, sizes, 0.045, 0.055, 0.02);
+	}
+
+	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
+			double speedLo, double speedHi, double metabolism) {
 		net.hedinger.prototype.entities.Genome[] out =
 				new net.hedinger.prototype.entities.Genome[markers.length];
 		for (int i = 0; i < markers.length; i++) {
 			net.hedinger.prototype.entities.Genome g = new net.hedinger.prototype.entities.Genome();
 			g.markers = markers[i];
 			g.size = sizes[i];
-			g.speed = 0.018 + 0.004 * (i % 3);
+			g.speed = speedLo + (speedHi - speedLo) * (markers.length == 1 ? 0 : i / (double) (markers.length - 1));
 			g.turnRate = 5;
-			g.flying = fly[i];
+			g.metabolism = metabolism;
 			out[i] = g;
 		}
 		return out;
@@ -86,47 +109,50 @@ public final class Worlds {
 	}
 
 	/**
-	 * A self-contained living arena, fully determined by the seed: patchy
-	 * fertile grassland, a wandering herd of grazers, and a scatter of items.
-	 * The returned world has ticked once, so every spawn is admitted and the
-	 * snapshot stream starts populated.
-	 *
-	 * <p>The herd is deliberately a stable, non-metabolic grazer population
-	 * rather than breeding evolvers: a public, always-on world must never be
-	 * found empty, and unbounded budders on regrowing grass are a chaotic
-	 * boom-or-extinction per seed. A steady herd keeps the world reliably alive
-	 * and in motion on every seed; the evolution sandbox stays the scenario
-	 * suite's job, and a breeding demo can be a future opt-in.
+	 * A living, evolving arena, fully determined by the seed: patchy fertile
+	 * grassland grazed by breeding herbivores, hunted by predators, with a
+	 * scatter of items — and a {@link WorldSteward} that keeps both populations
+	 * inside sane bounds so the public world never dies out or swarms. The
+	 * herbivores graze/breed/starve and the predators hunt/breed/starve, so
+	 * births, kills, deaths and evolution all play out on their own; the steward
+	 * only catches the extremes. The returned world has ticked once, so the
+	 * snapshot stream starts fully populated.
 	 */
 	public static World demo(long seed) {
 		World w = demoTerrain(seed);
 		int cols = w.getColums(), rows = w.getRows();
+		net.hedinger.prototype.entities.Genome[] prey = preySpecies();
+		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 
-		// A wandering herd drawn from a handful of species: each grazer renders as
-		// its genome's procedural organism (distinct forms, colours, a flyer or
-		// two) but keeps the stable graze-and-wander behaviour, so the herd drifts
-		// across the meadows forever without breeding or starving.
-		net.hedinger.prototype.entities.Genome[] species = herdSpecies();
+		// Founder herbivores: metabolic grazers that breed and evolve.
 		for (int i = 0; i < 16; i++) {
 			double x = 3 + Utils.random() * (cols - 6);
 			double y = 3 + Utils.random() * (rows - 6);
-			w.spawnEntity(TestNPC.grazer(x, y, 0, species[i % species.length]));
+			w.spawnEntity(TestNPC.breeder(x, y, 0, prey[i % prey.length])
+					.withEnergy(2.0).withDeathspan(ECO_DEATHSPAN));
+		}
+		// Founder predators.
+		for (int i = 0; i < 3; i++) {
+			double x = 3 + Utils.random() * (cols - 6);
+			double y = 3 + Utils.random() * (rows - 6);
+			w.spawnEntity(TestNPC.predator(x, y, 0, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
 		}
 
-		// A sprinkle of the inanimate world: food to find, crates to break,
-		// hazards to learn to avoid.
+		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < 6; i++) {
-			w.spawnEntity(Item.food(4 + Utils.random() * (cols - 8),
-					4 + Utils.random() * (rows - 8), 0));
+			w.spawnEntity(Item.food(4 + Utils.random() * (cols - 8), 4 + Utils.random() * (rows - 8), 0));
 		}
 		for (int i = 0; i < 3; i++) {
-			w.spawnEntity(Item.crate(4 + Utils.random() * (cols - 8),
-					4 + Utils.random() * (rows - 8), 0));
+			w.spawnEntity(Item.crate(4 + Utils.random() * (cols - 8), 4 + Utils.random() * (rows - 8), 0));
 		}
 		for (int i = 0; i < 2; i++) {
-			w.spawnEntity(Item.hazard(4 + Utils.random() * (cols - 8),
-					4 + Utils.random() * (rows - 8), 0));
+			w.spawnEntity(Item.hazard(4 + Utils.random() * (cols - 8), 4 + Utils.random() * (rows - 8), 0));
 		}
+
+		// The warden: prey in [10,40], predators in [2,8]. The bounds bracket the
+		// map's natural carrying capacity, so the steward only catches a genuine
+		// crash or bloom and the population mostly regulates itself.
+		w.spawnEntity(new WorldSteward(w, prey, pred, 10, 40, 2, 8));
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
