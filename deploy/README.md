@@ -41,8 +41,9 @@ bash /opt/bluproto/deploy/setup.sh
 ```
 
 The script installs Docker, asks for the domain / command token / seed
-(written to `deploy/.env`), builds the image, and starts server + Caddy with
-`restart: unless-stopped` — the world survives reboots.
+(written to `deploy/.env`), pulls the world-server image (built in CI, see
+below) or builds it locally on first boot, and starts server + Caddy +
+watchtower with `restart: unless-stopped` — the world survives reboots.
 
 *Private repo?* Add a read-only deploy key first (GitHub → repo → Settings →
 Deploy keys) and clone over SSH instead.
@@ -52,18 +53,26 @@ To act on it, open `https://yourdomain/#t=YOURTOKEN` — the page attaches the
 token to every command. Without it, spawning/pausing is refused (viewing
 still works).
 
-## Updating to the latest code
+## Updating: push to master, it deploys itself
 
-Re-run the script — it pulls and rebuilds:
+Every push to `master` runs **`.github/workflows/publish.yml`**, which builds
+a multi-arch (amd64 + arm64) image and pushes it to GHCR
+(`ghcr.io/lhedinger/bluproto:latest`). On the VPS, the **watchtower** service
+polls that package every couple of minutes and, when a new image lands, pulls
+it and recreates the server container in place — env vars, the recording
+volume, and TLS all preserved. No SSH key, no build on the VPS.
+
+**One-time, after the first publish:** make the package public so the VPS can
+pull it without credentials — GitHub → your repo → **Packages** → `bluproto`
+→ *Package settings* → **Change visibility** → *Public*. (Private also works,
+but then watchtower needs a registry login — see its docs.)
+
+Need an immediate update without waiting for the poll, or to change `.env`?
+Re-run the script — it pulls the latest image and restarts:
 
 ```bash
 bash /opt/bluproto/deploy/setup.sh
 ```
-
-Or trigger the **Deploy** GitHub Action (`.github/workflows/deploy.yml`,
-manual "Run workflow" button) after adding two repo secrets:
-`DEPLOY_HOST` (e.g. `root@1.2.3.4`) and `DEPLOY_SSH_KEY` (a private key whose
-public half is on the VPS).
 
 ## Operations crib sheet
 
@@ -96,11 +105,3 @@ A recording is just the world's seed plus the (tiny) log of commands applied to
 it; because the sim is deterministic, that reproduces any moment exactly. The
 live session's recording is also written to the `bluproto-data` volume every
 few seconds (`RECORD_DIR=/data`), so a reboot never loses viewers' spawns.
-
-## Auto-deploy on push
-
-Add two repo secrets (GitHub → Settings → Secrets → Actions):
-`DEPLOY_HOST` (`root@your.vps.ip`) and `DEPLOY_SSH_KEY` (a private key whose
-public half is in the VPS's `~/.ssh/authorized_keys`). Then every push to
-`master` redeploys automatically; until the secrets are set the workflow skips
-cleanly. You can also run it by hand from the Actions tab.

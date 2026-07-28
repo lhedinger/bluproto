@@ -52,8 +52,17 @@ if [ ! -s certs/origin.pem ] || [ ! -s certs/origin.key ]; then
 	exit 1
 fi
 
-# 5. Build and launch (world server + Caddy TLS edge).
-echo "-- building and starting"
-docker compose up -d --build
+# 5. Launch (world server + Caddy TLS edge + watchtower auto-updater).
+#    Prefer the CI-built image from GHCR; the little VPS shouldn't compile.
+#    Fall back to a local build only on the very first boot, before the
+#    publish workflow has pushed an image. After this, watchtower keeps the
+#    server current automatically — re-running setup.sh is rarely needed.
+echo "-- starting"
+if docker compose pull server 2>/dev/null; then
+	docker compose up -d
+else
+	echo "-- no published image yet; building locally (one-time)"
+	docker compose up -d --build
+fi
 
 echo "== done. https://$(grep ^DOMAIN= .env | cut -d= -f2) =="
