@@ -52,6 +52,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Stamp the commit into the image so /api/health reports it.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           # GitHub Actions cache keeps the JVM/npm layers warm between pushes.
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -24,6 +24,9 @@ WORKDIR /app
 COPY --from=build /build/server/build/install/server/ ./
 # Sprites and ground textures load from the filesystem-relative res/ dir.
 COPY res/ ./res/
-ENV PORT=7070 SEED=42
+# Stamp the built commit so /api/health reports exactly what's live (set by
+# the publish workflow; "dev" for a plain local build).
+ARG GIT_SHA=dev
+ENV PORT=7070 SEED=42 BUILD_VERSION=$GIT_SHA
 EXPOSE 7070
 CMD ["./bin/server"]
