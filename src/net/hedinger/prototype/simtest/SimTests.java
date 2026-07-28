@@ -2231,10 +2231,55 @@ public class SimTests {
 		return c;
 	}
 
+	/**
+	 * Anti-predator flight (the ecosystem's "aliveness" behaviour): a vigilant
+	 * eco herbivore ({@code withHerding()}) bolts away from a hunter, keeping a
+	 * wider gap than an ordinary grazer that crops in place while the predator
+	 * closes. Same seed, same cast — only the vigilance flag differs — so the gap
+	 * difference isolates the flight response. Pins that {@code withHerding()}
+	 * actually makes prey flee, and that the plain breeder is unaffected.
+	 */
+	static class HerbivoreFleesPredator extends Scenario {
+		private double endGap(boolean vigilant) {
+			seed(5);
+			World w = room(28, 28); // open grass, so the grazer never starves in-window
+			Genome preyG = new Genome();
+			preyG.markers = new double[] { 0.9, 0.7, 0.4 };
+			preyG.size = 7;
+			preyG.speed = 0.05; // a fleeing prey can open the gap...
+			Genome hunterG = new Genome();
+			hunterG.markers = new double[] { 0.9, 0.2, 0.2 };
+			hunterG.size = 14;
+			hunterG.speed = 0.04; // ...so flight is unambiguous, no kill to confound it
+			TestNPC pred = TestNPC.predator(10.5, 14.5, 0, hunterG);
+			TestNPC herb = TestNPC.breeder(15.5, 14.5, 0, preyG);
+			if (vigilant) {
+				herb.withHerding();
+			}
+			w.spawnEntity(pred);
+			w.spawnEntity(herb);
+			w.think();
+			tick(w, 25);
+			snapshot(w, vigilant ? "vigilant herbivore flees" : "plain grazer stays");
+			return Math.hypot(herb.getX() - pred.getX(), herb.getY() - pred.getY());
+		}
+
+		@Override
+		public void run() {
+			double fleeing = endGap(true);
+			double grazing = endGap(false);
+			assertGreater("a vigilant herbivore keeps a wider gap from the hunter than a grazer",
+					fleeing, grazing);
+			assertGreater("the vigilant herbivore actively opened distance (fled) from a 5-tile start",
+					fleeing, 5.0);
+		}
+	}
+
 	// ---- runner ------------------------------------------------------------
 
 	private static Scenario[] all() {
 		return new Scenario[] {
+				new HerbivoreFleesPredator(),
 				new WallContainment(),
 				new RoamerMoves(),
 				new ChaserClosesIn(),
