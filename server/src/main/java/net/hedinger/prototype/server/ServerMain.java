@@ -64,7 +64,8 @@ public final class ServerMain {
 		});
 
 		app.get("/api/health", ctx ->
-				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(), "commit", commit)));
+				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(),
+						"entities", host.runner().snapshot().entities().size(), "commit", commit)));
 
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.
 		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
