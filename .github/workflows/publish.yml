@@ -5,9 +5,11 @@ name: Publish image
 # watches this package and pulls the new image automatically — so "push to
 # master" is the whole deploy. No SSH key, no build on the little box.
 #
-# Multi-arch (amd64 + arm64) so the same tag runs on either a CX22 (x86) or a
-# CAX11 (arm64) VPS. The package is public (repo is public), so the VPS pulls
-# it without credentials — one-time: after the first publish, set the package
+# Built for linux/amd64 only — the VPS is x86, and building arm64 under QEMU
+# emulation tripled the build time for an image nothing runs. To target an arm
+# (CAX) box, add linux/arm64 back to `platforms` below (and restore the QEMU
+# setup step). The package is public (repo is public), so the VPS pulls it
+# without credentials — one-time: after the first publish, set the package
 # visibility to Public (repo → Packages → bluproto → Package settings).
 on:
   push:
@@ -24,8 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # QEMU + buildx enable the cross-architecture (arm64) build leg.
-      - uses: docker/setup-qemu-action@v3
+      # buildx for BuildKit (layer caching); no QEMU needed for a native amd64
+      # build. Re-add docker/setup-qemu-action@v3 if you restore arm64.
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
@@ -48,7 +50,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

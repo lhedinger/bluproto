@@ -14,6 +14,15 @@ RUN npm run build
 # 2 · Build the server, folding the prebuilt client into its static resources.
 FROM gradle:8.14-jdk21 AS build
 WORKDIR /build
+# Dependency layer first: copy only the build scripts and resolve dependencies,
+# so this expensive download is a cache hit whenever only source changes (the
+# layer is keyed on the build files, not the sources). Downloads land in the
+# image's Gradle home, so the cached layer carries them into the build below.
+COPY settings.gradle ./
+COPY engine/build.gradle ./engine/
+COPY server/build.gradle ./server/
+RUN gradle :server:dependencies --no-daemon -q || true
+# Sources, then the actual build (reuses the warm dependency cache above).
 COPY . .
 COPY --from=client /client/dist ./client/dist
 RUN gradle :server:installDist --no-daemon -q
