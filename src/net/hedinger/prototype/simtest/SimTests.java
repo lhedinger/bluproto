@@ -2275,11 +2275,47 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Seasons make the world breathe: over a year the demo ecosystem's prey herd
+	 * booms (lush summers) and thins (lean winters) instead of sitting flat at a
+	 * fixed floor — a visible swing — while never emptying. Samples the prey
+	 * headcount across two full seasonal cycles and asserts both a real swing and
+	 * a non-empty trough.
+	 */
+	static class SeasonsDriveBoomAndBust extends Scenario {
+		private int countPrey(World w) {
+			int prey = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.ecoRole().equals("prey")) {
+					prey++;
+				}
+			}
+			return prey;
+		}
+
+		@Override
+		public void run() {
+			net.hedinger.prototype.sim.SimulationRunner r =
+					new net.hedinger.prototype.sim.SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(7));
+			int lo = Integer.MAX_VALUE, hi = 0;
+			for (int t = 0; t < 12000; t += 200) {
+				int prey = countPrey(r.world());
+				lo = Math.min(lo, prey);
+				hi = Math.max(hi, prey);
+				r.advance(200);
+			}
+			snapshot(r.world(), "after two seasonal years");
+			assertGreater("the prey herd never empties (steward floor holds through winter)", lo, 0);
+			assertGreater("seasons drive a visible boom/bust swing in the herd", hi - lo, 8);
+		}
+	}
+
 	// ---- runner ------------------------------------------------------------
 
 	private static Scenario[] all() {
 		return new Scenario[] {
 				new HerbivoreFleesPredator(),
+				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
 				new RoamerMoves(),
 				new ChaserClosesIn(),
