@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-shot VPS setup for the bluproto world server (Ubuntu 24.04, Hetzner CX22).
+# One-shot VPS setup for the bluproto world server (Ubuntu 24.04/26.04,
+# Hetzner CX22 x86 or CAX11 arm64 — the stack is pure JVM + JS, arch-neutral).
 # Run as root on the fresh VPS:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/lhedinger/bluproto/master/deploy/setup.sh)
 # or clone the repo first and run deploy/setup.sh from it. Idempotent: safe to
