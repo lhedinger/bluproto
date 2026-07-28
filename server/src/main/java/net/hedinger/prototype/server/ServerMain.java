@@ -44,8 +44,16 @@ public final class ServerMain {
 		String token = cfg(args, "COMMAND_TOKEN", "");
 		// Built commit (set by the publish workflow -> Docker GIT_SHA); lets
 		// /api/health report exactly which commit is live, so a deploy is
-		// verifiable from outside. "dev" for a plain local run.
+		// verifiable from outside. "dev" for a plain local run. Shown short.
 		String commit = cfg(args, "BUILD_VERSION", "dev");
+		String commitShort = commit.length() > 7 ? commit.substring(0, 7) : commit;
+		// When this instance started running = when it was (re)deployed. Read
+		// once at startup, formatted human-readable in UTC.
+		String deployedAt = java.time.format.DateTimeFormatter
+				.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'")
+				.format(java.time.Instant
+						.ofEpochMilli(java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime())
+						.atZone(java.time.ZoneOffset.UTC));
 
 		WorldHost host = new WorldHost(seed);
 
@@ -65,7 +73,8 @@ public final class ServerMain {
 
 		app.get("/api/health", ctx ->
 				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(),
-						"entities", host.runner().snapshot().entities().size(), "commit", commit)));
+						"entities", host.runner().snapshot().entities().size(),
+						"commit", commitShort, "deployedAt", deployedAt)));
 
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.
 		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
