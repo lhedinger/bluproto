@@ -42,6 +42,10 @@ public class TestNPC extends NPC {
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
+	/** Eco herbivore: flees any predator within this radius (tiles). */
+	private static final double THREAT_R = 6.0;
+	/** Eco herbivore: regroups with kin within this radius when a patch thins. */
+	private static final double HERD_R = 7.0;
 	/** Pheromone laid at the nest at each birth; >> per-tick evaporation, so a
 	 *  repeatedly-marked nest cloud builds a strong persistent peak. */
 	private static final double NEST_DEPOSIT = 12.0;
@@ -63,6 +67,7 @@ public class TestNPC extends NPC {
 	private double speed = 0.04;
 	private int turn = 5;
 	private boolean heard = false;
+	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
 	private double totalIntake = 0;
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
@@ -356,6 +361,19 @@ public class TestNPC extends NPC {
 	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
 	public TestNPC withEnergy(double e) {
 		energy = e;
+		return this;
+	}
+
+	/**
+	 * Eco-only: makes a herbivore predator-aware. Each tick it bolts from any
+	 * predator inside {@link #THREAT_R} (overriding grazing), and when its patch
+	 * thins it drifts toward nearby kin instead of wandering at random, so a herd
+	 * loosely coheres and scatters. Off by default, so the plain {@link #breeder}
+	 * the scenarios use — and the deterministic stream — are unchanged. Inherited
+	 * by offspring, so a vigilant lineage stays vigilant.
+	 */
+	public TestNPC withHerding() {
+		vigilant = true;
 		return this;
 	}
 
@@ -864,16 +882,74 @@ public class TestNPC extends NPC {
 		return null;
 	}
 
-	/** Grazes for energy and buds a mutated child once well-fed. */
+	/** Grazes for energy and buds a mutated child once well-fed. When
+	 *  {@link #vigilant} (the eco herbivore), it flees predators and herds. */
 	private void thinkBreeder() {
+		if (vigilant) {
+			NPC threat = nearestThreat(THREAT_R);
+			if (threat != null) {
+				// Bolt: pick a waypoint directly away from the predator and run.
+				// Fleeing pre-empts grazing/breeding — survival first.
+				roam(speed, turn, Math.atan2(Y - threat.getY(), X - threat.getX()));
+				return;
+			}
+		}
 		double intake = graze(GRAZE_DEMAND); // feeds energy
 		totalIntake += intake;
 		if (tryReproduce()) {
 			return;
 		}
 		if (intake < GRAZE_DEMAND * 0.15) {
-			roam(speed, turn); // patch thinning -> find fresh grass
+			double herd = vigilant ? herdDir(HERD_R) : Double.NaN;
+			if (!Double.isNaN(herd)) {
+				roam(speed, turn, herd); // regroup with kin
+			} else {
+				roam(speed, turn); // patch thinning -> find fresh grass
+			}
 		}
+	}
+
+	/** Nearest living predator within {@code radius} (eco threat sense), or null.
+	 *  Keys on {@link #ecoRole()} rather than raw size, so a herbivore flees
+	 *  hunters — not merely larger herbivores. Scans proximity, not the
+	 *  facing-gated perception set, so a predator can't sneak up from behind. */
+	private NPC nearestThreat(double radius) {
+		NPC best = null;
+		double bestD = radius;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
+					|| !t.ecoRole().equals("predator")) {
+				continue;
+			}
+			double d = distance(t.getX(), t.getY(), t.getZ());
+			if (d < bestD) {
+				bestD = d;
+				best = t;
+			}
+		}
+		return best;
+	}
+
+	/** Heading toward the centroid of kin (same eco role) within {@code radius},
+	 *  or NaN when alone — a gentle cohesion pull, so a herd loosely aggregates
+	 *  without clumping into a single dot. */
+	private double herdDir(double radius) {
+		double sx = 0, sy = 0;
+		int k = 0;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
+					|| !t.ecoRole().equals("prey")) {
+				continue;
+			}
+			double d = distance(t.getX(), t.getY(), t.getZ());
+			if (d > radius || d < 1e-6) {
+				continue;
+			}
+			sx += t.getX();
+			sy += t.getY();
+			k++;
+		}
+		return k == 0 ? Double.NaN : Math.atan2(sy / k - Y, sx / k - X);
 	}
 
 	private boolean homing = false;
@@ -917,6 +993,7 @@ public class TestNPC extends NPC {
 			return predator(X, Y, Z, childG).withDeathspan(deathspan); // lineage shares corpse lifespan
 		}
 		TestNPC child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
+		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
 		return child.withDeathspan(deathspan);
 	}
 

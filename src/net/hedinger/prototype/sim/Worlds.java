@@ -129,7 +129,7 @@ public final class Worlds {
 			double x = 3 + Utils.random() * (cols - 6);
 			double y = 3 + Utils.random() * (rows - 6);
 			w.spawnEntity(TestNPC.breeder(x, y, 0, prey[i % prey.length])
-					.withEnergy(2.0).withDeathspan(ECO_DEATHSPAN));
+					.withHerding().withEnergy(2.0).withDeathspan(ECO_DEATHSPAN));
 		}
 		// Founder predators.
 		for (int i = 0; i < 3; i++) {

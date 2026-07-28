@@ -92,7 +92,7 @@ public final class WorldSteward extends Entity {
 		n++;
 		double x = 3 + Utils.random() * (cols - 6);
 		double y = 3 + Utils.random() * (rows - 6);
-		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g) : TestNPC.predator(x, y, 0, g);
+		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding() : TestNPC.predator(x, y, 0, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
