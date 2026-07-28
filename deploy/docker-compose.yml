@@ -2,9 +2,15 @@
 # Caddy terminates HTTPS with a Cloudflare Origin Certificate (Cloudflare
 # proxies the domain in "Full (strict)" mode) and proxies HTTP+WebSocket
 # traffic to the world server.
+#
+# Updates are hands-off: the image is built in CI and pushed to GHCR
+# (.github/workflows/publish.yml); the watchtower service below watches that
+# package and swaps in each new image automatically. `build:` stays only as a
+# first-boot fallback before CI has published anything (see deploy/setup.sh).
 
 services:
   server:
+    image: ghcr.io/lhedinger/bluproto:latest
     build:
       context: ..
     restart: unless-stopped
@@ -15,6 +21,9 @@ services:
       RECORD_DIR: "/data" # durable session recording survives restarts
     volumes:
       - bluproto-data:/data
+    labels:
+      # Only containers with this label are auto-updated by watchtower.
+      com.centurylinklabs.watchtower.enable: "true"
 
   caddy:
     image: caddy:2
@@ -30,6 +39,17 @@ services:
       DOMAIN: "${DOMAIN:?set in .env — your Cloudflare-managed domain}"
     depends_on:
       - server
+
+  # Auto-deploy: polls GHCR every 2 minutes and, when a newer server image is
+  # published, pulls it and recreates the container (preserving env/volumes),
+  # then prunes the old image so the VPS's fixed disk doesn't fill. Only the
+  # label-enabled server is watched — Caddy and watchtower itself are left be.
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --interval 120
 
 volumes:
   caddy-data:
