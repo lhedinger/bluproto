@@ -81,3 +81,26 @@ Reset to a fresh world from anywhere:
 curl -X POST https://yourdomain/api/world/reset \
      -H "X-Command-Token: YOURTOKEN" -d '{"seed": 7}'
 ```
+
+## Metrics & replay
+
+```bash
+curl https://yourdomain/api/metrics            # JSON: tick, tickMs, entities, viewers, heap, uptime
+curl https://yourdomain/metrics                # Prometheus text (for scraping)
+curl https://yourdomain/api/world/recording -o recording.json   # download the session
+curl "https://yourdomain/api/replay?tick=5000"                  # reconstruct the world at tick 5000
+curl -X POST https://yourdomain/api/replay -d @recording.json   # replay a downloaded recording
+```
+
+A recording is just the world's seed plus the (tiny) log of commands applied to
+it; because the sim is deterministic, that reproduces any moment exactly. The
+live session's recording is also written to the `bluproto-data` volume every
+few seconds (`RECORD_DIR=/data`), so a reboot never loses viewers' spawns.
+
+## Auto-deploy on push
+
+Add two repo secrets (GitHub → Settings → Secrets → Actions):
+`DEPLOY_HOST` (`root@your.vps.ip`) and `DEPLOY_SSH_KEY` (a private key whose
+public half is in the VPS's `~/.ssh/authorized_keys`). Then every push to
+`master` redeploys automatically; until the secrets are set the workflow skips
+cleanly. You can also run it by hand from the Actions tab.

@@ -45,13 +45,25 @@ final class WorldHost {
 				return t;
 			});
 
+	private volatile long startedAt = System.currentTimeMillis();
+	private final java.io.File recordDir; // durable recording dir, or null (off)
+
 	WorldHost(long seed) {
+		String rd = System.getenv("RECORD_DIR");
+		this.recordDir = (rd == null || rd.isBlank()) ? null : new java.io.File(rd);
+		if (recordDir != null) {
+			recordDir.mkdirs();
+		}
 		buildWorld(seed);
 		broadcaster.scheduleAtFixedRate(this::broadcast, BROADCAST_MS, BROADCAST_MS, TimeUnit.MILLISECONDS);
+		// Durability: periodically dump the session's recording (seed + command
+		// log) so a crash or reboot never loses a viewer's spawns.
+		broadcaster.scheduleAtFixedRate(this::dumpRecording, 15, 15, TimeUnit.SECONDS);
 	}
 
 	private void buildWorld(long newSeed) {
 		seed = newSeed;
+		startedAt = System.currentTimeMillis();
 		SimulationRunner r = new SimulationRunner(Worlds.demo(newSeed));
 		List<byte[]> baked = new ArrayList<byte[]>();
 		var terrain = Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
@@ -193,6 +205,64 @@ final class WorldHost {
 
 	SimulationRunner runner() {
 		return runner;
+	}
+
+	// ---- metrics + recording ----------------------------------------------
+
+	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */
+	java.util.Map<String, Object> metrics() {
+		Runtime rt = Runtime.getRuntime();
+		return new java.util.LinkedHashMap<String, Object>(java.util.Map.ofEntries(
+				java.util.Map.entry("seed", seed),
+				java.util.Map.entry("tick", runner.snapshot().tick()),
+				java.util.Map.entry("tickMs", Math.round(runner.avgTickMillis() * 1000) / 1000.0),
+				java.util.Map.entry("targetTps", SimulationRunner.TICKS_PER_SECOND),
+				java.util.Map.entry("entities", runner.snapshot().entities().size()),
+				java.util.Map.entry("commands", runner.commandLog().size()),
+				java.util.Map.entry("viewers", viewers()),
+				java.util.Map.entry("paused", runner.isPaused()),
+				java.util.Map.entry("speed", runner.getSpeed()),
+				java.util.Map.entry("uptimeSec", (System.currentTimeMillis() - startedAt) / 1000),
+				java.util.Map.entry("heapMb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024))));
+	}
+
+	/** The current session as a downloadable, replayable recording. */
+	net.hedinger.prototype.sim.Recording recording() {
+		return net.hedinger.prototype.sim.Recording.of(seed, runner);
+	}
+
+	/**
+	 * Reconstructs a recording to a given tick without disturbing the live world.
+	 * The engine RNG is a single global, so this runs under the runner's lock
+	 * (the live tick can't draw concurrently) with the live generator captured
+	 * and restored around it — the reconstruction reseeds and draws freely on an
+	 * isolated stream, then the live world resumes exactly where it was. Cheap
+	 * enough to hold the lock for (sub-millisecond ticks), so the pause is
+	 * imperceptible.
+	 */
+	net.hedinger.prototype.sim.WorldSnapshot replay(net.hedinger.prototype.sim.Recording rec, long tick) {
+		synchronized (runner) {
+			Object savedRng = net.hedinger.prototype.engine.Utils.captureRng();
+			try {
+				return net.hedinger.prototype.sim.Replays.reconstruct(rec, tick);
+			} finally {
+				net.hedinger.prototype.engine.Utils.restoreRng(savedRng);
+			}
+		}
+	}
+
+	/** Writes the recording to the durable dir (no-op if RECORD_DIR is unset or
+	 *  the session has no commands worth persisting). */
+	private void dumpRecording() {
+		try {
+			if (recordDir == null || runner.commandLog().size() == 0) {
+				return;
+			}
+			byte[] json = Protocol.JSON.writeValueAsBytes(recording());
+			java.nio.file.Files.write(new java.io.File(recordDir, "session.json").toPath(), json);
+		} catch (Exception e) {
+			System.err.println("recording dump: " + e);
+		}
 	}
 
 	long seed() {

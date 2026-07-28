@@ -1,10 +1,13 @@
 name: Deploy
 
-# Manual deploy to the Hetzner VPS (deploy/README.md). Requires two repo
-# secrets: DEPLOY_HOST (e.g. root@1.2.3.4) and DEPLOY_SSH_KEY (private key
-# whose public half is authorized on the VPS). The VPS-side script pulls the
-# branch and rebuilds the containers.
+# Deploys to the Hetzner VPS (deploy/README.md). Runs automatically on every
+# push to master, and can be triggered by hand for any branch. Requires two
+# repo secrets: DEPLOY_HOST (e.g. root@1.2.3.4) and DEPLOY_SSH_KEY (a private
+# key whose public half is authorized on the VPS). Until those are set the job
+# skips cleanly (green), so pushes are never blocked by an unconfigured deploy.
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       branch:
@@ -19,10 +22,12 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          BRANCH: ${{ inputs.branch }}
+          BRANCH: ${{ inputs.branch || 'master' }}
         run: |
           if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
-            echo "DEPLOY_HOST / DEPLOY_SSH_KEY secrets not configured"; exit 1
+            echo "DEPLOY_HOST / DEPLOY_SSH_KEY secrets not set — skipping deploy."
+            echo "Add them in repo Settings → Secrets to enable auto-deploy."
+            exit 0
           fi
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy

@@ -105,6 +105,24 @@ public class Utils {
 		return seed;
 	}
 
+	/**
+	 * Captures the live RNG so a headless side-computation (a replay
+	 * reconstruction) can reseed and draw, then hand the stream back exactly
+	 * where the live world left it. {@link #seed(long)} replaces the generator
+	 * reference rather than mutating it, so the captured object keeps advancing
+	 * only under whoever holds it — capture, run isolated work, restore.
+	 */
+	public static Object captureRng() {
+		return new Object[] { rng, seed };
+	}
+
+	/** Restores a generator captured by {@link #captureRng()}. */
+	public static void restoreRng(Object captured) {
+		Object[] c = (Object[]) captured;
+		rng = (java.util.Random) c[0];
+		seed = (Long) c[1];
+	}
+
 	/** Drop-in replacement for Math.random(): uniform double in [0, 1). */
 	public static double random() {
 		return rng.nextDouble();

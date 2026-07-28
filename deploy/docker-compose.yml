@@ -12,6 +12,9 @@ services:
       SEED: "${SEED:-42}"
       PORT: "7070"
       COMMAND_TOKEN: "${COMMAND_TOKEN:?set in .env — gate for mutating commands}"
+      RECORD_DIR: "/data" # durable session recording survives restarts
+    volumes:
+      - bluproto-data:/data
 
   caddy:
     image: caddy:2
@@ -30,3 +33,4 @@ services:
 
 volumes:
   caddy-data:
+  bluproto-data:

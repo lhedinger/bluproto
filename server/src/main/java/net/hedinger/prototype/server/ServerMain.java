@@ -62,6 +62,39 @@ public final class ServerMain {
 		app.get("/api/health", ctx ->
 				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick())));
 
+		// Ops metrics: sim cost, world size, viewers, uptime, heap.
+		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
+
+		// Prometheus text exposition of the same numbers, for scraping.
+		app.get("/metrics", ctx -> {
+			StringBuilder b = new StringBuilder();
+			host.metrics().forEach((k, v) -> {
+				if (v instanceof Number || v instanceof Boolean) {
+					double num = v instanceof Boolean bool ? (bool ? 1 : 0) : ((Number) v).doubleValue();
+					b.append("bluproto_").append(k).append(' ').append(num).append('\n');
+				}
+			});
+			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
+		});
+
+		// Download the current session as a replayable recording (seed + log).
+		app.get("/api/world/recording", ctx ->
+				ctx.header("Content-Disposition", "attachment; filename=recording.json")
+						.json(host.recording()));
+
+		// Replay/reconstruct: rebuild the world at any past tick. GET replays the
+		// live session's recording; POST replays an uploaded one.
+		app.get("/api/replay", ctx -> {
+			long tick = ctx.queryParamAsClass("tick", Long.class).getOrDefault(Long.MAX_VALUE);
+			ctx.json(host.replay(host.recording(), tick));
+		});
+		app.post("/api/replay", ctx -> {
+			net.hedinger.prototype.sim.Recording rec =
+					Protocol.JSON.readValue(ctx.body(), net.hedinger.prototype.sim.Recording.class);
+			long tick = ctx.queryParamAsClass("tick", Long.class).getOrDefault(Long.MAX_VALUE);
+			ctx.json(host.replay(rec, tick));
+		});
+
 		app.get("/api/world", ctx -> {
 			var w = host.runner().world();
 			var s = host.runner().snapshot();

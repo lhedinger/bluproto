@@ -72,12 +72,40 @@ public final class SimulationRunner {
 			c.apply(world);
 			log.append(world.getTick(), c);
 		}
+		long t0 = System.nanoTime();
 		world.think();
 		WorldSnapshot s = WorldSnapshot.of(world);
+		recordTickTime(System.nanoTime() - t0);
 		latest = s;
 		for (SnapshotListener l : listeners) {
 			l.onTick(s);
 		}
+	}
+
+	// ---- metrics (rolling per-tick cost) ----------------------------------
+
+	private static final int TICK_WINDOW = 64;
+	private final long[] tickNanos = new long[TICK_WINDOW];
+	private int tickIdx = 0;
+	private long ticksTimed = 0;
+
+	private void recordTickTime(long nanos) {
+		tickNanos[tickIdx] = nanos;
+		tickIdx = (tickIdx + 1) % TICK_WINDOW;
+		ticksTimed++;
+	}
+
+	/** Mean wall time of the last window of ticks, in milliseconds. */
+	public double avgTickMillis() {
+		int n = (int) Math.min(ticksTimed, TICK_WINDOW);
+		if (n == 0) {
+			return 0;
+		}
+		long sum = 0;
+		for (int i = 0; i < n; i++) {
+			sum += tickNanos[i];
+		}
+		return sum / (double) n / 1_000_000.0;
 	}
 
 	/** Advances n ticks synchronously (tests, replays, fast-forward). */

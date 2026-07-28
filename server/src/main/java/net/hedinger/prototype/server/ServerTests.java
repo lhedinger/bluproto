@@ -24,6 +24,7 @@ public final class ServerTests {
 		deltaOfIdenticalSnapshotsIsEmpty();
 		fullMessageJsonRoundTrips();
 		deltaAppliedToFullMatchesNextSnapshot();
+		replayReconstructsLiveSessionExactly();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -83,6 +84,32 @@ public final class ServerTests {
 		}
 		check("full + delta reproduces the next snapshot exactly",
 				List.copyOf(client.values()).equals(next.entities()));
+	}
+
+	/** A recorded session replays to a bit-identical world at any tick, and
+	 * survives a JSON round-trip (the download/replay feature's core promise). */
+	static void replayReconstructsLiveSessionExactly() throws Exception {
+		SimulationRunner live = new SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(21));
+		live.advance(20);
+		live.enqueue(net.hedinger.prototype.sim.SpawnItemCommand.parse("food", 10.5, 10.5, 0));
+		live.advance(25);
+		live.enqueue(net.hedinger.prototype.sim.SpawnItemCommand.parse("crate", 20.5, 12.5, 0));
+		live.advance(30);
+		long liveTick = live.snapshot().tick();
+		long liveSum = live.snapshot().checksum();
+
+		net.hedinger.prototype.sim.Recording rec = net.hedinger.prototype.sim.Recording.of(21, live);
+		check("replay reconstructs the live snapshot exactly",
+				net.hedinger.prototype.sim.Replays.reconstruct(rec, liveTick).checksum() == liveSum);
+
+		String json = Protocol.write(rec);
+		net.hedinger.prototype.sim.Recording rec2 =
+				Protocol.JSON.readValue(json, net.hedinger.prototype.sim.Recording.class);
+		check("a serialized recording still reconstructs exactly",
+				net.hedinger.prototype.sim.Replays.reconstruct(rec2, liveTick).checksum() == liveSum);
+
+		WorldSnapshot mid = net.hedinger.prototype.sim.Replays.reconstruct(rec, 40);
+		check("scrub-to-tick lands on the requested tick", mid.tick() == 40);
 	}
 
 	private static EntityState probe(int id, double x) {
