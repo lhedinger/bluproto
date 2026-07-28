@@ -42,10 +42,10 @@ public final class ServerMain {
 		// set, viewing stays open but every mutating verb — WS commands and the
 		// reset endpoint — requires the token. Unset (local dev) means open.
 		String token = cfg(args, "COMMAND_TOKEN", "");
-		// Build stamp (set by the publish workflow -> Docker GIT_SHA); lets
+		// Built commit (set by the publish workflow -> Docker GIT_SHA); lets
 		// /api/health report exactly which commit is live, so a deploy is
 		// verifiable from outside. "dev" for a plain local run.
-		String version = cfg(args, "BUILD_VERSION", "dev");
+		String commit = cfg(args, "BUILD_VERSION", "dev");
 
 		WorldHost host = new WorldHost(seed);
 
@@ -64,7 +64,7 @@ public final class ServerMain {
 		});
 
 		app.get("/api/health", ctx ->
-				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(), "version", version)));
+				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(), "commit", commit)));
 
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.
 		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
