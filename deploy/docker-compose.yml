@@ -44,8 +44,13 @@ services:
   # published, pulls it and recreates the container (preserving env/volumes),
   # then prunes the old image so the VPS's fixed disk doesn't fill. Only the
   # label-enabled server is watched — Caddy and watchtower itself are left be.
+  # nicholas-fedor/watchtower — the maintained fork. The original
+  # containrrr/watchtower is abandoned and ships a Docker client too old for
+  # modern Docker Engine (fails with "client version 1.25 is too old"), so it
+  # crash-loops and never updates anything. The fork is a drop-in: same
+  # label/flag conventions, current Docker SDK.
   watchtower:
-    image: containrrr/watchtower
+    image: ghcr.io/nicholas-fedor/watchtower
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
