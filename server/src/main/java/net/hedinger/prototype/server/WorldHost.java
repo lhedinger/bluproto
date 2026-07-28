@@ -212,9 +212,10 @@ final class WorldHost {
 	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */
 	java.util.Map<String, Object> metrics() {
 		Runtime rt = Runtime.getRuntime();
+		long tick = runner.snapshot().tick();
 		return new java.util.LinkedHashMap<String, Object>(java.util.Map.ofEntries(
 				java.util.Map.entry("seed", seed),
-				java.util.Map.entry("tick", runner.snapshot().tick()),
+				java.util.Map.entry("tick", tick),
 				java.util.Map.entry("tickMs", Math.round(runner.avgTickMillis() * 1000) / 1000.0),
 				java.util.Map.entry("targetTps", SimulationRunner.TICKS_PER_SECOND),
 				java.util.Map.entry("entities", runner.snapshot().entities().size()),
@@ -222,6 +223,9 @@ final class WorldHost {
 				java.util.Map.entry("viewers", viewers()),
 				java.util.Map.entry("paused", runner.isPaused()),
 				java.util.Map.entry("speed", runner.getSpeed()),
+				java.util.Map.entry("season", net.hedinger.prototype.sim.WorldSteward.seasonLabel(tick)),
+				java.util.Map.entry("seasonPhase",
+						Math.round(net.hedinger.prototype.sim.WorldSteward.seasonPhase(tick) * 100) / 100.0),
 				java.util.Map.entry("uptimeSec", (System.currentTimeMillis() - startedAt) / 1000),
 				java.util.Map.entry("heapMb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024))));
 	}

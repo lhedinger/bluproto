@@ -31,7 +31,10 @@ import net.hedinger.prototype.simtest.TestNPC;
  */
 public final class WorldSteward extends Entity {
 
-	private final int preyMin, preyMax, predMin, predMax;
+	// Population bounds {min, max} at the two extremes of the year; the live
+	// bounds are interpolated between them by the season, so the world holds
+	// more life in summer and less in winter.
+	private final int[] preyWinter, preySummer, predWinter, predSummer;
 	private final Genome[] preySpecies, predSpecies;
 	private final int cols, rows;
 	private int n = 0; // rotates species / placement, deterministically
@@ -39,21 +42,73 @@ public final class WorldSteward extends Entity {
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
 	private static final int ECO_DEATHSPAN = 90;
 
+	// --- seasons: a slow fertility cycle that makes the world breathe ---------
+	/** Ticks in one seasonal cycle (~3 min at 33 t/s): summer -> winter -> summer. */
+	private static final int YEAR_TICKS = 6000;
+	/** Fertility scale oscillates in [MID-AMP, MID+AMP]: summers push the grass to
+	 *  its lush cap, winters starve it back. (setFertility clamps at 1.0, so the
+	 *  summer overshoot just means the peak plateaus at full lushness.) */
+	private static final double SEASON_MID = 0.85, SEASON_AMP = 0.55;
+	/** Each floor tile's world-gen fertility, captured once; seasons scale this. */
+	private double[] baseFertility;
+
+	/** Seasonal fertility multiplier at a tick — 1.0 at peak summer down to
+	 *  {@code MID-AMP} in deep winter. Pure function of the tick, so it replays
+	 *  identically. */
+	public static double seasonFactor(long tick) {
+		return SEASON_MID + SEASON_AMP * Math.sin(2 * Math.PI * (tick % YEAR_TICKS) / YEAR_TICKS);
+	}
+
+	/** Season phase in [0,1]: 0 = deep winter, 1 = peak summer. */
+	public static double seasonPhase(long tick) {
+		return (seasonFactor(tick) - (SEASON_MID - SEASON_AMP)) / (2 * SEASON_AMP);
+	}
+
+	/** Human label for the current point in the year, from the phase and whether
+	 *  it is waxing (spring) or waning (autumn). */
+	public static String seasonLabel(long tick) {
+		double p = seasonPhase(tick);
+		boolean waxing = seasonPhase(tick + 1) >= p;
+		if (p > 0.75) {
+			return "summer";
+		}
+		if (p < 0.25) {
+			return "winter";
+		}
+		return waxing ? "spring" : "autumn";
+	}
+
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies,
-			int preyMin, int preyMax, int predMin, int predMax) {
+			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, 0, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
 		this.preySpecies = preySpecies;
 		this.predSpecies = predSpecies;
-		this.preyMin = preyMin;
-		this.preyMax = preyMax;
-		this.predMin = predMin;
-		this.predMax = predMax;
+		this.preyWinter = preyWinter;
+		this.preySummer = preySummer;
+		this.predWinter = predWinter;
+		this.predSummer = predSummer;
+	}
+
+	/** Interpolates an integer bound between its winter and summer value. */
+	private static int lerp(int winter, int summer, double phase) {
+		return (int) Math.round(winter + (summer - winter) * phase);
 	}
 
 	@Override
 	protected void think() {
+		long tick = getWorld().getTick();
+		applySeason(tick);
+
+		// Live bounds track the season: high in summer, low in winter, so the
+		// headcount visibly rises and falls with the grass.
+		double phase = seasonPhase(tick);
+		int preyMin = lerp(preyWinter[0], preySummer[0], phase);
+		int preyMax = lerp(preyWinter[1], preySummer[1], phase);
+		int predMin = lerp(predWinter[0], predSummer[0], phase);
+		int predMax = lerp(predWinter[1], predSummer[1], phase);
+
 		int prey = 0, pred = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
@@ -66,8 +121,8 @@ public final class WorldSteward extends Entity {
 			}
 		}
 
-		// Floor: reseed a couple per tick until the minimum is restored, so a
-		// crash recovers quickly but not instantly (it reads as a bloom).
+		// Floor: reseed a couple per tick until the (seasonal) minimum is
+		// restored, so a crash — or a spring thaw — recovers as a bloom.
 		if (prey < preyMin) {
 			seed(preySpecies, true);
 			seed(preySpecies, true);
@@ -76,13 +131,40 @@ public final class WorldSteward extends Entity {
 			seed(predSpecies, false);
 		}
 
-		// Ceiling: trim a small, fixed number of the excess per tick. Removed
-		// (not killed) so a hard cap does not carpet the world in corpses.
+		// Ceiling: trim a small, fixed number of the excess per tick, so a
+		// falling seasonal cap thins the herd gradually rather than culling it.
 		if (prey > preyMax) {
 			trim("prey", Math.min(3, prey - preyMax));
 		}
 		if (pred > predMax) {
 			trim("predator", Math.min(2, pred - predMax));
+		}
+	}
+
+	/**
+	 * Seasons: scale every floor tile's fertility by {@link #seasonFactor} of the
+	 * current tick. The base (world-gen, patchy) fertility is captured on the
+	 * first tick and never mutated, so the seasonal cycle preserves the map's
+	 * rich/poor habitat pattern while raising and lowering the whole grassland's
+	 * carrying capacity. Grass is lush in summer (prey breed and boom) and scarce
+	 * in winter (prey thin, predators follow) — a Lotka-Volterra rhythm the flat
+	 * steward floor otherwise damps out. Cheap: a single sweep of doubles.
+	 */
+	private void applySeason(long tick) {
+		World w = getWorld();
+		if (baseFertility == null) {
+			baseFertility = new double[cols * rows];
+			for (int y = 0; y < rows; y++) {
+				for (int x = 0; x < cols; x++) {
+					baseFertility[y * cols + x] = w.getTile(x, y, 0).getFertility();
+				}
+			}
+		}
+		double factor = seasonFactor(tick);
+		for (int y = 0; y < rows; y++) {
+			for (int x = 0; x < cols; x++) {
+				w.getTile(x, y, 0).setFertility(baseFertility[y * cols + x] * factor);
+			}
 		}
 	}
 

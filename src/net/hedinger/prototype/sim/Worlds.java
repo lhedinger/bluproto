@@ -41,11 +41,11 @@ public final class Worlds {
 				{ 0.95, 0.60, 0.35 }, // amber
 		};
 		double[] sizes = { 7, 8, 6, 9 };
-		// Metabolism tuned to the world's grass carrying capacity (~15-20 grazers
-		// on this map): hardy enough to sit off the floor, not so hardy they
-		// overgraze into a breed-and-starve churn that carpets the field in
-		// corpses.
-		return species(markers, sizes, 0.018, 0.03, 0.02);
+		// Low metabolism so grazers bank a strong energy surplus in lush months
+		// and breed freely — the herd is food-limited (booms when grass is rich,
+		// thins when it is scarce), not pinned to the steward's floor by
+		// predation. Seasons then read as real boom/bust.
+		return species(markers, sizes, 0.018, 0.03, 0.012);
 	}
 
 	/** Predator "species": bigger, faster hunters — reddish barcodes so they read
@@ -102,7 +102,7 @@ public final class Worlds {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				double f = w.getTile(x, y, 0).getFertility();
-				w.getTile(x, y, 0).setFertility(0.4 + 0.6 * f);
+				w.getTile(x, y, 0).setFertility(0.6 + 0.4 * f);
 			}
 		}
 		return w;
@@ -131,8 +131,8 @@ public final class Worlds {
 			w.spawnEntity(TestNPC.breeder(x, y, 0, prey[i % prey.length])
 					.withHerding().withEnergy(2.0).withDeathspan(ECO_DEATHSPAN));
 		}
-		// Founder predators.
-		for (int i = 0; i < 3; i++) {
+		// Founder predators (few: predation should track the prey, not cap it).
+		for (int i = 0; i < 2; i++) {
 			double x = 3 + Utils.random() * (cols - 6);
 			double y = 3 + Utils.random() * (rows - 6);
 			w.spawnEntity(TestNPC.predator(x, y, 0, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
@@ -149,10 +149,13 @@ public final class Worlds {
 			w.spawnEntity(Item.hazard(4 + Utils.random() * (cols - 8), 4 + Utils.random() * (rows - 8), 0));
 		}
 
-		// The warden: prey in [10,40], predators in [2,8]. The bounds bracket the
-		// map's natural carrying capacity, so the steward only catches a genuine
-		// crash or bloom and the population mostly regulates itself.
-		w.spawnEntity(new WorldSteward(w, prey, pred, 10, 40, 2, 8));
+		// The warden, with seasonal bounds: winter holds a lean {min,max}, summer
+		// a lush one, and the steward interpolates between them over the year —
+		// so the population visibly booms in summer and thins in winter while
+		// never emptying or swarming.
+		w.spawnEntity(new WorldSteward(w, prey, pred,
+				new int[] { 8, 18 }, new int[] { 22, 58 }, // prey: winter, summer
+				new int[] { 1, 4 }, new int[] { 2, 10 })); // predators: winter, summer
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
