@@ -30,10 +30,17 @@ final class WorldHost {
 	/** Broadcast cadence: every 100 ms ≈ 10 Hz (the client interpolates). */
 	private static final long BROADCAST_MS = 100;
 
+	/** Ground is baked and served as fixed-size map chunks (google-maps style):
+	 *  each level is rendered once, then sliced into CHUNK_TILES-square PNGs the
+	 *  client streams on demand. Bounds per-request size and lets the client
+	 *  fetch only the region in view. */
+	private static final int CHUNK_TILES = 16;
+
 	private final Object lock = new Object();
 	private long seed;
 	private SimulationRunner runner;
-	private List<byte[]> layers; // baked PNG per level
+	private java.util.Map<String, byte[]> chunks; // key "z/cx_cy" -> PNG
+	private int chunksX, chunksY; // chunk grid dimensions
 	private WorldSnapshot lastSent;
 	private boolean forceFull = false;
 
@@ -65,13 +72,29 @@ final class WorldHost {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
 		SimulationRunner r = new SimulationRunner(Worlds.demo(newSeed));
-		List<byte[]> baked = new ArrayList<byte[]>();
 		var terrain = Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
+		int chunkPx = CHUNK_TILES * ts;
+		int cols = r.world().getColums(), rows = r.world().getRows();
+		int imgW = cols * ts, imgH = rows * ts;
+		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
+		int cyN = (rows + CHUNK_TILES - 1) / CHUNK_TILES;
+		java.util.Map<String, byte[]> baked = new java.util.HashMap<String, byte[]>();
 		for (int z = 0; z < r.world().getLevels(); z++) {
-			baked.add(LayerBaker.bake(terrain, z));
+			java.awt.image.BufferedImage full = LayerBaker.renderLevelImage(terrain, z);
+			for (int cy = 0; cy < cyN; cy++) {
+				for (int cx = 0; cx < cxN; cx++) {
+					int x0 = cx * chunkPx, y0 = cy * chunkPx;
+					int w = Math.min(chunkPx, imgW - x0), h = Math.min(chunkPx, imgH - y0);
+					baked.put(z + "/" + cx + "_" + cy, LayerBaker.chunkPng(full, x0, y0, w, h));
+				}
+			}
+			full = null; // free the whole-level image before rendering the next
 		}
 		runner = r;
-		layers = baked;
+		chunks = baked;
+		chunksX = cxN;
+		chunksY = cyN;
 		lastSent = r.snapshot();
 		r.start();
 	}
@@ -84,13 +107,10 @@ final class WorldHost {
 		synchronized (lock) {
 			WorldSnapshot s = runner.snapshot();
 			var w = runner.world();
-			List<String> urls = new ArrayList<String>();
-			for (int z = 0; z < w.getLevels(); z++) {
-				urls.add("/api/world/layers/" + z + ".png");
-			}
 			ctx.send(Protocol.write(Protocol.Hello.of(seed, w.getColums(), w.getRows(), w.getLevels(),
 					net.hedinger.prototype.engine.ResourceManager.tileSize,
-					s.tick(), runner.isPaused(), runner.getSpeed(), urls)));
+					s.tick(), runner.isPaused(), runner.getSpeed(),
+					java.util.List.of(), CHUNK_TILES)));
 			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), s.entities())));
 			sessions.add(ctx);
 		}
@@ -273,9 +293,9 @@ final class WorldHost {
 		return seed;
 	}
 
-	byte[] layer(int z) {
-		List<byte[]> l = layers;
-		return z >= 0 && z < l.size() ? l.get(z) : null;
+	/** A baked ground chunk PNG at (level z, chunk cx, cy), or null if none. */
+	byte[] chunk(int z, int cx, int cy) {
+		return chunks.get(z + "/" + cx + "_" + cy);
 	}
 
 	int viewers() {

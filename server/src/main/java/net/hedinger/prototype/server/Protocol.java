@@ -31,10 +31,10 @@ final class Protocol {
 	static final ObjectMapper JSON = new ObjectMapper();
 
 	record Hello(String type, long seed, int cols, int rows, int levels, int tileSize,
-			long tick, boolean paused, double speed, List<String> layers) {
+			long tick, boolean paused, double speed, List<String> layers, int chunkTiles) {
 		static Hello of(long seed, int cols, int rows, int levels, int tileSize,
-				long tick, boolean paused, double speed, List<String> layers) {
-			return new Hello("hello", seed, cols, rows, levels, tileSize, tick, paused, speed, layers);
+				long tick, boolean paused, double speed, List<String> layers, int chunkTiles) {
+			return new Hello("hello", seed, cols, rows, levels, tileSize, tick, paused, speed, layers, chunkTiles);
 		}
 	}
 

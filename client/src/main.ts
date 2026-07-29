@@ -27,9 +27,23 @@ const state = new WorldState();
 const cam = new Camera(cv);
 let meta: WorldMeta | null = null;
 let hello: HelloMsg | null = null;
-let layers: HTMLImageElement[] = []; // one baked ground image per level
+let chunkTiles = 0;
 let currentLevel = 0;
 let paused = false;
+
+// Baked ground streams as map chunks, fetched lazily and cached by "z/cx_cy"
+// (google-maps style). The render loop asks for whatever chunks are in view.
+const chunkCache = new Map<string, HTMLImageElement>();
+function getChunk(cx: number, cy: number): HTMLImageElement {
+  const key = `${currentLevel}/${cx}_${cy}`;
+  let img = chunkCache.get(key);
+  if (!img) {
+    img = new Image();
+    img.src = `/api/world/layers/${currentLevel}/${cx}_${cy}.png`;
+    chunkCache.set(key, img);
+  }
+  return img;
+}
 
 function levelName(z: number): string {
   return z === 0 ? 'surface' : z === 1 ? 'underground' : `level ${z}`;
@@ -63,7 +77,8 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       meta = { cols: m.cols, rows: m.rows };
       paused = m.paused;
       speedSel.value = String(m.speed);
-      layers = m.layers.map(src => { const im = new Image(); im.src = src; return im; });
+      chunkTiles = m.chunkTiles;
+      chunkCache.clear();
       currentLevel = 0;
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
@@ -257,7 +272,7 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, layers[currentLevel] ?? null, renderTime, now, currentLevel);
+  render(g, cam, state, meta, chunkTiles, getChunk, renderTime, now, currentLevel);
   if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
   if (net.status === 'open' && now - lastStats > 250) {

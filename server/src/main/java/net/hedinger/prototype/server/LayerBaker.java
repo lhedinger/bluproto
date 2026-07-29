@@ -27,8 +27,10 @@ final class LayerBaker {
 
 	private static boolean resourcesLoaded = false;
 
-	/** Renders level {@code z} of the terrain world to PNG bytes (1 tile = tileSize px). */
-	static byte[] bake(World terrain, int z) {
+	/** Renders level {@code z} of the terrain world to one full-size image
+	 *  (1 tile = tileSize px). The caller slices it into chunks; the image is
+	 *  transient and freed once sliced. */
+	static BufferedImage renderLevelImage(World terrain, int z) {
 		synchronized (LayerBaker.class) {
 			if (!resourcesLoaded) {
 				ResourceManager.loadResources();
@@ -57,13 +59,21 @@ final class LayerBaker {
 		view.renderWorld(g);
 		view.renderEffects(g);
 		g.dispose();
+		return img;
+	}
 
+	/** Encodes a sub-rectangle of {@code full} (a map chunk) to PNG bytes. */
+	static byte[] chunkPng(BufferedImage full, int x0, int y0, int w, int h) {
+		BufferedImage sub = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = sub.createGraphics();
+		g.drawImage(full, 0, 0, w, h, x0, y0, x0 + w, y0 + h, null);
+		g.dispose();
 		try {
-			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 20);
-			ImageIO.write(img, "png", out);
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 18);
+			ImageIO.write(sub, "png", out);
 			return out.toByteArray();
 		} catch (IOException e) {
-			throw new IllegalStateException("layer bake failed", e);
+			throw new IllegalStateException("chunk encode failed", e);
 		}
 	}
 
