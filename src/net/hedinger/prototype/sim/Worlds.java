@@ -45,7 +45,7 @@ public final class Worlds {
 		// and breed freely — the herd is food-limited (booms when grass is rich,
 		// thins when it is scarce), not pinned to the steward's floor by
 		// predation. Seasons then read as real boom/bust.
-		return species(markers, sizes, 0.018, 0.03, 0.012);
+		return species(markers, sizes, 0.018, 0.03, 0.007);
 	}
 
 	/** Predator "species": bigger, faster hunters — reddish barcodes so they read
@@ -58,7 +58,7 @@ public final class Worlds {
 		double[] sizes = { 14, 13 };
 		// Predators must keep hunting to live (moderate metabolism), so prey
 		// scarcity thins them and the two populations track each other.
-		return species(markers, sizes, 0.045, 0.055, 0.02);
+		return species(markers, sizes, 0.045, 0.055, 0.016);
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
@@ -219,7 +219,7 @@ public final class Worlds {
 		for (int i = 0; i < 26; i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.breeder(p[0], p[1], 0, prey[i % prey.length])
-					.withHerding().withEnergy(2.0).withDeathspan(ECO_DEATHSPAN));
+					.withHerding().withEnergy(3.0).withDeathspan(ECO_DEATHSPAN));
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < 4; i++) {

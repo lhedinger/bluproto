@@ -267,7 +267,10 @@ statsEl.addEventListener('click', toggleDebug);
 async function refreshDebug(): Promise<void> {
   try {
     const r = await fetch('/api/health');
-    debugEl.textContent = JSON.stringify(await r.json(), null, 2);
+    const o = await r.json();
+    // Show the deploy time in the viewer's local timezone, not UTC.
+    if (o.deployedAt) o.deployedAt = new Date(o.deployedAt).toLocaleString();
+    debugEl.textContent = JSON.stringify(o, null, 2);
   } catch {
     debugEl.textContent = '/api/health unreachable';
   }
