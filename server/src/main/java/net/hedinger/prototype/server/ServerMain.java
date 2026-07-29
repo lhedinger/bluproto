@@ -20,7 +20,7 @@ import net.hedinger.prototype.sim.SpawnItemCommand;
  *   GET  /api/health            liveness + current tick
  *   GET  /api/world             world info (seed, geometry, tick, viewers)
  *   POST /api/world/reset       fresh world from {"seed": n}
- *   GET  /api/world/layers/{z}.png   baked static ground layer for level z
+ *   GET  /api/world/layers/{z}/{cx}_{cy}.png  baked ground chunk (level z)
  *   WS   /api/world/stream      hello+full on connect, ~10 Hz deltas after;
  *                               accepts {"cmd": ...} messages (see below)
  * </pre>
@@ -159,13 +159,21 @@ public final class ServerMain {
 			ctx.json(d);
 		});
 
-		app.get("/api/world/layers/{z}.png", ctx -> {
-			byte[] png = host.layer(Integer.parseInt(ctx.pathParam("z").replace(".png", "")));
+		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
+		// -> cache hard. The client streams only the chunks in view.
+		app.get("/api/world/layers/{z}/{chunk}.png", ctx -> {
+			int z = Integer.parseInt(ctx.pathParam("z").replace(".png", ""));
+			String[] p = ctx.pathParam("chunk").replace(".png", "").split("_");
+			byte[] png = p.length == 2
+					? host.chunk(z, Integer.parseInt(p[0]), Integer.parseInt(p[1]))
+					: null;
 			if (png == null) {
 				ctx.status(404);
 				return;
 			}
-			ctx.contentType(ContentType.IMAGE_PNG).result(png);
+			ctx.contentType(ContentType.IMAGE_PNG)
+					.header("Cache-Control", "public, max-age=86400")
+					.result(png);
 		});
 
 		app.ws("/api/world/stream", ws -> {

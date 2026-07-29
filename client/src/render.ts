@@ -15,7 +15,8 @@ export function render(
   cam: Camera,
   state: WorldState,
   meta: WorldMeta | null,
-  layer: HTMLImageElement | null,
+  chunkTiles: number,
+  getChunk: (cx: number, cy: number) => HTMLImageElement,
   renderTime: number,
   nowMs: number,
   level = 0,
@@ -25,12 +26,29 @@ export function render(
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
 
-  // Ground: one drawImage of the baked layer, nearest-neighbour so zooming in
-  // shows fat crisp pixels instead of blur.
-  if (layer && layer.complete && layer.naturalWidth) {
-    const o = cam.worldToScreen(0, 0);
+  // Ground: draw the baked map chunks covering the viewport, streamed on
+  // demand (nearest-neighbour so zooming in shows fat crisp pixels, not blur).
+  if (chunkTiles > 0) {
+    const cxN = Math.ceil(meta.cols / chunkTiles);
+    const cyN = Math.ceil(meta.rows / chunkTiles);
+    const tl = cam.screenToWorld(0, 0);
+    const br = cam.screenToWorld(cv.width, cv.height);
+    const cx0 = Math.max(0, Math.floor(tl.x / chunkTiles));
+    const cy0 = Math.max(0, Math.floor(tl.y / chunkTiles));
+    const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
+    const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
     g.imageSmoothingEnabled = false;
-    g.drawImage(layer, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const img = getChunk(cx, cy); // lazily fetches + caches this chunk
+        if (!img.complete || !img.naturalWidth) continue;
+        const wx = cx * chunkTiles, wy = cy * chunkTiles;
+        const cw = Math.min(chunkTiles, meta.cols - wx);
+        const ch = Math.min(chunkTiles, meta.rows - wy);
+        const o = cam.worldToScreen(wx, wy);
+        g.drawImage(img, o.x, o.y, cw * cam.scale, ch * cam.scale);
+      }
+    }
   }
 
   // Painter's order: haze, then dead, then items, then living creatures.

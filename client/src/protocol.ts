@@ -33,6 +33,7 @@ export interface HelloMsg {
   paused: boolean;
   speed: number;
   layers: string[];
+  chunkTiles: number; // baked ground is served as chunkTiles-square map chunks
 }
 
 export interface FullMsg { type: 'full'; tick: number; entities: EntityState[]; }
