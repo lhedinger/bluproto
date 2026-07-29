@@ -54,6 +54,7 @@ export class Camera {
     const pointers = new Map<number, { x: number; y: number }>();
     let tapStart: { x: number; y: number; t: number } | null = null;
     let pinchDist = 0;
+    let lastTapT = 0, lastTapX = 0, lastTapY = 0; // for double-tap detection
 
     cv.addEventListener('pointerdown', ev => {
       cv.setPointerCapture(ev.pointerId);
@@ -98,8 +99,17 @@ export class Camera {
       pointers.delete(ev.pointerId);
       pinchDist = 0;
       if (tapStart && performance.now() - tapStart.t < 400) {
-        const w = this.screenToWorld(tapStart.x, tapStart.y);
-        onTap(w);
+        const now = performance.now();
+        const near = Math.hypot(tapStart.x - lastTapX, tapStart.y - lastTapY) < 40;
+        if (now - lastTapT < 300 && near) {
+          this.zoomAround(tapStart.x, tapStart.y, 1.8); // double-tap: zoom in on the point
+          lastTapT = 0;
+        } else {
+          lastTapT = now;
+          lastTapX = tapStart.x;
+          lastTapY = tapStart.y;
+          onTap(this.screenToWorld(tapStart.x, tapStart.y));
+        }
       }
       tapStart = null;
     };

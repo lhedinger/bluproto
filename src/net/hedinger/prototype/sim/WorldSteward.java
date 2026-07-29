@@ -48,7 +48,7 @@ public final class WorldSteward extends Entity {
 	/** Fertility scale oscillates in [MID-AMP, MID+AMP]: summers push the grass to
 	 *  its lush cap, winters starve it back. (setFertility clamps at 1.0, so the
 	 *  summer overshoot just means the peak plateaus at full lushness.) */
-	private static final double SEASON_MID = 0.85, SEASON_AMP = 0.55;
+	private static final double SEASON_MID = 0.85, SEASON_AMP = 0.40;
 	/** Each floor tile's world-gen fertility, captured once; seasons scale this. */
 	private double[] baseFertility;
 
@@ -182,7 +182,8 @@ public final class WorldSteward extends Entity {
 				break;
 			}
 		}
-		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding() : TestNPC.predator(x, y, 0, g);
+		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding().withEnergy(3.0)
+				: TestNPC.predator(x, y, 0, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
