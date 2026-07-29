@@ -22,6 +22,7 @@ const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
+const debugEl = document.getElementById('debug') as HTMLElement;
 
 const state = new WorldState();
 const cam = new Camera(cv);
@@ -238,6 +239,30 @@ function reflect(): void {
     (followEl as HTMLElement).style.display = 'inline-block';
   } else {
     (followEl as HTMLElement).style.display = 'none';
+  }
+}
+
+// Debug overlay: press "d" to toggle a live dump of /api/health on the page.
+let debugOn = false;
+let debugTimer = 0;
+window.addEventListener('keydown', ev => {
+  const tag = (ev.target as HTMLElement).tagName;
+  if (ev.key !== 'd' && ev.key !== 'D') return;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  debugOn = !debugOn;
+  debugEl.style.display = debugOn ? 'block' : 'none';
+  clearInterval(debugTimer);
+  if (debugOn) {
+    refreshDebug();
+    debugTimer = window.setInterval(refreshDebug, 1000);
+  }
+});
+async function refreshDebug(): Promise<void> {
+  try {
+    const r = await fetch('/api/health');
+    debugEl.textContent = JSON.stringify(await r.json(), null, 2);
+  } catch {
+    debugEl.textContent = '/api/health unreachable';
   }
 }
 

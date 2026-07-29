@@ -36,6 +36,11 @@
     #inspect td { padding: 1px 0; }
     #inspect td.k { opacity: .6; }
     #inspect td.v { text-align: right; font-variant-numeric: tabular-nums; }
+    #debug { position: fixed; left: max(8px, env(safe-area-inset-left)); top: 46px;
+             max-width: min(340px, 72vw); background: #101216cc; border: 1px solid #3a3f4a;
+             border-radius: 8px; padding: 8px 10px; z-index: 3; display: none;
+             pointer-events: none; white-space: pre-wrap; color: #bfe3c4;
+             font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace; }
     #inspect .bar { height: 5px; border-radius: 3px; background: #3a3f4a; overflow: hidden; margin-top: 2px; }
     #inspect .bar > i { display: block; height: 100%; background: #6fb6e0; }
     #minimap { position: fixed; right: max(8px, env(safe-area-inset-right));
@@ -66,6 +71,7 @@
   </div>
   <div id="toast"></div>
   <div id="inspect"></div>
+  <div id="debug"></div>
   <canvas id="minimap" width="150" height="90"></canvas>
   <script type="module" src="/src/main.ts"></script>
 </body>
