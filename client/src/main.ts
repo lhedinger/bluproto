@@ -242,13 +242,11 @@ function reflect(): void {
   }
 }
 
-// Debug overlay: press "d" to toggle a live dump of /api/health on the page.
+// Debug overlay: a live dump of /api/health on the page. Toggle it with the
+// "d" key (desktop) or by tapping the status readout (mobile-friendly).
 let debugOn = false;
 let debugTimer = 0;
-window.addEventListener('keydown', ev => {
-  const tag = (ev.target as HTMLElement).tagName;
-  if (ev.key !== 'd' && ev.key !== 'D') return;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+function toggleDebug(): void {
   debugOn = !debugOn;
   debugEl.style.display = debugOn ? 'block' : 'none';
   clearInterval(debugTimer);
@@ -256,7 +254,16 @@ window.addEventListener('keydown', ev => {
     refreshDebug();
     debugTimer = window.setInterval(refreshDebug, 1000);
   }
+}
+window.addEventListener('keydown', ev => {
+  const tag = (ev.target as HTMLElement).tagName;
+  if (ev.key !== 'd' && ev.key !== 'D') return;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  toggleDebug();
 });
+statsEl.style.cursor = 'pointer';
+statsEl.title = 'tap to toggle debug';
+statsEl.addEventListener('click', toggleDebug);
 async function refreshDebug(): Promise<void> {
   try {
     const r = await fetch('/api/health');
