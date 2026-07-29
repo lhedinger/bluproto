@@ -13,6 +13,7 @@ export function drawMinimap(
   state: WorldState,
   meta: WorldMeta,
   main: HTMLCanvasElement,
+  level = 0,
 ): void {
   // Keep the minimap's aspect matched to the world.
   const targetH = Math.round((mm.width * meta.rows) / meta.cols);
@@ -26,6 +27,7 @@ export function drawMinimap(
   for (const t of state.tracks.values()) {
     const e = t.curr;
     if (e.kind === 'phero') continue;
+    if (Math.round(e.z) !== level) continue; // mirror the main view's level
     g.fillStyle = (e.flags & F_DEAD) ? '#5a5f66'
       : e.kind.startsWith('item.') ? '#d0c090'
       : '#' + e.rgb.toString(16).padStart(6, '0');

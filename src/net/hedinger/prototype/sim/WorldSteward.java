@@ -168,12 +168,20 @@ public final class WorldSteward extends Entity {
 		}
 	}
 
-	/** Spawns one creature of a rotating species at a random interior tile. */
+	/** Spawns one creature of a rotating species at a random open surface tile. */
 	private void seed(Genome[] pool, boolean isPrey) {
 		Genome g = Genome.child(pool[n % pool.length], 0.08); // lineage flavour, slight drift
 		n++;
-		double x = 3 + Utils.random() * (cols - 6);
-		double y = 3 + Utils.random() * (rows - 6);
+		double x = cols / 2.0, y = rows / 2.0;
+		for (int tries = 0; tries < 40; tries++) {
+			double px = 3 + Utils.random() * (cols - 6);
+			double py = 3 + Utils.random() * (rows - 6);
+			if (getWorld().getTile(px, py, 0).isWalkable()) {
+				x = px;
+				y = py;
+				break;
+			}
+		}
 		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding() : TestNPC.predator(x, y, 0, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}

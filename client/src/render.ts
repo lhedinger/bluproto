@@ -18,6 +18,7 @@ export function render(
   layer: HTMLImageElement | null,
   renderTime: number,
   nowMs: number,
+  level = 0,
 ): void {
   const cv = g.canvas;
   g.fillStyle = '#14161a';
@@ -39,6 +40,7 @@ export function render(
 
   for (const t of tracks) {
     const e = t.curr;
+    if (Math.round(e.z) !== level) continue; // only entities on the shown level
     const p = state.sample(t, renderTime);
     const s = cam.worldToScreen(p.x, p.y);
     if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;

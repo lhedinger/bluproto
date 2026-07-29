@@ -21,13 +21,19 @@ const followEl = document.getElementById('follow')!;
 const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
+const levelBtn = document.getElementById('level') as HTMLButtonElement;
 
 const state = new WorldState();
 const cam = new Camera(cv);
 let meta: WorldMeta | null = null;
 let hello: HelloMsg | null = null;
-let layer: HTMLImageElement | null = null;
+let layers: HTMLImageElement[] = []; // one baked ground image per level
+let currentLevel = 0;
 let paused = false;
+
+function levelName(z: number): string {
+  return z === 0 ? 'surface' : z === 1 ? 'underground' : `level ${z}`;
+}
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -48,8 +54,11 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       meta = { cols: m.cols, rows: m.rows };
       paused = m.paused;
       speedSel.value = String(m.speed);
-      layer = new Image();
-      layer.src = m.layers[0];
+      layers = m.layers.map(src => { const im = new Image(); im.src = src; return im; });
+      currentLevel = 0;
+      // Only offer the level switch when the world actually has more than one.
+      levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
+      levelBtn.textContent = levelName(currentLevel);
       cam.fit(m.cols, m.rows);
       reflect();
       break;
@@ -85,6 +94,7 @@ cam.attach(tap => {
   for (const [id, t] of state.tracks) {
     const e = t.curr;
     if (e.kind === 'phero') continue;
+    if (Math.round(e.z) !== currentLevel) continue; // only the visible level is selectable
     const d = Math.hypot(e.x - tap.x, e.y - tap.y);
     if (d < Math.max(fingerTiles, e.size * 2.5) && d < bestD) {
       best = id;
@@ -97,7 +107,7 @@ cam.attach(tap => {
   }
   const kind = spawnSel.value;
   if (kind && meta && tap.x > 0 && tap.y > 0 && tap.x < meta.cols && tap.y < meta.rows) {
-    net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: 0 });
+    net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: currentLevel });
   } else {
     deselect(); // tap on empty ground clears the selection
   }
@@ -185,6 +195,11 @@ mm.addEventListener('click', ev => {
 
 pauseBtn.onclick = () => net.send({ cmd: paused ? 'resume' : 'pause' });
 speedSel.onchange = () => net.send({ cmd: 'speed', value: parseFloat(speedSel.value) });
+levelBtn.onclick = () => {
+  if (!hello || hello.levels <= 1) return;
+  currentLevel = (currentLevel + 1) % hello.levels; // cycle surface -> underground -> …
+  levelBtn.textContent = levelName(currentLevel);
+};
 followEl.addEventListener('click', () => {
   cam.followId = null;
   reflect();
@@ -233,8 +248,8 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, layer, renderTime, now);
-  if (meta) drawMinimap(mm, cam, state, meta, cv);
+  render(g, cam, state, meta, layers[currentLevel] ?? null, renderTime, now, currentLevel);
+  if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;
