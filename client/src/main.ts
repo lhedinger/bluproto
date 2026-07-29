@@ -47,6 +47,15 @@ const net = new Net(onMsg, s => {
   if (s !== 'open') statsEl.textContent = s === 'connecting' ? 'connecting…' : 'reconnecting…';
 });
 
+// Read-only viewers (no command token in the URL) can watch but not drive the
+// world — grey out every mutating control so it reads as unavailable.
+if (net.readOnly) {
+  for (const el of [pauseBtn, speedSel, spawnSel]) {
+    el.disabled = true;
+    el.title = 'read-only — open with a command token (#t=…) to control the world';
+  }
+}
+
 function onMsg(m: ServerMsg, receivedAt: number): void {
   switch (m.type) {
     case 'hello': {

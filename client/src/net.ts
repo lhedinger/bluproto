@@ -20,6 +20,11 @@ export class Net {
     return new URLSearchParams(location.hash.slice(1)).get('t') ?? '';
   }
 
+  /** True when no command token is present: viewing only, no world control. */
+  get readOnly(): boolean {
+    return this.token() === '';
+  }
+
   connect(): void {
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     this.setStatus('connecting');
