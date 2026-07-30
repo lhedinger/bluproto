@@ -45,13 +45,48 @@ public abstract class NPC extends Entity {
 	protected boolean metabolic = false;
 	protected double energy = 1.0;
 	/** Set by a behaviour when it is exerting itself (a hunter's pursuit burst);
-	 *  cleared when cruising. While true the entity pays {@link #sprintMetabolism}
-	 *  on top of its resting metabolism, so fast movement — not just being alive —
-	 *  is what actually drains a predator. */
+	 *  cleared when cruising. While true the entity pays a sprint surcharge (a
+	 *  multiple of its resting burn, see {@link #sprintFactor}) on top of its
+	 *  resting metabolism, so fast movement — not just being alive — drains it. */
 	protected boolean sprinting = false;
-	/** Extra energy/tick burned while {@link #sprinting}. Zero for species that
-	 *  have no sprint (their movement is free beyond the flat resting cost). */
-	protected double sprintMetabolism = 0.0;
+	/** Extra burn while {@link #sprinting}, as a multiple of the resting rate: 0 =
+	 *  no sprint gear, 1.5 = a pursuit burns 2.5x resting. Scales with body mass
+	 *  automatically because the resting rate does. */
+	protected double sprintFactor = 0.0;
+
+	// --- size-scaled energy model --------------------------------------------
+	// Everything scales off a body-size factor, normalised so a reference-size
+	// creature is 1.0. The reserve (the "fully fed" tank) grows in proportion to
+	// size, while the resting burn grows only with size^0.75 (Kleiber: a big body
+	// burns more in absolute terms but less per unit mass). So a big creature's
+	// bigger tank outlasts a small one's — large animals fast longer between meals
+	// — yet still need bigger meals to top up. Anchored so a reference creature
+	// lasts a few minutes on a full tank.
+	/** Body size the energy model is anchored on (size factor 1.0 here). */
+	protected static final double REF_SIZE = 8.0;
+	/** Full energy reserve of a reference-size creature ("fully fed"). */
+	protected static final double BASE_CAPACITY = 6.0;
+	/** Resting energy/tick a reference-size creature burns. At 33 t/s a full
+	 *  reference tank (6.0 / 0.0005 = 12000 ticks) lasts ~6 minutes unfed, so even
+	 *  a half-empty creature has a few minutes of reserve before it starves. */
+	protected static final double BASE_METABOLISM = 0.0005;
+	/** The neutral {@link Genome#metabolism}; a genome at this value is an
+	 *  average burner, and mutations above/below it scale efficiency. */
+	protected static final double META_REF = 0.02;
+
+	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
+	 *  Falls back to the reference when no size is set. */
+	protected double bodyMass() {
+		double s = size > 0 ? size : REF_SIZE;
+		return s / REF_SIZE;
+	}
+
+	/** "Fully fed" energy ceiling: the tank grows with size, so a big body banks
+	 *  more and can go longer between meals (but needs more food to top up). */
+	public double energyCapacity() {
+		return BASE_CAPACITY * bodyMass();
+	}
+
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
@@ -108,7 +143,11 @@ public abstract class NPC extends Entity {
 	}
 
 	private double metabolismRate() {
-		return genome != null ? genome.metabolism : 0.02;
+		// Resting burn scales with mass^0.75 (Kleiber). The genome's metabolism is
+		// a heritable efficiency multiplier normalised to META_REF, so an average
+		// genome burns exactly the size-based rate and mutations nudge it.
+		double eff = genome != null ? genome.metabolism / META_REF : 1.0;
+		return BASE_METABOLISM * Math.pow(bodyMass(), 0.75) * eff;
 	}
 
 	/** Heritable trait vector; null for species that do not use one (yet). */
@@ -253,6 +292,12 @@ public abstract class NPC extends Entity {
 			if (reproCooldown > 0) {
 				reproCooldown--;
 			}
+			// A full body can't over-fill: cap the tank at its mass-scaled ceiling,
+			// so a well-fed creature is "fully fed" and extra grazing is wasted.
+			double cap = energyCapacity();
+			if (energy > cap) {
+				energy = cap;
+			}
 			double base = metabolismRate();
 			// Rider bonus: a creature voluntarily riding a host spends less energy
 			// (it is carried, not walking). A grabbed captive gets no such break.
@@ -268,8 +313,9 @@ public abstract class NPC extends Entity {
 			}
 			// Sprint surcharge: a hunter cruises cheaply and only burns hard during
 			// a pursuit burst, so it can go far longer between kills than a flat
-			// metabolism allowed — but a long fruitless chase still costs it.
-			double sprint = sprinting ? sprintMetabolism : 0.0;
+			// metabolism allowed — but a long fruitless chase still costs it. The
+			// surcharge is a multiple of the (mass-scaled) resting rate.
+			double sprint = sprinting ? base * sprintFactor : 0.0;
 			energy -= base + carry + sprint;
 			if (energy <= 0) {
 				energy = 0;
