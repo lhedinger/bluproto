@@ -278,6 +278,28 @@ final class WorldHost {
 		return v;
 	}
 
+	/**
+	 * Per-tile cover mask for the shrub canopy overlay: one byte per tile of level
+	 * z — 1 where the tile is sight-blocking {@code TYPE_COVER} (a thicket), else
+	 * 0. Static for the life of the world, so the client fetches it once per level
+	 * and draws foliage over the entities standing in it.
+	 */
+	byte[] cover(int z) {
+		var w = runner.world();
+		if (z < 0 || z >= w.getLevels()) {
+			return null;
+		}
+		int cols = w.getColums(), rows = w.getRows();
+		byte[] c = new byte[cols * rows];
+		for (int y = 0; y < rows; y++) {
+			for (int x = 0; x < cols; x++) {
+				c[y * cols + x] = (byte) (w.getTile(x, y, z).getType()
+						== net.hedinger.prototype.engine.Tile.TileType.TYPE_COVER ? 1 : 0);
+			}
+		}
+		return c;
+	}
+
 	private static double round(double v) {
 		return Math.round(v * 1000.0) / 1000.0;
 	}

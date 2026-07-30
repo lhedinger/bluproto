@@ -18,6 +18,7 @@ export function render(
   chunkTiles: number,
   getChunk: (cx: number, cy: number) => HTMLImageElement,
   veg: Uint8Array | null,
+  cover: Uint8Array | null,
   renderTime: number,
   nowMs: number,
   level = 0,
@@ -159,6 +160,48 @@ export function render(
       g.strokeStyle = 'rgba(255,255,255,0.8)';
       g.lineWidth = 2;
       g.beginPath(); g.arc(s.x, s.y, r * pulse + 4, 0, 7); g.stroke();
+    }
+  }
+
+  // Shrub canopy: thickets (cover tiles) grow foliage that draws OVER the
+  // creatures, so anything standing in cover is partly hidden — matching the
+  // fact that cover blocks line of sight. The clumps are translucent and leave
+  // gaps, so you can still make out what's underneath.
+  if (cover) drawCanopy(g, cam, meta, cover);
+}
+
+// Stable per-tile pseudo-random in [0,1): same tile+index always yields the
+// same value, so the foliage doesn't shimmer between frames.
+function shrubRand(x: number, y: number, i: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(i, 2246822519)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// Draws a bush canopy over every visible cover tile: a deterministic cluster of
+// translucent green blobs per tile, spilling slightly across tile edges so
+// adjacent thickets merge into a continuous stand.
+function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, cover: Uint8Array): void {
+  const cv = g.canvas;
+  const tl = cam.screenToWorld(0, 0);
+  const br = cam.screenToWorld(cv.width, cv.height);
+  const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
+  const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
+  const s = cam.scale;
+  // Translucent tones, kept light enough that a creature under the canopy still
+  // reads through the gaps and the foliage itself.
+  const tones = ['rgba(44,84,34,0.42)', 'rgba(32,63,25,0.46)', 'rgba(74,120,52,0.38)'];
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) {
+      if (cover[ty * meta.cols + tx] !== 1) continue;
+      const o = cam.worldToScreen(tx, ty);
+      for (let i = 0; i < 5; i++) {
+        const bx = o.x + (0.15 + shrubRand(tx, ty, i * 3) * 0.70) * s;
+        const by = o.y + (0.15 + shrubRand(tx, ty, i * 3 + 1) * 0.70) * s;
+        const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * s;
+        g.fillStyle = tones[i % tones.length];
+        g.beginPath(); g.arc(bx, by, rad, 0, 7); g.fill();
+      }
     }
   }
 }
