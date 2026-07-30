@@ -39,6 +39,12 @@ public class TestNPC extends NPC {
 	private static final int PRED_DAMAGE = 20;
 	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost). */
 	private static final double PRED_BITE_ENERGY = 0.5;
+	/** Fraction of top speed a predator patrols at while no prey is in sight — it
+	 *  lopes around cheaply and saves the full sprint for an actual pursuit. */
+	private static final double PRED_CRUISE = 0.6;
+	/** Extra energy/tick a predator burns while sprinting after prey (on top of its
+	 *  low resting metabolism). Cruising is nearly free; the sprint is what costs. */
+	private static final double PRED_SPRINT_COST = 0.013;
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
@@ -200,6 +206,7 @@ public class TestNPC extends NPC {
 		TestNPC t = new TestNPC(x, y, z, Behavior.PREDATOR);
 		configureGenomeBody(t, g);
 		t.energy = 5.0;
+		t.sprintMetabolism = PRED_SPRINT_COST; // only the pursuit burst is costly
 		t.reproThreshold = 6.0; // a kill or two before breeding
 		t.reproCost = 3.0;
 		t.LOS_FOV = Math.PI * 2;
@@ -463,15 +470,18 @@ public class TestNPC extends NPC {
 			double reach = (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
 			if (distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 				ecoAction = "attacking";
+				sprinting = false; // in reach: bite, don't burn on the chase
 				prey.damage(PRED_DAMAGE);
 				energy += PRED_BITE_ENERGY; // predation feeds the hunter
 			} else {
 				ecoAction = "hunting";
+				sprinting = true; // burst pursuit at full speed — the costly gear
 				chase(speed, turn);
 			}
 		} else {
 			ecoAction = "prowling";
-			roam(speed, turn); // nothing to hunt: wander
+			sprinting = false; // patrol calmly and cheaply until prey is in sight
+			roam(speed * PRED_CRUISE, turn); // nothing to hunt: cruise, don't sprint
 		}
 		tryReproduce();
 	}
