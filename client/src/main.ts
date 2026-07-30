@@ -47,7 +47,9 @@ function getChunk(cx: number, cy: number): HTMLImageElement {
 }
 
 function levelName(z: number): string {
-  return z === 0 ? 'surface' : z === 1 ? 'underground' : `level ${z}`;
+  // The surface is the top level (highest index); the cave sits below it.
+  const top = hello ? hello.levels - 1 : 1;
+  return z === top ? 'surface' : z === 0 ? 'underground' : `level ${z}`;
 }
 
 // Live grass levels (one byte per tile) polled from the server, so grazing
@@ -103,7 +105,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       speedSel.value = String(m.speed);
       chunkTiles = m.chunkTiles;
       chunkCache.clear();
-      currentLevel = 0;
+      currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
       vegGrid = null;
       startVegPolling();
       // Only offer the level switch when the world actually has more than one.
