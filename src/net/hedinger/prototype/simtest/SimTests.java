@@ -625,10 +625,15 @@ public class SimTests {
 			assertNear("stripped to bare ground", 0.0, t.getVegetation(w.getTick()), 1e-9);
 			assertGreater("grazing consumed the standing crop", eaten, 0.5);
 
-			// Regrowth is linear at VEG_REGROW/tick; run past a full recovery.
-			int ticks = (int) Math.ceil(Tile.VEG_MAX / Tile.VEG_REGROW) + 10;
-			tick(w, ticks);
-			assertNear("vegetation regrew to its cap", Tile.VEG_MAX, t.getVegetation(w.getTick()), 1e-9);
+			// A stripped tile rests for the cooldown before any regrowth: still bare
+			// two-thirds of the way through REGROW_DELAY.
+			tick(w, (int) (Tile.REGROW_DELAY * 2 / 3));
+			assertNear("depleted tile is still bare during its cooldown", 0.0,
+					t.getVegetation(w.getTick()), 1e-3);
+
+			// Past the cooldown, logistic regrowth climbs asymptotically to the cap.
+			tick(w, (int) Tile.REGROW_DELAY + 6000);
+			assertNear("vegetation regrew to its cap", Tile.VEG_MAX, t.getVegetation(w.getTick()), 0.02);
 		}
 	}
 
@@ -648,12 +653,12 @@ public class SimTests {
 			Tile rich = w.getTile(3, 3, 0); // default fertility 1.0
 
 			poor.graze(w.getTick(), Tile.VEG_MAX); // strip it bare
-			int ticks = (int) Math.ceil(Tile.VEG_MAX / Tile.VEG_REGROW) + 10;
-			tick(w, ticks);
+			// Rest through the cooldown, then let logistic regrowth run to near-cap.
+			tick(w, (int) Tile.REGROW_DELAY + 6000);
 			long now = w.getTick();
 
 			assertNear("poor ground regrows only to its fertility cap",
-					0.3 * Tile.VEG_MAX, poor.getVegetation(now), 1e-9);
+					0.3 * Tile.VEG_MAX, poor.getVegetation(now), 0.02);
 			assertNear("rich ground fills to the full cap",
 					Tile.VEG_MAX, rich.getVegetation(now), 1e-9);
 			assertGreater("rich ground carries much more grass than poor ground",

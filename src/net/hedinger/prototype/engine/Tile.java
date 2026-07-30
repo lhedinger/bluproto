@@ -29,14 +29,31 @@ public class Tile {
 
 	// --- vegetation (the living substrate) ---------------------------------
 	// A regrowing food resource on walkable ground. Grazers deplete it; it
-	// regrows linearly to a cap. Growth is computed lazily in closed form from
-	// the last-touched tick, so there is no per-tick sweep over the map -- a
-	// tile costs nothing until something grazes or draws it.
+	// regrows LOGISTICALLY toward a cap -- growth is proportional to how much
+	// grass is already standing (and how much headroom is left), so a tile with
+	// more grass recovers faster and a nearly-bare one only creeps up. A tile
+	// grazed down past DEPLETION_LEVEL first rests for REGROW_DELAY (~1 min)
+	// before any regrowth begins. All of this is computed lazily in closed form
+	// from the last-grazed tick (the logistic curve has a closed solution), so
+	// there is still no per-tick sweep over the map -- a tile costs nothing until
+	// something grazes or draws it.
 	public static final double VEG_MAX = 1.0;
-	public static final double VEG_REGROW = 0.002; // default per-tick regrow, up to the cap
+	/** Default logistic growth rate (per tick): larger => faster recovery. */
+	public static final double VEG_REGROW = 0.002;
+	/** A tile grazed below {@link #DEPLETION_LEVEL} of its cap pauses this many
+	 *  ticks (~1 min at 33 t/s) before it starts to recover; a tile with grass to
+	 *  spare resumes at once. */
+	public static final long REGROW_DELAY = 2000;
+	/** Below this fraction of its cap a tile counts as "depleted" and takes the
+	 *  {@link #REGROW_DELAY} cooldown before recovering. */
+	private static final double DEPLETION_LEVEL = 0.25;
+	/** Density (as a fraction of cap) the logistic curve restarts from once a tile
+	 *  is stripped bare, so recovery has a seed to climb from (pure proportional
+	 *  growth can't lift off from exactly zero). */
+	private static final double VEG_SEED = 0.03;
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
-	private double regrowRate = VEG_REGROW; // per-tile regrow speed (world-gen may slow grass)
+	private double regrowRate = VEG_REGROW; // per-tile logistic rate (world-gen may slow grass)
 
 	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
 	// A fertility field (see World.generateFertility) makes grass grow patchy,
@@ -69,8 +86,8 @@ public class Tile {
 		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
 	}
 
-	/** Per-tick vegetation regrow speed for this tile (world-gen can slow grass
-	 *  so grazed patches take longer to recover). */
+	/** Logistic regrow rate for this tile (world-gen can slow grass so grazed
+	 *  patches take longer to recover). Larger => faster recovery. */
 	public void setRegrowRate(double r) {
 		regrowRate = r < 0 ? 0 : r;
 	}
@@ -85,13 +102,34 @@ public class Tile {
 		return type == TileType.TYPE_FLOOR;
 	}
 
-	/** Current vegetation density [0, cap], regrown lazily to {@code now}. */
+	/** Current vegetation density [0, cap], regrown lazily to {@code now} along a
+	 *  logistic curve (fast when there is grass to spare, slow when nearly bare),
+	 *  after a rest period for tiles that were grazed down to depletion. */
 	public double getVegetation(long now) {
 		if (!growsVegetation()) {
 			return 0;
 		}
 		double cap = vegetationCap();
-		double v = vegStored + regrowRate * (now - vegTick);
+		if (cap <= 0) {
+			return 0;
+		}
+		long elapsed = now - vegTick;
+		// A grazed-down tile rests before recovering; one with grass to spare
+		// starts regrowing immediately.
+		long delay = vegStored < DEPLETION_LEVEL * cap ? REGROW_DELAY : 0;
+		if (elapsed <= delay) {
+			return vegStored > cap ? cap : vegStored;
+		}
+		// Logistic growth v(t) = cap / (1 + ((cap - v0)/v0) e^(-r t)): the rate is
+		// proportional to standing grass and remaining headroom, so more grass
+		// regrows faster. Seed a stripped tile so the curve can lift off from zero.
+		double v0 = vegStored > cap ? cap : vegStored;
+		double seed = VEG_SEED * cap;
+		if (v0 < seed) {
+			v0 = seed;
+		}
+		double t = elapsed - delay;
+		double v = cap / (1 + ((cap - v0) / v0) * Math.exp(-regrowRate * t));
 		return v > cap ? cap : v;
 	}
 
