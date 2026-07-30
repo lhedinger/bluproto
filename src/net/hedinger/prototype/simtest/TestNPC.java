@@ -475,7 +475,7 @@ public class TestNPC extends NPC {
 	 * scarce. Never targets its own kind (only strictly smaller bodies).
 	 */
 	private void thinkPredator() {
-		NPC prey = nearestPrey();
+		NPC prey = nearestPrey(LOS_RANGE); // hunt as far as it can see
 		if (prey != null) {
 			lockTarget(prey);
 			double reach = (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
@@ -503,13 +503,20 @@ public class TestNPC extends NPC {
 		return isDead() ? "dead" : ecoAction;
 	}
 
-	/** Nearest strictly-smaller living creature in perception (its prey); skips
-	 * items, corpses, and same-or-larger bodies (other predators). */
-	private NPC nearestPrey() {
+	/** Nearest strictly-smaller living creature within {@code radius} (its prey);
+	 *  skips items, corpses, and same-or-larger bodies (other predators). Scans by
+	 *  proximity, NOT the facing-gated perception set: that set is filled from a
+	 *  tile-local grid that only reaches ~1 tile, far short of the range at which
+	 *  prey flee (THREAT_R), so a hunter relying on it could never close on fleeing
+	 *  prey — it would lose sight of them the instant they bolted. Sensing prey out
+	 *  to its full sight range (which out-ranges the flee radius) lets a faster
+	 *  hunter actually run prey down, mirroring the prey's own {@link #nearestThreat}. */
+	private NPC nearestPrey(double radius) {
 		NPC best = null;
-		double bestD = Double.MAX_VALUE;
-		for (NPC n : targets.values()) {
-			if (n == this || n.isDead() || n instanceof Item || !(n.getSize() < getSize())) {
+		double bestD = radius;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
+					|| n instanceof Item || !(n.getSize() < getSize())) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
