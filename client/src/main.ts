@@ -75,6 +75,24 @@ function startVegPolling(): void {
   vegTimer = window.setInterval(pollVeg, 1500);
 }
 
+// Static cover mask (one byte per tile, 1 = thicket) fetched once per level, so
+// the renderer can draw a shrub canopy over the entities standing in cover.
+let coverGrid: Uint8Array | null = null;
+async function fetchCover(): Promise<void> {
+  coverGrid = null;
+  try {
+    const r = await fetch(`/api/world/cover/${currentLevel}`);
+    if (!r.ok) return;
+    const j = await r.json();
+    const bin = atob(j.data);
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    coverGrid = a;
+  } catch {
+    /* transient; leave the canopy off until the next fetch */
+  }
+}
+
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(cv.clientWidth * dpr);
@@ -108,6 +126,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
       vegGrid = null;
       startVegPolling();
+      fetchCover();
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
       levelBtn.textContent = levelName(currentLevel);
@@ -306,6 +325,7 @@ levelBtn.onclick = () => {
   levelBtn.textContent = levelName(currentLevel);
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
+  fetchCover(); // cover mask is per-level
 };
 followEl.addEventListener('click', () => {
   cam.followId = null;
@@ -389,7 +409,7 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, renderTime, now, currentLevel);
+  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, coverGrid, renderTime, now, currentLevel);
   if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
   if (net.status === 'open' && now - lastStats > 250) {
