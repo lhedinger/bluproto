@@ -2286,6 +2286,48 @@ public class SimTests {
 	}
 
 	/**
+	 * Predation actually connects: a faster hunter runs down a <em>fleeing</em>
+	 * vigilant prey that starts several tiles away and bites it. This guards the
+	 * predator's ranged prey-sense — the hunter must perceive (and keep chasing)
+	 * prey well beyond the tile-local perception grid, or a fleeing prey it can't
+	 * see past ~1 tile would open the gap and never be caught. The companion
+	 * {@link HerbivoreFleesPredator} pins flight with a faster prey (no kill);
+	 * this pins the kill with a faster predator, so together they cover both
+	 * sides of pursuit.
+	 */
+	static class PredatorRunsDownFleeingPrey extends Scenario {
+		@Override
+		public void run() {
+			seed(9);
+			World w = room(30, 12); // open grass, long enough for a real chase
+			Genome preyG = new Genome();
+			preyG.markers = new double[] { 0.9, 0.7, 0.4 };
+			preyG.size = 7;
+			preyG.speed = 0.03; // slower than the hunter, so it can be run down
+			Genome hunterG = new Genome();
+			hunterG.markers = new double[] { 0.9, 0.2, 0.2 };
+			hunterG.size = 14;
+			hunterG.speed = 0.05; // faster: a committed pursuit closes the gap
+			TestNPC pred = TestNPC.predator(3.5, 6.5, 0, hunterG);
+			TestNPC prey = TestNPC.breeder(11.5, 6.5, 0, preyG).withHerding(); // vigilant: it flees
+			w.spawnEntity(pred);
+			w.spawnEntity(prey);
+			w.think();
+
+			double startGap = Math.hypot(prey.getX() - pred.getX(), prey.getY() - pred.getY());
+			assertGreater("prey starts well beyond the tile-local perception grid", startGap, 6.0);
+
+			// Give the hunt time to play out; a faster hunter that can see the
+			// fleeing prey should land bites (or a kill) within the window.
+			for (int i = 0; i < 3000 && !prey.isDead(); i++) {
+				tick(w, 1);
+			}
+			snapshot(w, "after the chase");
+			assertTrue("the hunter ran down the fleeing prey and killed it", prey.isDead());
+		}
+	}
+
+	/**
 	 * Seasons make the world breathe: over a year the demo ecosystem's prey herd
 	 * booms (lush summers) and thins (lean winters) instead of sitting flat at a
 	 * fixed floor — a visible swing — while never emptying. Samples the prey
@@ -2325,6 +2367,7 @@ public class SimTests {
 	private static Scenario[] all() {
 		return new Scenario[] {
 				new HerbivoreFleesPredator(),
+				new PredatorRunsDownFleeingPrey(),
 				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
 				new RoamerMoves(),
