@@ -130,8 +130,16 @@ cam.attach(tap => {
     select(best);
     return;
   }
+  const tx = Math.floor(tap.x), ty = Math.floor(tap.y);
+  const inBounds = meta && tx >= 0 && ty >= 0 && tx < meta.cols && ty < meta.rows;
+  // In debug mode, tapping open ground inspects that tile (fertility + food)
+  // instead of spawning — so grazing and seasons are observable.
+  if (debugOn && inBounds) {
+    selectTile(tx, ty, currentLevel);
+    return;
+  }
   const kind = spawnSel.value;
-  if (kind && meta && tap.x > 0 && tap.y > 0 && tap.x < meta.cols && tap.y < meta.rows) {
+  if (kind && inBounds) {
     net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: currentLevel });
   } else {
     deselect(); // tap on empty ground clears the selection
@@ -141,10 +149,12 @@ cam.attach(tap => {
 // ---- selection + inspect ---------------------------------------------------
 
 let selectedId: number | null = null;
+let selectedTile: { x: number; y: number; z: number } | null = null;
 let detailTimer = 0;
 
 function select(id: number): void {
   selectedId = id;
+  selectedTile = null;
   const t = state.tracks.get(id);
   if (t && t.curr.kind.startsWith('npc.') && !(t.curr.flags & F_DEAD)) {
     cam.followId = id; // follow living creatures; items stay put
@@ -155,8 +165,20 @@ function select(id: number): void {
   reflect();
 }
 
+// Debug tile inspector: poll a tile's fertility/food so grazing is watchable.
+function selectTile(x: number, y: number, z: number): void {
+  selectedId = null;
+  cam.followId = null;
+  selectedTile = { x, y, z };
+  refreshTileDetail();
+  clearInterval(detailTimer);
+  detailTimer = window.setInterval(refreshTileDetail, 600);
+  reflect();
+}
+
 function deselect(): void {
   selectedId = null;
+  selectedTile = null;
   clearInterval(detailTimer);
   inspectEl.style.display = 'none';
 }
@@ -172,10 +194,41 @@ async function refreshDetail(): Promise<void> {
   }
 }
 
+async function refreshTileDetail(): Promise<void> {
+  if (!selectedTile) return;
+  try {
+    const { x, y, z } = selectedTile;
+    const r = await fetch(`/api/world/tile/${z}/${x}/${y}`);
+    if (!r.ok) { deselect(); return; }
+    renderTileInspect(await r.json());
+  } catch {
+    /* transient; keep the last panel */
+  }
+}
+
+function renderTileInspect(d: Record<string, any>): void {
+  const cap = Number(d.foodCap) || 0;
+  const food = Number(d.food) || 0;
+  const pct = cap > 0 ? Math.max(0, Math.min(1, food / cap)) : 0;
+  const rows = [
+    row('type', d.type),
+    row('fertility', Number(d.fertility).toFixed(3)),
+    row('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`),
+    `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`,
+  ];
+  inspectEl.innerHTML =
+    `<h3>tile <span class="mono">${d.x},${d.y}</span> · L${d.z}<span class="x">✕</span></h3>` +
+    `<table>${rows.join('')}</table>`;
+  inspectEl.style.display = 'block';
+  inspectEl.querySelector('.x')!.addEventListener('click', deselect);
+}
+
 function renderInspect(d: Record<string, any>): void {
   const rows: string[] = [];
-  const kind = String(d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
+  // Prefer the eco role (prey/predator) as the label; fall back to the kind.
+  const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
+  if (d.action) rows.push(row('doing', d.action));
   if ('energy' in d) {
     const pct = Math.max(0, Math.min(1, d.energy / 4));
     rows.push(row('energy', d.energy.toFixed(2)) +
