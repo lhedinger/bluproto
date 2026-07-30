@@ -173,12 +173,14 @@ public final class Worlds {
 			w.setTile(h[0], h[1], 0, Tile.TileType.TYPE_HOLE);
 		}
 
-		// Slow the surface grass's regrowth so heavy grazing leaves lasting bare
-		// patches that take ~1-2 min to recover (the big map still sustains the
-		// herd, unlike a small room). Non-grass tiles are unaffected.
+		// Tune the surface grass's logistic recovery so a grazed-bare patch rests
+		// (Tile.REGROW_DELAY, ~1 min) and then climbs back slowly over another
+		// ~1.5 min, while a lightly-cropped patch springs back fast. Heavy grazing
+		// thus leaves lasting bare patches, but the big map still sustains the herd
+		// (unlike a small room). Non-grass tiles are unaffected.
 		for (int x = 0; x < COLS; x++) {
 			for (int y = 0; y < ROWS; y++) {
-				w.getTile(x, y, 0).setRegrowRate(0.00025);
+				w.getTile(x, y, 0).setRegrowRate(0.0025);
 			}
 		}
 		return w;
