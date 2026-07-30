@@ -65,14 +65,21 @@ public class Grid {
 		int ox = v.pixelX(0, level, 0);
 		int oy = v.pixelY(0, level, 0);
 		if (camDepth == 0) {
-			g2.drawImage(lr.mapLayers[level].image_layer, ox, oy, null);
+			MapLayer ml0 = lr.mapLayers[level];
+			if (ml0.image_layer != null) {
+				g2.drawImage(ml0.image_layer, ox, oy, null);
+			} else {
+				drawBaseTiles(g2, ml0, ox, oy);
+			}
 			renderGround(g2, ox, oy);
 			if (RenderFx.foliage) {
 				renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
 				renderShrubs(g2, ox, oy);    // decorative bushes on the lushest tiles
 			}
 		} else {
-			g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
+			if (lr.mapLayers[level].image_layer_downsized != null) {
+				g2.drawImage(lr.mapLayers[level].image_layer_downsized[camDepth - 1], ox, oy, null);
+			}
 		}
 
 		for (Entity d : doors) {
@@ -340,6 +347,26 @@ public class Grid {
 	 * cover) rather than a flat colour -- grass density follows vegetation, so
 	 * grazed patches thin to bare floor. Pheromone rides on top as a wash.
 	 */
+	/** Draws the base floor+wall sprites tile-by-tile (the chunked-bake
+	 *  substitute for blitting a precompiled whole-level image). Identical
+	 *  placement to LayerRenderer.compileLayer, so output matches. */
+	private void drawBaseTiles(Graphics2D g2, MapLayer ml, int ox, int oy) {
+		int ts = ResourceManager.tileSize;
+		int pad = ResourceManager.tilePadding;
+		int sz = ts + pad * 2;
+		for (int x = 0; x < world.cols; x++) {
+			for (int y = 0; y < world.rows; y++) {
+				int px = ox + x * ts - pad, py = oy + y * ts - pad;
+				if (ml.floorTiles[x][y] != null) {
+					g2.drawImage(ml.floorTiles[x][y], px, py, sz, sz, null);
+				}
+				if (ml.wallTiles[x][y] != null) {
+					g2.drawImage(ml.wallTiles[x][y], px, py, sz, sz, null);
+				}
+			}
+		}
+	}
+
 	private void renderGround(Graphics2D g2, int ox, int oy) {
 		if (RenderFx.pixelGround) {
 			renderGroundPixel(g2, ox, oy);

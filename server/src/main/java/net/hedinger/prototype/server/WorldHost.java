@@ -73,23 +73,20 @@ final class WorldHost {
 		startedAt = System.currentTimeMillis();
 		SimulationRunner r = new SimulationRunner(Worlds.demo(newSeed));
 		var terrain = Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
-		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
-		int chunkPx = CHUNK_TILES * ts;
 		int cols = r.world().getColums(), rows = r.world().getRows();
-		int imgW = cols * ts, imgH = rows * ts;
 		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
 		int cyN = (rows + CHUNK_TILES - 1) / CHUNK_TILES;
+		// Bake each chunk in bounded (chunk-sized) memory — no whole-level image,
+		// so the map can grow arbitrarily without OOM.
+		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
 		java.util.Map<String, byte[]> baked = new java.util.HashMap<String, byte[]>();
 		for (int z = 0; z < r.world().getLevels(); z++) {
-			java.awt.image.BufferedImage full = LayerBaker.renderLevelImage(terrain, z);
 			for (int cy = 0; cy < cyN; cy++) {
 				for (int cx = 0; cx < cxN; cx++) {
-					int x0 = cx * chunkPx, y0 = cy * chunkPx;
-					int w = Math.min(chunkPx, imgW - x0), h = Math.min(chunkPx, imgH - y0);
-					baked.put(z + "/" + cx + "_" + cy, LayerBaker.chunkPng(full, x0, y0, w, h));
+					baked.put(z + "/" + cx + "_" + cy,
+							LayerBaker.renderChunk(terrain, lr, z, cx, cy, CHUNK_TILES));
 				}
 			}
-			full = null; // free the whole-level image before rendering the next
 		}
 		runner = r;
 		chunks = baked;

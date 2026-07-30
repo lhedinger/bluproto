@@ -37,9 +37,9 @@ COPY res/ ./res/
 # the publish workflow; "dev" for a plain local build).
 ARG GIT_SHA=dev
 ENV PORT=7070 SEED=42 BUILD_VERSION=$GIT_SHA
-# Cap the heap so the one-time layer bake fits a 2 GB VPS instead of OOM-ing
-# (the default 25%-of-RAM heap is too small for baking the big map). Steady
-# state is well under this; the ceiling only matters during the startup bake.
-ENV JAVA_OPTS="-Xmx1024m"
+# Heap ceiling for the 2 GB VPS. Per-chunk layer baking (no whole-level image
+# buffers) cut the bake's peak from >1 GB to under 384 MB, so 512 MB leaves
+# comfortable headroom; the ceiling only really matters during the startup bake.
+ENV JAVA_OPTS="-Xmx512m"
 EXPOSE 7070
 CMD ["./bin/server"]

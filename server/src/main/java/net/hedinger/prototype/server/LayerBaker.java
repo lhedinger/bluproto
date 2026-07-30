@@ -77,6 +77,62 @@ final class LayerBaker {
 		}
 	}
 
+	/** Builds a chunked-bake renderer: per-tile base sprites only, no whole-level
+	 *  image. Built once and reused across every chunk of every level. */
+	static net.hedinger.prototype.engine.LayerRenderer chunkRenderer(World terrain) {
+		synchronized (LayerBaker.class) {
+			if (!resourcesLoaded) {
+				ResourceManager.loadResources();
+				resourcesLoaded = true;
+			}
+		}
+		terrain.alignTiles();
+		net.hedinger.prototype.engine.LayerRenderer lr = new net.hedinger.prototype.engine.LayerRenderer(terrain);
+		lr.buildTilesOnly(terrain);
+		return lr;
+	}
+
+	/**
+	 * Renders one map chunk (level {@code z}, chunk {@code (cx,cy)} of
+	 * {@code chunkTiles}-square tiles) to PNG bytes in <em>bounded</em> memory:
+	 * only a chunk-sized image is ever allocated, regardless of world size. Each
+	 * chunk renders the whole level clipped to its region — so overlays that
+	 * bleed across tile boundaries (grass feathering, water shores) stay seamless
+	 * — then translates so the chunk's top-left maps to pixel (0,0).
+	 */
+	static byte[] renderChunk(World terrain, net.hedinger.prototype.engine.LayerRenderer lr,
+			int z, int cx, int cy, int chunkTiles) {
+		int ts = ResourceManager.tileSize;
+		int cols = terrain.getColums(), rows = terrain.getRows();
+		int x0 = cx * chunkTiles, y0 = cy * chunkTiles;
+		int cw = Math.min(chunkTiles, cols - x0), ch = Math.min(chunkTiles, rows - y0);
+		int wpx = cw * ts, hpx = ch * ts;
+		BufferedImage img = new BufferedImage(wpx, hpx, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		// Full-level clip while the view sets up, so its camera aligns tile (0,0)
+		// to pixel (0,0) exactly as the whole-level bake does (drawing outside the
+		// chunk image is harmlessly discarded).
+		g.setClip(0, 0, cols * ts, rows * ts);
+		View view = new View(terrain, lr);
+		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
+		g.translate(-x0 * ts, -y0 * ts); // world tile (x0,y0) -> image pixel (0,0)
+		g.setClip(x0 * ts, y0 * ts, wpx, hpx);
+		// Same passes and order as the whole-level bake, so the chunk is
+		// pixel-identical to the corresponding slice (grain/effects included).
+		view.clearScreen(g);
+		view.renderWorld(g);
+		view.renderEffects(g);
+		g.dispose();
+		try {
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 18);
+			ImageIO.write(img, "png", out);
+			return out.toByteArray();
+		} catch (IOException e) {
+			throw new IllegalStateException("chunk encode failed", e);
+		}
+	}
+
 	private LayerBaker() {
 	}
 }
