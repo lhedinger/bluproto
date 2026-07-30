@@ -200,6 +200,14 @@ final class WorldHost {
 				d.put("energy", round(n.getEnergy()));
 				d.put("carrying", n.getCarriedLoad() > 0);
 				d.put("grabbed", n.isGrabbed());
+				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
+					if (!tn.ecoRole().isEmpty()) {
+						d.put("role", tn.ecoRole());
+					}
+					if (!tn.currentAction().isEmpty()) {
+						d.put("action", tn.currentAction());
+					}
+				}
 				net.hedinger.prototype.entities.Genome g = n.getGenome();
 				if (g != null) {
 					java.util.Map<String, Object> gm = new java.util.LinkedHashMap<String, Object>();
@@ -217,6 +225,30 @@ final class WorldHost {
 			return d;
 		}
 		return null;
+	}
+
+	/**
+	 * Tile detail for the debug tile-inspector: type, fertility, and live
+	 * vegetation ("food"), so grazing depletion and the seasonal fertility swing
+	 * are observable by tapping a tile. Reads live fields without locking — a
+	 * momentarily stale number is harmless and it mutates nothing.
+	 */
+	java.util.Map<String, Object> tileDetail(int x, int y, int z) {
+		var w = runner.world();
+		if (z < 0 || z >= w.getLevels() || x < 0 || y < 0 || x >= w.getColums() || y >= w.getRows()) {
+			return null;
+		}
+		net.hedinger.prototype.engine.Tile t = w.getTile(x, y, z);
+		long tick = runner.snapshot().tick();
+		java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
+		d.put("x", x);
+		d.put("y", y);
+		d.put("z", z);
+		d.put("type", t.getType().name().toLowerCase().replace("type_", ""));
+		d.put("fertility", round(t.getFertility()));
+		d.put("food", round(t.getVegetation(tick)));
+		d.put("foodCap", round(t.vegetationCap()));
+		return d;
 	}
 
 	private static double round(double v) {

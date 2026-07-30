@@ -161,6 +161,17 @@ public final class ServerMain {
 
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
+		// Tap-to-inspect a tile (debug): type, fertility, live vegetation/food.
+		app.get("/api/world/tile/{z}/{x}/{y}", ctx -> {
+			var d = host.tileDetail(Integer.parseInt(ctx.pathParam("x")),
+					Integer.parseInt(ctx.pathParam("y")), Integer.parseInt(ctx.pathParam("z")));
+			if (d == null) {
+				ctx.status(404).json(Map.of("error", "no such tile"));
+				return;
+			}
+			ctx.json(d);
+		});
+
 		app.get("/api/world/layers/{z}/{chunk}.png", ctx -> {
 			int z = Integer.parseInt(ctx.pathParam("z").replace(".png", ""));
 			String[] p = ctx.pathParam("chunk").replace(".png", "").split("_");

@@ -68,6 +68,7 @@ public class TestNPC extends NPC {
 	private int turn = 5;
 	private boolean heard = false;
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
+	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
 	private double totalIntake = 0;
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
@@ -461,15 +462,24 @@ public class TestNPC extends NPC {
 			lockTarget(prey);
 			double reach = (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
 			if (distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
+				ecoAction = "attacking";
 				prey.damage(PRED_DAMAGE);
 				energy += PRED_BITE_ENERGY; // predation feeds the hunter
 			} else {
+				ecoAction = "hunting";
 				chase(speed, turn);
 			}
 		} else {
+			ecoAction = "prowling";
 			roam(speed, turn); // nothing to hunt: wander
 		}
 		tryReproduce();
+	}
+
+	/** A short label for what this creature did on its last tick (fleeing,
+	 *  grazing, hunting, …), for the inspect panel. Empty if it has no eco role. */
+	public String currentAction() {
+		return isDead() ? "dead" : ecoAction;
 	}
 
 	/** Nearest strictly-smaller living creature in perception (its prey); skips
@@ -890,6 +900,7 @@ public class TestNPC extends NPC {
 			if (threat != null) {
 				// Bolt: pick a waypoint directly away from the predator and run.
 				// Fleeing pre-empts grazing/breeding — survival first.
+				ecoAction = "fleeing";
 				roam(speed, turn, Math.atan2(Y - threat.getY(), X - threat.getX()));
 				return;
 			}
@@ -897,15 +908,20 @@ public class TestNPC extends NPC {
 		double intake = graze(GRAZE_DEMAND); // feeds energy
 		totalIntake += intake;
 		if (tryReproduce()) {
+			ecoAction = "breeding";
 			return;
 		}
 		if (intake < GRAZE_DEMAND * 0.15) {
 			double herd = vigilant ? herdDir(HERD_R) : Double.NaN;
 			if (!Double.isNaN(herd)) {
+				ecoAction = "herding";
 				roam(speed, turn, herd); // regroup with kin
 			} else {
+				ecoAction = "foraging";
 				roam(speed, turn); // patch thinning -> find fresh grass
 			}
+		} else {
+			ecoAction = "grazing";
 		}
 	}
 
