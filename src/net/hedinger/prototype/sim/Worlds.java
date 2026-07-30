@@ -56,9 +56,11 @@ public final class Worlds {
 				{ 0.78, 0.28, 0.48 }, // crimson hunter
 		};
 		double[] sizes = { 14, 13 };
-		// Predators must keep hunting to live (moderate metabolism), so prey
-		// scarcity thins them and the two populations track each other.
-		return species(markers, sizes, 0.045, 0.055, 0.016);
+		// Low RESTING metabolism: a predator idling/prowling burns little, so it can
+		// go a long time between kills. The real cost is the sprint surcharge it
+		// pays only while pursuing prey (see TestNPC.PRED_SPRINT_COST), so a long
+		// fruitless chase still drains it and prey scarcity still thins the hunters.
+		return species(markers, sizes, 0.045, 0.055, 0.007);
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,

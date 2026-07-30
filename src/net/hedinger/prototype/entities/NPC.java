@@ -44,6 +44,14 @@ public abstract class NPC extends Entity {
 	// false, so their behaviour and determinism are untouched.
 	protected boolean metabolic = false;
 	protected double energy = 1.0;
+	/** Set by a behaviour when it is exerting itself (a hunter's pursuit burst);
+	 *  cleared when cruising. While true the entity pays {@link #sprintMetabolism}
+	 *  on top of its resting metabolism, so fast movement — not just being alive —
+	 *  is what actually drains a predator. */
+	protected boolean sprinting = false;
+	/** Extra energy/tick burned while {@link #sprinting}. Zero for species that
+	 *  have no sprint (their movement is free beyond the flat resting cost). */
+	protected double sprintMetabolism = 0.0;
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
@@ -258,7 +266,11 @@ public abstract class NPC extends Entity {
 			if (isFlying()) {
 				carry *= FLIER_CARRY_MULTIPLIER;
 			}
-			energy -= base + carry;
+			// Sprint surcharge: a hunter cruises cheaply and only burns hard during
+			// a pursuit burst, so it can go far longer between kills than a flat
+			// metabolism allowed — but a long fruitless chase still costs it.
+			double sprint = sprinting ? sprintMetabolism : 0.0;
+			energy -= base + carry + sprint;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved
