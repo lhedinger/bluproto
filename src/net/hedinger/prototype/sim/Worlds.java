@@ -56,11 +56,12 @@ public final class Worlds {
 				{ 0.78, 0.28, 0.48 }, // crimson hunter
 		};
 		double[] sizes = { 14, 13 };
-		// Low RESTING metabolism: a predator idling/prowling burns little, so it can
-		// go a long time between kills. The real cost is the sprint surcharge it
-		// pays only while pursuing prey (see TestNPC.PRED_SPRINT_COST), so a long
-		// fruitless chase still drains it and prey scarcity still thins the hunters.
-		return species(markers, sizes, 0.045, 0.055, 0.007);
+		// Very low RESTING metabolism: a predator idling/prowling barely burns, so
+		// it can go a long time between kills and its energy drains gently rather
+		// than plummeting. The real cost is the sprint surcharge it pays only while
+		// pursuing prey (see TestNPC.PRED_SPRINT_COST), so a long fruitless chase
+		// still drains it and prey scarcity still thins the hunters.
+		return species(markers, sizes, 0.045, 0.055, 0.003);
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,

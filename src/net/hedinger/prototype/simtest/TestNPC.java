@@ -43,8 +43,9 @@ public class TestNPC extends NPC {
 	 *  lopes around cheaply and saves the full sprint for an actual pursuit. */
 	private static final double PRED_CRUISE = 0.6;
 	/** Extra energy/tick a predator burns while sprinting after prey (on top of its
-	 *  low resting metabolism). Cruising is nearly free; the sprint is what costs. */
-	private static final double PRED_SPRINT_COST = 0.013;
+	 *  low resting metabolism). Cruising is nearly free; the sprint is what costs —
+	 *  a pursuit burns ~3x the resting rate, so a long fruitless chase still bites. */
+	private static final double PRED_SPRINT_COST = 0.006;
 
 	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
 	private static final double GRAZE_DEMAND = 0.05;
