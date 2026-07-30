@@ -33,9 +33,10 @@ public class Tile {
 	// the last-touched tick, so there is no per-tick sweep over the map -- a
 	// tile costs nothing until something grazes or draws it.
 	public static final double VEG_MAX = 1.0;
-	public static final double VEG_REGROW = 0.002; // per tick, up to the cap
+	public static final double VEG_REGROW = 0.002; // default per-tick regrow, up to the cap
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
+	private double regrowRate = VEG_REGROW; // per-tile regrow speed (world-gen may slow grass)
 
 	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
 	// A fertility field (see World.generateFertility) makes grass grow patchy,
@@ -68,6 +69,12 @@ public class Tile {
 		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
 	}
 
+	/** Per-tick vegetation regrow speed for this tile (world-gen can slow grass
+	 *  so grazed patches take longer to recover). */
+	public void setRegrowRate(double r) {
+		regrowRate = r < 0 ? 0 : r;
+	}
+
 	/** The most vegetation this tile can hold, given its fertility. */
 	public double vegetationCap() {
 		return VEG_MAX * fertility;
@@ -84,7 +91,7 @@ public class Tile {
 			return 0;
 		}
 		double cap = vegetationCap();
-		double v = vegStored + VEG_REGROW * (now - vegTick);
+		double v = vegStored + regrowRate * (now - vegTick);
 		return v > cap ? cap : v;
 	}
 

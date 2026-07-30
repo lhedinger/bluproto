@@ -248,6 +248,36 @@ final class WorldHost {
 		return d;
 	}
 
+	/**
+	 * Per-tile grass level for the live vegetation overlay: one byte per tile of
+	 * level z — 0..100 = fraction of this grass tile's current capacity that has
+	 * vegetation (100 lush, 0 grazed bare), or 255 for a non-grass tile (bare
+	 * dirt / rock / water — no overlay). Lets the client show grazing depletion
+	 * and regrowth on top of the static baked ground.
+	 */
+	byte[] vegetation(int z) {
+		var w = runner.world();
+		if (z < 0 || z >= w.getLevels()) {
+			return null;
+		}
+		long tick = runner.snapshot().tick();
+		int cols = w.getColums(), rows = w.getRows();
+		byte[] v = new byte[cols * rows];
+		for (int y = 0; y < rows; y++) {
+			for (int x = 0; x < cols; x++) {
+				var t = w.getTile(x, y, z);
+				double cap = t.vegetationCap();
+				if (!t.growsVegetation() || cap <= 1e-9) {
+					v[y * cols + x] = (byte) 255; // non-grass: no overlay
+				} else {
+					long frac = Math.round(t.getVegetation(tick) / cap * 100);
+					v[y * cols + x] = (byte) Math.max(0, Math.min(100, frac));
+				}
+			}
+		}
+		return v;
+	}
+
 	private static double round(double v) {
 		return Math.round(v * 1000.0) / 1000.0;
 	}

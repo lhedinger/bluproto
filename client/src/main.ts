@@ -50,6 +50,29 @@ function levelName(z: number): string {
   return z === 0 ? 'surface' : z === 1 ? 'underground' : `level ${z}`;
 }
 
+// Live grass levels (one byte per tile) polled from the server, so grazing
+// depletion and regrowth show as dirt over the static baked grass.
+let vegGrid: Uint8Array | null = null;
+let vegTimer = 0;
+async function pollVeg(): Promise<void> {
+  try {
+    const r = await fetch(`/api/world/vegetation/${currentLevel}`);
+    if (!r.ok) { vegGrid = null; return; }
+    const j = await r.json();
+    const bin = atob(j.data);
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    vegGrid = a;
+  } catch {
+    /* transient; keep the last grid */
+  }
+}
+function startVegPolling(): void {
+  clearInterval(vegTimer);
+  pollVeg();
+  vegTimer = window.setInterval(pollVeg, 1500);
+}
+
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(cv.clientWidth * dpr);
@@ -81,6 +104,8 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       chunkTiles = m.chunkTiles;
       chunkCache.clear();
       currentLevel = 0;
+      vegGrid = null;
+      startVegPolling();
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
       levelBtn.textContent = levelName(currentLevel);
@@ -277,6 +302,8 @@ levelBtn.onclick = () => {
   if (!hello || hello.levels <= 1) return;
   currentLevel = (currentLevel + 1) % hello.levels; // cycle surface -> underground -> …
   levelBtn.textContent = levelName(currentLevel);
+  vegGrid = null;
+  startVegPolling(); // grass grid is per-level
 };
 followEl.addEventListener('click', () => {
   cam.followId = null;
@@ -360,7 +387,7 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, getChunk, renderTime, now, currentLevel);
+  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, renderTime, now, currentLevel);
   if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
   if (net.status === 'open' && now - lastStats > 250) {

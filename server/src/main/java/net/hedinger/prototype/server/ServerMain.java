@@ -161,6 +161,19 @@ public final class ServerMain {
 
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
+		// Live per-tile grass level for the vegetation overlay (byte per tile,
+		// base64). Polled by the client so grazing depletion shows on the map.
+		app.get("/api/world/vegetation/{z}", ctx -> {
+			byte[] v = host.vegetation(Integer.parseInt(ctx.pathParam("z")));
+			if (v == null) {
+				ctx.status(404);
+				return;
+			}
+			var w = host.runner().world();
+			ctx.json(Map.of("cols", w.getColums(), "rows", w.getRows(),
+					"data", java.util.Base64.getEncoder().encodeToString(v)));
+		});
+
 		// Tap-to-inspect a tile (debug): type, fertility, live vegetation/food.
 		app.get("/api/world/tile/{z}/{x}/{y}", ctx -> {
 			var d = host.tileDetail(Integer.parseInt(ctx.pathParam("x")),
