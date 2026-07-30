@@ -182,7 +182,7 @@ public final class WorldSteward extends Entity {
 				break;
 			}
 		}
-		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding().withEnergy(3.0)
+		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding() // born at its size-scaled reserve
 				: TestNPC.predator(x, y, 0, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}

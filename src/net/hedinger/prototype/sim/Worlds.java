@@ -41,11 +41,12 @@ public final class Worlds {
 				{ 0.95, 0.60, 0.35 }, // amber
 		};
 		double[] sizes = { 7, 8, 6, 9 };
-		// Low metabolism so grazers bank a strong energy surplus in lush months
-		// and breed freely — the herd is food-limited (booms when grass is rich,
-		// thins when it is scarce), not pinned to the steward's floor by
-		// predation. Seasons then read as real boom/bust.
-		return species(markers, sizes, 0.018, 0.03, 0.007);
+		// Neutral metabolism efficiency (META_REF): the size-scaled energy model
+		// does the work — reserve, resting burn and fasting endurance all follow
+		// body size, so these small grazers hold a few minutes of reserve and the
+		// bigger ones a little more. The herd stays food-limited (booms when grass
+		// is rich, thins when scarce), so seasons read as real boom/bust.
+		return species(markers, sizes, 0.018, 0.03, 0.02);
 	}
 
 	/** Predator "species": bigger, faster hunters — reddish barcodes so they read
@@ -56,12 +57,12 @@ public final class Worlds {
 				{ 0.78, 0.28, 0.48 }, // crimson hunter
 		};
 		double[] sizes = { 14, 13 };
-		// Very low RESTING metabolism: a predator idling/prowling barely burns, so
-		// it can go a long time between kills and its energy drains gently rather
-		// than plummeting. The real cost is the sprint surcharge it pays only while
-		// pursuing prey (see TestNPC.PRED_SPRINT_COST), so a long fruitless chase
-		// still drains it and prey scarcity still thins the hunters.
-		return species(markers, sizes, 0.045, 0.055, 0.003);
+		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
+		// these big hunters a large reserve and a long fasting endurance (bigger
+		// body, bigger tank), so a predator drains gently between kills. Its only
+		// heavy burn is the sprint surcharge paid while pursuing prey (see
+		// TestNPC.PRED_SPRINT_FACTOR), so a long fruitless chase still thins it.
+		return species(markers, sizes, 0.045, 0.055, 0.02);
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
@@ -231,7 +232,7 @@ public final class Worlds {
 		for (int i = 0; i < 26; i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.breeder(p[0], p[1], 0, prey[i % prey.length])
-					.withHerding().withEnergy(3.0).withDeathspan(ECO_DEATHSPAN));
+					.withHerding().withDeathspan(ECO_DEATHSPAN)); // born at its size-scaled reserve
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < 4; i++) {

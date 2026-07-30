@@ -780,7 +780,9 @@ public class SimTests {
 					w.getTile(x, y, 0).setFertility(0); // barren: no grass to eat
 				}
 			}
-			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome());
+			// Start with only a sliver of reserve so it burns down within the test
+			// window (the size-scaled model otherwise gives minutes of endurance).
+			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome()).withEnergy(0.02);
 			w.spawnEntity(breeder);
 			w.think();
 			snapshot(w, "before (barren ground)");
@@ -1563,8 +1565,11 @@ public class SimTests {
 			tick(w, 100);
 			double lossRide = eRide - rider.getEnergy();
 			double lossWalk = eWalk - control.getEnergy();
+			// A rider pays half metabolism, so it should lose meaningfully less than
+			// one under its own power. Assert the ratio, not an absolute margin, so
+			// the check is independent of the model's overall energy scale.
 			assertGreater("riding spends less energy than moving under your own power",
-					lossWalk, lossRide + 0.3);
+					lossWalk, lossRide * 1.5);
 		}
 	}
 

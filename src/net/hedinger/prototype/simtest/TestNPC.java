@@ -42,13 +42,21 @@ public class TestNPC extends NPC {
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and saves the full sprint for an actual pursuit. */
 	private static final double PRED_CRUISE = 0.6;
-	/** Extra energy/tick a predator burns while sprinting after prey (on top of its
-	 *  low resting metabolism). Cruising is nearly free; the sprint is what costs —
-	 *  a pursuit burns ~3x the resting rate, so a long fruitless chase still bites. */
-	private static final double PRED_SPRINT_COST = 0.006;
+	/** Sprint surcharge as a multiple of resting burn: a pursuit costs ~2.5x the
+	 *  resting rate (1.0 base + this), so cruising is cheap but a long fruitless
+	 *  chase still bites. Scales with body size because the resting rate does. */
+	private static final double PRED_SPRINT_FACTOR = 1.5;
 
-	/** Vegetation eaten per tick while grazing (>> the tile's regrowth rate). */
+	/** Vegetation eaten per tick by a reference-size grazer (>> the tile's regrowth
+	 *  rate). Bigger grazers crop faster in proportion to their size — see
+	 *  {@link #grazeDemand()} — so a large body both burns and eats more. */
 	private static final double GRAZE_DEMAND = 0.05;
+
+	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
+	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). */
+	private double grazeDemand() {
+		return GRAZE_DEMAND * bodyMass();
+	}
 	/** Eco herbivore: flees any predator within this radius (tiles). */
 	private static final double THREAT_R = 6.0;
 	/** Eco herbivore: regroups with kin within this radius when a patch thins. */
@@ -205,11 +213,8 @@ public class TestNPC extends NPC {
 	 */
 	public static TestNPC predator(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.PREDATOR);
-		configureGenomeBody(t, g);
-		t.energy = 5.0;
-		t.sprintMetabolism = PRED_SPRINT_COST; // only the pursuit burst is costly
-		t.reproThreshold = 6.0; // a kill or two before breeding
-		t.reproCost = 3.0;
+		configureGenomeBody(t, g); // size-scaled reserve, burn, and repro thresholds
+		t.sprintFactor = PRED_SPRINT_FACTOR; // only the pursuit burst is costly
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 12);
 		t.SEARCH_FREQ = 3;
@@ -305,7 +310,12 @@ public class TestNPC extends NPC {
 		t.speed = g.speed;
 		t.turn = g.turnRate;
 		t.metabolic = true;
-		t.energy = 1.0;
+		// Energy scales are all derived from body size (see NPC's size-scaled model):
+		// born comfortably fed, and reproduction gated on filling a big fraction of
+		// the (size-scaled) tank so a bigger creature must eat more before it breeds.
+		t.energy = 0.6 * t.energyCapacity();
+		t.reproThreshold = 0.75 * t.energyCapacity();
+		t.reproCost = 0.5 * t.energyCapacity();
 		t.col = g.toColor();
 	}
 
@@ -632,7 +642,7 @@ public class TestNPC extends NPC {
 			move(throttle * speed, D);
 		}
 		if (a[AgentIO.A_EAT] > 0.5) {
-			totalIntake += graze(GRAZE_DEMAND);
+			totalIntake += graze(grazeDemand());
 			eatNearestItem(); // also devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
@@ -871,7 +881,7 @@ public class TestNPC extends NPC {
 	/** Forages for energy; when fertile, seeks a compatible partner and breeds
 	 * sexually (a crossover child). Falls back to grazing/roaming otherwise. */
 	private void thinkMater() {
-		double intake = graze(GRAZE_DEMAND);
+		double intake = graze(grazeDemand());
 		totalIntake += intake;
 		if (fertile()) {
 			NPC partner = findMate();
@@ -887,7 +897,7 @@ public class TestNPC extends NPC {
 				}
 			}
 		}
-		if (intake < GRAZE_DEMAND * 0.15) {
+		if (intake < grazeDemand() * 0.15) {
 			roam(speed, turn); // patch thinning (or no partner) -> wander
 		}
 	}
@@ -916,13 +926,13 @@ public class TestNPC extends NPC {
 				return;
 			}
 		}
-		double intake = graze(GRAZE_DEMAND); // feeds energy
+		double intake = graze(grazeDemand()); // feeds energy
 		totalIntake += intake;
 		if (tryReproduce()) {
 			ecoAction = "breeding";
 			return;
 		}
-		if (intake < GRAZE_DEMAND * 0.15) {
+		if (intake < grazeDemand() * 0.15) {
 			double herd = vigilant ? herdDir(HERD_R) : Double.NaN;
 			if (!Double.isNaN(herd)) {
 				ecoAction = "herding";
@@ -983,7 +993,7 @@ public class TestNPC extends NPC {
 
 	/** Forages; when ready to breed, commits to homing and births at the nest. */
 	private void thinkNester() {
-		double intake = graze(GRAZE_DEMAND);
+		double intake = graze(grazeDemand());
 		totalIntake += intake;
 		if (!homing && energy >= reproThreshold && reproCooldown == 0) {
 			homing = true; // commit -- don't flip back to foraging mid-trip
@@ -1000,7 +1010,7 @@ public class TestNPC extends NPC {
 			}
 			return;
 		}
-		if (intake < GRAZE_DEMAND * 0.15) {
+		if (intake < grazeDemand() * 0.15) {
 			roam(speed, turn);
 		}
 	}
@@ -1038,11 +1048,11 @@ public class TestNPC extends NPC {
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */
 	private void thinkGraze() {
-		double intake = graze(GRAZE_DEMAND);
+		double intake = graze(grazeDemand());
 		totalIntake += intake;
 		// Stay and crop the patch down; only move on when it is nearly bare, so
 		// grazing bores a clear depleted spot before the herbivore wanders off.
-		if (intake < GRAZE_DEMAND * 0.15) {
+		if (intake < grazeDemand() * 0.15) {
 			roam(speed, turn);
 		}
 	}
