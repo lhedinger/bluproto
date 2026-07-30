@@ -50,9 +50,8 @@ public class Minimap {
 		minimapY = Math.round(world.rows * tileSize * minimap_scale);
 
 		for (int i = 0; i < mapLayers.length; i++) {
-			mapLayers[i] = Utils.resize(
-					layerRenderer.mapLayers[i].image_layer,
-					minimapX, minimapY);
+			BufferedImage src = layerRenderer.mapLayers[i].image_layer;
+			mapLayers[i] = src == null ? null : Utils.resize(src, minimapX, minimapY);
 		}
 	}
 

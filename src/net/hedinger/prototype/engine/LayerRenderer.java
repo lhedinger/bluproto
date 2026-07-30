@@ -46,6 +46,25 @@ public class LayerRenderer {
 
 	}
 
+	/** Chunked-bake mode: fill only the per-tile base sprites (cheap
+	 *  references) into each MapLayer, leaving image_layer null so no
+	 *  whole-level buffer is allocated -- Grid.render then draws the base
+	 *  per tile. Lets a level be baked in bounded (chunk-sized) memory. */
+	public void buildTilesOnly(World w) {
+		for (int z = 0; z < world.lvls; z++) {
+			mapLayers[z] = new MapLayer(z);
+			mapLayers[z].floorTiles = new BufferedImage[world.cols][world.rows];
+			mapLayers[z].wallTiles = new BufferedImage[world.cols][world.rows];
+			for (int x = 0; x < world.cols; x++) {
+				for (int y = 0; y < world.rows; y++) {
+					Tile t = world.levels[z].getTile(x, y);
+					mapLayers[z].floorTiles[x][y] = getFloorTile(world, t);
+					mapLayers[z].wallTiles[x][y] = getWallTile(world, t);
+				}
+			}
+		}
+	}
+
 	private BufferedImage getFloorTile(World world, Tile tile) {
 		String tilecode = tile.getTileCode();
 		Tile.TileType type = tile.getType();
