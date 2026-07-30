@@ -37,6 +37,7 @@ public final class WorldSteward extends Entity {
 	private final int[] preyWinter, preySummer, predWinter, predSummer;
 	private final Genome[] preySpecies, predSpecies;
 	private final int cols, rows;
+	private final int surfaceZ; // the open-air level the herd lives on
 	private int n = 0; // rotates species / placement, deterministically
 
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
@@ -78,11 +79,12 @@ public final class WorldSteward extends Entity {
 		return waxing ? "spring" : "autumn";
 	}
 
-	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies,
+	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer) {
-		super(w.getColums() / 2.0, w.getRows() / 2.0, 0, 0.0); // centre; direction ctor draws no RNG
+		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
+		this.surfaceZ = surfaceZ;
 		this.preySpecies = preySpecies;
 		this.predSpecies = predSpecies;
 		this.preyWinter = preyWinter;
@@ -156,14 +158,14 @@ public final class WorldSteward extends Entity {
 			baseFertility = new double[cols * rows];
 			for (int y = 0; y < rows; y++) {
 				for (int x = 0; x < cols; x++) {
-					baseFertility[y * cols + x] = w.getTile(x, y, 0).getFertility();
+					baseFertility[y * cols + x] = w.getTile(x, y, surfaceZ).getFertility();
 				}
 			}
 		}
 		double factor = seasonFactor(tick);
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
-				w.getTile(x, y, 0).setFertility(baseFertility[y * cols + x] * factor);
+				w.getTile(x, y, surfaceZ).setFertility(baseFertility[y * cols + x] * factor);
 			}
 		}
 	}
@@ -176,14 +178,14 @@ public final class WorldSteward extends Entity {
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);
 			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, 0).isWalkable()) {
+			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
 				x = px;
 				y = py;
 				break;
 			}
 		}
-		TestNPC t = isPrey ? TestNPC.breeder(x, y, 0, g).withHerding() // born at its size-scaled reserve
-				: TestNPC.predator(x, y, 0, g);
+		TestNPC t = isPrey ? TestNPC.breeder(x, y, surfaceZ, g).withHerding() // born at its size-scaled reserve
+				: TestNPC.predator(x, y, surfaceZ, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 

@@ -206,6 +206,80 @@ public class SimTests {
 	}
 
 	/**
+	 * The demo world's surface/cave orientation and links are sound: the surface
+	 * (grass-growing level) sits ABOVE the cave, so a creature that walks onto a
+	 * surface hole falls into the cave — a VALID level — rather than off the
+	 * bottom into an invalid negative level (the inversion bug that silently lost
+	 * wandering creatures). Also pins the up-link: a walker on a cave RAMPUP that
+	 * steps east into the flanking wall climbs to the surface. Guards against
+	 * re-inverting the levels or breaking the ramp geometry.
+	 */
+	static class DemoLevelsLinkSurfaceAndCave extends Scenario {
+		private static final Tile.TileType HOLE = Tile.TileType.TYPE_HOLE;
+		private static final Tile.TileType RAMPUP = Tile.TileType.TYPE_RAMPUP;
+		private static final Tile.TileType FLOOR = Tile.TileType.TYPE_FLOOR;
+
+		@Override
+		public void run() {
+			seed(42);
+			World w = net.hedinger.prototype.sim.Worlds.demoTerrain(42);
+			int cols = w.getColums(), rows = w.getRows();
+
+			// The surface is the level that grows grass; it must be the TOP level.
+			int surface = -1;
+			for (int z = 0; z < 2; z++) {
+				for (int x = 0; x < cols && surface != z; x++) {
+					for (int y = 0; y < rows; y++) {
+						Tile t = w.getTile(x, y, z);
+						if (t.getType() == FLOOR && t.getFertility() > 0) {
+							surface = z;
+							break;
+						}
+					}
+				}
+			}
+			assertEquals("the grassy surface is the top level (cave below it)", 1, surface);
+
+			// Down-link: a walker on a surface hole falls into the cave, not the void.
+			int hx = -1, hy = -1;
+			for (int x = 0; x < cols && hx < 0; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (w.getTile(x, y, surface).getType() == HOLE) {
+						hx = x;
+						hy = y;
+						break;
+					}
+				}
+			}
+			assertGreater("the surface has holes to fall through", hx, -1);
+			TestNPC faller = TestNPC.inert(hx + 0.5, hy + 0.5, surface);
+			w.spawnEntity(faller);
+			w.think();
+			tick(w, 10);
+			assertEquals("a surface hole drops a walker one level into the cave", surface - 1, faller.getLvl());
+			assertTrue("the faller landed on a valid (non-negative) level", faller.getLvl() >= 0);
+
+			// Up-link: a walker on a cave RAMPUP that heads east climbs to the surface.
+			int rx = -1, ry = -1;
+			for (int x = 0; x < cols && rx < 0; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (w.getTile(x, y, surface - 1).getType() == RAMPUP) {
+						rx = x;
+						ry = y;
+						break;
+					}
+				}
+			}
+			assertGreater("the cave has ramps up to the surface", rx, -1);
+			TestNPC climber = TestNPC.mover(rx + 0.5, ry + 0.5, surface - 1, 0.0).withSpeed(0.05);
+			w.spawnEntity(climber);
+			w.think();
+			tick(w, 200);
+			assertEquals("a cave ramp climbs a walker back up to the surface", surface, climber.getLvl());
+		}
+	}
+
+	/**
 	 * grab() attaches a smaller entity, which is then carried along; drop()
 	 * releases it.
 	 *
@@ -2368,6 +2442,7 @@ public class SimTests {
 		return new Scenario[] {
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
+				new DemoLevelsLinkSurfaceAndCave(),
 				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
 				new RoamerMoves(),

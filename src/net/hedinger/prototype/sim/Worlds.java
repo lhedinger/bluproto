@@ -85,6 +85,11 @@ public final class Worlds {
 	 *  predator/prey aren't always on top of each other. */
 	static final int COLS = 72, ROWS = 44;
 
+	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
+	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
+	 *  open-air surface must sit ABOVE the cave: surface is the higher index. */
+	static final int CAVE_Z = 0, SURFACE_Z = 1;
+
 	/**
 	 * The demo world's terrain — same seed, same tiles, same fertility, zero
 	 * entities: an exact twin of {@link #demo}'s ground, from which the server
@@ -136,12 +141,12 @@ public final class Worlds {
 					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.55 + 0.45 * moist; // meadow, lush where moist
 				}
-				w.setTile(x, y, 0, t);
-				w.getTile(x, y, 0).setFertility(fert);
+				w.setTile(x, y, SURFACE_Z, t);
+				w.getTile(x, y, SURFACE_Z).setFertility(fert);
 			}
 		}
 
-		// ---- level 1: underground caverns carved from solid rock ----
+		// ---- cave: underground caverns carved from solid rock ----
 		for (int x = 0; x < COLS; x++) {
 			for (int y = 0; y < ROWS; y++) {
 				double cave = Utils.noise2(x + 210, y + 770, 0.11);
@@ -154,23 +159,15 @@ public final class Worlds {
 				} else {
 					t = Tile.TileType.TYPE_WALL; // solid rock
 				}
-				w.setTile(x, y, 1, t);
-				w.getTile(x, y, 1).setFertility(0); // no grass grows underground
+				w.setTile(x, y, CAVE_Z, t);
+				w.getTile(x, y, CAVE_Z).setFertility(0); // no grass grows underground
 			}
 		}
 
-		// ---- links: two-way ramps and open pits between surface and cave ----
-		int[][] ramps = { { 18, 12 }, { 54, 14 }, { 30, 34 }, { 60, 32 } };
-		for (int[] r : ramps) {
-			carveFloor(w, r[0], r[1], 0);
-			carveFloor(w, r[0], r[1], 1);
-			w.setTile(r[0], r[1], 0, Tile.TileType.TYPE_RAMPDOWN);
-			w.setTile(r[0], r[1], 1, Tile.TileType.TYPE_RAMPUP);
-		}
-		int[][] holes = { { 24, 20 }, { 44, 26 }, { 38, 9 } };
-		for (int[] h : holes) {
-			carveFloor(w, h[0], h[1], 1); // a chamber under the pit to fall into
-			w.setTile(h[0], h[1], 0, Tile.TileType.TYPE_HOLE);
+		// ---- links between surface and cave (see linkStation for the mechanic) ----
+		int[][] stations = { { 16, 12 }, { 52, 14 }, { 30, 34 }, { 58, 30 } };
+		for (int[] s : stations) {
+			linkStation(w, s[0], s[1]);
 		}
 
 		// Tune the surface grass's logistic recovery so a grazed-bare patch rests
@@ -180,23 +177,58 @@ public final class Worlds {
 		// (unlike a small room). Non-grass tiles are unaffected.
 		for (int x = 0; x < COLS; x++) {
 			for (int y = 0; y < ROWS; y++) {
-				w.getTile(x, y, 0).setRegrowRate(0.0025);
+				w.getTile(x, y, SURFACE_Z).setRegrowRate(0.0025);
 			}
 		}
 		return w;
 	}
 
-	/** Clears a 3x3 patch of walkable floor around a tile (a ramp/pit landing),
+	/**
+	 * A working two-way link between the surface and the cave, built to match the
+	 * engine's movement rules (verified: a HOLE drops a walker one level; a RAMPUP
+	 * lifts a walker one level only when it steps EAST into an adjacent WALL).
+	 *
+	 * <p>Laid out along one row at {@code (sx,sy)}:
+	 * <ul>
+	 *   <li><b>Down</b> — on the surface, a HOLE with a RAMPDOWN just east of it
+	 *       (the ramp faces west, into the hole). A creature that walks onto the
+	 *       hole falls to the cave floor carved directly below.</li>
+	 *   <li><b>Up</b> — in the cave, a RAMPUP with a WALL just east of it (the ramp
+	 *       faces east, into the wall). A creature on the ramp that steps east into
+	 *       the wall pops up onto the surface floor carved directly above.</li>
+	 * </ul>
+	 */
+	private static void linkStation(World w, int sx, int sy) {
+		// A small open patch on both levels so creatures can reach the link.
+		carveFloor(w, sx, sy, SURFACE_Z);
+		carveFloor(w, sx, sy, CAVE_Z);
+
+		// Down: hole on the surface, ramp beside it (east), cave floor to land on.
+		w.setTile(sx, sy, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+		w.setTile(sx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
+		w.setTile(sx, sy, CAVE_Z, Tile.TileType.TYPE_FLOOR); // landing
+		w.getTile(sx, sy, CAVE_Z).setFertility(0);
+
+		// Up: ramp in the cave with a wall to its east; surface floor above the
+		// wall is where the climber lands.
+		int rx = sx + 2;
+		w.setTile(rx, sy, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
+		w.setTile(rx + 1, sy, CAVE_Z, Tile.TileType.TYPE_WALL); // climb east into this
+		w.setTile(rx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
+		w.getTile(rx + 1, sy, SURFACE_Z).setFertility(0.7);
+	}
+
+	/** Clears a 5x3 patch of walkable floor around a tile (a link landing/apron),
 	 *  lush on the surface, bare underground. */
 	private static void carveFloor(World w, int cx, int cy, int z) {
-		for (int dx = -1; dx <= 1; dx++) {
+		for (int dx = -2; dx <= 2; dx++) {
 			for (int dy = -1; dy <= 1; dy++) {
 				int x = cx + dx, y = cy + dy;
 				if (x < 1 || y < 1 || x >= w.getColums() - 1 || y >= w.getRows() - 1) {
 					continue;
 				}
 				w.setTile(x, y, z, Tile.TileType.TYPE_FLOOR);
-				w.getTile(x, y, z).setFertility(z == 0 ? 0.7 : 0);
+				w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
 			}
 		}
 	}
@@ -207,7 +239,7 @@ public final class Worlds {
 		for (int tries = 0; tries < 60; tries++) {
 			double x = 2 + Utils.random() * (w.getColums() - 4);
 			double y = 2 + Utils.random() * (w.getRows() - 4);
-			if (w.getTile(x, y, 0).isWalkable()) {
+			if (w.getTile(x, y, SURFACE_Z).isWalkable()) {
 				return new double[] { x, y };
 			}
 		}
@@ -233,34 +265,34 @@ public final class Worlds {
 		// onto open meadow (never into water or rock).
 		for (int i = 0; i < 26; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.breeder(p[0], p[1], 0, prey[i % prey.length])
+			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
 					.withHerding().withDeathspan(ECO_DEATHSPAN)); // born at its size-scaled reserve
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < 4; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.predator(p[0], p[1], 0, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
+			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
 		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < 10; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(Item.food(p[0], p[1], 0));
+			w.spawnEntity(Item.food(p[0], p[1], SURFACE_Z));
 		}
 		for (int i = 0; i < 5; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(Item.crate(p[0], p[1], 0));
+			w.spawnEntity(Item.crate(p[0], p[1], SURFACE_Z));
 		}
 		for (int i = 0; i < 3; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(Item.hazard(p[0], p[1], 0));
+			w.spawnEntity(Item.hazard(p[0], p[1], SURFACE_Z));
 		}
 
 		// The warden, with seasonal bounds: winter holds a lean {min,max}, summer
 		// a lush one, and the steward interpolates between them over the year —
 		// so the population visibly booms in summer and thins in winter while
 		// never emptying or swarming. Scaled up for the larger map.
-		w.spawnEntity(new WorldSteward(w, prey, pred,
+		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
 				new int[] { 12, 30 }, new int[] { 34, 84 }, // prey: winter, summer
 				new int[] { 1, 5 }, new int[] { 3, 14 })); // predators: winter, summer
 
