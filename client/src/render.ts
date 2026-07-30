@@ -17,6 +17,7 @@ export function render(
   meta: WorldMeta | null,
   chunkTiles: number,
   getChunk: (cx: number, cy: number) => HTMLImageElement,
+  veg: Uint8Array | null,
   renderTime: number,
   nowMs: number,
   level = 0,
@@ -47,6 +48,24 @@ export function render(
         const ch = Math.min(chunkTiles, meta.rows - wy);
         const o = cam.worldToScreen(wx, wy);
         g.drawImage(img, o.x, o.y, cw * cam.scale, ch * cam.scale);
+      }
+    }
+  }
+
+  // Live grazing: darken depleted grass toward bare dirt (255 = non-grass, no
+  // overlay; 100 = lush, none; 0 = grazed bare, full dirt). Regrowth fades it.
+  if (veg) {
+    const tl = cam.screenToWorld(0, 0);
+    const br = cam.screenToWorld(cv.width, cv.height);
+    const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
+    const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const lvl = veg[ty * meta.cols + tx];
+        if (lvl >= 100 || lvl === 255) continue; // lush grass or non-grass: nothing
+        const o = cam.worldToScreen(tx, ty);
+        g.fillStyle = `rgba(78,60,38,${(((100 - lvl) / 100) * 0.72).toFixed(3)})`;
+        g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
       }
     }
   }

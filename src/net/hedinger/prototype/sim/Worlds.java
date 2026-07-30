@@ -127,7 +127,7 @@ public final class Worlds {
 					fert = 0.90; // thickets: lush, and they block line of sight
 				} else if (elev > 0.58 && moist < 0.40) {
 					t = Tile.TileType.TYPE_FLOOR;
-					fert = 0.25; // dry badlands
+					fert = 0.0; // dry badlands: bare dirt, no grass, no food
 				} else {
 					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.55 + 0.45 * moist; // meadow, lush where moist
@@ -167,6 +167,15 @@ public final class Worlds {
 		for (int[] h : holes) {
 			carveFloor(w, h[0], h[1], 1); // a chamber under the pit to fall into
 			w.setTile(h[0], h[1], 0, Tile.TileType.TYPE_HOLE);
+		}
+
+		// Slow the surface grass's regrowth so heavy grazing leaves lasting bare
+		// patches that take ~1-2 min to recover (the big map still sustains the
+		// herd, unlike a small room). Non-grass tiles are unaffected.
+		for (int x = 0; x < COLS; x++) {
+			for (int y = 0; y < ROWS; y++) {
+				w.getTile(x, y, 0).setRegrowRate(0.00025);
+			}
 		}
 		return w;
 	}
