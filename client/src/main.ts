@@ -35,13 +35,19 @@ let paused = false;
 
 // Baked ground streams as map chunks, fetched lazily and cached by "z/cx_cy"
 // (google-maps style). The render loop asks for whatever chunks are in view.
+// Chunks live at a STABLE url but their content changes when the world is
+// regenerated on a redeploy (e.g. the surface/cave level swap), and they carry
+// a long CDN/browser cache — so the url is tagged with the server build id to
+// bust that cache on every redeploy. Without this, a stale ground layer renders
+// under live entities: they appear to walk through walls that no longer exist.
 const chunkCache = new Map<string, HTMLImageElement>();
 function getChunk(cx: number, cy: number): HTMLImageElement {
-  const key = `${currentLevel}/${cx}_${cy}`;
+  const v = hello ? hello.build : '0';
+  const key = `${v}/${currentLevel}/${cx}_${cy}`;
   let img = chunkCache.get(key);
   if (!img) {
     img = new Image();
-    img.src = `/api/world/layers/${currentLevel}/${cx}_${cy}.png`;
+    img.src = `/api/world/layers/${currentLevel}/${cx}_${cy}.png?v=${v}`;
     chunkCache.set(key, img);
   }
   return img;
@@ -82,7 +88,7 @@ let coverGrid: Uint8Array | null = null;
 async function fetchCover(): Promise<void> {
   coverGrid = null;
   try {
-    const r = await fetch(`/api/world/cover/${currentLevel}`);
+    const r = await fetch(`/api/world/cover/${currentLevel}?v=${hello ? hello.build : '0'}`);
     if (!r.ok) return;
     const j = await r.json();
     const bin = atob(j.data);
