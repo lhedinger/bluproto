@@ -122,9 +122,11 @@ public final class Worlds {
 				double detail = Utils.noise2(x + 950, y + 640, 0.16);
 				Tile.TileType t;
 				double fert;
-				if (border || elev > 0.74) {
+				if (border || elev > 0.87) {
 					t = Tile.TileType.TYPE_WALL;
-					fert = 0; // rocky rim + highland outcrops (impassable boundaries)
+					fert = 0; // rocky rim + occasional highland outcrops (the elevation
+					// noise means ~0.67, so this high threshold keeps highlands a rare
+					// accent instead of walling off half the map)
 				} else if (moist > 0.70 && elev < 0.45) {
 					t = Tile.TileType.TYPE_WATER;
 					fert = 0; // lakes in the low, wet ground
