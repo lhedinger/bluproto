@@ -28,6 +28,7 @@ const state = new WorldState();
 const cam = new Camera(cv);
 let meta: WorldMeta | null = null;
 let hello: HelloMsg | null = null;
+let loadedBuild: string | null = null; // server build this tab loaded against; reload if it changes
 let chunkTiles = 0;
 let currentLevel = 0;
 let paused = false;
@@ -117,6 +118,14 @@ if (net.readOnly) {
 function onMsg(m: ServerMsg, receivedAt: number): void {
   switch (m.type) {
     case 'hello': {
+      // Self-heal stale tabs: if this tab first connected to a different server
+      // process (a redeploy/restart happened while it was open), its bundled
+      // client may not match the new server — reload to fetch the current one.
+      if (loadedBuild !== null && m.build !== loadedBuild) {
+        location.reload();
+        return;
+      }
+      loadedBuild = m.build;
       hello = m;
       meta = { cols: m.cols, rows: m.rows };
       paused = m.paused;

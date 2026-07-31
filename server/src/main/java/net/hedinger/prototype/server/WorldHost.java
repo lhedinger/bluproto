@@ -107,7 +107,7 @@ final class WorldHost {
 			ctx.send(Protocol.write(Protocol.Hello.of(seed, w.getColums(), w.getRows(), w.getLevels(),
 					net.hedinger.prototype.engine.ResourceManager.tileSize,
 					s.tick(), runner.isPaused(), runner.getSpeed(),
-					java.util.List.of(), CHUNK_TILES)));
+					java.util.List.of(), CHUNK_TILES, String.valueOf(startedAt))));
 			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), s.entities())));
 			sessions.add(ctx);
 		}
