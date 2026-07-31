@@ -516,8 +516,8 @@ public class TestNPC extends NPC {
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || !(n.getSize() < getSize())) {
-				continue;
+					|| n instanceof Item || n.getLvl() != getLvl() || !(n.getSize() < getSize())) {
+				continue; // same level only: a hunter can't reach prey a floor above/below
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
 			if (d < bestD) {
@@ -962,8 +962,8 @@ public class TestNPC extends NPC {
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
-					|| !t.ecoRole().equals("predator")) {
-				continue;
+					|| t.getLvl() != getLvl() || !t.ecoRole().equals("predator")) {
+				continue; // same level only: no fleeing a hunter a floor away
 			}
 			double d = distance(t.getX(), t.getY(), t.getZ());
 			if (d < bestD) {
@@ -982,8 +982,8 @@ public class TestNPC extends NPC {
 		int k = 0;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
-					|| !t.ecoRole().equals("prey")) {
-				continue;
+					|| t.getLvl() != getLvl() || !t.ecoRole().equals("prey")) {
+				continue; // same level only: herd with kin you can actually reach
 			}
 			double d = distance(t.getX(), t.getY(), t.getZ());
 			if (d > radius || d < 1e-6) {
