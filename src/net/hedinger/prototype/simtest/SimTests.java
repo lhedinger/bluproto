@@ -2316,6 +2316,44 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter must not chase prey on another level. A predator that follows prey
+	 * down a hole into the cave used to lock onto the prey still on the surface
+	 * directly overhead (same x/y, one level up) and pin itself against a cave
+	 * wall trying to reach an unreachable target — it looked frozen. Perception
+	 * is now level-scoped, so a hunter with no prey on its own level prowls and
+	 * keeps moving instead of getting stuck.
+	 */
+	static class HunterIgnoresPreyOnAnotherLevel extends Scenario {
+		@Override
+		public void run() {
+			seed(20);
+			World w = room(14, 14, 2); // two open levels
+			Genome predG = new Genome();
+			predG.size = 14;
+			predG.speed = 0.05;
+			Genome preyG = new Genome();
+			preyG.size = 7;
+			preyG.speed = 0.03;
+			TestNPC pred = TestNPC.predator(7.5, 7.5, 0, predG); // in the cave (level 0)
+			TestNPC prey = TestNPC.breeder(7.5, 7.5, 1, preyG).withHerding(); // straight above
+			w.spawnEntity(pred);
+			w.spawnEntity(prey);
+			w.think();
+
+			double path = 0, px = pred.getX(), py = pred.getY();
+			for (int i = 0; i < 200; i++) {
+				tick(w, 1);
+				path += Math.hypot(pred.getX() - px, pred.getY() - py);
+				px = pred.getX();
+				py = pred.getY();
+			}
+			assertTrue("hunter ignores prey a level away and prowls (was: " + pred.currentAction() + ")",
+					pred.currentAction().equals("prowling"));
+			assertGreater("the cave hunter kept moving (never stuck on an unreachable target)", path, 2.0);
+		}
+	}
+
+	/**
 	 * Anti-predator flight (the ecosystem's "aliveness" behaviour): a vigilant
 	 * eco herbivore ({@code withHerding()}) bolts away from a hunter, keeping a
 	 * wider gap than an ordinary grazer that crops in place while the predator
@@ -2442,6 +2480,7 @@ public class SimTests {
 		return new Scenario[] {
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
+				new HunterIgnoresPreyOnAnotherLevel(),
 				new DemoLevelsLinkSurfaceAndCave(),
 				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
