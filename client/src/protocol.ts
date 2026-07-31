@@ -34,6 +34,7 @@ export interface HelloMsg {
   speed: number;
   layers: string[];
   chunkTiles: number; // baked ground is served as chunkTiles-square map chunks
+  build: string; // server process id; changes on every restart/redeploy
 }
 
 export interface FullMsg { type: 'full'; tick: number; entities: EntityState[]; }
