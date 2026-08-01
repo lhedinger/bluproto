@@ -920,6 +920,15 @@ public class TestNPC extends NPC {
 		return null;
 	}
 
+	/** True once a metabolic creature already has enough energy to reproduce — its
+	 *  biological goal — so more grazing just strips the pasture for a surplus it
+	 *  banks little of (it breeds the reserve away before ever topping out). Below
+	 *  this it grazes to refill; at/above it, it stops cropping and moves on.
+	 *  Always false for non-metabolic grazers (no energy tank). */
+	private boolean sated() {
+		return metabolic && energy >= reproThreshold;
+	}
+
 	/** Grazes for energy and buds a mutated child once well-fed. When
 	 *  {@link #vigilant} (the eco herbivore), it flees predators and herds. */
 	private void thinkBreeder() {
@@ -933,10 +942,19 @@ public class TestNPC extends NPC {
 				return;
 			}
 		}
-		double intake = graze(grazeDemand()); // feeds energy
+		// A full creature stops cropping: grazing past the tank just wastes the
+		// intake and needlessly holds the grass down, so it grazes only when it
+		// has room to fill.
+		double intake = sated() ? 0 : graze(grazeDemand());
 		totalIntake += intake;
 		if (tryReproduce()) {
 			ecoAction = "breeding";
+			return;
+		}
+		if (sated()) {
+			// Fully fed: drift off the patch and let the grass recover.
+			ecoAction = "sated";
+			roam(speed, turn);
 			return;
 		}
 		if (intake < grazeDemand() * 0.15) {

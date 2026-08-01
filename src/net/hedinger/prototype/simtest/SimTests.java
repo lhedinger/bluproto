@@ -2189,16 +2189,21 @@ public class SimTests {
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
 			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
 
-			// The living colony clusters near that nest.
-			double sum = 0;
-			int n = 0;
+			// The living colony concentrates near that nest: a good share of it sits
+			// within a few tiles of the pheromone peak — noticeably denser than the
+			// ~20% a uniform spread would put within that radius. A concentration
+			// fraction is robust to colony size, unlike a mean-distance threshold
+			// (which washes out once a fast-breeding colony fills the room).
+			int near = 0, total = 0;
 			for (Entity e : w.getEntities()) {
 				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
-					sum += Math.hypot(e.getX() - nx, e.getY() - ny);
-					n++;
+					total++;
+					if (Math.hypot(e.getX() - nx, e.getY() - ny) < 3.0) {
+						near++;
+					}
 				}
 			}
-			assertLess("the colony clusters around the nest", sum / n, 4.0);
+			assertGreater("the colony concentrates around the nest", near / (double) total, 0.30);
 		}
 	}
 
