@@ -46,6 +46,20 @@ public class TestNPC extends NPC {
 	 *  resting rate (1.0 base + this), so cruising is cheap but a long fruitless
 	 *  chase still bites. Scales with body size because the resting rate does. */
 	private static final double PRED_SPRINT_FACTOR = 1.5;
+	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
+	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
+	 *  a pin is caught within one window rather than up to two — the difference
+	 *  between a barely-noticeable hitch and a hunter standing frozen for seconds.
+	 *  Net displacement over a window also tells a genuine crawl (e.g. across
+	 *  drag-heavy mud) apart from turning in place, which a per-tick check cannot. */
+	private static final int PIN_WINDOW = 30;
+	/** If a hunter covers less than this (tiles) over {@link #PIN_WINDOW}, it is
+	 *  pinned. Sits well below even a slow straight mud crawl over the window
+	 *  (~0.008 tiles/tick * 30 = 0.24), so only a near-standstill trips it. */
+	private static final double PIN_MIN_MOVE = 0.1;
+	/** After a pin, drive straight off clear ground for this many ticks (ignoring
+	 *  prey) to break free. */
+	private static final int HUNT_GIVEUP_TICKS = 45;
 
 	/** Vegetation eaten per tick by a reference-size grazer (>> the tile's regrowth
 	 *  rate). Bigger grazers crop faster in proportion to their size — see
@@ -85,6 +99,10 @@ public class TestNPC extends NPC {
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
 	private double totalIntake = 0;
+	private double[] pinX, pinY; // trailing ring of recent positions (pin detection)
+	private int pinCount = 0; // ring entries filled so far (caps at PIN_WINDOW)
+	private int huntGiveUp = 0; // ticks left prowling after a pinned hunt
+	private double escLastX, escLastY; // position last give-up tick (zeroed-step detection)
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
 	private Mind mind = null;
@@ -475,6 +493,57 @@ public class TestNPC extends NPC {
 	 * scarce. Never targets its own kind (only strictly smaller bodies).
 	 */
 	private void thinkPredator() {
+		// Anti-freeze: a hunter can pin itself while chasing prey it can't reach —
+		// turning in place to face prey that circles it (chase() withholds movement
+		// until the heading is within 45 deg), losing sight of prey behind cover,
+		// or driving into water/a wall it can't cross. In every case it stands in
+		// the "hunting" state making no headway. Detection compares the current
+		// position against the one PIN_WINDOW ticks ago, held in a trailing ring
+		// sampled every tick: net displacement over a window tells a real crawl
+		// (e.g. across drag-heavy mud) apart from a standstill, which a per-tick
+		// check cannot, and sampling every tick catches the pin within one window
+		// instead of the up-to-two of a free-running counter. If it has drifted
+		// less than PIN_MIN_MOVE across the window, it is pinned — prowl a spell
+		// (ignoring prey) toward open ground so it shakes loose. Checked in any state.
+		if (pinX == null) {
+			pinX = new double[PIN_WINDOW];
+			pinY = new double[PIN_WINDOW];
+		}
+		int pinSlot = (int) (getWorld().getTick() % PIN_WINDOW);
+		if (pinCount >= PIN_WINDOW && huntGiveUp <= 0
+				&& Math.hypot(X - pinX[pinSlot], Y - pinY[pinSlot]) < PIN_MIN_MOVE) {
+			huntGiveUp = HUNT_GIVEUP_TICKS; // pinned: ignore prey for a spell
+			D = escapeHeading(); // aim at genuinely open ground the moment it is spotted
+		}
+		pinX[pinSlot] = X; // overwrite the PIN_WINDOW-ticks-ago sample with now
+		pinY[pinSlot] = Y;
+		if (pinCount < PIN_WINDOW) {
+			pinCount++;
+		}
+
+		// While shaking loose, don't hand back to roam/chase — they re-aim into the
+		// same obstacle and burn ticks turning. Drive STRAIGHT along the escape
+		// heading until the give-up window elapses. If a step gets fully zeroed
+		// (the heading cleared at arm's length but the actual step stalls on the
+		// next cell — a diagonal water edge, or a big body wedged in a mud pocket
+		// whose footprint clips water whichever way it faces), rotate by the golden
+		// angle to a fresh heading rather than flipping 180 deg: opposite headings
+		// cancel and leave it pinned, whereas a golden-angle sweep samples the whole
+		// circle without retracing, so the first heading that admits a step is taken.
+		if (huntGiveUp > 0) {
+			huntGiveUp--;
+			if (Math.hypot(X - escLastX, Y - escLastY) < 1e-4) {
+				D += 2.39996; // golden angle (~137.5 deg): sweep for a heading that moves
+			}
+			escLastX = X;
+			escLastY = Y;
+			ecoAction = "prowling";
+			sprinting = false;
+			move(speed * PRED_CRUISE, D);
+			tryReproduce();
+			return;
+		}
+
 		NPC prey = nearestPrey(LOS_RANGE); // hunt as far as it can see
 		if (prey != null) {
 			lockTarget(prey);
@@ -482,6 +551,7 @@ public class TestNPC extends NPC {
 			if (distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 				ecoAction = "attacking";
 				sprinting = false; // in reach: bite, don't burn on the chase
+				pinCount = 0; // biting in place is not a pin — hold off the give-up
 				prey.damage(PRED_DAMAGE);
 				energy += PRED_BITE_ENERGY; // predation feeds the hunter
 			} else {
@@ -495,6 +565,30 @@ public class TestNPC extends NPC {
 			roam(speed * PRED_CRUISE, turn); // nothing to hunt: cruise, don't sprint
 		}
 		tryReproduce();
+	}
+
+	/** A heading whose next step is actually clear ground — used to shake a hunter
+	 *  loose once it has pinned itself against water or a wall (roam on its own can
+	 *  keep re-aiming into the same obstacle). Sweeps candidate directions, favouring
+	 *  ones that turn away from the current (blocked) heading; falls back to a
+	 *  U-turn if genuinely boxed in. Probes only a short step ahead: a longer reach
+	 *  can diagonally clear a one-tile-wide water column that the hunter's actual
+	 *  (much smaller) step falls straight into, so it would keep picking a heading
+	 *  that stalls on the very next cell. */
+	private static final double ESCAPE_PROBE = 0.25;
+
+	private double escapeHeading() {
+		double[] offs = { Math.PI, 3 * Math.PI / 4, -3 * Math.PI / 4, Math.PI / 2,
+				-Math.PI / 2, Math.PI / 4, -Math.PI / 4 };
+		for (double off : offs) {
+			double a = D + off;
+			double nx = X + Math.cos(a) * ESCAPE_PROBE, ny = Y + Math.sin(a) * ESCAPE_PROBE;
+			if (getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z)
+					&& (isFlying() || !getWorld().getTile(nx, ny, Z).isWater())) {
+				return a;
+			}
+		}
+		return D + Math.PI;
 	}
 
 	/** A short label for what this creature did on its last tick (fleeing,
@@ -516,8 +610,14 @@ public class TestNPC extends NPC {
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl() || !(n.getSize() < getSize())) {
-				continue; // same level only: a hunter can't reach prey a floor above/below
+					|| n instanceof Item || n.getLvl() != getLvl() || !(n.getSize() < getSize())
+					|| !isInLOS(n)) {
+				// Same level only (can't reach a floor away), and only prey actually in
+				// line of sight: a wall or a thicket (cover blocks sight) hides prey, and
+				// the chase steering refuses to move toward a target it can't see — so
+				// locking onto unseen prey would just freeze the hunter against the
+				// obstacle. Requiring LOS also lets prey use cover as a real refuge.
+				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
 			if (d < bestD) {

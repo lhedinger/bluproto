@@ -2359,6 +2359,48 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter never freezes on prey it can see but can't reach. A predator that
+	 * locks onto prey across water (which blocks movement but not sight) used to
+	 * pin itself at the shoreline, steering into the water forever in "hunting".
+	 * Now, if a chase makes no headway it gives up for a spell and prowls — so the
+	 * hunter keeps moving instead of freezing.
+	 */
+	static class HunterDoesNotFreezeOnUnreachablePrey extends Scenario {
+		@Override
+		public void run() {
+			seed(22);
+			World w = room(16, 9);
+			for (int y = 1; y < 8; y++) {
+				w.setTile(8, y, 0, Tile.TileType.TYPE_WATER); // a water wall splits the room
+			}
+			Genome predG = new Genome();
+			predG.size = 14;
+			predG.speed = 0.05;
+			Genome preyG = new Genome();
+			preyG.size = 7;
+			preyG.speed = 0.0; // a fixed lure on the far bank
+			TestNPC pred = TestNPC.predator(3.5, 4.5, 0, predG);
+			TestNPC prey = TestNPC.breeder(13.5, 4.5, 0, preyG);
+			w.spawnEntity(pred);
+			w.spawnEntity(prey);
+			w.think();
+
+			tick(w, 120); // let it reach the shore and (without the fix) pin there
+			// Measure steady-state movement: a frozen hunter accrues ~0 path here;
+			// one that gives up and prowls keeps racking it up.
+			double path = 0, px = pred.getX(), py = pred.getY();
+			for (int i = 0; i < 300; i++) {
+				tick(w, 1);
+				path += Math.hypot(pred.getX() - px, pred.getY() - py);
+				px = pred.getX();
+				py = pred.getY();
+			}
+			assertGreater("the hunter never froze against the water — it kept moving", path, 3.0);
+			assertLess("the hunter stayed on its (dry) side of the water", pred.getX(), 8.0);
+		}
+	}
+
+	/**
 	 * Anti-predator flight (the ecosystem's "aliveness" behaviour): a vigilant
 	 * eco herbivore ({@code withHerding()}) bolts away from a hunter, keeping a
 	 * wider gap than an ordinary grazer that crops in place while the predator
@@ -2486,6 +2528,7 @@ public class SimTests {
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
 				new HunterIgnoresPreyOnAnotherLevel(),
+				new HunterDoesNotFreezeOnUnreachablePrey(),
 				new DemoLevelsLinkSurfaceAndCave(),
 				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
