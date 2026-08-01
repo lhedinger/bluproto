@@ -163,9 +163,15 @@ public class Genome {
 		return Utils.random() < 0.5 ? a : b;
 	}
 
+	/** Body size stays inside a sane band under mutation: the drift is
+	 *  multiplicative, so an unbounded gene random-walks to extremes (dust-sized
+	 *  or giant) over a long-lived world. These keep every creature readable and
+	 *  the predator/prey scale meaningful. */
+	public static final double SIZE_MIN = 4, SIZE_MAX = 20;
+
 	/** Mutates every gene by up to +/- rate (relative for magnitudes). */
 	public void mutate(double rate) {
-		size = pos(size * (1 + jitter(rate)));
+		size = clamp(size * (1 + jitter(rate)), SIZE_MIN, SIZE_MAX);
 		speed = pos(speed * (1 + jitter(rate)));
 		turnRate = Math.max(1, (int) Math.round(turnRate * (1 + jitter(rate))));
 		losRange = pos(losRange * (1 + jitter(rate)));
