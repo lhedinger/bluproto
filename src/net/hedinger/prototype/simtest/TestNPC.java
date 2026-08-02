@@ -46,6 +46,11 @@ public class TestNPC extends NPC {
 	 *  resting rate (1.0 base + this), so cruising is cheap but a long fruitless
 	 *  chase still bites. Scales with body size because the resting rate does. */
 	private static final double PRED_SPRINT_FACTOR = 1.5;
+	/** A predator holding less than this fraction of its (size-scaled) tank is
+	 *  starving — desperate enough to break the taboo and hunt its own kind. Born
+	 *  at 0.6 and breeding at 0.75, a hunter only drops this low when it has been
+	 *  failing to feed, so cannibalism stays a genuine last resort. */
+	private static final double STARVE_FRACTION = 0.2;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -401,6 +406,14 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Holds off reproduction for this many ticks — lets a scenario keep a well-fed
+	 *  predator sated for a whole window instead of letting it immediately breed the
+	 *  surplus away and drop back to hungry. */
+	public TestNPC withReproCooldown(int ticks) {
+		reproCooldown = ticks;
+		return this;
+	}
+
 	/**
 	 * Eco-only: makes a herbivore predator-aware. Each tick it bolts from any
 	 * predator inside {@link #THREAT_R} (overriding grazing), and when its patch
@@ -486,11 +499,13 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * A hunter: it chases the nearest smaller creature (its prey), bites it when
-	 * in reach for a chunk of energy, and buds a mutated child when well-fed --
-	 * so a predator lineage evolves too. Metabolic: it starves if it cannot
-	 * catch enough, which is what keeps predator numbers in check when prey are
-	 * scarce. Never targets its own kind (only strictly smaller bodies).
+	 * A hunter whose drive tracks its hunger. Well-fed it merely patrols and takes
+	 * prey that stumbles into reach; hungry it actively runs down the nearest
+	 * smaller prey; starving it will even turn on smaller predators. It bites for a
+	 * chunk of energy and buds a mutated child when well-fed, so a predator lineage
+	 * evolves too. Metabolic: it starves if it cannot catch enough, which keeps
+	 * predator numbers in check when prey are scarce. Spares its own kind unless
+	 * starvation forces the issue.
 	 */
 	private void thinkPredator() {
 		// Anti-freeze: a hunter can pin itself while chasing prey it can't reach —
@@ -544,25 +559,36 @@ public class TestNPC extends NPC {
 			return;
 		}
 
-		NPC prey = nearestPrey(LOS_RANGE); // hunt as far as it can see
-		if (prey != null) {
+		// Hunger dictates the hunt. A well-fed hunter (at/above its breeding
+		// threshold) has no reason to chase: it patrols and takes only prey that
+		// blunders into reach — less restrained than a grazer, which quits its
+		// patch outright, but no longer the wanton killer that slaughtered prey it
+		// couldn't use. Below that it hunts in earnest. Only genuine starvation
+		// lifts the taboo on eating its own kind, so cannibalism is a last resort,
+		// not routine.
+		boolean sated = energy >= reproThreshold;
+		boolean starving = energy < STARVE_FRACTION * energyCapacity();
+		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
+		double reach = prey == null ? 0
+				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
+		if (prey != null && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
-			double reach = (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-			if (distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
-				ecoAction = "attacking";
-				sprinting = false; // in reach: bite, don't burn on the chase
-				pinCount = 0; // biting in place is not a pin — hold off the give-up
-				prey.damage(PRED_DAMAGE);
-				energy += PRED_BITE_ENERGY; // predation feeds the hunter
-			} else {
-				ecoAction = "hunting";
-				sprinting = true; // burst pursuit at full speed — the costly gear
-				chase(speed, turn);
-			}
+			ecoAction = "attacking"; // in reach: bite whatever the hunger level
+			sprinting = false; // in reach: bite, don't burn on the chase
+			pinCount = 0; // biting in place is not a pin — hold off the give-up
+			prey.damage(PRED_DAMAGE);
+			energy += PRED_BITE_ENERGY; // predation feeds the hunter
+		} else if (prey != null && !sated) {
+			lockTarget(prey);
+			ecoAction = starving ? "starving" : "hunting";
+			sprinting = true; // burst pursuit at full speed — the costly gear
+			chase(speed, turn);
 		} else {
-			ecoAction = "prowling";
-			sprinting = false; // patrol calmly and cheaply until prey is in sight
-			roam(speed * PRED_CRUISE, turn); // nothing to hunt: cruise, don't sprint
+			// No prey, or well-fed and nothing in its mouth: patrol calmly. Label
+			// it "sated" when it is deliberately letting visible prey be.
+			ecoAction = (sated && prey != null) ? "sated" : "prowling";
+			sprinting = false; // patrol calmly and cheaply — no sprint
+			roam(speed * PRED_CRUISE, turn);
 		}
 		tryReproduce();
 	}
@@ -598,14 +624,16 @@ public class TestNPC extends NPC {
 	}
 
 	/** Nearest strictly-smaller living creature within {@code radius} (its prey);
-	 *  skips items, corpses, and same-or-larger bodies (other predators). Scans by
-	 *  proximity, NOT the facing-gated perception set: that set is filled from a
-	 *  tile-local grid that only reaches ~1 tile, far short of the range at which
-	 *  prey flee (THREAT_R), so a hunter relying on it could never close on fleeing
-	 *  prey — it would lose sight of them the instant they bolted. Sensing prey out
-	 *  to its full sight range (which out-ranges the flee radius) lets a faster
-	 *  hunter actually run prey down, mirroring the prey's own {@link #nearestThreat}. */
-	private NPC nearestPrey(double radius) {
+	 *  skips items and corpses. When {@code cannibal} is false it also skips other
+	 *  predators — a hunter normally takes only actual prey and leaves its own kind
+	 *  alone; only a starving hunter passes {@code cannibal} true to include smaller
+	 *  rivals as food. Scans by proximity, NOT the facing-gated perception set: that
+	 *  set is filled from a tile-local grid that only reaches ~1 tile, far short of
+	 *  the range at which prey flee (THREAT_R), so a hunter relying on it could never
+	 *  close on fleeing prey — it would lose sight of them the instant they bolted.
+	 *  Sensing prey out to its full sight range (which out-ranges the flee radius)
+	 *  lets a faster hunter actually run prey down, mirroring {@link #nearestThreat}. */
+	private NPC nearestPrey(double radius, boolean cannibal) {
 		NPC best = null;
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
@@ -617,6 +645,11 @@ public class TestNPC extends NPC {
 				// the chase steering refuses to move toward a target it can't see — so
 				// locking onto unseen prey would just freeze the hunter against the
 				// obstacle. Requiring LOS also lets prey use cover as a real refuge.
+				continue;
+			}
+			// Leave rival predators alone unless desperate: eating one's own kind is
+			// a starvation measure, not everyday hunting.
+			if (!cannibal && n instanceof TestNPC tn && tn.ecoRole().equals("predator")) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
