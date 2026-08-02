@@ -1336,6 +1336,86 @@ public class SimTests {
 	}
 
 	/**
+	 * The body guards survival basics for a mind: a minded creature over an open
+	 * hole holds its level unless it actively wills the descent (A_VERTICAL held
+	 * down), so a random policy cannot pitch it into the cave by accident. The same
+	 * body drops through the moment it does will the descent — the wish the terrain
+	 * grants. (Ordinary gravity-bound creatures, which never touch A_VERTICAL, still
+	 * fall — see HoleFallRespectsFlying.)
+	 */
+	static class MindedBodyDescendsOnlyWhenItWills extends Scenario {
+		private int levelAfter(double verticalIntent) {
+			seed(80);
+			World w = room(9, 9, 2);
+			w.setTile(4, 4, 1, Tile.TileType.TYPE_HOLE);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_VERTICAL] = verticalIntent; // the only intent it expresses
+					a[AgentIO.A_THROTTLE] = 0; // sit on the hole
+				}
+			};
+			TestNPC body = TestNPC.minded(4.5, 4.5, 1, g, ctrl); // spawned on the hole
+			w.spawnEntity(body);
+			tick(w, 10);
+			return body.getLvl();
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a minded body holds its level over a hole it isn't willing to descend",
+					1, levelAfter(0.0));
+			assertEquals("...and drops through only when it wills the descent",
+					0, levelAfter(-1.0));
+		}
+	}
+
+	/**
+	 * The body's anti-freeze reflex carries to minded bodies: a degenerate policy
+	 * that drives flat into a wall cannot pin the creature there forever. The body
+	 * detects the terrain jam and drives it clear for a spell, so it keeps moving
+	 * instead of standing frozen — the survival floor that lets fully-random brains
+	 * live long enough to evolve.
+	 */
+	static class MindedBodyUnsticksFromWallJam extends Scenario {
+		@Override
+		public void run() {
+			seed(81);
+			World w = room(9, 9);
+			Genome g = new Genome();
+			g.size = 6;
+			g.speed = 0.08;
+			Mind ram = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1.0; // full ahead, never steering
+					a[AgentIO.A_TURN] = 0;
+				}
+			};
+			TestNPC body = TestNPC.minded(4.5, 4.5, 0, g, ram); // heading east, into the wall
+			w.spawnEntity(body);
+			w.think();
+			// Track the deepest it drives into the wall, then how far it retreats
+			// afterwards: a jammed body stays pressed at maxX (no retreat); one the
+			// body unsticks is driven back off the wall before it charges again.
+			double maxX = body.getX(), minXafter = body.getX();
+			for (int i = 0; i < 300; i++) {
+				tick(w, 1);
+				if (body.getX() > maxX) {
+					maxX = body.getX();
+					minXafter = maxX;
+				} else {
+					minXafter = Math.min(minXafter, body.getX());
+				}
+			}
+			assertGreater("a minded body jammed into a wall is driven back off it (unstick reflex)",
+					maxX - minXafter, 1.5);
+		}
+	}
+
+	/**
 	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
 	 * the parent's program, a sexual child crosses both parents' programs, and a
 	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
@@ -2814,6 +2894,8 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new SprintGearCostsEnergyForSpeed(),
+				new MindedBodyDescendsOnlyWhenItWills(),
+				new MindedBodyUnsticksFromWallJam(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),

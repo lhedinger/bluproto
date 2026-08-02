@@ -238,7 +238,7 @@ public abstract class Entity {
 			dY *= drag;
 		}
 
-		if (isOverHole() && !isFlying()) {
+		if (isOverHole() && !isFlying() && descendIntent) {
 			// FIXME allow flying entities to go down the hole if they wish
 			dZ = -1;
 		} else if (isInWall()) {
@@ -284,6 +284,12 @@ public abstract class Entity {
 		return false;
 	}
 
+	/** Whether this body will drop through a hole it stands over (and step onto one
+	 *  at all). Default true: ordinary creatures fall by gravity and use holes to
+	 *  descend. A mind sets it false unless it wills the descent, so a minded body
+	 *  treats an open hole as a ledge it won't step off by accident. */
+	protected boolean descendIntent = true;
+
 	protected boolean isColliding() {
 		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
 			return true;
@@ -292,6 +298,11 @@ public abstract class Entity {
 		if (!isFlying()) {
 			Tile dest = world.getTile(X + dX, Y + dY, Z + dZ);
 			if (dest != null && dest.isWater()) {
+				return true;
+			}
+			// A body that isn't choosing to descend won't step onto an open hole
+			// either -- it stops at the lip like it would at water.
+			if (dest != null && !descendIntent && dest.getType() == Tile.TileType.TYPE_HOLE) {
 				return true;
 			}
 		}

@@ -112,6 +112,7 @@ public class TestNPC extends NPC {
 	private int pinCount = 0; // ring entries filled so far (caps at PIN_WINDOW)
 	private int huntGiveUp = 0; // ticks left prowling after a pinned hunt
 	private double escLastX, escLastY; // position last give-up tick (zeroed-step detection)
+	private double lastThrottle = 0; // minded body's throttle last tick (gates the unstick reflex)
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
 	private Mind mind = null;
@@ -521,54 +522,8 @@ public class TestNPC extends NPC {
 	 * starvation forces the issue.
 	 */
 	private void thinkPredator() {
-		// Anti-freeze: a hunter can pin itself while chasing prey it can't reach —
-		// turning in place to face prey that circles it (chase() withholds movement
-		// until the heading is within 45 deg), losing sight of prey behind cover,
-		// or driving into water/a wall it can't cross. In every case it stands in
-		// the "hunting" state making no headway. Detection compares the current
-		// position against the one PIN_WINDOW ticks ago, held in a trailing ring
-		// sampled every tick: net displacement over a window tells a real crawl
-		// (e.g. across drag-heavy mud) apart from a standstill, which a per-tick
-		// check cannot, and sampling every tick catches the pin within one window
-		// instead of the up-to-two of a free-running counter. If it has drifted
-		// less than PIN_MIN_MOVE across the window, it is pinned — prowl a spell
-		// (ignoring prey) toward open ground so it shakes loose. Checked in any state.
-		if (pinX == null) {
-			pinX = new double[PIN_WINDOW];
-			pinY = new double[PIN_WINDOW];
-		}
-		int pinSlot = (int) (getWorld().getTick() % PIN_WINDOW);
-		if (pinCount >= PIN_WINDOW && huntGiveUp <= 0
-				&& Math.hypot(X - pinX[pinSlot], Y - pinY[pinSlot]) < PIN_MIN_MOVE) {
-			huntGiveUp = HUNT_GIVEUP_TICKS; // pinned: ignore prey for a spell
-			D = escapeHeading(); // aim at genuinely open ground the moment it is spotted
-		}
-		pinX[pinSlot] = X; // overwrite the PIN_WINDOW-ticks-ago sample with now
-		pinY[pinSlot] = Y;
-		if (pinCount < PIN_WINDOW) {
-			pinCount++;
-		}
-
-		// While shaking loose, don't hand back to roam/chase — they re-aim into the
-		// same obstacle and burn ticks turning. Drive STRAIGHT along the escape
-		// heading until the give-up window elapses. If a step gets fully zeroed
-		// (the heading cleared at arm's length but the actual step stalls on the
-		// next cell — a diagonal water edge, or a big body wedged in a mud pocket
-		// whose footprint clips water whichever way it faces), rotate by the golden
-		// angle to a fresh heading rather than flipping 180 deg: opposite headings
-		// cancel and leave it pinned, whereas a golden-angle sweep samples the whole
-		// circle without retracing, so the first heading that admits a step is taken.
-		if (huntGiveUp > 0) {
-			huntGiveUp--;
-			if (Math.hypot(X - escLastX, Y - escLastY) < 1e-4) {
-				D += 2.39996; // golden angle (~137.5 deg): sweep for a heading that moves
-			}
-			escLastX = X;
-			escLastY = Y;
-			ecoAction = "prowling";
-			sprinting = false;
-			move(speed * PRED_CRUISE, D);
-			tryReproduce();
+		if (unstickIfPinned(speed * PRED_CRUISE, true, false)) {
+			tryReproduce(); // shaking loose from a pin; still breed if well-fed
 			return;
 		}
 
@@ -604,6 +559,65 @@ public class TestNPC extends NPC {
 			roam(speed * PRED_CRUISE, turn);
 		}
 		tryReproduce();
+	}
+
+	/**
+	 * Body survival reflex, shared by the hunter and any minded body: spot a pin —
+	 * no net displacement over a window while the body is trying to move — and,
+	 * once spotted, drive straight to open ground for a spell so nothing can jam
+	 * the creature against an obstacle forever (a hunter turning in place against
+	 * prey it can't reach, or a degenerate mind steering flat into a wall).
+	 *
+	 * <p>Detection uses a trailing ring sampled every tick: net displacement over
+	 * {@link #PIN_WINDOW} ticks tells a real crawl (e.g. across drag-heavy mud)
+	 * apart from a standstill, which a per-tick check cannot, and sampling every
+	 * tick catches the pin within one window. While shaking loose it drives STRAIGHT
+	 * along a cleared heading rather than handing back to roam/chase/the brain
+	 * (which would re-aim into the same obstacle); if a step is fully zeroed it
+	 * rotates by the golden angle so opposite headings can't cancel and re-pin.
+	 *
+	 * @param driveSpeed  speed to escape at while shaking loose
+	 * @param trying      whether the body is currently trying to move -- a body
+	 *                    deliberately holding still (a mind choosing not to move) is
+	 *                    never force-marched
+	 * @param terrainOnly only treat a pin as a jam when the obstacle ahead is
+	 *                    terrain (a wall/water/hole), not another creature: pressing
+	 *                    against a neighbour (a target, prey, mate) is benign and
+	 *                    handled by collision separation, so a minded body at its
+	 *                    goal is not shoved off it. The hunter passes false -- its
+	 *                    turn-in-place pin on open ground has no terrain to gate on.
+	 * @return true if it took over movement this tick (the caller must not also move)
+	 */
+	private boolean unstickIfPinned(double driveSpeed, boolean trying, boolean terrainOnly) {
+		if (pinX == null) {
+			pinX = new double[PIN_WINDOW];
+			pinY = new double[PIN_WINDOW];
+		}
+		int pinSlot = (int) (getWorld().getTick() % PIN_WINDOW);
+		if (pinCount >= PIN_WINDOW && huntGiveUp <= 0 && trying
+				&& Math.hypot(X - pinX[pinSlot], Y - pinY[pinSlot]) < PIN_MIN_MOVE
+				&& (!terrainOnly || terrainBlockedAhead())) {
+			huntGiveUp = HUNT_GIVEUP_TICKS; // pinned: take over movement for a spell
+			D = escapeHeading(); // aim at genuinely open ground the moment it is spotted
+		}
+		pinX[pinSlot] = X; // overwrite the PIN_WINDOW-ticks-ago sample with now
+		pinY[pinSlot] = Y;
+		if (pinCount < PIN_WINDOW) {
+			pinCount++;
+		}
+		if (huntGiveUp > 0) {
+			huntGiveUp--;
+			if (Math.hypot(X - escLastX, Y - escLastY) < 1e-4) {
+				D += 2.39996; // golden angle (~137.5 deg): sweep for a heading that moves
+			}
+			escLastX = X;
+			escLastY = Y;
+			ecoAction = "prowling";
+			sprinting = false;
+			move(driveSpeed, D);
+			return true;
+		}
+		return false;
 	}
 
 	/** A heading whose next step is actually clear ground — used to shake a hunter
@@ -734,13 +748,23 @@ public class TestNPC extends NPC {
 	}
 
 	/** The body/mind loop: sense the world into the vector, let the mind decide,
-	 * then apply the actuator vector as intent. The mind never sees the world. */
+	 * then apply the actuator vector as intent. The mind never sees the world.
+	 *
+	 * <p>Survival reflex first: if the body has been trying to move (a real throttle
+	 * last tick) but has made no headway, the body takes the wheel and drives to
+	 * open ground for a spell, skipping the mind -- so a degenerate policy that
+	 * steers flat into a wall can't pin the creature forever. A mind that is
+	 * deliberately still (low throttle) is left alone, never force-marched. */
 	private void thinkMinded() {
 		if (mind == null) {
 			return;
 		}
+		if (unstickIfPinned(speed * PRED_CRUISE, lastThrottle > 0.3, true)) {
+			return; // body override: shaking loose, the mind sits this tick out
+		}
 		senseInto(sensors);
 		mind.think(sensors, actuators);
+		lastThrottle = clampUnit(actuators[AgentIO.A_THROTTLE]);
 		actFrom(actuators);
 	}
 
@@ -862,6 +886,19 @@ public class TestNPC extends NPC {
 		return getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z) ? 0.0 : 1.0;
 	}
 
+	/** True if the tile one step along the current heading is impassable terrain (a
+	 *  wall, or -- for a non-flyer -- water or an open hole), as opposed to clear
+	 *  ground where any standstill is a neighbour collision, not a terrain jam. */
+	private boolean terrainBlockedAhead() {
+		double nx = X + Math.cos(D), ny = Y + Math.sin(D);
+		if (!getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z)) {
+			return true;
+		}
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(nx, ny, Z);
+		return t != null && !isFlying()
+				&& (t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
+	}
+
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
 	private void actFrom(double[] a) {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
@@ -872,9 +909,11 @@ public class TestNPC extends NPC {
 		if (throttle > 0.02) {
 			move(throttle * topSpeed, D);
 		}
-		// A_VERTICAL (seek up / down) is a reserved intent slot: the hybrid-boundary
-		// phase wires the body to take a ramp or hole when the mind wills it and the
-		// terrain allows. Until then it is inert -- a wish the world does not grant.
+		// Vertical intent: the body only drops through (or steps onto) a hole when
+		// the mind actively wills the descent -- otherwise it treats an open hole as
+		// a ledge and stops at the lip. Climbing a ramp stays automatic where one
+		// exists (going up is not a survival hazard), so this gates only the fall.
+		descendIntent = a[AgentIO.A_VERTICAL] < -0.5;
 		if (a[AgentIO.A_EAT] > 0.5) {
 			totalIntake += graze(grazeDemand());
 			eatNearestItem(); // also devour a food (or bite a hazard) in reach
