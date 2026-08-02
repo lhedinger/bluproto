@@ -80,8 +80,8 @@ public final class Worlds {
 		return out;
 	}
 
-	/** One founder/reseed minded genome: random dispositions and markers, a random
-	 *  body inside the sane size band, and a fresh random brain. */
+	/** One founder minded genome: random dispositions and markers, a random body
+	 *  inside the sane size band, and a fresh random brain. */
 	static net.hedinger.prototype.entities.Genome mindedGenome() {
 		net.hedinger.prototype.entities.Genome g = net.hedinger.prototype.entities.Genome.random();
 		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
@@ -89,6 +89,30 @@ public final class Worlds {
 		g.metabolism = 0.02;
 		g.brain = net.hedinger.prototype.entities.Brain.random(16); // a fully random mind
 		return g;
+	}
+
+	/**
+	 * The genome for the steward's next minded reseed, under survivor-seeding: a
+	 * mutated child of the longest-lived minded creature currently alive. Living
+	 * longest <em>is</em> the fitness — a metabolic creature that can't feed itself
+	 * starves, so the oldest one alive is the one coping best — so the cohort's
+	 * reseeds descend from the current survival champion and inherit its (mutated)
+	 * brain, rather than starting from scratch each death. Falls back to a fresh
+	 * random genome only when the whole cohort has died out, so a total wipe can't
+	 * stall on nothing to copy.
+	 */
+	public static net.hedinger.prototype.entities.Genome mindedReseedGenome(World w) {
+		TestNPC best = null;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof TestNPC t && t.isMinded() && !t.isDead() && !t.isRemoved()
+					&& t.getGenome() != null && (best == null || t.getAge() > best.getAge())) {
+				best = t;
+			}
+		}
+		if (best == null) {
+			return mindedGenome(); // cohort wiped out: start a fresh random lineage
+		}
+		return net.hedinger.prototype.entities.Genome.child(best.getGenome(), 0.08); // inherit + mutate
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
