@@ -18,7 +18,12 @@ public final class AgentIO {
 	// ---- sensors (world -> mind) ------------------------------------------
 	/** Constant 1.0, so a policy can synthesize thresholds/biases. */
 	public static final int S_BIAS = 0;
-	/** Own energy, normalized (0 when the body keeps no energy). */
+	/** Own hunger/reserve as a fraction of this body's OWN capacity, ~0..1: 1.0
+	 * means a full tank, near 0 means starving. Scaled to the creature's own
+	 * (size-dependent) capacity, not an absolute constant, so the same policy
+	 * reads "how full am I" the same way in a small body or a large one — which is
+	 * what lets appetite-driven behaviour (hunt when hungry, rest when full)
+	 * evolve. 0 when the body keeps no energy tank. */
 	public static final int S_ENERGY = 1;
 	/** Vegetation on the tile underfoot, 0..1. */
 	public static final int S_FOOD = 2;

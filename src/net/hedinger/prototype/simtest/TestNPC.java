@@ -735,7 +735,8 @@ public class TestNPC extends NPC {
 	private void senseInto(double[] s) {
 		long now = getWorld().getTick();
 		s[AgentIO.S_BIAS] = 1.0;
-		s[AgentIO.S_ENERGY] = clampUnit(getEnergy() / 4.0);
+		double cap = energyCapacity();
+		s[AgentIO.S_ENERGY] = cap > 0 ? clampUnit(getEnergy() / cap) : 0; // fraction of OWN tank
 		s[AgentIO.S_FOOD] = getWorld().getTile(X, Y, Z).getVegetation(now)
 				/ net.hedinger.prototype.engine.Tile.VEG_MAX;
 		s[AgentIO.S_PHERO] = Math.tanh(sensePheromone());
