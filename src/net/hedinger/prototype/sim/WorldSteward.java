@@ -36,7 +36,7 @@ public final class WorldSteward extends Entity {
 	// more life in summer and less in winter.
 	private final int[] preyWinter, preySummer, predWinter, predSummer;
 	private final Genome[] preySpecies, predSpecies;
-	private final int mindedFloor; // keep at least this many minded creatures alive
+	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private int n = 0; // rotates species / placement, deterministically
@@ -81,7 +81,8 @@ public final class WorldSteward extends Entity {
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer, int mindedFloor) {
+			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer,
+			int mindedFloor, int mindedMax) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
@@ -93,6 +94,7 @@ public final class WorldSteward extends Entity {
 		this.predWinter = predWinter;
 		this.predSummer = predSummer;
 		this.mindedFloor = mindedFloor;
+		this.mindedMax = mindedMax;
 	}
 
 	/** Interpolates an integer bound between its winter and summer value. */
@@ -144,6 +146,12 @@ public final class WorldSteward extends Entity {
 		// restored (fresh random, not inherited: pure emergence, per the design).
 		if (minded < mindedFloor) {
 			seedMinded();
+		}
+		// Ceiling on the minded cohort too: a viable (fed, breeding) lineage would
+		// otherwise swarm, since minded creatures aren't culled by the prey/predator
+		// caps. Keep it a small, watchable A/B group.
+		if (minded > mindedMax) {
+			trimMinded(Math.min(3, minded - mindedMax));
 		}
 
 		// Ceiling: trim a small, fixed number of the excess per tick, so a
@@ -219,6 +227,21 @@ public final class WorldSteward extends Entity {
 			}
 		}
 		getWorld().spawnEntity(TestNPC.mindedForager(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
+	}
+
+	/** Removes up to {@code count} minded creatures (iteration order) -- the ceiling
+	 *  for the hybrid cohort, which the role-keyed {@link #trim} does not cover. */
+	private void trimMinded(int count) {
+		int removed = 0;
+		for (Entity e : getWorld().getEntities()) {
+			if (removed >= count) {
+				break;
+			}
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()) {
+				t.remove();
+				removed++;
+			}
+		}
 	}
 
 	/** Removes up to {@code count} of the given role (iteration order). */

@@ -80,15 +80,57 @@ public final class Worlds {
 		return out;
 	}
 
-	/** One founder minded genome: random dispositions and markers, a random body
-	 *  inside the sane size band, and a fresh random brain. */
+	/** One founder minded genome: random dispositions, markers and body inside the
+	 *  sane size band, and the hand-written {@link #starterBrain()} — a minimal
+	 *  forager that mutation and survivor-seeding then refine. A fully-random brain
+	 *  was tried first (Phase 3/4): it never stumbled onto feeding, so selection had
+	 *  no gradient to climb. Seeding a viable-but-crude brain gives evolution a
+	 *  foothold to improve from, while every other gene stays random. */
 	static net.hedinger.prototype.entities.Genome mindedGenome() {
 		net.hedinger.prototype.entities.Genome g = net.hedinger.prototype.entities.Genome.random();
 		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
 		g.speed = 0.04 + Utils.random() * 0.03;
 		g.metabolism = 0.02;
-		g.brain = net.hedinger.prototype.entities.Brain.random(16); // a fully random mind
+		g.brain = starterBrain();
 		return g;
+	}
+
+	/**
+	 * A minimal hand-written forager brain — the warm seed the minded cohort starts
+	 * from, so it survives long enough for selection to have something to work on.
+	 * It does four things, and nothing more: drive forward, graze continuously
+	 * (harmless off grass, so it feeds whenever it crosses a meadow), try to breed
+	 * (so a fed lineage grows), and steer — wandering by the clock, but turning away
+	 * when a bigger creature is close. Crude on purpose: mutation plus survivor-
+	 * seeding are meant to sharpen it (better wandering, real fleeing, hunting),
+	 * which is the whole experiment. Runs one instruction per tick, so it is kept
+	 * short; the actuator latches persist between writes.
+	 */
+	static net.hedinger.prototype.entities.Brain starterBrain() {
+		final int SET = net.hedinger.prototype.entities.Brain.SET;
+		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
+		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
+		final int NEG = net.hedinger.prototype.entities.Brain.NEG;
+		final int GT = net.hedinger.prototype.entities.Brain.GT;
+		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
+		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
+		int[][] code = {
+				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9])
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // drive forward
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze whenever on grass
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // breed when well-fed
+				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_CLOCK, 0 }, // r2 = clock (wander)
+				{ SENSE, 3, net.hedinger.prototype.entities.AgentIO.S_THREAT_BEARING, 0 }, // r3 = threat bearing
+				{ SENSE, 4, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r4 = threat prox
+				{ NEG, 5, 3, 0 }, // r5 = -threat bearing (rough flee heading)
+				{ SET, 6, 7, 0 }, // r6 = 0.25 (const[7]) threat threshold
+				{ GT, 7, 4, 6, }, // r7 = threat is close?
+				{ MOV, 8, 2, 0 }, // r8 = wander (default)
+				{ SKIPZ, 7, 0, 0 }, // no threat near -> skip the flee override
+				{ MOV, 8, 5, 0 }, // r8 = flee turn
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_TURN, 8, 0 }, // steer
+		};
+		return new net.hedinger.prototype.entities.Brain(code);
 	}
 
 	/**
@@ -356,7 +398,7 @@ public final class Worlds {
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
 				new int[] { 12, 30 }, new int[] { 34, 84 }, // prey: winter, summer
 				new int[] { 1, 5 }, new int[] { 3, 14 }, // predators: winter, summer
-				4)); // keep at least this many minded creatures alive (small cohort)
+				4, 12)); // minded cohort held in [floor, max] — small but able to grow
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;

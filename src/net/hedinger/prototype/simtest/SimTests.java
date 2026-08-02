@@ -1513,6 +1513,41 @@ public class SimTests {
 	}
 
 	/**
+	 * The warm-seed payoff: a minded creature carrying the hand-written starter
+	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
+	 * survives far past the age it could ever reach on its birth reserve alone — the
+	 * "no-food starvation age" that every fully-random brain in Phases 3-4 died at.
+	 * Being alive after 20k ticks (well beyond that ceiling for any body in the size
+	 * band) can only mean it ate: the foothold selection needed.
+	 */
+	static class StarterBrainedForagerFeedsItself extends Scenario {
+		@Override
+		public void run() {
+			seed(91);
+			World w = room(24, 24);
+			for (int x = 1; x < 23; x++) {
+				for (int y = 1; y < 23; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // a lush meadow, grass everywhere
+				}
+			}
+			tick(w, 1); // advance the clock so vegetation is defined
+			// A fresh starter-brained genome (empty cohort -> mindedReseedGenome yields
+			// the founder starter), on a body in the usual size band.
+			Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			// Suppress breeding so we test one forager feeding itself, not a cohort:
+			// the starter mates whenever able, which in an unbounded room (no steward
+			// ceiling) would explode and overgraze. The live world's minded cap
+			// handles that; here we isolate the feeding claim.
+			TestNPC forager = TestNPC.mindedForager(12.5, 12.5, 0, g).withReproCooldown(100_000_000);
+			w.spawnEntity(forager);
+			tick(w, 20000); // no body in the size band lasts this long without eating
+			assertTrue("a starter-brained forager on grass is still alive after 20k ticks",
+					!forager.isDead() && !forager.isRemoved());
+			assertGreater("...reaching an age only feeding could sustain", forager.getAge(), 12000);
+		}
+	}
+
+	/**
 	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
 	 * the parent's program, a sexual child crosses both parents' programs, and a
 	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
@@ -2995,6 +3030,7 @@ public class SimTests {
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
+				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),
