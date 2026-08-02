@@ -1416,6 +1416,48 @@ public class SimTests {
 	}
 
 	/**
+	 * The demo world seeds a small cohort of minded creatures alongside the scripted
+	 * species, and the steward keeps it from dying out: fully-random brains rarely
+	 * feed themselves, so without the reseed the lineage would starve to nothing and
+	 * the A/B seam with it. Pins that the cohort is present, is marked minded (apart
+	 * from the hardcoded creatures), stays alive over time, and does not crowd out
+	 * the scripted ecosystem it runs beside.
+	 */
+	static class MindedCohortSustainedBySteward extends Scenario {
+		private int countMinded(World w) {
+			int c = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()) {
+					c++;
+				}
+			}
+			return c;
+		}
+
+		private int countRole(World w, String role) {
+			int c = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& !t.isMinded() && t.ecoRole().equals(role)) {
+					c++;
+				}
+			}
+			return c;
+		}
+
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(7);
+			assertGreater("the demo world seeds a minded cohort", countMinded(w), 0);
+			// Long enough for the random-brained founders to starve and be reseeded.
+			tick(w, 8000);
+			assertGreater("the steward keeps the minded cohort from dying out", countMinded(w), 0);
+			assertGreater("the scripted prey persist alongside the minded cohort",
+					countRole(w, "prey"), 0);
+		}
+	}
+
+	/**
 	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
 	 * the parent's program, a sexual child crosses both parents' programs, and a
 	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
@@ -2896,6 +2938,7 @@ public class SimTests {
 				new SprintGearCostsEnergyForSpeed(),
 				new MindedBodyDescendsOnlyWhenItWills(),
 				new MindedBodyUnsticksFromWallJam(),
+				new MindedCohortSustainedBySteward(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),

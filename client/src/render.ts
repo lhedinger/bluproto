@@ -5,7 +5,7 @@
 
 import { ART_RADIUS, CELL, atlasFor, cell } from './atlas';
 import type { Camera } from './camera';
-import { F_CARRYING, F_DEAD, F_GRABBED } from './protocol';
+import { F_CARRYING, F_DEAD, F_GRABBED, F_MINDED } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
@@ -143,6 +143,14 @@ export function render(
       g.lineTo(s.x + Math.cos(p.dir + 2.5) * r * 0.55, s.y + Math.sin(p.dir + 2.5) * r * 0.55);
       g.lineTo(s.x + Math.cos(p.dir - 2.5) * r * 0.55, s.y + Math.sin(p.dir - 2.5) * r * 0.55);
       g.closePath(); g.fill();
+    }
+    // Minded cohort: a crisp violet ring marks a creature whose behaviour comes
+    // from an evolvable mind, so it can be watched competing against the scripted
+    // species. Distinct from the grab (orange) and carry (cyan) rings.
+    if (e.flags & F_MINDED) {
+      g.strokeStyle = 'rgba(198,96,255,0.95)';
+      g.lineWidth = Math.max(1, r * 0.22);
+      g.beginPath(); g.arc(s.x, s.y, r * 1.25, 0, 7); g.stroke();
     }
     if (e.flags & F_GRABBED) {
       g.strokeStyle = 'rgba(255,160,60,0.9)';

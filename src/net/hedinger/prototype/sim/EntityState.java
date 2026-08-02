@@ -34,6 +34,9 @@ public record EntityState(
 	public static final int F_FLYING = 2;
 	public static final int F_GRABBED = 4;
 	public static final int F_CARRYING = 8;
+	/** Driven by an evolvable mind (the hybrid cohort), not a hardcoded behaviour --
+	 *  the viewer marks these apart so they can be watched competing. */
+	public static final int F_MINDED = 16;
 
 	/** Captures one entity. Read-only: must never mutate {@code e}. */
 	static EntityState of(Entity e) {
@@ -71,6 +74,9 @@ public record EntityState(
 		}
 		if (e.getCarriedLoad() > 0) {
 			flags |= F_CARRYING;
+		}
+		if (e instanceof net.hedinger.prototype.simtest.TestNPC t && t.isMinded()) {
+			flags |= F_MINDED;
 		}
 		int attachedTo = e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID();
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),

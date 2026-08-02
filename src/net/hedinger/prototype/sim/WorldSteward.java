@@ -36,6 +36,7 @@ public final class WorldSteward extends Entity {
 	// more life in summer and less in winter.
 	private final int[] preyWinter, preySummer, predWinter, predSummer;
 	private final Genome[] preySpecies, predSpecies;
+	private final int mindedFloor; // keep at least this many minded creatures alive
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private int n = 0; // rotates species / placement, deterministically
@@ -80,7 +81,7 @@ public final class WorldSteward extends Entity {
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer) {
+			int[] preyWinter, int[] preySummer, int[] predWinter, int[] predSummer, int mindedFloor) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
@@ -91,6 +92,7 @@ public final class WorldSteward extends Entity {
 		this.preySummer = preySummer;
 		this.predWinter = predWinter;
 		this.predSummer = predSummer;
+		this.mindedFloor = mindedFloor;
 	}
 
 	/** Interpolates an integer bound between its winter and summer value. */
@@ -111,14 +113,18 @@ public final class WorldSteward extends Entity {
 		int predMin = lerp(predWinter[0], predSummer[0], phase);
 		int predMax = lerp(predWinter[1], predSummer[1], phase);
 
-		int prey = 0, pred = 0;
+		int prey = 0, pred = 0, minded = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
-				String r = t.ecoRole();
-				if (r.equals("prey")) {
-					prey++;
-				} else if (r.equals("predator")) {
-					pred++;
+				if (t.isMinded()) {
+					minded++; // the hybrid cohort is its own category (role emerges)
+				} else {
+					String r = t.ecoRole();
+					if (r.equals("prey")) {
+						prey++;
+					} else if (r.equals("predator")) {
+						pred++;
+					}
 				}
 			}
 		}
@@ -131,6 +137,13 @@ public final class WorldSteward extends Entity {
 		}
 		if (pred < predMin && prey > predMin * 4) {
 			seed(predSpecies, false);
+		}
+		// Keep the small minded cohort from vanishing: a fully-random mind rarely
+		// feeds itself, so the lineage would otherwise die out and the A/B seam with
+		// it. Reseed one fresh random-brained creature per tick until the floor is
+		// restored (fresh random, not inherited: pure emergence, per the design).
+		if (minded < mindedFloor) {
+			seedMinded();
 		}
 
 		// Ceiling: trim a small, fixed number of the excess per tick, so a
@@ -187,6 +200,23 @@ public final class WorldSteward extends Entity {
 		TestNPC t = isPrey ? TestNPC.breeder(x, y, surfaceZ, g).withHerding() // born at its size-scaled reserve
 				: TestNPC.predator(x, y, surfaceZ, g);
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
+	}
+
+	/** Spawns one fresh minded creature (a new random body + random brain) at a
+	 *  random open surface tile — a clean-slate lineage, no inheritance. */
+	private void seedMinded() {
+		Genome g = Worlds.mindedGenome();
+		double x = cols / 2.0, y = rows / 2.0;
+		for (int tries = 0; tries < 40; tries++) {
+			double px = 3 + Utils.random() * (cols - 6);
+			double py = 3 + Utils.random() * (rows - 6);
+			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
+				x = px;
+				y = py;
+				break;
+			}
+		}
+		getWorld().spawnEntity(TestNPC.mindedForager(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Removes up to {@code count} of the given role (iteration order). */
