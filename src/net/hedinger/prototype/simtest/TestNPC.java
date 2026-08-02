@@ -323,6 +323,34 @@ public class TestNPC extends NPC {
 		return t;
 	}
 
+	/**
+	 * A full ecosystem citizen driven by its genome's evolvable {@link Brain}: same
+	 * size-scaled energy economy as the hardcoded breeders/predators (born fed,
+	 * burns to live, breeds when full, starves when it can't feed), but every
+	 * decision — where to go, what to eat, whom to hunt or flee or mate — comes from
+	 * the mind reading the {@link AgentIO} vector, not a hardcoded rule. Its role is
+	 * not fixed: a big-bodied one that learns to chase is a predator, a grazer is
+	 * prey, and offspring inherit the mutated brain, so the behaviour evolves. Used
+	 * to seed the parallel minded cohort that competes against the scripted species.
+	 */
+	public static TestNPC mindedForager(double x, double y, double z, Genome g) {
+		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
+		configureGenomeBody(t, g); // size-scaled reserve, burn and repro thresholds
+		t.LOS_FOV = Math.PI * 2; // omnidirectional, like the other genome bodies
+		t.LOS_RANGE = Math.max(g.losRange, 3);
+		t.SEARCH_FREQ = 2;
+		t.sprintFactor = PRED_SPRINT_FACTOR; // the sprint actuator's burst has a real cost
+		t.mind = mindOf(g);
+		return t;
+	}
+
+	/** True if this body's decisions come from a pluggable {@link Mind} (the hybrid
+	 *  minded cohort) rather than a hardcoded eco behaviour -- used to mark them
+	 *  apart in the viewer and count them in the census. */
+	public boolean isMinded() {
+		return behavior == Behavior.MINDED;
+	}
+
 	private static final Mind INERT_MIND = new Mind() {
 		@Override
 		public void think(double[] sensors, double[] actuators) {

@@ -65,6 +65,32 @@ public final class Worlds {
 		return species(markers, sizes, 0.045, 0.055, 0.02);
 	}
 
+	/** Minded "species": a small cohort whose behaviour comes from a fully-random
+	 *  evolvable {@link net.hedinger.prototype.entities.Brain}, not a hardcoded rule.
+	 *  Random bodies (so a role can emerge — a big one may learn to hunt, a small one
+	 *  to graze) with a distinct greenish barcode, and a random brain each. They
+	 *  compete inside the same world as the scripted species; most will flounder at
+	 *  first (a random mind rarely feeds itself), which is the point of watching. */
+	private static net.hedinger.prototype.entities.Genome[] mindedSpecies(int count) {
+		net.hedinger.prototype.entities.Genome[] out =
+				new net.hedinger.prototype.entities.Genome[count];
+		for (int i = 0; i < count; i++) {
+			out[i] = mindedGenome();
+		}
+		return out;
+	}
+
+	/** One founder/reseed minded genome: random dispositions and markers, a random
+	 *  body inside the sane size band, and a fresh random brain. */
+	static net.hedinger.prototype.entities.Genome mindedGenome() {
+		net.hedinger.prototype.entities.Genome g = net.hedinger.prototype.entities.Genome.random();
+		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
+		g.speed = 0.04 + Utils.random() * 0.03;
+		g.metabolism = 0.02;
+		g.brain = net.hedinger.prototype.entities.Brain.random(16); // a fully random mind
+		return g;
+	}
+
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
 			double speedLo, double speedHi, double metabolism) {
 		net.hedinger.prototype.entities.Genome[] out =
@@ -275,6 +301,15 @@ public final class Worlds {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
 		}
+		// A small parallel cohort of minded creatures (fully-random brains) that
+		// competes inside the same world as the scripted species — the A/B seam
+		// where evolvable behaviour proves itself (or doesn't) against the hardcoded
+		// baseline. The steward keeps this cohort topped up as it dies off.
+		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(5);
+		for (int i = 0; i < 5; i++) {
+			double[] p = openSpot(w);
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).withDeathspan(ECO_DEATHSPAN));
+		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < 10; i++) {
@@ -296,7 +331,8 @@ public final class Worlds {
 		// never emptying or swarming. Scaled up for the larger map.
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
 				new int[] { 12, 30 }, new int[] { 34, 84 }, // prey: winter, summer
-				new int[] { 1, 5 }, new int[] { 3, 14 })); // predators: winter, summer
+				new int[] { 1, 5 }, new int[] { 3, 14 }, // predators: winter, summer
+				4)); // keep at least this many minded creatures alive (small cohort)
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;

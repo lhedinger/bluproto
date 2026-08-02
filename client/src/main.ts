@@ -7,7 +7,7 @@ import { Camera } from './camera';
 import { drawMinimap, minimapToWorld } from './minimap';
 import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
-import { F_DEAD } from './protocol';
+import { F_DEAD, F_MINDED } from './protocol';
 import { render, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 
@@ -301,6 +301,8 @@ function renderInspect(d: Record<string, any>): void {
   if (d.carrying) rows.push(row('state', 'carrying'));
   if (d.grabbed) rows.push(row('state', 'grabbed'));
   if (d.dead) rows.push(row('state', 'dead'));
+  const flags = state.tracks.get(selectedId!)?.curr.flags ?? 0;
+  if (flags & F_MINDED) rows.push(row('mind', 'evolvable'));
   const gm = d.genome;
   if (gm) {
     rows.push(row('size', gm.size));

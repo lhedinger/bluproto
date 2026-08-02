@@ -21,6 +21,7 @@ export const F_DEAD = 1;
 export const F_FLYING = 2;
 export const F_GRABBED = 4;
 export const F_CARRYING = 8;
+export const F_MINDED = 16; // driven by an evolvable mind, not a hardcoded behaviour
 
 export interface HelloMsg {
   type: 'hello';
