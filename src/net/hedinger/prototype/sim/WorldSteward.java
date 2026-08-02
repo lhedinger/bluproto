@@ -202,10 +202,12 @@ public final class WorldSteward extends Entity {
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Spawns one fresh minded creature (a new random body + random brain) at a
-	 *  random open surface tile — a clean-slate lineage, no inheritance. */
+	/** Spawns one minded creature at a random open surface tile. Under survivor-
+	 *  seeding it descends from the longest-lived minded creature currently alive
+	 *  (a mutated child, inheriting its brain); only a wiped-out cohort falls back
+	 *  to a fresh random lineage. */
 	private void seedMinded() {
-		Genome g = Worlds.mindedGenome();
+		Genome g = Worlds.mindedReseedGenome(getWorld());
 		double x = cols / 2.0, y = rows / 2.0;
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);

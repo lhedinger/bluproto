@@ -1458,6 +1458,61 @@ public class SimTests {
 	}
 
 	/**
+	 * Survivor-seeding with longevity as fitness: when the steward must top the
+	 * minded cohort back up, the new creature descends from the longest-lived
+	 * minded creature currently alive (a mutated child, inheriting its brain), not a
+	 * fresh random one — living longest is itself the fitness, since a metabolic
+	 * creature that can't feed itself starves. Only a wiped-out cohort falls back to
+	 * random. Pins that the reseed tracks the OLDEST survivor's lineage (by its
+	 * markers), not a younger one, and that the empty-cohort fallback still yields a
+	 * valid random-brained genome.
+	 */
+	static class MindedReseedDescendsFromLongestLivedSurvivor extends Scenario {
+		private static Genome mindedWith(double m0, double m1, double m2) {
+			Genome g = new Genome();
+			g.markers = new double[] { m0, m1, m2 };
+			g.size = 10;
+			g.speed = 0.05;
+			g.brain = Brain.random(16);
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(90);
+			World w = room(20, 20);
+
+			// Empty cohort: the reseed falls back to a fresh random-brained genome.
+			Genome fresh = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			assertTrue("a wiped-out cohort reseeds a fresh random-brained genome", fresh.brain != null);
+
+			// An older survivor (distinctive red-ish markers), then a younger one
+			// (green-ish). Both live comfortably within the window (a big reserve
+			// drains slowly), so age alone separates them.
+			TestNPC older = TestNPC.mindedForager(5.5, 5.5, 0, mindedWith(0.90, 0.10, 0.10));
+			w.spawnEntity(older);
+			tick(w, 200); // the older one banks 200 ticks of age
+			TestNPC younger = TestNPC.mindedForager(14.5, 14.5, 0, mindedWith(0.10, 0.90, 0.10));
+			w.spawnEntity(younger);
+			tick(w, 5);
+
+			assertTrue("both survivors are still alive to seed from",
+					!older.isDead() && !older.isRemoved() && !younger.isDead() && !younger.isRemoved());
+
+			// The reseed descends from the OLDER survivor: its markers track the
+			// red-ish lineage (mutated by <= the 0.08 rate), not the green-ish one.
+			Genome reseed = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			assertTrue("the reseed inherits a brain (not a brain-less body)", reseed.brain != null);
+			assertLess("reseed marker 0 tracks the longest-lived survivor's",
+					Math.abs(reseed.markers[0] - 0.90), 0.2);
+			assertLess("reseed marker 1 tracks the longest-lived survivor's",
+					Math.abs(reseed.markers[1] - 0.10), 0.2);
+			assertGreater("the reseed did NOT descend from the younger survivor",
+					Math.abs(reseed.markers[1] - 0.90), 0.3);
+		}
+	}
+
+	/**
 	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
 	 * the parent's program, a sexual child crosses both parents' programs, and a
 	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
@@ -2939,6 +2994,7 @@ public class SimTests {
 				new MindedBodyDescendsOnlyWhenItWills(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
+				new MindedReseedDescendsFromLongestLivedSurvivor(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),
