@@ -2401,6 +2401,90 @@ public class SimTests {
 	}
 
 	/**
+	 * Hunger governs the hunt. A well-fed predator (at or above its breeding
+	 * threshold) patrols and leaves prey it does not need alone, while a hungry
+	 * one runs the very same prey down. Only the predator's energy differs between
+	 * the two runs, so the kills that appear in one and not the other isolate
+	 * appetite as the driver — the fix for hunters that used to slaughter prey they
+	 * were already too full to make any use of.
+	 */
+	static class SatedPredatorSparesPrey extends Scenario {
+		private int kills(double energyFraction, int reproCooldown) {
+			seed(11);
+			World w = room(20, 9);
+			Genome predG = new Genome();
+			predG.size = 14;
+			predG.speed = 0.06;
+			TestNPC pred = TestNPC.predator(5.5, 4.5, 0, predG)
+					.withReproCooldown(reproCooldown); // don't let it breed the surplus off
+			pred.withEnergy(energyFraction * pred.energyCapacity());
+			Genome preyG = new Genome();
+			preyG.size = 7;
+			preyG.speed = 0.0; // a fixed lure in plain sight, four tiles off
+			TestNPC prey = TestNPC.breeder(9.5, 4.5, 0, preyG);
+			w.spawnEntity(pred);
+			w.spawnEntity(prey);
+			w.think();
+			int kills = 0;
+			for (int i = 0; i < 150; i++) {
+				if (prey.isDead() || prey.isRemoved()) {
+					kills++;
+					prey = TestNPC.breeder(9.5, 4.5, 0, preyG); // restock the lure
+					w.spawnEntity(prey);
+				}
+				tick(w, 1);
+			}
+			return kills;
+		}
+
+		@Override
+		public void run() {
+			int hungry = kills(0.4, 0); // below the breeding threshold: hunts in earnest
+			int sated = kills(1.0, 100000); // full, and kept from breeding it away
+			assertGreater("a hungry predator runs the prey down", hungry, 0);
+			assertEquals("a sated predator leaves prey it doesn't need alone", 0, sated);
+		}
+	}
+
+	/**
+	 * Cannibalism is a last resort, not routine. A predator spares a smaller rival
+	 * predator while it is fed or merely hungry, and turns on it only under genuine
+	 * starvation. Same cast in both runs — only the big predator's energy differs —
+	 * so the bite that appears in one and not the other isolates starvation as what
+	 * lifts the taboo on eating one's own kind.
+	 */
+	static class StarvationDrivesCannibalism extends Scenario {
+		private int damageToRival(double energyFraction, int reproCooldown) {
+			seed(12);
+			World w = room(16, 9);
+			Genome bigG = new Genome();
+			bigG.size = 16;
+			bigG.speed = 0.06;
+			TestNPC big = TestNPC.predator(6.5, 4.5, 0, bigG).withReproCooldown(reproCooldown);
+			big.withEnergy(energyFraction * big.energyCapacity());
+			Genome smallG = new Genome();
+			smallG.size = 9;
+			smallG.speed = 0.0; // a smaller, stationary rival predator two tiles off
+			TestNPC small = TestNPC.predator(8.5, 4.5, 0, smallG).withReproCooldown(1_000_000);
+			int hp0 = small.getHealth();
+			w.spawnEntity(big);
+			w.spawnEntity(small);
+			w.think();
+			tick(w, 120);
+			int hp1 = (small.isDead() || small.isRemoved()) ? -1000 : small.getHealth();
+			return hp0 - hp1;
+		}
+
+		@Override
+		public void run() {
+			int wellFed = damageToRival(0.8, 100000); // sated: leaves its own kind be
+			int starving = damageToRival(0.1, 0); // desperate: turns cannibal
+			assertEquals("a well-fed predator spares a smaller rival predator", 0, wellFed);
+			assertGreater("a starving predator turns on its own kind", starving, 0);
+		}
+	}
+
+	/**
 	 * Anti-predator flight (the ecosystem's "aliveness" behaviour): a vigilant
 	 * eco herbivore ({@code withHerding()}) bolts away from a hunter, keeping a
 	 * wider gap than an ordinary grazer that crops in place while the predator
@@ -2529,6 +2613,8 @@ public class SimTests {
 				new PredatorRunsDownFleeingPrey(),
 				new HunterIgnoresPreyOnAnotherLevel(),
 				new HunterDoesNotFreezeOnUnreachablePrey(),
+				new SatedPredatorSparesPrey(),
+				new StarvationDrivesCannibalism(),
 				new DemoLevelsLinkSurfaceAndCave(),
 				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
