@@ -18,7 +18,12 @@ public final class AgentIO {
 	// ---- sensors (world -> mind) ------------------------------------------
 	/** Constant 1.0, so a policy can synthesize thresholds/biases. */
 	public static final int S_BIAS = 0;
-	/** Own energy, normalized (0 when the body keeps no energy). */
+	/** Own hunger/reserve as a fraction of this body's OWN capacity, ~0..1: 1.0
+	 * means a full tank, near 0 means starving. Scaled to the creature's own
+	 * (size-dependent) capacity, not an absolute constant, so the same policy
+	 * reads "how full am I" the same way in a small body or a large one — which is
+	 * what lets appetite-driven behaviour (hunt when hungry, rest when full)
+	 * evolve. 0 when the body keeps no energy tank. */
 	public static final int S_ENERGY = 1;
 	/** Vegetation on the tile underfoot, 0..1. */
 	public static final int S_FOOD = 2;
@@ -44,11 +49,43 @@ public final class AgentIO {
 	public static final int S_ITEM_BEARING = 11;
 	/** What kind of item it is: +1 food (eat), -1 hazard (avoid), 0 crate/none. */
 	public static final int S_ITEM_KIND = 12;
-	public static final int NUM_SENSORS = 13;
+	/** Proximity of the nearest <i>smaller</i> creature (potential prey) within
+	 * sight, 1/(1+dist), 0 if none. A dedicated hunt channel, at full sight range
+	 * rather than the short facing-gated {@link #S_NEAR_PROX} set, so a hunter can
+	 * lock a target from far enough off to run it down. */
+	public static final int S_PREY_PROX = 13;
+	/** Relative bearing to that smaller creature in the heading frame, -1..1. */
+	public static final int S_PREY_BEARING = 14;
+	/** Proximity of the nearest <i>larger</i> creature (potential threat) within
+	 * sight, 1/(1+dist), 0 if none. A dedicated flee channel, full sight range. */
+	public static final int S_THREAT_PROX = 15;
+	/** Relative bearing to that larger creature in the heading frame, -1..1. */
+	public static final int S_THREAT_BEARING = 16;
+	/** Bearing toward the similarity-weighted centre of nearby kin, -1..1 (of PI);
+	 * 0 when no kin are in sight. Lets herding/flocking/packing emerge from a single
+	 * "which way are my kind" gradient rather than one nearest neighbour. */
+	public static final int S_KIN_BEARING = 17;
+	/** Own health, 0..1 (1 = unhurt). Lets a wounded creature behave differently. */
+	public static final int S_HEALTH = 18;
+	/** Carry state: +1 held as a captive, -1 riding a host voluntarily, 0 free --
+	 * so struggle/hold-on timing can be conditioned on being carried. */
+	public static final int S_CARRIED = 19;
+	/** 1 if the tile 45 deg to the LEFT of the heading is impassable, else 0 -- a
+	 * whisker, so a mind can tell which way around an obstacle is clear. */
+	public static final int S_WHISKER_L = 20;
+	/** 1 if the tile 45 deg to the RIGHT of the heading is impassable, else 0. */
+	public static final int S_WHISKER_R = 21;
+	/** 1 if the tile straight ahead is a drowning/falling hazard (water or an open
+	 * hole) for a non-flyer, else 0 -- the sensed half of the body's "don't walk
+	 * into water/off a ledge unless you mean it" reflex. */
+	public static final int S_HAZARD_AHEAD = 22;
+	public static final int NUM_SENSORS = 23;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
-			"item_prox", "item_bearing", "item_kind" };
+			"item_prox", "item_bearing", "item_kind",
+			"prey_prox", "prey_bearing", "threat_prox", "threat_bearing", "kin_bearing",
+			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -75,9 +112,19 @@ public final class AgentIO {
 	 *  signal <b>bucks</b>: it spends energy trying to throw them off (a bigger
 	 *  parasite comes loose sooner than a small one that clings tighter). */
 	public static final int A_STRUGGLE = 8;
-	public static final int NUM_ACT = 9;
+	/** Engage the costly sprint gear when &gt; 0.5: move faster, but pay the
+	 *  size-scaled sprint surcharge every tick. Lets the cheap-cruise / expensive-
+	 *  burst economy that predation depends on be learned rather than hardcoded. */
+	public static final int A_SPRINT = 9;
+	/** Vertical intent: seek to climb when &gt; 0.5, to descend when &lt; -0.5, hold
+	 *  level otherwise. The body executes it only where a ramp or hole actually
+	 *  connects the levels (wired in the hybrid-boundary phase), so it is a wish the
+	 *  terrain may or may not grant, never teleportation. */
+	public static final int A_VERTICAL = 10;
+	public static final int NUM_ACT = 11;
 	public static final String[] ACT_NAMES = {
-			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle" };
+			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
+			"sprint", "vertical" };
 
 	private AgentIO() {
 	}
