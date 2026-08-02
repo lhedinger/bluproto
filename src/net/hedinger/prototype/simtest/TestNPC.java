@@ -46,6 +46,10 @@ public class TestNPC extends NPC {
 	 *  resting rate (1.0 base + this), so cruising is cheap but a long fruitless
 	 *  chase still bites. Scales with body size because the resting rate does. */
 	private static final double PRED_SPRINT_FACTOR = 1.5;
+	/** Top-speed multiplier while a mind engages the sprint actuator, paired with
+	 *  the sprint energy surcharge: the burst is genuinely faster than the cruise it
+	 *  costs more than, so the mind has a real gear to spend energy on. */
+	private static final double SPRINT_SPEED_MULT = 1.5;
 	/** A predator holding less than this fraction of its (size-scaled) tank is
 	 *  starving — desperate enough to break the taboo and hunt its own kind. Born
 	 *  at 0.6 and breeding at 0.75, a hunter only drops this low when it has been
@@ -296,6 +300,7 @@ public class TestNPC extends NPC {
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 3);
 		t.SEARCH_FREQ = 2;
+		t.sprintFactor = PRED_SPRINT_FACTOR; // the sprint actuator's burst has a real cost
 		t.mind = mind;
 		return t;
 	}
@@ -411,6 +416,14 @@ public class TestNPC extends NPC {
 	 *  surplus away and drop back to hungry. */
 	public TestNPC withReproCooldown(int ticks) {
 		reproCooldown = ticks;
+		return this;
+	}
+
+	/** Makes this body metabolic (burns energy, can starve) — lets a scenario put a
+	 *  hand-driven mind on an energy-bearing body to exercise the hunger/sprint
+	 *  economy without the full breeder lifecycle. */
+	public TestNPC withMetabolic() {
+		metabolic = true;
 		return this;
 	}
 
@@ -772,6 +785,81 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_ITEM_BEARING] = 0;
 			s[AgentIO.S_ITEM_KIND] = 0;
 		}
+		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
+	}
+
+	/** Fills the wider-range hunt/flee/kin channels plus body-state and obstacle
+	 *  whiskers -- the senses a hybrid mind needs that the short, facing-gated
+	 *  nearest-neighbour channel cannot give. One pass over perceivable neighbours
+	 *  feeds the prey, threat and kin gradients at once, at full sight range. */
+	private void senseFieldAndBody(double[] s) {
+		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
+		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
+		double kinX = 0, kinY = 0;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
+					|| n instanceof Item || n.getLvl() != getLvl() || !isInLOS(n)) {
+				continue; // same level, in line of sight (cover and walls hide neighbours)
+			}
+			double dx = n.getX() - X, dy = n.getY() - Y;
+			double dist = Math.hypot(dx, dy);
+			if (dist > LOS_RANGE) {
+				continue;
+			}
+			if (n.getSize() < getSize() && dist < preyD) {
+				preyD = dist;
+				preyDx = dx;
+				preyDy = dy;
+			}
+			if (n.getSize() > getSize() && dist < threatD) {
+				threatD = dist;
+				threatDx = dx;
+				threatDy = dy;
+			}
+			net.hedinger.prototype.entities.Genome og = n.getGenome();
+			if (genome != null && og != null) {
+				double sim = genome.similarityTo(og);
+				kinX += sim * dx; // similarity-weighted pull toward kin
+				kinY += sim * dy;
+			}
+		}
+		if (preyD < Double.MAX_VALUE) {
+			s[AgentIO.S_PREY_PROX] = 1.0 / (1.0 + preyD);
+			s[AgentIO.S_PREY_BEARING] = wrap(Math.atan2(preyDy, preyDx) - D) / Math.PI;
+		} else {
+			s[AgentIO.S_PREY_PROX] = 0;
+			s[AgentIO.S_PREY_BEARING] = 0;
+		}
+		if (threatD < Double.MAX_VALUE) {
+			s[AgentIO.S_THREAT_PROX] = 1.0 / (1.0 + threatD);
+			s[AgentIO.S_THREAT_BEARING] = wrap(Math.atan2(threatDy, threatDx) - D) / Math.PI;
+		} else {
+			s[AgentIO.S_THREAT_PROX] = 0;
+			s[AgentIO.S_THREAT_BEARING] = 0;
+		}
+		s[AgentIO.S_KIN_BEARING] = (kinX != 0 || kinY != 0)
+				? wrap(Math.atan2(kinY, kinX) - D) / Math.PI
+				: 0;
+
+		s[AgentIO.S_HEALTH] = clampUnit(getHealth() / 100.0);
+		s[AgentIO.S_CARRIED] = isGrabbed() ? 1.0 : (getAttachTarget() != null ? -1.0 : 0.0);
+
+		// Obstacle whiskers 45 deg off each shoulder, and a drowning/falling hazard
+		// dead ahead (non-flyer only): the sensed half of the survival reflex.
+		s[AgentIO.S_WHISKER_L] = blockedAt(D - Math.PI / 4);
+		s[AgentIO.S_WHISKER_R] = blockedAt(D + Math.PI / 4);
+		double hx = X + Math.cos(D), hy = Y + Math.sin(D);
+		net.hedinger.prototype.engine.Tile ahead = getWorld().getTile(hx, hy, Z);
+		boolean hazard = !isFlying() && ahead != null
+				&& (ahead.isWater()
+						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
+		s[AgentIO.S_HAZARD_AHEAD] = hazard ? 1.0 : 0.0;
+	}
+
+	/** 1 if a one-tile step along {@code heading} lands on impassable ground, else 0. */
+	private double blockedAt(double heading) {
+		double nx = X + Math.cos(heading), ny = Y + Math.sin(heading);
+		return getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z) ? 0.0 : 1.0;
 	}
 
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
@@ -779,9 +867,14 @@ public class TestNPC extends NPC {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
 		D = wrap(D + t * MAX_TURN); // steer
+		sprinting = a[AgentIO.A_SPRINT] > 0.5; // engage the costly burst gear
+		double topSpeed = sprinting ? speed * SPRINT_SPEED_MULT : speed;
 		if (throttle > 0.02) {
-			move(throttle * speed, D);
+			move(throttle * topSpeed, D);
 		}
+		// A_VERTICAL (seek up / down) is a reserved intent slot: the hybrid-boundary
+		// phase wires the body to take a ramp or hole when the mind wills it and the
+		// terrain allows. Until then it is inert -- a wish the world does not grant.
 		if (a[AgentIO.A_EAT] > 0.5) {
 			totalIntake += graze(grazeDemand());
 			eatNearestItem(); // also devour a food (or bite a hazard) in reach

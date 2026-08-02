@@ -1175,6 +1175,167 @@ public class SimTests {
 	}
 
 	/**
+	 * The hunger sensor reports a fraction of the body's OWN capacity, not an
+	 * absolute constant, so a large body is not pinned at "full". A mind that
+	 * throttles by its hunger reading crawls when the tank is half-empty and races
+	 * when it is full; a big body at half fill therefore travels far less than the
+	 * same body full — which the old fixed-divisor sensor (saturated at ~1 for any
+	 * sizeable body) could never express.
+	 */
+	static class MindSensesHungerByCapacity extends Scenario {
+		private double travel(double energyFraction) {
+			seed(70);
+			World w = room(30, 30); // roomy and centred, so the path never meets a wall
+			Genome g = new Genome();
+			g.size = 16; // capacity 6 * (16/8) = 12, well above the old /4 divisor
+			g.speed = 0.05;
+			Mind throttleByHunger = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = s[AgentIO.S_ENERGY]; // pace set by how full I am
+					a[AgentIO.A_TURN] = 0; // no steering: distance covered reflects throttle alone
+				}
+			};
+			TestNPC agent = TestNPC.minded(15.5, 15.5, 0, g, throttleByHunger);
+			agent.withEnergy(energyFraction * agent.energyCapacity());
+			double x0 = agent.getX(), y0 = agent.getY();
+			w.spawnEntity(agent);
+			w.think();
+			tick(w, 120);
+			return Math.hypot(agent.getX() - x0, agent.getY() - y0);
+		}
+
+		@Override
+		public void run() {
+			double full = travel(1.0);
+			double half = travel(0.5);
+			assertGreater("a full body paces itself near top throttle", full, 3.0);
+			assertLess("a half-full big body reads ~0.5 hunger and moves at ~half pace, not saturated",
+					half, full * 0.7);
+		}
+	}
+
+	/**
+	 * The dedicated prey channel drives hunting. A mind that steers toward
+	 * {@code S_PREY_BEARING} and engages the sprint gear runs down a smaller
+	 * creature it senses at full sight range — a target the short facing-gated
+	 * nearest-neighbour channel would lose the moment it moved.
+	 */
+	static class MindHuntsViaPreyChannel extends Scenario {
+		@Override
+		public void run() {
+			seed(71);
+			World w = room(24, 9);
+			Genome pg = new Genome();
+			pg.size = 12;
+			pg.speed = 0.05;
+			pg.losRange = 14;
+			Mind hunt = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_TURN] = s[AgentIO.S_PREY_BEARING]; // steer onto the prey
+					a[AgentIO.A_THROTTLE] = 1.0;
+					a[AgentIO.A_SPRINT] = 1.0; // burst after it
+				}
+			};
+			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt);
+			TestNPC prey = TestNPC.inert(11.5, 4.5, 0); // size 6 < 12, seven tiles off
+			w.spawnEntity(pred);
+			w.spawnEntity(prey);
+			w.think();
+			double d0 = Math.hypot(pred.getX() - prey.getX(), pred.getY() - prey.getY());
+			tick(w, 250);
+			double d1 = Math.hypot(pred.getX() - prey.getX(), pred.getY() - prey.getY());
+			assertGreater("the prey started out of arm's reach", d0, 5.0);
+			assertLess("the hunter closed on prey sensed through the prey channel", d1, 2.0);
+		}
+	}
+
+	/**
+	 * The dedicated threat channel drives flight. A mind that steers away from
+	 * {@code S_THREAT_BEARING} opens the gap from a larger creature — the split
+	 * threat sense lets prey react to what could eat it, not merely to whatever is
+	 * nearest.
+	 */
+	static class MindFleesViaThreatChannel extends Scenario {
+		@Override
+		public void run() {
+			seed(72);
+			World w = room(30, 9);
+			Genome yg = new Genome();
+			yg.size = 6;
+			yg.speed = 0.05;
+			yg.losRange = 14;
+			Mind flee = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					double b = s[AgentIO.S_THREAT_BEARING] * Math.PI; // relative bearing to threat
+					double away = Math.atan2(Math.sin(b + Math.PI), Math.cos(b + Math.PI));
+					a[AgentIO.A_TURN] = Math.max(-1, Math.min(1, away / (Math.PI * 0.5)));
+					a[AgentIO.A_THROTTLE] = 1.0;
+				}
+			};
+			TestNPC prey = TestNPC.minded(15.5, 4.5, 0, yg, flee);
+			Mind idle = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			};
+			Genome tg = new Genome();
+			tg.size = 14; // a big, stationary threat to the prey's west
+			TestNPC threat = TestNPC.minded(9.5, 4.5, 0, tg, idle);
+			w.spawnEntity(prey);
+			w.spawnEntity(threat);
+			w.think();
+			double d0 = Math.hypot(prey.getX() - threat.getX(), prey.getY() - threat.getY());
+			tick(w, 150);
+			double d1 = Math.hypot(prey.getX() - threat.getX(), prey.getY() - threat.getY());
+			assertGreater("the prey opened the gap from a threat sensed through the threat channel",
+					d1, d0 + 2.0);
+		}
+	}
+
+	/**
+	 * The sprint actuator is a real gear: engaging it covers more ground per tick
+	 * than cruising, and burns extra energy (the size-scaled sprint surcharge) to
+	 * do it. That cost/benefit is what lets a mind evolve to spend the burst only
+	 * when a chase is worth it, instead of the flat-cost movement it replaces.
+	 */
+	static class SprintGearCostsEnergyForSpeed extends Scenario {
+		private double[] run(boolean sprint) {
+			seed(73);
+			World w = room(50, 9);
+			Genome g = new Genome();
+			g.size = 10;
+			g.speed = 0.05;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1.0;
+					a[AgentIO.A_TURN] = 0;
+					if (sprint) {
+						a[AgentIO.A_SPRINT] = 1.0;
+					}
+				}
+			};
+			TestNPC body = TestNPC.minded(3.5, 4.5, 0, g, ctrl).withMetabolic().withEnergy(5.0);
+			double x0 = body.getX(), e0 = body.getEnergy();
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 100);
+			return new double[] { body.getX() - x0, e0 - body.getEnergy() };
+		}
+
+		@Override
+		public void run() {
+			double[] sprinted = run(true);
+			double[] cruised = run(false);
+			assertGreater("sprinting covers more ground than cruising", sprinted[0], cruised[0] + 1.0);
+			assertGreater("sprinting burns more energy than cruising", sprinted[1], cruised[1]);
+		}
+	}
+
+	/**
 	 * A brain is inherited alongside the body: an asexual child copies-and-mutates
 	 * the parent's program, a sexual child crosses both parents' programs, and a
 	 * brain-less lineage stays brain-less (drawing no extra RNG, so the sim stream
@@ -2649,6 +2810,10 @@ public class SimTests {
 				new BrainLengthSetsThoughtRate(),
 				new BrainHeredityCrossesAndMutates(),
 				new MindDrivesAgent(),
+				new MindSensesHungerByCapacity(),
+				new MindHuntsViaPreyChannel(),
+				new MindFleesViaThreatChannel(),
+				new SprintGearCostsEnergyForSpeed(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
 				new EvolutionDiscoversForaging(),
