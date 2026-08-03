@@ -22,7 +22,6 @@ const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
-const debugEl = document.getElementById('debug') as HTMLElement;
 
 const state = new WorldState();
 const cam = new Camera(cv);
@@ -411,17 +410,10 @@ function reflect(): void {
 // Debug mode is a CLIENT-ONLY view: it changes what's rendered and how much a
 // selection reveals, never how the server behaves. Enable it by tapping the tick
 // readout three times, pressing "d" (desktop), or opening with ?debug=true. When
-// on: tapping a tile inspects it, the inspect panel shows the full debug dump for
-// whatever is selected, and a live /api/health overlay is shown.
+// on: tapping a tile inspects it, and the inspect panel shows the full debug dump
+// for whatever is selected.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
-let debugTimer = 0;
 function applyDebug(): void {
-  debugEl.style.display = debugOn ? 'block' : 'none';
-  clearInterval(debugTimer);
-  if (debugOn) {
-    refreshDebug();
-    debugTimer = window.setInterval(refreshDebug, 1000);
-  }
   // Re-render whatever is open in the new context (simple card <-> full dump).
   if (selectedId !== null) refreshDetail();
   statsEl.title = debugOn ? 'debug on — tap 3× to turn off' : 'tap 3× for debug';
@@ -454,17 +446,6 @@ window.addEventListener('keydown', ev => {
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   setDebug(!debugOn);
 });
-async function refreshDebug(): Promise<void> {
-  try {
-    const r = await fetch('/api/health');
-    const o = await r.json();
-    // Show the deploy time in the viewer's local timezone, not UTC.
-    if (o.deployedAt) o.deployedAt = new Date(o.deployedAt).toLocaleString();
-    debugEl.textContent = JSON.stringify(o, null, 2);
-  } catch {
-    debugEl.textContent = '/api/health unreachable';
-  }
-}
 applyDebug(); // reflect ?debug=true on load
 
 let toastTimer = 0;
