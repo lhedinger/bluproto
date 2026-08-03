@@ -185,19 +185,26 @@ final class WorldHost {
 			d.put("id", id);
 			d.put("x", e.getX());
 			d.put("y", e.getY());
+			d.put("z", e.getLvl()); // level, for the debug inspector
+			d.put("dir", round(e.getDirection()));
+			d.put("age", e.getAge());
 			d.put("dead", e.isDead());
 			d.put("flying", e.isFlying());
 			d.put("health", e.getHealth());
+			d.put("attachedTo", e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID());
 			if (e instanceof net.hedinger.prototype.entities.Item it) {
 				d.put("kind", "item." + it.getKind().name().toLowerCase());
+				d.put("subtype", it.getKind().name().toLowerCase());
 				d.put("edible", it.isEdible());
 				d.put("durability", it.getHealth());
 			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
+				d.put("subtype", n.getNpcTypeName().toLowerCase());
 				d.put("energy", round(n.getEnergy()));
 				d.put("carrying", n.getCarriedLoad() > 0);
 				d.put("grabbed", n.isGrabbed());
 				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
+					d.put("minded", tn.isMinded());
 					if (!tn.ecoRole().isEmpty()) {
 						d.put("role", tn.ecoRole());
 					}
@@ -210,12 +217,21 @@ final class WorldHost {
 					java.util.Map<String, Object> gm = new java.util.LinkedHashMap<String, Object>();
 					gm.put("size", round(g.size));
 					gm.put("speed", round(g.speed));
+					gm.put("turnRate", g.turnRate);
+					gm.put("losRange", round(g.losRange));
+					gm.put("losFov", round(g.losFov));
+					gm.put("metabolism", round(g.metabolism));
+					gm.put("maxAge", g.maxAge);
 					gm.put("markers", new double[] { round(g.markers[0]), round(g.markers[1]),
 							g.markers.length > 2 ? round(g.markers[2]) : 0.0 });
 					gm.put("flying", g.flying);
 					gm.put("predatory", round(g.predatory));
+					gm.put("xenophobia", round(g.xenophobia));
 					gm.put("gregariousness", round(g.gregariousness));
+					gm.put("boldness", round(g.boldness));
+					gm.put("mateThreshold", round(g.mateThreshold));
 					gm.put("hasBrain", g.brain != null);
+					gm.put("brainLen", g.brain != null ? g.brain.length() : 0);
 					d.put("genome", gm);
 				}
 			}
@@ -242,6 +258,9 @@ final class WorldHost {
 		d.put("y", y);
 		d.put("z", z);
 		d.put("type", t.getType().name().toLowerCase().replace("type_", ""));
+		d.put("walkable", t.isWalkable());
+		d.put("water", t.isWater());
+		d.put("open", t.getType().isOpen());
 		d.put("fertility", round(t.getFertility()));
 		d.put("food", round(t.getVegetation(tick)));
 		d.put("foodCap", round(t.vegetationCap()));

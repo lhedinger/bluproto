@@ -22,6 +22,8 @@ export function render(
   renderTime: number,
   nowMs: number,
   level = 0,
+  selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
+    { id: null, tile: null },
 ): void {
   const cv = g.canvas;
   g.fillStyle = '#14161a';
@@ -69,6 +71,21 @@ export function render(
         g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
       }
     }
+  }
+
+  // Selection highlight — a bright ring on the inspected tile, so it's obvious
+  // what the debug panel is describing. (The selected creature gets its own ring
+  // in the entity loop, where its interpolated position is known.)
+  if (selection.tile && selection.tile.z === level) {
+    const o = cam.worldToScreen(selection.tile.x, selection.tile.y);
+    const w = cam.scale;
+    g.save();
+    g.strokeStyle = 'rgba(255,214,64,0.95)';
+    g.lineWidth = Math.max(2, w * 0.06);
+    g.strokeRect(o.x + 1, o.y + 1, w - 2, w - 2);
+    g.fillStyle = 'rgba(255,214,64,0.12)';
+    g.fillRect(o.x + 1, o.y + 1, w - 2, w - 2);
+    g.restore();
   }
 
   // Painter's order: haze, then dead, then items, then living creatures.
@@ -168,6 +185,13 @@ export function render(
       g.strokeStyle = 'rgba(255,255,255,0.8)';
       g.lineWidth = 2;
       g.beginPath(); g.arc(s.x, s.y, r * pulse + 4, 0, 7); g.stroke();
+    }
+    // Selection highlight: a steady amber ring on the inspected creature, so it's
+    // obvious which one the panel describes (distinct from the follow pulse).
+    if (selection.id === e.id) {
+      g.strokeStyle = 'rgba(255,214,64,0.95)';
+      g.lineWidth = Math.max(2, r * 0.18);
+      g.beginPath(); g.arc(s.x, s.y, r * 1.7 + 3, 0, 7); g.stroke();
     }
   }
 
