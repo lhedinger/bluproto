@@ -106,6 +106,7 @@ public class TestNPC extends NPC {
 	private int turn = 5;
 	private boolean heard = false;
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
+	private int generation = 0; // 0 = spawned by the world; a child is its parent's + 1
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
 	private double totalIntake = 0;
 	private double[] pinX, pinY; // trailing ring of recent positions (pin detection)
@@ -453,6 +454,20 @@ public class TestNPC extends NPC {
 	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
 	public TestNPC withEnergy(double e) {
 		energy = e;
+		return this;
+	}
+
+	/** Generation depth: 0 for a creature the world (or steward) spawned, and one
+	 *  more than its parent for any creature born in-world by reproduction — so a
+	 *  lineage's age in births is visible at a glance (useful for debugging
+	 *  evolution). */
+	public int generation() {
+		return generation;
+	}
+
+	/** Sets the generation (used when a birth stamps a child as parent + 1). */
+	public TestNPC withGeneration(int g) {
+		generation = g;
 		return this;
 	}
 
@@ -1358,15 +1373,17 @@ public class TestNPC extends NPC {
 		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
 		// genome carries a brain, Genome.child mutates the inherited program too.
 		Genome childG = Genome.child(genome, 0.1);
+		TestNPC child;
 		if (behavior == Behavior.MINDED) {
-			return brainedBreeder(X, Y, Z, childG);
+			child = brainedBreeder(X, Y, Z, childG);
+		} else if (behavior == Behavior.PREDATOR) {
+			child = predator(X, Y, Z, childG).withDeathspan(deathspan); // lineage shares corpse lifespan
+		} else {
+			child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
+			child.vigilant = vigilant; // a vigilant lineage stays predator-aware
+			child.withDeathspan(deathspan);
 		}
-		if (behavior == Behavior.PREDATOR) {
-			return predator(X, Y, Z, childG).withDeathspan(deathspan); // lineage shares corpse lifespan
-		}
-		TestNPC child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
-		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
-		return child.withDeathspan(deathspan);
+		return child.withGeneration(generation + 1);
 	}
 
 	@Override
@@ -1378,7 +1395,13 @@ public class TestNPC extends NPC {
 		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
-		return behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
+		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
+		// A crossover child is one deeper than the more-advanced parent's lineage.
+		int parentGen = generation;
+		if (partner instanceof TestNPC tp) {
+			parentGen = Math.max(parentGen, tp.generation);
+		}
+		return child.withGeneration(parentGen + 1);
 	}
 
 	/** Eats the substrate underfoot; wanders on once a patch is grazed down. */

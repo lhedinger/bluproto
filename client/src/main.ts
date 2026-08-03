@@ -278,7 +278,7 @@ function renderTileInspect(d: Record<string, any>): void {
   const food = Number(d.food) || 0;
   const pct = cap > 0 ? Math.max(0, Math.min(1, food / cap)) : 0;
   const flags = [d.walkable ? 'walkable' : '', d.water ? 'water' : '', d.open ? 'open' : '',
-    d.solid ? 'solid' : '', d.blocksSight ? 'blocks sight' : '']
+    d.solid ? 'solid' : '', d.slow ? 'slow' : '', d.blocksSight ? 'blocks sight' : '']
     .filter(Boolean).join(', ') || '—';
   const rows = [
     row('type', d.type),
@@ -317,6 +317,7 @@ function renderInspectDebug(d: Record<string, any>): void {
   ];
   const status: string[] = [];
   if (d.action) status.push(row('action', d.action));
+  if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
   status.push(row('health', d.health));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
@@ -414,9 +415,10 @@ async function refreshMind(): Promise<void> {
 
 function renderMind(d: Record<string, any>): void {
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
+  const gen = 'generation' in d ? ` <span class="mono">· gen ${d.generation}</span>` : '';
   const hd =
     `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `mind <span class="mono">#${d.id}</span>` +
+    `mind <span class="mono">#${d.id}</span>${gen}` +
     `<span class="back" role="button">← back</span><span class="x">✕</span></h3>`;
   if (!d.hasBrain) {
     mindEl.innerHTML = hd + '<div class="grp">no brain</div>' +
