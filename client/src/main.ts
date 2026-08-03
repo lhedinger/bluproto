@@ -7,7 +7,7 @@ import { Camera } from './camera';
 import { drawMinimap, minimapToWorld } from './minimap';
 import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
-import { F_DEAD, F_MINDED } from './protocol';
+import { F_DEAD } from './protocol';
 import { render, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 
@@ -242,6 +242,7 @@ function deselect(): void {
   selectedTile = null;
   clearInterval(detailTimer);
   inspectEl.style.display = 'none';
+  inspectEl.className = '';
 }
 
 async function refreshDetail(): Promise<void> {
@@ -249,7 +250,9 @@ async function refreshDetail(): Promise<void> {
   try {
     const r = await fetch(`/api/world/entity/${selectedId}`);
     if (!r.ok) { deselect(); return; }
-    renderInspect(await r.json());
+    const d = await r.json();
+    // Two contexts: a compact card when just watching, the full dump in debug.
+    if (debugOn) renderInspectDebug(d); else renderInspectSimple(d);
   } catch {
     /* transient; keep the last panel */
   }
@@ -267,55 +270,99 @@ async function refreshTileDetail(): Promise<void> {
   }
 }
 
+// Tile inspection is a debug-only action, so it always shows the full tile dump.
 function renderTileInspect(d: Record<string, any>): void {
   const cap = Number(d.foodCap) || 0;
   const food = Number(d.food) || 0;
   const pct = cap > 0 ? Math.max(0, Math.min(1, food / cap)) : 0;
+  const flags = [d.walkable ? 'walkable' : '', d.water ? 'water' : '', d.open ? 'open' : '']
+    .filter(Boolean).join(', ') || '—';
   const rows = [
     row('type', d.type),
+    row('flags', flags),
     row('fertility', Number(d.fertility).toFixed(3)),
-    row('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`),
-    `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`,
+    bar('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`, pct),
   ];
+  inspectEl.className = 'dbg';
   inspectEl.innerHTML =
     `<h3>tile <span class="mono">${d.x},${d.y}</span> · L${d.z}<span class="x">✕</span></h3>` +
     `<table>${rows.join('')}</table>`;
-  inspectEl.style.display = 'block';
-  inspectEl.querySelector('.x')!.addEventListener('click', deselect);
+  showInspect();
 }
 
-function renderInspect(d: Record<string, any>): void {
-  const rows: string[] = [];
-  // Prefer the eco role (prey/predator) as the label; fall back to the kind.
+// Non-debug context: just the essentials — name and, for a creature, its energy.
+function renderInspectSimple(d: Record<string, any>): void {
   const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
-  if (d.action) rows.push(row('doing', d.action));
-  if ('energy' in d) {
-    const pct = Math.max(0, Math.min(1, d.energy / 4));
-    rows.push(row('energy', d.energy.toFixed(2)) +
-      `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`);
-  }
+  const rows: string[] = [];
+  if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
   if ('durability' in d) rows.push(row('durability', d.durability));
-  if ('edible' in d) rows.push(row('edible', d.edible ? 'yes' : 'no'));
-  if (d.flying) rows.push(row('locomotion', 'flying'));
-  if (d.carrying) rows.push(row('state', 'carrying'));
-  if (d.grabbed) rows.push(row('state', 'grabbed'));
-  if (d.dead) rows.push(row('state', 'dead'));
-  const flags = state.tracks.get(selectedId!)?.curr.flags ?? 0;
-  if (flags & F_MINDED) rows.push(row('mind', 'evolvable'));
+  inspectEl.className = '';
+  inspectEl.innerHTML = header(swatch, kind, d.id) + `<table>${rows.join('')}</table>`;
+  showInspect();
+}
+
+// Debug context: everything the server will tell us, grouped and scrollable.
+function renderInspectDebug(d: Record<string, any>): void {
+  const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
+  const name = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
+  const identity = [
+    row('kind', d.kind),
+    d.subtype ? row('subtype', d.subtype) : '',
+    d.role ? row('role', d.role) : '',
+    'minded' in d ? row('minded', d.minded ? 'yes' : 'no') : '',
+  ];
+  const position = [
+    row('pos', `${Number(d.x).toFixed(2)}, ${Number(d.y).toFixed(2)}`),
+    row('level', d.z),
+    row('dir', Number(d.dir).toFixed(2)),
+    row('age', d.age),
+  ];
+  const status: string[] = [];
+  if (d.action) status.push(row('action', d.action));
+  status.push(row('health', d.health));
+  if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  const fl: string[] = [];
+  if (d.dead) fl.push('dead');
+  if (d.flying) fl.push('flying');
+  if (d.carrying) fl.push('carrying');
+  if (d.grabbed) fl.push('grabbed');
+  if (d.attachedTo >= 0) fl.push(`attached→#${d.attachedTo}`);
+  if (fl.length) status.push(row('flags', fl.join(', ')));
+  if ('edible' in d) status.push(row('edible', d.edible ? 'yes' : 'no'));
+  if ('durability' in d) status.push(row('durability', d.durability));
+  const sections = [group('identity', identity), group('position', position), group('status', status)];
   const gm = d.genome;
   if (gm) {
-    rows.push(row('size', gm.size));
-    rows.push(row('speed', gm.speed));
-    rows.push(row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')));
-    if (gm.predatory > 0) rows.push(row('predatory', gm.predatory));
-    if (gm.gregariousness > 0) rows.push(row('gregarious', gm.gregariousness));
-    if (gm.hasBrain) rows.push(row('brain', 'yes'));
+    sections.push(group('genome', [
+      row('size', gm.size), row('speed', gm.speed), row('turnRate', gm.turnRate),
+      row('los', `${gm.losRange} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
+      row('metabolism', gm.metabolism), row('maxAge', gm.maxAge),
+      row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')),
+      row('predatory', gm.predatory), row('xenophobia', gm.xenophobia),
+      row('gregarious', gm.gregariousness), row('boldness', gm.boldness),
+      row('mateThresh', gm.mateThreshold),
+      row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
+    ]));
   }
-  inspectEl.innerHTML =
-    `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `${kind} <span class="mono">#${d.id}</span><span class="x">✕</span></h3>` +
-    `<table>${rows.join('')}</table>`;
+  inspectEl.className = 'dbg';
+  inspectEl.innerHTML = header(swatch, name, d.id) + sections.join('');
+  showInspect();
+}
+
+function header(swatch: number, label: string, id: unknown): string {
+  return `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
+    `${label} <span class="mono">#${id}</span><span class="x">✕</span></h3>`;
+}
+function group(title: string, rows: string[]): string {
+  const body = rows.filter(Boolean).join('');
+  return body ? `<div class="grp">${title}</div><table>${body}</table>` : '';
+}
+function bar(k: string, v: unknown, pct: number): string {
+  return row(k, v) +
+    `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`;
+}
+function showInspect(): void {
   inspectEl.style.display = 'block';
   inspectEl.querySelector('.x')!.addEventListener('click', deselect);
 }
@@ -361,28 +408,52 @@ function reflect(): void {
   }
 }
 
-// Debug overlay: a live dump of /api/health on the page. Toggle it with the
-// "d" key (desktop) or by tapping the status readout (mobile-friendly).
-let debugOn = false;
+// Debug mode is a CLIENT-ONLY view: it changes what's rendered and how much a
+// selection reveals, never how the server behaves. Enable it by tapping the tick
+// readout three times, pressing "d" (desktop), or opening with ?debug=true. When
+// on: tapping a tile inspects it, the inspect panel shows the full debug dump for
+// whatever is selected, and a live /api/health overlay is shown.
+let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
 let debugTimer = 0;
-function toggleDebug(): void {
-  debugOn = !debugOn;
+function applyDebug(): void {
   debugEl.style.display = debugOn ? 'block' : 'none';
   clearInterval(debugTimer);
   if (debugOn) {
     refreshDebug();
     debugTimer = window.setInterval(refreshDebug, 1000);
   }
+  // Re-render whatever is open in the new context (simple card <-> full dump).
+  if (selectedId !== null) refreshDetail();
+  statsEl.title = debugOn ? 'debug on — tap 3× to turn off' : 'tap 3× for debug';
 }
+function setDebug(on: boolean): void {
+  if (debugOn === on) return;
+  debugOn = on;
+  if (!debugOn && selectedTile) deselect(); // tile inspection is a debug-only tool
+  applyDebug();
+  toast(`debug mode ${debugOn ? 'on' : 'off'}`);
+}
+// Triple-tap the tick readout toggles debug — deliberate, so a stray tap on the
+// status line never flips it. The "d" key does the same on desktop.
+let tickTaps = 0;
+let tickTapTimer = 0;
+statsEl.style.cursor = 'pointer';
+statsEl.title = 'tap 3× for debug';
+statsEl.addEventListener('click', () => {
+  clearTimeout(tickTapTimer);
+  if (++tickTaps >= 3) {
+    tickTaps = 0;
+    setDebug(!debugOn);
+    return;
+  }
+  tickTapTimer = window.setTimeout(() => (tickTaps = 0), 600);
+});
 window.addEventListener('keydown', ev => {
   const tag = (ev.target as HTMLElement).tagName;
   if (ev.key !== 'd' && ev.key !== 'D') return;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  toggleDebug();
+  setDebug(!debugOn);
 });
-statsEl.style.cursor = 'pointer';
-statsEl.title = 'tap to toggle debug';
-statsEl.addEventListener('click', toggleDebug);
 async function refreshDebug(): Promise<void> {
   try {
     const r = await fetch('/api/health');
@@ -394,6 +465,7 @@ async function refreshDebug(): Promise<void> {
     debugEl.textContent = '/api/health unreachable';
   }
 }
+applyDebug(); // reflect ?debug=true on load
 
 let toastTimer = 0;
 function toast(msg: string): void {
@@ -426,7 +498,8 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, coverGrid, renderTime, now, currentLevel);
+  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, coverGrid, renderTime, now, currentLevel,
+    { id: selectedId, tile: selectedTile });
   if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
   if (net.status === 'open' && now - lastStats > 250) {

@@ -35,7 +35,17 @@
     #inspect table { width: 100%; border-collapse: collapse; font-size: 12px; }
     #inspect td { padding: 1px 0; }
     #inspect td.k { opacity: .6; }
-    #inspect td.v { text-align: right; font-variant-numeric: tabular-nums; }
+    #inspect td.v { text-align: right; font-variant-numeric: tabular-nums;
+                    word-break: break-word; max-width: 62%; }
+    #inspect .mono { opacity: .7; font: 11px ui-monospace, Menlo, Consolas, monospace; }
+    /* Debug context: a wider, scrollable dump grouped into sections. Sized to stay
+       inside the viewport on a phone and scroll rather than run off-screen. */
+    #inspect.dbg { width: min(340px, 84vw); max-height: min(62vh, 560px);
+                   overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    #inspect .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase;
+                    letter-spacing: .06em; opacity: .5; border-top: 1px solid #ffffff14;
+                    padding-top: 6px; }
+    #inspect h3 + .grp { border-top: 0; padding-top: 0; margin-top: 2px; }
     #debug { position: fixed; left: max(8px, env(safe-area-inset-left)); top: 46px;
              max-width: min(340px, 72vw); background: #101216cc; border: 1px solid #3a3f4a;
              border-radius: 8px; padding: 8px 10px; z-index: 3; display: none;
