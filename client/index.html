@@ -18,8 +18,6 @@
            border-radius: 6px; padding: 6px 12px; font: inherit; backdrop-filter: blur(3px); }
     #bar button.on { background: #2f6b28; border-color: #3f8f35; }
     #bar button:disabled, #bar select:disabled { opacity: .4; cursor: not-allowed; }
-    #follow { display: none; background: #24404acc; border: 1px solid #2f6b7a; border-radius: 6px;
-              padding: 6px 10px; cursor: pointer; }
     #stats { margin-left: auto; opacity: .75; font-variant-numeric: tabular-nums; }
     #toast { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
              transform: translateX(-50%); background: #2a2e36ee; border: 1px solid #3a3f4a;
@@ -57,6 +55,7 @@
 <body>
   <div id="app"><canvas id="cv"></canvas></div>
   <div id="bar">
+    <button id="level" title="switch level" style="display:none"></button>
     <button id="pause">pause</button>
     <select id="speed" title="simulation speed">
       <option value="0.5">0.5×</option>
@@ -70,8 +69,6 @@
       <option value="crate">tap: crate</option>
       <option value="hazard">tap: hazard</option>
     </select>
-    <button id="level" title="switch level" style="display:none"></button>
-    <span id="follow"></span>
     <span id="stats">connecting…</span>
   </div>
   <div id="toast"></div>
