@@ -427,31 +427,144 @@ function renderMind(d: Record<string, any>): void {
   const actuators = (d.actuators as any[]) ?? [];
   const regs = (d.registers as number[]) ?? [];
   const disasm = (d.disasm as string[]) ?? [];
-  const metaRows = [
-    row('length', `${d.length} instr`),
-    row('steps/tick', d.stepsPerTick),
-    row('pc', d.pc),
-  ];
+  // Headline: decode the actuators into a plain-language "what is it doing".
+  const doing = `<div class="doing">${doingNow(actuators)}</div>`;
+  const sIn = sensors.map(c => channelRow(c, SENSOR_KIND)).join('');
+  const aOut = actuators.map(c => channelRow(c, ACT_KIND)).join('');
   const prog = disasm
-    .map((ln, i) => `<div class="ins${i === d.pc ? ' pc' : ''}">${esc(ln)}</div>`)
+    .map((ln, i) => `<div class="ins ${insClass(ln)}${i === d.pc ? ' pc' : ''}">${esc(ln)}</div>`)
     .join('');
-  mindEl.innerHTML = hd +
-    group('meta', metaRows) +
-    `<div class="grp">sensors (in)</div><table>${sensors.map(ioRow).join('')}</table>` +
-    `<div class="grp">actuators (out)</div><table>${actuators.map(ioRow).join('')}</table>` +
-    `<div class="grp">program</div><div class="prog">${prog}</div>` +
-    `<div class="grp">registers</div><table>${regs.map((v, i) => row(`R${i}`, v.toFixed(3))).join('')}</table>`;
+  const regChips = regs
+    .map((v, i) => `<span class="reg">R${i} <b>${v.toFixed(2)}</b></span>`)
+    .join('');
+  mindEl.innerHTML = hd + doing +
+    '<div class="grp">sensors — what it perceives</div>' + sIn +
+    '<div class="grp">actuators — what it drives</div>' + aOut +
+    `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>` +
+    `<div class="prog">${prog}</div>` +
+    `<div class="grp">registers</div><div class="regs">${regChips}</div>`;
   showMind();
 }
 
-// One I/O channel: name, signed value, and a centre-anchored bar (negative
-// grows left of centre, positive right) so the sign is readable at a glance.
-function ioRow(c: { name: string; value: number }): string {
+// Each I/O channel has a natural shape; render it that way rather than as one
+// generic bar. Bearings are angles, flags are on/off, some sensors are enums,
+// and gated actuators only matter once they cross their firing threshold.
+const SENSOR_KIND: Record<string, string> = {
+  bias: 'const',
+  energy: 'mag', food: 'mag', phero: 'mag', near_prox: 'mag', near_sim: 'mag',
+  item_prox: 'mag', prey_prox: 'mag', threat_prox: 'mag', health: 'mag',
+  near_bearing: 'brg', item_bearing: 'brg', prey_bearing: 'brg',
+  threat_bearing: 'brg', kin_bearing: 'brg',
+  near_sizeadv: 'bip', clock: 'bip',
+  blocked: 'bool', whisker_l: 'bool', whisker_r: 'bool', hazard_ahead: 'bool',
+  item_kind: 'item_kind', carried: 'carried',
+};
+const ACT_KIND: Record<string, string> = {
+  turn: 'bip', throttle: 'mag', struggle: 'mag',
+  eat: 'gate', deposit: 'gate', attack: 'gate', mate: 'gate',
+  grab: 'gate', attach: 'gate', sprint: 'gate',
+  vertical: 'vert',
+};
+
+// One channel row: name · a shape-appropriate visual · a readable value. Rows
+// sitting at their inert value are dimmed so the live signals stand out; a
+// firing actuator is highlighted.
+function channelRow(c: { name: string; value: number }, kinds: Record<string, string>): string {
   const v = Number(c.value) || 0;
+  const kind = kinds[c.name] ?? 'bip';
+  let vis = '';
+  let val = v.toFixed(3);
+  let quiet = false;
+  let fire = false;
+  switch (kind) {
+    case 'const':
+      vis = magBar(v); val = v.toFixed(2); quiet = true; break;
+    case 'mag':
+      vis = magBar(clamp01(v)); val = v.toFixed(2); quiet = v < 0.02; break;
+    case 'bip':
+      vis = bipBar(v); val = v.toFixed(2); quiet = Math.abs(v) < 0.02; break;
+    case 'brg': {
+      const deg = Math.round(v * 180);
+      vis = compass(v); val = `${deg > 0 ? '+' : ''}${deg}°`; quiet = Math.abs(v) < 0.02; break;
+    }
+    case 'bool': {
+      const on = v >= 0.5;
+      vis = `<span class="dot${on ? ' on' : ''}"></span>`; val = on ? 'yes' : '—'; quiet = !on; break;
+    }
+    case 'gate':
+      fire = v > 0.5; vis = gateBar(v); val = (fire ? '▶ ' : '') + v.toFixed(2); quiet = !fire; break;
+    case 'item_kind': {
+      const t = v > 0.5 ? ['food', 'good'] : v < -0.5 ? ['hazard', 'bad'] : ['none', ''];
+      vis = chip(t[0], t[1]); val = ''; quiet = !t[1]; break;
+    }
+    case 'carried': {
+      const t = v > 0.5 ? ['captive', 'bad'] : v < -0.5 ? ['riding', 'good'] : ['free', ''];
+      vis = chip(t[0], t[1]); val = ''; quiet = !t[1]; break;
+    }
+    case 'vert': {
+      const t = v > 0.5 ? ['climb', 'good'] : v < -0.5 ? ['descend', 'good'] : ['hold', ''];
+      vis = chip(t[0], t[1]); val = ''; quiet = !t[1]; break;
+    }
+  }
+  const cls = 'ch' + (quiet ? ' dim' : '') + (fire ? ' fire' : '');
+  return `<div class="${cls}"><span class="nm">${c.name}</span>` +
+    `<span class="vis">${vis}</span><span class="val mono">${val}</span></div>`;
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+// A left-filling bar for a 0..1 magnitude.
+function magBar(f: number): string {
+  return `<span class="mag"><i style="width:${(f * 100).toFixed(0)}%"></i></span>`;
+}
+// The same, tinted, with the 0.5 firing threshold marked, for gated actuators.
+function gateBar(v: number): string {
+  return `<span class="mag gate"><i style="width:${(clamp01(v) * 100).toFixed(0)}%"></i></span>`;
+}
+// A centre-anchored bar for a signed -1..1 quantity (negative grows left).
+function bipBar(v: number): string {
   const w = Math.min(50, Math.abs(v) * 50);
   const left = v >= 0 ? 50 : 50 - w;
-  return `<tr><td class="k">${c.name}</td><td class="v mono">${v.toFixed(3)}</td></tr>` +
-    `<tr><td colspan=2><div class="io"><i style="left:${left}%;width:${w}%"></i></div></td></tr>`;
+  return `<span class="bip"><i style="left:${left}%;width:${w}%"></i></span>`;
+}
+// A compass needle for an egocentric bearing: 0 = straight ahead (up), positive
+// to the right, negative to the left — value is -1..1 of PI, so ×180 = degrees.
+function compass(v: number): string {
+  return `<span class="brg" style="transform:rotate(${v * 180}deg)">↑</span>`;
+}
+function chip(label: string, tone: string): string {
+  return `<span class="chip${tone ? ' ' + tone : ''}">${label}</span>`;
+}
+
+// Decode the actuator vector into a one-line plain-language read of behaviour.
+function doingNow(acts: { name: string; value: number }[]): string {
+  const m: Record<string, number> = {};
+  for (const a of acts) m[a.name] = Number(a.value) || 0;
+  const at = (k: string) => m[k] ?? 0;
+  const words: string[] = [];
+  const sprinting = at('sprint') > 0.5;
+  if (at('throttle') > 0.05 || sprinting) words.push(sprinting ? 'sprinting' : 'moving');
+  if (Math.abs(at('turn')) > 0.1) words.push(at('turn') > 0 ? 'turning right' : 'turning left');
+  if (at('eat') > 0.5) words.push('eating');
+  if (at('mate') > 0.5) words.push('mating');
+  if (at('attack') > 0.5) words.push('attacking');
+  if (at('grab') > 0.5) words.push('grabbing');
+  if (at('attach') > 0.5) words.push('hitching');
+  if (at('deposit') > 0.5) words.push('marking');
+  if (at('struggle') > 0.5) words.push('struggling');
+  if (at('vertical') > 0.5) words.push('climbing');
+  else if (at('vertical') < -0.5) words.push('descending');
+  return words.length ? words.join(' · ') : 'idle';
+}
+
+// Tint a disassembly line by role so the program's shape is scannable: reads
+// from a sensor (input), writes to an actuator (output), or control flow.
+function insClass(ln: string): string {
+  if (/\bsense\b/.test(ln)) return 'in';
+  if (/\bact\b/.test(ln)) return 'out';
+  if (/\bskip\b/.test(ln)) return 'ctl';
+  return '';
 }
 
 function showMind(): void {
