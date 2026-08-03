@@ -173,9 +173,12 @@ public final class Worlds {
 		return out;
 	}
 
-	/** World size (tiles). Bigger than the old 48x28 box so biomes have room and
-	 *  predator/prey aren't always on top of each other. */
-	static final int COLS = 72, ROWS = 44;
+	/** World size (tiles). Scaled up from the earlier 72x44 to give biomes real
+	 *  room and a proper underground network; {@link WorldAudit} verifies that the
+	 *  whole space stays connected and that the sim keeps far more than real-time
+	 *  headroom at this size (see {@link #demo(long, int, int)} for how populations
+	 *  scale with the area). */
+	static final int COLS = 144, ROWS = 88;
 
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
@@ -200,15 +203,27 @@ public final class Worlds {
 	 * so the terrain is fully reproducible and does not perturb the entity RNG.
 	 */
 	public static World demoTerrain(long seed) {
+		return demoTerrain(seed, COLS, ROWS);
+	}
+
+	/**
+	 * The demo terrain at an arbitrary size. Biomes are sampled from the same
+	 * coordinate noise (so a bigger map is more of the same world, not a
+	 * different one), and the two levels are wired together by
+	 * {@link #connectLevels} — which places underground links adaptively so the
+	 * whole walkable space stays one connected region at any size (verified by
+	 * {@link WorldAudit}).
+	 */
+	public static World demoTerrain(long seed, int cols, int rows) {
 		Utils.seed(seed);
 		Perf.stopwatch = new StopWatch();
 
-		World w = new World(COLS, ROWS, 2);
+		World w = new World(cols, rows, 2);
 
 		// ---- level 0: surface biomes inside a rocky boundary ----
-		for (int x = 0; x < COLS; x++) {
-			for (int y = 0; y < ROWS; y++) {
-				boolean border = x < 2 || y < 2 || x >= COLS - 2 || y >= ROWS - 2;
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
 				double elev = Utils.noise2(x, y, 0.055);
 				double moist = Utils.noise2(x + 500, y + 300, 0.075);
 				double detail = Utils.noise2(x + 950, y + 640, 0.16);
@@ -241,12 +256,12 @@ public final class Worlds {
 		}
 
 		// ---- cave: underground caverns carved from solid rock ----
-		for (int x = 0; x < COLS; x++) {
-			for (int y = 0; y < ROWS; y++) {
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
 				double cave = Utils.noise2(x + 210, y + 770, 0.11);
 				double pool = Utils.noise2(x + 1300, y + 90, 0.13);
 				Tile.TileType t;
-				if (x < 1 || y < 1 || x >= COLS - 1 || y >= ROWS - 1) {
+				if (x < 1 || y < 1 || x >= cols - 1 || y >= rows - 1) {
 					t = Tile.TileType.TYPE_WALL; // sealed edge
 				} else if (cave > 0.38 && cave < 0.66) {
 					t = pool > 0.72 ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_FLOOR;
@@ -258,23 +273,295 @@ public final class Worlds {
 			}
 		}
 
-		// ---- links between surface and cave (see linkStation for the mechanic) ----
-		int[][] stations = { { 16, 12 }, { 52, 14 }, { 30, 34 }, { 58, 30 } };
-		for (int[] s : stations) {
-			linkStation(w, s[0], s[1]);
-		}
+		// ---- wire the levels together so every area is reachable ----
+		connectLevels(w, cols, rows);
 
 		// Tune the surface grass's logistic recovery so a grazed-bare patch rests
 		// (Tile.REGROW_DELAY, ~1 min) and then climbs back slowly over another
 		// ~1.5 min, while a lightly-cropped patch springs back fast. Heavy grazing
 		// thus leaves lasting bare patches, but the big map still sustains the herd
 		// (unlike a small room). Non-grass tiles are unaffected.
-		for (int x = 0; x < COLS; x++) {
-			for (int y = 0; y < ROWS; y++) {
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
 				w.getTile(x, y, SURFACE_Z).setRegrowRate(0.0025);
 			}
 		}
 		return w;
+	}
+
+	/**
+	 * Wire the surface and cave into a single connected space, at any size.
+	 *
+	 * <ol>
+	 *   <li>Label the surface's walkable regions. Tiny walled-off nooks (fewer
+	 *       than {@code MIN_REGION} tiles) are sealed to rock — they'd be
+	 *       unreachable dead space otherwise.</li>
+	 *   <li>Place a spread of underground link stations (grid-sampled, scaled to
+	 *       the map's area), guaranteeing at least one inside every surviving
+	 *       surface region — so no region is stranded on the surface.</li>
+	 *   <li>Carve a cave backbone: connect the station landings with corridors,
+	 *       so the underground is one traversable tunnel network linking the
+	 *       regions.</li>
+	 *   <li>Seal any cave pocket the backbone doesn't reach, so there are no
+	 *       isolated underground areas.</li>
+	 * </ol>
+	 *
+	 * The result is a world where any walkable tile can be reached from any other
+	 * by land or by tunnel — which {@link WorldAudit#connectivity} verifies.
+	 */
+	private static void connectLevels(World w, int cols, int rows) {
+		// 1. Label surface walkable regions (4-neighbour flood fill).
+		int[][] label = new int[cols][rows];
+		for (int[] c : label) {
+			java.util.Arrays.fill(c, -1);
+		}
+		java.util.List<java.util.List<int[]>> regions = new java.util.ArrayList<java.util.List<int[]>>();
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				if (label[x][y] != -1 || !w.getTile(x, y, SURFACE_Z).isWalkable()) {
+					continue;
+				}
+				java.util.List<int[]> members = new java.util.ArrayList<int[]>();
+				int id = regions.size();
+				java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
+				label[x][y] = id;
+				q.add(new int[] { x, y });
+				while (!q.isEmpty()) {
+					int[] p = q.poll();
+					members.add(p);
+					int[][] card = { { p[0] + 1, p[1] }, { p[0] - 1, p[1] },
+							{ p[0], p[1] + 1 }, { p[0], p[1] - 1 } };
+					for (int[] n : card) {
+						if (n[0] >= 0 && n[1] >= 0 && n[0] < cols && n[1] < rows
+								&& label[n[0]][n[1]] == -1 && w.getTile(n[0], n[1], SURFACE_Z).isWalkable()) {
+							label[n[0]][n[1]] = id;
+							q.add(n);
+						}
+					}
+				}
+				regions.add(members);
+			}
+		}
+
+		// The largest surface region is the world's mainland: the connectivity
+		// repair floods from here, so the main surface is never what gets sealed.
+		int[] mainSeed = null;
+		int mainSize = -1;
+		for (java.util.List<int[]> members : regions) {
+			if (members.size() > mainSize) {
+				mainSize = members.size();
+				mainSeed = members.get(0);
+			}
+		}
+
+		// 2 + 3. For each region: seal the tiny nooks, and give every substantial
+		// region at least one link station (a grid spread scaled to area gives big
+		// regions several). A region that can host no station at all — too cramped,
+		// or hard against a border — is itself isolated, so it is sealed too rather
+		// than left stranded with no way in or out.
+		final int MIN_REGION = 12;
+		int target = Math.max(1, (int) Math.round(cols * (double) rows / 1600.0));
+		int step = Math.max(16, (int) Math.round(Math.sqrt(cols * (double) rows / target)));
+		java.util.List<int[]> sites = new java.util.ArrayList<int[]>();
+		for (java.util.List<int[]> members : regions) {
+			boolean seal = members.size() < MIN_REGION;
+			if (!seal) {
+				int before = sites.size();
+				for (int gx = step / 2; gx < cols; gx += step) {
+					for (int gy = step / 2; gy < rows; gy += step) {
+						int[] s = nearestFittingSite(members, gx, gy, cols, rows, sites);
+						if (s != null) {
+							sites.add(s);
+						}
+					}
+				}
+				if (sites.size() == before) {
+					int[] s = bestFittingSite(members, cols, rows, sites); // grid missed it
+					if (s != null) {
+						sites.add(s);
+					} else {
+						seal = true; // no station fits anywhere: this region is unlinkable
+					}
+				}
+			}
+			if (seal) {
+				for (int[] p : members) {
+					w.setTile(p[0], p[1], SURFACE_Z, Tile.TileType.TYPE_WALL);
+					w.getTile(p[0], p[1], SURFACE_Z).setFertility(0);
+				}
+			}
+		}
+		if (sites.isEmpty()) {
+			sites.add(new int[] { Math.min(cols - 5, Math.max(3, cols / 2)),
+					Math.min(rows - 3, Math.max(2, rows / 2)) });
+		}
+
+		// 4. Carve a station at each site, then link the cave landings.
+		for (int[] s : sites) {
+			linkStation(w, s[0], s[1]);
+		}
+		for (int i = 1; i < sites.size(); i++) {
+			carveCaveCorridor(w, sites.get(i - 1), sites.get(i), cols, rows);
+		}
+
+		// 5. Connectivity repair: flood the whole walkable space from the mainland
+		//    (crossing levels exactly as a body does), and seal anything it can't
+		//    reach — on either level. Whatever survives is, by construction, a
+		//    single connected region: mainland + tunnel network + every surface
+		//    region and cavern the tunnels tie in. Isolated pockets become rock.
+		sealUnreachable(w, cols, rows, mainSeed != null ? mainSeed : sites.get(0));
+	}
+
+	/** The station-fitting region tile nearest {@code (gx,gy)} that isn't already
+	 *  crowded by an existing site; null if the region has none near this point. */
+	private static int[] nearestFittingSite(java.util.List<int[]> members, int gx, int gy,
+			int cols, int rows, java.util.List<int[]> taken) {
+		int[] best = null;
+		double bestD = Double.MAX_VALUE;
+		for (int[] p : members) {
+			int sx = p[0], sy = p[1];
+			// linkStation touches sx-2..sx+3 (apron + up-ramp wall) and sy-1..sy+1.
+			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 3) {
+				continue;
+			}
+			double d = (sx - gx) * (double) (sx - gx) + (sy - gy) * (double) (sy - gy);
+			if (d >= bestD || d > (double) (cols + rows)) {
+				continue; // only snap a grid point to a site reasonably near it
+			}
+			boolean crowded = false;
+			for (int[] t : taken) {
+				if (Math.abs(t[0] - sx) < 6 && Math.abs(t[1] - sy) < 6) {
+					crowded = true;
+					break;
+				}
+			}
+			if (!crowded) {
+				bestD = d;
+				best = new int[] { sx, sy };
+			}
+		}
+		return best;
+	}
+
+	/** Any station-fitting tile in the region nearest its centroid (no distance
+	 *  cap), avoiding crowding — the fallback when the grid snapped nothing. Null
+	 *  only when the region can host no station at all. */
+	private static int[] bestFittingSite(java.util.List<int[]> members, int cols, int rows,
+			java.util.List<int[]> taken) {
+		double cx = 0, cy = 0;
+		for (int[] p : members) {
+			cx += p[0];
+			cy += p[1];
+		}
+		cx /= members.size();
+		cy /= members.size();
+		int[] best = null;
+		double bestD = Double.MAX_VALUE;
+		for (int[] p : members) {
+			int sx = p[0], sy = p[1];
+			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 3) {
+				continue;
+			}
+			boolean crowded = false;
+			for (int[] t : taken) {
+				if (Math.abs(t[0] - sx) < 6 && Math.abs(t[1] - sy) < 6) {
+					crowded = true;
+					break;
+				}
+			}
+			if (crowded) {
+				continue;
+			}
+			double d = (sx - cx) * (sx - cx) + (sy - cy) * (sy - cy);
+			if (d < bestD) {
+				bestD = d;
+				best = new int[] { sx, sy };
+			}
+		}
+		return best;
+	}
+
+	/** Carve a 2-wide L-shaped cave corridor between two station landings, so the
+	 *  underground forms one connected backbone. */
+	private static void carveCaveCorridor(World w, int[] a, int[] b, int cols, int rows) {
+		int x = a[0], y = a[1];
+		while (x != b[0]) {
+			carveCaveTile(w, x, y, cols, rows);
+			x += b[0] > x ? 1 : -1;
+		}
+		while (y != b[1]) {
+			carveCaveTile(w, x, y, cols, rows);
+			y += b[1] > y ? 1 : -1;
+		}
+		carveCaveTile(w, b[0], b[1], cols, rows);
+	}
+
+	/** A 2x2 brush of cave floor (clamped inside the sealed rim), so corridors are
+	 *  wide enough for a body to pass. */
+	private static void carveCaveTile(World w, int x, int y, int cols, int rows) {
+		for (int dx = 0; dx <= 1; dx++) {
+			for (int dy = 0; dy <= 1; dy++) {
+				int cx = x + dx, cy = y + dy;
+				if (cx < 1 || cy < 1 || cx >= cols - 1 || cy >= rows - 1) {
+					continue;
+				}
+				w.setTile(cx, cy, CAVE_Z, Tile.TileType.TYPE_FLOOR);
+				w.getTile(cx, cy, CAVE_Z).setFertility(0);
+			}
+		}
+	}
+
+	/** Flood the whole walkable space from a surface seed, crossing levels the way
+	 *  a land body does (walk onto a HOLE to drop; step a RAMPUP east into a WALL
+	 *  to climb), then seal every walkable tile the flood never reaches — on
+	 *  either level. What remains is a single connected region. Mirrors
+	 *  {@link WorldAudit#connectivity}'s traversal, so the audit agrees by
+	 *  construction. */
+	private static void sealUnreachable(World w, int cols, int rows, int[] surfaceSeed) {
+		boolean[][][] seen = new boolean[2][cols][rows];
+		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
+		if (w.getTile(surfaceSeed[0], surfaceSeed[1], SURFACE_Z).isWalkable()) {
+			seen[SURFACE_Z][surfaceSeed[0]][surfaceSeed[1]] = true;
+			q.add(new int[] { surfaceSeed[0], surfaceSeed[1], SURFACE_Z });
+		}
+		while (!q.isEmpty()) {
+			int[] p = q.poll();
+			int x = p[0], y = p[1], z = p[2];
+			int[][] card = { { x + 1, y }, { x - 1, y }, { x, y + 1 }, { x, y - 1 } };
+			for (int[] n : card) {
+				floodVisit(w, seen, q, n[0], n[1], z, cols, rows); // land
+				// Descend: a cardinal HOLE drops to the tile directly below it.
+				if (n[0] >= 0 && n[1] >= 0 && n[0] < cols && n[1] < rows && z - 1 >= 0
+						&& w.getTile(n[0], n[1], z).getType() == Tile.TileType.TYPE_HOLE) {
+					floodVisit(w, seen, q, n[0], n[1], z - 1, cols, rows);
+				}
+			}
+			// Climb: a RAMPUP with a WALL to its east lifts onto the tile above.
+			if (z + 1 < 2 && x + 1 < cols
+					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP
+					&& w.getTile(x + 1, y, z).getType() == Tile.TileType.TYPE_WALL) {
+				floodVisit(w, seen, q, x + 1, y, z + 1, cols, rows);
+			}
+		}
+		for (int z = 0; z < 2; z++) {
+			for (int x = 0; x < cols; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (w.getTile(x, y, z).isWalkable() && !seen[z][x][y]) {
+						w.setTile(x, y, z, Tile.TileType.TYPE_WALL);
+						w.getTile(x, y, z).setFertility(0);
+					}
+				}
+			}
+		}
+	}
+
+	private static void floodVisit(World w, boolean[][][] seen, java.util.Deque<int[]> q,
+			int x, int y, int z, int cols, int rows) {
+		if (x >= 0 && y >= 0 && x < cols && y < rows && !seen[z][x][y]
+				&& w.getTile(x, y, z).isWalkable()) {
+			seen[z][x][y] = true;
+			q.add(new int[] { x, y, z });
+		}
 	}
 
 	/**
@@ -351,19 +638,30 @@ public final class Worlds {
 	 * snapshot stream starts fully populated.
 	 */
 	public static World demo(long seed) {
-		World w = demoTerrain(seed);
+		return demo(seed, COLS, ROWS);
+	}
+
+	/**
+	 * The demo world at an arbitrary size. Populations and population bounds scale
+	 * with the map's area, so a bigger world keeps roughly the same density (and
+	 * the same feel) rather than becoming an empty plain — which also keeps the
+	 * performance measurement honest.
+	 */
+	public static World demo(long seed, int cols, int rows) {
+		World w = demoTerrain(seed, cols, rows);
+		double scale = cols * (double) rows / (COLS * (double) ROWS);
 		net.hedinger.prototype.entities.Genome[] prey = preySpecies();
 		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 
 		// Founder herbivores: metabolic grazers that breed and evolve, scattered
 		// onto open meadow (never into water or rock).
-		for (int i = 0; i < 26; i++) {
+		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
 					.withHerding().withDeathspan(ECO_DEATHSPAN)); // born at its size-scaled reserve
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
 		}
@@ -371,22 +669,23 @@ public final class Worlds {
 		// competes inside the same world as the scripted species — the A/B seam
 		// where evolvable behaviour proves itself (or doesn't) against the hardcoded
 		// baseline. The steward keeps this cohort topped up as it dies off.
-		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(5);
-		for (int i = 0; i < 5; i++) {
+		int nMinded = Math.max(5, sc(5, scale));
+		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(nMinded);
+		for (int i = 0; i < nMinded; i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).withDeathspan(ECO_DEATHSPAN));
 		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < sc(10, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(Item.food(p[0], p[1], SURFACE_Z));
 		}
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < sc(5, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(Item.crate(p[0], p[1], SURFACE_Z));
 		}
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < sc(3, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(Item.hazard(p[0], p[1], SURFACE_Z));
 		}
@@ -394,13 +693,18 @@ public final class Worlds {
 		// The warden, with seasonal bounds: winter holds a lean {min,max}, summer
 		// a lush one, and the steward interpolates between them over the year —
 		// so the population visibly booms in summer and thins in winter while
-		// never emptying or swarming. Scaled up for the larger map.
+		// never emptying or swarming. Bounds scale with the map's area.
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
-				new int[] { 12, 30 }, new int[] { 34, 84 }, // prey: winter, summer
-				new int[] { 1, 5 }, new int[] { 3, 14 }, // predators: winter, summer
-				4, 12)); // minded cohort held in [floor, max] — small but able to grow
+				new int[] { sc(12, scale), sc(30, scale) }, new int[] { sc(34, scale), sc(84, scale) },
+				new int[] { Math.max(1, sc(1, scale)), sc(5, scale) }, new int[] { sc(3, scale), sc(14, scale) },
+				Math.max(4, sc(4, scale)), Math.max(12, sc(12, scale)))); // minded [floor, max]
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
+	}
+
+	/** Scale a base count by the map's area ratio, never below 1. */
+	private static int sc(int base, double scale) {
+		return Math.max(1, (int) Math.round(base * scale));
 	}
 }

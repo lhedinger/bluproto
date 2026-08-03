@@ -2980,8 +2980,34 @@ public class SimTests {
 
 	// ---- runner ------------------------------------------------------------
 
+	/**
+	 * Every generated world — at the deployed size and larger, across seeds — must
+	 * be a single connected walkable space: mainland, every other surface region,
+	 * and the cave all reachable from the mainland by land and two-way links
+	 * ({@link net.hedinger.prototype.sim.WorldAudit}'s directed flood). Guards the
+	 * world-gen linking so a resize can never strand an area.
+	 */
+	static class DemoWorldFullyConnected extends Scenario {
+		@Override
+		public void run() {
+			long[] seeds = { 1, 7, 9, 25, 36, 42, 100, 777 };
+			int[][] sizes = { { 72, 44 }, { 144, 88 }, { 96, 120 } };
+			for (long s : seeds) {
+				for (int[] wh : sizes) {
+					World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s, wh[0], wh[1]);
+					net.hedinger.prototype.sim.WorldAudit.Connectivity c =
+							net.hedinger.prototype.sim.WorldAudit.connectivity(w);
+					assertTrue(wh[0] + "x" + wh[1] + " seed " + s + " fully connected (reached "
+							+ c.reachable + "/" + c.walkable + ", "
+							+ String.format("%.2f", c.coverage() * 100) + "%)", c.fullyConnected());
+				}
+			}
+		}
+	}
+
 	private static Scenario[] all() {
 		return new Scenario[] {
+				new DemoWorldFullyConnected(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
 				new HunterIgnoresPreyOnAnotherLevel(),

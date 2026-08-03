@@ -205,6 +205,7 @@ final class WorldHost {
 				d.put("grabbed", n.isGrabbed());
 				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
 					d.put("minded", tn.isMinded());
+					d.put("generation", tn.generation()); // 0 = world-spawned, +1 per birth
 					if (!tn.ecoRole().isEmpty()) {
 						d.put("role", tn.ecoRole());
 					}
@@ -265,6 +266,9 @@ final class WorldHost {
 		// otherwise a wall reads only "blocks sight", with its solidity implied
 		// solely by the absence of the other badges.
 		d.put("solid", t.isSolid());
+		// Mud is walkable but drags (speedFactor < 1). Surface that, otherwise a
+		// bog is indistinguishable from plain floor in the inspector.
+		d.put("slow", t.speedFactor() < 1.0);
 		// Cover (thicket) is walkable and open yet still blocks the sightline, so
 		// surface it explicitly — otherwise the inspector gives no hint why a
 		// creature standing in it can't be seen.
@@ -298,6 +302,7 @@ final class WorldHost {
 			net.hedinger.prototype.simtest.TestNPC tn = (net.hedinger.prototype.simtest.TestNPC) e;
 			net.hedinger.prototype.entities.Brain b = lm.brain();
 			d.put("hasBrain", true);
+			d.put("generation", tn.generation()); // lineage depth: 0 = world-seeded
 			d.put("length", b.length());
 			d.put("stepsPerTick", lm.budget());
 			d.put("pc", b.pc());
