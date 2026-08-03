@@ -57,18 +57,42 @@
     #mind h3 .x { cursor: pointer; opacity: .7; }
     #mind .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
                  opacity: .5; border-top: 1px solid #ffffff14; padding-top: 6px; }
-    #mind table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    #mind td { padding: 1px 0; vertical-align: middle; }
-    #mind td.k { opacity: .6; width: 44%; }
-    #mind td.v { text-align: right; }
     #mind .mono { font: 11px ui-monospace, Menlo, Consolas, monospace; }
-    #mind .io { position: relative; height: 4px; margin-top: 2px; background: #2a2e36; border-radius: 2px; }
-    #mind .io::before { content: ''; position: absolute; left: 50%; top: -1px; bottom: -1px;
-                        width: 1px; background: #ffffff26; }
-    #mind .io > i { position: absolute; top: 0; bottom: 0; background: #6fb6e0; border-radius: 2px; }
+    /* The plain-language "what is it doing" headline, decoded from actuators. */
+    #mind .doing { margin: 2px 0 4px; font-size: 13px; color: #eafbe8; }
+    #mind .doing::before { content: '▶ '; opacity: .55; }
+    /* One I/O channel: name · shape-appropriate visual · value. Inert channels
+       dim so the live ones read first; a firing actuator gets a lit row. */
+    #mind .ch { display: flex; align-items: center; gap: 8px; padding: 1.5px 0; font-size: 12px; }
+    #mind .ch.dim { opacity: .34; }
+    #mind .ch.fire { background: #2f6b2833; border-radius: 4px; }
+    #mind .ch .nm { width: 33%; opacity: .72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #mind .ch .vis { flex: 1; display: flex; align-items: center; height: 12px; }
+    #mind .ch .val { width: 54px; text-align: right; opacity: .85;
+                     font: 11px ui-monospace, Menlo, Consolas, monospace; }
+    #mind .mag { position: relative; flex: 1; height: 4px; background: #2a2e36; border-radius: 2px; overflow: hidden; }
+    #mind .mag > i { display: block; height: 100%; background: #6fb6e0; }
+    #mind .mag.gate > i { background: #6fd08a; }
+    #mind .bip { position: relative; flex: 1; height: 4px; background: #2a2e36; border-radius: 2px; }
+    #mind .bip::before { content: ''; position: absolute; left: 50%; top: -1px; bottom: -1px;
+                         width: 1px; background: #ffffff26; }
+    #mind .bip > i { position: absolute; top: 0; bottom: 0; background: #d0a86f; border-radius: 2px; }
+    #mind .brg { display: inline-block; font-size: 14px; line-height: 1; color: #a6d8ff;
+                 transform-origin: 50% 50%; }
+    #mind .dot { width: 9px; height: 9px; border-radius: 50%; background: #3a3f4a; box-shadow: inset 0 0 0 1px #0004; }
+    #mind .dot.on { background: #e06f6f; box-shadow: 0 0 4px #e06f6faa; }
+    #mind .chip { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: #2a2e36; }
+    #mind .chip.good { background: #2f6b2855; color: #cdeecd; }
+    #mind .chip.bad { background: #6b282855; color: #eecdcd; }
+    #mind .regs { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    #mind .reg { font: 11px ui-monospace, Menlo, Consolas, monospace; opacity: .55; }
+    #mind .reg b { opacity: .95; font-weight: 600; }
     #mind .prog { background: #10121688; border-radius: 6px; padding: 6px 8px; margin-top: 2px;
                   overflow-x: auto; }
     #mind .prog .ins { white-space: pre; font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; opacity: .82; }
+    #mind .prog .ins.in { color: #8fd0f0; }   /* reads a sensor  */
+    #mind .prog .ins.out { color: #8fe0a8; }  /* writes an actuator */
+    #mind .prog .ins.ctl { color: #e0c88f; }  /* control flow (skip) */
     #mind .prog .ins.pc { background: #2f6b2855; color: #eafbe8; opacity: 1; border-radius: 3px; }
     #inspect .bar { height: 5px; border-radius: 3px; background: #3a3f4a; overflow: hidden; margin-top: 2px; }
     #inspect .bar > i { display: block; height: 100%; background: #6fb6e0; }
