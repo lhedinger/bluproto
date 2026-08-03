@@ -261,6 +261,10 @@ final class WorldHost {
 		d.put("walkable", t.isWalkable());
 		d.put("water", t.isWater());
 		d.put("open", t.getType().isOpen());
+		// Cover (thicket) is walkable and open yet still blocks the sightline, so
+		// surface it explicitly — otherwise the inspector gives no hint why a
+		// creature standing in it can't be seen.
+		d.put("blocksSight", t.blocksSight());
 		d.put("fertility", round(t.getFertility()));
 		d.put("food", round(t.getVegetation(tick)));
 		d.put("foodCap", round(t.vegetationCap()));
