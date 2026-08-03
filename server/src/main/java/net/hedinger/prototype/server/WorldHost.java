@@ -261,6 +261,10 @@ final class WorldHost {
 		d.put("walkable", t.isWalkable());
 		d.put("water", t.isWater());
 		d.put("open", t.getType().isOpen());
+		// A wall is impassable (not walkable, not flyable). Say so explicitly:
+		// otherwise a wall reads only "blocks sight", with its solidity implied
+		// solely by the absence of the other badges.
+		d.put("solid", t.isSolid());
 		// Cover (thicket) is walkable and open yet still blocks the sightline, so
 		// surface it explicitly — otherwise the inspector gives no hint why a
 		// creature standing in it can't be seen.
