@@ -44,6 +44,32 @@
                     letter-spacing: .06em; opacity: .5; border-top: 1px solid #ffffff14;
                     padding-top: 6px; }
     #inspect h3 + .grp { border-top: 0; padding-top: 0; margin-top: 2px; }
+    #inspect .mindlink { margin-top: 10px; text-align: center; color: #a6d8ff; cursor: pointer;
+                         border: 1px solid #2f6b7a; background: #24404a80; border-radius: 6px; padding: 7px; }
+    /* Mind inspector: the creature's evolvable program, live I/O and registers. */
+    #mind { position: fixed; left: max(8px, env(safe-area-inset-left));
+            bottom: max(8px, env(safe-area-inset-bottom)); width: min(360px, 92vw);
+            max-height: min(72vh, 640px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+            background: #1d2026f2; border: 1px solid #3a3f4a; border-radius: 10px;
+            padding: 10px 12px; z-index: 6; display: none; backdrop-filter: blur(4px); }
+    #mind h3 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    #mind h3 .back { margin-left: auto; cursor: pointer; opacity: .85; font-size: 12px; }
+    #mind h3 .x { cursor: pointer; opacity: .7; }
+    #mind .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+                 opacity: .5; border-top: 1px solid #ffffff14; padding-top: 6px; }
+    #mind table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    #mind td { padding: 1px 0; vertical-align: middle; }
+    #mind td.k { opacity: .6; width: 44%; }
+    #mind td.v { text-align: right; }
+    #mind .mono { font: 11px ui-monospace, Menlo, Consolas, monospace; }
+    #mind .io { position: relative; height: 4px; margin-top: 2px; background: #2a2e36; border-radius: 2px; }
+    #mind .io::before { content: ''; position: absolute; left: 50%; top: -1px; bottom: -1px;
+                        width: 1px; background: #ffffff26; }
+    #mind .io > i { position: absolute; top: 0; bottom: 0; background: #6fb6e0; border-radius: 2px; }
+    #mind .prog { background: #10121688; border-radius: 6px; padding: 6px 8px; margin-top: 2px;
+                  overflow-x: auto; }
+    #mind .prog .ins { white-space: pre; font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; opacity: .82; }
+    #mind .prog .ins.pc { background: #2f6b2855; color: #eafbe8; opacity: 1; border-radius: 3px; }
     #inspect .bar { height: 5px; border-radius: 3px; background: #3a3f4a; overflow: hidden; margin-top: 2px; }
     #inspect .bar > i { display: block; height: 100%; background: #6fb6e0; }
     #minimap { position: fixed; right: max(8px, env(safe-area-inset-right));
@@ -73,6 +99,7 @@
   </div>
   <div id="toast"></div>
   <div id="inspect"></div>
+  <div id="mind"></div>
   <canvas id="minimap" width="150" height="90"></canvas>
   <script type="module" src="/src/main.ts"></script>
 </body>

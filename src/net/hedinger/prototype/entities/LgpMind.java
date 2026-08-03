@@ -26,6 +26,11 @@ public final class LgpMind implements Mind {
 		return brain;
 	}
 
+	/** Instructions run per tick (the thought rate), for the mind inspector. */
+	public int budget() {
+		return budget;
+	}
+
 	@Override
 	public void think(double[] sensors, double[] actuators) {
 		brain.step(sensors, actuators, budget);

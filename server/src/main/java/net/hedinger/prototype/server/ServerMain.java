@@ -159,6 +159,17 @@ public final class ServerMain {
 			ctx.json(d);
 		});
 
+		// Mind inspector: the creature's evolvable LGP program, live registers and
+		// program counter, and the sensor/actuator vectors it read/wrote last tick.
+		app.get("/api/world/mind/{id}", ctx -> {
+			var d = host.mindDetail(Integer.parseInt(ctx.pathParam("id")));
+			if (d == null) {
+				ctx.status(404).json(Map.of("error", "no such entity"));
+				return;
+			}
+			ctx.json(d);
+		});
+
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
 		// Live per-tile grass level for the vegetation overlay (byte per tile,

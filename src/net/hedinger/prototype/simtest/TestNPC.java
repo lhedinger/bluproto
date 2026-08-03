@@ -351,6 +351,22 @@ public class TestNPC extends NPC {
 		return behavior == Behavior.MINDED;
 	}
 
+	/** This body's LGP mind, if it runs one (the minded cohort) -- for the mind
+	 *  inspector; null for a hardcoded behaviour or an inert/brain-less mind. */
+	public LgpMind lgpMind() {
+		return mind instanceof LgpMind lm ? lm : null;
+	}
+
+	/** A copy of the last-tick sensor vector the mind saw (mind inspector). */
+	public double[] sensorSnapshot() {
+		return sensors.clone();
+	}
+
+	/** A copy of the last-tick actuator vector the mind wrote (mind inspector). */
+	public double[] actuatorSnapshot() {
+		return actuators.clone();
+	}
+
 	private static final Mind INERT_MIND = new Mind() {
 		@Override
 		public void think(double[] sensors, double[] actuators) {
