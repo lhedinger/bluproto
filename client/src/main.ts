@@ -278,7 +278,7 @@ function renderTileInspect(d: Record<string, any>): void {
   const food = Number(d.food) || 0;
   const pct = cap > 0 ? Math.max(0, Math.min(1, food / cap)) : 0;
   const flags = [d.walkable ? 'walkable' : '', d.water ? 'water' : '', d.open ? 'open' : '',
-    d.blocksSight ? 'blocks sight' : '']
+    d.solid ? 'solid' : '', d.blocksSight ? 'blocks sight' : '']
     .filter(Boolean).join(', ') || '—';
   const rows = [
     row('type', d.type),
