@@ -17,7 +17,6 @@ const statsEl = document.getElementById('stats')!;
 const pauseBtn = document.getElementById('pause') as HTMLButtonElement;
 const speedSel = document.getElementById('speed') as HTMLSelectElement;
 const spawnSel = document.getElementById('spawn') as HTMLSelectElement;
-const followEl = document.getElementById('follow')!;
 const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
@@ -112,11 +111,10 @@ const net = new Net(onMsg, s => {
 });
 
 // Read-only viewers (no command token in the URL) can watch but not drive the
-// world — grey out every mutating control so it reads as unavailable.
+// world — hide every mutating control so the toolbar shows only what works.
 if (net.readOnly) {
   for (const el of [pauseBtn, speedSel, spawnSel]) {
-    el.disabled = true;
-    el.title = 'read-only — open with a command token (#t=…) to control the world';
+    el.style.display = 'none';
   }
 }
 
@@ -239,9 +237,11 @@ function selectTile(x: number, y: number, z: number): void {
 function deselect(): void {
   selectedId = null;
   selectedTile = null;
+  cam.followId = null; // closing the inspector also stops following
   clearInterval(detailTimer);
   inspectEl.style.display = 'none';
   inspectEl.className = '';
+  reflect();
 }
 
 async function refreshDetail(): Promise<void> {
@@ -311,14 +311,9 @@ function renderInspectDebug(d: Record<string, any>): void {
     d.role ? row('role', d.role) : '',
     'minded' in d ? row('minded', d.minded ? 'yes' : 'no') : '',
   ];
-  const position = [
-    row('pos', `${Number(d.x).toFixed(2)}, ${Number(d.y).toFixed(2)}`),
-    row('level', d.z),
-    row('dir', Number(d.dir).toFixed(2)),
-    row('age', d.age),
-  ];
   const status: string[] = [];
   if (d.action) status.push(row('action', d.action));
+  status.push(row('age', d.age));
   status.push(row('health', d.health));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
   const fl: string[] = [];
@@ -330,7 +325,7 @@ function renderInspectDebug(d: Record<string, any>): void {
   if (fl.length) status.push(row('flags', fl.join(', ')));
   if ('edible' in d) status.push(row('edible', d.edible ? 'yes' : 'no'));
   if ('durability' in d) status.push(row('durability', d.durability));
-  const sections = [group('identity', identity), group('position', position), group('status', status)];
+  const sections = [group('identity', identity), group('status', status)];
   const gm = d.genome;
   if (gm) {
     sections.push(group('genome', [
@@ -390,21 +385,9 @@ levelBtn.onclick = () => {
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
 };
-followEl.addEventListener('click', () => {
-  cam.followId = null;
-  reflect();
-});
-
 function reflect(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
   pauseBtn.classList.toggle('on', paused);
-  if (cam.followId !== null) {
-    const t = state.tracks.get(cam.followId);
-    followEl.textContent = `following ${t ? t.curr.kind.replace('npc.', '') : '…'} ✕`;
-    (followEl as HTMLElement).style.display = 'inline-block';
-  } else {
-    (followEl as HTMLElement).style.display = 'none';
-  }
 }
 
 // Debug mode is a CLIENT-ONLY view: it changes what's rendered and how much a
