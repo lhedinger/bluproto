@@ -19,6 +19,7 @@ const speedSel = document.getElementById('speed') as HTMLSelectElement;
 const spawnSel = document.getElementById('spawn') as HTMLSelectElement;
 const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
+const mindEl = document.getElementById('mind') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
 
@@ -239,8 +240,10 @@ function deselect(): void {
   selectedTile = null;
   cam.followId = null; // closing the inspector also stops following
   clearInterval(detailTimer);
+  clearInterval(mindTimer);
   inspectEl.style.display = 'none';
   inspectEl.className = '';
+  mindEl.style.display = 'none';
   reflect();
 }
 
@@ -339,9 +342,15 @@ function renderInspectDebug(d: Record<string, any>): void {
       row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
     ]));
   }
+  // A doorway to the second inspector: the creature's evolvable program itself.
+  const mindlink = gm?.hasBrain
+    ? '<div class="mindlink" role="button">🧠 inspect mind →</div>'
+    : '';
   inspectEl.className = 'dbg';
-  inspectEl.innerHTML = header(swatch, name, d.id) + sections.join('');
+  inspectEl.innerHTML = header(swatch, name, d.id) + sections.join('') + mindlink;
   showInspect();
+  const ml = inspectEl.querySelector('.mindlink');
+  if (ml) ml.addEventListener('click', openMind);
 }
 
 function header(swatch: number, label: string, id: unknown): string {
@@ -363,6 +372,96 @@ function showInspect(): void {
 
 function row(k: string, v: unknown): string {
   return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+}
+
+// ---- mind inspector --------------------------------------------------------
+// A second panel focused on the creature's evolvable LGP program: its live
+// sensor/actuator vectors, the disassembled instructions with the program
+// counter marked, and the registers. One panel at a time — opening the mind
+// hides the entity card and stops its poll; "← back" reopens the card, "✕"
+// deselects entirely. Polls faster than the card so the PC and I/O feel live.
+let mindTimer = 0;
+
+function openMind(): void {
+  if (selectedId === null) return;
+  clearInterval(detailTimer); // the entity card yields the poll to the mind
+  inspectEl.style.display = 'none';
+  refreshMind();
+  clearInterval(mindTimer);
+  mindTimer = window.setInterval(refreshMind, 500);
+}
+
+function closeMind(): void {
+  clearInterval(mindTimer);
+  mindEl.style.display = 'none';
+  if (selectedId === null) return;
+  refreshDetail(); // reopen the entity card and resume its slower poll
+  clearInterval(detailTimer);
+  detailTimer = window.setInterval(refreshDetail, 1000);
+}
+
+async function refreshMind(): Promise<void> {
+  if (selectedId === null) return;
+  try {
+    const r = await fetch(`/api/world/mind/${selectedId}`);
+    if (!r.ok) { deselect(); return; }
+    renderMind(await r.json());
+  } catch {
+    /* transient; keep the last panel */
+  }
+}
+
+function renderMind(d: Record<string, any>): void {
+  const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
+  const hd =
+    `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
+    `mind <span class="mono">#${d.id}</span>` +
+    `<span class="back" role="button">← back</span><span class="x">✕</span></h3>`;
+  if (!d.hasBrain) {
+    mindEl.innerHTML = hd + '<div class="grp">no brain</div>' +
+      '<div class="mono">this creature is scripted, not minded.</div>';
+    showMind();
+    return;
+  }
+  const sensors = (d.sensors as any[]) ?? [];
+  const actuators = (d.actuators as any[]) ?? [];
+  const regs = (d.registers as number[]) ?? [];
+  const disasm = (d.disasm as string[]) ?? [];
+  const metaRows = [
+    row('length', `${d.length} instr`),
+    row('steps/tick', d.stepsPerTick),
+    row('pc', d.pc),
+  ];
+  const prog = disasm
+    .map((ln, i) => `<div class="ins${i === d.pc ? ' pc' : ''}">${esc(ln)}</div>`)
+    .join('');
+  mindEl.innerHTML = hd +
+    group('meta', metaRows) +
+    `<div class="grp">sensors (in)</div><table>${sensors.map(ioRow).join('')}</table>` +
+    `<div class="grp">actuators (out)</div><table>${actuators.map(ioRow).join('')}</table>` +
+    `<div class="grp">program</div><div class="prog">${prog}</div>` +
+    `<div class="grp">registers</div><table>${regs.map((v, i) => row(`R${i}`, v.toFixed(3))).join('')}</table>`;
+  showMind();
+}
+
+// One I/O channel: name, signed value, and a centre-anchored bar (negative
+// grows left of centre, positive right) so the sign is readable at a glance.
+function ioRow(c: { name: string; value: number }): string {
+  const v = Number(c.value) || 0;
+  const w = Math.min(50, Math.abs(v) * 50);
+  const left = v >= 0 ? 50 : 50 - w;
+  return `<tr><td class="k">${c.name}</td><td class="v mono">${v.toFixed(3)}</td></tr>` +
+    `<tr><td colspan=2><div class="io"><i style="left:${left}%;width:${w}%"></i></div></td></tr>`;
+}
+
+function showMind(): void {
+  mindEl.style.display = 'block';
+  mindEl.querySelector('.back')!.addEventListener('click', closeMind);
+  mindEl.querySelector('.x')!.addEventListener('click', deselect);
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // Minimap: tap to recentre the camera there (drops follow).

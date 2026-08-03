@@ -268,6 +268,59 @@ final class WorldHost {
 	}
 
 	/**
+	 * The evolvable mind behind one creature, for the mind inspector: the LGP
+	 * program disassembled, the live register bank and program counter, and the
+	 * sensor/actuator vectors it read and wrote last tick (named). {@code hasBrain}
+	 * is false for a hardcoded or brain-less creature. Read-only: it snapshots live
+	 * fields without locking and mutates nothing.
+	 */
+	java.util.Map<String, Object> mindDetail(int id) {
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e == null || e.getID() != id || e.isRemoved()) {
+				continue;
+			}
+			java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
+			d.put("id", id);
+			net.hedinger.prototype.entities.LgpMind lm =
+					e instanceof net.hedinger.prototype.simtest.TestNPC tn ? tn.lgpMind() : null;
+			if (lm == null || lm.brain() == null) {
+				d.put("hasBrain", false);
+				return d;
+			}
+			net.hedinger.prototype.simtest.TestNPC tn = (net.hedinger.prototype.simtest.TestNPC) e;
+			net.hedinger.prototype.entities.Brain b = lm.brain();
+			d.put("hasBrain", true);
+			d.put("length", b.length());
+			d.put("stepsPerTick", lm.budget());
+			d.put("pc", b.pc());
+			d.put("disasm", b.disassemble(net.hedinger.prototype.entities.AgentIO.SENSOR_NAMES,
+					net.hedinger.prototype.entities.AgentIO.ACT_NAMES));
+			double[] reg = b.registers();
+			double[] regs = new double[reg.length];
+			for (int i = 0; i < reg.length; i++) {
+				regs[i] = round(reg[i]);
+			}
+			d.put("registers", regs);
+			d.put("sensors", named(net.hedinger.prototype.entities.AgentIO.SENSOR_NAMES, tn.sensorSnapshot()));
+			d.put("actuators", named(net.hedinger.prototype.entities.AgentIO.ACT_NAMES, tn.actuatorSnapshot()));
+			return d;
+		}
+		return null;
+	}
+
+	/** Pairs each value with its channel name, for the mind inspector's I/O lists. */
+	private java.util.List<java.util.Map<String, Object>> named(String[] names, double[] vals) {
+		java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<java.util.Map<String, Object>>();
+		for (int i = 0; i < vals.length; i++) {
+			java.util.Map<String, Object> m = new java.util.LinkedHashMap<String, Object>();
+			m.put("name", i < names.length ? names[i] : "[" + i + "]");
+			m.put("value", round(vals[i]));
+			out.add(m);
+		}
+		return out;
+	}
+
+	/**
 	 * Per-tile grass level for the live vegetation overlay: one byte per tile of
 	 * level z — 0..100 = fraction of this grass tile's current capacity that has
 	 * vegetation (100 lush, 0 grazed bare), or 255 for a non-grass tile (bare
