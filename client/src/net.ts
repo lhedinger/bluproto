@@ -20,6 +20,12 @@ export class Net {
     return new URLSearchParams(location.hash.slice(1)).get('t') ?? '';
   }
 
+  /** The command token from the URL hash, for the token-gated HTTP endpoints
+   *  (the WS path attaches it itself). Empty string when viewing only. */
+  get commandToken(): string {
+    return this.token();
+  }
+
   /** True when no command token is present: viewing only, no world control. */
   get readOnly(): boolean {
     return this.token() === '';

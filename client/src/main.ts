@@ -22,6 +22,8 @@ const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mindEl = document.getElementById('mind') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
+const injectBtn = document.getElementById('inject') as HTMLButtonElement;
+const injectFile = document.getElementById('injectFile') as HTMLInputElement;
 
 const state = new WorldState();
 const cam = new Camera(cv);
@@ -114,10 +116,36 @@ const net = new Net(onMsg, s => {
 // Read-only viewers (no command token in the URL) can watch but not drive the
 // world — hide every mutating control so the toolbar shows only what works.
 if (net.readOnly) {
-  for (const el of [pauseBtn, speedSel, spawnSel]) {
+  for (const el of [pauseBtn, speedSel, spawnSel, injectBtn]) {
     el.style.display = 'none';
   }
 }
+
+// Inject a saved genome (token holders only): pick a .genome file exported from
+// the mind inspector and drop that creature at the current view centre, through
+// the token-gated POST /api/world/genome (the same command queue as spawn/reset).
+injectBtn.onclick = () => injectFile.click();
+injectFile.onchange = async () => {
+  const f = injectFile.files?.[0];
+  injectFile.value = ''; // let the same file be picked again next time
+  if (!f) return;
+  const genome = (await f.text()).trim();
+  if (!genome) { toast('empty genome file'); return; }
+  const x = cam.cx, y = cam.cy, z = currentLevel;
+  try {
+    const r = await fetch('/api/world/genome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Command-Token': net.commandToken },
+      body: JSON.stringify({ genome, x, y, z }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) toast(`injected at ${x.toFixed(0)}, ${y.toFixed(0)}`);
+    else if (r.status === 403) toast('inject refused: bad token');
+    else toast(`inject failed: ${d.error ?? r.status}`);
+  } catch {
+    toast('inject failed');
+  }
+};
 
 function onMsg(m: ServerMsg, receivedAt: number): void {
   switch (m.type) {
