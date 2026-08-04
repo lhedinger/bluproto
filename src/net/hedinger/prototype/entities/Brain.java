@@ -236,6 +236,17 @@ public final class Brain {
 		return reg;
 	}
 
+	/** A copy of the heritable program (each row {@code {op, x, y, z}}), for
+	 *  exporting/serializing a genome. A copy, so a caller can't mutate the live
+	 *  program. Reconstruct with {@link #Brain(int[][])}. */
+	public int[][] code() {
+		int[][] out = new int[code.length][];
+		for (int i = 0; i < code.length; i++) {
+			out[i] = code[i].clone();
+		}
+		return out;
+	}
+
 	/** Human-readable listing of the program, one line per instruction, with the
 	 * program counter marked -- for the on-screen inspector. */
 	public String[] disassemble(String[] sensorNames, String[] actNames) {

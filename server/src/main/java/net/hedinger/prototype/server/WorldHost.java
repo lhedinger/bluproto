@@ -344,6 +344,49 @@ final class WorldHost {
 		return null;
 	}
 
+	/**
+	 * Exports one creature's whole genome (brain included) as a portable, single-
+	 * line {@link net.hedinger.prototype.entities.GenomeCodec} string — a savefile
+	 * you can back up and later re-inject as a seed. Read-only. {@code hasBrain} is
+	 * false for a scripted or brain-less creature (nothing to seed from).
+	 */
+	java.util.Map<String, Object> genomeExport(int id) {
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e == null || e.getID() != id || e.isRemoved()) {
+				continue;
+			}
+			java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
+			d.put("id", id);
+			net.hedinger.prototype.entities.Genome g =
+					e instanceof net.hedinger.prototype.entities.NPC n ? n.getGenome() : null;
+			if (g == null || g.brain == null) {
+				d.put("hasBrain", false);
+				return d;
+			}
+			d.put("hasBrain", true);
+			d.put("minded", e instanceof net.hedinger.prototype.simtest.TestNPC tn && tn.isMinded());
+			d.put("genome", net.hedinger.prototype.entities.GenomeCodec.encode(g));
+			return d;
+		}
+		return null;
+	}
+
+	/**
+	 * Injects a creature built from an exported genome at {@code (x,y,z)}, through
+	 * the tick-boundary command queue (so it is logged and replays exactly). The
+	 * caller has already checked the command token. Returns the tick it will apply
+	 * at, or -1 if the genome string is malformed (so a bad payload is a 400, not a
+	 * crash).
+	 */
+	long injectGenome(String encodedGenome, double x, double y, double z) {
+		net.hedinger.prototype.sim.SpawnMindedCommand cmd =
+				net.hedinger.prototype.sim.SpawnMindedCommand.parse(encodedGenome, x, y, z);
+		if (cmd == null) {
+			return -1;
+		}
+		return runner.enqueue(cmd);
+	}
+
 	/** Pairs each value with its channel name, for the mind inspector's I/O lists. */
 	private java.util.List<java.util.Map<String, Object>> named(String[] names, double[] vals) {
 		java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<java.util.Map<String, Object>>();
