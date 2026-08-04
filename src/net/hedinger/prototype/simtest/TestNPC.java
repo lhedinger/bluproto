@@ -107,6 +107,7 @@ public class TestNPC extends NPC {
 	private boolean heard = false;
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
 	private int generation = 0; // 0 = spawned by the world; a child is its parent's + 1
+	private boolean handPlaced = false; // placed by a person, not by the steward
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
 	private double totalIntake = 0;
 	private double[] pinX, pinY; // trailing ring of recent positions (pin detection)
@@ -468,6 +469,34 @@ public class TestNPC extends NPC {
 	/** Sets the generation (used when a birth stamps a child as parent + 1). */
 	public TestNPC withGeneration(int g) {
 		generation = g;
+		return this;
+	}
+
+	/** True for a creature a person placed by hand (a genome injected from the
+	 *  viewer) rather than one the {@link net.hedinger.prototype.sim.WorldSteward}
+	 *  seeded. The steward's population ceiling leaves these alone -- see
+	 *  {@link #withHandPlaced()}. */
+	public boolean isHandPlaced() {
+		return handPlaced;
+	}
+
+	/**
+	 * Marks this creature as deliberately placed by a person, which exempts it
+	 * from the steward's population cull.
+	 *
+	 * <p>The steward holds the minded cohort under a ceiling by silently deleting
+	 * surplus members ({@code Entity.remove()} -- age -1 <em>and</em> removal in
+	 * the same breath, so the body blinks out with no corpse). A hand-placed
+	 * creature that landed in a world already at the ceiling was therefore liable
+	 * to vanish within a second or two of being dropped, healthy and well-fed,
+	 * which read as "I tap the ground and it disappears". Exempting it makes an
+	 * injection <em>displace</em> one of the steward's own creatures instead of
+	 * being displaced by them -- the cohort stays just as bounded, because the
+	 * founder still counts toward the ceiling and its offspring are ordinary
+	 * cullable citizens.
+	 */
+	public TestNPC withHandPlaced() {
+		handPlaced = true;
 		return this;
 	}
 
