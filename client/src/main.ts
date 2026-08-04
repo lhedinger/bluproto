@@ -121,22 +121,27 @@ if (net.readOnly) {
   }
 }
 
-// Inject a saved genome (token holders only): pick a .genome file exported from
-// the mind inspector and drop that creature at the current view centre, through
-// the token-gated POST /api/world/genome (the same command queue as spawn/reset).
-injectBtn.onclick = () => injectFile.click();
-injectFile.onchange = async () => {
-  const f = injectFile.files?.[0];
-  injectFile.value = ''; // let the same file be picked again next time
-  if (!f) return;
-  const genome = (await f.text()).trim();
-  if (!genome) { toast('empty genome file'); return; }
-  const x = cam.cx, y = cam.cy, z = currentLevel;
+// Genome injection (token holders only): "⤒ load genome" reads a .genome file
+// exported from the mind inspector and REMEMBERS it (persisted, so it survives
+// the auto-reload on redeploy), then arms the "tap: genome" spawn mode. With
+// that selected, each tap on open ground drops a copy of the remembered genome
+// there, through the token-gated POST /api/world/genome (the same command queue
+// as spawn/reset).
+let loadedGenome: string | null = null;
+const GENOME_KEY = 'injectGenome';
+
+function enableGenomeSpawn(): void {
+  const opt = spawnSel.querySelector('option[value="genome"]') as HTMLOptionElement | null;
+  if (opt) opt.disabled = false;
+}
+
+async function injectGenomeAt(x: number, y: number, z: number): Promise<void> {
+  if (!loadedGenome) { toast('no genome loaded — tap ⤒ load genome'); return; }
   try {
     const r = await fetch('/api/world/genome', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Command-Token': net.commandToken },
-      body: JSON.stringify({ genome, x, y, z }),
+      body: JSON.stringify({ genome: loadedGenome, x, y, z }),
     });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.ok) toast(`injected at ${x.toFixed(0)}, ${y.toFixed(0)}`);
@@ -145,7 +150,30 @@ injectFile.onchange = async () => {
   } catch {
     toast('inject failed');
   }
+}
+
+injectBtn.onclick = () => injectFile.click();
+injectFile.onchange = async () => {
+  const f = injectFile.files?.[0];
+  injectFile.value = ''; // let the same file be picked again next time
+  if (!f) return;
+  const genome = (await f.text()).trim();
+  if (!genome) { toast('empty genome file'); return; }
+  loadedGenome = genome;
+  try { localStorage.setItem(GENOME_KEY, genome); } catch { /* private mode: keep in memory */ }
+  enableGenomeSpawn();
+  spawnSel.value = 'genome'; // arm tap-to-place with the just-loaded genome
+  toast(`loaded ${f.name} — tap to place`);
 };
+
+// Restore a remembered genome across reloads (the client self-heals/reloads on
+// redeploy), so an armed genome and its "tap: genome" mode survive.
+if (!net.readOnly) {
+  try {
+    const saved = localStorage.getItem(GENOME_KEY);
+    if (saved) { loadedGenome = saved; enableGenomeSpawn(); }
+  } catch { /* ignore */ }
+}
 
 function onMsg(m: ServerMsg, receivedAt: number): void {
   switch (m.type) {
@@ -226,7 +254,9 @@ cam.attach(tap => {
     return;
   }
   const kind = spawnSel.value;
-  if (kind && inBounds) {
+  if (kind === 'genome' && inBounds) {
+    injectGenomeAt(tap.x, tap.y, currentLevel); // drop the remembered genome here
+  } else if (kind && inBounds) {
     net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: currentLevel });
   } else {
     deselect(); // tap on empty ground clears the selection

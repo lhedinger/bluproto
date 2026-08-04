@@ -22,7 +22,7 @@
     #toast { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
              transform: translateX(-50%); background: #2a2e36ee; border: 1px solid #3a3f4a;
              border-radius: 8px; padding: 8px 14px; opacity: 0; transition: opacity .25s;
-             pointer-events: none; z-index: 3; }
+             pointer-events: none; z-index: 10; } /* above minimap (3), inspect (5), mind (6) */
     #inspect { position: fixed; left: max(8px, env(safe-area-inset-left));
                bottom: max(8px, env(safe-area-inset-bottom)); width: min(240px, 46vw);
                background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
@@ -120,8 +120,9 @@
       <option value="food">tap: food</option>
       <option value="crate">tap: crate</option>
       <option value="hazard">tap: hazard</option>
+      <option value="genome" disabled>tap: genome</option>
     </select>
-    <button id="inject" title="inject a saved .genome at the view centre">⤒ inject</button>
+    <button id="inject" title="load a .genome file, then use 'tap: genome' to place it">⤒ load genome</button>
     <input id="injectFile" type="file" accept=".genome,.txt,text/plain" style="display:none" />
     <span id="stats">connecting…</span>
   </div>
