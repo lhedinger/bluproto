@@ -173,12 +173,19 @@ public final class Worlds {
 		return out;
 	}
 
-	/** World size (tiles). Scaled up from the earlier 72x44 to give biomes real
-	 *  room and a proper underground network; {@link WorldAudit} verifies that the
-	 *  whole space stays connected and that the sim keeps far more than real-time
-	 *  headroom at this size (see {@link #demo(long, int, int)} for how populations
-	 *  scale with the area). */
-	static final int COLS = 144, ROWS = 88;
+	/**
+	 * Default world size (tiles). The sim itself has ample headroom for much
+	 * larger worlds (see {@link WorldAudit}), but the one-time startup <em>bake</em>
+	 * of the ground layers holds a per-tile sprite cache whose peak grows with the
+	 * map area, and the deploy VPS runs the JVM with a small ({@code -Xmx512m})
+	 * heap — so a 4x map OOMs the bake there. This default is sized to bake
+	 * comfortably within that heap; {@code WORLD_COLS}/{@code WORLD_ROWS} (see
+	 * {@code ServerMain}) can override it wherever more heap is available, and the
+	 * size-parameterized {@link #demo(long, int, int)} makes any size a
+	 * one-argument change. Raising this default is gated on making the bake's peak
+	 * memory bounded (or giving the VPS more heap).
+	 */
+	static final int COLS = 72, ROWS = 44;
 
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
