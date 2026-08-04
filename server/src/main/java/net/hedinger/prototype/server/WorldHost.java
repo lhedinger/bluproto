@@ -91,17 +91,25 @@ final class WorldHost {
 		int cols = r.world().getColums(), rows = r.world().getRows();
 		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
 		int cyN = (rows + CHUNK_TILES - 1) / CHUNK_TILES;
-		// Bake each chunk in bounded (chunk-sized) memory — no whole-level image,
-		// so the map can grow arbitrarily without OOM.
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
+		// Bake each level once into a single image (bounded by the shared tile-sprite
+		// cache — see ProcTiles), then slice it into chunk PNGs and drop it before the
+		// next level. One render pass per level (not one per chunk) keeps the bake
+		// fast, and only one level image is ever live, so peak memory stays well
+		// within the deploy heap even for a large map.
 		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
 		java.util.Map<String, byte[]> baked = new java.util.HashMap<String, byte[]>();
 		for (int z = 0; z < r.world().getLevels(); z++) {
+			java.awt.image.BufferedImage level = LayerBaker.bakeLevelImage(terrain, lr, z);
 			for (int cy = 0; cy < cyN; cy++) {
 				for (int cx = 0; cx < cxN; cx++) {
-					baked.put(z + "/" + cx + "_" + cy,
-							LayerBaker.renderChunk(terrain, lr, z, cx, cy, CHUNK_TILES));
+					int x0 = cx * CHUNK_TILES * ts, y0 = cy * CHUNK_TILES * ts;
+					int cw = Math.min(CHUNK_TILES * ts, cols * ts - x0);
+					int ch = Math.min(CHUNK_TILES * ts, rows * ts - y0);
+					baked.put(z + "/" + cx + "_" + cy, LayerBaker.chunkPng(level, x0, y0, cw, ch));
 				}
 			}
+			level = null; // free this level's image before baking the next
 		}
 		runner = r;
 		chunks = baked;

@@ -62,6 +62,34 @@ final class LayerBaker {
 		return img;
 	}
 
+	/**
+	 * Renders a whole level once into a single image, using the cheap per-tile
+	 * base renderer ({@link #chunkRenderer}) rather than {@code build()}'s
+	 * full-level compositor + downsized pyramid. Peak memory is one level image
+	 * plus the shared (cached) tile sprites — so a large map bakes fast (one render
+	 * pass per level, not one per chunk) and within a small heap. The caller slices
+	 * it into chunks with {@link #chunkPng} and drops it before the next level.
+	 *
+	 * <p>Same passes and order as {@link #renderChunk}, so each sliced chunk is
+	 * pixel-identical to the per-chunk bake.
+	 */
+	static BufferedImage bakeLevelImage(World terrain,
+			net.hedinger.prototype.engine.LayerRenderer lr, int z) {
+		int ts = ResourceManager.tileSize;
+		int w = terrain.getColums() * ts, h = terrain.getRows() * ts;
+		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = img.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		g.setClip(0, 0, w, h);
+		View view = new View(terrain, lr);
+		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
+		view.clearScreen(g);
+		view.renderWorld(g);
+		view.renderEffects(g);
+		g.dispose();
+		return img;
+	}
+
 	/** Encodes a sub-rectangle of {@code full} (a map chunk) to PNG bytes. */
 	static byte[] chunkPng(BufferedImage full, int x0, int y0, int w, int h) {
 		BufferedImage sub = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
