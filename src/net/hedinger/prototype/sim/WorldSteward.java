@@ -230,14 +230,22 @@ public final class WorldSteward extends Entity {
 	}
 
 	/** Removes up to {@code count} minded creatures (iteration order) -- the ceiling
-	 *  for the hybrid cohort, which the role-keyed {@link #trim} does not cover. */
+	 *  for the hybrid cohort, which the role-keyed {@link #trim} does not cover.
+	 *
+	 *  <p>Hand-placed creatures (a genome someone injected from the viewer) are
+	 *  never culled: deleting what a person deliberately dropped -- healthy, and
+	 *  with no corpse to show for it -- reads as the world eating your creature.
+	 *  An injection therefore displaces one of the steward's own, and the cohort
+	 *  stays just as bounded (the founder still counts toward the ceiling, and its
+	 *  offspring are ordinary cullable citizens). */
 	private void trimMinded(int count) {
 		int removed = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (removed >= count) {
 				break;
 			}
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()) {
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()
+					&& !t.isHandPlaced()) {
 				t.remove();
 				removed++;
 			}

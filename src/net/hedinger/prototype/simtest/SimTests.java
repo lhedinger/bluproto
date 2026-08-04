@@ -1426,7 +1426,7 @@ public class SimTests {
 	static class MindedCohortSustainedBySteward extends Scenario {
 		private int countMinded(World w) {
 			int c = 0;
-			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			for (Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()) {
 					c++;
 				}
@@ -1436,7 +1436,7 @@ public class SimTests {
 
 		private int countRole(World w, String role) {
 			int c = 0;
-			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			for (Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
 						&& !t.isMinded() && t.ecoRole().equals(role)) {
 					c++;
@@ -2321,7 +2321,7 @@ public class SimTests {
 
 		private int countFood(World w) {
 			int n = 0;
-			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			for (Entity e : w.getEntities()) {
 				if (e instanceof Item && !e.isRemoved() && ((Item) e).getKind() == Item.Kind.FOOD) {
 					n++;
 				}
@@ -3006,6 +3006,85 @@ public class SimTests {
 	}
 
 	/**
+	 * A hand-injected creature is not silently deleted by the steward's population
+	 * ceiling. The steward holds the minded cohort under a cap by removing surplus
+	 * members outright ({@code Entity.remove()} — dead AND purged in one call, so
+	 * the body blinks out leaving no corpse). A genome dropped into a world already
+	 * at that cap was therefore liable to vanish within a second or two, healthy and
+	 * well-fed: "I tap the ground and it disappears". A hand-placed founder is now
+	 * exempt, so an injection displaces one of the steward's own instead.
+	 *
+	 * <p>Also guards the other half of the bargain: the cohort must stay bounded.
+	 * The founder still counts toward the ceiling and its offspring are ordinary
+	 * cullable citizens, so one injection must not let the population run away.
+	 */
+	static class InjectedCreatureSurvivesPopulationCeiling extends Scenario {
+		@Override
+		public void run() {
+			seed(11);
+			World w = net.hedinger.prototype.sim.Worlds.demo(11);
+			for (int i = 0; i < 400; i++) {
+				w.think(); // settle: the minded cohort reaches its ceiling
+			}
+			// Donate the brain of the oldest proven survivor — what the viewer exports.
+			Genome g = null;
+			int bestAge = -1;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.isMinded() && !t.isDead()
+						&& t.getGenome() != null && t.getGenome().brain != null
+						&& t.getAge() > bestAge) {
+					bestAge = t.getAge();
+					g = t.getGenome();
+				}
+			}
+			assertTrue("world produced a minded donor genome", g != null);
+
+			java.util.Set<Integer> before = new java.util.HashSet<>();
+			for (Entity e : w.getEntities()) {
+				before.add(e.getID());
+			}
+			int mindedBefore = countMinded(w);
+			// Drop it on open ground far from the donor, exactly as a tap would.
+			new net.hedinger.prototype.sim.SpawnMindedCommand(g, 20.5, 20.5, 0).apply(w);
+			w.think();
+
+			TestNPC seedling = null;
+			for (Entity e : w.getEntities()) {
+				if (!before.contains(e.getID()) && e instanceof TestNPC t
+						&& t.getGenome() == g) {
+					seedling = t; // the only body holding this exact Genome instance
+				}
+			}
+			assertTrue("injected creature materialized", seedling != null);
+			assertTrue("injected creature is marked hand-placed", seedling.isHandPlaced());
+
+			// Long enough for the steward to run its cull many times over.
+			for (int i = 0; i < 400; i++) {
+				w.think();
+			}
+			assertTrue("hand-placed creature was not culled by the population ceiling",
+					!seedling.isRemoved());
+			assertTrue("hand-placed creature is still alive", !seedling.isDead());
+
+			// The ceiling still bites: exempting founders must not let the cohort
+			// run away, since only this one body is protected.
+			assertTrue("minded cohort stayed bounded after the injection ("
+					+ countMinded(w) + " vs " + mindedBefore + " before)",
+					countMinded(w) <= mindedBefore + 3);
+		}
+
+		private static int countMinded(World w) {
+			int n = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.isMinded() && !t.isDead() && !t.isRemoved()) {
+					n++;
+				}
+			}
+			return n;
+		}
+	}
+
+	/**
 	 * A genome (brain included) survives a round-trip through the export/inject
 	 * savefile form: encode → decode reproduces every field and every brain
 	 * instruction exactly, the encoding carries no whitespace (so it survives the
@@ -3116,6 +3195,7 @@ public class SimTests {
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new GenomeSavefileRoundTrips(),
+				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
 				new HunterIgnoresPreyOnAnotherLevel(),

@@ -43,7 +43,11 @@ public record SpawnMindedCommand(Genome genome, double x, double y, double z) im
 		// thicket edge or a lake. Deterministic (a fixed outward ring scan over
 		// static terrain), so it still replays exactly.
 		double[] p = nearestWalkable(w, x, y, (int) z);
-		TestNPC npc = TestNPC.mindedForager(p[0], p[1], z, genome).withDeathspan(DEATHSPAN);
+		// withHandPlaced: exempt from the steward's population cull, which would
+		// otherwise silently delete a healthy just-placed creature (no corpse)
+		// whenever the minded cohort sat at its ceiling.
+		TestNPC npc = TestNPC.mindedForager(p[0], p[1], z, genome)
+				.withHandPlaced().withDeathspan(DEATHSPAN);
 		// Born brand-new: age 0 (a fresh entity already starts there) and a FULL
 		// tank rather than the ecosystem's 0.6-capacity "born fed" default. An
 		// injected seed gets the longest possible runway to establish itself — the
