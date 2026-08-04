@@ -60,3 +60,36 @@ jobs:
           # GitHub Actions cache keeps the JVM/npm layers warm between pushes.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Post-deploy smoke gate: the deploy itself is out-of-band (Watchtower on the
+  # VPS pulls the new image ~every 120s), so this job waits for the live server
+  # to report the commit we just published via /api/health, and fails red if it
+  # doesn't within the window. That turns a crash-looping deploy (e.g. an OOM at
+  # boot) into a red build minutes after merge, instead of a 502 someone has to
+  # notice. It's an alert, not a rollback — a pull-based deploy keeps no
+  # known-good to revert to, so `latest` still points at the bad image until the
+  # next push.
+  verify-deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the live server to report the new commit
+        run: |
+          URL="https://world.evarium.cc/api/health"
+          WANT="${GITHUB_SHA:0:7}"
+          echo "waiting for $URL to report commit $WANT (Watchtower polls ~every 120s)…"
+          deadline=$(( $(date +%s) + 480 ))   # 8 minutes: ~4 Watchtower cycles of headroom
+          last="none"
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            body="$(curl -fsS -m 10 "$URL" 2>/dev/null || true)"
+            live="$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)"
+            [ -n "$live" ] && last="$live"
+            if [ "$live" = "$WANT" ]; then
+              echo "✅ deploy verified: $URL is serving commit $WANT"
+              exit 0
+            fi
+            echo "  not yet (live=${live:-unreachable}, want=$WANT) — retrying in 15s"
+            sleep 15
+          done
+          echo "::error::Deploy not verified within 8m: $URL never reported commit $WANT (last seen: $last). The new container may be crash-looping — check the VPS."
+          exit 1
