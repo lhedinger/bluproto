@@ -248,7 +248,7 @@ cam.attach(tap => {
   const tx = Math.floor(tap.x), ty = Math.floor(tap.y);
   const inBounds = meta && tx >= 0 && ty >= 0 && tx < meta.cols && ty < meta.rows;
   // In debug mode, tapping open ground inspects that tile (fertility + food)
-  // instead of spawning — so grazing and seasons are observable.
+  // instead of spawning — so grazing and regrowth are observable.
   if (debugOn && inBounds) {
     selectTile(tx, ty, currentLevel);
     return;
