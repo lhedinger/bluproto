@@ -55,7 +55,11 @@ public final class ServerMain {
 				.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
 				.toString();
 
-		WorldHost host = new WorldHost(seed);
+		// World size: 0 (default) uses the built-in size; set WORLD_COLS/WORLD_ROWS
+		// to override — e.g. to scale down under a tight heap without a rebuild.
+		int worldCols = Integer.parseInt(cfg(args, "WORLD_COLS", "0"));
+		int worldRows = Integer.parseInt(cfg(args, "WORLD_ROWS", "0"));
+		WorldHost host = new WorldHost(seed, worldCols, worldRows);
 
 		Javalin app = Javalin.create(c -> {
 			c.showJavalinBanner = false;

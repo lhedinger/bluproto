@@ -55,7 +55,19 @@ final class WorldHost {
 	private volatile long startedAt = System.currentTimeMillis();
 	private final java.io.File recordDir; // durable recording dir, or null (off)
 
+	private final int worldCols; // <=0 means use Worlds' built-in default size
+	private final int worldRows;
+
 	WorldHost(long seed) {
+		this(seed, 0, 0);
+	}
+
+	/** Size-overridable ctor: {@code cols}/{@code rows} &gt; 0 build the world at
+	 *  that size (so the deployed size can be tuned — or scaled down under a tight
+	 *  heap — from config without a rebuild); otherwise the built-in default. */
+	WorldHost(long seed, int cols, int rows) {
+		this.worldCols = cols;
+		this.worldRows = rows;
 		String rd = System.getenv("RECORD_DIR");
 		this.recordDir = (rd == null || rd.isBlank()) ? null : new java.io.File(rd);
 		if (recordDir != null) {
@@ -71,8 +83,11 @@ final class WorldHost {
 	private void buildWorld(long newSeed) {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
-		SimulationRunner r = new SimulationRunner(Worlds.demo(newSeed));
-		var terrain = Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
+		boolean sized = worldCols > 0 && worldRows > 0;
+		SimulationRunner r = new SimulationRunner(
+				sized ? Worlds.demo(newSeed, worldCols, worldRows) : Worlds.demo(newSeed));
+		var terrain = sized ? Worlds.demoTerrain(newSeed, worldCols, worldRows)
+				: Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
 		int cols = r.world().getColums(), rows = r.world().getRows();
 		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
 		int cyN = (rows + CHUNK_TILES - 1) / CHUNK_TILES;
