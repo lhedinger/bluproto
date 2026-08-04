@@ -49,10 +49,25 @@ public final class ProcTiles {
 	private ProcTiles() {
 	}
 
+	/**
+	 * Memoized tiles, keyed by kind + connectivity code + variant. Each distinct
+	 * tile is drawn once and shared thereafter (the images are read-only — callers
+	 * only ever draw them as sources). Without this, a whole-level bake allocates a
+	 * fresh {@code SZ}x{@code SZ} image for <em>every</em> tile, so peak memory
+	 * grows with the map area (a large world OOMs the bake); with it, memory is
+	 * bounded by the number of distinct tile shapes, independent of world size.
+	 */
+	private static final java.util.Map<String, BufferedImage> CACHE =
+			new java.util.concurrent.ConcurrentHashMap<String, BufferedImage>();
+
 	// ---- public tile builders (called by ResourceManager) ------------------
 
 	/** A wall tile: a stone mass that merges with connected wall neighbours. */
 	public static BufferedImage wall(String code, int variant) {
+		return CACHE.computeIfAbsent("wall|" + code + "|" + variant, k -> buildWall(code, variant));
+	}
+
+	private static BufferedImage buildWall(String code, int variant) {
 		boolean N = has(code, '2'), E = has(code, '5'), S = has(code, '7'), W = has(code, '4');
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
@@ -89,6 +104,10 @@ public final class ProcTiles {
 
 	/** The pit (top layer) of a hole: a dark void inset to leave an earth lip. */
 	public static BufferedImage hole(String code, int variant) {
+		return CACHE.computeIfAbsent("hole|" + code + "|" + variant, k -> buildHole(code, variant));
+	}
+
+	private static BufferedImage buildHole(String code, int variant) {
 		boolean N = has(code, '2'), E = has(code, '5'), S = has(code, '7'), W = has(code, '4');
 		boolean NW = has(code, '1'), NE = has(code, '3'), SE = has(code, '8'), SW = has(code, '6');
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
@@ -109,7 +128,8 @@ public final class ProcTiles {
 
 	/** The earth lip (bottom layer) under a hole; the pit sits on top of it. */
 	public static BufferedImage holeFloor(String code, int variant) {
-		return soilTile(seed(code, variant) ^ 0x9E3779B9L);
+		return CACHE.computeIfAbsent("holeFloor|" + code + "|" + variant,
+				k -> soilTile(seed(code, variant) ^ 0x9E3779B9L));
 	}
 
 	/**
@@ -119,7 +139,7 @@ public final class ProcTiles {
 	 * than the old blue floor sprite.
 	 */
 	public static BufferedImage floor() {
-		return soilTile(0x50117L);
+		return CACHE.computeIfAbsent("floor", k -> soilTile(0x50117L));
 	}
 
 	/** Opaque soil fill with a little grain, sized to the padded tile. */
@@ -141,6 +161,10 @@ public final class ProcTiles {
 
 	/** A ramp tile: an earthy slope, bright at the high end, with uphill chevrons. */
 	public static BufferedImage ramp(String code, boolean up) {
+		return CACHE.computeIfAbsent("ramp|" + code + "|" + up, k -> buildRamp(code, up));
+	}
+
+	private static BufferedImage buildRamp(String code, boolean up) {
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = gfx(img);
 		// up faces right (high on the right), down faces left.
