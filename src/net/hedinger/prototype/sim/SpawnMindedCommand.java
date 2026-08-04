@@ -36,7 +36,38 @@ public record SpawnMindedCommand(Genome genome, double x, double y, double z) im
 
 	@Override
 	public void apply(World w) {
-		w.spawnEntity(TestNPC.mindedForager(x, y, z, genome).withDeathspan(DEATHSPAN));
+		// Land the creature on walkable ground near the requested spot. Dropping a
+		// land body onto a wall makes it try to climb, run off the top level, and
+		// die instantly; onto water it's stuck and starves. Snapping to the nearest
+		// open tile makes "tap to place" forgiving of a tap on the rocky rim, a
+		// thicket edge or a lake. Deterministic (a fixed outward ring scan over
+		// static terrain), so it still replays exactly.
+		double[] p = nearestWalkable(w, x, y, (int) z);
+		w.spawnEntity(TestNPC.mindedForager(p[0], p[1], z, genome).withDeathspan(DEATHSPAN));
+	}
+
+	private static double[] nearestWalkable(World w, double x, double y, int z) {
+		int cx = (int) x, cy = (int) y;
+		if (walkable(w, cx, cy, z)) {
+			return new double[] { x, y }; // requested spot is fine: keep it exact
+		}
+		for (int r = 1; r <= 8; r++) {
+			for (int dx = -r; dx <= r; dx++) {
+				for (int dy = -r; dy <= r; dy++) {
+					if (Math.max(Math.abs(dx), Math.abs(dy)) != r) {
+						continue; // only the outer ring at this radius
+					}
+					if (walkable(w, cx + dx, cy + dy, z)) {
+						return new double[] { cx + dx + 0.5, cy + dy + 0.5 };
+					}
+				}
+			}
+		}
+		return new double[] { x, y }; // nothing open nearby; land as asked (rare)
+	}
+
+	private static boolean walkable(World w, int x, int y, int z) {
+		return w.isValid(x, y, z) && w.getTile(x, y, z).isWalkable();
 	}
 
 	@Override

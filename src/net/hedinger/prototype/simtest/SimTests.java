@@ -3084,6 +3084,16 @@ public class SimTests {
 			parsed.apply(room);
 			room.think();
 			assertEquals("injection admitted exactly one creature", 1, room.getAliveCount());
+
+			// A tap on a wall snaps to open ground rather than dying on it: (0,0) is
+			// the room's border wall, so a land body dropped there would try to climb,
+			// run off the top level and die instantly without the snap.
+			new net.hedinger.prototype.sim.SpawnMindedCommand(g, 0, 0, 0).apply(room);
+			for (int i = 0; i < 6; i++) {
+				room.think();
+			}
+			assertEquals("wall-tap injection snapped to open ground and survived", 2,
+					room.getAliveCount());
 		}
 	}
 
