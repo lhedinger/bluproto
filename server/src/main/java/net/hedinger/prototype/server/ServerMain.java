@@ -174,6 +174,39 @@ public final class ServerMain {
 			ctx.json(d);
 		});
 
+		// Genome export (read-only): a creature's whole heritable definition, brain
+		// included, as a portable savefile string — back it up, re-inject it below.
+		app.get("/api/world/genome/{id}", ctx -> {
+			var d = host.genomeExport(Integer.parseInt(ctx.pathParam("id")));
+			if (d == null) {
+				ctx.status(404).json(Map.of("error", "no such entity"));
+				return;
+			}
+			ctx.json(d);
+		});
+
+		// Genome injection (token-gated, like reset/spawn): drop a creature built
+		// from an exported genome into the live world. Body: {"genome": "<encoded>",
+		// "x": .., "y": .., "z": ..}; position defaults to the surface centre.
+		app.post("/api/world/genome", ctx -> {
+			if (!token.isEmpty() && !token.equals(ctx.header("X-Command-Token"))) {
+				ctx.status(403).json(Map.of("ok", false, "error", "command token required"));
+				return;
+			}
+			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
+			String encoded = body.path("genome").asText("");
+			var w = host.runner().world();
+			double x = body.path("x").asDouble(w.getColums() / 2.0);
+			double y = body.path("y").asDouble(w.getRows() / 2.0);
+			double z = body.path("z").asDouble(w.getLevels() - 1); // surface (top level)
+			long tick = host.injectGenome(encoded, x, y, z);
+			if (tick < 0) {
+				ctx.status(400).json(Map.of("ok", false, "error", "malformed genome"));
+				return;
+			}
+			ctx.json(Map.of("ok", true, "tick", tick, "x", x, "y", y, "z", z));
+		});
+
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
 		// Live per-tile grass level for the vegetation overlay (byte per tile,

@@ -3005,9 +3005,92 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A genome (brain included) survives a round-trip through the export/inject
+	 * savefile form: encode → decode reproduces every field and every brain
+	 * instruction exactly, the encoding carries no whitespace (so it survives the
+	 * command log, which splits on it), the spawnMinded command parses back from
+	 * its logged line, and injecting it actually drops a living creature into a
+	 * world. Guards the genome-savefile feature end to end.
+	 */
+	static class GenomeSavefileRoundTrips extends Scenario {
+		@Override
+		public void run() {
+			seed(7);
+			Genome g = new Genome();
+			g.size = 11.25;
+			g.speed = 0.0523;
+			g.turnRate = 6;
+			g.losRange = 12.5;
+			g.losFov = 1.234;
+			g.metabolism = 0.019;
+			g.maxAge = 2750;
+			g.flying = true;
+			g.markers = new double[] { 0.1, 0.55, 0.9 };
+			g.predatory = 0.37;
+			g.xenophobia = 0.11;
+			g.gregariousness = -0.4;
+			g.boldness = -0.2;
+			g.mateThreshold = 0.66;
+			g.brain = new Brain(new int[][] { { 1, 1, 9, 0 }, { 13, 1, 1, 0 }, { 14, 2, 8, 0 },
+					{ 3, 5, 2, 6 } });
+
+			String enc = net.hedinger.prototype.entities.GenomeCodec.encode(g);
+			assertTrue("encoding carries no whitespace", !enc.matches("(?s).*\\s.*"));
+			Genome back = net.hedinger.prototype.entities.GenomeCodec.decode(enc);
+			assertTrue("size round-trips exactly", g.size == back.size);
+			assertTrue("speed round-trips exactly", g.speed == back.speed);
+			assertTrue("losFov round-trips exactly", g.losFov == back.losFov);
+			assertTrue("metabolism round-trips exactly", g.metabolism == back.metabolism);
+			assertTrue("predatory round-trips exactly", g.predatory == back.predatory);
+			assertTrue("boldness round-trips exactly", g.boldness == back.boldness);
+			assertTrue("mateThreshold round-trips exactly", g.mateThreshold == back.mateThreshold);
+			assertTrue("flying round-trips", back.flying);
+			assertEquals("maxAge round-trips", g.maxAge, back.maxAge);
+			assertEquals("turnRate round-trips", g.turnRate, back.turnRate);
+			assertTrue("markers round-trip", back.markers.length == 3 && g.markers[0] == back.markers[0]
+					&& g.markers[1] == back.markers[1] && g.markers[2] == back.markers[2]);
+
+			assertTrue("brain survives", back.brain != null);
+			int[][] a = g.brain.code(), b = back.brain.code();
+			assertEquals("brain instruction count", a.length, b.length);
+			boolean cells = true;
+			for (int i = 0; i < a.length; i++) {
+				if (a[i].length != b[i].length) {
+					cells = false;
+					break;
+				}
+				for (int j = 0; j < a[i].length; j++) {
+					if (a[i][j] != b[i][j]) {
+						cells = false;
+					}
+				}
+			}
+			assertTrue("every brain instruction round-trips", cells);
+			assertTrue("re-encoding is stable", enc.equals(
+					net.hedinger.prototype.entities.GenomeCodec.encode(back)));
+
+			// The command-log form: describe() -> fromDescribe() -> same command.
+			net.hedinger.prototype.sim.SimCommand cmd =
+					new net.hedinger.prototype.sim.SpawnMindedCommand(g, 15, 15, 0);
+			net.hedinger.prototype.sim.SimCommand parsed =
+					net.hedinger.prototype.sim.SimCommands.fromDescribe(cmd.describe());
+			assertTrue("spawnMinded parses back from its log line",
+					parsed instanceof net.hedinger.prototype.sim.SpawnMindedCommand);
+			assertTrue("command re-describe is stable", cmd.describe().equals(parsed.describe()));
+
+			// And injecting it drops exactly one living creature into an empty room.
+			World room = room(30, 30);
+			parsed.apply(room);
+			room.think();
+			assertEquals("injection admitted exactly one creature", 1, room.getAliveCount());
+		}
+	}
+
 	private static Scenario[] all() {
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
+				new GenomeSavefileRoundTrips(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
 				new HunterIgnoresPreyOnAnotherLevel(),

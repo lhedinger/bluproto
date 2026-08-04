@@ -445,8 +445,28 @@ function renderMind(d: Record<string, any>): void {
     '<div class="grp">actuators — what it drives</div>' + aOut +
     `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>` +
     `<div class="prog">${prog}</div>` +
-    `<div class="grp">registers</div><div class="regs">${regChips}</div>`;
+    `<div class="grp">registers</div><div class="regs">${regChips}</div>` +
+    '<div class="save" role="button">⤓ save genome</div>';
   showMind();
+}
+
+// Export this creature's whole genome (brain included) to a savefile you can
+// back up and later re-inject as a seed (POST /api/world/genome, token-gated).
+async function downloadGenome(id: number): Promise<void> {
+  try {
+    const r = await fetch(`/api/world/genome/${id}`);
+    if (!r.ok) { toast('no genome'); return; }
+    const d = await r.json();
+    if (!d.hasBrain || !d.genome) { toast('no brain to save'); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([d.genome], { type: 'text/plain' }));
+    a.download = `creature-${id}.genome`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('genome saved');
+  } catch {
+    toast('save failed');
+  }
 }
 
 // Each I/O channel has a natural shape; render it that way rather than as one
@@ -574,6 +594,11 @@ function showMind(): void {
   mindEl.style.display = 'block';
   mindEl.querySelector('.back')!.addEventListener('click', closeMind);
   mindEl.querySelector('.x')!.addEventListener('click', deselect);
+  const save = mindEl.querySelector('.save');
+  if (save && selectedId !== null) {
+    const id = selectedId;
+    save.addEventListener('click', () => downloadGenome(id));
+  }
 }
 
 function esc(s: string): string {
