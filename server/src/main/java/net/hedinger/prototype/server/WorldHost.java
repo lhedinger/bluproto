@@ -266,7 +266,7 @@ final class WorldHost {
 
 	/**
 	 * Tile detail for the debug tile-inspector: type, fertility, and live
-	 * vegetation ("food"), so grazing depletion and the seasonal fertility swing
+	 * vegetation ("food"), so grazing depletion and regrowth
 	 * are observable by tapping a tile. Reads live fields without locking — a
 	 * momentarily stale number is harmless and it mutates nothing.
 	 */
@@ -475,9 +475,6 @@ final class WorldHost {
 				java.util.Map.entry("viewers", viewers()),
 				java.util.Map.entry("paused", runner.isPaused()),
 				java.util.Map.entry("speed", runner.getSpeed()),
-				java.util.Map.entry("season", net.hedinger.prototype.sim.WorldSteward.seasonLabel(tick)),
-				java.util.Map.entry("seasonPhase",
-						Math.round(net.hedinger.prototype.sim.WorldSteward.seasonPhase(tick) * 100) / 100.0),
 				java.util.Map.entry("uptimeSec", (System.currentTimeMillis() - startedAt) / 1000),
 				java.util.Map.entry("heapMb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024))));
 	}

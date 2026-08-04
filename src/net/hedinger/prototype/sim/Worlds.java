@@ -44,8 +44,8 @@ public final class Worlds {
 		// Neutral metabolism efficiency (META_REF): the size-scaled energy model
 		// does the work — reserve, resting burn and fasting endurance all follow
 		// body size, so these small grazers hold a few minutes of reserve and the
-		// bigger ones a little more. The herd stays food-limited (booms when grass
-		// is rich, thins when scarce), so seasons read as real boom/bust.
+		// bigger ones a little more. The herd stays food-limited: it booms where the
+		// grass is rich and thins where grazing has stripped it.
 		return species(markers, sizes, 0.018, 0.03, 0.02);
 	}
 
@@ -56,7 +56,11 @@ public final class Worlds {
 				{ 0.90, 0.20, 0.22 }, // red hunter
 				{ 0.78, 0.28, 0.48 }, // crimson hunter
 		};
-		double[] sizes = { 14, 13 };
+		// Apex-sized, at the top of the band every genome is clamped to
+		// (Genome.SIZE_MAX): paired with the "up to my own size" hunting rule this
+		// makes a founder hunter able to take ANY creature in the world, including a
+		// minded one that has drifted to the largest body a genome can express.
+		double[] sizes = { 20, 18 };
 		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
 		// these big hunters a large reserve and a long fasting endurance (bigger
 		// body, bigger tank), so a predator drains gently between kills. Its only
@@ -696,14 +700,17 @@ public final class Worlds {
 			w.spawnEntity(Item.hazard(p[0], p[1], SURFACE_Z));
 		}
 
-		// The warden, with seasonal bounds: winter holds a lean {min,max}, summer
-		// a lush one, and the steward interpolates between them over the year —
-		// so the population visibly booms in summer and thins in winter while
-		// never emptying or swarming. Bounds scale with the map's area.
+		// The warden, with fixed {min,max} bounds that scale with the map's area.
+		// These are guardrails, not the population control: grass, predation and
+		// starvation decide the actual headcount, and the ceilings sit well above
+		// where those forces settle so the steward rarely has to fire at all. The
+		// minded cap in particular is generous — predators hunt minded creatures
+		// like any other body their size or smaller, so that cohort is now held in
+		// check ecologically rather than by deletion.
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
-				new int[] { sc(12, scale), sc(30, scale) }, new int[] { sc(34, scale), sc(84, scale) },
-				new int[] { Math.max(1, sc(1, scale)), sc(5, scale) }, new int[] { sc(3, scale), sc(14, scale) },
-				Math.max(4, sc(4, scale)), Math.max(12, sc(12, scale)))); // minded [floor, max]
+				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
+				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
+				Math.max(6, sc(6, scale)), Math.max(80, sc(80, scale)))); // minded
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;

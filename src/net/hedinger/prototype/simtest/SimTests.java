@@ -2943,41 +2943,6 @@ public class SimTests {
 		}
 	}
 
-	/**
-	 * Seasons make the world breathe: over a year the demo ecosystem's prey herd
-	 * booms (lush summers) and thins (lean winters) instead of sitting flat at a
-	 * fixed floor — a visible swing — while never emptying. Samples the prey
-	 * headcount across two full seasonal cycles and asserts both a real swing and
-	 * a non-empty trough.
-	 */
-	static class SeasonsDriveBoomAndBust extends Scenario {
-		private int countPrey(World w) {
-			int prey = 0;
-			for (Entity e : w.getEntities()) {
-				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.ecoRole().equals("prey")) {
-					prey++;
-				}
-			}
-			return prey;
-		}
-
-		@Override
-		public void run() {
-			net.hedinger.prototype.sim.SimulationRunner r =
-					new net.hedinger.prototype.sim.SimulationRunner(net.hedinger.prototype.sim.Worlds.demo(7));
-			int lo = Integer.MAX_VALUE, hi = 0;
-			for (int t = 0; t < 12000; t += 200) {
-				int prey = countPrey(r.world());
-				lo = Math.min(lo, prey);
-				hi = Math.max(hi, prey);
-				r.advance(200);
-			}
-			snapshot(r.world(), "after two seasonal years");
-			assertGreater("the prey herd never empties (steward floor holds through winter)", lo, 0);
-			assertGreater("seasons drive a visible boom/bust swing in the herd", hi - lo, 8);
-		}
-	}
-
 	// ---- runner ------------------------------------------------------------
 
 	/**
@@ -3023,8 +2988,10 @@ public class SimTests {
 		public void run() {
 			seed(11);
 			World w = net.hedinger.prototype.sim.Worlds.demo(11);
-			for (int i = 0; i < 400; i++) {
-				w.think(); // settle: the minded cohort reaches its ceiling
+			// Settle until the minded cohort has actually saturated its (generous)
+			// ceiling — otherwise the cull never fires and the test proves nothing.
+			for (int i = 0; i < 2000; i++) {
+				w.think();
 			}
 			// Donate the brain of the oldest proven survivor — what the viewer exports.
 			Genome g = null;
@@ -3058,19 +3025,40 @@ public class SimTests {
 			assertTrue("injected creature materialized", seedling != null);
 			assertTrue("injected creature is marked hand-placed", seedling.isHandPlaced());
 
-			// Long enough for the steward to run its cull many times over.
+			// Long enough for the steward to run its cull many times over. A CULL is
+			// removal while still healthy and fed — the steward deletes outright, so
+			// the body is dead and purged in the same tick with its health intact.
+			// Being eaten or starving is an ordinary ecological death (health or
+			// energy gone first, corpse purged only a deathspan later) and must NOT
+			// fail this test: predators are supposed to hunt minded creatures.
+			boolean culledWhileHealthy = false;
+			String fate = "survived all 400 ticks";
 			for (int i = 0; i < 400; i++) {
-				w.think();
+				w.think(); // never break early: the cohort-bound check below needs the
+				           // full window, and a corpse cannot be culled twice
+				if (seedling.isRemoved() && seedling.getHealth() > 0
+						&& seedling.getEnergy() > 0.001) {
+					culledWhileHealthy = true; // healthy AND fed, yet purged: a cull
+					fate = "culled at tick " + i;
+				} else if (seedling.isDead() && fate.startsWith("survived")) {
+					fate = seedling.getHealth() <= 0 ? "eaten at tick " + i
+							: "starved at tick " + i;
+				}
 			}
-			assertTrue("hand-placed creature was not culled by the population ceiling",
-					!seedling.isRemoved());
-			assertTrue("hand-placed creature is still alive", !seedling.isDead());
+			// Guard against a vacuous pass: if the creature vanished immediately the
+			// cull check above would be trivially satisfied.
+			assertTrue("the injected creature lived long enough to be a real test ("
+					+ fate + ")", !seedling.isDead() || !fate.contains("tick 0"));
+			assertTrue("hand-placed creature was never deleted by the population "
+					+ "ceiling (" + fate + ")", !culledWhileHealthy);
 
-			// The ceiling still bites: exempting founders must not let the cohort
-			// run away, since only this one body is protected.
+			// The ceiling still bites: exempting founders must not let the cohort run
+			// away, since only this one body is protected and its offspring are not.
+			// Bound is the configured cap plus the overshoot the 3-per-tick trim
+			// allows, NOT "no growth" — the cohort legitimately fills its headroom.
 			assertTrue("minded cohort stayed bounded after the injection ("
-					+ countMinded(w) + " vs " + mindedBefore + " before)",
-					countMinded(w) <= mindedBefore + 3);
+					+ countMinded(w) + ", was " + mindedBefore + " before)",
+					countMinded(w) <= 95);
 		}
 
 		private static int countMinded(World w) {
@@ -3203,7 +3191,6 @@ public class SimTests {
 				new SatedPredatorSparesPrey(),
 				new StarvationDrivesCannibalism(),
 				new DemoLevelsLinkSurfaceAndCave(),
-				new SeasonsDriveBoomAndBust(),
 				new WallContainment(),
 				new RoamerMoves(),
 				new ChaserClosesIn(),

@@ -752,8 +752,14 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			// A hunter takes anything up to its OWN size, not just strictly smaller.
+			// Body size is clamped to Genome.SIZE_MAX for every creature alike, so a
+			// strictly-smaller rule left the largest creatures — including any minded
+			// one that drifted to the top of the band — permanently un-huntable, with
+			// no predator able to exist above them. Allowing equal size closes that
+			// hole and makes an apex-sized hunter genuinely apex.
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl() || !(n.getSize() < getSize())
+					|| n instanceof Item || n.getLvl() != getLvl() || n.getSize() > getSize()
 					|| !isInLOS(n)) {
 				// Same level only (can't reach a floor away), and only prey actually in
 				// line of sight: a wall or a thicket (cover blocks sight) hides prey, and
