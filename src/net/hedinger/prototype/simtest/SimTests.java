@@ -3085,6 +3085,21 @@ public class SimTests {
 			room.think();
 			assertEquals("injection admitted exactly one creature", 1, room.getAliveCount());
 
+			// It is born brand-new: a FULL tank (not the ecosystem's 0.6-capacity
+			// default), giving a hand-placed seed the longest runway before metabolism
+			// can starve it. Energy is read after the one tick that materialized it, so
+			// it sits a hair below a literal full tank; 0.9 cleanly separates "born
+			// full" from the old 0.6 start.
+			net.hedinger.prototype.entities.NPC seed = null;
+			for (net.hedinger.prototype.engine.Entity e : room.getEntities()) {
+				if (e instanceof net.hedinger.prototype.entities.NPC n && !n.isDead()) {
+					seed = n;
+				}
+			}
+			assertTrue("injected seed materialized", seed != null);
+			assertGreater("injected seed born at a full tank", seed.getEnergy(),
+					0.9 * seed.energyCapacity());
+
 			// A tap on a wall snaps to open ground rather than dying on it: (0,0) is
 			// the room's border wall, so a land body dropped there would try to climb,
 			// run off the top level and die instantly without the snap.
