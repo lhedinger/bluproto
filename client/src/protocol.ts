@@ -23,6 +23,19 @@ export const F_GRABBED = 4;
 export const F_CARRYING = 8;
 export const F_MINDED = 16; // driven by an evolvable mind, not a hardcoded behaviour
 
+// What the creature is visibly doing, packed into the spare high bits of `flags`
+// (server: EntityState.ACTION_*). 0 = nothing worth drawing, which is most
+// creatures most of the time — only notable acts get a badge.
+export const ACTION_SHIFT = 5;
+export const ACTION_MASK = 0xf << ACTION_SHIFT;
+export const ACT_NONE = 0, ACT_ATTACK = 1, ACT_MATE = 2, ACT_FLEE = 3,
+  ACT_GRAZE = 4, ACT_HUNT = 5, ACT_GRAB = 6, ACT_NEST = 7, ACT_AFFILIATE = 8;
+
+/** The action code carried in an entity's flags. */
+export function actionOf(flags: number): number {
+  return (flags & ACTION_MASK) >> ACTION_SHIFT;
+}
+
 export interface HelloMsg {
   type: 'hello';
   seed: number;

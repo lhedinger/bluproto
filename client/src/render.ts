@@ -5,7 +5,10 @@
 
 import { ART_RADIUS, CELL, atlasFor, cell } from './atlas';
 import type { Camera } from './camera';
-import { F_CARRYING, F_DEAD, F_GRABBED, F_MINDED } from './protocol';
+import {
+  ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
+  ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED, F_MINDED,
+} from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
@@ -169,6 +172,17 @@ export function render(
       g.lineWidth = Math.max(1, r * 0.22);
       g.beginPath(); g.arc(s.x, s.y, r * 1.25, 0, 7); g.stroke();
     }
+    // What it is doing, as a small badge hovering over the body. Only notable
+    // acts carry a code, so this stays sparse rather than tagging every creature
+    // on screen. Gated on the TRUE on-screen body size rather than `r`, which is
+    // floored so distant creatures stay visible as dots — testing `r` would keep
+    // drawing unreadable specks at every zoom level, including the fully
+    // zoomed-out map view. Badges therefore fade out as you pull back and appear
+    // as you zoom in on what a creature is actually doing.
+    if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
+      drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
+    }
+
     if (e.flags & F_GRABBED) {
       g.strokeStyle = 'rgba(255,160,60,0.9)';
       g.lineWidth = Math.max(1, r * 0.2);
@@ -268,5 +282,101 @@ function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: numbe
     g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
     g.fillStyle = '#4C8A33';
     g.beginPath(); g.arc(x + r * 0.4, y - r * 0.9, Math.max(1.5, r * 0.4), 0, 7); g.fill();
+  }
+}
+
+/** Smallest on-screen body radius (device px) that earns an action badge. Below
+ *  this the shape cannot be told apart from a coloured dot, so drawing it is
+ *  noise; the map-overview zoom sits well under it. */
+const GLYPH_MIN_BODY_PX = 5;
+
+/** Colour for each action badge — matched to the Java snapshot renderer's palette
+ *  so a scenario PNG and the live viewer read the same way. */
+const ACTION_COLOUR: Record<number, string> = {
+  [ACT_ATTACK]: '#E63C3C',
+  [ACT_FLEE]: '#F0BE3C',
+  [ACT_MATE]: '#F05AB4',
+  [ACT_AFFILIATE]: '#46C8DC',
+  [ACT_GRAZE]: '#46C85A',
+  [ACT_NEST]: '#DC3CC8',
+  [ACT_GRAB]: '#F09632',
+  [ACT_HUNT]: '#FF7828',
+};
+
+/**
+ * A small icon hovering over a creature saying what it is doing right now: `!`
+ * attacking, heart mating, chevron fleeing, asterisk grazing, crosshair hunting,
+ * hook carrying, house homing to a nest. Shapes mirror the Java snapshot
+ * renderer's, so a test PNG and the live world are read the same way.
+ *
+ * Drawn on a dark disc so it stays legible over grass, water or a pale body.
+ */
+function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: number,
+                         u: number, action: number): void {
+  if (!action) return; // nothing worth showing (the zoom gate is at the call site)
+  const col = ACTION_COLOUR[action];
+  if (!col) return;
+
+  g.fillStyle = 'rgba(12,14,18,0.55)';
+  g.beginPath(); g.arc(cx, cy, u * 1.15, 0, 7); g.fill();
+
+  g.strokeStyle = col;
+  g.fillStyle = col;
+  g.lineWidth = Math.max(1, u * 0.28);
+  g.lineCap = 'round';
+  g.beginPath();
+  switch (action) {
+    case ACT_ATTACK: // exclamation
+      g.moveTo(cx, cy - u * 0.6); g.lineTo(cx, cy + u * 0.15);
+      g.stroke();
+      g.beginPath(); g.arc(cx, cy + u * 0.55, Math.max(1, u * 0.16), 0, 7); g.fill();
+      return;
+    case ACT_FLEE: // chevron, pointing away
+      g.moveTo(cx - u * 0.55, cy + u * 0.3);
+      g.lineTo(cx, cy - u * 0.4);
+      g.lineTo(cx + u * 0.55, cy + u * 0.3);
+      g.stroke();
+      return;
+    case ACT_MATE: { // heart
+      const t = u * 0.62;
+      g.moveTo(cx, cy + t * 0.85);
+      g.bezierCurveTo(cx - t * 1.7, cy - t * 0.35, cx - t * 0.55, cy - t * 1.3, cx, cy - t * 0.35);
+      g.bezierCurveTo(cx + t * 0.55, cy - t * 1.3, cx + t * 1.7, cy - t * 0.35, cx, cy + t * 0.85);
+      g.fill();
+      return;
+    }
+    case ACT_AFFILIATE: // plus
+      g.moveTo(cx - u * 0.5, cy); g.lineTo(cx + u * 0.5, cy);
+      g.moveTo(cx, cy - u * 0.5); g.lineTo(cx, cy + u * 0.5);
+      g.stroke();
+      return;
+    case ACT_GRAZE: // asterisk
+      for (let i = 0; i < 3; i++) {
+        const a = (i * Math.PI) / 3;
+        const dx = Math.cos(a) * u * 0.55, dy = Math.sin(a) * u * 0.55;
+        g.moveTo(cx - dx, cy - dy); g.lineTo(cx + dx, cy + dy);
+      }
+      g.stroke();
+      return;
+    case ACT_HUNT: // crosshair: locked on
+      g.arc(cx, cy, u * 0.4, 0, 7);
+      g.moveTo(cx - u * 0.65, cy); g.lineTo(cx - u * 0.4, cy);
+      g.moveTo(cx + u * 0.4, cy); g.lineTo(cx + u * 0.65, cy);
+      g.stroke();
+      return;
+    case ACT_GRAB: // hook
+      g.arc(cx, cy, u * 0.45, 0, 7);
+      g.moveTo(cx, cy); g.lineTo(cx + u * 0.55, cy + u * 0.55);
+      g.stroke();
+      return;
+    case ACT_NEST: // house
+      g.moveTo(cx - u * 0.45, cy + u * 0.5);
+      g.lineTo(cx - u * 0.45, cy - u * 0.05);
+      g.lineTo(cx, cy - u * 0.55);
+      g.lineTo(cx + u * 0.45, cy - u * 0.05);
+      g.lineTo(cx + u * 0.45, cy + u * 0.5);
+      g.closePath();
+      g.stroke();
+      return;
   }
 }

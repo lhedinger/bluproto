@@ -254,6 +254,8 @@ final class SnapshotRenderer {
 			return new Color(220, 60, 200);
 		case "grab":
 			return new Color(240, 150, 50);
+		case "hunt":
+			return new Color(255, 120, 40);
 		default:
 			return new Color(160, 160, 160);
 		}
@@ -272,6 +274,11 @@ final class SnapshotRenderer {
 		case "flee": // chevron pointing away
 			g.drawLine(cx - u / 2, cy + u / 4, cx, cy - u / 3);
 			g.drawLine(cx, cy - u / 3, cx + u / 2, cy + u / 4);
+			break;
+		case "hunt": // crosshair -- locked on, closing in
+			g.drawOval(cx - u / 3, cy - u / 3, (2 * u) / 3, (2 * u) / 3);
+			g.drawLine(cx - u / 2, cy, cx - u / 3, cy);
+			g.drawLine(cx + u / 3, cy, cx + u / 2, cy);
 			break;
 		case "affiliate": // plus
 			g.drawLine(cx - u / 2, cy, cx + u / 2, cy);

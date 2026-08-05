@@ -38,6 +38,43 @@ public record EntityState(
 	 *  the viewer marks these apart so they can be watched competing. */
 	public static final int F_MINDED = 16;
 
+	// What the creature is visibly doing, packed into the spare high bits of
+	// `flags` rather than added as a field: the viewer draws a small badge above
+	// the body, and riding along in an int already on the wire costs the delta
+	// stream nothing. 0 means "nothing worth showing" -- most creatures, most of
+	// the time, are just walking around.
+	public static final int ACTION_SHIFT = 5;
+	public static final int ACTION_MASK = 0xF << ACTION_SHIFT;
+	public static final int ACT_NONE = 0, ACT_ATTACK = 1, ACT_MATE = 2, ACT_FLEE = 3,
+			ACT_GRAZE = 4, ACT_HUNT = 5, ACT_GRAB = 6, ACT_NEST = 7, ACT_AFFILIATE = 8;
+
+	/** Wire code for a glyph key from {@code TestNPC.actionKey()}. */
+	private static int actionCode(String key) {
+		if (key == null) {
+			return ACT_NONE;
+		}
+		switch (key) {
+		case "attack":
+			return ACT_ATTACK;
+		case "mate":
+			return ACT_MATE;
+		case "flee":
+			return ACT_FLEE;
+		case "graze":
+			return ACT_GRAZE;
+		case "hunt":
+			return ACT_HUNT;
+		case "grab":
+			return ACT_GRAB;
+		case "nest":
+			return ACT_NEST;
+		case "affiliate":
+			return ACT_AFFILIATE;
+		default:
+			return ACT_NONE;
+		}
+	}
+
 	/** Captures one entity. Read-only: must never mutate {@code e}. */
 	static EntityState of(Entity e) {
 		String kind;
@@ -75,8 +112,11 @@ public record EntityState(
 		if (e.getCarriedLoad() > 0) {
 			flags |= F_CARRYING;
 		}
-		if (e instanceof net.hedinger.prototype.simtest.TestNPC t && t.isMinded()) {
-			flags |= F_MINDED;
+		if (e instanceof net.hedinger.prototype.simtest.TestNPC t) {
+			if (t.isMinded()) {
+				flags |= F_MINDED;
+			}
+			flags |= actionCode(t.actionKey()) << ACTION_SHIFT;
 		}
 		int attachedTo = e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID();
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),
