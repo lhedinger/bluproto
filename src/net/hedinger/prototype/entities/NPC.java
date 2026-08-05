@@ -110,6 +110,23 @@ public abstract class NPC extends Entity {
 	protected static final int REPRO_COOLDOWN = 100;
 	/** Extra energy per tick a carrier burns per unit of carried body weight. */
 	protected static final double CARRY_ENERGY = 0.15;
+	/**
+	 * Energy per tick per unit of held body weight, for keeping a grip on a
+	 * <em>grabbed</em> captive — the cost of restraint itself, on top of hauling
+	 * the weight around.
+	 *
+	 * <p>Carrying already charged for weight, but the grip was free: a captor could
+	 * seize something and hold it indefinitely at no cost beyond what a willing
+	 * passenger of the same mass would have cost. That made captivity a permanent
+	 * state rather than an effort a captor has to keep paying for. A voluntary rider
+	 * still costs nothing extra — it clings on by its own effort — so the asymmetry
+	 * between a passenger and a prisoner is now priced, and a captor must eventually
+	 * either eat its captive or let go.
+	 *
+	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
+	 * still costs its captor more than one hanging limp.
+	 */
+	protected static final double GRIP_ENERGY = 0.10;
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
 	protected static final double RIDER_METABOLISM = 0.5;
@@ -327,6 +344,13 @@ public abstract class NPC extends Entity {
 			double carry = getCarriedLoad() * CARRY_ENERGY;
 			if (isFlying()) {
 				carry *= FLIER_CARRY_MULTIPLIER;
+			}
+			// Grip: restraining a captive is work in its own right, separate from
+			// hauling its weight. Not multiplied by flight — what flying makes
+			// expensive is lifting the load, and the carry term already prices that;
+			// holding on is the same effort in the air as on the ground.
+			if (grabbing != null) {
+				carry += GRIP_ENERGY * grabbing.getSize();
 			}
 			// Sprint surcharge: a hunter cruises cheaply and only burns hard during
 			// a pursuit burst, so it can go far longer between kills than a flat
