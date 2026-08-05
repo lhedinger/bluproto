@@ -27,7 +27,14 @@
                bottom: max(8px, env(safe-area-inset-bottom)); width: min(240px, 46vw);
                background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
                padding: 10px 12px; z-index: 5; display: none; backdrop-filter: blur(4px); }
-    #inspect h3 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    /* The window title stays put while the body scrolls under it. Negative
+       margins bleed it over the panel's own padding so nothing peeks past its
+       edges, and the padding puts the inset back visually. Opaque (not the
+       panel's translucent fill) so rows can't show through as they pass. */
+    #inspect h3, #mind h3 { position: sticky; top: 0; z-index: 2;
+                            margin: -10px -12px 6px; padding: 10px 12px 6px;
+                            background: #1d2026; border-bottom: 1px solid #ffffff14; }
+    #inspect h3 { font-size: 13px; display: flex; align-items: center; gap: 6px; }
     #inspect .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #0006; }
     #inspect .x { margin-left: auto; cursor: pointer; opacity: .7; }
     #inspect table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -52,7 +59,7 @@
             max-height: min(72vh, 640px); overflow-y: auto; -webkit-overflow-scrolling: touch;
             background: #1d2026f2; border: 1px solid #3a3f4a; border-radius: 10px;
             padding: 10px 12px; z-index: 6; display: none; backdrop-filter: blur(4px); }
-    #mind h3 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    #mind h3 { font-size: 13px; display: flex; align-items: center; gap: 8px; }
     #mind h3 .back { margin-left: auto; cursor: pointer; opacity: .85; font-size: 12px; }
     #mind h3 .x { cursor: pointer; opacity: .7; }
     #mind .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;

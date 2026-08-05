@@ -351,12 +351,17 @@ function renderTileInspect(d: Record<string, any>): void {
   showInspect();
 }
 
-// Non-debug context: just the essentials — name and, for a creature, its energy.
+// Non-debug context: what you actually want while following a creature — what
+// it is doing right now, how fed it is, and how deep in its lineage it sits.
+// Everything else stays behind debug mode.
 function renderInspectSimple(d: Record<string, any>): void {
   const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const rows: string[] = [];
+  if (d.action) rows.push(row('doing', d.action));
   if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  // gen 0 is a creature the world (or you) placed; every birth adds one.
+  if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
   inspectEl.className = '';
   inspectEl.innerHTML = header(swatch, kind, d.id) + `<table>${rows.join('')}</table>`;

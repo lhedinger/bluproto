@@ -1044,19 +1044,39 @@ public class TestNPC extends NPC {
 		// a ledge and stops at the lip. Climbing a ramp stays automatic where one
 		// exists (going up is not a survival hazard), so this gates only the fall.
 		descendIntent = a[AgentIO.A_VERTICAL] < -0.5;
+		double eaten = 0;
 		if (a[AgentIO.A_EAT] > 0.5) {
-			totalIntake += graze(grazeDemand());
+			eaten = graze(grazeDemand());
+			totalIntake += eaten;
 			eatNearestItem(); // also devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
+		boolean bit = false;
 		if (a[AgentIO.A_ATTACK] > 0.5) {
-			attackNearest();
+			bit = attackNearest();
 			attackNearestItem(); // an object in reach can be smashed too
 		}
+		boolean bred = false;
 		if (a[AgentIO.A_MATE] > 0.5) {
-			reproduce();
+			bred = reproduce();
+		}
+		// A plain-language label for what this mind actually DID, so the viewer can
+		// follow a minded creature and read its behaviour without opening the mind
+		// inspector. Deliberately reports outcomes, not intent: a starter brain
+		// holds eat and mate high permanently, so labelling the actuators would
+		// read "mating" forever regardless of what the creature achieved.
+		if (bit) {
+			ecoAction = "attacking";
+		} else if (bred) {
+			ecoAction = "breeding";
+		} else if (eaten > 0) {
+			ecoAction = "grazing";
+		} else if (throttle > 0.02) {
+			ecoAction = sprinting ? "running" : "wandering";
+		} else {
+			ecoAction = "resting";
 		}
 		// Grab: seize and carry a smaller neighbour while the actuator is high,
 		// release the moment it drops (or the captive is gone).
@@ -1167,38 +1187,39 @@ public class TestNPC extends NPC {
 	}
 
 	/** Bites the nearest perceived neighbour if it is in reach: it takes damage
-	 * (and dies once its health is gone) and the attacker gains a little energy. */
-	private void attackNearest() {
+	 * (and dies once its health is gone) and the attacker gains a little energy.
+	 * Returns true if a bite actually landed. */
+	private boolean attackNearest() {
 		NPC near = nearestPerceived();
 		if (near == null || near == this || near.isDead()) {
-			return;
+			return false;
 		}
 		double reach = (getSize() + near.getSize()) / 2.0 + ATTACK_REACH;
 		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
-			return;
+			return false;
 		}
 		near.damage(ATTACK_DAMAGE);
 		energy += BITE_ENERGY; // predation feeds the attacker
+		return true;
 	}
 
 	/** The reproduce actuator: mates with the nearest perceived compatible partner
 	 * in reach (a crossover child inheriting both crossed minds); with no partner
 	 * in reach it buds asexually instead. Reproduction is entirely brain-driven --
 	 * nothing reproduces unless its mind fires this actuator. */
-	private void reproduce() {
+	private boolean reproduce() {
 		if (!fertile()) {
-			return;
+			return false;
 		}
 		for (NPC n : targets.values()) {
 			if (canMateWith(n)) {
 				double reach = (getSize() + n.getSize()) / 2.0 + MATE_REACH;
 				if (distance(n.getX(), n.getY(), n.getZ()) <= reach) {
-					reproduceWith(n); // sexual: crossover child
-					return;
+					return reproduceWith(n); // sexual: crossover child
 				}
 			}
 		}
-		tryReproduce(); // no compatible partner in reach -> bud asexually
+		return tryReproduce(); // no compatible partner in reach -> bud asexually
 	}
 
 	/** Nearest living perceived neighbour (excluding self and inanimate items), or
