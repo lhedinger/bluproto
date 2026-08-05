@@ -775,6 +775,71 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Creatures are born as juveniles and grow into their genome's body. Growth
+	 * runs at a fixed rate, so the bigger the adult body the longer the childhood —
+	 * and the largest body a genome can express takes about a minute, the longest
+	 * childhood the world can produce. Growth is physical: the juvenile is smaller,
+	 * burns less and is easier prey, but the energy economy (tank, breeding
+	 * threshold and cost) is anchored on the adult body and so is unchanged.
+	 */
+	static class CreaturesGrowToAdultSize extends Scenario {
+		/** Ticks for a body with the given adult size to finish growing. */
+		private int ticksToMature(double adultSize) {
+			seed(9);
+			World w = room(20, 12);
+			Genome g = new Genome();
+			g.size = adultSize;
+			TestNPC t = TestNPC.breeder(9.5, 5.5, 0, g);
+			w.spawnEntity(t);
+			w.think();
+			assertTrue("a newborn is a juvenile", t.isJuvenile());
+			assertLess("a newborn is markedly smaller than its adult body",
+					t.getPixelSize(), adultSize * 0.6);
+			for (int i = 0; i < 6000; i++) {
+				w.think();
+				if (!t.isJuvenile()) {
+					assertEquals("a grown body reaches exactly its genome size",
+							(int) Math.round(adultSize), t.getPixelSize());
+					return i;
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			int small = ticksToMature(6);
+			int large = ticksToMature(Genome.SIZE_MAX); // 20: the biggest body possible
+
+			assertGreater("a small body finishes growing", small, -1);
+			assertGreater("the largest body finishes growing", large, -1);
+			assertGreater("a bigger creature takes longer to grow up", large, small);
+			// A fixed growth rate over the longest possible climb: ~1 minute at
+			// 33 ticks/s. Bounded on both sides so the rate cannot drift unnoticed.
+			int oneMinute = 60 * net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
+			assertGreater("the longest childhood is on the order of a minute ("
+					+ large + " ticks)", large, oneMinute * 0.75);
+			assertLess("the longest childhood does not much exceed a minute ("
+					+ large + " ticks)", large, oneMinute * 1.25);
+
+			// Growth is physical, not economic: the tank is anchored on the adult
+			// body, so a newborn's breeding economy matches a grown one's.
+			seed(9);
+			World w = room(20, 12);
+			Genome g = new Genome();
+			g.size = 12;
+			TestNPC baby = TestNPC.breeder(9.5, 5.5, 0, g);
+			w.spawnEntity(baby);
+			w.think();
+			double juvenileCap = baby.energyCapacity();
+			tick(w, 3000); // long enough to be fully grown
+			assertTrue("the body did finish growing", !baby.isJuvenile());
+			assertEquals("the energy tank is the same before and after growing up",
+					Math.round(juvenileCap * 1000), Math.round(baby.energyCapacity() * 1000));
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -1130,9 +1195,12 @@ public class SimTests {
 			// Sexual breeders must cluster to pair, so a colony breeds fast and then
 			// overgrazes back down -- the lasting proof is that it rose above the
 			// founder count at all, and that crossover produced a recombinant.
+			// The recombinant check is a ~50/50 gene draw per birth, so the window
+			// has to be long enough to see several births or it is a coin toss
+			// rather than a test of crossover.
 			int peak = founders;
 			boolean sawRecombinant = false;
-			for (int step = 0; step < 30; step++) {
+			for (int step = 0; step < 80; step++) {
 				tick(colony, 20);
 				peak = Math.max(peak, colony.getAliveCount());
 				sawRecombinant |= hasRecombinant(colony);
@@ -3382,6 +3450,7 @@ public class SimTests {
 				new EngineCapsStepLength(),
 				new TravelCostsEnergy(),
 				new HoldingACaptiveCostsEnergy(),
+				new CreaturesGrowToAdultSize(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),

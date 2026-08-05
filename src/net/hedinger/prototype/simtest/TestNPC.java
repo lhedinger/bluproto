@@ -394,13 +394,16 @@ public class TestNPC extends NPC {
 
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
-		t.size = (int) Math.round(g.size);
+		// Born a juvenile and grow into the genome's body (see NPC.beginGrowth).
+		t.beginGrowth(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
 		t.metabolic = true;
 		// Energy scales are all derived from body size (see NPC's size-scaled model):
 		// born comfortably fed, and reproduction gated on filling a big fraction of
 		// the (size-scaled) tank so a bigger creature must eat more before it breeds.
+		// energyCapacity() is anchored on the adult body, so these are unchanged by
+		// the creature being born a juvenile — growth is physical, not economic.
 		t.energy = 0.6 * t.energyCapacity();
 		t.reproThreshold = 0.75 * t.energyCapacity();
 		t.reproCost = 0.5 * t.energyCapacity();

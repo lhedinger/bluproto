@@ -73,6 +73,47 @@ public abstract class NPC extends Entity {
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
 	protected static final double META_REF = 0.02;
+
+	// --- growth: born small, grow into the genome's body ----------------------
+	/** Fraction of its adult body a creature is born at. */
+	protected static final double BIRTH_SIZE_FRACTION = 0.35;
+	/**
+	 * Growth in body radius per tick. A FIXED rate, so the distance to travel —
+	 * and therefore the length of childhood — scales with how big the adult body
+	 * is: a small grazer is grown in seconds, the largest possible body takes the
+	 * longest. At {@link Genome#SIZE_MAX} (20) the climb from birth size is 13
+	 * units, or ~1970 ticks — about one minute at 33 ticks/s, the longest
+	 * childhood the world can produce.
+	 */
+	protected static final double GROWTH_RATE = 0.0066;
+
+	/** Adult body this creature is growing toward; 0 for a body that does not grow. */
+	protected double adultSize = 0;
+	/** Continuous size while growing — {@link #size} is this, rounded, because the
+	 *  body radius itself is an integer. */
+	protected double grownSize = 0;
+
+	/**
+	 * Starts this body as a juvenile that will grow into {@code adult}. The
+	 * size-derived economy (tank, burn, collision reach, what can eat it) follows
+	 * the CURRENT body, so a juvenile is genuinely small: cheaper to run, but a
+	 * smaller reserve and easy prey.
+	 */
+	protected void beginGrowth(double adult) {
+		adultSize = adult;
+		grownSize = Math.max(1, adult * BIRTH_SIZE_FRACTION);
+		size = (int) Math.round(grownSize);
+	}
+
+	/** True while this body is still growing into its adult size. */
+	public boolean isJuvenile() {
+		return adultSize > 0 && grownSize < adultSize;
+	}
+
+	/** How grown this body is, 0..1; 1 for anything fully grown or that never grows. */
+	public double maturity() {
+		return adultSize <= 0 ? 1.0 : Math.min(1.0, grownSize / adultSize);
+	}
 	/**
 	 * Energy to carry one unit of body mass one tile — the cost of transport, and
 	 * the price of actually going somewhere.
@@ -98,10 +139,28 @@ public abstract class NPC extends Entity {
 		return s / REF_SIZE;
 	}
 
-	/** "Fully fed" energy ceiling: the tank grows with size, so a big body banks
-	 *  more and can go longer between meals (but needs more food to top up). */
+	/** Size factor of the body this creature is growing INTO, 1.0 at
+	 *  {@link #REF_SIZE}. Falls back to the current body for anything that does not
+	 *  grow. */
+	protected double adultMass() {
+		double s = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
+		return s / REF_SIZE;
+	}
+
+	/**
+	 * "Fully fed" energy ceiling: the tank grows with size, so a big body banks
+	 * more and can go longer between meals (but needs more food to top up).
+	 *
+	 * <p>Anchored on the ADULT body, deliberately. Growth is a physical change —
+	 * how much a body burns, how far it reaches, what can eat it — and pinning the
+	 * tank to the grown body keeps the whole reproduction economy (born-fed level,
+	 * breeding threshold, breeding cost, and a hunter's "sated" line, all of which
+	 * are fractions of this) identical to what it was before creatures grew. A
+	 * juvenile-sized tank would instead have silently re-gated breeding on maturity
+	 * and left young hunters unable ever to count as sated.
+	 */
 	public double energyCapacity() {
-		return BASE_CAPACITY * bodyMass();
+		return BASE_CAPACITY * adultMass();
 	}
 
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
@@ -317,6 +376,15 @@ public abstract class NPC extends Entity {
 		}
 		if (D < 0) {
 			D += 2 * Math.PI;
+		}
+
+		// Growth: a juvenile creeps toward its adult body at a fixed rate, so the
+		// bigger the adult the longer the childhood. Everything size-derived — tank,
+		// resting burn, transport cost, collision reach, and whether a hunter can
+		// take it — follows the body it has right now, not the one it will have.
+		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
+			grownSize = Math.min(adultSize, grownSize + GROWTH_RATE);
+			size = (int) Math.round(grownSize);
 		}
 
 		// Energy economy: metabolic entities burn energy each tick and starve

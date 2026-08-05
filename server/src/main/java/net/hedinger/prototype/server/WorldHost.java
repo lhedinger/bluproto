@@ -226,6 +226,12 @@ final class WorldHost {
 				d.put("energy", round(n.getEnergy()));
 				d.put("carrying", n.getCarriedLoad() > 0);
 				d.put("grabbed", n.isGrabbed());
+				// Growth: a juvenile is still climbing toward its genome's body, so a
+				// creature that looks too small for its species is simply young.
+				if (n.isJuvenile()) {
+					d.put("juvenile", true);
+					d.put("grown", Math.round(n.maturity() * 100) + "%");
+				}
 				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
 					d.put("minded", tn.isMinded());
 					d.put("generation", tn.generation()); // 0 = world-spawned, +1 per birth
