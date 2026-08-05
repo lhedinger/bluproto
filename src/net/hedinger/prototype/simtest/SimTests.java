@@ -730,6 +730,51 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Holding a prisoner costs more than carrying a passenger of the same weight.
+	 * Carrying always charged for mass, but the grip itself was free, so a captor
+	 * could seize something and hold it forever at no cost beyond what a willing
+	 * rider would have cost — captivity was a state rather than an effort. Three
+	 * identical carriers, differing only in what they hold: nothing, a voluntary
+	 * rider, and a grabbed captive of the same size as that rider.
+	 */
+	static class HoldingACaptiveCostsEnergy extends Scenario {
+		@Override
+		public void run() {
+			seed(6);
+			World w = room(30, 24);
+			// Same body, same start energy; only the load differs. Big enough to
+			// grab the small ones (grab refuses anything larger than the captor).
+			TestNPC empty = TestNPC.inert(5.0, 4.0, 0).withSize(12).withMetabolic().withEnergy(4);
+			TestNPC ferry = TestNPC.inert(5.0, 10.0, 0).withSize(12).withMetabolic().withEnergy(4);
+			TestNPC captor = TestNPC.inert(5.0, 16.0, 0).withSize(12).withMetabolic().withEnergy(4);
+			TestNPC rider = TestNPC.inert(5.05, 10.0, 0).withSize(6);
+			TestNPC victim = TestNPC.inert(5.05, 16.0, 0).withSize(6);
+			w.spawnEntity(empty);
+			w.spawnEntity(ferry);
+			w.spawnEntity(captor);
+			w.spawnEntity(rider);
+			w.spawnEntity(victim);
+			w.think();
+
+			assertTrue("the rider latched on voluntarily", rider.attachTo(ferry));
+			assertTrue("the captor seized its victim", captor.grab(victim));
+			assertTrue("a grabbed body is held, a rider is not",
+					victim.isGrabbed() && !rider.isGrabbed());
+
+			double e0 = empty.getEnergy();
+			tick(w, 100);
+			double burnEmpty = e0 - empty.getEnergy();
+			double burnFerry = e0 - ferry.getEnergy();
+			double burnCaptor = e0 - captor.getEnergy();
+
+			assertGreater("carrying a passenger costs more than carrying nothing",
+					burnFerry, burnEmpty);
+			assertGreater("holding a prisoner costs more than ferrying a passenger "
+					+ "of the same weight", burnCaptor, burnFerry);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -3336,6 +3381,7 @@ public class SimTests {
 				new SmallHunterTakesBiggerPreySlowly(),
 				new EngineCapsStepLength(),
 				new TravelCostsEnergy(),
+				new HoldingACaptiveCostsEnergy(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
