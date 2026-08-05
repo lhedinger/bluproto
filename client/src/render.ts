@@ -174,8 +174,14 @@ export function render(
     }
     // What it is doing, as a small badge hovering over the body. Only notable
     // acts carry a code, so this stays sparse rather than tagging every creature
-    // on screen; below a few pixels the shape is unreadable, so it is skipped.
-    drawActionGlyph(g, s.x, s.y - r * 2.0, Math.max(0, r * 0.95), actionOf(e.flags));
+    // on screen. Gated on the TRUE on-screen body size rather than `r`, which is
+    // floored so distant creatures stay visible as dots — testing `r` would keep
+    // drawing unreadable specks at every zoom level, including the fully
+    // zoomed-out map view. Badges therefore fade out as you pull back and appear
+    // as you zoom in on what a creature is actually doing.
+    if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
+      drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
+    }
 
     if (e.flags & F_GRABBED) {
       g.strokeStyle = 'rgba(255,160,60,0.9)';
@@ -279,6 +285,11 @@ function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: numbe
   }
 }
 
+/** Smallest on-screen body radius (device px) that earns an action badge. Below
+ *  this the shape cannot be told apart from a coloured dot, so drawing it is
+ *  noise; the map-overview zoom sits well under it. */
+const GLYPH_MIN_BODY_PX = 5;
+
 /** Colour for each action badge — matched to the Java snapshot renderer's palette
  *  so a scenario PNG and the live viewer read the same way. */
 const ACTION_COLOUR: Record<number, string> = {
@@ -302,7 +313,7 @@ const ACTION_COLOUR: Record<number, string> = {
  */
 function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: number,
                          u: number, action: number): void {
-  if (!action || u < 3) return; // nothing to say, or too small to read
+  if (!action) return; // nothing worth showing (the zoom gate is at the call site)
   const col = ACTION_COLOUR[action];
   if (!col) return;
 
