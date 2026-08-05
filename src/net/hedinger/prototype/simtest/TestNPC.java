@@ -35,9 +35,22 @@ public class TestNPC extends NPC {
 		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL, PREDATOR
 	}
 
-	/** Damage a predator's bite does to prey (prey health 100 -> a few-second kill). */
+	/** Damage a predator's bite does to prey of its own size or smaller (prey
+	 *  health 100 -> a few-second kill). Scaled down against bigger quarry — see
+	 *  {@link #biteDamage}. */
 	private static final int PRED_DAMAGE = 20;
-	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost). */
+	/** How much larger than itself a hunter will take on, as a multiple of its own
+	 *  body size. Above 1 so a smaller hunter can pick a fight it is not built to
+	 *  win quickly: it lands weaker bites and needs far more of them, which is the
+	 *  whole trade — a long, costly, interruptible kill instead of a clean one. */
+	private static final double PRED_MAX_PREY_RATIO = 1.5;
+	/** Floor on the bite-strength multiplier, so taking on the largest quarry a
+	 *  hunter will engage stays a slow kill rather than an impossible one. */
+	private static final double PRED_MIN_BITE_SCALE = 0.25;
+	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost).
+	 *  Deliberately NOT scaled by size: a bigger animal takes more bites to bring
+	 *  down and so yields more energy in total, which is what makes the slow, risky
+	 *  kill worth attempting at all. */
 	private static final double PRED_BITE_ENERGY = 0.5;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and saves the full sprint for an actual pursuit. */
@@ -632,7 +645,7 @@ public class TestNPC extends NPC {
 			ecoAction = "attacking"; // in reach: bite whatever the hunger level
 			sprinting = false; // in reach: bite, don't burn on the chase
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
-			prey.damage(PRED_DAMAGE);
+			prey.damage(biteDamage(prey));
 			energy += PRED_BITE_ENERGY; // predation feeds the hunter
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
@@ -647,6 +660,24 @@ public class TestNPC extends NPC {
 			roam(speed * PRED_CRUISE, turn);
 		}
 		tryReproduce();
+	}
+
+	/**
+	 * How hard this hunter's bite lands on a given quarry. Against anything its own
+	 * size or smaller it is the full {@link #PRED_DAMAGE} — unchanged from a plain
+	 * same-weight kill. Against something bigger the bite is scaled down by the
+	 * size ratio, so a hunter punching above its weight needs proportionally more
+	 * bites and the kill drags out: it has to stay latched on far longer, burning
+	 * energy and giving the quarry (or a rival) time to break it up.
+	 *
+	 * <p>Only the damage is scaled, never {@link #PRED_BITE_ENERGY} — more bites at
+	 * the same energy each means a bigger animal is a bigger meal overall, which is
+	 * what makes the slow kill worth starting.
+	 */
+	private int biteDamage(NPC prey) {
+		double ratio = getSize() / Math.max(1e-6, prey.getSize());
+		double scale = Math.max(PRED_MIN_BITE_SCALE, Math.min(1.0, ratio));
+		return Math.max(1, (int) Math.round(PRED_DAMAGE * scale));
 	}
 
 	/**
@@ -752,14 +783,16 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestD = radius;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			// A hunter takes anything up to its OWN size, not just strictly smaller.
-			// Body size is clamped to Genome.SIZE_MAX for every creature alike, so a
-			// strictly-smaller rule left the largest creatures — including any minded
-			// one that drifted to the top of the band — permanently un-huntable, with
-			// no predator able to exist above them. Allowing equal size closes that
-			// hole and makes an apex-sized hunter genuinely apex.
+			// A hunter takes anything up to PRED_MAX_PREY_RATIO times its own size —
+			// its own weight class, plus quarry somewhat above it. Body size is
+			// clamped to Genome.SIZE_MAX for every creature alike, so a strictly-
+			// smaller rule left the largest creatures permanently un-huntable with no
+			// predator able to exist above them; reaching past its own size closes
+			// that hole. Punching up is not free: the bite lands weaker the bigger the
+			// quarry (see biteDamage), so the kill takes proportionally longer.
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl() || n.getSize() > getSize()
+					|| n instanceof Item || n.getLvl() != getLvl()
+					|| n.getSize() > getSize() * PRED_MAX_PREY_RATIO
 					|| !isInLOS(n)) {
 				// Same level only (can't reach a floor away), and only prey actually in
 				// line of sight: a wall or a thicket (cover blocks sight) hides prey, and

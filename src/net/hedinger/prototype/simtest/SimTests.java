@@ -605,6 +605,60 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A hunter can punch above its weight, but pays for it in time. Quarry up to
+	 * {@code PRED_MAX_PREY_RATIO} times a hunter's own size is fair game, and the
+	 * bite scales down with the size ratio — so an undersized hunter still brings
+	 * the animal down, it just needs far more bites to do it.
+	 *
+	 * <p>Runs the same kill twice, changing only the hunter's body: an equal-sized
+	 * hunter and an undersized one against identical quarry, each parked in reach so
+	 * the measurement is the bite rate and nothing else (no chase, no perception).
+	 * Asserts both kill, and that the small one takes materially longer.
+	 */
+	static class SmallHunterTakesBiggerPreySlowly extends Scenario {
+		/** Ticks for {@code hunterSize} to kill a size-10 victim parked in reach;
+		 *  -1 if it never manages it. */
+		private int ticksToKill(double hunterSize) {
+			seed(5);
+			World w = room(20, 12);
+			Genome predG = new Genome();
+			predG.size = hunterSize;
+			predG.speed = 0.04;
+			predG.losFov = Math.PI * 2;
+			predG.losRange = 12;
+			Genome victimG = new Genome();
+			victimG.size = 10;
+			victimG.speed = 0; // parked: isolate bite rate from the chase
+
+			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG);
+			TestNPC victim = TestNPC.breeder(5.4, 5.0, 0, victimG); // adjacent, in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(victim);
+			w.think();
+			for (int t = 0; t < 3000; t++) {
+				w.think();
+				if (victim.isDead()) {
+					return t;
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			int even = ticksToKill(10); // same weight class as the victim
+			int small = ticksToKill(7); // undersized: victim is ~1.43x its size
+
+			assertGreater("an evenly-matched hunter kills its quarry", even, -1);
+			assertGreater("an undersized hunter still brings bigger quarry down", small, -1);
+			// 20 damage/bite at parity vs round(20 * 7/10) = 14, so a 100-health
+			// victim needs 5 bites instead of 8 — a clearly longer kill.
+			assertGreater("the undersized hunter's kill takes materially longer ("
+					+ small + " ticks vs " + even + ")", small, even);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -3208,6 +3262,7 @@ public class SimTests {
 				new SpawnRejectsOutOfBounds(),
 				new GenomeReactModel(),
 				new GenomePredatorHuntsPrey(),
+				new SmallHunterTakesBiggerPreySlowly(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
