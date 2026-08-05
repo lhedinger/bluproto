@@ -137,6 +137,27 @@ public abstract class NPC extends Entity {
 		return s / REF_SIZE;
 	}
 
+	/**
+	 * Everything this body is hauling, in the same units as {@link #bodyMass()} so
+	 * the two simply add up.
+	 *
+	 * <p>A load is not a separate bill — it is just extra mass. Whatever a carrier
+	 * is holding makes it heavier, and being heavier is already expensive through
+	 * the one channel that prices mass: movement. So hauling costs exactly what it
+	 * should, when it should. Standing still holding something is nearly free
+	 * (only the grip, if the thing is an unwilling captive), and walking off with
+	 * it costs in proportion to how much of it there is and how fast you go.
+	 *
+	 * <p>{@code carriedLoad} accumulates {@code getSize()}, which is in tiles,
+	 * while {@code bodyMass()} is normalised to {@link #REF_SIZE} — hence the
+	 * conversion. Flying counts a load heavier: holding a body up in the air is
+	 * harder than dragging it along the ground.
+	 */
+	protected double carriedMass() {
+		double load = getCarriedLoad() * ResourceManager.tileSize / REF_SIZE;
+		return isFlying() ? load * FLIER_CARRY_MULTIPLIER : load;
+	}
+
 	/** Size factor of the body this creature is growing INTO, 1.0 at
 	 *  {@link #REF_SIZE}. Falls back to the current body for anything that does not
 	 *  grow. */
@@ -165,20 +186,16 @@ public abstract class NPC extends Entity {
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	protected static final int REPRO_COOLDOWN = 100;
-	/** Extra energy per tick a carrier burns per unit of carried body weight. */
-	protected static final double CARRY_ENERGY = 0.15;
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
-	 * <em>grabbed</em> captive — the cost of restraint itself, on top of hauling
-	 * the weight around.
+	 * <em>grabbed</em> captive — the cost of restraint itself, separate from the
+	 * weight, which is priced by {@link #carriedMass}.
 	 *
-	 * <p>Carrying already charged for weight, but the grip was free: a captor could
-	 * seize something and hold it indefinitely at no cost beyond what a willing
-	 * passenger of the same mass would have cost. That made captivity a permanent
-	 * state rather than an effort a captor has to keep paying for. A voluntary rider
-	 * still costs nothing extra — it clings on by its own effort — so the asymmetry
-	 * between a passenger and a prisoner is now priced, and a captor must eventually
-	 * either eat its captive or let go.
+	 * <p>A voluntary rider costs its carrier nothing beyond the weight — it clings
+	 * on by its own effort — so this is the whole difference between a passenger and
+	 * a prisoner. It is charged whether or not the captor moves, so holding somebody
+	 * is an effort that has to keep being paid for rather than a free permanent
+	 * state: a captor must eventually either eat its captive or let go.
 	 *
 	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
 	 * still costs its captor more than one hanging limp.
@@ -193,8 +210,8 @@ public abstract class NPC extends Entity {
 	/** Energy a struggling captive burns itself per tick per unit of struggle --
 	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
 	protected static final double STRUGGLE_SELF_COST = 0.02;
-	/** Multiplier on the carry cost when the carrier is flying: hauling a body
-	 *  through the air burns far more than dragging it over the ground. */
+	/** How much heavier a load counts while the carrier is flying: holding a body
+	 *  up through the air is far harder work than dragging it over the ground. */
 	protected static final double FLIER_CARRY_MULTIPLIER = 5.0;
 	/** Energy a carrier burns per tick per unit of buck effort (shaking riders
 	 *  off is exhausting, just like a captive's struggle). */
@@ -404,25 +421,18 @@ public abstract class NPC extends Entity {
 			if (getAttachTarget() != null && !isGrabbed()) {
 				base *= RIDER_METABOLISM;
 			}
-			// Carrying burden: pay extra for the total body weight riding on you --
-			// a grabbed captive or a latched-on hitch-hiker both count. Holding a
-			// body aloft is far costlier than dragging it along the ground.
-			double carry = getCarriedLoad() * CARRY_ENERGY;
-			if (isFlying()) {
-				carry *= FLIER_CARRY_MULTIPLIER;
-			}
-			// Grip: restraining a captive is work in its own right, separate from
-			// hauling its weight. Not multiplied by flight — what flying makes
-			// expensive is lifting the load, and the carry term already prices that;
-			// holding on is the same effort in the air as on the ground.
-			if (grabbing != null) {
-				carry += GRIP_ENERGY * grabbing.getSize();
-			}
-			// Movement: kinetic, so a fast body pays the square of its speed. Charged
-			// on the ground actually covered — a step cancelled by a collision moved
-			// nothing and costs nothing, so this prices travel, not intent.
-			double travel = MOVE_ENERGY * bodyMass() * lastStep * lastStep;
-			energy -= base + carry + travel;
+			// Grip: restraining an unwilling captive is work in its own right, and
+			// the only thing a captor pays that a ferry carrying a willing passenger
+			// of the same weight does not. The weight itself is not billed here --
+			// see below.
+			double grip = grabbing != null ? GRIP_ENERGY * grabbing.getSize() : 0.0;
+			// Movement: kinetic, so a fast body pays the square of its speed, and it
+			// pays for everything it is hauling because a load is simply extra mass.
+			// Charged on the ground actually covered -- a step cancelled by a
+			// collision moved nothing and costs nothing, so this prices travel rather
+			// than intent, and standing still under a load is nearly free.
+			double travel = MOVE_ENERGY * (bodyMass() + carriedMass()) * lastStep * lastStep;
+			energy -= base + grip + travel;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved
