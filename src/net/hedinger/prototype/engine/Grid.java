@@ -452,12 +452,13 @@ public class Grid {
 	 * mixes of adjacent ramp colours, never blends. The terrain lookup is
 	 * jittered by noise so class boundaries wander and dither across tile edges
 	 * instead of snapping to the grid. Open ground (grass, soil, water, mud,
-	 * cover) jitters hard for organic coastlines; water's shading is stretched
-	 * into horizontal swell bands, and bare soil/mud is plated by a dark
-	 * Voronoi-ridge crack network. Walls and holes jitter only slightly (a
-	 * couple of pixels) so they stay solid and never bleed out onto open
-	 * ground; a wall's body is vertically striated rock with a top-lit bevel
-	 * and shadowed base, plus a cast shadow on the ground just south of it.
+	 * cover) jitters hard for organic coastlines; water renders as short flat
+	 * horizontal dashes clustering into swell bands, and bare soil/mud is
+	 * plated by a dark Voronoi-ridge crack network. Walls and holes jitter
+	 * only slightly (a couple of pixels) so they stay solid and never bleed
+	 * out onto open ground; a wall's body is discrete vertical rock dashes
+	 * with a top-lit edge and shadowed base, plus a cast shadow on the ground
+	 * just south of it.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -497,19 +498,11 @@ public class Grid {
 						int col;
 						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
-							// Striated stone: the shade noise is stretched hard along y
-							// (high frequency across, low frequency down), so the mass
-							// reads as long vertical pixel runs -- a carved rock face --
-							// with the top-lit bevel and dark base biasing the runs
-							// bright at the lit edge and dark at the foot.
-							double s = Utils.noise2(wx * 7.0, wy * 0.55, 1.0);
-							double p = (s - 0.22) / 0.56 * 2;
-							if (!wallN && aj < A * 0.28) {
-								p += 1.4; // lit top edge
-							} else if (!wallS && aj >= A * 0.72) {
-								p -= 1.1; // shadowed base
-							}
-							col = GroundTextures.ditherRamp(cl, p, gx, gy);
+							// Striated stone: discrete flat vertical dashes with hard,
+							// per-column-staggered breaks (a carved rock face in
+							// hand-placed pixels), lit at the top edge, dark at the base.
+							col = GroundTextures.wallStria(gx, gy,
+									!wallN && aj < A * 0.28, !wallS && aj >= A * 0.72);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground: the north lip catches
 							// the screen-north light brightest, the other three lips are the
@@ -533,9 +526,16 @@ public class Grid {
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
+						} else if (cl == GroundTextures.CLS_WATER) {
+							// Water: short flat horizontal dashes clustering into swell
+							// bands -- pixel-art strokes, not stretched shading.
+							col = GroundTextures.waterDash(wx, wy, gx, gy);
+							if (wallN && aj < A * 0.32) {
+								col = darken(col, 0.62); // shadow cast by the wall to the north
+							}
 						} else {
-							// Open ground: ordered-dithered shade blobs (water's are
-							// stretched into horizontal swell bands).
+							// Open ground: solid shade clusters with a narrow dithered
+							// border where adjacent shades meet.
 							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
 							// Bare earth is plated by a crack network, like sun-baked
 							// clay: dark seams along the Voronoi ridges.

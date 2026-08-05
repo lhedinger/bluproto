@@ -116,17 +116,58 @@ public final class GroundTextures {
 
 	/**
 	 * Dithered ground colour: the same shade noise and ramp as
-	 * {@link #groundColor}, but mapped to a continuous shade index and rendered
-	 * through {@link #ditherRamp}, so shade transitions are checkerboard mixes
-	 * instead of hard thresholds. Water samples the noise anisotropically --
-	 * stretched along x, compressed along y -- so its shading pulls into
-	 * horizontal bands that read as swell.
+	 * {@link #groundColor}, but the transition zone between adjacent shades is
+	 * rendered as a narrow Bayer-dithered border around otherwise solid shade
+	 * clusters -- pixel-art cluster shading, not a full-field checkerboard. The
+	 * sharpening keeps ~2/3 of every shade band solid and dithers the rest.
 	 */
 	public static int groundColorDithered(int cls, double wx, double wy, int px, int py) {
-		double sh = cls == CLS_WATER
-				? Utils.noise2(wx * 0.45, wy * 1.8, 3.7)
-				: Utils.noise2(wx, wy, 3.7);
-		return ditherRamp(cls, (sh - 0.28) / 0.56 * 2, px, py);
+		double sh = Utils.noise2(wx, wy, 3.7);
+		double p = (sh - 0.28) / 0.56 * 2;
+		p = p < 0 ? 0 : (p > 2 ? 2 : p);
+		int lo = (int) p;
+		double frac = p - lo;
+		// Sharpen: only the middle third of the transition dithers.
+		frac = frac < 0.33 ? 0 : (frac > 0.66 ? 1 : (frac - 0.33) / 0.33);
+		return ditherRamp(cls, lo + frac, px, py);
+	}
+
+	/**
+	 * Water as pixel-art strokes: short flat horizontal dashes (hard breaks,
+	 * one shade per dash) over the base blue, with a coarse world-space swell
+	 * noise biasing whole regions darker or lighter so the dashes cluster into
+	 * bands instead of scattering uniformly. Purely positional and discrete --
+	 * no stretched gradients.
+	 */
+	public static int waterDash(double wx, double wy, int px, int py) {
+		int len = 5 + (int) (hash01(py, 0, 7) * 3); // dash length per row, 5..7 px
+		int phase = (int) (hash01(py, 1, 8) * len); // stagger rows against each other
+		int seg = Math.floorDiv(px + phase, len);
+		double r = hash01(seg, py, 9);
+		double swell = Utils.noise2(wx * 0.6, wy * 1.3, 1.6); // coarse band bias
+		double dark = 0.10 + 0.28 * swell; // dark-dash share, ~0.1 .. 0.38
+		return RAMP[CLS_WATER][r < dark ? 0 : (r > 0.94 ? 2 : 1)];
+	}
+
+	/**
+	 * Wall rock as pixel-art striation: each art-pixel column carries flat
+	 * vertical dashes of 4-7 px with hard, per-column-staggered breaks -- the
+	 * hand-placed look of a carved face, not stretched noise. Adjacent dashes
+	 * that hash to the same shade merge into longer runs on their own. The lit
+	 * top edge shifts dashes one shade up, the base one shade down.
+	 */
+	public static int wallStria(int px, int py, boolean litTop, boolean darkBase) {
+		int len = 4 + (int) (hash01(px, 0, 10) * 4); // dash length per column, 4..7 px
+		int phase = (int) (hash01(px, 1, 11) * len); // stagger columns
+		int seg = Math.floorDiv(py + phase, len);
+		double r = hash01(px, seg, 12);
+		int idx = r < 0.30 ? 0 : (r > 0.72 ? 2 : 1);
+		if (litTop) {
+			idx = Math.min(2, idx + 1);
+		} else if (darkBase) {
+			idx = Math.max(0, idx - 1);
+		}
+		return RAMP[CLS_WALL][idx];
 	}
 
 	/**
