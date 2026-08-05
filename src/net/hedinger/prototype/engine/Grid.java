@@ -452,13 +452,14 @@ public class Grid {
 	 * mixes of adjacent ramp colours, never blends. The terrain lookup is
 	 * jittered by noise so class boundaries wander and dither across tile edges
 	 * instead of snapping to the grid. Open ground (grass, soil, water, mud,
-	 * cover) jitters hard for organic coastlines; water renders as short flat
-	 * horizontal dashes clustering into swell bands, and bare soil/mud is
-	 * plated by a dark Voronoi-ridge crack network. Walls and holes jitter
-	 * only slightly (a couple of pixels) so they stay solid and never bleed
-	 * out onto open ground; a wall's body is discrete vertical rock dashes
-	 * with a top-lit edge and shadowed base, plus a cast shadow on the ground
-	 * just south of it.
+	 * cover) jitters hard for organic coastlines; water is a calm top-down
+	 * surface of shadow/base patches with sparse glints, dry soil is plated by
+	 * a dark Voronoi-ridge crack network (mud cracks finer, and turns into a
+	 * darker crack-free wet band beside water). Walls and holes jitter only
+	 * slightly (a couple of pixels) so they stay solid and never bleed out
+	 * onto open ground; a wall shows a calm cross-section top with a lit north
+	 * edge, a band of carved vertical face dashes where it fronts open ground
+	 * to the south, and a cast shadow on the ground below.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -498,11 +499,14 @@ public class Grid {
 						int col;
 						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
-							// Striated stone: discrete flat vertical dashes with hard,
-							// per-column-staggered breaks (a carved rock face in
-							// hand-placed pixels), lit at the top edge, dark at the base.
-							col = GroundTextures.wallStria(gx, gy,
-									!wallN && aj < A * 0.28, !wallS && aj >= A * 0.72);
+							// A wall is two surfaces from above: the flat cross-section
+							// top (kept calm), and a band of carved vertical face dashes
+							// where the mass fronts open ground to the south.
+							if (!wallS && aj >= A * 0.55) {
+								col = GroundTextures.wallFace(gx, gy);
+							} else {
+								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
+							}
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground: the north lip catches
 							// the screen-north light brightest, the other three lips are the
@@ -527,9 +531,9 @@ public class Grid {
 								col = GroundTextures.rampColor(cl, 1);
 							}
 						} else if (cl == GroundTextures.CLS_WATER) {
-							// Water: short flat horizontal dashes clustering into swell
-							// bands -- pixel-art strokes, not stretched shading.
-							col = GroundTextures.waterDash(wx, wy, gx, gy);
+							// Water from straight above: calm shadow/base patches with
+							// sparse glints -- no directional strokes.
+							col = GroundTextures.waterTop(wx, wy, gx, gy);
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
@@ -537,11 +541,18 @@ public class Grid {
 							// Open ground: solid shade clusters with a narrow dithered
 							// border where adjacent shades meet.
 							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
-							// Bare earth is plated by a crack network, like sun-baked
-							// clay: dark seams along the Voronoi ridges.
-							if ((cl == GroundTextures.CLS_SOIL || cl == GroundTextures.CLS_MUD)
-									&& GroundTextures.crack(wx, wy)) {
+							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 1.15)) {
+								// Dry badlands: big sun-baked plates, dark seams.
 								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+							} else if (cl == GroundTextures.CLS_MUD) {
+								if (nearWater(x, y)) {
+									// Wet shore band: darker, crack-free mud melting into
+									// the water's shadow shade at the jittered boundary.
+									col = darken(col, 0.74);
+								} else if (GroundTextures.crack(wx, wy, 0.55)) {
+									// Drier mud plates crack finer than badlands clay.
+									col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+								}
 							}
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
@@ -642,6 +653,18 @@ public class Grid {
 			return false;
 		}
 		return tiles[nx][ny].getType() == type;
+	}
+
+	/** Whether any of the eight neighbours (or the tile itself) is water. */
+	private boolean nearWater(int x, int y) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private boolean neighbourMottle(int nx, int ny, long now) {

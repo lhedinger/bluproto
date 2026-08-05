@@ -133,51 +133,60 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Water as pixel-art strokes: short flat horizontal dashes (hard breaks,
-	 * one shade per dash) over the base blue, with a coarse world-space swell
-	 * noise biasing whole regions darker or lighter so the dashes cluster into
-	 * bands instead of scattering uniformly. Purely positional and discrete --
-	 * no stretched gradients.
+	 * Top-down water: a calm surface of broad shadow/base patches (coarse
+	 * noise, sharpened so patch cores stay solid and only their borders
+	 * dither) with rare 2-px sun glints. No directional strokes -- from
+	 * straight above, water has no profile to band.
 	 */
-	public static int waterDash(double wx, double wy, int px, int py) {
-		int len = 5 + (int) (hash01(py, 0, 7) * 3); // dash length per row, 5..7 px
-		int phase = (int) (hash01(py, 1, 8) * len); // stagger rows against each other
-		int seg = Math.floorDiv(px + phase, len);
-		double r = hash01(seg, py, 9);
-		double swell = Utils.noise2(wx * 0.6, wy * 1.3, 1.6); // coarse band bias
-		double dark = 0.10 + 0.28 * swell; // dark-dash share, ~0.1 .. 0.38
-		return RAMP[CLS_WATER][r < dark ? 0 : (r > 0.94 ? 2 : 1)];
+	public static int waterTop(double wx, double wy, int px, int py) {
+		if (hash01(px >> 1, py, 14) > 0.992) {
+			return RAMP[CLS_WATER][2]; // sparse glint, 2 px wide
+		}
+		double sh = Utils.noise2(wx + 31, wy + 17, 0.6);
+		double p = (sh - 0.24) / 0.44; // continuous shadow..base index
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_WATER, p, px, py);
 	}
 
 	/**
-	 * Wall rock as pixel-art striation: each art-pixel column carries flat
-	 * vertical dashes of 4-7 px with hard, per-column-staggered breaks -- the
-	 * hand-placed look of a carved face, not stretched noise. Adjacent dashes
-	 * that hash to the same shade merge into longer runs on their own. The lit
-	 * top edge shifts dashes one shade up, the base one shade down.
+	 * The flat top of a wall mass -- the cross-section seen from above. Kept
+	 * calm: base shade with sparse 2x2-px darker chips and the odd light
+	 * fleck, so the mass reads as one quiet solid and the carved texture is
+	 * saved for the vertical face ({@link #wallFace}).
 	 */
-	public static int wallStria(int px, int py, boolean litTop, boolean darkBase) {
-		int len = 4 + (int) (hash01(px, 0, 10) * 4); // dash length per column, 4..7 px
-		int phase = (int) (hash01(px, 1, 11) * len); // stagger columns
-		int seg = Math.floorDiv(py + phase, len);
-		double r = hash01(px, seg, 12);
-		int idx = r < 0.30 ? 0 : (r > 0.72 ? 2 : 1);
-		if (litTop) {
+	public static int wallTop(int px, int py, boolean litEdge) {
+		double r = hash01(px >> 1, py >> 1, 13);
+		int idx = r < 0.12 ? 0 : (r > 0.96 ? 2 : 1);
+		if (litEdge) {
 			idx = Math.min(2, idx + 1);
-		} else if (darkBase) {
-			idx = Math.max(0, idx - 1);
 		}
 		return RAMP[CLS_WALL][idx];
 	}
 
 	/**
+	 * The exposed vertical face of a wall (where it fronts open ground to the
+	 * south): flat vertical dashes of 4-7 px with hard, per-column-staggered
+	 * breaks, biased a shade dark so the face reads as the shadowed side of a
+	 * raised mass. Adjacent dashes that hash alike merge into longer runs on
+	 * their own.
+	 */
+	public static int wallFace(int px, int py) {
+		int len = 4 + (int) (hash01(px, 0, 10) * 4); // dash length per column, 4..7 px
+		int phase = (int) (hash01(px, 1, 11) * len); // stagger columns
+		int seg = Math.floorDiv(py + phase, len);
+		double r = hash01(px, seg, 12);
+		return RAMP[CLS_WALL][r < 0.45 ? 0 : (r > 0.90 ? 2 : 1)];
+	}
+
+	/**
 	 * True where (wx,wy) lies on the crack network that plates bare ground: the
 	 * ridge lines of a jittered-lattice Voronoi diagram (points where the two
-	 * nearest feature points are nearly equidistant). Purely positional, so the
-	 * network is seamless across tiles and chunk bakes.
+	 * nearest feature points are nearly equidistant). {@code cell} is the plate
+	 * diameter in tiles. Purely positional, so the network is seamless across
+	 * tiles and chunk bakes.
 	 */
-	public static boolean crack(double wx, double wy) {
-		double cell = 1.15; // plate diameter in tiles
+	public static boolean crack(double wx, double wy, double cell) {
 		double cx = wx / cell, cy = wy / cell;
 		int ix = (int) Math.floor(cx), iy = (int) Math.floor(cy);
 		double d1 = 9, d2 = 9;
