@@ -122,6 +122,30 @@ public class TestNPC extends NPC {
 	private int generation = 0; // 0 = spawned by the world; a child is its parent's + 1
 	private boolean handPlaced = false; // placed by a person, not by the steward
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
+	/**
+	 * Ticks a momentary act stays on display after the instant it happened. A bite
+	 * or a birth occupies a single tick, and the viewer only samples ~10 times a
+	 * second, so without a hold those events flash past between frames and are
+	 * effectively invisible — you would never see a heart. Continuous states
+	 * (grazing, hunting, fleeing) need no hold: they persist on their own.
+	 */
+	private static final int ACTION_HOLD = 25; // ~0.75 s at 33 t/s
+	private int actionHold = 0;
+
+	/**
+	 * Records what this creature is doing. A {@code momentary} act latches for
+	 * {@link #ACTION_HOLD} ticks so it survives long enough to be seen; ordinary
+	 * states cannot overwrite a latched one until it lapses.
+	 */
+	private void setAction(String action, boolean momentary) {
+		if (actionHold > 0 && !momentary) {
+			return; // a latched event still has the floor
+		}
+		ecoAction = action;
+		if (momentary) {
+			actionHold = ACTION_HOLD;
+		}
+	}
 	private double totalIntake = 0;
 	private double[] pinX, pinY; // trailing ring of recent positions (pin detection)
 	private int pinCount = 0; // ring entries filled so far (caps at PIN_WINDOW)
@@ -554,6 +578,9 @@ public class TestNPC extends NPC {
 
 	@Override
 	protected void think() {
+		if (actionHold > 0) {
+			actionHold--; // a latched act lapses; think() runs exactly once per tick
+		}
 		// If whoever was carrying us is dead or gone, we're free again -- a captive
 		// isn't clamped to a corpse.
 		if (getAttachTarget() != null && (getAttachTarget().isDead() || getAttachTarget().isRemoved())) {
@@ -645,20 +672,20 @@ public class TestNPC extends NPC {
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
 		if (prey != null && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
-			ecoAction = "attacking"; // in reach: bite whatever the hunger level
+			setAction("attacking", true); // in reach: bite whatever the hunger level
 			sprinting = false; // in reach: bite, don't burn on the chase
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
 			prey.damage(biteDamage(prey));
 			energy += PRED_BITE_ENERGY; // predation feeds the hunter
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
-			ecoAction = starving ? "starving" : "hunting";
+			setAction(starving ? "starving" : "hunting", false);
 			sprinting = true; // burst pursuit at full speed — the costly gear
 			chase(speed, turn);
 		} else {
 			// No prey, or well-fed and nothing in its mouth: patrol calmly. Label
 			// it "sated" when it is deliberately letting visible prey be.
-			ecoAction = (sated && prey != null) ? "sated" : "prowling";
+			setAction((sated && prey != null) ? "sated" : "prowling", false);
 			sprinting = false; // patrol calmly and cheaply — no sprint
 			roam(speed * PRED_CRUISE, turn);
 		}
@@ -734,7 +761,7 @@ public class TestNPC extends NPC {
 			}
 			escLastX = X;
 			escLastY = Y;
-			ecoAction = "prowling";
+			setAction("prowling", false);
 			sprinting = false;
 			move(driveSpeed, D);
 			return true;
@@ -1068,15 +1095,15 @@ public class TestNPC extends NPC {
 		// holds eat and mate high permanently, so labelling the actuators would
 		// read "mating" forever regardless of what the creature achieved.
 		if (bit) {
-			ecoAction = "attacking";
+			setAction("attacking", true); // an instant: latch it so it can be seen
 		} else if (bred) {
-			ecoAction = "breeding";
+			setAction("breeding", true);
 		} else if (eaten > 0) {
-			ecoAction = "grazing";
+			setAction("grazing", false);
 		} else if (throttle > 0.02) {
-			ecoAction = sprinting ? "running" : "wandering";
+			setAction(sprinting ? "running" : "wandering", false);
 		} else {
-			ecoAction = "resting";
+			setAction("resting", false);
 		}
 		// Grab: seize and carry a smaller neighbour while the actuator is high,
 		// release the moment it drops (or the captive is gone).
@@ -1354,7 +1381,7 @@ public class TestNPC extends NPC {
 			if (threat != null) {
 				// Bolt: pick a waypoint directly away from the predator and run.
 				// Fleeing pre-empts grazing/breeding — survival first.
-				ecoAction = "fleeing";
+				setAction("fleeing", false);
 				roam(speed, turn, Math.atan2(Y - threat.getY(), X - threat.getX()));
 				return;
 			}
@@ -1365,26 +1392,26 @@ public class TestNPC extends NPC {
 		double intake = sated() ? 0 : graze(grazeDemand());
 		totalIntake += intake;
 		if (tryReproduce()) {
-			ecoAction = "breeding";
+			setAction("breeding", true);
 			return;
 		}
 		if (sated()) {
 			// Fully fed: drift off the patch and let the grass recover.
-			ecoAction = "sated";
+			setAction("sated", false);
 			roam(speed, turn);
 			return;
 		}
 		if (intake < grazeDemand() * 0.15) {
 			double herd = vigilant ? herdDir(HERD_R) : Double.NaN;
 			if (!Double.isNaN(herd)) {
-				ecoAction = "herding";
+				setAction("herding", false);
 				roam(speed, turn, herd); // regroup with kin
 			} else {
-				ecoAction = "foraging";
+				setAction("foraging", false);
 				roam(speed, turn); // patch thinning -> find fresh grass
 			}
 		} else {
-			ecoAction = "grazing";
+			setAction("grazing", false);
 		}
 	}
 
@@ -1581,11 +1608,36 @@ public class TestNPC extends NPC {
 				return null;
 			}
 		case GRAZE:
-		case BREEDER:
 		case MATER:
-			return "graze";
+			return "graze"; // no per-tick action label: these always forage
 		case NEST:
 			return homing ? "nest" : "graze";
+		default:
+			// Breeders, predators and the minded cohort all report what they
+			// actually did last tick, so the glyph follows real behaviour rather
+			// than the species. Predators and minded bodies previously fell through
+			// here and showed nothing at all.
+			return glyphFor(ecoAction);
+		}
+	}
+
+	/** Maps a last-tick action label to a glyph key, or null for the unremarkable
+	 *  ones (wandering, resting, prowling, sated, herding) — a badge over every
+	 *  creature all the time would be noise rather than information. */
+	private static String glyphFor(String action) {
+		switch (action) {
+		case "attacking":
+			return "attack";
+		case "breeding":
+			return "mate";
+		case "fleeing":
+			return "flee";
+		case "grazing":
+		case "foraging":
+			return "graze";
+		case "hunting":
+		case "starving":
+			return "hunt";
 		default:
 			return null;
 		}

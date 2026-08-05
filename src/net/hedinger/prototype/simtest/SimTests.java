@@ -840,6 +840,50 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The viewer's action badges ride to the client packed into the spare high
+	 * bits of the entity flags, so they cost the delta stream nothing. Pins that
+	 * the codes actually arrive for the live ecosystem, that they stay sparse
+	 * (a badge over every creature would be noise, not information), and — the
+	 * part that would silently corrupt the viewer — that packing them does not
+	 * disturb the existing flag bits sharing that int.
+	 */
+	static class ActionGlyphsRideTheWire extends Scenario {
+		@Override
+		public void run() {
+			seed(23);
+			World w = net.hedinger.prototype.sim.Worlds.demo(23);
+			tick(w, 2000); // settle: creatures are grazing, hunting, breeding
+
+			int withAction = 0, creatures = 0, minded = 0;
+			for (net.hedinger.prototype.sim.EntityState e
+					: net.hedinger.prototype.sim.WorldSnapshot.of(w).entities()) {
+				if (!e.kind().startsWith("npc.")) {
+					continue;
+				}
+				creatures++;
+				int code = (e.flags() & net.hedinger.prototype.sim.EntityState.ACTION_MASK)
+						>> net.hedinger.prototype.sim.EntityState.ACTION_SHIFT;
+				assertTrue("action code is a known glyph (" + code + ")",
+						code >= 0 && code <= net.hedinger.prototype.sim.EntityState.ACT_AFFILIATE);
+				if (code != net.hedinger.prototype.sim.EntityState.ACT_NONE) {
+					withAction++;
+				}
+				if ((e.flags() & net.hedinger.prototype.sim.EntityState.F_MINDED) != 0) {
+					minded++;
+				}
+			}
+			assertGreater("the settled world has creatures to describe", creatures, 20);
+			assertGreater("some creatures report a visible action", withAction, 0);
+			assertLess("badges stay sparse rather than tagging everything",
+					withAction, creatures);
+			// The packing shares an int with F_DEAD/F_FLYING/F_GRABBED/F_CARRYING/
+			// F_MINDED; if the shift were wrong these would be clobbered wholesale.
+			assertGreater("the minded flag still survives alongside the action code",
+					minded, 0);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -3451,6 +3495,7 @@ public class SimTests {
 				new TravelCostsEnergy(),
 				new HoldingACaptiveCostsEnergy(),
 				new CreaturesGrowToAdultSize(),
+				new ActionGlyphsRideTheWire(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
