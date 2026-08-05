@@ -37,6 +37,28 @@ public abstract class Entity {
 	 *  back; when it exceeds this rider's grip it is thrown clear. Reset on detach. */
 	private double buckPressure = 0;
 
+	/**
+	 * Hard ceiling on how far any body may travel in one tick (tiles). This is an
+	 * ENGINE limit, not a balance knob: passability is decided one tile at a time
+	 * ({@link Tile#isConnected} rejects a step landing more than one tile away), so
+	 * a longer step would tunnel through walls, water and hole edges — or, once it
+	 * exceeded a tile, be rejected outright and freeze the creature in place. Half
+	 * a tile keeps every step inside the neighbour the collision test actually
+	 * checks, with margin for the +/-10% jitter movement adds.
+	 */
+	public static final double MAX_STEP = 0.5;
+
+	/** Ground actually covered on the last tick (tiles) — zero when a move was
+	 *  cancelled by a collision, or while being carried. Drives the locomotion
+	 *  energy cost in {@code NPC}: creatures pay for distance travelled, not for
+	 *  intent. */
+	protected double lastStep = 0;
+
+	/** Ground this body covered on its last tick (tiles). */
+	public double lastStep() {
+		return lastStep;
+	}
+
 	protected Sound lastHeardSound = null;
 
 	protected abstract void think();
@@ -218,6 +240,7 @@ public abstract class Entity {
 			dX = 0;
 			dY = 0;
 			dZ = 0;
+			lastStep = 0; // carried, not walking: the host pays for the travel
 
 			double dist = attachTarget.getSize() / 2 + getSize() / 2;
 
@@ -238,6 +261,19 @@ public abstract class Entity {
 			dY *= drag;
 		}
 
+		// Engine speed limit. Collision is decided one tile at a time, so an
+		// over-long step would either tunnel through terrain or (past a full tile)
+		// be rejected wholesale, leaving the creature stuttering in place. Clamping
+		// the vector — before the collision test, so what is checked is what is
+		// applied — keeps a runaway speed gene physically impossible rather than
+		// merely unlucky. Direction is preserved; only the magnitude is capped.
+		double step = Math.hypot(dX, dY);
+		if (step > MAX_STEP) {
+			double k = MAX_STEP / step;
+			dX *= k;
+			dY *= k;
+		}
+
 		if (isOverHole() && !isFlying() && descendIntent) {
 			// FIXME allow flying entities to go down the hole if they wish
 			dZ = -1;
@@ -253,6 +289,10 @@ public abstract class Entity {
 			world.getTile(X, Y, Z).removeEntity(getID());
 			world.getTile(X + dX, Y + dY, Z + dZ).addEntity(getID());
 		}
+
+		// What was actually covered, after drag, the speed clamp and any collision
+		// cancellation — this is what locomotion is charged for.
+		lastStep = Math.hypot(dX, dY);
 
 		X += dX;
 		Y += dY;

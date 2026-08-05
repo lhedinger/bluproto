@@ -73,6 +73,23 @@ public abstract class NPC extends Entity {
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
 	protected static final double META_REF = 0.02;
+	/**
+	 * Energy to carry one unit of body mass one tile — the cost of transport, and
+	 * the price of actually going somewhere.
+	 *
+	 * <p>Without this, movement was free: the burn depended only on body size, so a
+	 * creature that evolved to run five times faster paid exactly what a sluggish
+	 * one of the same size did. Speed is the one gene with real upside (more ground
+	 * grazed, more prey caught, more hunters escaped) and, with no cost against it,
+	 * it simply ratcheted upward every generation. Charging by distance covered
+	 * puts a brake on the far side of that trade, and — unlike a flat penalty —
+	 * costs a creature nothing while it holds still.
+	 *
+	 * <p>Calibrated so a reference-size creature moving at about the founder speed
+	 * pays roughly its own resting rate again: locomotion roughly doubles the bill
+	 * of a moving creature, and dominates it for a genuinely fast one.
+	 */
+	protected static final double COST_OF_TRANSPORT = 0.01;
 
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
 	 *  Falls back to the reference when no size is set. */
@@ -316,7 +333,11 @@ public abstract class NPC extends Entity {
 			// metabolism allowed — but a long fruitless chase still costs it. The
 			// surcharge is a multiple of the (mass-scaled) resting rate.
 			double sprint = sprinting ? base * sprintFactor : 0.0;
-			energy -= base + carry + sprint;
+			// Cost of transport: pay for the ground actually covered last tick, in
+			// proportion to the mass hauled over it. A step cancelled by a collision
+			// covered nothing and so costs nothing — this charges travel, not intent.
+			double travel = COST_OF_TRANSPORT * bodyMass() * lastStep;
+			energy -= base + carry + sprint + travel;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved

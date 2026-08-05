@@ -659,6 +659,77 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The engine refuses to move any body more than {@link Entity#MAX_STEP} in one
+	 * tick, however fast its genome claims to be. Passability is decided one tile at
+	 * a time, so an over-long step would tunnel through terrain — or, past a full
+	 * tile, be rejected outright and leave the creature stuttering in place. Drives
+	 * a deliberately absurd speed (100x the fastest anything evolves to) and pins
+	 * both halves: every step stays inside the ceiling, AND the creature still
+	 * actually travels rather than freezing.
+	 */
+	static class EngineCapsStepLength extends Scenario {
+		@Override
+		public void run() {
+			seed(3);
+			World w = room(30, 12);
+			TestNPC bolter = TestNPC.mover(2.5, 5.5, 0, 0).withSpeed(5.0); // due east
+			w.spawnEntity(bolter);
+			w.think();
+
+			double x0 = bolter.getX();
+			double worst = 0;
+			for (int i = 0; i < 20; i++) {
+				w.think();
+				worst = Math.max(worst, bolter.lastStep());
+			}
+			assertLess("no step exceeds the engine ceiling", worst, Entity.MAX_STEP + 1e-9);
+			assertGreater("a clamped body still travels (it is not frozen by the cap)",
+					bolter.getX() - x0, 1.0);
+		}
+	}
+
+	/**
+	 * Moving costs energy, in proportion to the ground covered. Without a cost of
+	 * transport the burn depended only on body size, so speed — the one gene with
+	 * real upside and no downside — ratcheted upward every generation. Three
+	 * identical bodies differing only in speed: a still one, a slow walker and a
+	 * fast one. Asserts the burn is strictly ordered by distance travelled, and
+	 * that holding still costs nothing beyond resting metabolism.
+	 */
+	static class TravelCostsEnergy extends Scenario {
+		@Override
+		public void run() {
+			seed(4);
+			World w = room(30, 14);
+			// Same size (so identical resting burn), same start energy, differing
+			// only in speed. Movers walk east across open floor, never reaching a wall
+			// within the window, so nothing cancels their steps.
+			TestNPC still = TestNPC.inert(2.5, 3.5, 0).withMetabolic().withEnergy(4);
+			TestNPC slow = TestNPC.mover(2.5, 6.5, 0, 0).withMetabolic().withEnergy(4).withSpeed(0.05);
+			TestNPC fast = TestNPC.mover(2.5, 9.5, 0, 0).withMetabolic().withEnergy(4).withSpeed(0.15);
+			w.spawnEntity(still);
+			w.spawnEntity(slow);
+			w.spawnEntity(fast);
+			w.think();
+
+			double e0 = still.getEnergy();
+			tick(w, 100);
+			double burnStill = e0 - still.getEnergy();
+			double burnSlow = e0 - slow.getEnergy();
+			double burnFast = e0 - fast.getEnergy();
+
+			assertGreater("walking costs more than standing still", burnSlow, burnStill);
+			assertGreater("travelling further costs more again", burnFast, burnSlow);
+			// The gap is the cost of transport over the extra ground, so it should
+			// track the distance ratio (3x the speed => ~3x the travel component).
+			double travelSlow = burnSlow - burnStill;
+			double travelFast = burnFast - burnStill;
+			assertGreater("the fast body's travel bill scales with the distance it covered",
+					travelFast, travelSlow * 2.0);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -3263,6 +3334,8 @@ public class SimTests {
 				new GenomeReactModel(),
 				new GenomePredatorHuntsPrey(),
 				new SmallHunterTakesBiggerPreySlowly(),
+				new EngineCapsStepLength(),
+				new TravelCostsEnergy(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),

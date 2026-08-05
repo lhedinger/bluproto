@@ -169,10 +169,22 @@ public class Genome {
 	 *  the predator/prey scale meaningful. */
 	public static final double SIZE_MIN = 4, SIZE_MAX = 20;
 
+	/**
+	 * Ceiling on the speed gene (tiles/tick). Speed was the one magnitude with no
+	 * upper bound, so it random-walked upward under selection with nothing to stop
+	 * it. {@link net.hedinger.prototype.engine.Entity#MAX_STEP} already refuses to
+	 * move any body further than half a tile per tick, but clamping the gene too
+	 * keeps a genome honest: without it a lineage would evolve speeds the engine
+	 * silently throws away, and the inspector would advertise a number the creature
+	 * cannot reach. Set below MAX_STEP with room for the minded sprint gear
+	 * (x1.5), so even a sprinting body stays inside the engine limit on its own.
+	 */
+	public static final double SPEED_MAX = 0.3;
+
 	/** Mutates every gene by up to +/- rate (relative for magnitudes). */
 	public void mutate(double rate) {
 		size = clamp(size * (1 + jitter(rate)), SIZE_MIN, SIZE_MAX);
-		speed = pos(speed * (1 + jitter(rate)));
+		speed = clamp(speed * (1 + jitter(rate)), 0, SPEED_MAX);
 		turnRate = Math.max(1, (int) Math.round(turnRate * (1 + jitter(rate))));
 		losRange = pos(losRange * (1 + jitter(rate)));
 		losFov = clamp(losFov * (1 + jitter(rate)), 0, 2 * Math.PI);
