@@ -44,15 +44,9 @@ public abstract class NPC extends Entity {
 	// false, so their behaviour and determinism are untouched.
 	protected boolean metabolic = false;
 	protected double energy = 1.0;
-	/** Set by a behaviour when it is exerting itself (a hunter's pursuit burst);
-	 *  cleared when cruising. While true the entity pays a sprint surcharge (a
-	 *  multiple of its resting burn, see {@link #sprintFactor}) on top of its
-	 *  resting metabolism, so fast movement — not just being alive — drains it. */
-	protected boolean sprinting = false;
-	/** Extra burn while {@link #sprinting}, as a multiple of the resting rate: 0 =
-	 *  no sprint gear, 1.5 = a pursuit burns 2.5x resting. Scales with body mass
-	 *  automatically because the resting rate does. */
-	protected double sprintFactor = 0.0;
+	// Movement has no separate "gear": a creature simply chooses how fast to go
+	// (its throttle, or a behaviour's chosen speed) and the movement cost below
+	// prices that choice continuously. There is no sprint flag and no surcharge.
 
 	// --- size-scaled energy model --------------------------------------------
 	// Everything scales off a body-size factor, normalised so a reference-size
@@ -115,22 +109,26 @@ public abstract class NPC extends Entity {
 		return adultSize <= 0 ? 1.0 : Math.min(1.0, grownSize / adultSize);
 	}
 	/**
-	 * Energy to carry one unit of body mass one tile — the cost of transport, and
-	 * the price of actually going somewhere.
+	 * Movement cost coefficient: a creature pays
+	 * {@code MOVE_ENERGY * mass * v^2} every tick, where {@code v} is the ground
+	 * it actually covered that tick — kinetic energy, so speed is charged as a
+	 * square rather than a flat toll per tile.
 	 *
-	 * <p>Without this, movement was free: the burn depended only on body size, so a
-	 * creature that evolved to run five times faster paid exactly what a sluggish
-	 * one of the same size did. Speed is the one gene with real upside (more ground
-	 * grazed, more prey caught, more hunters escaped) and, with no cost against it,
-	 * it simply ratcheted upward every generation. Charging by distance covered
-	 * puts a brake on the far side of that trade, and — unlike a flat penalty —
-	 * costs a creature nothing while it holds still.
+	 * <p>The square is what makes speed genuinely expensive. Cost per TICK rises
+	 * with v², so cost per TILE rises linearly with v: going twice as fast costs
+	 * four times as much per tick and twice as much per tile. A creature that
+	 * merely wants to cover ground is therefore better off going slowly, and speed
+	 * has to buy something real — escaping, or catching — to be worth its price.
+	 * There is deliberately no separate sprint gear: a creature just chooses how
+	 * fast to move and this prices the choice continuously, at every speed, rather
+	 * than only above a threshold.
 	 *
-	 * <p>Calibrated so a reference-size creature moving at about the founder speed
-	 * pays roughly its own resting rate again: locomotion roughly doubles the bill
-	 * of a moving creature, and dominates it for a genuinely fast one.
+	 * <p>Anchored so a reference-size creature moving at about the founder speed
+	 * (0.05 tiles/tick) pays roughly its own resting rate again — the same
+	 * break-even the earlier flat model had — while a genuinely fast one now pays
+	 * several times over rather than merely proportionally.
 	 */
-	protected static final double COST_OF_TRANSPORT = 0.01;
+	protected static final double MOVE_ENERGY = 0.2;
 
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
 	 *  Falls back to the reference when no size is set. */
@@ -420,16 +418,11 @@ public abstract class NPC extends Entity {
 			if (grabbing != null) {
 				carry += GRIP_ENERGY * grabbing.getSize();
 			}
-			// Sprint surcharge: a hunter cruises cheaply and only burns hard during
-			// a pursuit burst, so it can go far longer between kills than a flat
-			// metabolism allowed — but a long fruitless chase still costs it. The
-			// surcharge is a multiple of the (mass-scaled) resting rate.
-			double sprint = sprinting ? base * sprintFactor : 0.0;
-			// Cost of transport: pay for the ground actually covered last tick, in
-			// proportion to the mass hauled over it. A step cancelled by a collision
-			// covered nothing and so costs nothing — this charges travel, not intent.
-			double travel = COST_OF_TRANSPORT * bodyMass() * lastStep;
-			energy -= base + carry + sprint + travel;
+			// Movement: kinetic, so a fast body pays the square of its speed. Charged
+			// on the ground actually covered — a step cancelled by a collision moved
+			// nothing and costs nothing, so this prices travel, not intent.
+			double travel = MOVE_ENERGY * bodyMass() * lastStep * lastStep;
+			energy -= base + carry + travel;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved

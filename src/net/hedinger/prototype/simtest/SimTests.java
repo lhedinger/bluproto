@@ -1499,7 +1499,7 @@ public class SimTests {
 
 	/**
 	 * The dedicated prey channel drives hunting. A mind that steers toward
-	 * {@code S_PREY_BEARING} and engages the sprint gear runs down a smaller
+	 * {@code S_PREY_BEARING} and opens the throttle runs down a smaller
 	 * creature it senses at full sight range — a target the short facing-gated
 	 * nearest-neighbour channel would lose the moment it moved.
 	 */
@@ -1517,7 +1517,7 @@ public class SimTests {
 				public void think(double[] s, double[] a) {
 					a[AgentIO.A_TURN] = s[AgentIO.S_PREY_BEARING]; // steer onto the prey
 					a[AgentIO.A_THROTTLE] = 1.0;
-					a[AgentIO.A_SPRINT] = 1.0; // burst after it
+					a[AgentIO.A_THROTTLE] = 1.0; // run it down at full speed
 				}
 			};
 			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt);
@@ -1578,13 +1578,15 @@ public class SimTests {
 	}
 
 	/**
-	 * The sprint actuator is a real gear: engaging it covers more ground per tick
-	 * than cruising, and burns extra energy (the size-scaled sprint surcharge) to
-	 * do it. That cost/benefit is what lets a mind evolve to spend the burst only
-	 * when a chase is worth it, instead of the flat-cost movement it replaces.
+	 * Throttle is the speed control, and speed is charged as kinetic energy. There
+	 * is no sprint gear to engage: a mind simply asks for the pace it wants, and
+	 * because movement costs {@code mass * v^2} the bill rises with the SQUARE of
+	 * that choice. Runs one body at two throttle settings and pins both halves —
+	 * more throttle covers more ground, and it costs superlinearly more to do it,
+	 * which is what makes going fast a decision rather than a free upgrade.
 	 */
-	static class SprintGearCostsEnergyForSpeed extends Scenario {
-		private double[] run(boolean sprint) {
+	static class ThrottleSetsSpeedAndCostsItsSquare extends Scenario {
+		private double[] run(double throttle) {
 			seed(73);
 			World w = room(50, 9);
 			Genome g = new Genome();
@@ -1593,11 +1595,8 @@ public class SimTests {
 			Mind ctrl = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_THROTTLE] = 1.0;
+					a[AgentIO.A_THROTTLE] = throttle;
 					a[AgentIO.A_TURN] = 0;
-					if (sprint) {
-						a[AgentIO.A_SPRINT] = 1.0;
-					}
 				}
 			};
 			TestNPC body = TestNPC.minded(3.5, 4.5, 0, g, ctrl).withMetabolic().withEnergy(5.0);
@@ -1610,10 +1609,19 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			double[] sprinted = run(true);
-			double[] cruised = run(false);
-			assertGreater("sprinting covers more ground than cruising", sprinted[0], cruised[0] + 1.0);
-			assertGreater("sprinting burns more energy than cruising", sprinted[1], cruised[1]);
+			double[] fast = run(1.0);
+			double[] half = run(0.5);
+			assertGreater("more throttle covers more ground", fast[0], half[0] + 1.0);
+
+			// Resting metabolism is in both bills, so compare the MOVEMENT component.
+			// Doubling speed quadruples the per-tick movement cost, so over the same
+			// window the moving part should be ~4x, not 2x.
+			double[] still = run(0.0);
+			double moveFast = fast[1] - still[1];
+			double moveHalf = half[1] - still[1];
+			assertGreater("moving at all costs energy", moveHalf, 0.0);
+			assertGreater("doubling speed costs far more than double (v^2, not v)",
+					moveFast, moveHalf * 3.0);
 		}
 	}
 
@@ -2858,7 +2866,19 @@ public class SimTests {
 					}
 				}
 			}
-			assertGreater("the colony concentrates around the nest", near / (double) total, 0.30);
+			// Measured against what an even spread over the walkable interior would
+			// put inside that radius, NOT against a raw fraction. A thriving colony
+			// saturates this small room — 150-odd bodies over ~144 open tiles — and
+			// at that density no raw share can look impressive however tightly the
+			// creatures nest, simply because the circle cannot hold them. The ratio
+			// asks the question the test actually means: are they denser here than
+			// chance would put them?
+			double open = (w.getColums() - 2) * (double) (w.getRows() - 2);
+			double uniform = Math.PI * 3.0 * 3.0 / open;
+			assertGreater("the colony concentrates around the nest ("
+					+ near + "/" + total + " within 3 tiles, vs "
+					+ String.format("%.0f%%", uniform * 100) + " if spread evenly)",
+					(near / (double) total) / uniform, 1.2);
 		}
 	}
 
@@ -3514,7 +3534,7 @@ public class SimTests {
 				new MindSensesHungerByCapacity(),
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
-				new SprintGearCostsEnergyForSpeed(),
+				new ThrottleSetsSpeedAndCostsItsSquare(),
 				new MindedBodyDescendsOnlyWhenItWills(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),

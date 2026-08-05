@@ -112,9 +112,17 @@ public final class AgentIO {
 	 *  signal <b>bucks</b>: it spends energy trying to throw them off (a bigger
 	 *  parasite comes loose sooner than a small one that clings tighter). */
 	public static final int A_STRUGGLE = 8;
-	/** Engage the costly sprint gear when &gt; 0.5: move faster, but pay the
-	 *  size-scaled sprint surcharge every tick. Lets the cheap-cruise / expensive-
-	 *  burst economy that predation depends on be learned rather than hardcoded. */
+	/**
+	 * Retired, and inert: the sprint gear is gone. Movement is now charged as
+	 * {@code mass * v^2}, so a creature simply asks for the speed it wants through
+	 * {@link #A_THROTTLE} and pays for that choice continuously — a separate
+	 * "burst" gear with its own surcharge no longer means anything.
+	 *
+	 * <p>The slot is kept rather than removed on purpose. Brain instructions store
+	 * raw actuator indices, so deleting this one would renumber
+	 * {@link #A_VERTICAL} and silently change the meaning of every genome already
+	 * saved to a file. A mind may still write here; nothing reads it.
+	 */
 	public static final int A_SPRINT = 9;
 	/** Vertical intent: seek to climb when &gt; 0.5, to descend when &lt; -0.5, hold
 	 *  level otherwise. The body executes it only where a ramp or hole actually
@@ -124,7 +132,7 @@ public final class AgentIO {
 	public static final int NUM_ACT = 11;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"sprint", "vertical" };
+			"sprint (retired)", "vertical" };
 
 	private AgentIO() {
 	}
