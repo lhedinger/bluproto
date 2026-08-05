@@ -53,16 +53,8 @@ public class TestNPC extends NPC {
 	 *  kill worth attempting at all. */
 	private static final double PRED_BITE_ENERGY = 0.5;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
-	 *  lopes around cheaply and saves the full sprint for an actual pursuit. */
+	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
-	/** Sprint surcharge as a multiple of resting burn: a pursuit costs ~2.5x the
-	 *  resting rate (1.0 base + this), so cruising is cheap but a long fruitless
-	 *  chase still bites. Scales with body size because the resting rate does. */
-	private static final double PRED_SPRINT_FACTOR = 1.5;
-	/** Top-speed multiplier while a mind engages the sprint actuator, paired with
-	 *  the sprint energy surcharge: the burst is genuinely faster than the cruise it
-	 *  costs more than, so the mind has a real gear to spend energy on. */
-	private static final double SPRINT_SPEED_MULT = 1.5;
 	/** A predator holding less than this fraction of its (size-scaled) tank is
 	 *  starving — desperate enough to break the taboo and hunt its own kind. Born
 	 *  at 0.6 and breeding at 0.75, a hunter only drops this low when it has been
@@ -281,7 +273,6 @@ public class TestNPC extends NPC {
 	public static TestNPC predator(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.PREDATOR);
 		configureGenomeBody(t, g); // size-scaled reserve, burn, and repro thresholds
-		t.sprintFactor = PRED_SPRINT_FACTOR; // only the pursuit burst is costly
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 12);
 		t.SEARCH_FREQ = 3;
@@ -340,7 +331,6 @@ public class TestNPC extends NPC {
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 3);
 		t.SEARCH_FREQ = 2;
-		t.sprintFactor = PRED_SPRINT_FACTOR; // the sprint actuator's burst has a real cost
 		t.mind = mind;
 		return t;
 	}
@@ -378,7 +368,6 @@ public class TestNPC extends NPC {
 		t.LOS_FOV = Math.PI * 2; // omnidirectional, like the other genome bodies
 		t.LOS_RANGE = Math.max(g.losRange, 3);
 		t.SEARCH_FREQ = 2;
-		t.sprintFactor = PRED_SPRINT_FACTOR; // the sprint actuator's burst has a real cost
 		t.mind = mindOf(g);
 		return t;
 	}
@@ -549,7 +538,7 @@ public class TestNPC extends NPC {
 	}
 
 	/** Makes this body metabolic (burns energy, can starve) — lets a scenario put a
-	 *  hand-driven mind on an energy-bearing body to exercise the hunger/sprint
+	 *  hand-driven mind on an energy-bearing body to exercise the hunger/movement
 	 *  economy without the full breeder lifecycle. */
 	public TestNPC withMetabolic() {
 		metabolic = true;
@@ -673,20 +662,17 @@ public class TestNPC extends NPC {
 		if (prey != null && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
 			setAction("attacking", true); // in reach: bite whatever the hunger level
-			sprinting = false; // in reach: bite, don't burn on the chase
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
 			prey.damage(biteDamage(prey));
 			energy += PRED_BITE_ENERGY; // predation feeds the hunter
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
 			setAction(starving ? "starving" : "hunting", false);
-			sprinting = true; // burst pursuit at full speed — the costly gear
 			chase(speed, turn);
 		} else {
 			// No prey, or well-fed and nothing in its mouth: patrol calmly. Label
 			// it "sated" when it is deliberately letting visible prey be.
 			setAction((sated && prey != null) ? "sated" : "prowling", false);
-			sprinting = false; // patrol calmly and cheaply — no sprint
 			roam(speed * PRED_CRUISE, turn);
 		}
 		tryReproduce();
@@ -762,7 +748,6 @@ public class TestNPC extends NPC {
 			escLastX = X;
 			escLastY = Y;
 			setAction("prowling", false);
-			sprinting = false;
 			move(driveSpeed, D);
 			return true;
 		}
@@ -1061,10 +1046,12 @@ public class TestNPC extends NPC {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
 		D = wrap(D + t * MAX_TURN); // steer
-		sprinting = a[AgentIO.A_SPRINT] > 0.5; // engage the costly burst gear
-		double topSpeed = sprinting ? speed * SPRINT_SPEED_MULT : speed;
+		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
+		// genome's top speed. There is no separate gear to engage — the movement
+		// cost is quadratic in speed, so easing off is exactly how a mind saves
+		// energy, and pushing hard is exactly what it pays for.
 		if (throttle > 0.02) {
-			move(throttle * topSpeed, D);
+			move(throttle * speed, D);
 		}
 		// Vertical intent: the body only drops through (or steps onto) a hole when
 		// the mind actively wills the descent -- otherwise it treats an open hole as
@@ -1101,7 +1088,7 @@ public class TestNPC extends NPC {
 		} else if (eaten > 0) {
 			setAction("grazing", false);
 		} else if (throttle > 0.02) {
-			setAction(sprinting ? "running" : "wandering", false);
+			setAction(throttle > 0.7 ? "running" : "wandering", false);
 		} else {
 			setAction("resting", false);
 		}

@@ -63,9 +63,10 @@ public final class Worlds {
 		double[] sizes = { 20, 18 };
 		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
 		// these big hunters a large reserve and a long fasting endurance (bigger
-		// body, bigger tank), so a predator drains gently between kills. Its only
-		// heavy burn is the sprint surcharge paid while pursuing prey (see
-		// TestNPC.PRED_SPRINT_FACTOR), so a long fruitless chase still thins it.
+		// body, bigger tank), so a predator drains gently between kills. Running
+		// prey down is what costs it: movement is charged as mass * v^2, so a
+		// full-speed pursuit burns far harder than its patrol and a long fruitless
+		// chase still thins it.
 		return species(markers, sizes, 0.045, 0.055, 0.02);
 	}
 

@@ -176,8 +176,8 @@ public class Genome {
 	 * move any body further than half a tile per tick, but clamping the gene too
 	 * keeps a genome honest: without it a lineage would evolve speeds the engine
 	 * silently throws away, and the inspector would advertise a number the creature
-	 * cannot reach. Set below MAX_STEP with room for the minded sprint gear
-	 * (x1.5), so even a sprinting body stays inside the engine limit on its own.
+	 * cannot reach. Sits below MAX_STEP, so the fastest body a genome can express
+	 * is still inside the engine's per-tick step limit on its own.
 	 */
 	public static final double SPEED_MAX = 0.3;
 
