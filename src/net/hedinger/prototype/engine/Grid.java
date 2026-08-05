@@ -447,13 +447,17 @@ public class Grid {
 
 	/**
 	 * Low-res pixel ground: each tile is drawn as A×A chunky art-pixels, each
-	 * coloured from its terrain-class ramp by a world-space shade noise. The
-	 * terrain lookup is jittered by noise so class boundaries wander and dither
-	 * across tile edges instead of snapping to the grid. Open ground (grass, soil,
-	 * water, mud, cover) jitters hard for organic coastlines; walls and holes
-	 * jitter only slightly (a couple of pixels) so they stay solid, never bleed
-	 * out onto open ground, and get a simple top-lit bevel / rim for depth, plus a
-	 * cast shadow on the ground just south of a wall.
+	 * coloured from its terrain-class ramp by a world-space shade noise pushed
+	 * through an ordered (Bayer) dither -- shade transitions are checkerboard
+	 * mixes of adjacent ramp colours, never blends. The terrain lookup is
+	 * jittered by noise so class boundaries wander and dither across tile edges
+	 * instead of snapping to the grid. Open ground (grass, soil, water, mud,
+	 * cover) jitters hard for organic coastlines; water's shading is stretched
+	 * into horizontal swell bands, and bare soil/mud is plated by a dark
+	 * Voronoi-ridge crack network. Walls and holes jitter only slightly (a
+	 * couple of pixels) so they stay solid and never bleed out onto open
+	 * ground; a wall's body is vertically striated rock with a top-lit bevel
+	 * and shadowed base, plus a cast shadow on the ground just south of it.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -489,13 +493,23 @@ public class Grid {
 						if (!ownTight && (cl == GroundTextures.CLS_WALL || cl == GroundTextures.CLS_HOLE)) {
 							cl = cls; // structures don't bleed out onto open ground
 						}
+						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
 						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
-							// Flat stone (no ground blobs) + a top-lit bevel, so it reads
-							// as a solid raised mass rather than mottled camouflage.
-							col = GroundTextures.rampColor(cl,
-									(!wallN && aj < A * 0.28) ? 2 : (!wallS && aj >= A * 0.72) ? 0 : 1);
+							// Striated stone: the shade noise is stretched hard along y
+							// (high frequency across, low frequency down), so the mass
+							// reads as long vertical pixel runs -- a carved rock face --
+							// with the top-lit bevel and dark base biasing the runs
+							// bright at the lit edge and dark at the foot.
+							double s = Utils.noise2(wx * 7.0, wy * 0.55, 1.0);
+							double p = (s - 0.22) / 0.56 * 2;
+							if (!wallN && aj < A * 0.28) {
+								p += 1.4; // lit top edge
+							} else if (!wallS && aj >= A * 0.72) {
+								p -= 1.1; // shadowed base
+							}
+							col = GroundTextures.ditherRamp(cl, p, gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground: the north lip catches
 							// the screen-north light brightest, the other three lips are the
@@ -520,7 +534,15 @@ public class Grid {
 								col = GroundTextures.rampColor(cl, 1);
 							}
 						} else {
-							col = GroundTextures.groundColor(cl, wx, wy); // organic blobs for open ground
+							// Open ground: ordered-dithered shade blobs (water's are
+							// stretched into horizontal swell bands).
+							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
+							// Bare earth is plated by a crack network, like sun-baked
+							// clay: dark seams along the Voronoi ridges.
+							if ((cl == GroundTextures.CLS_SOIL || cl == GroundTextures.CLS_MUD)
+									&& GroundTextures.crack(wx, wy)) {
+								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+							}
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}

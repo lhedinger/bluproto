@@ -84,6 +84,86 @@ public final class GroundTextures {
 		return RAMP[cls][sh < 0.32 ? 0 : (sh > 0.80 ? 2 : 1)];
 	}
 
+	// ---- ordered dither, striation, cracks --------------------------------
+
+	/** 4x4 Bayer matrix: the classic ordered-dither threshold pattern. */
+	private static final int[] BAYER4 = {
+			0, 8, 2, 10,
+			12, 4, 14, 6,
+			3, 11, 1, 9,
+			15, 7, 13, 5 };
+
+	/** Ordered-dither threshold in (0,1) for a world-absolute art-pixel. */
+	public static double bayer(int px, int py) {
+		return (BAYER4[(py & 3) * 4 + (px & 3)] + 0.5) / 16.0;
+	}
+
+	/**
+	 * A ramp shade for a continuous shade index {@code p} in [0,2], picked by
+	 * Bayer-dithering between the two adjacent shades: the fractional part of
+	 * {@code p} becomes checkerboard coverage of the brighter shade. Gradients
+	 * thus render as ordered-dither mixes of the same three ramp colours, never
+	 * as new in-between colours.
+	 */
+	public static int ditherRamp(int cls, double p, int px, int py) {
+		p = p < 0 ? 0 : (p > 2 ? 2 : p);
+		int lo = (int) p;
+		if (lo >= 2) {
+			return RAMP[cls][2];
+		}
+		return RAMP[cls][p - lo > bayer(px, py) ? lo + 1 : lo];
+	}
+
+	/**
+	 * Dithered ground colour: the same shade noise and ramp as
+	 * {@link #groundColor}, but mapped to a continuous shade index and rendered
+	 * through {@link #ditherRamp}, so shade transitions are checkerboard mixes
+	 * instead of hard thresholds. Water samples the noise anisotropically --
+	 * stretched along x, compressed along y -- so its shading pulls into
+	 * horizontal bands that read as swell.
+	 */
+	public static int groundColorDithered(int cls, double wx, double wy, int px, int py) {
+		double sh = cls == CLS_WATER
+				? Utils.noise2(wx * 0.45, wy * 1.8, 3.7)
+				: Utils.noise2(wx, wy, 3.7);
+		return ditherRamp(cls, (sh - 0.28) / 0.56 * 2, px, py);
+	}
+
+	/**
+	 * True where (wx,wy) lies on the crack network that plates bare ground: the
+	 * ridge lines of a jittered-lattice Voronoi diagram (points where the two
+	 * nearest feature points are nearly equidistant). Purely positional, so the
+	 * network is seamless across tiles and chunk bakes.
+	 */
+	public static boolean crack(double wx, double wy) {
+		double cell = 1.15; // plate diameter in tiles
+		double cx = wx / cell, cy = wy / cell;
+		int ix = (int) Math.floor(cx), iy = (int) Math.floor(cy);
+		double d1 = 9, d2 = 9;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int nx = ix + ox, ny = iy + oy;
+				double dx = cx - (nx + 0.18 + 0.64 * hash01(nx, ny, 1));
+				double dy = cy - (ny + 0.18 + 0.64 * hash01(nx, ny, 2));
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d < d1) {
+					d2 = d1;
+					d1 = d;
+				} else if (d < d2) {
+					d2 = d;
+				}
+			}
+		}
+		return d2 - d1 < 0.10;
+	}
+
+	/** Deterministic integer-lattice hash to [0,1). */
+	private static double hash01(int x, int y, int s) {
+		int h = x * 374761393 + y * 668265263 + s * (int) 2246822519L;
+		h = (h ^ (h >>> 13)) * 1274126177;
+		return ((h ^ (h >>> 16)) & 0x7fffffff) / (double) 0x7fffffff;
+	}
+
 	/** A specific ramp shade (0 shadow, 1 base, 2 highlight) for a class. */
 	public static int rampColor(int cls, int idx) {
 		return RAMP[cls][idx];
