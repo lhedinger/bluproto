@@ -546,7 +546,7 @@ public class Grid {
 							// Open ground: solid shade clusters with a narrow dithered
 							// border where adjacent shades meet.
 							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
-							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 0.6, 0.08)) {
+							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 0.38, 0.06)) {
 								// Dry badlands: sun-baked clay plates, dark seams.
 								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
 							} else if (cl == GroundTextures.CLS_MUD) {
