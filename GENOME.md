@@ -11,16 +11,57 @@ dispositions*. No "A hates B" table.
 
 ---
 
-## The model — three layers
+## The model — four layers
 
 | Layer | Fields | Role |
 |---|---|---|
-| **Phenotype** (the body) | `size`, `speed`, `turnRate`, `losRange`, `losFov`, `metabolism`, `maxAge` | Drives physics & perception |
+| **Phenotype** (the body) | `size`, `speed`, `turnRate`, `losRange`, `losFov`, `metabolism`, `maxAge`, `flying` | Drives physics, perception and the energy economy |
 | **Markers** (recognition) | `markers[3]` ∈ [0,1] | A neutral "barcode" — no physical effect. Two entities are *similar* when markers are close. Mapped to RGB (`toColor()`) so similarity is visible |
-| **Dispositions** (behaviour) | `predatory`, `xenophobia`, `gregariousness`, `boldness`, `mateThreshold` | Response weights that turn a perceived neighbour into a drive |
+| **Dispositions** (reflex behaviour) | `predatory`, `xenophobia`, `gregariousness`, `boldness`, `mateThreshold` | Response weights that turn a perceived neighbour into a drive (`react()`) |
+| **Mind** (learned behaviour) | `brain` — a `Brain`, or null | An evolvable program. Where dispositions give a fixed reflex, the brain *decides*, and both the wiring and its length are heritable |
 
 Keeping markers (who I recognise) separate from dispositions (how I feel about
-the recognised) lets recognition and behaviour evolve independently.
+the recognised) lets recognition and behaviour evolve independently. The brain is
+separate again: a genome can carry a body with no mind (the scripted species) or
+a body driven entirely by one (the minded cohort).
+
+## The mind — `Brain` + `AgentIO`
+
+A creature with a `brain` is driven by a **linear genetic program** rather than a
+hardcoded rule. Its body fills a sensor vector, the program runs, and the body
+applies the actuator vector as intent. The mind never touches the world directly.
+
+- **Registers** — 12 scalars that persist across ticks, so a brain has memory.
+- **Ops** — `NOP SET MOV ADD SUB MUL MIN MAX NEG TANH GT SKIPZ SKIPNZ SENSE WRITE`,
+  over a fixed 12-value constant pool.
+- **I/O** — 23 sensors (`S_*`) in, 11 actuators (`A_*`) out. Actuator values
+  **latch** between writes, so a program only spends instructions on what changes.
+- **Heredity** — point mutation plus insertion/deletion of whole instructions, and
+  variable-length crossover, so wiring *and* length evolve. Capped at `MAX_LEN`.
+
+### One instruction per tick — a deliberate invariant
+
+A brain executes **one instruction per tick**, so program length *is* the length
+of one thought cycle: a 14-instruction brain completes a cycle every 14 ticks
+(≈0.42 s at 33 t/s). This is a specification, not a limitation to engineer away.
+It makes capability and reflex speed a real trade-off that selection must price:
+a mind that senses more reacts more slowly, and a lean brain that reacts fast
+gives something up to do it. Since length is heritable, lineages settle this for
+themselves. **Seed brains are therefore kept short**, and new ones should be.
+
+### Starter brains
+
+Fully-random brains were tried first and never stumbled onto feeding, so
+selection had no gradient to climb. Founders instead get a crude, viable seed
+that mutation sharpens:
+
+| Brain | Strategy |
+|---|---|
+| `Worlds.starterBrain()` | Forager — drive, graze, breed, wander by the clock, turn **away** from anything bigger |
+| `Worlds.hitchhikerBrain()` | Hitch-hiker — the same sensors read with the opposite sign: turn **toward** anything bigger and ride it |
+
+Every third minded founder is a hitch-hiker, so both strategies compete from tick
+one; survivor-seeding then propagates whichever is coping.
 
 ## Reaction — `react(other, sizeAdv)`
 
@@ -53,6 +94,78 @@ Mutation draws from the **seeded RNG**, so evolution is fully reproducible.
 
 ---
 
+## The body's economy
+
+Every genome-driven creature that opts into `metabolic` runs the same energy
+model. Everything in it derives from the body the genome asks for, so the
+phenotype genes have real consequences rather than being cosmetic.
+
+### The per-tick bill
+
+```
+energy -= base + grip + travel
+
+base   = BASE_METABOLISM · mass^0.75 · (metabolism / META_REF)   // staying alive
+grip   = GRIP_ENERGY · held_mass          // restraining an unwilling captive
+travel = MOVE_ENERGY · (mass + carried_mass) · v²                // going somewhere
+```
+
+`mass = size / REF_SIZE`, and `v` is the ground **actually covered** this tick —
+a step cancelled by a collision moved nothing and costs nothing, so travel prices
+movement rather than intent.
+
+### The laws that fall out of it
+
+- **Resting scales sublinearly with mass** (`mass^0.75`, Kleiber) while the tank
+  scales linearly, so fasting endurance goes as **mass^0.25**: a bigger body
+  idles longer between meals, but needs bigger meals to refill.
+- **Movement is kinetic.** Cost per tick rises with v², so cost per *tile* rises
+  linearly with v — twice as fast is four times as expensive per tick and twice as
+  expensive per tile. Covering ground is cheapest slowly, so speed has to buy
+  something real (escaping, catching) to be worth its price.
+- **Travel is mass-neutral in tank terms.** `travel / capacity` reduces to
+  `distance / 600` with the mass cancelling: crossing the map costs *every*
+  creature the same fraction of its reserve. Being big buys endurance at rest and
+  nothing at all for covering ground.
+- **A load is simply extra mass.** Carrying has no separate toll; whatever a
+  creature hauls makes it heavier and is billed through movement. Standing still
+  under a load is nearly free; walking off with it costs in proportion. Flight
+  counts a load several times heavier — lifting is harder than dragging.
+- **The grip is the exception**, and the only thing separating a ferry from a
+  captor: restraining something that does not want to be held costs whether or not
+  you move, so captivity is an effort rather than a free permanent state.
+- **There is no sprint gear.** A creature asks for the speed it wants (throttle,
+  for a mind) and the quadratic law prices that choice continuously at every
+  speed, rather than only above a threshold.
+
+### Growth
+
+A creature is born at `BIRTH_SIZE_FRACTION` of its adult body and grows in at a
+fixed `GROWTH_RATE`. Because the *rate* is fixed and the *distance* is not,
+childhood length scales with adult size — the largest body a genome can express
+takes about a minute, the longest childhood the world produces.
+
+Growth is deliberately **physical, not economic**. Everything derived from the
+body a creature has *right now* follows it down — resting burn, movement cost,
+collision reach, and what a hunter may take — so a juvenile is cheap to run but
+genuinely small and easy prey. The energy **tank** is anchored on the *adult*
+body, which keeps the whole reproduction economy (born-fed level, breeding
+threshold and cost, a hunter's "sated" line) identical to a world without growth.
+Anchoring the tank on the juvenile body instead was tried and silently re-gated
+breeding on maturity while leaving young hunters unable ever to count as sated.
+
+### Engine limits, not balance knobs
+
+- `Entity.MAX_STEP` (0.5 tiles) caps any single step. Passability is decided one
+  tile at a time, so a longer step would tunnel through terrain — and past a full
+  tile the collision test rejects it outright, freezing the creature rather than
+  speeding it up. Direction is preserved; only magnitude is clamped.
+- `Genome.SIZE_MAX` / `SPEED_MAX` bound the two genes that would otherwise
+  random-walk without limit. With movement priced as v², evolved speed settles
+  around 0.08–0.10 tiles/tick on its own, well inside the clamp.
+
+---
+
 ## Current status
 
 - ✅ **Phenotype flows from the genome** — all 12 species source their body stats
@@ -66,14 +179,31 @@ Mutation draws from the **seeded RNG**, so evolution is fully reproducible.
 - ✅ **Asexual inheritance runs** — the energy economy (`NPC.metabolic`) plus
   `tryReproduce()` → `spawnOffspring()` → `Genome.child(parent)` gives a working
   evolutionary loop for the `breeder` fixture: fed populations grow and drift
-  (`PopulationGrowsWithFood`). Not yet wired into real species (needs Step 2/3)
-  or sexual mating.
+  (`PopulationGrowsWithFood`).
+- ✅ **Sexual inheritance runs** — `canMateWith()` + `reproduceWith()` bear a
+  crossover child; both parents pay and go on cooldown.
+- ✅ **The mind evolves** — brains are inherited, mutated and crossed over
+  alongside the body, and the deployed world runs a standing cohort of minded
+  creatures competing beside the scripted species.
+- ✅ **The economy has teeth** — size, speed and metabolism all feed the per-tick
+  bill above, so the phenotype genes are under real selection: too fast starves,
+  too big is expensive to move, too small is prey.
+- ✅ **Genomes are portable** — `GenomeCodec` round-trips a whole creature (brain
+  included) through a single whitespace-free line, so one can be exported from the
+  viewer, kept as a savefile, and injected back into a live world.
 
 ---
 
 ## Plan — make the genome actually drive & evolve
 
-### Migration (behaviour → genome)
+> **Superseded, kept for context.** The migration below assumed the legacy
+> bestiary (Zombie, Headcrab, …) would be converted species by species. The
+> project went the other way: the deployed world is built entirely from
+> genome-driven `TestNPC` bodies, and the bestiary is now dead weight awaiting
+> deletion rather than migration. Steps 2–5 describe a path not taken; the
+> *cross-cutting APIs* section below did happen, and is the part that mattered.
+
+### Migration (behaviour → genome) — not taken
 
 - **Step 2 · Author founder genes.** Give each species distinct `markers` and
   `dispositions`. ⚠️ This is a **deliberate behaviour change toward emergence**,
@@ -96,12 +226,14 @@ Mutation draws from the **seeded RNG**, so evolution is fully reproducible.
 
 Heritable behaviour means nothing until something is selected for:
 
-- **Energy / metabolism** — grass → energy → survival. The `metabolism` gene
-  exists but is unused; add an `energy` pool, per-tick drain, and `starve()`.
-- **Reproduction** — `canMate(other)` (mate drive + energy threshold + cooldown)
-  and `reproduce()` → `child(mom, dad, rate)`. **Assortative mating** (breed with
-  the similar) is what holds lineages together.
-- **Sensing** — so genome-driven foraging can steer toward food, not stumble onto it.
+- ✅ **Energy / metabolism** — shipped, and since grown into the full economy
+  documented above.
+- ✅ **Reproduction** — `canMateWith(other)` + `reproduceWith()`; assortative
+  mating holds lineages together.
+- ⚠️ **Sensing** — *still the open one.* A creature can feel whether it is standing
+  on grass (`S_FOOD`) but has **no directional food sense at all**, so foraging
+  cannot steer — it can only stumble. This is why the minded cohort's dominant
+  reported action is *wandering*. See the roadmap: it is the next thing to build.
 
 ### The payoff — speciation
 
