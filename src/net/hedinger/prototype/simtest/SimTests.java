@@ -890,6 +890,42 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The hitch-hiker starter brain actually works: a creature running it steers to
+	 * a larger neighbour and climbs aboard, riding voluntarily rather than being
+	 * seized. Guards both halves of the mechanism — the brain's approach-and-cling
+	 * logic, and the boarding reach that makes contact achievable at all (attach
+	 * once demanded dead-centre contact, which the collision spring made nearly
+	 * impossible to hit deliberately).
+	 */
+	static class HitchhikerBrainClimbsAboard extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(24, 24);
+			// A big, brainless (so motionless) host, and a small hitch-hiker a tile
+			// away with line of sight to it.
+			Genome hostG = Genome.phenotype(14, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC host = TestNPC.minded(12.0, 12.0, 0, hostG);
+			Genome hitchG = Genome.phenotype(6, 0.05, 5, 12, Math.PI * 2, 100000);
+			hitchG.brain = net.hedinger.prototype.sim.Worlds.hitchhikerBrain();
+			TestNPC rider = TestNPC.minded(13.2, 12.0, 0, hitchG);
+			w.spawnEntity(host);
+			w.spawnEntity(rider);
+			w.think();
+			assertTrue("it starts on its own feet", rider.getAttachTarget() == null);
+
+			boolean boarded = false;
+			for (int i = 0; i < 400 && !boarded; i++) {
+				w.think();
+				boarded = rider.getAttachTarget() == host;
+			}
+			assertTrue("a hitch-hiker steers to a larger neighbour and climbs aboard", boarded);
+			assertTrue("it rides voluntarily rather than being seized", !rider.isGrabbed());
+			assertGreater("the host now carries a load", host.getCarriedLoad(), 0.0);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -3553,6 +3589,7 @@ public class SimTests {
 				new HoldingACaptiveCostsEnergy(),
 				new CreaturesGrowToAdultSize(),
 				new ActionGlyphsRideTheWire(),
+				new HitchhikerBrainClimbsAboard(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
