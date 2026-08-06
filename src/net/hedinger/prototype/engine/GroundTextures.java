@@ -58,6 +58,10 @@ public final class GroundTextures {
 	/** The rare over-bright spore speck on a fungus clump -- the one colour
 	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
 	private static final int FUNGUS_SPARK = 0x9df5c6;
+	/** Wildflower / berry accents, matching the shrub decoration palette
+	 *  (Grid.SH_BERRY / SH_FLOWER) so meadow blossoms, shrub berries and
+	 *  thicket berries read as one flora. */
+	private static final int BLOOM_RED = 0xE0455F, BLOOM_CREAM = 0xF0E8C6;
 
 	/** Whether a class is a solid structure (wall) rather than open ground. */
 	public static boolean isStructure(int cls) {
@@ -156,27 +160,62 @@ public final class GroundTextures {
 
 	/**
 	 * Grass as hand-drawn lawns are textured: a calm base broken into coarse
-	 * light/shadow patches, scattered with stamped tufts -- a 2-px lit tip
-	 * over a 1-px shadow root, the classic top-down grass mark. Tuft density
-	 * follows the live vegetation, so a grazed lawn goes quiet before it goes
-	 * bare, and the highlight shade appears only on tuft tips.
+	 * light/shadow patches, scattered with stamped plant motifs. Most cells
+	 * grow a simple tuft (2-px lit tip over a shadow root); some grow a wide
+	 * three-tip clump; lush ground occasionally sprouts a darker broadleaf
+	 * rosette (borrowing the thicket ramp, so it reads as a different plant)
+	 * or a tiny wildflower in the shrub-accent colours. Motif density follows
+	 * the live vegetation, so a grazed lawn goes quiet before it goes bare,
+	 * and the grass highlight shade appears only on blade tips.
 	 */
 	public static int grass(double wx, double wy, int px, int py, double veg) {
-		int C = 3; // tuft lattice pitch, art-px
+		int C = 3; // motif lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
 				if (hash01(cx, cy, 40) > 0.10 + 0.38 * veg) {
-					continue; // no tuft in this cell
+					continue; // nothing grows in this cell
 				}
 				int tx = cx * C + (int) (hash01(cx, cy, 41) * C);
 				int ty = cy * C + (int) (hash01(cx, cy, 42) * C);
-				if (px == tx && (py == ty || py == ty - 1)) {
-					return RAMP[CLS_GRASS][2]; // lit blade tip
-				}
-				if (px == tx && py == ty + 1) {
-					return RAMP[CLS_GRASS][0]; // shadow at the root
+				int dx = px - tx, dy = py - ty;
+				double kind = hash01(cx, cy, 48);
+				if (kind < 0.05 && veg > 0.5) {
+					// Wildflower: a 2-px blossom over a leaf shadow.
+					if (dy == 0 && (dx == 0 || dx == 1)) {
+						return hash01(cx, cy, 49) < 0.7 ? BLOOM_RED : BLOOM_CREAM;
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
+				} else if (kind < 0.11 && veg > 0.55) {
+					// Broadleaf rosette: a darker plus-shaped plant.
+					if (dx == 0 && dy == 0) {
+						return RAMP[CLS_COVER][2];
+					}
+					if (Math.abs(dx) + Math.abs(dy) == 1) {
+						return RAMP[CLS_COVER][1];
+					}
+				} else if (kind < 0.30) {
+					// Wide clump: three fanned lit tips over a shadow root.
+					if ((dy == 0 && Math.abs(dx) == 1) || (dx == 0 && dy == -1)) {
+						return RAMP[CLS_GRASS][2];
+					}
+					if (dx == 0 && dy == 0) {
+						return RAMP[CLS_GRASS][1];
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
+				} else {
+					// Simple tuft: 2-px lit tip over a shadow root.
+					if (dx == 0 && (dy == 0 || dy == -1)) {
+						return RAMP[CLS_GRASS][2];
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
 				}
 			}
 		}
@@ -199,6 +238,7 @@ public final class GroundTextures {
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
 		double bestD = 1e9, bestDy = 0, bestR = 1;
 		boolean bestLit = false;
+		int bestCx = 0, bestCy = 0;
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
@@ -212,10 +252,17 @@ public final class GroundTextures {
 					bestDy = dy;
 					bestR = r;
 					bestLit = hash01(cx, cy, 47) > 0.55;
+					bestCx = cx;
+					bestCy = cy;
 				}
 			}
 		}
 		if (bestD < bestR) {
+			// The odd clump fruits: a small berry cluster at its core, the
+			// same accent the shrubs wear.
+			if (bestD < 0.7 && hash01(bestCx, bestCy, 52) > 0.85) {
+				return BLOOM_RED;
+			}
 			if (bestLit && bestDy < -0.3 * bestR) {
 				return RAMP[CLS_COVER][2]; // lit crown of this clump
 			}
@@ -412,7 +459,10 @@ public final class GroundTextures {
 				int dx = px - tx, dy = py - ty;
 				int tall = hash01(cx, cy, 38) > 0.55 ? 2 : 1; // some stalks stand taller
 				if (dx == 0 && dy == 0) {
-					return RAMP[CLS_REEDS][2]; // lit stalk tip
+					// A share of the tall stalks carry a brown cattail head
+					// (the mud ramp's highlight, so no new colour).
+					return tall == 2 && hash01(cx, cy, 51) > 0.7
+							? RAMP[CLS_MUD][2] : RAMP[CLS_REEDS][2];
 				}
 				if ((Math.abs(dx) == 1 && dy == 0) || (dx == 0 && Math.abs(dy) <= tall)) {
 					return RAMP[CLS_REEDS][1]; // the tuft's arms
