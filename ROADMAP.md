@@ -48,6 +48,33 @@ small, deterministic, test-backed slices.
 - *Fertility field:* `Tile.fertility` gates the grass cap;
   `World.generateFertility()` paints coherent patchy habitats.
 
+**Evolvable minds** — `entities/Brain.java`, `entities/AgentIO.java`
+- Linear genetic program with persistent registers; 23 sensors in, 11 actuators
+  out; wiring *and* length heritable. One instruction per tick, so brain size is
+  reaction time — see [GENOME.md](GENOME.md#one-instruction-per-tick--a-deliberate-invariant).
+- A standing minded cohort competes beside the scripted species in the live world,
+  seeded from two hand-written starter brains (forager, hitch-hiker) and kept
+  topped up by survivor-seeding from the longest-lived survivor.
+- `GenomeCodec` exports a whole creature, brain included, as one line — savefiles
+  and token-gated injection into the running world.
+
+**The body's economy** — full spec in [GENOME.md](GENOME.md#the-bodys-economy)
+- Resting burn `mass^0.75` (Kleiber) against a linear tank, so endurance goes as
+  `mass^0.25`. Movement is kinetic (`mass · v²`), with no separate sprint gear.
+- A carried load is simply extra mass on its carrier; the grip on an unwilling
+  captive is the one cost paid standing still.
+- Creatures are born small and grow into their adult body; growth is physical, so
+  a juvenile is cheap to run but easy prey.
+- Engine step cap (`MAX_STEP`) and gene clamps (`SIZE_MAX`, `SPEED_MAX`) bound
+  what the physics can express, distinct from the balance knobs above.
+
+**A public, always-on world**
+- `WorldSteward` holds each population inside fixed floors and ceilings — a
+  backstop, not the control: predation and starvation do the work. Creatures a
+  person placed by hand are exempt from the cull.
+- Seasons were tried and removed: a global fertility cycle drove the whole world
+  in lockstep, which read as noise rather than as habitat.
+
 ---
 
 ## Next — environment tiers
@@ -56,7 +83,7 @@ small, deterministic, test-backed slices.
 |---|---|---|---|
 | 1 · Living substrate | Regrowing vegetation | Base of the food chain | ✅ done |
 | 2a · Fertility field | Patchy grass capacity | Spatial niches | ✅ done |
-| **2b · Living pressure** | Temperature/light fields + day/night clock that drain energy and can starve/kill | **Real selection pressure — habitat-driven survival** | ▶ next (keystone, higher risk: touches survival + determinism) |
+| **2b · Living pressure** | Temperature/light fields + day/night clock that drain energy and can starve/kill | **Real selection pressure — habitat-driven survival** | keystone; **do it after sensing** — a pressure creatures cannot perceive only kills them at random |
 | 3 · Terrain variety | `WATER` (blocks land / passes flyers), `MUD` (slows), `COVER` (blocks LOS) | Behavioural richness | ✅ done |
 | 4 · Scent / stigmergy | Per-tile pheromone (lazy decay) + deposit/sense/home | Emergent **nests**: a marked peak the lineage clusters around | ✅ done (nesting) |
 
@@ -87,9 +114,38 @@ alongside the tiers:
 
 ---
 
+## The gap that matters most
+
+The apparatus is built and barely used. Of **23 sensors the starter brains read
+three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 10 live actuators
+they write five. Never touched by any seed: `A_DEPOSIT`, `A_ATTACK`, `A_GRAB`,
+`A_STRUGGLE`, `A_VERTICAL`, and the sensors for food, scent, prey, kin, health,
+items, whiskers and hazards.
+
+So the cheapest new behaviour is mostly behaviour already paid for:
+
+1. **Food-gradient sensing, and a forager that climbs it.** `S_FOOD` reports only
+   *"am I standing on grass"* — there is no directional food sensor anywhere in
+   the engine, so a creature cannot tell where food *is*. Measured consequence:
+   the minded cohort reports **wandering 71, grazing 4** out of 80. They are not
+   failing to forage, they are searching blind. Add a bearing sensor and a brain
+   that climbs it, and foraging becomes a skill selection can sharpen.
+2. **A hunter brain.** `A_ATTACK` + `S_PREY_*` are fully wired and unused — all
+   predation is scripted. Roughly the shape of the hitch-hiker brain, and it lets
+   the cohort grow its own predators instead of the role being hardcoded.
+3. **A nester brain.** Tier 4 is done, but only the *scripted* nester nests.
+   `World.pheromoneDirection()` already exists — minds simply have no sensor for
+   it. Exposing it gives colonies that emerge from evolved minds.
+4. **The underground.** Multi-level tunnels exist that no mind has entered;
+   `A_VERTICAL` is unused.
+
+Note the standing constraint when adding any of these: one instruction per tick
+means every extra sensor costs a tick of reaction latency, so seed brains stay
+lean and lineages trade capability against reflexes themselves.
+
 ## Sequencing note
 
-Recommended order once the above are scoped: **Tier 3 (quick, safe win)** →
-**energy + reproduction** (unlocks evolution) → **Tier 2b living pressure**
-(the selection engine) → **Tier 4 scent**. Each lands as its own validated,
-committed slice.
+**Sensing (1) → a hunter brain (2) → Tier 2b living pressure.** Sensing comes
+first because it is the roadmap's own open item, because it is what the current
+population visibly lacks, and because Tier 2b's whole point is a pressure
+creatures can *respond* to. Each lands as its own validated, committed slice.
