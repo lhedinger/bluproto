@@ -547,24 +547,39 @@ public class Grid {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						} else {
-							// Open ground: solid shade clusters with a narrow dithered
-							// border where adjacent shades meet.
-							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
-							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 0.38, 0.06)) {
-								// Dry badlands: sun-baked clay plates, dark seams.
-								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
-							} else if (cl == GroundTextures.CLS_STONE
-									&& GroundTextures.crack(wx, wy, 0.8, 0.07)) {
-								// Stone floor: fitted flagstone slabs, mortar-dark joints.
-								col = darken(GroundTextures.rampColor(cl, 0), 0.6);
-							} else if (cl == GroundTextures.CLS_MUD) {
-								if (nearWater(x, y)) {
-									// Wet shore band: darker, crack-free mud melting into
-									// the water's shadow shade at the jittered boundary.
-									col = darken(col, 0.74);
-								} else if (GroundTextures.crack(wx, wy, 0.35, 0.06)) {
-									// Drier mud crumbles into fine pebble-sized plates.
+							if (cl == GroundTextures.CLS_FUNGUS) {
+								// Bioluminescent beds; clump size follows live vegetation,
+								// so grazing visibly eats the glow away.
+								double cap = t.vegetationCap();
+								double veg = cap > 0 ? t.getVegetation(now) / cap : 1;
+								col = GroundTextures.fungus(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_RUBBLE) {
+								col = GroundTextures.rubble(gx, gy);
+							} else if (cl == GroundTextures.CLS_SAND) {
+								col = GroundTextures.sand(gx, gy);
+							} else if (cl == GroundTextures.CLS_REEDS) {
+								col = GroundTextures.reeds(gx, gy);
+							} else {
+								// Open ground: solid shade clusters with a narrow dithered
+								// border where adjacent shades meet.
+								col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
+								if (cl == GroundTextures.CLS_SOIL
+										&& GroundTextures.crack(wx, wy, 0.38, 0.06)) {
+									// Dry badlands: sun-baked clay plates, dark seams.
 									col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+								} else if (cl == GroundTextures.CLS_STONE
+										&& GroundTextures.crack(wx, wy, 0.8, 0.07)) {
+									// Stone floor: fitted flagstone slabs, mortar-dark joints.
+									col = darken(GroundTextures.rampColor(cl, 0), 0.6);
+								} else if (cl == GroundTextures.CLS_MUD) {
+									if (nearWater(x, y)) {
+										// Wet shore band: darker, crack-free mud melting into
+										// the water's shadow shade at the jittered boundary.
+										col = darken(col, 0.74);
+									} else if (GroundTextures.crack(wx, wy, 0.35, 0.06)) {
+										// Drier mud crumbles into fine pebble-sized plates.
+										col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+									}
 								}
 							}
 							if (wallN && aj < A * 0.32) {

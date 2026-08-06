@@ -202,10 +202,12 @@ public final class Worlds {
 	 *
 	 * <ul>
 	 *   <li><b>Level 0 — the surface:</b> a patchwork of biomes inside a rocky
-	 *       rim — meadow, marsh and open water, dry badlands, sight-blocking
-	 *       thickets, and rocky highlands — laid out from coordinate noise.</li>
-	 *   <li><b>Level 1 — underground:</b> solid rock with carved caverns and the
-	 *       odd subterranean pool.</li>
+	 *       rim — meadow, reed-fringed water, marsh, dry badlands with sand
+	 *       pans, sight-blocking thickets, and stone-and-scree highlands — laid
+	 *       out from coordinate noise.</li>
+	 *   <li><b>Level 1 — underground:</b> solid rock with carved caverns,
+	 *       subterranean pools, and bioluminescent fungus beds skirting
+	 *       them.</li>
 	 * </ul>
 	 *
 	 * The levels are linked by a few two-way ramps and a few open pits (holes).
@@ -244,18 +246,27 @@ public final class Worlds {
 					fert = 0; // rocky rim + occasional highland outcrops (the elevation
 					// noise means ~0.67, so this high threshold keeps highlands a rare
 					// accent instead of walling off half the map)
+				} else if (elev > 0.845) {
+					t = Tile.TileType.TYPE_RUBBLE;
+					fert = 0; // scree collar hugging the outcrops
 				} else if (elev > 0.82) {
 					t = Tile.TileType.TYPE_STONE;
-					fert = 0; // bare rock apron skirting the outcrops
+					fert = 0; // bare rock apron outside the scree
 				} else if (moist > 0.70 && elev < 0.45) {
 					t = Tile.TileType.TYPE_WATER;
 					fert = 0; // lakes in the low, wet ground
+				} else if (moist > 0.68 && elev < 0.46) {
+					t = Tile.TileType.TYPE_REEDS;
+					fert = 0; // reed beds fringing the water: slow, sight-blocking
 				} else if (moist > 0.60 && elev < 0.52) {
 					t = Tile.TileType.TYPE_MUD;
 					fert = 0.30; // marshy shore, slows movement
 				} else if (moist > 0.55 && detail > 0.62) {
 					t = Tile.TileType.TYPE_COVER;
 					fert = 0.90; // thickets: lush, and they block line of sight
+				} else if (elev > 0.58 && moist < 0.30) {
+					t = Tile.TileType.TYPE_SAND;
+					fert = 0; // the badlands' driest core: a sand pan
 				} else if (elev > 0.58 && moist < 0.40) {
 					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.0; // dry badlands: bare dirt, no grass, no food
@@ -277,12 +288,19 @@ public final class Worlds {
 				if (x < 1 || y < 1 || x >= cols - 1 || y >= rows - 1) {
 					t = Tile.TileType.TYPE_WALL; // sealed edge
 				} else if (cave > 0.38 && cave < 0.66) {
-					t = pool > 0.72 ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_STONE;
+					// Pool cores are water; the damp ground skirting a pool grows
+					// bioluminescent fungus beds (the caves' only food); the rest
+					// is bare stone.
+					t = pool > 0.72 ? Tile.TileType.TYPE_WATER
+							: pool > 0.62 ? Tile.TileType.TYPE_FUNGUS
+									: Tile.TileType.TYPE_STONE;
 				} else {
 					t = Tile.TileType.TYPE_WALL; // solid rock
 				}
 				w.setTile(x, y, CAVE_Z, t);
-				w.getTile(x, y, CAVE_Z).setFertility(0); // no grass grows underground
+				// Fungus beds hold moderate food; nothing else grows underground.
+				w.getTile(x, y, CAVE_Z).setFertility(
+						t == Tile.TileType.TYPE_FUNGUS ? 0.6 : 0);
 			}
 		}
 

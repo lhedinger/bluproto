@@ -39,7 +39,8 @@ public final class GroundTextures {
 	// Per terrain class: {shadow, base, highlight}, natural palette from the
 	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
 	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
-			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7;
+			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7, CLS_FUNGUS = 8, CLS_RUBBLE = 9,
+			CLS_SAND = 10, CLS_REEDS = 11;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -49,7 +50,14 @@ public final class GroundTextures {
 			{ 0x3a3e49, 0x565b69, 0x7c828f }, // wall (stone)
 			{ 0x090a0e, 0x14161f, 0x222634 }, // hole (pit)
 			{ 0x2e323c, 0x484d59, 0x666c7a }, // stone floor (darker than wall mass)
+			{ 0x16352a, 0x2a6b4f, 0x54c78e }, // fungus (bioluminescent teal-green)
+			{ 0x333845, 0x515866, 0x747b8a }, // rubble (between stone floor and wall)
+			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // sand (pale warm)
+			{ 0x14301f, 0x2c5a36, 0x4f8752 }, // reeds (wet green)
 	};
+	/** The rare over-bright spore speck on a fungus clump -- the one colour
+	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
+	private static final int FUNGUS_SPARK = 0x9df5c6;
 
 	/** Whether a class is a solid structure (wall) rather than open ground. */
 	public static boolean isStructure(int cls) {
@@ -71,6 +79,14 @@ public final class GroundTextures {
 			return CLS_HOLE;
 		case TYPE_STONE:
 			return CLS_STONE;
+		case TYPE_FUNGUS:
+			return CLS_FUNGUS;
+		case TYPE_RUBBLE:
+			return CLS_RUBBLE;
+		case TYPE_SAND:
+			return CLS_SAND;
+		case TYPE_REEDS:
+			return CLS_REEDS;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -219,6 +235,71 @@ public final class GroundTextures {
 			}
 		}
 		return d2 - d1 < width / cell;
+	}
+
+	/**
+	 * Cave fungus beds: bioluminescent clumps scattered over dark cave rock.
+	 * A coarse clump noise gates where fungus grows; inside a clump the shade
+	 * dithers brighter toward the core, capped with rare over-bright spore
+	 * specks -- the beds read as the level's one faint light source. Between
+	 * clumps the floor is stone shadow with a dusting of dark spores.
+	 * {@code veg} in [0,1] is the tile's live vegetation fraction: grazed-down
+	 * beds shrink their clumps and lose their glow.
+	 */
+	public static int fungus(double wx, double wy, int px, int py, double veg) {
+		double clump = Utils.noise2(wx + 77, wy + 55, 1.9);
+		double thr = 0.66 - 0.22 * veg; // lusher beds spread wider
+		if (clump <= thr) {
+			return hash01(px, py, 21) > 0.94 ? RAMP[CLS_FUNGUS][0] : RAMP[CLS_STONE][0];
+		}
+		if (veg > 0.4 && hash01(px, py, 22) > 0.982) {
+			return FUNGUS_SPARK; // rare glowing spore speck
+		}
+		double p = (clump - thr) / (1 - thr) * 2.2 * (0.4 + 0.6 * veg);
+		return ditherRamp(CLS_FUNGUS, p, px, py);
+	}
+
+	/**
+	 * Scree: broken rock chips in 2x2-px chunks, dense enough to read as
+	 * unstable ground but with a calm base so it does not shimmer.
+	 */
+	public static int rubble(int px, int py) {
+		double r = hash01(px >> 1, py >> 1, 24);
+		if (r < 0.24) {
+			return RAMP[CLS_RUBBLE][0];
+		}
+		if (r > 0.90) {
+			return RAMP[CLS_RUBBLE][2];
+		}
+		return hash01(px, py, 25) < 0.12 ? RAMP[CLS_RUBBLE][0] : RAMP[CLS_RUBBLE][1];
+	}
+
+	/**
+	 * Sand: a deliberately quiet surface -- fine single-pixel grain over the
+	 * base, crossed by sparse dark wind-ripple dashes (same dash grammar as
+	 * water, far sparser).
+	 */
+	public static int sand(int px, int py) {
+		int len = 4 + (int) (hash01(py, 0, 26) * 3);
+		int seg = Math.floorDiv(px + (int) (hash01(py, 1, 27) * len), len);
+		if (hash01(seg, py, 28) > 0.94) {
+			return RAMP[CLS_SAND][0]; // wind-ripple dash
+		}
+		double g = hash01(px, py, 29);
+		return RAMP[CLS_SAND][g < 0.08 ? 0 : (g > 0.92 ? 2 : 1)];
+	}
+
+	/**
+	 * Reed beds from above: a dense field of stalk tips -- vertically-paired
+	 * pixels so each stalk is a short 2-px mark -- over the dark wet ground
+	 * showing through the gaps.
+	 */
+	public static int reeds(int px, int py) {
+		double s = hash01(px, py >> 1, 30);
+		if (s < 0.30) {
+			return RAMP[CLS_REEDS][0]; // water-dark gap between stalks
+		}
+		return RAMP[CLS_REEDS][s > 0.82 ? 2 : 1];
 	}
 
 	private static int darken(int rgb, double f) {
