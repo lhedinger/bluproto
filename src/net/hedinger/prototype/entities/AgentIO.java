@@ -124,15 +124,23 @@ public final class AgentIO {
 	 * saved to a file. A mind may still write here; nothing reads it.
 	 */
 	public static final int A_SPRINT = 9;
-	/** Vertical intent: seek to climb when &gt; 0.5, to descend when &lt; -0.5, hold
-	 *  level otherwise. The body executes it only where a ramp or hole actually
-	 *  connects the levels (wired in the hybrid-boundary phase), so it is a wish the
-	 *  terrain may or may not grant, never teleportation. */
+	/**
+	 * Retired, and inert: there is no vertical intent to express. A ramp is floor
+	 * that spans two levels, so a body changes level by walking across one — the
+	 * ground decides, not the mind, and a creature needs no more sense of height
+	 * than it needs to know which tile it is standing on. A hole is the other case,
+	 * and it is gravity rather than a route: stand over one and you fall.
+	 *
+	 * <p>Kept rather than removed for the same reason as {@link #A_SPRINT}: brain
+	 * instructions store raw actuator indices, so deleting a slot silently rewrites
+	 * every genome already saved to a file. A mind may still write here; nothing
+	 * reads it.
+	 */
 	public static final int A_VERTICAL = 10;
 	public static final int NUM_ACT = 11;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"sprint (retired)", "vertical" };
+			"sprint (retired)", "vertical (retired)" };
 
 	private AgentIO() {
 	}

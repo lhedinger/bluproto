@@ -463,6 +463,14 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Points the body along a heading in radians (0 = east). The {@code mover}
+	 *  fixture takes one up front; this lets the other fixtures — a minded body in
+	 *  particular — start out facing a chosen way without a mind having to turn. */
+	public TestNPC withHeading(double radians) {
+		D = radians;
+		return this;
+	}
+
 	/** Sets the body radius; gates grabbing and the carry offset. */
 	public TestNPC withSize(int s) {
 		size = s;
@@ -1053,11 +1061,10 @@ public class TestNPC extends NPC {
 		if (throttle > 0.02) {
 			move(throttle * speed, D);
 		}
-		// Vertical intent: the body only drops through (or steps onto) a hole when
-		// the mind actively wills the descent -- otherwise it treats an open hole as
-		// a ledge and stops at the lip. Climbing a ramp stays automatic where one
-		// exists (going up is not a survival hazard), so this gates only the fall.
-		descendIntent = a[AgentIO.A_VERTICAL] < -0.5;
+		// Nothing here steers vertically. Changing level is the ground's business:
+		// a ramp is floor that spans two levels and carries whatever walks across it,
+		// so a mind reaches the cave the same way it reaches anywhere else -- by
+		// walking there. A hole is a pit, and falling in one is a mistake, not a move.
 		double eaten = 0;
 		if (a[AgentIO.A_EAT] > 0.5) {
 			eaten = graze(grazeDemand());

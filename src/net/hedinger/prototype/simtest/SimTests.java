@@ -276,6 +276,29 @@ public class SimTests {
 			w.think();
 			tick(w, 200);
 			assertEquals("a cave ramp climbs a walker back up to the surface", surface, climber.getLvl());
+
+			// Down-ramp: the descent is a walk too, not just a fall. A walker heading
+			// west off a surface RAMPDOWN steps down into the cave under its own feet.
+			int dx = -1, dy = -1;
+			for (int x = 0; x < cols && dx < 0; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (w.getTile(x, y, surface).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+						dx = x;
+						dy = y;
+						break;
+					}
+				}
+			}
+			assertGreater("the surface has ramps down into the cave", dx, -1);
+			// Seal the pit beside the ramp first. It descends to the same landing, so
+			// leaving it open would let gravity pass this test and prove nothing; with
+			// it walled off, only the ramp can carry the walker down.
+			w.setTile(dx - 1, dy, surface, Tile.TileType.TYPE_WALL);
+			TestNPC walker = TestNPC.mover(dx + 0.5, dy + 0.5, surface, Math.PI).withSpeed(0.05);
+			w.spawnEntity(walker);
+			w.think();
+			tick(w, 60);
+			assertEquals("a surface ramp walks a body down into the cave", surface - 1, walker.getLvl());
 		}
 	}
 
@@ -387,11 +410,11 @@ public class SimTests {
 	/**
 	 * A walker ascends to the level above via a ramp.
 	 *
-	 * <p>Pins the (non-obvious) ramp mechanic: standing on a RAMPUP tile makes
-	 * the move onto the next tile east legal even though that tile is WALL at
-	 * this level; executeMovement's in-wall check then pops the entity up one
-	 * level (dZ=+1), where it continues on the floor above. A control mover in
-	 * a ramp-less row is simply blocked by the same wall.
+	 * <p>Pins the ramp mechanic: a ramp is floor that spans two levels, so a body
+	 * that simply keeps walking east off a RAMPUP's top edge steps onto the level
+	 * above and carries on there. Nothing is willed and nothing is sensed — the
+	 * ground does it. A control mover in a ramp-less row meets the same wall and is
+	 * merely blocked, which is what proves the ramp (not the wall) is doing the work.
 	 */
 	static class RampAscends extends Scenario {
 		@Override
@@ -1668,39 +1691,46 @@ public class SimTests {
 	}
 
 	/**
-	 * The body guards survival basics for a mind: a minded creature over an open
-	 * hole holds its level unless it actively wills the descent (A_VERTICAL held
-	 * down), so a random policy cannot pitch it into the cave by accident. The same
-	 * body drops through the moment it does will the descent — the wish the terrain
-	 * grants. (Ordinary gravity-bound creatures, which never touch A_VERTICAL, still
-	 * fall — see HoleFallRespectsFlying.)
+	 * A mind changes level by walking, not by wishing. A ramp is floor that spans
+	 * two levels, so a minded body that only ever asks for throttle crosses one and
+	 * comes out on the other side a level away — up an east-climbing RAMPUP, down a
+	 * west-descending RAMPDOWN. Both bodies here jam A_VERTICAL hard the WRONG way
+	 * throughout, which is the point: the actuator is retired and inert, and the
+	 * terrain is what moves them. Guards against reintroducing a vertical intent
+	 * that a random policy would have to get right before it could use a ramp.
 	 */
-	static class MindedBodyDescendsOnlyWhenItWills extends Scenario {
-		private int levelAfter(double verticalIntent) {
+	static class MindsChangeLevelByWalkingRamps extends Scenario {
+		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading} and
+		 *  reports the level it ends on. */
+		private int levelAfterWalking(double x, double y, int z, double heading,
+				double contraryVerticalIntent) {
 			seed(80);
-			World w = room(9, 9, 2);
-			w.setTile(4, 4, 1, Tile.TileType.TYPE_HOLE);
+			World w = room(10, 6, 2);
+			// A ramp pair on row 2: climb east off (5,2,0), descend west off (5,2,1).
+			w.setTile(5, 2, 0, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(5, 2, 1, Tile.TileType.TYPE_RAMPDOWN);
 			Genome g = new Genome();
 			g.size = 6;
 			Mind ctrl = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_VERTICAL] = verticalIntent; // the only intent it expresses
-					a[AgentIO.A_THROTTLE] = 0; // sit on the hole
+					a[AgentIO.A_THROTTLE] = 1; // walk, and nothing else
+					a[AgentIO.A_VERTICAL] = contraryVerticalIntent; // inert: ignored
 				}
 			};
-			TestNPC body = TestNPC.minded(4.5, 4.5, 1, g, ctrl); // spawned on the hole
+			TestNPC body = TestNPC.minded(x, y, z, g, ctrl).withSpeed(0.05).withHeading(heading);
 			w.spawnEntity(body);
-			tick(w, 10);
+			w.think();
+			tick(w, 200);
 			return body.getLvl();
 		}
 
 		@Override
 		public void run() {
-			assertEquals("a minded body holds its level over a hole it isn't willing to descend",
-					1, levelAfter(0.0));
-			assertEquals("...and drops through only when it wills the descent",
-					0, levelAfter(-1.0));
+			assertEquals("a mind that only walks east climbs the ramp to the level above",
+					1, levelAfterWalking(2.5, 2.5, 0, 0.0, 1.0));
+			assertEquals("a mind that only walks west descends the ramp to the level below",
+					0, levelAfterWalking(8.5, 2.5, 1, Math.PI, 1.0));
 		}
 	}
 
@@ -3609,7 +3639,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
-				new MindedBodyDescendsOnlyWhenItWills(),
+				new MindsChangeLevelByWalkingRamps(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),

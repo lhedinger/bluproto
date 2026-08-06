@@ -34,8 +34,11 @@ applies the actuator vector as intent. The mind never touches the world directly
 - **Registers** — 12 scalars that persist across ticks, so a brain has memory.
 - **Ops** — `NOP SET MOV ADD SUB MUL MIN MAX NEG TANH GT SKIPZ SKIPNZ SENSE WRITE`,
   over a fixed 12-value constant pool.
-- **I/O** — 23 sensors (`S_*`) in, 11 actuators (`A_*`) out. Actuator values
-  **latch** between writes, so a program only spends instructions on what changes.
+- **I/O** — 23 sensors (`S_*`) in, 11 actuator slots (`A_*`) out, of which 9 are
+  live: `A_SPRINT` and `A_VERTICAL` are retired in place. Slots are never deleted,
+  because instructions store raw actuator indices and renumbering would silently
+  rewrite every saved genome. Actuator values **latch** between writes, so a
+  program only spends instructions on what changes.
 - **Heredity** — point mutation plus insertion/deletion of whole instructions, and
   variable-length crossover, so wiring *and* length evolve. Capped at `MAX_LEN`.
 

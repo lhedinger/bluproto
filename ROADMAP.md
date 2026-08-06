@@ -49,9 +49,10 @@ small, deterministic, test-backed slices.
   `World.generateFertility()` paints coherent patchy habitats.
 
 **Evolvable minds** — `entities/Brain.java`, `entities/AgentIO.java`
-- Linear genetic program with persistent registers; 23 sensors in, 11 actuators
-  out; wiring *and* length heritable. One instruction per tick, so brain size is
-  reaction time — see [GENOME.md](GENOME.md#one-instruction-per-tick--a-deliberate-invariant).
+- Linear genetic program with persistent registers; 23 sensors in, 11 actuator
+  slots out (9 live); wiring *and* length heritable. One instruction per tick, so
+  brain size is reaction time — see
+  [GENOME.md](GENOME.md#one-instruction-per-tick--a-deliberate-invariant).
 - A standing minded cohort competes beside the scripted species in the live world,
   seeded from two hand-written starter brains (forager, hitch-hiker) and kept
   topped up by survivor-seeding from the longest-lived survivor.
@@ -85,6 +86,7 @@ small, deterministic, test-backed slices.
 | 2a · Fertility field | Patchy grass capacity | Spatial niches | ✅ done |
 | **2b · Living pressure** | Temperature/light fields + day/night clock that drain energy and can starve/kill | **Real selection pressure — habitat-driven survival** | keystone; **do it after sensing** — a pressure creatures cannot perceive only kills them at random |
 | 3 · Terrain variety | `WATER` (blocks land / passes flyers), `MUD` (slows), `COVER` (blocks LOS) | Behavioural richness | ✅ done |
+| 3b · Ramps as floor | A ramp spans two levels, so walking across one changes level | Vertical space costs a mind nothing to use | ✅ done |
 | 4 · Scent / stigmergy | Per-tile pheromone (lazy decay) + deposit/sense/home | Emergent **nests**: a marked peak the lineage clusters around | ✅ done (nesting) |
 
 ---
@@ -117,10 +119,10 @@ alongside the tiers:
 ## The gap that matters most
 
 The apparatus is built and barely used. Of **23 sensors the starter brains read
-three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 10 live actuators
+three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 9 live actuators
 they write five. Never touched by any seed: `A_DEPOSIT`, `A_ATTACK`, `A_GRAB`,
-`A_STRUGGLE`, `A_VERTICAL`, and the sensors for food, scent, prey, kin, health,
-items, whiskers and hazards.
+`A_STRUGGLE`, and the sensors for food, scent, prey, kin, health, items,
+whiskers and hazards.
 
 So the cheapest new behaviour is mostly behaviour already paid for:
 
@@ -136,8 +138,10 @@ So the cheapest new behaviour is mostly behaviour already paid for:
 3. **A nester brain.** Tier 4 is done, but only the *scripted* nester nests.
    `World.pheromoneDirection()` already exists — minds simply have no sensor for
    it. Exposing it gives colonies that emerge from evolved minds.
-4. **The underground.** Multi-level tunnels exist that no mind has entered;
-   `A_VERTICAL` is unused.
+4. **The underground.** Multi-level tunnels exist that no mind has entered. This
+   one no longer needs an actuator: a ramp is floor that spans two levels, so a
+   mind reaches the cave by walking there. What it needs is a *reason* to go —
+   which is Tier 2b, since shelter is only worth having once the surface hurts.
 
 Note the standing constraint when adding any of these: one instruction per tick
 means every extra sensor costs a tick of reaction latency, so seed brains stay
