@@ -559,10 +559,18 @@ public class Grid {
 								col = GroundTextures.sand(gx, gy);
 							} else if (cl == GroundTextures.CLS_REEDS) {
 								col = GroundTextures.reeds(gx, gy);
+							} else if (cl == GroundTextures.CLS_GRASS) {
+								// Lawn: calm patches plus stamped tufts whose density
+								// follows the live vegetation.
+								double veg = Math.min(1, t.getVegetation(now) / Tile.VEG_MAX);
+								col = GroundTextures.grass(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_COVER) {
+								// Thicket: a closed canopy of self-shaded leaf clumps.
+								col = GroundTextures.canopy(gx, gy);
 							} else {
-								// Open ground: solid shade clusters with a narrow dithered
-								// border where adjacent shades meet.
-								col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
+								// Mineral ground (soil, mud, stone): quiet plate interiors
+								// under the crack-network seams.
+								col = GroundTextures.quietGround(cl, wx, wy, gx, gy);
 								if (cl == GroundTextures.CLS_SOIL
 										&& GroundTextures.crack(wx, wy, 0.38, 0.06)) {
 									// Dry badlands: sun-baked clay plates, dark seams.

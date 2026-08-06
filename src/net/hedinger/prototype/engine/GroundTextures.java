@@ -134,21 +134,94 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Dithered ground colour: the same shade noise and ramp as
-	 * {@link #groundColor}, but the transition zone between adjacent shades is
-	 * rendered as a narrow Bayer-dithered border around otherwise solid shade
-	 * clusters -- pixel-art cluster shading, not a full-field checkerboard. The
-	 * sharpening keeps ~2/3 of every shade band solid and dithers the rest.
+	 * Calm mineral ground: base-dominant, structured by coarse dithered
+	 * shadow patches (solid cores, dithered borders) and sparse 2-px grains
+	 * -- never lone pixels. The quiet interior shared by soil, mud and stone,
+	 * over which the crack networks draw their seams.
 	 */
-	public static int groundColorDithered(int cls, double wx, double wy, int px, int py) {
-		double sh = Utils.noise2(wx, wy, 3.7);
-		double p = (sh - 0.28) / 0.56 * 2;
-		p = p < 0 ? 0 : (p > 2 ? 2 : p);
-		int lo = (int) p;
-		double frac = p - lo;
-		// Sharpen: only the middle third of the transition dithers.
-		frac = frac < 0.33 ? 0 : (frac > 0.66 ? 1 : (frac - 0.33) / 0.33);
-		return ditherRamp(cls, lo + frac, px, py);
+	public static int quietGround(int cls, double wx, double wy, int px, int py) {
+		double g = hash01(px >> 1, py, 46); // 2-px grain clusters
+		if (g < 0.05) {
+			return RAMP[cls][0];
+		}
+		if (g > 0.965) {
+			return RAMP[cls][2];
+		}
+		double sh = Utils.noise2(wx + 13, wy + 29, 0.8);
+		double p = (sh - 0.30) / 0.42;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(cls, p, px, py);
+	}
+
+	/**
+	 * Grass as hand-drawn lawns are textured: a calm base broken into coarse
+	 * light/shadow patches, scattered with stamped tufts -- a 2-px lit tip
+	 * over a 1-px shadow root, the classic top-down grass mark. Tuft density
+	 * follows the live vegetation, so a grazed lawn goes quiet before it goes
+	 * bare, and the highlight shade appears only on tuft tips.
+	 */
+	public static int grass(double wx, double wy, int px, int py, double veg) {
+		int C = 3; // tuft lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 40) > 0.10 + 0.38 * veg) {
+					continue; // no tuft in this cell
+				}
+				int tx = cx * C + (int) (hash01(cx, cy, 41) * C);
+				int ty = cy * C + (int) (hash01(cx, cy, 42) * C);
+				if (px == tx && (py == ty || py == ty - 1)) {
+					return RAMP[CLS_GRASS][2]; // lit blade tip
+				}
+				if (px == tx && py == ty + 1) {
+					return RAMP[CLS_GRASS][0]; // shadow at the root
+				}
+			}
+		}
+		double sh = Utils.noise2(wx, wy, 0.8);
+		double p = (sh - 0.30) / 0.42;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_GRASS, p, px, py); // calm shadow/base patches
+	}
+
+	/**
+	 * Thicket canopy: overlapping leaf-clump caps stamped on a jittered
+	 * lattice -- the round-clump grammar of top-down foliage. Every cell
+	 * holds a cap, so the canopy is closed; each cap self-shades (some crowns
+	 * lit, lower rims dark) and the crevices between caps drop to shadow, so
+	 * the mass reads bumpy rather than flat.
+	 */
+	public static int canopy(int px, int py) {
+		int C = 4; // cap lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double bestD = 1e9, bestDy = 0, bestR = 1;
+		boolean bestLit = false;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				double jx = cx * C + 1 + hash01(cx, cy, 43) * (C - 2);
+				double jy = cy * C + 1 + hash01(cx, cy, 44) * (C - 2);
+				double r = 2.0 + hash01(cx, cy, 45) * 1.4;
+				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d - r < bestD - bestR) {
+					bestD = d;
+					bestDy = dy;
+					bestR = r;
+					bestLit = hash01(cx, cy, 47) > 0.55;
+				}
+			}
+		}
+		if (bestD < bestR) {
+			if (bestLit && bestDy < -0.3 * bestR) {
+				return RAMP[CLS_COVER][2]; // lit crown of this clump
+			}
+			return RAMP[CLS_COVER][bestDy > 0.55 * bestR ? 0 : 1]; // flank / dark lower rim
+		}
+		return RAMP[CLS_COVER][0]; // crevice between clumps
 	}
 
 	/**
@@ -299,7 +372,8 @@ public final class GroundTextures {
 		if (r > 0.90) {
 			return RAMP[CLS_RUBBLE][2];
 		}
-		return hash01(px, py, 25) < 0.12 ? RAMP[CLS_RUBBLE][0] : RAMP[CLS_RUBBLE][1];
+		// 2-px grit between the chips (lone pixels would read as noise).
+		return hash01(px >> 1, py, 25) < 0.10 ? RAMP[CLS_RUBBLE][0] : RAMP[CLS_RUBBLE][1];
 	}
 
 	/**
