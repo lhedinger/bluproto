@@ -572,21 +572,23 @@ public class Grid {
 								// under the crack-network seams.
 								col = GroundTextures.quietGround(cl, wx, wy, gx, gy);
 								if (cl == GroundTextures.CLS_SOIL
-										&& GroundTextures.crack(wx, wy, 0.38, 0.06)) {
-									// Dry badlands: sun-baked clay plates, dark seams.
-									col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+										&& GroundTextures.crack(wx, wy, 0.38, 0.05)) {
+									// Dry badlands: sun-baked clay plates. Seams stay inside
+									// the ramp (plain shadow shade), so the network reads as
+									// soft creases rather than hard black lines.
+									col = GroundTextures.rampColor(cl, 0);
 								} else if (cl == GroundTextures.CLS_STONE
-										&& GroundTextures.crack(wx, wy, 0.8, 0.07)) {
-									// Stone floor: fitted flagstone slabs, mortar-dark joints.
-									col = darken(GroundTextures.rampColor(cl, 0), 0.6);
+										&& GroundTextures.crack(wx, wy, 0.8, 0.06)) {
+									// Stone floor: fitted flagstone slabs, shadow-shade joints.
+									col = GroundTextures.rampColor(cl, 0);
 								} else if (cl == GroundTextures.CLS_MUD) {
 									if (nearWater(x, y)) {
 										// Wet shore band: darker, crack-free mud melting into
 										// the water's shadow shade at the jittered boundary.
 										col = darken(col, 0.74);
-									} else if (GroundTextures.crack(wx, wy, 0.35, 0.06)) {
+									} else if (GroundTextures.crack(wx, wy, 0.35, 0.05)) {
 										// Drier mud crumbles into fine pebble-sized plates.
-										col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+										col = GroundTextures.rampColor(cl, 0);
 									}
 								}
 							}
