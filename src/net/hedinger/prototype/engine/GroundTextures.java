@@ -238,25 +238,53 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Cave fungus beds: bioluminescent clumps scattered over dark cave rock.
-	 * A coarse clump noise gates where fungus grows; inside a clump the shade
-	 * dithers brighter toward the core, capped with rare over-bright spore
-	 * specks -- the beds read as the level's one faint light source. Between
-	 * clumps the floor is stone shadow with a dusting of dark spores.
-	 * {@code veg} in [0,1] is the tile's live vegetation fraction: grazed-down
-	 * beds shrink their clumps and lose their glow.
+	 * Cave fungus beds drawn as pixel-art clusters, not noise: discrete
+	 * rounded caps stamped on a jittered lattice, each cap shaded as a shape
+	 * -- lit crown toward screen-north, base flank, and a grounded shadow rim
+	 * under its south edge -- so a bed reads as a mass of individual growths
+	 * (the benthic-node look). A coarse clump field gates where caps appear;
+	 * a few caps carry a small glowing core, the bed's emissive accent.
+	 * {@code veg} in [0,1] is the tile's live vegetation fraction: grazing
+	 * thins the caps, shrinks them and kills the glow.
 	 */
 	public static int fungus(double wx, double wy, int px, int py, double veg) {
-		double clump = Utils.noise2(wx + 77, wy + 55, 1.9);
-		double thr = 0.66 - 0.22 * veg; // lusher beds spread wider
-		if (clump <= thr) {
-			return hash01(px, py, 21) > 0.94 ? RAMP[CLS_FUNGUS][0] : RAMP[CLS_STONE][0];
+		int C = 4; // candidate-cap lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double bestD = 1e9, bestDy = 0, bestR = 0;
+		boolean bestGlow = false;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				// Cap presence: the clump field sampled at this cell's centre,
+				// widened by lush vegetation.
+				double nwx = wx + (cx * C + C * 0.5 - (px + 0.5)) / 12.0;
+				double nwy = wy + (cy * C + C * 0.5 - (py + 0.5)) / 12.0;
+				if (Utils.noise2(nwx + 77, nwy + 55, 1.9) < 0.64 - 0.22 * veg) {
+					continue;
+				}
+				double jx = cx * C + 1 + hash01(cx, cy, 31) * (C - 2);
+				double jy = cy * C + 1 + hash01(cx, cy, 32) * (C - 2);
+				double r = 1.4 + hash01(cx, cy, 33) * (0.5 + 0.9 * veg);
+				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d - r < bestD - bestR) {
+					bestD = d;
+					bestDy = dy;
+					bestR = r;
+					bestGlow = veg > 0.4 && hash01(cx, cy, 34) > 0.8;
+				}
+			}
 		}
-		if (veg > 0.4 && hash01(px, py, 22) > 0.982) {
-			return FUNGUS_SPARK; // rare glowing spore speck
+		if (bestD < bestR) {
+			if (bestGlow && bestD < 0.75) {
+				return FUNGUS_SPARK; // glowing cap core, a deliberate 1-2px accent
+			}
+			return RAMP[CLS_FUNGUS][bestDy < -0.2 * bestR ? 2 : 1]; // lit crown / flank
 		}
-		double p = (clump - thr) / (1 - thr) * 2.2 * (0.4 + 0.6 * veg);
-		return ditherRamp(CLS_FUNGUS, p, px, py);
+		if (bestD < bestR + 1.1 && bestDy > 0) {
+			return RAMP[CLS_FUNGUS][0]; // shadow rim grounding the cap's south edge
+		}
+		return RAMP[CLS_STONE][0]; // bare cave rock between beds
 	}
 
 	/**
@@ -275,9 +303,9 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Sand: a deliberately quiet surface -- fine single-pixel grain over the
-	 * base, crossed by sparse dark wind-ripple dashes (same dash grammar as
-	 * water, far sparser).
+	 * Sand: a deliberately quiet surface -- sparse 2-px grain clusters (never
+	 * lone pixels, which read as noise) over the base, crossed by sparse dark
+	 * wind-ripple dashes (same dash grammar as water, far sparser).
 	 */
 	public static int sand(int px, int py) {
 		int len = 4 + (int) (hash01(py, 0, 26) * 3);
@@ -285,21 +313,39 @@ public final class GroundTextures {
 		if (hash01(seg, py, 28) > 0.94) {
 			return RAMP[CLS_SAND][0]; // wind-ripple dash
 		}
-		double g = hash01(px, py, 29);
-		return RAMP[CLS_SAND][g < 0.08 ? 0 : (g > 0.92 ? 2 : 1)];
+		double g = hash01(px >> 1, py, 29); // 2-px horizontal grains
+		return RAMP[CLS_SAND][g < 0.06 ? 0 : (g > 0.94 ? 2 : 1)];
 	}
 
 	/**
-	 * Reed beds from above: a dense field of stalk tips -- vertically-paired
-	 * pixels so each stalk is a short 2-px mark -- over the dark wet ground
-	 * showing through the gaps.
+	 * Reed beds from above, as stamped tufts rather than pixel noise: each
+	 * lattice cell holds (usually) one tuft -- a plus-shaped cluster of
+	 * stalks, some grown taller into a vertical run, its centre tip catching
+	 * the light -- over connected wet-dark ground showing between tufts. The
+	 * repeated-motif-varied-placement grammar of hand-drawn foliage.
 	 */
 	public static int reeds(int px, int py) {
-		double s = hash01(px, py >> 1, 30);
-		if (s < 0.30) {
-			return RAMP[CLS_REEDS][0]; // water-dark gap between stalks
+		int C = 4; // tuft lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 35) < 0.18) {
+					continue; // open water gap in the bed
+				}
+				int tx = cx * C + 1 + (int) (hash01(cx, cy, 36) * (C - 2));
+				int ty = cy * C + 1 + (int) (hash01(cx, cy, 37) * (C - 2));
+				int dx = px - tx, dy = py - ty;
+				int tall = hash01(cx, cy, 38) > 0.55 ? 2 : 1; // some stalks stand taller
+				if (dx == 0 && dy == 0) {
+					return RAMP[CLS_REEDS][2]; // lit stalk tip
+				}
+				if ((Math.abs(dx) == 1 && dy == 0) || (dx == 0 && Math.abs(dy) <= tall)) {
+					return RAMP[CLS_REEDS][1]; // the tuft's arms
+				}
+			}
 		}
-		return RAMP[CLS_REEDS][s > 0.82 ? 2 : 1];
+		return RAMP[CLS_REEDS][0]; // wet dark ground between tufts
 	}
 
 	private static int darken(int rgb, double f) {
