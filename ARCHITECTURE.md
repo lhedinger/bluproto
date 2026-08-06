@@ -98,6 +98,16 @@ by the same depth-fog. The pixel-ground pass only adds a light translucent pit
 shade and a lit lip around the rim; it invents no separate substrate or parallax
 of its own. On the bottom level a hole reveals nothing and reads as a dark pit.
 
+**Ramps are the deliberate route between levels, and holes are not.** A ramp is
+floor that spans two levels: a `RAMPUP` runs west-low to east-high, a `RAMPDOWN`
+east-high to west-low, so a body that walks off a ramp's far edge comes out one
+level away. That is the whole mechanism — no vertical intent, no actuator, no
+sense of height. A creature cannot tell a ramp from ordinary ground, which is
+exactly the point: reaching the cave is a matter of walking there, so it is
+available to an evolved mind without that mind having to discover a special
+control first. A hole, by contrast, is gravity: stand over one and you fall.
+Falling is a mistake with a cost, not a way of getting somewhere.
+
 ## Dependency direction
 
 Dependencies point downward and inward. Application sits on top and wires the

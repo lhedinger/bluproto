@@ -584,8 +584,8 @@ public final class Worlds {
 	}
 
 	/** Flood the whole walkable space from a surface seed, crossing levels the way
-	 *  a land body does (walk onto a HOLE to drop; step a RAMPUP east into a WALL
-	 *  to climb), then seal every walkable tile the flood never reaches — on
+	 *  a land body does (walk onto a HOLE to fall; walk off a ramp's far edge to
+	 *  change level), then seal every walkable tile the flood never reaches — on
 	 *  either level. What remains is a single connected region. Mirrors
 	 *  {@link WorldAudit#connectivity}'s traversal, so the audit agrees by
 	 *  construction. */
@@ -608,11 +608,15 @@ public final class Worlds {
 					floodVisit(w, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}
-			// Climb: a RAMPUP with a WALL to its east lifts onto the tile above.
+			// Climb: walking east off a RAMPUP's top lands on the level above.
 			if (z + 1 < 2 && x + 1 < cols
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP
-					&& w.getTile(x + 1, y, z).getType() == Tile.TileType.TYPE_WALL) {
+					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP) {
 				floodVisit(w, seen, q, x + 1, y, z + 1, cols, rows);
+			}
+			// Descend: walking west off a RAMPDOWN's foot lands on the level below.
+			if (z - 1 >= 0 && x - 1 >= 0
+					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+				floodVisit(w, seen, q, x - 1, y, z - 1, cols, rows);
 			}
 		}
 		for (int z = 0; z < 2; z++) {
@@ -638,17 +642,19 @@ public final class Worlds {
 
 	/**
 	 * A working two-way link between the surface and the cave, built to match the
-	 * engine's movement rules (verified: a HOLE drops a walker one level; a RAMPUP
-	 * lifts a walker one level only when it steps EAST into an adjacent WALL).
+	 * engine's movement rules: a ramp is floor spanning two levels, so walking east
+	 * off a RAMPUP lands a level up and walking west off a RAMPDOWN lands a level
+	 * down. A HOLE is not a route at all, just a pit that drops whatever stands on
+	 * it — kept here because a second way down costs nothing.
 	 *
 	 * <p>Laid out along one row at {@code (sx,sy)}:
 	 * <ul>
-	 *   <li><b>Down</b> — on the surface, a HOLE with a RAMPDOWN just east of it
-	 *       (the ramp faces west, into the hole). A creature that walks onto the
-	 *       hole falls to the cave floor carved directly below.</li>
-	 *   <li><b>Up</b> — in the cave, a RAMPUP with a WALL just east of it (the ramp
-	 *       faces east, into the wall). A creature on the ramp that steps east into
-	 *       the wall pops up onto the surface floor carved directly above.</li>
+	 *   <li><b>Down</b> — on the surface, a RAMPDOWN whose foot faces west onto the
+	 *       cave floor carved below, with a HOLE beside it that falls to the same
+	 *       landing.</li>
+	 *   <li><b>Up</b> — in the cave, a RAMPUP whose top faces east onto the surface
+	 *       floor carved above. The WALL below that landing is not part of the
+	 *       mechanism any more, only the rock the surface tile rests on.</li>
 	 * </ul>
 	 */
 	private static void linkStation(World w, int sx, int sy) {
@@ -656,17 +662,17 @@ public final class Worlds {
 		carveFloor(w, sx, sy, SURFACE_Z);
 		carveFloor(w, sx, sy, CAVE_Z);
 
-		// Down: hole on the surface, ramp beside it (east), cave floor to land on.
+		// Down: ramp on the surface descending west, with a hole beside it; the cave
+		// floor below (sx, sy) is what both routes land on.
 		w.setTile(sx, sy, SURFACE_Z, Tile.TileType.TYPE_HOLE);
 		w.setTile(sx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
 		w.setTile(sx, sy, CAVE_Z, Tile.TileType.TYPE_FLOOR); // landing
 		w.getTile(sx, sy, CAVE_Z).setFertility(0);
 
-		// Up: ramp in the cave with a wall to its east; surface floor above the
-		// wall is where the climber lands.
+		// Up: ramp in the cave climbing east onto the surface floor carved above it.
 		int rx = sx + 2;
 		w.setTile(rx, sy, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
-		w.setTile(rx + 1, sy, CAVE_Z, Tile.TileType.TYPE_WALL); // climb east into this
+		w.setTile(rx + 1, sy, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
 		w.setTile(rx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
 		w.getTile(rx + 1, sy, SURFACE_Z).setFertility(0.7);
 	}
