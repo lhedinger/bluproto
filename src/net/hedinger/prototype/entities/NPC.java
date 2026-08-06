@@ -204,6 +204,9 @@ public abstract class NPC extends Entity {
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
 	protected static final double RIDER_METABOLISM = 0.5;
+	/** How far beyond touching a creature can reach to climb aboard a host, in
+	 *  tiles — the same margin biting, mating and grabbing already allow. */
+	protected static final double ATTACH_REACH = 0.5;
 	/** Extra energy a captor burns per tick per unit of (weight x struggle) -- the
 	 *  surcharge for hauling an unwilling captive over a consenting passenger. */
 	protected static final double STRUGGLE_CARRIER_COST = 0.35;
@@ -1721,8 +1724,14 @@ public abstract class NPC extends Entity {
 		if (getCarriedLoad() > 0 || grabbing != null) {
 			return false; // can't be carried while carrying (no carry-and-be-carried)
 		}
+		// Boarding reach, matching the margin every other close interaction gets
+		// (biting, mating, grabbing all allow half a tile beyond touching). Attach
+		// was the only one demanding dead-centre contact: two ordinary bodies had
+		// to come within about a tenth of a tile, which the collision spring pushing
+		// them apart made almost impossible to hit on purpose. A creature that WANTS
+		// to climb aboard can now actually manage it.
 		double dist = distance(host);
-		double minDist = host.getSize() / 2 + getSize() / 2;
+		double minDist = host.getSize() / 2 + getSize() / 2 + ATTACH_REACH;
 		if (dist > minDist) {
 			return false;
 		}
