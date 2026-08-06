@@ -244,6 +244,9 @@ public final class Worlds {
 					fert = 0; // rocky rim + occasional highland outcrops (the elevation
 					// noise means ~0.67, so this high threshold keeps highlands a rare
 					// accent instead of walling off half the map)
+				} else if (elev > 0.82) {
+					t = Tile.TileType.TYPE_STONE;
+					fert = 0; // bare rock apron skirting the outcrops
 				} else if (moist > 0.70 && elev < 0.45) {
 					t = Tile.TileType.TYPE_WATER;
 					fert = 0; // lakes in the low, wet ground
@@ -274,7 +277,7 @@ public final class Worlds {
 				if (x < 1 || y < 1 || x >= cols - 1 || y >= rows - 1) {
 					t = Tile.TileType.TYPE_WALL; // sealed edge
 				} else if (cave > 0.38 && cave < 0.66) {
-					t = pool > 0.72 ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_FLOOR;
+					t = pool > 0.72 ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_STONE;
 				} else {
 					t = Tile.TileType.TYPE_WALL; // solid rock
 				}
@@ -515,7 +518,7 @@ public final class Worlds {
 				if (cx < 1 || cy < 1 || cx >= cols - 1 || cy >= rows - 1) {
 					continue;
 				}
-				w.setTile(cx, cy, CAVE_Z, Tile.TileType.TYPE_FLOOR);
+				w.setTile(cx, cy, CAVE_Z, Tile.TileType.TYPE_STONE);
 				w.getTile(cx, cy, CAVE_Z).setFertility(0);
 			}
 		}
@@ -597,7 +600,7 @@ public final class Worlds {
 		// Down: hole on the surface, ramp beside it (east), cave floor to land on.
 		w.setTile(sx, sy, SURFACE_Z, Tile.TileType.TYPE_HOLE);
 		w.setTile(sx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
-		w.setTile(sx, sy, CAVE_Z, Tile.TileType.TYPE_FLOOR); // landing
+		w.setTile(sx, sy, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
 		w.getTile(sx, sy, CAVE_Z).setFertility(0);
 
 		// Up: ramp in the cave with a wall to its east; surface floor above the
@@ -618,7 +621,8 @@ public final class Worlds {
 				if (x < 1 || y < 1 || x >= w.getColums() - 1 || y >= w.getRows() - 1) {
 					continue;
 				}
-				w.setTile(x, y, z, Tile.TileType.TYPE_FLOOR);
+				w.setTile(x, y, z, z == SURFACE_Z
+						? Tile.TileType.TYPE_FLOOR : Tile.TileType.TYPE_STONE);
 				w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
 			}
 		}

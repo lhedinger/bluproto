@@ -509,18 +509,22 @@ public class Grid {
 								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
 							}
 						} else if (cl == GroundTextures.CLS_HOLE) {
-							// Rim on every side the pit meets ground: the north lip catches
-							// the screen-north light brightest, the other three lips are the
-							// same stone lip a touch dimmer, so the pit edge reads all round.
-							int band = 3; // art-px rim thickness
-							boolean nRim = !holeN && aj < band;
-							boolean sRim = !holeS && aj >= A - band;
-							boolean wRim = !holeW && ai < band;
-							boolean eRim = !holeE && ai >= A - band;
+							// Rim on every side the pit meets ground, as pixel-art: the
+							// lit north lip is a broken run of dashes whose depth varies
+							// per column (a crumbling cut edge, not a solid band); the
+							// other lips are a thin dimmer edge with dithered dropouts.
+							int nDepth = 2 + (int) (GroundTextures.hash01(gx, 0, 20) * 2.99);
+							boolean nRim = !holeN && aj < nDepth;
+							boolean sRim = !holeS && aj >= A - 2;
+							boolean wRim = !holeW && ai < 2;
+							boolean eRim = !holeE && ai >= A - 2;
 							if (nRim) {
-								col = GroundTextures.rampColor(cl, 2); // bright lit top lip
+								col = GroundTextures.rampColor(cl,
+										GroundTextures.bayer(gx, gy) < 0.75 ? 2 : 1);
 							} else if (sRim || wRim || eRim) {
-								col = darken(GroundTextures.rampColor(cl, 2), 0.6); // dimmer side lips
+								col = GroundTextures.bayer(gx, gy) < 0.35
+										? GroundTextures.rampColor(cl, 0)
+										: darken(GroundTextures.rampColor(cl, 2), 0.6);
 							} else if (RenderFx.holeTranslucent) {
 								// Translucent pit: a semi-transparent shade over the real level
 								// below (composited underneath, and left unoccluded because the
@@ -549,6 +553,10 @@ public class Grid {
 							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 0.38, 0.06)) {
 								// Dry badlands: sun-baked clay plates, dark seams.
 								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
+							} else if (cl == GroundTextures.CLS_STONE
+									&& GroundTextures.crack(wx, wy, 0.8, 0.07)) {
+								// Stone floor: fitted flagstone slabs, mortar-dark joints.
+								col = darken(GroundTextures.rampColor(cl, 0), 0.6);
 							} else if (cl == GroundTextures.CLS_MUD) {
 								if (nearWater(x, y)) {
 									// Wet shore band: darker, crack-free mud melting into

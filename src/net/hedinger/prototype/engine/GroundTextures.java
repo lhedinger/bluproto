@@ -39,7 +39,7 @@ public final class GroundTextures {
 	// Per terrain class: {shadow, base, highlight}, natural palette from the
 	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
 	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
-			CLS_WALL = 5, CLS_HOLE = 6;
+			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -48,6 +48,7 @@ public final class GroundTextures {
 			{ 0x1b3a16, 0x2b5422, 0x456c36 }, // cover (dark grass)
 			{ 0x3a3e49, 0x565b69, 0x7c828f }, // wall (stone)
 			{ 0x090a0e, 0x14161f, 0x222634 }, // hole (pit)
+			{ 0x2e323c, 0x484d59, 0x666c7a }, // stone floor (darker than wall mass)
 	};
 
 	/** Whether a class is a solid structure (wall) rather than open ground. */
@@ -68,6 +69,8 @@ public final class GroundTextures {
 			return CLS_WALL;
 		case TYPE_HOLE:
 			return CLS_HOLE;
+		case TYPE_STONE:
+			return CLS_STONE;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -226,7 +229,7 @@ public final class GroundTextures {
 	}
 
 	/** Deterministic integer-lattice hash to [0,1). */
-	private static double hash01(int x, int y, int s) {
+	public static double hash01(int x, int y, int s) {
 		int h = x * 374761393 + y * 668265263 + s * (int) 2246822519L;
 		h = (h ^ (h >>> 13)) * 1274126177;
 		return ((h ^ (h >>> 16)) & 0x7fffffff) / (double) 0x7fffffff;

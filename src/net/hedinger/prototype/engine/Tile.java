@@ -521,7 +521,8 @@ public class Tile {
 		TYPE_RAMPDOWN(4, true),
 		TYPE_WATER(5, true), // open (flyers pass) but not walkable
 		TYPE_MUD(6, true), // walkable, slows movement
-		TYPE_COVER(7, true); // walkable, blocks line of sight
+		TYPE_COVER(7, true), // walkable, blocks line of sight
+		TYPE_STONE(8, true); // walkable bare rock floor; grows no vegetation
 
 		private int value;
 		private boolean open;
