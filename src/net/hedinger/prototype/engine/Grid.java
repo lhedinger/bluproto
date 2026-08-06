@@ -465,6 +465,7 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		int A = 12; // art-pixels per tile
+		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
@@ -532,8 +533,12 @@ public class Grid {
 							}
 						} else if (cl == GroundTextures.CLS_WATER) {
 							// Water from straight above: calm shadow/base patches with
-							// sparse glints -- no directional strokes.
-							col = GroundTextures.waterTop(wx, wy, gx, gy);
+							// sparse glints, darkening with distance from the shore so
+							// lake middles read deep.
+							if (wdist == null) {
+								wdist = waterDist();
+							}
+							col = GroundTextures.waterTop(wx, wy, gx, gy, depthAt(wdist, wx, wy));
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
@@ -541,16 +546,16 @@ public class Grid {
 							// Open ground: solid shade clusters with a narrow dithered
 							// border where adjacent shades meet.
 							col = GroundTextures.groundColorDithered(cl, wx, wy, gx, gy);
-							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 1.15)) {
-								// Dry badlands: big sun-baked plates, dark seams.
+							if (cl == GroundTextures.CLS_SOIL && GroundTextures.crack(wx, wy, 0.6, 0.08)) {
+								// Dry badlands: sun-baked clay plates, dark seams.
 								col = darken(GroundTextures.rampColor(cl, 0), 0.55);
 							} else if (cl == GroundTextures.CLS_MUD) {
 								if (nearWater(x, y)) {
 									// Wet shore band: darker, crack-free mud melting into
 									// the water's shadow shade at the jittered boundary.
 									col = darken(col, 0.74);
-								} else if (GroundTextures.crack(wx, wy, 0.55)) {
-									// Drier mud plates crack finer than badlands clay.
+								} else if (GroundTextures.crack(wx, wy, 0.35, 0.06)) {
+									// Drier mud crumbles into fine pebble-sized plates.
 									col = darken(GroundTextures.rampColor(cl, 0), 0.55);
 								}
 							}
@@ -653,6 +658,64 @@ public class Grid {
 			return false;
 		}
 		return tiles[nx][ny].getType() == type;
+	}
+
+	/**
+	 * Per-tile distance to the nearest non-water tile, in tiles (0 on land, 1
+	 * on shoreline water, rising inward) -- a multi-source BFS over the level,
+	 * built once per ground render. Feeds the water depth shading.
+	 */
+	private int[][] waterDist() {
+		int cols = world.cols, rows = world.rows;
+		int[][] d = new int[cols][rows];
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				if (tiles[x][y].getType() == Tile.TileType.TYPE_WATER) {
+					d[x][y] = Integer.MAX_VALUE;
+				} else {
+					q.add(x * rows + y);
+				}
+			}
+		}
+		while (!q.isEmpty()) {
+			int i = q.poll();
+			int x = i / rows, y = i % rows, nd = d[x][y] + 1;
+			for (int k = 0; k < 4; k++) {
+				int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0);
+				int ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+				if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && d[nx][ny] > nd) {
+					d[nx][ny] = nd;
+					q.add(nx * rows + ny);
+				}
+			}
+		}
+		return d;
+	}
+
+	/**
+	 * Depth term in [0,1] for a water pixel: the shore-distance field sampled
+	 * bilinearly between tile centres (so contours curve instead of stepping
+	 * at tile edges), reaching full depth ~4 tiles offshore. An all-water map
+	 * has no shore seeds; the clamp treats its unreached tiles as deep.
+	 */
+	private static double depthAt(int[][] dist, double wx, double wy) {
+		double fx = wx - 0.5, fy = wy - 0.5;
+		int x0 = (int) Math.floor(fx), y0 = (int) Math.floor(fy);
+		double tx = fx - x0, ty = fy - y0;
+		double top = distClamped(dist, x0, y0) * (1 - tx) + distClamped(dist, x0 + 1, y0) * tx;
+		double bot = distClamped(dist, x0, y0 + 1) * (1 - tx) + distClamped(dist, x0 + 1, y0 + 1) * tx;
+		double d = top * (1 - ty) + bot * ty;
+		d = (d - 1.0) / 3.0;
+		return d < 0 ? 0 : (d > 1 ? 1 : d);
+	}
+
+	private static double distClamped(int[][] dist, int x, int y) {
+		if (x < 0 || y < 0 || x >= dist.length || y >= dist[0].length) {
+			return 0;
+		}
+		int v = dist[x][y];
+		return v > 8 ? 8 : v;
 	}
 
 	/** Whether any of the eight neighbours (or the tile itself) is water. */

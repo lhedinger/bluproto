@@ -135,18 +135,28 @@ public final class GroundTextures {
 	/**
 	 * Top-down water: a calm surface of broad shadow/base patches (coarse
 	 * noise, sharpened so patch cores stay solid and only their borders
-	 * dither) with rare 2-px sun glints. No directional strokes -- from
-	 * straight above, water has no profile to band.
+	 * dither) with rare 2-px sun glints near the shore. No directional
+	 * strokes -- from straight above, water has no profile to band.
+	 *
+	 * <p>{@code depth} in [0,1] is the distance-from-shore term: it pulls the
+	 * shade index down so a lake darkens toward its middle, and past the
+	 * shadow shade it dither-fades into a still darker abyss tone, so a big
+	 * lake reads as a deep hole and a puddle stays bright.
 	 */
-	public static int waterTop(double wx, double wy, int px, int py) {
-		if (hash01(px >> 1, py, 14) > 0.992) {
-			return RAMP[CLS_WATER][2]; // sparse glint, 2 px wide
+	public static int waterTop(double wx, double wy, int px, int py, double depth) {
+		if (depth < 0.55 && hash01(px >> 1, py, 14) > 0.992) {
+			return RAMP[CLS_WATER][2]; // sparse glint, 2 px wide, shallows only
 		}
 		double sh = Utils.noise2(wx + 31, wy + 17, 0.6);
 		double p = (sh - 0.24) / 0.44; // continuous shadow..base index
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
-		return ditherRamp(CLS_WATER, p, px, py);
+		p -= depth * 1.7; // deeper water -> darker shades
+		if (p >= 0) {
+			return ditherRamp(CLS_WATER, p, px, py);
+		}
+		double deep = Math.min(1, -p / 0.7); // past shadow: fade to the abyss tone
+		return bayer(px, py) < deep ? darken(RAMP[CLS_WATER][0], 0.70) : RAMP[CLS_WATER][0];
 	}
 
 	/**
@@ -183,10 +193,11 @@ public final class GroundTextures {
 	 * True where (wx,wy) lies on the crack network that plates bare ground: the
 	 * ridge lines of a jittered-lattice Voronoi diagram (points where the two
 	 * nearest feature points are nearly equidistant). {@code cell} is the plate
-	 * diameter in tiles. Purely positional, so the network is seamless across
-	 * tiles and chunk bakes.
+	 * diameter in tiles and {@code width} the seam width in tiles -- absolute,
+	 * so small plates keep readable seams. Purely positional, so the network
+	 * is seamless across tiles and chunk bakes.
 	 */
-	public static boolean crack(double wx, double wy, double cell) {
+	public static boolean crack(double wx, double wy, double cell, double width) {
 		double cx = wx / cell, cy = wy / cell;
 		int ix = (int) Math.floor(cx), iy = (int) Math.floor(cy);
 		double d1 = 9, d2 = 9;
@@ -204,7 +215,14 @@ public final class GroundTextures {
 				}
 			}
 		}
-		return d2 - d1 < 0.10;
+		return d2 - d1 < width / cell;
+	}
+
+	private static int darken(int rgb, double f) {
+		int r = (int) (((rgb >> 16) & 255) * f);
+		int g = (int) (((rgb >> 8) & 255) * f);
+		int b = (int) ((rgb & 255) * f);
+		return (r << 16) | (g << 8) | b;
 	}
 
 	/** Deterministic integer-lattice hash to [0,1). */
