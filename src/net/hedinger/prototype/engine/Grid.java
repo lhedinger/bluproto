@@ -325,9 +325,20 @@ public class Grid {
 	private void drawShrub(Graphics2D g2, int cx, int cy, int R, int ts, int hash) {
 		int pix = Math.max(4, ts / 11);
 		int style = Math.floorMod(hash, 3); // 0 soft mound, 1 leafy, 2 irregular
-		// Tight shadow tucked under the base so the shrub doesn't float.
-		g2.setColor(new java.awt.Color(0, 0, 0, 120));
-		g2.fillOval(cx - (int) (R * 1.05), cy + (int) (R * 0.18), (int) (R * 2.1), (int) (R * 0.55));
+		// Tight shadow tucked under the base so the shrub doesn't float:
+		// screen-door dither (opaque near-black blocks at half coverage)
+		// instead of an alpha oval, hard-edged like the rest of the art.
+		g2.setColor(new java.awt.Color(0x10, 0x1a, 0x0c));
+		double shRx = R * 1.05, shRy = R * 0.275, shCy = cy + R * 0.455;
+		for (int by = (int) (-shRy / pix) - 1; by <= shRy / pix + 1; by++) {
+			for (int bx = (int) (-shRx / pix) - 1; bx <= shRx / pix + 1; bx++) {
+				double ex = bx * pix / shRx, ey = by * pix / shRy;
+				if (ex * ex + ey * ey > 1 || GroundTextures.bayer(bx, by) >= 0.5) {
+					continue;
+				}
+				g2.fillRect(cx + bx * pix, (int) shCy + by * pix, pix, pix);
+			}
+		}
 
 		double[][] lobe = new double[SH_LOBES.length][];
 		for (int i = 0; i < lobe.length; i++) {
@@ -564,7 +575,6 @@ public class Grid {
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
-						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
 							// A wall is two surfaces from above: the flat cross-section
 							// top (kept calm), and a band of carved vertical face dashes
@@ -592,12 +602,15 @@ public class Grid {
 										? GroundTextures.rampColor(cl, 0)
 										: darken(GroundTextures.rampColor(cl, 2), 0.6);
 							} else if (RenderFx.holeTranslucent) {
-								// Translucent pit: a semi-transparent shade over the real level
-								// below (composited underneath, and left unoccluded because the
-								// baked hole tile is a cut-out). Its parallax comes for free from
-								// the engine's per-level projection (Utils.scaleZ).
+								// Screen-door pit: opaque shadow art-pixels at holeDepth
+								// coverage, the rest left fully open to the real level below
+								// (composited underneath, and unoccluded because the baked
+								// hole tile is a cut-out). Dithered translucency; the
+								// parallax comes for free from the per-level projection.
+								if (GroundTextures.bayer(gx, gy) >= RenderFx.holeDepth) {
+									continue;
+								}
 								col = GroundTextures.rampColor(cl, 0);
-								alpha = (int) Math.round(RenderFx.holeDepth * 255);
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
@@ -663,8 +676,7 @@ public class Grid {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						}
-						g2.setColor(alpha == 255 ? new Color(col)
-								: new Color((col >> 16) & 255, (col >> 8) & 255, col & 255, alpha));
+						g2.setColor(new Color(col));
 						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 					}
 				}
