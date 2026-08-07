@@ -187,6 +187,18 @@ public class World {
 		return entities.values();
 	}
 
+	/** Registers a door with its level so it thinks and renders (doors live
+	 *  beside the entity stream, not in it). False if out of bounds. */
+	public boolean addDoor(net.hedinger.prototype.entities.Door d) {
+		if (d == null || !isValid(d.getCol(), d.getRow(), d.getLvl())) {
+			return false;
+		}
+		d.buildID(this, spawnCounter);
+		spawnCounter++;
+		levels[(int) d.getZ()].doors.add(d);
+		return true;
+	}
+
 	// ---- Pheromone: clouds are entities, not a per-tile scalar field --------
 
 	/**
