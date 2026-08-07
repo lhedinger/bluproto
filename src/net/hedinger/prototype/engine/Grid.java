@@ -98,6 +98,72 @@ public class Grid {
 				e.render(g, v);
 			}
 		}
+		// What perception cannot see, the eye should only half see: re-stamp
+		// foliage over creatures standing in walkable sight-blockers.
+		if (camDepth == 0 && RenderFx.pixelGround && RenderFx.concealFoliage) {
+			renderConcealment(g2, ox, oy);
+		}
+	}
+
+	/**
+	 * Concealment overlay, matching the web client's canopy pass: wherever a
+	 * living creature stands in (or overlaps) a walkable sight-blocking tile
+	 * -- thicket cover or a reed bed -- part of that tile's own foliage is
+	 * re-stamped over the entity layer. Reeds redraw exactly their stalk
+	 * pixels, so a body shows between the stalks; the closed canopy redraws
+	 * clustered 2x2 blocks at roughly half coverage, so a body reads through
+	 * gaps in the leaves rather than vanishing. Pixels regenerate from the
+	 * same pure texture functions as the ground, so the overlay is invisible
+	 * where it lands on identical ground pixels.
+	 */
+	private void renderConcealment(Graphics2D g2, int ox, int oy) {
+		java.util.HashSet<Integer> veiled = new java.util.HashSet<Integer>();
+		for (Entity e : world.entities.values()) {
+			if (e == null || e instanceof PheromoneCloud || e.getLvl() != level || e.isDead()) {
+				continue;
+			}
+			int ex = (int) e.getX(), ey = (int) e.getY();
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int tx = ex + dx, ty = ey + dy;
+					if (tx < 0 || ty < 0 || tx >= world.cols || ty >= world.rows) {
+						continue;
+					}
+					Tile t = tiles[tx][ty];
+					if (t.blocksSight() && !t.isSolid()) {
+						veiled.add(ty * world.cols + tx);
+					}
+				}
+			}
+		}
+		int ts = ResourceManager.tileSize;
+		int A = 12; // must match renderGroundPixel's art-pixel grid
+		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
+		for (int key : veiled) {
+			int x = key % world.cols, y = key / world.cols;
+			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
+			int sx = ox + x * ts, sy = oy + y * ts;
+			for (int aj = 0; aj < A; aj++) {
+				for (int ai = 0; ai < A; ai++) {
+					int gx = x * A + ai, gy = y * A + aj;
+					int col;
+					if (reedBed) {
+						col = GroundTextures.reeds(gx, gy);
+						if (col == reedGap) {
+							continue; // the body shows between the stalks
+						}
+					} else {
+						if (GroundTextures.hash01(gx >> 1, gy >> 1, 61) > 0.55) {
+							continue; // clustered gaps in the leaf veil
+						}
+						col = GroundTextures.canopy(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
+					}
+					g2.setColor(new Color(col));
+					g2.fillRect(sx + ai * ts / A, sy + aj * ts / A,
+							(ai + 1) * ts / A - ai * ts / A, (aj + 1) * ts / A - aj * ts / A);
+				}
+			}
+		}
 	}
 
 	/**
