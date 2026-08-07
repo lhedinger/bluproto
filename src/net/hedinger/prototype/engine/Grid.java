@@ -565,8 +565,9 @@ public class Grid {
 								double veg = Math.min(1, t.getVegetation(now) / Tile.VEG_MAX);
 								col = GroundTextures.grass(wx, wy, gx, gy, veg);
 							} else if (cl == GroundTextures.CLS_COVER) {
-								// Thicket: a closed canopy of self-shaded leaf clumps.
-								col = GroundTextures.canopy(gx, gy);
+								// Thicket: a canopy of self-shaded leaf clumps whose
+								// character varies stand by stand.
+								col = GroundTextures.canopy(wx, wy, gx, gy);
 							} else {
 								// Mineral ground (soil, mud, stone): quiet plate interiors
 								// under the crack-network seams.

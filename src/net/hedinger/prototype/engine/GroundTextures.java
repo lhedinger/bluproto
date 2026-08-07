@@ -228,43 +228,60 @@ public final class GroundTextures {
 
 	/**
 	 * Thicket canopy: overlapping leaf-clump caps stamped on a jittered
-	 * lattice -- the round-clump grammar of top-down foliage. Every cell
-	 * holds a cap, so the canopy is closed; each cap self-shades (some crowns
-	 * lit, lower rims dark) and the crevices between caps drop to shadow, so
-	 * the mass reads bumpy rather than flat.
+	 * lattice -- the round-clump grammar of top-down foliage. Each cap
+	 * self-shades (some crowns lit, lower rims dark) and the crevices between
+	 * caps drop to shadow, so the mass reads bumpy rather than flat.
+	 *
+	 * <p>Variety comes from two coarse world-space fields rather than
+	 * per-cell noise, so whole stands differ in character: a growth field
+	 * swings cap size between old-growth mounds and fine young scrub, and a
+	 * light field swings the share of lit crowns between airy bright stands
+	 * and dense dark ones. On top of that, the odd cell is an open gap, big
+	 * caps carry 2-px leaf flecks so they do not go flat, and the occasional
+	 * clump fruits (red berries) or flowers (cream blossoms) at its core --
+	 * the same accents the shrubs wear.
 	 */
-	public static int canopy(int px, int py) {
+	public static int canopy(double wx, double wy, int px, int py) {
 		int C = 4; // cap lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double growth = Utils.noise2(wx + 41, wy + 83, 0.35); // stand character
+		double light = Utils.noise2(wx + 19, wy + 67, 0.3);
 		double bestD = 1e9, bestDy = 0, bestR = 1;
 		boolean bestLit = false;
 		int bestCx = 0, bestCy = 0;
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 53) < 0.06) {
+					continue; // an open gap in the canopy
+				}
 				double jx = cx * C + 1 + hash01(cx, cy, 43) * (C - 2);
 				double jy = cy * C + 1 + hash01(cx, cy, 44) * (C - 2);
-				double r = 2.0 + hash01(cx, cy, 45) * 1.4;
+				double r = 1.6 + 1.6 * growth + hash01(cx, cy, 45) * 1.2;
 				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
 				double d = Math.sqrt(dx * dx + dy * dy);
 				if (d - r < bestD - bestR) {
 					bestD = d;
 					bestDy = dy;
 					bestR = r;
-					bestLit = hash01(cx, cy, 47) > 0.55;
+					bestLit = hash01(cx, cy, 47) < 0.25 + 0.6 * light;
 					bestCx = cx;
 					bestCy = cy;
 				}
 			}
 		}
 		if (bestD < bestR) {
-			// The odd clump fruits: a small berry cluster at its core, the
-			// same accent the shrubs wear.
-			if (bestD < 0.7 && hash01(bestCx, bestCy, 52) > 0.85) {
-				return BLOOM_RED;
+			// The odd clump fruits or flowers at its core.
+			double accent = hash01(bestCx, bestCy, 52);
+			if (bestD < 0.7 && accent > 0.86) {
+				return accent > 0.95 ? BLOOM_CREAM : BLOOM_RED;
 			}
 			if (bestLit && bestDy < -0.3 * bestR) {
 				return RAMP[CLS_COVER][2]; // lit crown of this clump
+			}
+			// Leaf flecks keep a broad old-growth cap from reading flat.
+			if (bestR > 3 && bestD < bestR * 0.8 && hash01(px >> 1, py, 54) < 0.08) {
+				return RAMP[CLS_COVER][0];
 			}
 			return RAMP[CLS_COVER][bestDy > 0.55 * bestR ? 0 : 1]; // flank / dark lower rim
 		}
