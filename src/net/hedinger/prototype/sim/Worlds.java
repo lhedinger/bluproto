@@ -63,9 +63,10 @@ public final class Worlds {
 		double[] sizes = { 20, 18 };
 		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
 		// these big hunters a large reserve and a long fasting endurance (bigger
-		// body, bigger tank), so a predator drains gently between kills. Its only
-		// heavy burn is the sprint surcharge paid while pursuing prey (see
-		// TestNPC.PRED_SPRINT_FACTOR), so a long fruitless chase still thins it.
+		// body, bigger tank), so a predator drains gently between kills. Running
+		// prey down is what costs it: movement is charged as mass * v^2, so a
+		// full-speed pursuit burns far harder than its patrol and a long fruitless
+		// chase still thins it.
 		return species(markers, sizes, 0.045, 0.055, 0.02);
 	}
 
@@ -79,7 +80,7 @@ public final class Worlds {
 		net.hedinger.prototype.entities.Genome[] out =
 				new net.hedinger.prototype.entities.Genome[count];
 		for (int i = 0; i < count; i++) {
-			out[i] = mindedGenome();
+			out[i] = mindedGenome(i);
 		}
 		return out;
 	}
@@ -91,11 +92,25 @@ public final class Worlds {
 	 *  no gradient to climb. Seeding a viable-but-crude brain gives evolution a
 	 *  foothold to improve from, while every other gene stays random. */
 	static net.hedinger.prototype.entities.Genome mindedGenome() {
+		return mindedGenome(0);
+	}
+
+	/**
+	 * As {@link #mindedGenome()}, but picks the founder's starting brain by index
+	 * so the cohort does not all begin with the same idea. Every third founder is a
+	 * {@link #hitchhikerBrain() hitch-hiker} rather than a plain forager, so both
+	 * strategies are in the world from the first tick and can be watched competing
+	 * — which is the whole point of the minded cohort.
+	 *
+	 * <p>The index only chooses a (fixed, RNG-free) program, so the deterministic
+	 * stream is identical to drawing every founder the old way.
+	 */
+	static net.hedinger.prototype.entities.Genome mindedGenome(int index) {
 		net.hedinger.prototype.entities.Genome g = net.hedinger.prototype.entities.Genome.random();
 		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
 		g.speed = 0.04 + Utils.random() * 0.03;
 		g.metabolism = 0.02;
-		g.brain = starterBrain();
+		g.brain = (index % 3 == 2) ? hitchhikerBrain() : starterBrain();
 		return g;
 	}
 
@@ -132,6 +147,53 @@ public final class Worlds {
 				{ MOV, 8, 2, 0 }, // r8 = wander (default)
 				{ SKIPZ, 7, 0, 0 }, // no threat near -> skip the flee override
 				{ MOV, 8, 5, 0 }, // r8 = flee turn
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_TURN, 8, 0 }, // steer
+		};
+		return new net.hedinger.prototype.entities.Brain(code);
+	}
+
+	/**
+	 * A hitch-hiker: the forager's mirror image. Where the forager turns AWAY from
+	 * anything bigger than itself, this one turns TOWARDS it and clings on — the
+	 * same two sensors, read with the opposite sign.
+	 *
+	 * <p>Riding is a real strategy rather than a novelty. A voluntary passenger
+	 * pays half metabolism, pays nothing at all for movement (the host covers the
+	 * ground, and a load is billed to whoever is carrying it), and is not frozen —
+	 * it keeps grazing and breeding while aboard. The catch is that "bigger than
+	 * me" includes predators, so a hitch-hiker courts exactly the creatures most
+	 * likely to eat it, and it feeds only from whatever tile its host happens to
+	 * be standing on.
+	 *
+	 * <p>Boarding needs contact: {@code attachTo} refuses a host further away than
+	 * the two bodies touching, which is why this steers toward its target instead
+	 * of merely holding the actuator down and hoping.
+	 *
+	 * <p>Note that a juvenile is 35% of its adult size, so a young hitch-hiker's
+	 * own parent counts as "bigger" — a lineage running this brain will be seen
+	 * riding its mothers until it grows out of them.
+	 */
+	public static net.hedinger.prototype.entities.Brain hitchhikerBrain() {
+		final int SET = net.hedinger.prototype.entities.Brain.SET;
+		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
+		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
+		final int GT = net.hedinger.prototype.entities.Brain.GT;
+		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
+		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
+		int[][] code = {
+				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9])
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // drive forward
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze, aboard or not
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // breed when well-fed
+				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_CLOCK, 0 }, // r2 = clock (wander)
+				{ SENSE, 3, net.hedinger.prototype.entities.AgentIO.S_THREAT_BEARING, 0 }, // r3 = bearing to it
+				{ SENSE, 4, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r4 = how close
+				{ SET, 6, 7, 0 }, // r6 = 0.25 (const[7]) closeness threshold
+				{ GT, 7, 4, 6 }, // r7 = something bigger is close?
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_ATTACH, 7, 0 }, // cling; 0 lets go
+				{ MOV, 8, 2, 0 }, // r8 = wander (default)
+				{ SKIPZ, 7, 0, 0 }, // nothing bigger near -> keep wandering
+				{ MOV, 8, 3, 0 }, // else steer TOWARD it, to get within boarding reach
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_TURN, 8, 0 }, // steer
 		};
 		return new net.hedinger.prototype.entities.Brain(code);

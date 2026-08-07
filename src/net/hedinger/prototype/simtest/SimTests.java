@@ -742,14 +742,20 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(6);
-			World w = room(30, 24);
+			World w = room(40, 24);
 			// Same body, same start energy; only the load differs. Big enough to
 			// grab the small ones (grab refuses anything larger than the captor).
-			TestNPC empty = TestNPC.inert(5.0, 4.0, 0).withSize(12).withMetabolic().withEnergy(4);
-			TestNPC ferry = TestNPC.inert(5.0, 10.0, 0).withSize(12).withMetabolic().withEnergy(4);
-			TestNPC captor = TestNPC.inert(5.0, 16.0, 0).withSize(12).withMetabolic().withEnergy(4);
-			TestNPC rider = TestNPC.inert(5.05, 10.0, 0).withSize(6);
-			TestNPC victim = TestNPC.inert(5.05, 16.0, 0).withSize(6);
+			// They must WALK: a load is priced as extra mass through the movement
+			// term, so a motionless carrier pays nothing for weight it is merely
+			// holding. Standing still would compare three identical resting bills.
+			TestNPC empty = TestNPC.mover(3.0, 4.0, 0, 0).withSize(12).withMetabolic()
+					.withEnergy(4).withSpeed(0.08);
+			TestNPC ferry = TestNPC.mover(3.0, 10.0, 0, 0).withSize(12).withMetabolic()
+					.withEnergy(4).withSpeed(0.08);
+			TestNPC captor = TestNPC.mover(3.0, 16.0, 0, 0).withSize(12).withMetabolic()
+					.withEnergy(4).withSpeed(0.08);
+			TestNPC rider = TestNPC.inert(3.05, 10.0, 0).withSize(6);
+			TestNPC victim = TestNPC.inert(3.05, 16.0, 0).withSize(6);
 			w.spawnEntity(empty);
 			w.spawnEntity(ferry);
 			w.spawnEntity(captor);
@@ -768,10 +774,10 @@ public class SimTests {
 			double burnFerry = e0 - ferry.getEnergy();
 			double burnCaptor = e0 - captor.getEnergy();
 
-			assertGreater("carrying a passenger costs more than carrying nothing",
+			assertGreater("hauling a passenger costs more than travelling empty",
 					burnFerry, burnEmpty);
 			assertGreater("holding a prisoner costs more than ferrying a passenger "
-					+ "of the same weight", burnCaptor, burnFerry);
+					+ "of the same weight (the grip is the difference)", burnCaptor, burnFerry);
 		}
 	}
 
@@ -881,6 +887,42 @@ public class SimTests {
 			// F_MINDED; if the shift were wrong these would be clobbered wholesale.
 			assertGreater("the minded flag still survives alongside the action code",
 					minded, 0);
+		}
+	}
+
+	/**
+	 * The hitch-hiker starter brain actually works: a creature running it steers to
+	 * a larger neighbour and climbs aboard, riding voluntarily rather than being
+	 * seized. Guards both halves of the mechanism — the brain's approach-and-cling
+	 * logic, and the boarding reach that makes contact achievable at all (attach
+	 * once demanded dead-centre contact, which the collision spring made nearly
+	 * impossible to hit deliberately).
+	 */
+	static class HitchhikerBrainClimbsAboard extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(24, 24);
+			// A big, brainless (so motionless) host, and a small hitch-hiker a tile
+			// away with line of sight to it.
+			Genome hostG = Genome.phenotype(14, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC host = TestNPC.minded(12.0, 12.0, 0, hostG);
+			Genome hitchG = Genome.phenotype(6, 0.05, 5, 12, Math.PI * 2, 100000);
+			hitchG.brain = net.hedinger.prototype.sim.Worlds.hitchhikerBrain();
+			TestNPC rider = TestNPC.minded(13.2, 12.0, 0, hitchG);
+			w.spawnEntity(host);
+			w.spawnEntity(rider);
+			w.think();
+			assertTrue("it starts on its own feet", rider.getAttachTarget() == null);
+
+			boolean boarded = false;
+			for (int i = 0; i < 400 && !boarded; i++) {
+				w.think();
+				boarded = rider.getAttachTarget() == host;
+			}
+			assertTrue("a hitch-hiker steers to a larger neighbour and climbs aboard", boarded);
+			assertTrue("it rides voluntarily rather than being seized", !rider.isGrabbed());
+			assertGreater("the host now carries a load", host.getCarriedLoad(), 0.0);
 		}
 	}
 
@@ -1499,7 +1541,7 @@ public class SimTests {
 
 	/**
 	 * The dedicated prey channel drives hunting. A mind that steers toward
-	 * {@code S_PREY_BEARING} and engages the sprint gear runs down a smaller
+	 * {@code S_PREY_BEARING} and opens the throttle runs down a smaller
 	 * creature it senses at full sight range — a target the short facing-gated
 	 * nearest-neighbour channel would lose the moment it moved.
 	 */
@@ -1517,7 +1559,7 @@ public class SimTests {
 				public void think(double[] s, double[] a) {
 					a[AgentIO.A_TURN] = s[AgentIO.S_PREY_BEARING]; // steer onto the prey
 					a[AgentIO.A_THROTTLE] = 1.0;
-					a[AgentIO.A_SPRINT] = 1.0; // burst after it
+					a[AgentIO.A_THROTTLE] = 1.0; // run it down at full speed
 				}
 			};
 			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt);
@@ -1578,13 +1620,15 @@ public class SimTests {
 	}
 
 	/**
-	 * The sprint actuator is a real gear: engaging it covers more ground per tick
-	 * than cruising, and burns extra energy (the size-scaled sprint surcharge) to
-	 * do it. That cost/benefit is what lets a mind evolve to spend the burst only
-	 * when a chase is worth it, instead of the flat-cost movement it replaces.
+	 * Throttle is the speed control, and speed is charged as kinetic energy. There
+	 * is no sprint gear to engage: a mind simply asks for the pace it wants, and
+	 * because movement costs {@code mass * v^2} the bill rises with the SQUARE of
+	 * that choice. Runs one body at two throttle settings and pins both halves —
+	 * more throttle covers more ground, and it costs superlinearly more to do it,
+	 * which is what makes going fast a decision rather than a free upgrade.
 	 */
-	static class SprintGearCostsEnergyForSpeed extends Scenario {
-		private double[] run(boolean sprint) {
+	static class ThrottleSetsSpeedAndCostsItsSquare extends Scenario {
+		private double[] run(double throttle) {
 			seed(73);
 			World w = room(50, 9);
 			Genome g = new Genome();
@@ -1593,11 +1637,8 @@ public class SimTests {
 			Mind ctrl = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_THROTTLE] = 1.0;
+					a[AgentIO.A_THROTTLE] = throttle;
 					a[AgentIO.A_TURN] = 0;
-					if (sprint) {
-						a[AgentIO.A_SPRINT] = 1.0;
-					}
 				}
 			};
 			TestNPC body = TestNPC.minded(3.5, 4.5, 0, g, ctrl).withMetabolic().withEnergy(5.0);
@@ -1610,10 +1651,19 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			double[] sprinted = run(true);
-			double[] cruised = run(false);
-			assertGreater("sprinting covers more ground than cruising", sprinted[0], cruised[0] + 1.0);
-			assertGreater("sprinting burns more energy than cruising", sprinted[1], cruised[1]);
+			double[] fast = run(1.0);
+			double[] half = run(0.5);
+			assertGreater("more throttle covers more ground", fast[0], half[0] + 1.0);
+
+			// Resting metabolism is in both bills, so compare the MOVEMENT component.
+			// Doubling speed quadruples the per-tick movement cost, so over the same
+			// window the moving part should be ~4x, not 2x.
+			double[] still = run(0.0);
+			double moveFast = fast[1] - still[1];
+			double moveHalf = half[1] - still[1];
+			assertGreater("moving at all costs energy", moveHalf, 0.0);
+			assertGreater("doubling speed costs far more than double (v^2, not v)",
+					moveFast, moveHalf * 3.0);
 		}
 	}
 
@@ -2401,7 +2451,8 @@ public class SimTests {
 			tick(w, 4);
 			assertTrue("the captive is grabbed while the captor lives", captive.isGrabbed());
 			assertTrue("the captor still lives at this point", !captor.isDead());
-			tick(w, 40); // the captor starves
+			tick(w, 90); // the captor starves (slower now: a held body is weight, not
+			             // a per-tick toll, so a motionless captor pays only the grip)
 			assertTrue("the captor died", captor.isDead());
 			assertTrue("the captive was released from the dead captor", captive.getAttachTarget() == null);
 			assertTrue("the captive is no longer marked grabbed", !captive.isGrabbed());
@@ -2409,41 +2460,71 @@ public class SimTests {
 		}
 	}
 
-	/** Carrying a body aloft is far costlier: a flying carrier burns much more
-	 *  energy per tick than a grounded one hauling the same weight. */
+	/**
+	 * Carrying a body aloft is far costlier: a flying carrier burns much more
+	 * energy than a grounded one hauling the same weight the same distance.
+	 *
+	 * <p>A load is priced as extra mass through the movement term, and flight
+	 * multiplies how heavy that load counts, so both carriers have to actually
+	 * haul their passenger somewhere for the difference to exist — a hovering
+	 * carrier and a standing one both pay nothing for weight alone. The passengers
+	 * ride VOLUNTARILY rather than being seized, which keeps the comparison clean:
+	 * a grabbed captive would add an identical grip cost to both bills and dilute
+	 * the very ratio being measured.
+	 */
 	static class FlyingCarrierPaysMore extends Scenario {
 		@Override
 		public void run() {
 			seed(83);
-			World w = room(16, 12);
-			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
-			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
-			Genome fG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			World w = room(60, 40);
+			// Full throttle plus a gentle constant turn, so each carrier orbits a
+			// few tiles wide: it hauls continuously without ever reaching a wall,
+			// whatever heading it happened to start on.
+			int[][] walk = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 },
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 0, 0 },
+					{ Brain.SET, 1, 6, 0 }, // r1 = 0.1 (const[6])
+					{ Brain.WRITE, AgentIO.A_TURN, 1, 0 } };
+			int[][] cling = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 },
+					{ Brain.WRITE, AgentIO.A_ATTACH, 0, 0 } };
+			Genome fG = Genome.phenotype(8, 0.12, 5, 6, Math.PI * 2, 100000);
 			fG.metabolism = 0.02;
-			fG.brain = new Brain(deepCopy(hold));
-			Genome gG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			fG.brain = new Brain(deepCopy(walk));
+			Genome gG = Genome.phenotype(8, 0.12, 5, 6, Math.PI * 2, 100000);
 			gG.metabolism = 0.02;
-			gG.brain = new Brain(deepCopy(hold));
-			TestNPC flier = TestNPC.brainedBreeder(4.0, 6.0, 0, fG).withEnergy(14.0).withFlying();
-			TestNPC ground = TestNPC.brainedBreeder(12.0, 6.0, 0, gG).withEnergy(14.0);
+			gG.brain = new Brain(deepCopy(walk));
+			TestNPC flier = TestNPC.brainedBreeder(15.0, 20.0, 0, fG).withEnergy(14.0).withFlying();
+			TestNPC ground = TestNPC.brainedBreeder(45.0, 20.0, 0, gG).withEnergy(14.0);
 			Genome vAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
-			vAG.brain = new Brain(deepCopy(limp));
+			vAG.brain = new Brain(deepCopy(cling));
 			Genome vBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
-			vBG.brain = new Brain(deepCopy(limp));
-			TestNPC preyA = TestNPC.minded(4.05, 6.0, 0, vAG);
-			TestNPC preyB = TestNPC.minded(12.05, 6.0, 0, vBG);
+			vBG.brain = new Brain(deepCopy(cling));
+			TestNPC riderA = TestNPC.minded(15.05, 20.0, 0, vAG).withFlying();
+			TestNPC riderB = TestNPC.minded(45.05, 20.0, 0, vBG);
 			w.spawnEntity(flier);
 			w.spawnEntity(ground);
-			w.spawnEntity(preyA);
-			w.spawnEntity(preyB);
+			w.spawnEntity(riderA);
+			w.spawnEntity(riderB);
 			tick(w, 6);
-			assertTrue("the flier grabbed its prey", preyA.isGrabbed());
-			assertTrue("the ground carrier grabbed its prey", preyB.isGrabbed());
+			assertTrue("the flier picked up a passenger", riderA.getAttachTarget() == flier);
+			assertTrue("the ground carrier picked up a passenger", riderB.getAttachTarget() == ground);
+
 			double f0 = flier.getEnergy(), g0 = ground.getEnergy();
-			tick(w, 80);
+			// Ground covered, summed per tick — direction-agnostic, unlike a
+			// start-to-end displacement, which an orbiting body would understate.
+			double fDist = 0, gDist = 0;
+			for (int i = 0; i < 250; i++) {
+				w.think();
+				fDist += flier.lastStep();
+				gDist += ground.lastStep();
+			}
 			double fLoss = f0 - flier.getEnergy(), gLoss = g0 - ground.getEnergy();
-			assertGreater("hauling a body aloft costs a flier far more than a ground carrier",
-					fLoss, gLoss + 1.5);
+			assertGreater("both carriers actually hauled their passenger somewhere",
+					Math.min(fDist, gDist), 5.0);
+			// A ratio, not a fixed margin: both bills scale with how far they get,
+			// so the multiple is the stable claim.
+			assertGreater("hauling a body aloft costs a flier far more than a ground "
+					+ "carrier (" + String.format("%.2f", fLoss) + " vs "
+					+ String.format("%.2f", gLoss) + ")", fLoss, gLoss * 1.8);
 		}
 	}
 
@@ -2858,7 +2939,19 @@ public class SimTests {
 					}
 				}
 			}
-			assertGreater("the colony concentrates around the nest", near / (double) total, 0.30);
+			// Measured against what an even spread over the walkable interior would
+			// put inside that radius, NOT against a raw fraction. A thriving colony
+			// saturates this small room — 150-odd bodies over ~144 open tiles — and
+			// at that density no raw share can look impressive however tightly the
+			// creatures nest, simply because the circle cannot hold them. The ratio
+			// asks the question the test actually means: are they denser here than
+			// chance would put them?
+			double open = (w.getColums() - 2) * (double) (w.getRows() - 2);
+			double uniform = Math.PI * 3.0 * 3.0 / open;
+			assertGreater("the colony concentrates around the nest ("
+					+ near + "/" + total + " within 3 tiles, vs "
+					+ String.format("%.0f%%", uniform * 100) + " if spread evenly)",
+					(near / (double) total) / uniform, 1.2);
 		}
 	}
 
@@ -3496,6 +3589,7 @@ public class SimTests {
 				new HoldingACaptiveCostsEnergy(),
 				new CreaturesGrowToAdultSize(),
 				new ActionGlyphsRideTheWire(),
+				new HitchhikerBrainClimbsAboard(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new VegetationRegrows(),
@@ -3514,7 +3608,7 @@ public class SimTests {
 				new MindSensesHungerByCapacity(),
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
-				new SprintGearCostsEnergyForSpeed(),
+				new ThrottleSetsSpeedAndCostsItsSquare(),
 				new MindedBodyDescendsOnlyWhenItWills(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),

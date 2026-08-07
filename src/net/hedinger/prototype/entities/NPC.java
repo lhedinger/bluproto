@@ -44,15 +44,9 @@ public abstract class NPC extends Entity {
 	// false, so their behaviour and determinism are untouched.
 	protected boolean metabolic = false;
 	protected double energy = 1.0;
-	/** Set by a behaviour when it is exerting itself (a hunter's pursuit burst);
-	 *  cleared when cruising. While true the entity pays a sprint surcharge (a
-	 *  multiple of its resting burn, see {@link #sprintFactor}) on top of its
-	 *  resting metabolism, so fast movement — not just being alive — drains it. */
-	protected boolean sprinting = false;
-	/** Extra burn while {@link #sprinting}, as a multiple of the resting rate: 0 =
-	 *  no sprint gear, 1.5 = a pursuit burns 2.5x resting. Scales with body mass
-	 *  automatically because the resting rate does. */
-	protected double sprintFactor = 0.0;
+	// Movement has no separate "gear": a creature simply chooses how fast to go
+	// (its throttle, or a behaviour's chosen speed) and the movement cost below
+	// prices that choice continuously. There is no sprint flag and no surcharge.
 
 	// --- size-scaled energy model --------------------------------------------
 	// Everything scales off a body-size factor, normalised so a reference-size
@@ -115,28 +109,53 @@ public abstract class NPC extends Entity {
 		return adultSize <= 0 ? 1.0 : Math.min(1.0, grownSize / adultSize);
 	}
 	/**
-	 * Energy to carry one unit of body mass one tile — the cost of transport, and
-	 * the price of actually going somewhere.
+	 * Movement cost coefficient: a creature pays
+	 * {@code MOVE_ENERGY * mass * v^2} every tick, where {@code v} is the ground
+	 * it actually covered that tick — kinetic energy, so speed is charged as a
+	 * square rather than a flat toll per tile.
 	 *
-	 * <p>Without this, movement was free: the burn depended only on body size, so a
-	 * creature that evolved to run five times faster paid exactly what a sluggish
-	 * one of the same size did. Speed is the one gene with real upside (more ground
-	 * grazed, more prey caught, more hunters escaped) and, with no cost against it,
-	 * it simply ratcheted upward every generation. Charging by distance covered
-	 * puts a brake on the far side of that trade, and — unlike a flat penalty —
-	 * costs a creature nothing while it holds still.
+	 * <p>The square is what makes speed genuinely expensive. Cost per TICK rises
+	 * with v², so cost per TILE rises linearly with v: going twice as fast costs
+	 * four times as much per tick and twice as much per tile. A creature that
+	 * merely wants to cover ground is therefore better off going slowly, and speed
+	 * has to buy something real — escaping, or catching — to be worth its price.
+	 * There is deliberately no separate sprint gear: a creature just chooses how
+	 * fast to move and this prices the choice continuously, at every speed, rather
+	 * than only above a threshold.
 	 *
-	 * <p>Calibrated so a reference-size creature moving at about the founder speed
-	 * pays roughly its own resting rate again: locomotion roughly doubles the bill
-	 * of a moving creature, and dominates it for a genuinely fast one.
+	 * <p>Anchored so a reference-size creature moving at about the founder speed
+	 * (0.05 tiles/tick) pays roughly its own resting rate again — the same
+	 * break-even the earlier flat model had — while a genuinely fast one now pays
+	 * several times over rather than merely proportionally.
 	 */
-	protected static final double COST_OF_TRANSPORT = 0.01;
+	protected static final double MOVE_ENERGY = 0.2;
 
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
 	 *  Falls back to the reference when no size is set. */
 	protected double bodyMass() {
 		double s = size > 0 ? size : REF_SIZE;
 		return s / REF_SIZE;
+	}
+
+	/**
+	 * Everything this body is hauling, in the same units as {@link #bodyMass()} so
+	 * the two simply add up.
+	 *
+	 * <p>A load is not a separate bill — it is just extra mass. Whatever a carrier
+	 * is holding makes it heavier, and being heavier is already expensive through
+	 * the one channel that prices mass: movement. So hauling costs exactly what it
+	 * should, when it should. Standing still holding something is nearly free
+	 * (only the grip, if the thing is an unwilling captive), and walking off with
+	 * it costs in proportion to how much of it there is and how fast you go.
+	 *
+	 * <p>{@code carriedLoad} accumulates {@code getSize()}, which is in tiles,
+	 * while {@code bodyMass()} is normalised to {@link #REF_SIZE} — hence the
+	 * conversion. Flying counts a load heavier: holding a body up in the air is
+	 * harder than dragging it along the ground.
+	 */
+	protected double carriedMass() {
+		double load = getCarriedLoad() * ResourceManager.tileSize / REF_SIZE;
+		return isFlying() ? load * FLIER_CARRY_MULTIPLIER : load;
 	}
 
 	/** Size factor of the body this creature is growing INTO, 1.0 at
@@ -167,20 +186,16 @@ public abstract class NPC extends Entity {
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	protected static final int REPRO_COOLDOWN = 100;
-	/** Extra energy per tick a carrier burns per unit of carried body weight. */
-	protected static final double CARRY_ENERGY = 0.15;
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
-	 * <em>grabbed</em> captive — the cost of restraint itself, on top of hauling
-	 * the weight around.
+	 * <em>grabbed</em> captive — the cost of restraint itself, separate from the
+	 * weight, which is priced by {@link #carriedMass}.
 	 *
-	 * <p>Carrying already charged for weight, but the grip was free: a captor could
-	 * seize something and hold it indefinitely at no cost beyond what a willing
-	 * passenger of the same mass would have cost. That made captivity a permanent
-	 * state rather than an effort a captor has to keep paying for. A voluntary rider
-	 * still costs nothing extra — it clings on by its own effort — so the asymmetry
-	 * between a passenger and a prisoner is now priced, and a captor must eventually
-	 * either eat its captive or let go.
+	 * <p>A voluntary rider costs its carrier nothing beyond the weight — it clings
+	 * on by its own effort — so this is the whole difference between a passenger and
+	 * a prisoner. It is charged whether or not the captor moves, so holding somebody
+	 * is an effort that has to keep being paid for rather than a free permanent
+	 * state: a captor must eventually either eat its captive or let go.
 	 *
 	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
 	 * still costs its captor more than one hanging limp.
@@ -189,14 +204,17 @@ public abstract class NPC extends Entity {
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
 	protected static final double RIDER_METABOLISM = 0.5;
+	/** How far beyond touching a creature can reach to climb aboard a host, in
+	 *  tiles — the same margin biting, mating and grabbing already allow. */
+	protected static final double ATTACH_REACH = 0.5;
 	/** Extra energy a captor burns per tick per unit of (weight x struggle) -- the
 	 *  surcharge for hauling an unwilling captive over a consenting passenger. */
 	protected static final double STRUGGLE_CARRIER_COST = 0.35;
 	/** Energy a struggling captive burns itself per tick per unit of struggle --
 	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
 	protected static final double STRUGGLE_SELF_COST = 0.02;
-	/** Multiplier on the carry cost when the carrier is flying: hauling a body
-	 *  through the air burns far more than dragging it over the ground. */
+	/** How much heavier a load counts while the carrier is flying: holding a body
+	 *  up through the air is far harder work than dragging it over the ground. */
 	protected static final double FLIER_CARRY_MULTIPLIER = 5.0;
 	/** Energy a carrier burns per tick per unit of buck effort (shaking riders
 	 *  off is exhausting, just like a captive's struggle). */
@@ -406,30 +424,18 @@ public abstract class NPC extends Entity {
 			if (getAttachTarget() != null && !isGrabbed()) {
 				base *= RIDER_METABOLISM;
 			}
-			// Carrying burden: pay extra for the total body weight riding on you --
-			// a grabbed captive or a latched-on hitch-hiker both count. Holding a
-			// body aloft is far costlier than dragging it along the ground.
-			double carry = getCarriedLoad() * CARRY_ENERGY;
-			if (isFlying()) {
-				carry *= FLIER_CARRY_MULTIPLIER;
-			}
-			// Grip: restraining a captive is work in its own right, separate from
-			// hauling its weight. Not multiplied by flight — what flying makes
-			// expensive is lifting the load, and the carry term already prices that;
-			// holding on is the same effort in the air as on the ground.
-			if (grabbing != null) {
-				carry += GRIP_ENERGY * grabbing.getSize();
-			}
-			// Sprint surcharge: a hunter cruises cheaply and only burns hard during
-			// a pursuit burst, so it can go far longer between kills than a flat
-			// metabolism allowed — but a long fruitless chase still costs it. The
-			// surcharge is a multiple of the (mass-scaled) resting rate.
-			double sprint = sprinting ? base * sprintFactor : 0.0;
-			// Cost of transport: pay for the ground actually covered last tick, in
-			// proportion to the mass hauled over it. A step cancelled by a collision
-			// covered nothing and so costs nothing — this charges travel, not intent.
-			double travel = COST_OF_TRANSPORT * bodyMass() * lastStep;
-			energy -= base + carry + sprint + travel;
+			// Grip: restraining an unwilling captive is work in its own right, and
+			// the only thing a captor pays that a ferry carrying a willing passenger
+			// of the same weight does not. The weight itself is not billed here --
+			// see below.
+			double grip = grabbing != null ? GRIP_ENERGY * grabbing.getSize() : 0.0;
+			// Movement: kinetic, so a fast body pays the square of its speed, and it
+			// pays for everything it is hauling because a load is simply extra mass.
+			// Charged on the ground actually covered -- a step cancelled by a
+			// collision moved nothing and costs nothing, so this prices travel rather
+			// than intent, and standing still under a load is nearly free.
+			double travel = MOVE_ENERGY * (bodyMass() + carriedMass()) * lastStep * lastStep;
+			energy -= base + grip + travel;
 			if (energy <= 0) {
 				energy = 0;
 				kill(); // starved
@@ -1718,8 +1724,14 @@ public abstract class NPC extends Entity {
 		if (getCarriedLoad() > 0 || grabbing != null) {
 			return false; // can't be carried while carrying (no carry-and-be-carried)
 		}
+		// Boarding reach, matching the margin every other close interaction gets
+		// (biting, mating, grabbing all allow half a tile beyond touching). Attach
+		// was the only one demanding dead-centre contact: two ordinary bodies had
+		// to come within about a tenth of a tile, which the collision spring pushing
+		// them apart made almost impossible to hit on purpose. A creature that WANTS
+		// to climb aboard can now actually manage it.
 		double dist = distance(host);
-		double minDist = host.getSize() / 2 + getSize() / 2;
+		double minDist = host.getSize() / 2 + getSize() / 2 + ATTACH_REACH;
 		if (dist > minDist) {
 			return false;
 		}
