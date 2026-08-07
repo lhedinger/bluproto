@@ -44,14 +44,23 @@ public class TestNPC extends NPC {
 	 *  win quickly: it lands weaker bites and needs far more of them, which is the
 	 *  whole trade — a long, costly, interruptible kill instead of a clean one. */
 	private static final double PRED_MAX_PREY_RATIO = 1.5;
-	/** Floor on the bite-strength multiplier, so taking on the largest quarry a
-	 *  hunter will engage stays a slow kill rather than an impossible one. */
-	private static final double PRED_MIN_BITE_SCALE = 0.25;
-	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost).
-	 *  Deliberately NOT scaled by size: a bigger animal takes more bites to bring
-	 *  down and so yields more energy in total, which is what makes the slow, risky
-	 *  kill worth attempting at all. */
-	private static final double PRED_BITE_ENERGY = 0.5;
+	/** Full health, and so the whole of a body: a bite that removes this much of a
+	 *  creature has consumed all of it. Health is flat across every body size, which
+	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
+	private static final int FULL_BODY_HEALTH = 100;
+	/**
+	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
+	 * body is worth what it weighs, so the meal tracks the quarry rather than the
+	 * effort: an animal that takes twice as many bites to bring down is not twice
+	 * as nutritious, it is just slower to eat.
+	 *
+	 * <p>This replaces a flat per-bite payout, under which a mouse and an animal the
+	 * hunter's own size were worth exactly the same (measured: 2.49 either way). That
+	 * pointed selection at the smallest, easiest quarry and left no niche for a large
+	 * hunter — the one corner of the economy where mass did not appear, while
+	 * metabolism, movement and tank capacity all scale with it.
+	 */
+	private static final double MEAT_ENERGY = 2.5;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
@@ -75,10 +84,17 @@ public class TestNPC extends NPC {
 	 *  prey) to break free. */
 	private static final int HUNT_GIVEUP_TICKS = 45;
 
-	/** Vegetation eaten per tick by a reference-size grazer (>> the tile's regrowth
-	 *  rate). Bigger grazers crop faster in proportion to their size — see
-	 *  {@link #grazeDemand()} — so a large body both burns and eats more. */
-	private static final double GRAZE_DEMAND = 0.05;
+	/**
+	 * Vegetation cropped per tick by a reference-size grazer, still well above the
+	 * tile's regrowth rate so a patch does run down. Bigger grazers crop faster in
+	 * proportion to their mass — see {@link #grazeDemand()}.
+	 *
+	 * <p>Sized so a full tile takes a few seconds of steady work to strip rather than
+	 * well under one. At the old rate a single reference grazer stripped a whole tile
+	 * in 20 ticks, which meant a herd erased its pasture faster than it could spread
+	 * out over it, and the substrate behaved like a switch rather than a resource.
+	 */
+	private static final double GRAZE_DEMAND = 0.012;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). */
@@ -687,12 +703,12 @@ public class TestNPC extends NPC {
 		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
 		double reach = prey == null ? 0
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-		if (prey != null && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
+		boolean full = energy >= energyCapacity();
+		if (prey != null && !full && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
-			setAction("attacking", true); // in reach: bite whatever the hunger level
+			setAction("attacking", true); // in reach: bite at any hunger short of full
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
-			prey.damage(biteDamage(prey));
-			energy += PRED_BITE_ENERGY; // predation feeds the hunter
+			energy += biteFeeds(prey);
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
 			setAction(starving ? "starving" : "hunting", false);
@@ -720,8 +736,25 @@ public class TestNPC extends NPC {
 	 */
 	private int biteDamage(NPC prey) {
 		double ratio = getSize() / Math.max(1e-6, prey.getSize());
-		double scale = Math.max(PRED_MIN_BITE_SCALE, Math.min(1.0, ratio));
+		double scale = Math.min(1.0, ratio);
 		return Math.max(1, (int) Math.round(PRED_DAMAGE * scale));
+	}
+
+	/**
+	 * Takes one bite out of {@code prey} and returns what it fed the hunter.
+	 *
+	 * <p>The bite removes health; the meal is the share of the body that health
+	 * represented, {@code MEAT_ENERGY * preyMass * (damage / FULL_BODY_HEALTH)}. So
+	 * the whole carcass is worth {@code MEAT_ENERGY * preyMass} no matter how many
+	 * bites it took, and a hunter that arrives at an animal something else has
+	 * already chewed on gets only what is left of it. Damage past death feeds
+	 * nobody — you cannot eat more of an animal than there was.
+	 */
+	private double biteFeeds(NPC prey) {
+		int bite = biteDamage(prey);
+		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
+		prey.damage(bite);
+		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
 	}
 
 	/**

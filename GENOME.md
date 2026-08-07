@@ -186,6 +186,34 @@ movement rather than intent.
   for a mind) and the quadratic law prices that choice continuously at every
   speed, rather than only above a threshold.
 
+### The income side — what food is worth
+
+Spending is mass-based everywhere above, so income is too.
+
+```
+meat  = MEAT_ENERGY · prey_mass · (damage / FULL_BODY_HEALTH)   // per bite
+grass = GRASS_ENERGY · vegetation_cropped                       // per tick grazing
+```
+
+- **A carcass is worth what it weighs.** Health is a flat 100 on every body, so
+  the *meal* has to carry the size instead. Since each bite pays for the share of
+  the body it removed, a whole carcass comes to `MEAT_ENERGY · prey_mass` however
+  many bites it took — an animal that is hard to bring down is slower to eat, not
+  more nutritious, and a hunter arriving at something already chewed on gets only
+  what is left.
+- **This was the one corner where mass did not appear.** A flat per-bite payout
+  made a mouse and an animal the hunter's own size worth exactly the same
+  (measured: 2.49 either way), which pointed selection at the smallest, easiest
+  quarry and left no niche for a large hunter.
+- **Grass is bulk food.** A whole tile stripped bare is worth a small fraction of
+  a reference-mass carcass, and it is cropped a few percent at a time. So grazing
+  is a full-time occupation and predation is an event — which is why a herd is
+  spread thin across the map while hunters are few. Bite size scales with mass
+  like everything else, so a big grazer both eats and burns more.
+- **A predator will not kill on a full tank.** The opportunistic bite is gated on
+  having room for the meal; without that, a full hunter killed prey whose energy
+  the tank cap then discarded.
+
 ### Growth
 
 A creature is born at `BIRTH_SIZE_FRACTION` of its adult body and grows in at a
