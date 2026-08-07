@@ -34,13 +34,58 @@ applies the actuator vector as intent. The mind never touches the world directly
 - **Registers** — 12 scalars that persist across ticks, so a brain has memory.
 - **Ops** — `NOP SET MOV ADD SUB MUL MIN MAX NEG TANH GT SKIPZ SKIPNZ SENSE WRITE`,
   over a fixed 12-value constant pool.
-- **I/O** — 23 sensors (`S_*`) in, 11 actuator slots (`A_*`) out, of which 9 are
+- **I/O** — 28 sensors (`S_*`) in, 13 actuator slots (`A_*`) out, of which 11 are
   live: `A_SPRINT` and `A_VERTICAL` are retired in place. Slots are never deleted,
   because instructions store raw actuator indices and renumbering would silently
   rewrite every saved genome. Actuator values **latch** between writes, so a
   program only spends instructions on what changes.
 - **Heredity** — point mutation plus insertion/deletion of whole instructions, and
   variable-length crossover, so wiring *and* length evolve. Capped at `MAX_LEN`.
+
+### Resizing the I/O vectors is a breaking change
+
+`Brain` masks operand indices **modulo the live array length** (`s[imod(y,
+s.length)]`), which is what makes every random mutation a legal program. The
+consequence is that *growing* a vector is as destructive as deleting a slot: a
+genome encoded against 23 sensors reads different sensors once there are 28. Its
+wiring is not extended, it is rewritten.
+
+So `GenomeCodec` carries a version tag, and it is bumped whenever either vector
+changes size — `g1` was 23/11, `g2` is 28/13. Old tokens are **rejected**, not
+migrated: a stale token names a creature that can no longer be reconstructed, and
+silently loading a different animal under its name is worse than refusing.
+
+### Intent commands — naming a target instead of steering to it
+
+`A_SEEK` names a *kind of thing to head for* rather than a turn rate. While it is
+set and the body can see one, the body supplies the heading and `A_TURN` is
+ignored; the sign flips attraction to avoidance, so chasing and fleeing are one
+instruction apart. Throttle stays the mind's, and so do walls — the body gives a
+direction, not a route.
+
+The magnitude selects the target on bands centred on the constant pool, so one
+`SET`+`WRITE` can name any of them, and a small mutation usually preserves the
+intent:
+
+| `A_SEEK` | Target | | `A_SEEK` | Target |
+|---|---|---|---|---|
+| `±0.1` | forage patch | | `±1` | threat |
+| `±0.25` | kin | | `±2` | item |
+| `±0.5` | prey | | `±4` | waypoint |
+
+Naming something absent does nothing at all and leaves `A_TURN` in charge, so a
+seek can never freeze a creature pointing at what isn't there.
+
+`A_MARK` plus the waypoint sensors are the whole of spatial memory: latch where
+you are, wander off, come back. **The coordinate lives in the body**, not in the
+mind's registers — necessarily so, because the instruction set has no divide and
+no `atan2`, so a mind holding two numbers could never turn them into a heading.
+
+Note what this does to the economy above: an intent command packs far more
+capability into one instruction than `A_TURN` does. Under one instruction per
+tick, a lineage that seeks is both more capable *and* faster to react than one
+that steers by hand. That is a deliberate widening of what selection can reach,
+and it means seed brains can be shorter still.
 
 ### One instruction per tick — a deliberate invariant
 

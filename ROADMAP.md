@@ -49,10 +49,12 @@ small, deterministic, test-backed slices.
   `World.generateFertility()` paints coherent patchy habitats.
 
 **Evolvable minds** — `entities/Brain.java`, `entities/AgentIO.java`
-- Linear genetic program with persistent registers; 23 sensors in, 11 actuator
-  slots out (9 live); wiring *and* length heritable. One instruction per tick, so
+- Linear genetic program with persistent registers; 28 sensors in, 13 actuator
+  slots out (11 live); wiring *and* length heritable. One instruction per tick, so
   brain size is reaction time — see
   [GENOME.md](GENOME.md#one-instruction-per-tick--a-deliberate-invariant).
+- Minds can name intents, not just turn rates: `A_SEEK` picks a kind of target and
+  the body supplies the heading, `A_MARK` remembers one place to come back to.
 - A standing minded cohort competes beside the scripted species in the live world,
   seeded from two hand-written starter brains (forager, hitch-hiker) and kept
   topped up by survivor-seeding from the longest-lived survivor.
@@ -110,31 +112,36 @@ alongside the tiers:
   fixture runs it, and `SexualReproductionNeedsPartner` pins the three defining
   facts: a partner is required, dissimilar maters refuse, offspring recombine
   both parents. The assortative-mating path to true speciation is open.
-- **Environment sensing.** Entities can't perceive fields — `graze()` eats
-  blindly. Add `senseVegetation()` / `senseFertility()` / `senseTemperature()` /
-  `senseScent(dir)` so behaviour can *steer toward* food, warmth, trails.
+- ✅ **Environment sensing (food).** `S_FORAGE_PROX` / `S_FORAGE_BEARING` name a
+  *place*: the body scores the ground it can see by density against distance and
+  reports where the best patch is, so `graze()` no longer eats blindly. Still
+  open: fertility, temperature and directional scent.
+- ✅ **Intent commands.** `A_SEEK` names a kind of target (forage, kin, prey,
+  threat, item, waypoint) and the body supplies the heading; `A_MARK` plus the
+  waypoint sensors give a creature one remembered place to return to. See
+  [GENOME.md](GENOME.md#intent-commands--naming-a-target-instead-of-steering-to-it).
 
 ---
 
 ## The gap that matters most
 
-The apparatus is built and barely used. Of **23 sensors the starter brains read
-three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 9 live actuators
+The apparatus is built and barely used. Of **28 sensors the starter brains read
+three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 11 live actuators
 they write five. Never touched by any seed: `A_DEPOSIT`, `A_ATTACK`, `A_GRAB`,
-`A_STRUGGLE`, and the sensors for food, scent, prey, kin, health, items,
-whiskers and hazards.
+`A_STRUGGLE`, `A_SEEK`, `A_MARK`, and the sensors for forage, scent, prey, kin,
+health, items, whiskers, hazards and waypoints.
 
 So the cheapest new behaviour is mostly behaviour already paid for:
 
-1. **Food-gradient sensing, and a forager that climbs it.** `S_FOOD` reports only
-   *"am I standing on grass"* — there is no directional food sensor anywhere in
-   the engine, so a creature cannot tell where food *is*. Measured consequence:
-   the minded cohort reports **wandering 71, grazing 4** out of 80. They are not
-   failing to forage, they are searching blind. Add a bearing sensor and a brain
-   that climbs it, and foraging becomes a skill selection can sharpen.
+1. **A forager that actually seeks.** The sensing gap is now closed —
+   `S_FORAGE_BEARING` names where food is, and `A_SEEK = 0.1` walks there in one
+   instruction. What is missing is a *seed that uses it*: the minded cohort was
+   last measured at **wandering 71, grazing 4** out of 80, searching blind. A
+   starter brain built on seek should move that number, and it is the cheapest
+   experiment available.
 2. **A hunter brain.** `A_ATTACK` + `S_PREY_*` are fully wired and unused — all
-   predation is scripted. Roughly the shape of the hitch-hiker brain, and it lets
-   the cohort grow its own predators instead of the role being hardcoded.
+   predation is scripted. With `A_SEEK = 0.5` supplying the pursuit, a hunter seed
+   is now little more than "seek prey, attack when close".
 3. **A nester brain.** Tier 4 is done, but only the *scripted* nester nests.
    `World.pheromoneDirection()` already exists — minds simply have no sensor for
    it. Exposing it gives colonies that emerge from evolved minds.
@@ -145,7 +152,9 @@ So the cheapest new behaviour is mostly behaviour already paid for:
 
 Note the standing constraint when adding any of these: one instruction per tick
 means every extra sensor costs a tick of reaction latency, so seed brains stay
-lean and lineages trade capability against reflexes themselves.
+lean and lineages trade capability against reflexes themselves. Intent commands
+change the arithmetic but not the rule — a seek buys more behaviour per
+instruction, which is exactly why a seeking seed can afford to be shorter.
 
 ## Sequencing note
 
