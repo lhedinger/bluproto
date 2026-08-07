@@ -16,7 +16,16 @@ package net.hedinger.prototype.entities;
  */
 public final class GenomeCodec {
 
-	private static final String VERSION = "g1";
+	/**
+	 * Bumped whenever the {@link AgentIO} vectors change size. {@code Brain} masks
+	 * operand indices modulo the live array length, so a genome encoded against 23
+	 * sensors reads <i>different</i> sensors once there are 28 — its wiring is
+	 * silently rewritten rather than merely extended. Rejecting the old tag is the
+	 * honest outcome: a stale token names a creature that can no longer be
+	 * reconstructed, and loading it would produce a different animal wearing its
+	 * name. (g1: 23 sensors / 11 actuators. g2: 28 / 13, intent commands added.)
+	 */
+	private static final String VERSION = "g2";
 
 	private GenomeCodec() {
 	}

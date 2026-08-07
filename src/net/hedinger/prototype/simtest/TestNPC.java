@@ -150,6 +150,26 @@ public class TestNPC extends NPC {
 	private final double[] sensors = new double[AgentIO.NUM_SENSORS];
 	private final double[] actuators = new double[AgentIO.NUM_ACT];
 
+	/** The one place this body remembers, in world tiles; {@code wpLvl < 0} means
+	 *  nothing is marked. Spatial memory lives here rather than in the mind's
+	 *  registers because a coordinate is only useful if something can do geometry
+	 *  with it, and the instruction set has neither divide nor atan2. */
+	private double wpX = 0, wpY = 0;
+	private int wpLvl = -1;
+
+	/** The forage patch this body is currently steering by, as tile coordinates;
+	 *  {@code forageCol < 0} means none was found on the last scan. Cached because
+	 *  the scan is O(r^2) tile reads and the answer changes slowly, while the
+	 *  <i>bearing</i> to it changes every tick as the body moves — so the sensor
+	 *  stays live between scans without rescanning. */
+	private int forageCol = -1, forageRow = -1;
+	private long forageScanAt = Long.MIN_VALUE;
+
+	/** How often a body re-scans for a forage patch. Grass regrows over ~a minute
+	 *  (Tile.REGROW_DELAY), so a target a second old is still a good target, and
+	 *  rescanning every tick would buy nothing for 33x the cost. */
+	private static final int FORAGE_SCAN_PERIOD = 33;
+
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
 		this.behavior = behavior;
@@ -969,7 +989,7 @@ public class TestNPC extends NPC {
 	private void senseFieldAndBody(double[] s) {
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
-		double kinX = 0, kinY = 0;
+		double kinX = 0, kinY = 0, kinWeight = 0;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
 					|| n instanceof Item || n.getLvl() != getLvl() || !isInLOS(n)) {
@@ -995,6 +1015,7 @@ public class TestNPC extends NPC {
 				double sim = genome.similarityTo(og);
 				kinX += sim * dx; // similarity-weighted pull toward kin
 				kinY += sim * dy;
+				kinWeight += sim;
 			}
 		}
 		if (preyD < Double.MAX_VALUE) {
@@ -1014,6 +1035,17 @@ public class TestNPC extends NPC {
 		s[AgentIO.S_KIN_BEARING] = (kinX != 0 || kinY != 0)
 				? wrap(Math.atan2(kinY, kinX) - D) / Math.PI
 				: 0;
+		// The kin centroid's distance, which the bearing alone never carried. The
+		// weights are a positive scalar, so dividing them out moves the point but not
+		// the direction -- S_KIN_BEARING is unchanged by this.
+		if (kinWeight > 0 && (kinX != 0 || kinY != 0)) {
+			s[AgentIO.S_KIN_PROX] = 1.0 / (1.0 + Math.hypot(kinX / kinWeight, kinY / kinWeight));
+		} else {
+			s[AgentIO.S_KIN_PROX] = 0;
+		}
+
+		senseForage(s);
+		senseWaypoint(s);
 
 		s[AgentIO.S_HEALTH] = clampUnit(getHealth() / 100.0);
 		s[AgentIO.S_CARRIED] = isGrabbed() ? 1.0 : (getAttachTarget() != null ? -1.0 : 0.0);
@@ -1028,6 +1060,101 @@ public class TestNPC extends NPC {
 				&& (ahead.isWater()
 						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 		s[AgentIO.S_HAZARD_AHEAD] = hazard ? 1.0 : 0.0;
+	}
+
+	/**
+	 * Fills the forage channel: where the best patch of ground in sight is, as a
+	 * bearing and a proximity.
+	 *
+	 * <p>The patch is re-chosen only every {@link #FORAGE_SCAN_PERIOD} ticks, but the
+	 * bearing to it is recomputed every tick from the remembered tile — so the body
+	 * keeps a steady target it can actually walk to, instead of a direction that
+	 * jitters as ties change hands. That distinction is the whole point of naming a
+	 * <i>place</i> rather than a gradient: a creature can commit to it.
+	 */
+	private void senseForage(double[] s) {
+		long now = getWorld().getTick();
+		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
+				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
+				|| (forageCol >= 0 && vegetationAt(forageCol, forageRow, now) <= 0); // eaten bare
+		if (due) {
+			scanForage(now);
+		}
+		if (forageCol < 0) {
+			s[AgentIO.S_FORAGE_PROX] = 0;
+			s[AgentIO.S_FORAGE_BEARING] = 0;
+			return;
+		}
+		double dx = forageCol + 0.5 - X, dy = forageRow + 0.5 - Y;
+		s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
+	}
+
+	/**
+	 * Picks the best forage tile within sight and remembers it. Scored as
+	 * {@code vegetation / (1 + distance)}, so a rich patch across the map loses to a
+	 * fair one underfoot — the creature is choosing where to walk, and walking costs
+	 * energy. The sweep runs in a fixed row-major order and keeps the first strict
+	 * maximum, so ties break identically on every replay.
+	 */
+	private void scanForage(long now) {
+		forageScanAt = now;
+		forageCol = -1;
+		forageRow = -1;
+		int r = (int) Math.ceil(LOS_RANGE);
+		int cx = (int) X, cy = (int) Y, lvl = getLvl();
+		double best = 0;
+		for (int ty = cy - r; ty <= cy + r; ty++) {
+			for (int tx = cx - r; tx <= cx + r; tx++) {
+				double dist = Math.hypot(tx + 0.5 - X, ty + 0.5 - Y);
+				if (dist > LOS_RANGE) {
+					continue; // the square's corners fall outside the sight circle
+				}
+				// Prune before touching the tile: vegetation tops out at VEG_MAX, so
+				// nothing this far away can beat what we already hold no matter what
+				// grows on it. Since the winner is decided by a strict >, skipping a
+				// tile that can only tie or lose leaves the choice bit-for-bit
+				// identical -- this is a speed-up, not an approximation.
+				if (net.hedinger.prototype.engine.Tile.VEG_MAX / (1.0 + dist) <= best) {
+					continue;
+				}
+				double veg = vegetationAt(tx, ty, now);
+				if (veg <= 0) {
+					continue;
+				}
+				double score = veg / (1.0 + dist);
+				if (score > best) {
+					best = score;
+					forageCol = tx;
+					forageRow = ty;
+				}
+			}
+		}
+		if (forageCol >= 0 && !getWorld().isValid(forageCol, forageRow, lvl)) {
+			forageCol = -1; // paranoia: never hand the mind a tile off the map
+		}
+	}
+
+	/** Vegetation on a tile, or 0 if it is off the map or not walkable ground. */
+	private double vegetationAt(int col, int row, long now) {
+		if (!getWorld().isValid(col, row, getLvl())) {
+			return 0;
+		}
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(col, row, getLvl());
+		return (t == null || !t.isWalkable()) ? 0 : t.getVegetation(now);
+	}
+
+	/** Fills the waypoint channel; zeros when nothing is marked or the mark is on
+	 *  another level, since a bearing across levels would point at nothing walkable. */
+	private void senseWaypoint(double[] s) {
+		if (wpLvl != getLvl()) {
+			s[AgentIO.S_WAYPOINT_PROX] = 0;
+			s[AgentIO.S_WAYPOINT_BEARING] = 0;
+			return;
+		}
+		double dx = wpX - X, dy = wpY - Y;
+		s[AgentIO.S_WAYPOINT_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_WAYPOINT_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 	}
 
 	/** 1 if a one-tile step along {@code heading} lands on impassable ground, else 0. */
@@ -1049,10 +1176,73 @@ public class TestNPC extends NPC {
 				&& (t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 	}
 
+	/**
+	 * The relative bearing (radians) to a named seek target, or {@code NaN} when the
+	 * body cannot see one. Read straight off the sensor vector the mind was just
+	 * shown, so the body steers by exactly what it told the mind — there is no
+	 * second, privileged view of the world hiding behind the intent commands.
+	 */
+	private double seekBearing(int seekClass) {
+		int prox;
+		int bearing;
+		switch (seekClass) {
+		case AgentIO.SEEK_FORAGE:
+			prox = AgentIO.S_FORAGE_PROX;
+			bearing = AgentIO.S_FORAGE_BEARING;
+			break;
+		case AgentIO.SEEK_KIN:
+			prox = AgentIO.S_KIN_PROX;
+			bearing = AgentIO.S_KIN_BEARING;
+			break;
+		case AgentIO.SEEK_PREY:
+			prox = AgentIO.S_PREY_PROX;
+			bearing = AgentIO.S_PREY_BEARING;
+			break;
+		case AgentIO.SEEK_THREAT:
+			prox = AgentIO.S_THREAT_PROX;
+			bearing = AgentIO.S_THREAT_BEARING;
+			break;
+		case AgentIO.SEEK_ITEM:
+			prox = AgentIO.S_ITEM_PROX;
+			bearing = AgentIO.S_ITEM_BEARING;
+			break;
+		case AgentIO.SEEK_WAYPOINT:
+			prox = AgentIO.S_WAYPOINT_PROX;
+			bearing = AgentIO.S_WAYPOINT_BEARING;
+			break;
+		default:
+			return Double.NaN;
+		}
+		return sensors[prox] > 0 ? sensors[bearing] * Math.PI : Double.NaN;
+	}
+
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
 	private void actFrom(double[] a) {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
+		// Intent steering. A_SEEK names a kind of thing rather than a turn rate; when
+		// the body can see one, it works out the turn and A_TURN is ignored. A
+		// negative value means the same target repels instead of attracting, so
+		// running from a threat and running at prey are the same instruction with a
+		// different sign. Naming something absent changes nothing, and A_TURN stands.
+		double seekWish = a[AgentIO.A_SEEK];
+		int seekClass = AgentIO.seekTarget(seekWish);
+		if (seekClass != AgentIO.SEEK_NONE) {
+			double bearing = seekBearing(seekClass);
+			if (!Double.isNaN(bearing)) {
+				if (seekWish < 0) {
+					bearing = wrap(bearing + Math.PI); // the far side of the same target
+				}
+				t = clamp(bearing / MAX_TURN, -1, 1); // as far around as one tick allows
+			}
+		}
+		if (a[AgentIO.A_MARK] > 0.5) {
+			wpX = X; // remember here
+			wpY = Y;
+			wpLvl = getLvl();
+		} else if (a[AgentIO.A_MARK] < -0.5) {
+			wpLvl = -1; // forget it
+		}
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
 		// genome's top speed. There is no separate gear to engage — the movement

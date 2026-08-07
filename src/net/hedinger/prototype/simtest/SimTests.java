@@ -1691,6 +1691,140 @@ public class SimTests {
 	}
 
 	/**
+	 * Intent steering: a mind that names a <i>kind of thing</i> gets there without
+	 * ever writing a turn. The body scores the ground it can see, picks a patch, and
+	 * supplies the heading; the mind spends one instruction saying what it wants.
+	 * The sign is the whole of approach-versus-avoid, so the same policy that hunts
+	 * a patch flees one by flipping a constant.
+	 *
+	 * <p>Both bodies start facing directly <i>away</i> from the only grass in the
+	 * room and never write A_TURN, so anything that arrives did so because the body
+	 * steered it.
+	 */
+	static class SeekWalksToAPatchWithoutSteering extends Scenario {
+		private static final int PATCH_X = 32, PATCH_Y = 7;
+
+		/** Distance from the patch after walking with this A_SEEK value. */
+		private double distanceAfter(double seek) {
+			seed(90);
+			World w = room(40, 14);
+			for (int x = 0; x < 40; x++) {
+				for (int y = 0; y < 14; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren everywhere...
+				}
+			}
+			for (int x = PATCH_X - 1; x <= PATCH_X + 1; x++) {
+				for (int y = PATCH_Y - 1; y <= PATCH_Y + 1; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // ...except one lush patch
+				}
+			}
+			Genome g = new Genome();
+			g.size = 6;
+			g.losRange = 20; // far enough to see the patch from the start
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_SEEK] = seek; // the only steering it ever expresses
+				}
+			};
+			// Facing west, i.e. away from the patch: a body that ignores seek leaves.
+			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withSpeed(0.1)
+					.withHeading(Math.PI * 0.9);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 150);
+			return Math.hypot(body.getX() - (PATCH_X + 0.5), body.getY() - (PATCH_Y + 0.5));
+		}
+
+		@Override
+		public void run() {
+			double start = Math.hypot(20.5 - (PATCH_X + 0.5), 7.5 - (PATCH_Y + 0.5));
+			double toward = distanceAfter(0.1);
+			double away = distanceAfter(-0.1);
+			assertLess("seeking the forage patch walks the body onto it", toward, 2.0);
+			assertGreater("the same command with a minus sign walks it off", away, start);
+		}
+	}
+
+	/**
+	 * Spatial memory in two instructions. A_MARK latches where the body is standing;
+	 * A_SEEK = ±4 steers back to it later. The coordinate lives in the body on
+	 * purpose — a mind could hold two numbers in registers but could never turn them
+	 * into a heading, since the instruction set has no divide and no atan2.
+	 *
+	 * <p>The return leg also jams A_TURN hard the wrong way, which is what pins the
+	 * precedence: while a seek has something to steer by, it is the steering.
+	 */
+	static class WaypointRemembersAPlace extends Scenario {
+		@Override
+		public void run() {
+			seed(91);
+			World w = room(30, 14);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				private int t = 0;
+
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_MARK] = t == 0 ? 1.0 : 0.0; // remember here, once
+					if (t < 120) {
+						a[AgentIO.A_SEEK] = 0; // walk straight off
+						a[AgentIO.A_TURN] = 0;
+					} else {
+						a[AgentIO.A_SEEK] = 4; // go back...
+						a[AgentIO.A_TURN] = 1; // ...against a hard contrary turn
+					}
+					t++;
+				}
+			};
+			TestNPC body = TestNPC.minded(6.5, 7.5, 0, g, ctrl).withSpeed(0.08).withHeading(0);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 120);
+			double away = Math.hypot(body.getX() - 6.5, body.getY() - 7.5);
+			assertGreater("the body walked away from the place it marked", away, 5.0);
+			tick(w, 220);
+			double back = Math.hypot(body.getX() - 6.5, body.getY() - 7.5);
+			assertLess("seeking the waypoint brought it home", back, 2.0);
+			assertLess("...and home is nearer than where it had wandered", back, away);
+		}
+	}
+
+	/**
+	 * A seek is a preference, not a lock. Naming a target the body cannot currently
+	 * see steers nothing at all and leaves A_TURN in charge — so a mutation that
+	 * writes a seek constant can never freeze a creature pointing at a thing that
+	 * isn't there. Here the waypoint is never marked, so A_SEEK = 4 names nothing
+	 * and a body told to turn zero walks perfectly straight.
+	 */
+	static class SeekYieldsWhenItNamesNothing extends Scenario {
+		@Override
+		public void run() {
+			seed(92);
+			World w = room(30, 14);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_SEEK] = 4; // the waypoint... which was never marked
+					a[AgentIO.A_TURN] = 0;
+				}
+			};
+			TestNPC body = TestNPC.minded(6.5, 7.5, 0, g, ctrl).withSpeed(0.08).withHeading(0);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 100);
+			assertGreater("the body kept walking east", body.getX(), 12.0);
+			assertNear("an unmarked waypoint bent its course not at all", 7.5, body.getY(), 0.001);
+		}
+	}
+
+	/**
 	 * A mind changes level by walking, not by wishing. A ramp is floor that spans
 	 * two levels, so a minded body that only ever asks for throttle crosses one and
 	 * comes out on the other side a level away — up an east-climbing RAMPUP, down a
@@ -3639,6 +3773,9 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new SeekWalksToAPatchWithoutSteering(),
+				new WaypointRemembersAPlace(),
+				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
