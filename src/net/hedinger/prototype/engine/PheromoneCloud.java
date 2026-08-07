@@ -11,10 +11,10 @@ import java.awt.Graphics2D;
  * marking whole tiles, a deposit reinforces the nearest cloud (or spawns a new
  * one), and the world sums nearby clouds when something senses pheromone.
  *
- * <p>Graphically it renders as a screen-door haze -- opaque stipple whose
- * dithered density falls off with radius -- rather than a coloured tile, so
- * trails and nests read as organic smells drifting over the ground while
- * staying inside the render's pixel-art grammar.
+ * <p>Graphically it renders as a chunky stipple haze -- translucent
+ * art-pixel blocks whose scattered density falls off with radius -- rather
+ * than a coloured tile, so trails and nests read as organic smells drifting
+ * over the ground while staying inside the render's pixel-art grammar.
  *
  * <p>It draws no RNG (it is built through the direction-taking {@link Entity}
  * constructor) and never moves or collides, so scattering clouds through a
@@ -82,9 +82,11 @@ public class PheromoneCloud extends Entity {
 		updateRadius();
 	}
 
-	/** Haze colours: the scent's magenta, with a slightly brighter core tone. */
-	private static final Color HAZE = new Color(0xC0, 0x2C, 0xA2);
-	private static final Color HAZE_CORE = new Color(0xE6, 0x50, 0xC4);
+	/** Haze colours: the scent's magenta, with a slightly brighter core tone.
+	 *  Translucent: the stipple stays chunky art-pixels, but each block tints
+	 *  the ground under it rather than covering it. */
+	private static final Color HAZE = new Color(0xC0, 0x2C, 0xA2, 110);
+	private static final Color HAZE_CORE = new Color(0xE6, 0x50, 0xC4, 150);
 
 	@Override
 	protected void draw(Graphics g, View v) {
@@ -92,10 +94,10 @@ public class PheromoneCloud extends Entity {
 		if (toPixel(v, size) < 1) {
 			return;
 		}
-		// Screen-door haze: opaque art-pixels whose Bayer-dithered density
-		// falls off with radius -- pixel-art translucency, matching the rest
-		// of the render instead of an alpha gradient. The stipple is indexed
-		// by world-absolute art-pixel, so it holds still as the cloud decays.
+		// Chunky stipple haze: translucent art-pixel blocks whose scattered
+		// density falls off with radius -- pixelated structure, soft tint.
+		// The stipple is indexed by world-absolute art-pixel, so it holds
+		// still as the cloud decays.
 		double s = Math.min(1.0, strength / 8.0);
 		int A = 12; // art-pixels per tile, matching the ground grid
 		double step = (v.pixelX(1, Z, 0) - v.pixelX(0, Z, 0)) / (double) A;
@@ -112,7 +114,7 @@ public class PheromoneCloud extends Entity {
 				if (f <= 0) {
 					continue;
 				}
-				double cov = s * f * f * 0.55; // peak ~half coverage at a nest core
+				double cov = s * f * f * 0.7; // peak coverage at a nest core
 				// Hash stipple, not Bayer: an organic scatter suits a smell,
 				// where the ordered matrix reads as a mechanical grid.
 				if (GroundTextures.hash01(gx, gy, 55) >= cov) {

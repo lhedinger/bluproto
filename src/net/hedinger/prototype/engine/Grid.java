@@ -326,14 +326,14 @@ public class Grid {
 		int pix = Math.max(4, ts / 11);
 		int style = Math.floorMod(hash, 3); // 0 soft mound, 1 leafy, 2 irregular
 		// Tight shadow tucked under the base so the shrub doesn't float:
-		// screen-door dither (opaque near-black blocks at half coverage)
-		// instead of an alpha oval, hard-edged like the rest of the art.
-		g2.setColor(new java.awt.Color(0x10, 0x1a, 0x0c));
+		// a blocky translucent oval -- art-pixel steps on the outline, but
+		// each block tints the ground instead of covering it.
+		g2.setColor(new java.awt.Color(0, 0, 0, 110));
 		double shRx = R * 1.05, shRy = R * 0.275, shCy = cy + R * 0.455;
 		for (int by = (int) (-shRy / pix) - 1; by <= shRy / pix + 1; by++) {
 			for (int bx = (int) (-shRx / pix) - 1; bx <= shRx / pix + 1; bx++) {
 				double ex = bx * pix / shRx, ey = by * pix / shRy;
-				if (ex * ex + ey * ey > 1 || GroundTextures.bayer(bx, by) >= 0.5) {
+				if (ex * ex + ey * ey > 1) {
 					continue;
 				}
 				g2.fillRect(cx + bx * pix, (int) shCy + by * pix, pix, pix);
