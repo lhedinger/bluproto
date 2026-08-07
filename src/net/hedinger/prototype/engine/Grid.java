@@ -550,9 +550,9 @@ public class Grid {
 				if (cls < 0) {
 					continue; // ramps: baked layer shows through
 				}
-				boolean ownTight = cls == GroundTextures.CLS_WALL || cls == GroundTextures.CLS_HOLE;
-				boolean wallN = isType(x, y - 1, Tile.TileType.TYPE_WALL);
-				boolean wallS = isType(x, y + 1, Tile.TileType.TYPE_WALL);
+				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE;
+				boolean wallN = isWallish(x, y - 1);
+				boolean wallS = isWallish(x, y + 1);
 				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
 				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
 				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
@@ -570,7 +570,7 @@ public class Grid {
 						if (cl < 0) {
 							cl = cls;
 						}
-						if (!ownTight && (cl == GroundTextures.CLS_WALL || cl == GroundTextures.CLS_HOLE)) {
+						if (!ownTight && (GroundTextures.isStructure(cl) || cl == GroundTextures.CLS_HOLE)) {
 							cl = cls; // structures don't bleed out onto open ground
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
@@ -584,6 +584,16 @@ public class Grid {
 							} else {
 								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
 							}
+						} else if (cl == GroundTextures.CLS_WALL_BUILT) {
+							// Masonry: coursed block top, coursed shadowed face where
+							// the wall fronts open ground to the south.
+							if (!wallS && aj >= A * 0.55) {
+								col = GroundTextures.wallFaceBuilt(gx, gy);
+							} else {
+								col = GroundTextures.wallTopBuilt(gx, gy, !wallN && aj < A * 0.28);
+							}
+						} else if (cl == GroundTextures.CLS_CRYSTAL) {
+							col = GroundTextures.crystal(gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground, as pixel-art: the
 							// lit north lip is a broken run of dashes whose depth varies
@@ -626,7 +636,15 @@ public class Grid {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						} else {
-							if (cl == GroundTextures.CLS_FUNGUS) {
+							if (cl == GroundTextures.CLS_SHALLOWS) {
+								col = GroundTextures.shallows(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_QUICKSAND) {
+								col = GroundTextures.quicksand(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_VENT) {
+								col = GroundTextures.vent(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_PAVED) {
+								col = GroundTextures.paved(gx, gy);
+							} else if (cl == GroundTextures.CLS_FUNGUS) {
 								// Bioluminescent beds; clump size follows live vegetation,
 								// so grazing visibly eats the glow away.
 								double cap = t.vegetationCap();
@@ -772,6 +790,12 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
+	/** A wall for lighting purposes: natural rock or man-made masonry. */
+	private boolean isWallish(int nx, int ny) {
+		return isType(nx, ny, Tile.TileType.TYPE_WALL)
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT);
+	}
+
 	/**
 	 * Per-tile distance to the nearest non-water tile, in tiles (0 on land, 1
 	 * on shoreline water, rising inward) -- a multi-source BFS over the level,
@@ -830,11 +854,13 @@ public class Grid {
 		return v > 8 ? 8 : v;
 	}
 
-	/** Whether any of the eight neighbours (or the tile itself) is water. */
+	/** Whether any of the eight neighbours (or the tile itself) is water --
+	 *  open water or its walkable shallows fringe. */
 	private boolean nearWater(int x, int y) {
 		for (int dy = -1; dy <= 1; dy++) {
 			for (int dx = -1; dx <= 1; dx++) {
-				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)) {
+				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)
+						|| isType(x + dx, y + dy, Tile.TileType.TYPE_SHALLOWS)) {
 					return true;
 				}
 			}
