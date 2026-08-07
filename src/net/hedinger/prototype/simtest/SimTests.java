@@ -1234,7 +1234,11 @@ public class SimTests {
 			w.think();
 			int start = w.getAliveCount();
 			snapshot(w, "founders");
-			tick(w, 600);
+			// 3000, not 600: grass became bulk food (a quarter of the old energy per
+			// unit, cropped at a quarter of the old rate), so banking a breeding takes
+			// roughly sixteen times as long. The fact under test is unchanged -- a fed
+			// population still grows -- only the clock it grows on.
+			tick(w, 3000);
 			snapshot(w, "after (population grew)");
 			int end = w.getAliveCount();
 			assertGreater("a fed breeder population grows by reproduction", end, start);
@@ -1309,7 +1313,10 @@ public class SimTests {
 			// rather than a test of crossover.
 			int peak = founders;
 			boolean sawRecombinant = false;
-			for (int step = 0; step < 80; step++) {
+			// 400 steps rather than 80: grass is bulk food now, so a pair takes far
+			// longer to bank the energy for a birth, and the recombinant draw needs
+			// several births to stop being a coin toss.
+			for (int step = 0; step < 400; step++) {
 				tick(colony, 20);
 				peak = Math.max(peak, colony.getAliveCount());
 				sawRecombinant |= hasRecombinant(colony);
@@ -2105,7 +2112,9 @@ public class SimTests {
 			// population and every distinct mind seen across the run.
 			int peak = start;
 			java.util.Set<String> minds = new java.util.HashSet<String>();
-			for (int step = 0; step < 30; step++) {
+			// 150 steps rather than 30: see PopulationGrowsWithFood -- feeding on grass
+			// is a much longer job than it was, so the boom takes longer to arrive.
+			for (int step = 0; step < 150; step++) {
 				tick(w, 20);
 				peak = Math.max(peak, w.getAliveCount());
 				for (Entity e : w.getEntities()) {
@@ -2170,11 +2179,17 @@ public class SimTests {
 				}
 			}
 			double finalMean = lateSum / 3.0;
-			assertLess("random founder brains forage almost nothing", initialMean, 0.2);
+			// Fitness is vegetation cropped, so these thresholds are in graze-demand
+			// units -- and that unit shrank by 0.24 when GRAZE_DEMAND went 0.05 -> 0.012
+			// (grass became bulk food). Every figure below is the old one scaled by
+			// exactly that factor, so the test still measures what it always did: the
+			// gap between a random forager and an evolved one, not an absolute yield.
+			// Scaling the bar rather than the evaluation window keeps the run short.
+			assertLess("random founder brains forage almost nothing", initialMean, 0.048);
 			assertGreater("evolution found a strong forager (a champion gathered real food)",
-					bestEver, 4.0);
+					bestEver, 0.96);
 			assertGreater("mean foraging rose far above the random start under selection",
-					finalMean, initialMean + 1.0);
+					finalMean, initialMean + 0.24);
 		}
 
 		/** Fitness = food each brain forages over K ticks on full grass. Bodies are
@@ -3055,6 +3070,41 @@ public class SimTests {
 	 * an emergent nest -- builds up, and the growing lineage clusters around it
 	 * instead of smearing across the map.
 	 */
+	/** The strongest pheromone cloud right now as {@code {x, y, intensity}}, where
+	 *  intensity is what a homing creature actually smells there — the summed
+	 *  concentration of every cloud overlapping that point, not one cloud's own
+	 *  strength. All zeros when nothing has been laid. */
+	private static double[] strongestNest(World w) {
+		double maxP = 0, nx = 0, ny = 0;
+		for (Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.engine.PheromoneCloud && !e.isRemoved()) {
+				double s = ((net.hedinger.prototype.engine.PheromoneCloud) e).getStrength();
+				if (s > maxP) {
+					maxP = s;
+					nx = e.getX();
+					ny = e.getY();
+				}
+			}
+		}
+		return maxP == 0 ? new double[] { 0, 0, 0 }
+				: new double[] { nx, ny, w.pheromoneAt(nx, ny, 0) };
+	}
+
+	/** {@code {near, total}} living creatures, near meaning within {@code radius}
+	 *  tiles of {@code (cx, cy)}. */
+	private static int[] colonyNear(World w, double cx, double cy, double radius) {
+		int near = 0, total = 0;
+		for (Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
+				total++;
+				if (Math.hypot(e.getX() - cx, e.getY() - cy) < radius) {
+					near++;
+				}
+			}
+		}
+		return new int[] { near, total };
+	}
+
 	static class NestEmergesFromPheromone extends Scenario {
 		@Override
 		public void run() {
@@ -3068,24 +3118,31 @@ public class SimTests {
 			w.think();
 			int start = w.getAliveCount();
 			snapshot(w, "founders");
-			tick(w, 800);
-			snapshot(w, "after (colony around the nest)");
-
-			// The nest is the strongest pheromone cloud.
-			double maxP = 0, nx = w.getColums() / 2.0, ny = w.getRows() / 2.0;
-			for (Entity e : w.getEntities()) {
-				if (e instanceof net.hedinger.prototype.engine.PheromoneCloud && !e.isRemoved()) {
-					double s = ((net.hedinger.prototype.engine.PheromoneCloud) e).getStrength();
-					if (s > maxP) {
-						maxP = s;
-						nx = e.getX();
-						ny = e.getY();
-					}
+			// A nest is a process, not a state: it waxes while the colony breeds and
+			// fades as the pheromone decays. So sample it as the run goes and keep the
+			// strongest it ever got, rather than reading whatever happened to be
+			// standing on the tick the test stopped. Under the old grass economy the
+			// colony bred fast enough that the two coincided; now that grass is bulk
+			// food, breeding is spread out and the terminal reading undersells the nest
+			// by a factor of three. The claim under test is unchanged.
+			// Both facts are read at the SAME moment — the tick the nest is strongest.
+			// Asking whether the colony sits on its nest only means anything while
+			// there is a nest to sit on, and by the end of a long run the pheromone has
+			// faded and the colony has filled this small room, at which point every
+			// creature is near everything and the question answers itself.
+			double nestIntensity = 0;
+			int near = 0, total = 0;
+			for (int step = 0; step < 64; step++) {
+				tick(w, 50);
+				double[] nest = strongestNest(w);
+				if (nest[2] > nestIntensity) {
+					nestIntensity = nest[2];
+					int[] c = colonyNear(w, nest[0], nest[1], 3.0);
+					near = c[0];
+					total = c[1];
 				}
 			}
-			// Nest intensity is what a homing creature actually smells there: the
-			// summed concentration of every cloud overlapping the peak.
-			double nestIntensity = w.pheromoneAt(nx, ny, 0);
+			snapshot(w, "after (colony around the nest)");
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
 			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
 
@@ -3094,15 +3151,6 @@ public class SimTests {
 			// ~20% a uniform spread would put within that radius. A concentration
 			// fraction is robust to colony size, unlike a mean-distance threshold
 			// (which washes out once a fast-breeding colony fills the room).
-			int near = 0, total = 0;
-			for (Entity e : w.getEntities()) {
-				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
-					total++;
-					if (Math.hypot(e.getX() - nx, e.getY() - ny) < 3.0) {
-						near++;
-					}
-				}
-			}
 			// Measured against what an even spread over the walkable interior would
 			// put inside that radius, NOT against a raw fraction. A thriving colony
 			// saturates this small room — 150-odd bodies over ~144 open tiles — and

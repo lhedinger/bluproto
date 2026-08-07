@@ -68,6 +68,9 @@ small, deterministic, test-backed slices.
   captive is the one cost paid standing still.
 - Creatures are born small and grow into their adult body; growth is physical, so
   a juvenile is cheap to run but easy prey.
+- Income is mass-based too: a carcass is worth what it weighs, and grass is bulk
+  food worth a fraction of meat per unit — so grazing is a full-time job and
+  predation is an event.
 - Engine step cap (`MAX_STEP`) and gene clamps (`SIZE_MAX`, `SPEED_MAX`) bound
   what the physics can express, distinct from the balance knobs above.
 
