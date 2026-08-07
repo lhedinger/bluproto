@@ -39,7 +39,8 @@ public final class GroundTextures {
 	// Per terrain class: {shadow, base, highlight}, natural palette from the
 	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
 	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
-			CLS_WALL = 5, CLS_HOLE = 6;
+			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7, CLS_FUNGUS = 8, CLS_RUBBLE = 9,
+			CLS_SAND = 10, CLS_REEDS = 11;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -48,7 +49,19 @@ public final class GroundTextures {
 			{ 0x1b3a16, 0x2b5422, 0x456c36 }, // cover (dark grass)
 			{ 0x3a3e49, 0x565b69, 0x7c828f }, // wall (stone)
 			{ 0x090a0e, 0x14161f, 0x222634 }, // hole (pit)
+			{ 0x2e323c, 0x484d59, 0x666c7a }, // stone floor (darker than wall mass)
+			{ 0x16352a, 0x2a6b4f, 0x54c78e }, // fungus (bioluminescent teal-green)
+			{ 0x333845, 0x515866, 0x747b8a }, // rubble (between stone floor and wall)
+			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // sand (pale warm)
+			{ 0x14301f, 0x2c5a36, 0x4f8752 }, // reeds (wet green)
 	};
+	/** The rare over-bright spore speck on a fungus clump -- the one colour
+	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
+	private static final int FUNGUS_SPARK = 0x9df5c6;
+	/** Wildflower / berry accents, matching the shrub decoration palette
+	 *  (Grid.SH_BERRY / SH_FLOWER) so meadow blossoms, shrub berries and
+	 *  thicket berries read as one flora. */
+	private static final int BLOOM_RED = 0xE0455F, BLOOM_CREAM = 0xF0E8C6;
 
 	/** Whether a class is a solid structure (wall) rather than open ground. */
 	public static boolean isStructure(int cls) {
@@ -68,6 +81,16 @@ public final class GroundTextures {
 			return CLS_WALL;
 		case TYPE_HOLE:
 			return CLS_HOLE;
+		case TYPE_STONE:
+			return CLS_STONE;
+		case TYPE_FUNGUS:
+			return CLS_FUNGUS;
+		case TYPE_RUBBLE:
+			return CLS_RUBBLE;
+		case TYPE_SAND:
+			return CLS_SAND;
+		case TYPE_REEDS:
+			return CLS_REEDS;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -82,6 +105,402 @@ public final class GroundTextures {
 	public static int groundColor(int cls, double wx, double wy) {
 		double sh = Utils.noise2(wx, wy, 3.7);
 		return RAMP[cls][sh < 0.32 ? 0 : (sh > 0.80 ? 2 : 1)];
+	}
+
+	// ---- ordered dither, striation, cracks --------------------------------
+
+	/** 4x4 Bayer matrix: the classic ordered-dither threshold pattern. */
+	private static final int[] BAYER4 = {
+			0, 8, 2, 10,
+			12, 4, 14, 6,
+			3, 11, 1, 9,
+			15, 7, 13, 5 };
+
+	/** Ordered-dither threshold in (0,1) for a world-absolute art-pixel. */
+	public static double bayer(int px, int py) {
+		return (BAYER4[(py & 3) * 4 + (px & 3)] + 0.5) / 16.0;
+	}
+
+	/**
+	 * A ramp shade for a continuous shade index {@code p} in [0,2], picked by
+	 * Bayer-dithering between the two adjacent shades: the fractional part of
+	 * {@code p} becomes checkerboard coverage of the brighter shade. Gradients
+	 * thus render as ordered-dither mixes of the same three ramp colours, never
+	 * as new in-between colours.
+	 */
+	public static int ditherRamp(int cls, double p, int px, int py) {
+		p = p < 0 ? 0 : (p > 2 ? 2 : p);
+		int lo = (int) p;
+		if (lo >= 2) {
+			return RAMP[cls][2];
+		}
+		return RAMP[cls][p - lo > bayer(px, py) ? lo + 1 : lo];
+	}
+
+	/**
+	 * Calm mineral ground: base-dominant, structured by coarse dithered
+	 * shadow patches (solid cores, dithered borders) and sparse 2-px grains
+	 * -- never lone pixels. The quiet interior shared by soil, mud and stone,
+	 * over which the crack networks draw their seams.
+	 */
+	public static int quietGround(int cls, double wx, double wy, int px, int py) {
+		double g = hash01(px >> 1, py, 46); // 2-px grain clusters
+		if (g < 0.05) {
+			return RAMP[cls][0];
+		}
+		if (g > 0.965) {
+			return RAMP[cls][2];
+		}
+		double sh = Utils.noise2(wx + 13, wy + 29, 0.8);
+		double p = (sh - 0.30) / 0.42;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(cls, p, px, py);
+	}
+
+	/**
+	 * Grass as hand-drawn lawns are textured: a calm base broken into coarse
+	 * light/shadow patches, scattered with stamped plant motifs. Most cells
+	 * grow a simple tuft (2-px lit tip over a shadow root); some grow a wide
+	 * three-tip clump; lush ground occasionally sprouts a darker broadleaf
+	 * rosette (borrowing the thicket ramp, so it reads as a different plant)
+	 * or a tiny wildflower in the shrub-accent colours. Motif density follows
+	 * the live vegetation, so a grazed lawn goes quiet before it goes bare,
+	 * and the grass highlight shade appears only on blade tips.
+	 */
+	public static int grass(double wx, double wy, int px, int py, double veg) {
+		int C = 3; // motif lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 40) > 0.10 + 0.38 * veg) {
+					continue; // nothing grows in this cell
+				}
+				int tx = cx * C + (int) (hash01(cx, cy, 41) * C);
+				int ty = cy * C + (int) (hash01(cx, cy, 42) * C);
+				int dx = px - tx, dy = py - ty;
+				double kind = hash01(cx, cy, 48);
+				if (kind < 0.05 && veg > 0.5) {
+					// Wildflower: a 2-px blossom over a leaf shadow.
+					if (dy == 0 && (dx == 0 || dx == 1)) {
+						return hash01(cx, cy, 49) < 0.7 ? BLOOM_RED : BLOOM_CREAM;
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
+				} else if (kind < 0.11 && veg > 0.55) {
+					// Broadleaf rosette: a darker plus-shaped plant.
+					if (dx == 0 && dy == 0) {
+						return RAMP[CLS_COVER][2];
+					}
+					if (Math.abs(dx) + Math.abs(dy) == 1) {
+						return RAMP[CLS_COVER][1];
+					}
+				} else if (kind < 0.30) {
+					// Wide clump: three fanned lit tips over a shadow root.
+					if ((dy == 0 && Math.abs(dx) == 1) || (dx == 0 && dy == -1)) {
+						return RAMP[CLS_GRASS][2];
+					}
+					if (dx == 0 && dy == 0) {
+						return RAMP[CLS_GRASS][1];
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
+				} else {
+					// Simple tuft: 2-px lit tip over a shadow root.
+					if (dx == 0 && (dy == 0 || dy == -1)) {
+						return RAMP[CLS_GRASS][2];
+					}
+					if (dx == 0 && dy == 1) {
+						return RAMP[CLS_GRASS][0];
+					}
+				}
+			}
+		}
+		double sh = Utils.noise2(wx, wy, 0.8);
+		double p = (sh - 0.30) / 0.42;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_GRASS, p, px, py); // calm shadow/base patches
+	}
+
+	/**
+	 * Thicket canopy: overlapping leaf-clump caps stamped on a jittered
+	 * lattice -- the round-clump grammar of top-down foliage. Each cap
+	 * self-shades (some crowns lit, lower rims dark) and the crevices between
+	 * caps drop to shadow, so the mass reads bumpy rather than flat.
+	 *
+	 * <p>Variety comes from two coarse world-space fields rather than
+	 * per-cell noise, so whole stands differ in character: a growth field
+	 * swings cap size between old-growth mounds and fine young scrub, and a
+	 * light field swings the share of lit crowns between airy bright stands
+	 * and dense dark ones. On top of that, the odd cell is an open gap, big
+	 * caps carry 2-px leaf flecks so they do not go flat, and the occasional
+	 * clump fruits (red berries) or flowers (cream blossoms) at its core --
+	 * the same accents the shrubs wear.
+	 */
+	public static int canopy(double wx, double wy, int px, int py) {
+		int C = 4; // cap lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double growth = Utils.noise2(wx + 41, wy + 83, 0.35); // stand character
+		double light = Utils.noise2(wx + 19, wy + 67, 0.3);
+		double bestD = 1e9, bestDy = 0, bestR = 1;
+		boolean bestLit = false;
+		int bestCx = 0, bestCy = 0;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 53) < 0.06) {
+					continue; // an open gap in the canopy
+				}
+				double jx = cx * C + 1 + hash01(cx, cy, 43) * (C - 2);
+				double jy = cy * C + 1 + hash01(cx, cy, 44) * (C - 2);
+				double r = 1.6 + 1.6 * growth + hash01(cx, cy, 45) * 1.2;
+				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d - r < bestD - bestR) {
+					bestD = d;
+					bestDy = dy;
+					bestR = r;
+					bestLit = hash01(cx, cy, 47) < 0.25 + 0.6 * light;
+					bestCx = cx;
+					bestCy = cy;
+				}
+			}
+		}
+		if (bestD < bestR) {
+			// The odd clump fruits or flowers at its core.
+			double accent = hash01(bestCx, bestCy, 52);
+			if (bestD < 0.7 && accent > 0.86) {
+				return accent > 0.95 ? BLOOM_CREAM : BLOOM_RED;
+			}
+			if (bestLit && bestDy < -0.3 * bestR) {
+				return RAMP[CLS_COVER][2]; // lit crown of this clump
+			}
+			// Leaf flecks keep a broad old-growth cap from reading flat.
+			if (bestR > 3 && bestD < bestR * 0.8 && hash01(px >> 1, py, 54) < 0.08) {
+				return RAMP[CLS_COVER][0];
+			}
+			return RAMP[CLS_COVER][bestDy > 0.55 * bestR ? 0 : 1]; // flank / dark lower rim
+		}
+		return RAMP[CLS_COVER][0]; // crevice between clumps
+	}
+
+	/**
+	 * Top-down water: a calm surface of broad shadow/base patches (coarse
+	 * noise, sharpened so patch cores stay solid and only their borders
+	 * dither) with rare 2-px sun glints near the shore. No directional
+	 * strokes -- from straight above, water has no profile to band.
+	 *
+	 * <p>{@code depth} in [0,1] is the distance-from-shore term: it pulls the
+	 * shade index down so a lake darkens toward its middle, and past the
+	 * shadow shade it dither-fades into a still darker abyss tone, so a big
+	 * lake reads as a deep hole and a puddle stays bright.
+	 */
+	public static int waterTop(double wx, double wy, int px, int py, double depth) {
+		if (depth < 0.55 && hash01(px >> 1, py, 14) > 0.992) {
+			return RAMP[CLS_WATER][2]; // sparse glint, 2 px wide, shallows only
+		}
+		double sh = Utils.noise2(wx + 31, wy + 17, 0.6);
+		double p = (sh - 0.24) / 0.44; // continuous shadow..base index
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		p -= depth * 1.7; // deeper water -> darker shades
+		if (p >= 0) {
+			return ditherRamp(CLS_WATER, p, px, py);
+		}
+		double deep = Math.min(1, -p / 0.7); // past shadow: fade to the abyss tone
+		return bayer(px, py) < deep ? darken(RAMP[CLS_WATER][0], 0.70) : RAMP[CLS_WATER][0];
+	}
+
+	/**
+	 * The flat top of a wall mass -- the cross-section seen from above. Kept
+	 * calm: base shade with sparse 2x2-px darker chips and the odd light
+	 * fleck, so the mass reads as one quiet solid and the carved texture is
+	 * saved for the vertical face ({@link #wallFace}).
+	 */
+	public static int wallTop(int px, int py, boolean litEdge) {
+		double r = hash01(px >> 1, py >> 1, 13);
+		int idx = r < 0.12 ? 0 : (r > 0.96 ? 2 : 1);
+		if (litEdge) {
+			idx = Math.min(2, idx + 1);
+		}
+		return RAMP[CLS_WALL][idx];
+	}
+
+	/**
+	 * The exposed vertical face of a wall (where it fronts open ground to the
+	 * south): flat vertical dashes of 4-7 px with hard, per-column-staggered
+	 * breaks, biased a shade dark so the face reads as the shadowed side of a
+	 * raised mass. Adjacent dashes that hash alike merge into longer runs on
+	 * their own.
+	 */
+	public static int wallFace(int px, int py) {
+		int len = 4 + (int) (hash01(px, 0, 10) * 4); // dash length per column, 4..7 px
+		int phase = (int) (hash01(px, 1, 11) * len); // stagger columns
+		int seg = Math.floorDiv(py + phase, len);
+		double r = hash01(px, seg, 12);
+		return RAMP[CLS_WALL][r < 0.45 ? 0 : (r > 0.90 ? 2 : 1)];
+	}
+
+	/**
+	 * True where (wx,wy) lies on the crack network that plates bare ground: the
+	 * ridge lines of a jittered-lattice Voronoi diagram (points where the two
+	 * nearest feature points are nearly equidistant). {@code cell} is the plate
+	 * diameter in tiles and {@code width} the seam width in tiles -- absolute,
+	 * so small plates keep readable seams. Purely positional, so the network
+	 * is seamless across tiles and chunk bakes.
+	 */
+	public static boolean crack(double wx, double wy, double cell, double width) {
+		double cx = wx / cell, cy = wy / cell;
+		int ix = (int) Math.floor(cx), iy = (int) Math.floor(cy);
+		double d1 = 9, d2 = 9;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int nx = ix + ox, ny = iy + oy;
+				double dx = cx - (nx + 0.18 + 0.64 * hash01(nx, ny, 1));
+				double dy = cy - (ny + 0.18 + 0.64 * hash01(nx, ny, 2));
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d < d1) {
+					d2 = d1;
+					d1 = d;
+				} else if (d < d2) {
+					d2 = d;
+				}
+			}
+		}
+		return d2 - d1 < width / cell;
+	}
+
+	/**
+	 * Cave fungus beds drawn as pixel-art clusters, not noise: discrete
+	 * rounded caps stamped on a jittered lattice, each cap shaded as a shape
+	 * -- lit crown toward screen-north, base flank, and a grounded shadow rim
+	 * under its south edge -- so a bed reads as a mass of individual growths
+	 * (the benthic-node look). A coarse clump field gates where caps appear;
+	 * a few caps carry a small glowing core, the bed's emissive accent.
+	 * {@code veg} in [0,1] is the tile's live vegetation fraction: grazing
+	 * thins the caps, shrinks them and kills the glow.
+	 */
+	public static int fungus(double wx, double wy, int px, int py, double veg) {
+		int C = 4; // candidate-cap lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double bestD = 1e9, bestDy = 0, bestR = 0;
+		boolean bestGlow = false;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				// Cap presence: the clump field sampled at this cell's centre,
+				// widened by lush vegetation.
+				double nwx = wx + (cx * C + C * 0.5 - (px + 0.5)) / 12.0;
+				double nwy = wy + (cy * C + C * 0.5 - (py + 0.5)) / 12.0;
+				if (Utils.noise2(nwx + 77, nwy + 55, 1.9) < 0.64 - 0.22 * veg) {
+					continue;
+				}
+				double jx = cx * C + 1 + hash01(cx, cy, 31) * (C - 2);
+				double jy = cy * C + 1 + hash01(cx, cy, 32) * (C - 2);
+				double r = 1.4 + hash01(cx, cy, 33) * (0.5 + 0.9 * veg);
+				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
+				double d = Math.sqrt(dx * dx + dy * dy);
+				if (d - r < bestD - bestR) {
+					bestD = d;
+					bestDy = dy;
+					bestR = r;
+					bestGlow = veg > 0.4 && hash01(cx, cy, 34) > 0.8;
+				}
+			}
+		}
+		if (bestD < bestR) {
+			if (bestGlow && bestD < 0.75) {
+				return FUNGUS_SPARK; // glowing cap core, a deliberate 1-2px accent
+			}
+			return RAMP[CLS_FUNGUS][bestDy < -0.2 * bestR ? 2 : 1]; // lit crown / flank
+		}
+		if (bestD < bestR + 1.1 && bestDy > 0) {
+			return RAMP[CLS_FUNGUS][0]; // shadow rim grounding the cap's south edge
+		}
+		return RAMP[CLS_STONE][0]; // bare cave rock between beds
+	}
+
+	/**
+	 * Scree: broken rock chips in 2x2-px chunks, dense enough to read as
+	 * unstable ground but with a calm base so it does not shimmer.
+	 */
+	public static int rubble(int px, int py) {
+		double r = hash01(px >> 1, py >> 1, 24);
+		if (r < 0.24) {
+			return RAMP[CLS_RUBBLE][0];
+		}
+		if (r > 0.90) {
+			return RAMP[CLS_RUBBLE][2];
+		}
+		// 2-px grit between the chips (lone pixels would read as noise).
+		return hash01(px >> 1, py, 25) < 0.10 ? RAMP[CLS_RUBBLE][0] : RAMP[CLS_RUBBLE][1];
+	}
+
+	/**
+	 * Sand: a deliberately quiet surface -- sparse 2-px grain clusters (never
+	 * lone pixels, which read as noise) over the base, crossed by sparse dark
+	 * wind-ripple dashes (same dash grammar as water, far sparser).
+	 */
+	public static int sand(int px, int py) {
+		int len = 4 + (int) (hash01(py, 0, 26) * 3);
+		int seg = Math.floorDiv(px + (int) (hash01(py, 1, 27) * len), len);
+		if (hash01(seg, py, 28) > 0.94) {
+			return RAMP[CLS_SAND][0]; // wind-ripple dash
+		}
+		double g = hash01(px >> 1, py, 29); // 2-px horizontal grains
+		return RAMP[CLS_SAND][g < 0.06 ? 0 : (g > 0.94 ? 2 : 1)];
+	}
+
+	/**
+	 * Reed beds from above, as stamped tufts rather than pixel noise: each
+	 * lattice cell holds (usually) one tuft -- a plus-shaped cluster of
+	 * stalks, some grown taller into a vertical run, its centre tip catching
+	 * the light -- over connected wet-dark ground showing between tufts. The
+	 * repeated-motif-varied-placement grammar of hand-drawn foliage.
+	 */
+	public static int reeds(int px, int py) {
+		int C = 4; // tuft lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 35) < 0.18) {
+					continue; // open water gap in the bed
+				}
+				int tx = cx * C + 1 + (int) (hash01(cx, cy, 36) * (C - 2));
+				int ty = cy * C + 1 + (int) (hash01(cx, cy, 37) * (C - 2));
+				int dx = px - tx, dy = py - ty;
+				int tall = hash01(cx, cy, 38) > 0.55 ? 2 : 1; // some stalks stand taller
+				if (dx == 0 && dy == 0) {
+					// A share of the tall stalks carry a brown cattail head
+					// (the mud ramp's highlight, so no new colour).
+					return tall == 2 && hash01(cx, cy, 51) > 0.7
+							? RAMP[CLS_MUD][2] : RAMP[CLS_REEDS][2];
+				}
+				if ((Math.abs(dx) == 1 && dy == 0) || (dx == 0 && Math.abs(dy) <= tall)) {
+					return RAMP[CLS_REEDS][1]; // the tuft's arms
+				}
+			}
+		}
+		return RAMP[CLS_REEDS][0]; // wet dark ground between tufts
+	}
+
+	private static int darken(int rgb, double f) {
+		int r = (int) (((rgb >> 16) & 255) * f);
+		int g = (int) (((rgb >> 8) & 255) * f);
+		int b = (int) ((rgb & 255) * f);
+		return (r << 16) | (g << 8) | b;
+	}
+
+	/** Deterministic integer-lattice hash to [0,1). */
+	public static double hash01(int x, int y, int s) {
+		int h = x * 374761393 + y * 668265263 + s * (int) 2246822519L;
+		h = (h ^ (h >>> 13)) * 1274126177;
+		return ((h ^ (h >>> 16)) & 0x7fffffff) / (double) 0x7fffffff;
 	}
 
 	/** A specific ramp shade (0 shadow, 1 base, 2 highlight) for a class. */

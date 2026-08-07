@@ -437,9 +437,10 @@ final class WorldHost {
 
 	/**
 	 * Per-tile cover mask for the shrub canopy overlay: one byte per tile of level
-	 * z — 1 where the tile is sight-blocking {@code TYPE_COVER} (a thicket), else
-	 * 0. Static for the life of the world, so the client fetches it once per level
-	 * and draws foliage over the entities standing in it.
+	 * z — 1 where the tile is a walkable sight-blocker (a {@code TYPE_COVER}
+	 * thicket or a {@code TYPE_REEDS} bed), else 0. Static for the life of the
+	 * world, so the client fetches it once per level and draws foliage over the
+	 * entities standing in it — anything the sim hides, the viewer part-hides too.
 	 */
 	byte[] cover(int z) {
 		var w = runner.world();
@@ -450,8 +451,8 @@ final class WorldHost {
 		byte[] c = new byte[cols * rows];
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
-				c[y * cols + x] = (byte) (w.getTile(x, y, z).getType()
-						== net.hedinger.prototype.engine.Tile.TileType.TYPE_COVER ? 1 : 0);
+				var t = w.getTile(x, y, z);
+				c[y * cols + x] = (byte) (t.blocksSight() && !t.isSolid() ? 1 : 0);
 			}
 		}
 		return c;

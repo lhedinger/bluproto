@@ -75,6 +75,11 @@ public class LayerRenderer {
 		case TYPE_WATER:
 		case TYPE_MUD:
 		case TYPE_COVER:
+		case TYPE_STONE:
+		case TYPE_FUNGUS:
+		case TYPE_RUBBLE:
+		case TYPE_SAND:
+		case TYPE_REEDS:
 			return ResourceManager.getFloorTile(tilecode);
 		// TYPE_HOLE is intentionally omitted: a hole bakes to nothing so it is a
 		// see-through cut-out, letting the level below show (and parallax) through.

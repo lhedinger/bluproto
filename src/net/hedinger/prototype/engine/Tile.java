@@ -97,9 +97,10 @@ public class Tile {
 		return VEG_MAX * fertility;
 	}
 
-	/** True where vegetation can grow: open, walkable ground. */
+	/** True where vegetation can grow: grassy floor, or cave fungus beds --
+	 *  both feed grazers through the same logistic regrowth model. */
 	public boolean growsVegetation() {
-		return type == TileType.TYPE_FLOOR;
+		return type == TileType.TYPE_FLOOR || type == TileType.TYPE_FUNGUS;
 	}
 
 	/** Current vegetation density [0, cap], regrown lazily to {@code now} along a
@@ -433,14 +434,25 @@ public class Tile {
 		return type == TileType.TYPE_WATER;
 	}
 
-	/** Movement multiplier for an entity standing on this tile (mud drags). */
+	/** Movement multiplier for an entity standing on this tile: mud drags
+	 *  hardest, reeds tangle, rubble is slow scrambling ground. */
 	public double speedFactor() {
-		return type == TileType.TYPE_MUD ? 0.4 : 1.0;
+		switch (type) {
+		case TYPE_MUD:
+			return 0.4;
+		case TYPE_REEDS:
+			return 0.5;
+		case TYPE_RUBBLE:
+			return 0.6;
+		default:
+			return 1.0;
+		}
 	}
 
-	/** True if this tile blocks line of sight (walls, or tall-grass cover). */
+	/** True if this tile blocks line of sight (walls, thicket cover, or the
+	 *  reed beds at the water's edge). */
 	public boolean blocksSight() {
-		return isSolid() || type == TileType.TYPE_COVER;
+		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS;
 	}
 
 	public void updateTilecode(World world) {
@@ -521,7 +533,12 @@ public class Tile {
 		TYPE_RAMPDOWN(4, true),
 		TYPE_WATER(5, true), // open (flyers pass) but not walkable
 		TYPE_MUD(6, true), // walkable, slows movement
-		TYPE_COVER(7, true); // walkable, blocks line of sight
+		TYPE_COVER(7, true), // walkable, blocks line of sight
+		TYPE_STONE(8, true), // walkable bare rock floor; grows no vegetation
+		TYPE_FUNGUS(9, true), // cave floor growing grazeable fungus
+		TYPE_RUBBLE(10, true), // broken rock; slows movement, sight passes
+		TYPE_SAND(11, true), // bare loose ground; grows no vegetation
+		TYPE_REEDS(12, true); // wetland stalks; slow AND sight-blocking
 
 		private int value;
 		private boolean open;

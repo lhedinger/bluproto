@@ -1,8 +1,6 @@
 package net.hedinger.prototype.engine;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -166,29 +164,46 @@ public final class ProcTiles {
 
 	private static BufferedImage buildRamp(String code, boolean up) {
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = gfx(img);
-		// up faces right (high on the right), down faces left.
-		GradientPaint grad = up
-				? new GradientPaint(X0, 0, RAMP_LO, X0 + TS, 0, RAMP_HI)
-				: new GradientPaint(X0, 0, RAMP_HI, X0 + TS, 0, RAMP_LO);
-		g.setPaint(grad);
-		g.fillRect(X0, Y0, TS, TS);
-		// Darker channel edges (top and bottom) so the ramp reads as a cut slope.
-		g.setColor(new Color(0, 0, 0, 55));
-		g.fillRect(X0, Y0, TS, 5);
-		g.fillRect(X0, Y0 + TS - 5, TS, 5);
-		// Chevrons pointing uphill (toward the high end).
-		g.setColor(new Color(255, 255, 255, 150));
-		g.setStroke(new BasicStroke(4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-		int cy = Y0 + TS / 2, s = 10;
+		Graphics2D g = img.createGraphics(); // no AA: hard-edged art pixels
+		// Pixel-art slope, matching the ground's 12x12 art-pixel grid: the
+		// LO->HI climb renders as three flat bands whose boundaries are
+		// Bayer-dithered, never a smooth gradient. up faces right (high on the
+		// right), down faces left.
+		int A = 12, ap = TS / A + 1; // art-pixel size (rounded up to cover)
+		Color mid = new Color(
+				(RAMP_LO.getRed() + RAMP_HI.getRed()) / 2,
+				(RAMP_LO.getGreen() + RAMP_HI.getGreen()) / 2,
+				(RAMP_LO.getBlue() + RAMP_HI.getBlue()) / 2);
+		Color[] shades = { RAMP_LO, mid, RAMP_HI };
+		for (int aj = 0; aj < A; aj++) {
+			for (int ai = 0; ai < A; ai++) {
+				double t = (up ? ai : A - 1 - ai) / (double) (A - 1) * 2; // 0..2
+				int lo = (int) t;
+				double frac = t - lo;
+				int idx = lo >= 2 ? 2
+						: (frac > GroundTextures.bayer(ai, aj) ? lo + 1 : lo);
+				// Dark channel edges: the top and bottom art-pixel rows step a
+				// shade down, so the ramp reads as a cut slope.
+				if ((aj == 0 || aj == A - 1) && idx > 0) {
+					idx--;
+				}
+				g.setColor(shades[idx]);
+				g.fillRect(X0 + ai * TS / A, Y0 + aj * TS / A, ap, ap);
+			}
+		}
+		// Chevrons pointing uphill: blocky one-art-pixel diagonal steps, in the
+		// pale high-end tone (opaque -- no anti-aliased strokes).
+		g.setColor(new Color(
+				Math.min(255, RAMP_HI.getRed() + 40),
+				Math.min(255, RAMP_HI.getGreen() + 40),
+				Math.min(255, RAMP_HI.getBlue() + 40)));
+		int s = TS / A; // one art pixel
 		for (int k = 0; k < 3; k++) {
-			int cx = X0 + 16 + k * 16;
-			if (up) {
-				g.drawLine(cx - s, cy - s, cx + s, cy);
-				g.drawLine(cx + s, cy, cx - s, cy + s);
-			} else {
-				g.drawLine(cx + s, cy - s, cx - s, cy);
-				g.drawLine(cx - s, cy, cx + s, cy + s);
+			int bx = 2 + k * 3; // chevron apex column, in art pixels
+			for (int i = 0; i < 3; i++) {
+				int cxA = up ? bx + i : bx + (2 - i);
+				g.fillRect(X0 + cxA * s, Y0 + (4 + i) * s, s, s); // upper arm
+				g.fillRect(X0 + cxA * s, Y0 + (8 - i) * s, s, s); // lower arm
 			}
 		}
 		g.dispose();

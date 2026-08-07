@@ -20,6 +20,9 @@ public final class RenderFx {
 	public static boolean foliage = true;
 	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
 	public static boolean cacheSprites = true;
+	/** Re-stamp foliage over creatures standing in walkable sight-blockers
+	 * (thicket cover, reed beds), so hidden creatures render part-hidden. */
+	public static boolean concealFoliage = true;
 	/** Render holes as translucent pits, so the layer beneath shows through. */
 	public static boolean holeTranslucent = true;
 	/** How opaque the pit shade is over the revealed level (0 clear .. 1 black).

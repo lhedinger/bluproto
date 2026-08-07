@@ -98,6 +98,72 @@ public class Grid {
 				e.render(g, v);
 			}
 		}
+		// What perception cannot see, the eye should only half see: re-stamp
+		// foliage over creatures standing in walkable sight-blockers.
+		if (camDepth == 0 && RenderFx.pixelGround && RenderFx.concealFoliage) {
+			renderConcealment(g2, ox, oy);
+		}
+	}
+
+	/**
+	 * Concealment overlay, matching the web client's canopy pass: wherever a
+	 * living creature stands in (or overlaps) a walkable sight-blocking tile
+	 * -- thicket cover or a reed bed -- part of that tile's own foliage is
+	 * re-stamped over the entity layer. Reeds redraw exactly their stalk
+	 * pixels, so a body shows between the stalks; the closed canopy redraws
+	 * clustered 2x2 blocks at roughly half coverage, so a body reads through
+	 * gaps in the leaves rather than vanishing. Pixels regenerate from the
+	 * same pure texture functions as the ground, so the overlay is invisible
+	 * where it lands on identical ground pixels.
+	 */
+	private void renderConcealment(Graphics2D g2, int ox, int oy) {
+		java.util.HashSet<Integer> veiled = new java.util.HashSet<Integer>();
+		for (Entity e : world.entities.values()) {
+			if (e == null || e instanceof PheromoneCloud || e.getLvl() != level || e.isDead()) {
+				continue;
+			}
+			int ex = (int) e.getX(), ey = (int) e.getY();
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int tx = ex + dx, ty = ey + dy;
+					if (tx < 0 || ty < 0 || tx >= world.cols || ty >= world.rows) {
+						continue;
+					}
+					Tile t = tiles[tx][ty];
+					if (t.blocksSight() && !t.isSolid()) {
+						veiled.add(ty * world.cols + tx);
+					}
+				}
+			}
+		}
+		int ts = ResourceManager.tileSize;
+		int A = 12; // must match renderGroundPixel's art-pixel grid
+		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
+		for (int key : veiled) {
+			int x = key % world.cols, y = key / world.cols;
+			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
+			int sx = ox + x * ts, sy = oy + y * ts;
+			for (int aj = 0; aj < A; aj++) {
+				for (int ai = 0; ai < A; ai++) {
+					int gx = x * A + ai, gy = y * A + aj;
+					int col;
+					if (reedBed) {
+						col = GroundTextures.reeds(gx, gy);
+						if (col == reedGap) {
+							continue; // the body shows between the stalks
+						}
+					} else {
+						if (GroundTextures.hash01(gx >> 1, gy >> 1, 61) > 0.55) {
+							continue; // clustered gaps in the leaf veil
+						}
+						col = GroundTextures.canopy(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
+					}
+					g2.setColor(new Color(col));
+					g2.fillRect(sx + ai * ts / A, sy + aj * ts / A,
+							(ai + 1) * ts / A - ai * ts / A, (aj + 1) * ts / A - aj * ts / A);
+				}
+			}
+		}
 	}
 
 	/**
@@ -259,9 +325,20 @@ public class Grid {
 	private void drawShrub(Graphics2D g2, int cx, int cy, int R, int ts, int hash) {
 		int pix = Math.max(4, ts / 11);
 		int style = Math.floorMod(hash, 3); // 0 soft mound, 1 leafy, 2 irregular
-		// Tight shadow tucked under the base so the shrub doesn't float.
-		g2.setColor(new java.awt.Color(0, 0, 0, 120));
-		g2.fillOval(cx - (int) (R * 1.05), cy + (int) (R * 0.18), (int) (R * 2.1), (int) (R * 0.55));
+		// Tight shadow tucked under the base so the shrub doesn't float:
+		// a blocky translucent oval -- art-pixel steps on the outline, but
+		// each block tints the ground instead of covering it.
+		g2.setColor(new java.awt.Color(0, 0, 0, 110));
+		double shRx = R * 1.05, shRy = R * 0.275, shCy = cy + R * 0.455;
+		for (int by = (int) (-shRy / pix) - 1; by <= shRy / pix + 1; by++) {
+			for (int bx = (int) (-shRx / pix) - 1; bx <= shRx / pix + 1; bx++) {
+				double ex = bx * pix / shRx, ey = by * pix / shRy;
+				if (ex * ex + ey * ey > 1) {
+					continue;
+				}
+				g2.fillRect(cx + bx * pix, (int) shCy + by * pix, pix, pix);
+			}
+		}
 
 		double[][] lobe = new double[SH_LOBES.length][];
 		for (int i = 0; i < lobe.length; i++) {
@@ -447,18 +524,25 @@ public class Grid {
 
 	/**
 	 * Low-res pixel ground: each tile is drawn as A×A chunky art-pixels, each
-	 * coloured from its terrain-class ramp by a world-space shade noise. The
-	 * terrain lookup is jittered by noise so class boundaries wander and dither
-	 * across tile edges instead of snapping to the grid. Open ground (grass, soil,
-	 * water, mud, cover) jitters hard for organic coastlines; walls and holes
-	 * jitter only slightly (a couple of pixels) so they stay solid, never bleed
-	 * out onto open ground, and get a simple top-lit bevel / rim for depth, plus a
-	 * cast shadow on the ground just south of a wall.
+	 * coloured from its terrain-class ramp by a world-space shade noise pushed
+	 * through an ordered (Bayer) dither -- shade transitions are checkerboard
+	 * mixes of adjacent ramp colours, never blends. The terrain lookup is
+	 * jittered by noise so class boundaries wander and dither across tile edges
+	 * instead of snapping to the grid. Open ground (grass, soil, water, mud,
+	 * cover) jitters hard for organic coastlines; water is a calm top-down
+	 * surface of shadow/base patches with sparse glints, dry soil is plated by
+	 * a dark Voronoi-ridge crack network (mud cracks finer, and turns into a
+	 * darker crack-free wet band beside water). Walls and holes jitter only
+	 * slightly (a couple of pixels) so they stay solid and never bleed out
+	 * onto open ground; a wall shows a calm cross-section top with a lit north
+	 * edge, a band of carved vertical face dashes where it fronts open ground
+	 * to the south, and a cast shadow on the ground below.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
 		int A = 12; // art-pixels per tile
+		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
@@ -489,44 +573,110 @@ public class Grid {
 						if (!ownTight && (cl == GroundTextures.CLS_WALL || cl == GroundTextures.CLS_HOLE)) {
 							cl = cls; // structures don't bleed out onto open ground
 						}
+						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
-						int alpha = 255;
 						if (cl == GroundTextures.CLS_WALL) {
-							// Flat stone (no ground blobs) + a top-lit bevel, so it reads
-							// as a solid raised mass rather than mottled camouflage.
-							col = GroundTextures.rampColor(cl,
-									(!wallN && aj < A * 0.28) ? 2 : (!wallS && aj >= A * 0.72) ? 0 : 1);
+							// A wall is two surfaces from above: the flat cross-section
+							// top (kept calm), and a band of carved vertical face dashes
+							// where the mass fronts open ground to the south.
+							if (!wallS && aj >= A * 0.55) {
+								col = GroundTextures.wallFace(gx, gy);
+							} else {
+								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
+							}
 						} else if (cl == GroundTextures.CLS_HOLE) {
-							// Rim on every side the pit meets ground: the north lip catches
-							// the screen-north light brightest, the other three lips are the
-							// same stone lip a touch dimmer, so the pit edge reads all round.
-							int band = 3; // art-px rim thickness
-							boolean nRim = !holeN && aj < band;
-							boolean sRim = !holeS && aj >= A - band;
-							boolean wRim = !holeW && ai < band;
-							boolean eRim = !holeE && ai >= A - band;
+							// Rim on every side the pit meets ground, as pixel-art: the
+							// lit north lip is a broken run of dashes whose depth varies
+							// per column (a crumbling cut edge, not a solid band); the
+							// other lips are a thin dimmer edge with dithered dropouts.
+							int nDepth = 2 + (int) (GroundTextures.hash01(gx, 0, 20) * 2.99);
+							boolean nRim = !holeN && aj < nDepth;
+							boolean sRim = !holeS && aj >= A - 2;
+							boolean wRim = !holeW && ai < 2;
+							boolean eRim = !holeE && ai >= A - 2;
 							if (nRim) {
-								col = GroundTextures.rampColor(cl, 2); // bright lit top lip
+								col = GroundTextures.rampColor(cl,
+										GroundTextures.bayer(gx, gy) < 0.75 ? 2 : 1);
 							} else if (sRim || wRim || eRim) {
-								col = darken(GroundTextures.rampColor(cl, 2), 0.6); // dimmer side lips
+								col = GroundTextures.bayer(gx, gy) < 0.35
+										? GroundTextures.rampColor(cl, 0)
+										: darken(GroundTextures.rampColor(cl, 2), 0.6);
 							} else if (RenderFx.holeTranslucent) {
-								// Translucent pit: a semi-transparent shade over the real level
-								// below (composited underneath, and left unoccluded because the
-								// baked hole tile is a cut-out). Its parallax comes for free from
-								// the engine's per-level projection (Utils.scaleZ).
+								// Screen-door pit: opaque shadow art-pixels at holeDepth
+								// coverage, the rest left fully open to the real level below
+								// (composited underneath, and unoccluded because the baked
+								// hole tile is a cut-out). Dithered translucency; the
+								// parallax comes for free from the per-level projection.
+								if (GroundTextures.bayer(gx, gy) >= RenderFx.holeDepth) {
+									continue;
+								}
 								col = GroundTextures.rampColor(cl, 0);
-								alpha = (int) Math.round(RenderFx.holeDepth * 255);
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
+						} else if (cl == GroundTextures.CLS_WATER) {
+							// Water from straight above: calm shadow/base patches with
+							// sparse glints, darkening with distance from the shore so
+							// lake middles read deep.
+							if (wdist == null) {
+								wdist = waterDist();
+							}
+							col = GroundTextures.waterTop(wx, wy, gx, gy, depthAt(wdist, wx, wy));
+							if (wallN && aj < A * 0.32) {
+								col = darken(col, 0.62); // shadow cast by the wall to the north
+							}
 						} else {
-							col = GroundTextures.groundColor(cl, wx, wy); // organic blobs for open ground
+							if (cl == GroundTextures.CLS_FUNGUS) {
+								// Bioluminescent beds; clump size follows live vegetation,
+								// so grazing visibly eats the glow away.
+								double cap = t.vegetationCap();
+								double veg = cap > 0 ? t.getVegetation(now) / cap : 1;
+								col = GroundTextures.fungus(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_RUBBLE) {
+								col = GroundTextures.rubble(gx, gy);
+							} else if (cl == GroundTextures.CLS_SAND) {
+								col = GroundTextures.sand(gx, gy);
+							} else if (cl == GroundTextures.CLS_REEDS) {
+								col = GroundTextures.reeds(gx, gy);
+							} else if (cl == GroundTextures.CLS_GRASS) {
+								// Lawn: calm patches plus stamped tufts whose density
+								// follows the live vegetation.
+								double veg = Math.min(1, t.getVegetation(now) / Tile.VEG_MAX);
+								col = GroundTextures.grass(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_COVER) {
+								// Thicket: a canopy of self-shaded leaf clumps whose
+								// character varies stand by stand.
+								col = GroundTextures.canopy(wx, wy, gx, gy);
+							} else {
+								// Mineral ground (soil, mud, stone): quiet plate interiors
+								// under the crack-network seams.
+								col = GroundTextures.quietGround(cl, wx, wy, gx, gy);
+								if (cl == GroundTextures.CLS_SOIL
+										&& GroundTextures.crack(wx, wy, 0.38, 0.05)) {
+									// Dry badlands: sun-baked clay plates. Seams stay inside
+									// the ramp (plain shadow shade), so the network reads as
+									// soft creases rather than hard black lines.
+									col = GroundTextures.rampColor(cl, 0);
+								} else if (cl == GroundTextures.CLS_STONE
+										&& GroundTextures.crack(wx, wy, 0.8, 0.06)) {
+									// Stone floor: fitted flagstone slabs, shadow-shade joints.
+									col = GroundTextures.rampColor(cl, 0);
+								} else if (cl == GroundTextures.CLS_MUD) {
+									if (nearWater(x, y)) {
+										// Wet shore band: darker, crack-free mud melting into
+										// the water's shadow shade at the jittered boundary.
+										col = darken(col, 0.74);
+									} else if (GroundTextures.crack(wx, wy, 0.35, 0.05)) {
+										// Drier mud crumbles into fine pebble-sized plates.
+										col = GroundTextures.rampColor(cl, 0);
+									}
+								}
+							}
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						}
-						g2.setColor(alpha == 255 ? new Color(col)
-								: new Color((col >> 16) & 255, (col >> 8) & 255, col & 255, alpha));
+						g2.setColor(new Color(col));
 						g2.fillRect(sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 					}
 				}
@@ -620,6 +770,76 @@ public class Grid {
 			return false;
 		}
 		return tiles[nx][ny].getType() == type;
+	}
+
+	/**
+	 * Per-tile distance to the nearest non-water tile, in tiles (0 on land, 1
+	 * on shoreline water, rising inward) -- a multi-source BFS over the level,
+	 * built once per ground render. Feeds the water depth shading.
+	 */
+	private int[][] waterDist() {
+		int cols = world.cols, rows = world.rows;
+		int[][] d = new int[cols][rows];
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				if (tiles[x][y].getType() == Tile.TileType.TYPE_WATER) {
+					d[x][y] = Integer.MAX_VALUE;
+				} else {
+					q.add(x * rows + y);
+				}
+			}
+		}
+		while (!q.isEmpty()) {
+			int i = q.poll();
+			int x = i / rows, y = i % rows, nd = d[x][y] + 1;
+			for (int k = 0; k < 4; k++) {
+				int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0);
+				int ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+				if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && d[nx][ny] > nd) {
+					d[nx][ny] = nd;
+					q.add(nx * rows + ny);
+				}
+			}
+		}
+		return d;
+	}
+
+	/**
+	 * Depth term in [0,1] for a water pixel: the shore-distance field sampled
+	 * bilinearly between tile centres (so contours curve instead of stepping
+	 * at tile edges), reaching full depth ~4 tiles offshore. An all-water map
+	 * has no shore seeds; the clamp treats its unreached tiles as deep.
+	 */
+	private static double depthAt(int[][] dist, double wx, double wy) {
+		double fx = wx - 0.5, fy = wy - 0.5;
+		int x0 = (int) Math.floor(fx), y0 = (int) Math.floor(fy);
+		double tx = fx - x0, ty = fy - y0;
+		double top = distClamped(dist, x0, y0) * (1 - tx) + distClamped(dist, x0 + 1, y0) * tx;
+		double bot = distClamped(dist, x0, y0 + 1) * (1 - tx) + distClamped(dist, x0 + 1, y0 + 1) * tx;
+		double d = top * (1 - ty) + bot * ty;
+		d = (d - 1.0) / 3.0;
+		return d < 0 ? 0 : (d > 1 ? 1 : d);
+	}
+
+	private static double distClamped(int[][] dist, int x, int y) {
+		if (x < 0 || y < 0 || x >= dist.length || y >= dist[0].length) {
+			return 0;
+		}
+		int v = dist[x][y];
+		return v > 8 ? 8 : v;
+	}
+
+	/** Whether any of the eight neighbours (or the tile itself) is water. */
+	private boolean nearWater(int x, int y) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private boolean neighbourMottle(int nx, int ny, long now) {
