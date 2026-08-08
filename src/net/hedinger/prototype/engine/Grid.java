@@ -563,23 +563,24 @@ public class Grid {
 					for (int ai = 0; ai < A; ai++) {
 						int bx0 = ai * ts / A, bx1 = (ai + 1) * ts / A;
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
-						// Boundary raggedness: a SMALL displacement at HIGH
-						// frequency, so borders break into pixel-scale notches.
-						// (A large low-frequency jitter makes every edge meander
-						// in long parallel waves -- the lava-lamp look.)
-						double amp = ownTight ? 0.2 : 0.5;
-						double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * amp;
-						double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * amp;
-						int cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
-						if (cl < 0) {
-							cl = cls;
-						}
-						if (!ownTight && (GroundTextures.isStructure(cl) || cl == GroundTextures.CLS_HOLE
-								|| cl == GroundTextures.CLS_PAVED)) {
-							cl = cls; // structures and masonry don't bleed onto open ground
-						}
-						if (cls == GroundTextures.CLS_PAVED) {
-							cl = cls; // and nothing bleeds onto paving: built edges are straight
+						int cl;
+						if (ownTight) {
+							// Structures keep a whisper of jitter so rock edges
+							// aren't laser-cut; they never trade pixels with
+							// open ground either way.
+							double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * 0.2;
+							double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * 0.2;
+							cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
+							if (cl < 0 || !(GroundTextures.isStructure(cl)
+									|| cl == GroundTextures.CLS_HOLE)) {
+								cl = cls;
+							}
+						} else {
+							// Open ground: autotiled edges. Boundaries are drawn
+							// shapes, not noise -- the higher-priority terrain laps
+							// into its lower neighbour with rounded corners and
+							// short hand-scallop runs (see resolveEdge).
+							cl = resolveEdge(x, y, ai, aj, cls, now);
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
@@ -720,6 +721,115 @@ public class Grid {
 			return -1;
 		}
 		return GroundTextures.groundClass(tiles[cx][cy], now);
+	}
+
+	/** Draw-order rank for open-ground autotiling: the higher terrain laps
+	 *  over the lower at their shared edge (grass overhangs soil, fungus laps
+	 *  onto stone, everything laps over water). Structures, holes and paving
+	 *  do not participate: their edges are their own. */
+	private static int edgeRank(int cls) {
+		switch (cls) {
+		case GroundTextures.CLS_WATER: return 0;
+		case GroundTextures.CLS_SHALLOWS: return 1;
+		case GroundTextures.CLS_MUD: return 2;
+		case GroundTextures.CLS_QUICKSAND: return 3;
+		case GroundTextures.CLS_SAND: return 4;
+		case GroundTextures.CLS_SOIL: return 5;
+		case GroundTextures.CLS_STONE: return 6;
+		case GroundTextures.CLS_RUBBLE: return 7;
+		case GroundTextures.CLS_VENT: return 8;
+		case GroundTextures.CLS_FUNGUS: return 9;
+		case GroundTextures.CLS_GRASS: return 10;
+		case GroundTextures.CLS_REEDS: return 11;
+		case GroundTextures.CLS_COVER: return 12;
+		default: return -1; // structures, holes, paving: no lapping
+		}
+	}
+
+	/** Scalloped lap depth (art-px) at position {@code t} along an edge: short
+	 *  hash-picked runs of depth 1-3, the hand-drawn scallop of a tileset. */
+	private static int lapDepth(int t, int salt) {
+		int seg = Math.floorDiv(t, 4); // 4-px scallop runs
+		return 1 + (int) (GroundTextures.hash01(seg, salt, 75) * 2.99);
+	}
+
+	/**
+	 * Autotiled open-ground boundary: returns the class that owns art-pixel
+	 * (ai,aj) of tile (x,y). A higher-ranked cardinal neighbour laps into
+	 * this tile by a scalloped 1-3 px band along the shared edge; where two
+	 * lapping edges meet, and at outer corners against a higher diagonal
+	 * neighbour, the lap rounds into a quarter-circle -- so borders are drawn
+	 * shapes with rounded corners, deterministic and tile-anchored, never
+	 * noise. Ties (equal rank) keep the straight tile edge.
+	 */
+	private int resolveEdge(int x, int y, int ai, int aj, int cls, long now) {
+		int A = 12;
+		int own = edgeRank(cls);
+		if (own < 0) {
+			return cls;
+		}
+		int gx = x * A + ai, gy = y * A + aj;
+		// Cardinal laps, deepest wins so corner pockets fill naturally.
+		int best = cls, bestDepth = 0;
+		int n = lapClassAt(x, y - 1, own, now);
+		if (n >= 0 && aj < lapDepth(gx, n * 4 + 0)) {
+			int d = lapDepth(gx, n * 4 + 0) - aj;
+			if (d > bestDepth) { best = n; bestDepth = d; }
+		}
+		int s = lapClassAt(x, y + 1, own, now);
+		if (s >= 0 && aj >= A - lapDepth(gx, s * 4 + 1)) {
+			int d = aj - (A - lapDepth(gx, s * 4 + 1)) + 1;
+			if (d > bestDepth) { best = s; bestDepth = d; }
+		}
+		int w = lapClassAt(x - 1, y, own, now);
+		if (w >= 0 && ai < lapDepth(gy, w * 4 + 2)) {
+			int d = lapDepth(gy, w * 4 + 2) - ai;
+			if (d > bestDepth) { best = w; bestDepth = d; }
+		}
+		int e = lapClassAt(x + 1, y, own, now);
+		if (e >= 0 && ai >= A - lapDepth(gy, e * 4 + 3)) {
+			int d = ai - (A - lapDepth(gy, e * 4 + 3)) + 1;
+			if (d > bestDepth) { best = e; bestDepth = d; }
+		}
+		if (bestDepth > 0) {
+			return best;
+		}
+		// Rounded outer corners: where two cardinals share a higher diagonal
+		// neighbour, the diagonal's lap rounds the corner with a quarter-arc.
+		int R = 4; // corner radius, art-px
+		int nw = lapClassAt(x - 1, y - 1, own, now);
+		if (nw >= 0 && ai < R && aj < R && dist2(ai, aj, R, R) > R * R) {
+			return nw;
+		}
+		int ne = lapClassAt(x + 1, y - 1, own, now);
+		if (ne >= 0 && ai >= A - R && aj < R && dist2(ai, aj, A - 1 - R, R) > R * R) {
+			return ne;
+		}
+		int sw = lapClassAt(x - 1, y + 1, own, now);
+		if (sw >= 0 && ai < R && aj >= A - R && dist2(ai, aj, R, A - 1 - R) > R * R) {
+			return sw;
+		}
+		int se = lapClassAt(x + 1, y + 1, own, now);
+		if (se >= 0 && ai >= A - R && aj >= A - R && dist2(ai, aj, A - 1 - R, A - 1 - R) > R * R) {
+			return se;
+		}
+		return cls;
+	}
+
+	/** The neighbour's class if it out-ranks {@code ownRank} (so it laps into
+	 *  this tile), else -1. */
+	private int lapClassAt(int cx, int cy, int ownRank, long now) {
+		int c = groundClassAt(cx, cy, now);
+		if (c < 0) {
+			return -1;
+		}
+		int r = edgeRank(c);
+		return r > ownRank ? c : -1;
+	}
+
+	private static int dist2(int ax, int ay, int bx, int by) {
+		int dx = ax - bx, dy = ay - by;
+		return dx * dx + dy * dy;
 	}
 
 	/** Edge-fade bits (N=1, E=2, S=4, W=8) for edges whose neighbour isn't mottle. */
