@@ -633,21 +633,21 @@ public class Grid {
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
-						} else if (cl == GroundTextures.CLS_WATER) {
-							// Water from straight above: calm shadow/base patches with
-							// sparse glints, darkening with distance from the shore so
-							// lake middles read deep.
+						} else if (cl == GroundTextures.CLS_WATER
+								|| cl == GroundTextures.CLS_SHALLOWS) {
+							// One water surface from wading fringe to abyss: both
+							// classes render the same shore-distance continuum, so
+							// the walkable/unwalkable line is invisible in the
+							// picture -- the same technique as the deep gradient.
 							if (wdist == null) {
 								wdist = waterDist();
 							}
-							col = GroundTextures.waterTop(wx, wy, gx, gy, depthAt(wdist, wx, wy));
+							col = GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						} else {
-							if (cl == GroundTextures.CLS_SHALLOWS) {
-								col = GroundTextures.shallows(wx, wy, gx, gy);
-							} else if (cl == GroundTextures.CLS_QUICKSAND) {
+							if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
 								col = GroundTextures.vent(ai, aj, gx, gy);
@@ -915,9 +915,10 @@ public class Grid {
 	}
 
 	/**
-	 * Per-tile distance to the nearest non-water tile, in tiles (0 on land, 1
-	 * on shoreline water, rising inward) -- a multi-source BFS over the level,
-	 * built once per ground render. Feeds the water depth shading.
+	 * Per-tile distance to the nearest true-land tile, in tiles (0 on land,
+	 * ~1 on the walkable shallows band, ~2 at the first open-water tile,
+	 * rising inward) -- a multi-source BFS over the level, built once per
+	 * ground render. Feeds the continuous shallows-to-abyss water surface.
 	 */
 	private int[][] waterDist() {
 		int cols = world.cols, rows = world.rows;
@@ -925,7 +926,8 @@ public class Grid {
 		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
-				if (tiles[x][y].getType() == Tile.TileType.TYPE_WATER) {
+				Tile.TileType tt = tiles[x][y].getType();
+				if (tt == Tile.TileType.TYPE_WATER || tt == Tile.TileType.TYPE_SHALLOWS) {
 					d[x][y] = Integer.MAX_VALUE;
 				} else {
 					q.add(x * rows + y);
@@ -948,10 +950,10 @@ public class Grid {
 	}
 
 	/**
-	 * Depth term in [0,1] for a water pixel: the shore-distance field sampled
+	 * The raw shore-distance for a water-surface pixel: the field sampled
 	 * bilinearly between tile centres (so contours curve instead of stepping
-	 * at tile edges), reaching full depth ~4 tiles offshore. An all-water map
-	 * has no shore seeds; the clamp treats its unreached tiles as deep.
+	 * at tile edges). An all-water map has no shore seeds; the clamp treats
+	 * its unreached tiles as deep.
 	 */
 	private static double depthAt(int[][] dist, double wx, double wy) {
 		double fx = wx - 0.5, fy = wy - 0.5;
@@ -959,9 +961,7 @@ public class Grid {
 		double tx = fx - x0, ty = fy - y0;
 		double top = distClamped(dist, x0, y0) * (1 - tx) + distClamped(dist, x0 + 1, y0) * tx;
 		double bot = distClamped(dist, x0, y0 + 1) * (1 - tx) + distClamped(dist, x0 + 1, y0 + 1) * tx;
-		double d = top * (1 - ty) + bot * ty;
-		d = (d - 1.0) / 3.0;
-		return d < 0 ? 0 : (d > 1 ? 1 : d);
+		return top * (1 - ty) + bot * ty;
 	}
 
 	private static double distClamped(int[][] dist, int x, int y) {

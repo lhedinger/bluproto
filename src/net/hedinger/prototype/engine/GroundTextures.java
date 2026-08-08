@@ -512,17 +512,27 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Wading shallows: the sunlit turquoise fringe where water meets land --
-	 * calm pale patches leaning toward the bright end of the ramp, with
-	 * glints noticeably denser than open water, so the ford reads inviting
-	 * where the deep reads forbidding.
+	 * One continuous water surface across the shallows AND the open water,
+	 * driven by {@code d} -- the bilinear distance from true land (~1 on the
+	 * walkable shallows band, ~2 at the first open-water tile, rising toward
+	 * the middle). The sunlit turquoise darkens as it deepens, hands off to
+	 * the water blues through a Bayer-dithered blend band, and from there the
+	 * existing depth shading carries on down to the abyss tone. Both tile
+	 * classes render through this same function, so the walkable/unwalkable
+	 * boundary is invisible in the picture -- exactly like the deep-water
+	 * gradient, one material all the way across.
 	 */
-	public static int shallows(double wx, double wy, int px, int py) {
+	public static int waterSurface(double wx, double wy, int px, int py, double d) {
+		double depth = Math.max(0, (d - 1.8) / 2.6);
+		double blend = (d - 1.3) / 0.9; // 0 inner shallows .. 1 fully open water
+		if (blend >= 1 || (blend > 0 && bayer(px, py) < blend)) {
+			return waterTop(wx, wy, px, py, depth);
+		}
 		if (hash01(px >> 1, py, 62) > 0.985) {
-			return RAMP[CLS_SHALLOWS][2]; // 2-px sparkle, denser than deep water
+			return RAMP[CLS_SHALLOWS][2]; // 2-px sparkle, denser than open water
 		}
 		double sh = Utils.noise2(wx + 9, wy + 3, 0.9);
-		double p = (sh - 0.18) / 0.38;
+		double p = (sh - 0.18) / 0.38 - (d - 1.0) * 1.2; // deeper wading = darker turquoise
 		p = p < 0 ? 0 : (p > 1.9 ? 1.9 : p);
 		return ditherRamp(CLS_SHALLOWS, p, px, py);
 	}
