@@ -434,13 +434,18 @@ public class Tile {
 		return type == TileType.TYPE_WATER;
 	}
 
-	/** Movement multiplier for an entity standing on this tile: mud drags
-	 *  hardest, reeds tangle, rubble is slow scrambling ground. */
+	/** Movement multiplier for an entity standing on this tile: quicksand
+	 *  near-stops, mud drags hardest of the ordinary ground, reeds tangle,
+	 *  wading shallows and scrambling rubble slow. */
 	public double speedFactor() {
 		switch (type) {
+		case TYPE_QUICKSAND:
+			return 0.2;
 		case TYPE_MUD:
 			return 0.4;
 		case TYPE_REEDS:
+			return 0.5;
+		case TYPE_SHALLOWS:
 			return 0.5;
 		case TYPE_RUBBLE:
 			return 0.6;
@@ -449,9 +454,13 @@ public class Tile {
 		}
 	}
 
-	/** True if this tile blocks line of sight (walls, thicket cover, or the
-	 *  reed beds at the water's edge). */
+	/** True if this tile blocks line of sight: walls (natural or built),
+	 *  thicket cover, and reed beds -- but NOT crystal, which is solid to
+	 *  movement yet clear to the eye. */
 	public boolean blocksSight() {
+		if (type == TileType.TYPE_CRYSTAL) {
+			return false;
+		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS;
 	}
 
@@ -538,7 +547,13 @@ public class Tile {
 		TYPE_FUNGUS(9, true), // cave floor growing grazeable fungus
 		TYPE_RUBBLE(10, true), // broken rock; slows movement, sight passes
 		TYPE_SAND(11, true), // bare loose ground; grows no vegetation
-		TYPE_REEDS(12, true); // wetland stalks; slow AND sight-blocking
+		TYPE_REEDS(12, true), // wetland stalks; slow AND sight-blocking
+		TYPE_SHALLOWS(13, true), // walkable water fringe; slows like a ford
+		TYPE_QUICKSAND(14, true), // treacherous sand; near-stops whatever enters
+		TYPE_CRYSTAL(15, false), // solid mineral cluster; blocks movement, not sight
+		TYPE_VENT(16, true), // geothermal vent mouth in cave stone
+		TYPE_WALL_BUILT(17, false), // man-made masonry wall
+		TYPE_PAVED(18, true); // man-made paved corridor floor
 
 		private int value;
 		private boolean open;

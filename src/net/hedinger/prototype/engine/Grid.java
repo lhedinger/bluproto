@@ -550,9 +550,9 @@ public class Grid {
 				if (cls < 0) {
 					continue; // ramps: baked layer shows through
 				}
-				boolean ownTight = cls == GroundTextures.CLS_WALL || cls == GroundTextures.CLS_HOLE;
-				boolean wallN = isType(x, y - 1, Tile.TileType.TYPE_WALL);
-				boolean wallS = isType(x, y + 1, Tile.TileType.TYPE_WALL);
+				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE;
+				boolean wallN = isWallish(x, y - 1);
+				boolean wallS = isWallish(x, y + 1);
 				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
 				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
 				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
@@ -563,15 +563,24 @@ public class Grid {
 					for (int ai = 0; ai < A; ai++) {
 						int bx0 = ai * ts / A, bx1 = (ai + 1) * ts / A;
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
-						double amp = ownTight ? 0.22 : 0.9;
-						double jx = wx + (Utils.noise2(wx + 3.1, wy, 1.1) - 0.5) * amp;
-						double jy = wy + (Utils.noise2(wx, wy + 5.7, 1.1) - 0.5) * amp;
-						int cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
-						if (cl < 0) {
-							cl = cls;
-						}
-						if (!ownTight && (cl == GroundTextures.CLS_WALL || cl == GroundTextures.CLS_HOLE)) {
-							cl = cls; // structures don't bleed out onto open ground
+						int cl;
+						if (ownTight) {
+							// Structures keep a whisper of jitter so rock edges
+							// aren't laser-cut; they never trade pixels with
+							// open ground either way.
+							double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * 0.2;
+							double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * 0.2;
+							cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
+							if (cl < 0 || !(GroundTextures.isStructure(cl)
+									|| cl == GroundTextures.CLS_HOLE)) {
+								cl = cls;
+							}
+						} else {
+							// Open ground: autotiled edges. Boundaries are drawn
+							// shapes, not noise -- the higher-priority terrain laps
+							// into its lower neighbour with rounded corners and
+							// short hand-scallop runs (see resolveEdge).
+							cl = resolveEdge(x, y, ai, aj, cls, now);
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
@@ -584,6 +593,16 @@ public class Grid {
 							} else {
 								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
 							}
+						} else if (cl == GroundTextures.CLS_WALL_BUILT) {
+							// Masonry: coursed block top, coursed shadowed face where
+							// the wall fronts open ground to the south.
+							if (!wallS && aj >= A * 0.55) {
+								col = GroundTextures.wallFaceBuilt(gx, gy);
+							} else {
+								col = GroundTextures.wallTopBuilt(gx, gy, !wallN && aj < A * 0.28);
+							}
+						} else if (cl == GroundTextures.CLS_CRYSTAL) {
+							col = GroundTextures.crystal(gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground, as pixel-art: the
 							// lit north lip is a broken run of dashes whose depth varies
@@ -614,19 +633,27 @@ public class Grid {
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
-						} else if (cl == GroundTextures.CLS_WATER) {
-							// Water from straight above: calm shadow/base patches with
-							// sparse glints, darkening with distance from the shore so
-							// lake middles read deep.
+						} else if (cl == GroundTextures.CLS_WATER
+								|| cl == GroundTextures.CLS_SHALLOWS) {
+							// One water surface from wading fringe to abyss: both
+							// classes render the same shore-distance continuum, so
+							// the walkable/unwalkable line is invisible in the
+							// picture -- the same technique as the deep gradient.
 							if (wdist == null) {
 								wdist = waterDist();
 							}
-							col = GroundTextures.waterTop(wx, wy, gx, gy, depthAt(wdist, wx, wy));
+							col = GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
 							if (wallN && aj < A * 0.32) {
 								col = darken(col, 0.62); // shadow cast by the wall to the north
 							}
 						} else {
-							if (cl == GroundTextures.CLS_FUNGUS) {
+							if (cl == GroundTextures.CLS_QUICKSAND) {
+								col = GroundTextures.quicksand(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_VENT) {
+								col = GroundTextures.vent(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_PAVED) {
+								col = GroundTextures.paved(gx, gy);
+							} else if (cl == GroundTextures.CLS_FUNGUS) {
 								// Bioluminescent beds; clump size follows live vegetation,
 								// so grazing visibly eats the glow away.
 								double cap = t.vegetationCap();
@@ -694,6 +721,115 @@ public class Grid {
 			return -1;
 		}
 		return GroundTextures.groundClass(tiles[cx][cy], now);
+	}
+
+	/** Draw-order rank for open-ground autotiling: the higher terrain laps
+	 *  over the lower at their shared edge (grass overhangs soil, fungus laps
+	 *  onto stone, everything laps over water). Structures, holes and paving
+	 *  do not participate: their edges are their own. */
+	private static int edgeRank(int cls) {
+		switch (cls) {
+		case GroundTextures.CLS_WATER: return 0;
+		case GroundTextures.CLS_SHALLOWS: return 1;
+		case GroundTextures.CLS_MUD: return 2;
+		case GroundTextures.CLS_QUICKSAND: return 3;
+		case GroundTextures.CLS_SAND: return 4;
+		case GroundTextures.CLS_SOIL: return 5;
+		case GroundTextures.CLS_STONE: return 6;
+		case GroundTextures.CLS_RUBBLE: return 7;
+		case GroundTextures.CLS_VENT: return 8;
+		case GroundTextures.CLS_FUNGUS: return 9;
+		case GroundTextures.CLS_GRASS: return 10;
+		case GroundTextures.CLS_REEDS: return 11;
+		case GroundTextures.CLS_COVER: return 12;
+		default: return -1; // structures, holes, paving: no lapping
+		}
+	}
+
+	/** Scalloped lap depth (art-px) at position {@code t} along an edge: short
+	 *  hash-picked runs of depth 1-3, the hand-drawn scallop of a tileset. */
+	private static int lapDepth(int t, int salt) {
+		int seg = Math.floorDiv(t, 4); // 4-px scallop runs
+		return 1 + (int) (GroundTextures.hash01(seg, salt, 75) * 2.99);
+	}
+
+	/**
+	 * Autotiled open-ground boundary: returns the class that owns art-pixel
+	 * (ai,aj) of tile (x,y). A higher-ranked cardinal neighbour laps into
+	 * this tile by a scalloped 1-3 px band along the shared edge; where two
+	 * lapping edges meet, and at outer corners against a higher diagonal
+	 * neighbour, the lap rounds into a quarter-circle -- so borders are drawn
+	 * shapes with rounded corners, deterministic and tile-anchored, never
+	 * noise. Ties (equal rank) keep the straight tile edge.
+	 */
+	private int resolveEdge(int x, int y, int ai, int aj, int cls, long now) {
+		int A = 12;
+		int own = edgeRank(cls);
+		if (own < 0) {
+			return cls;
+		}
+		int gx = x * A + ai, gy = y * A + aj;
+		// Cardinal laps, deepest wins so corner pockets fill naturally.
+		int best = cls, bestDepth = 0;
+		int n = lapClassAt(x, y - 1, own, now);
+		if (n >= 0 && aj < lapDepth(gx, n * 4 + 0)) {
+			int d = lapDepth(gx, n * 4 + 0) - aj;
+			if (d > bestDepth) { best = n; bestDepth = d; }
+		}
+		int s = lapClassAt(x, y + 1, own, now);
+		if (s >= 0 && aj >= A - lapDepth(gx, s * 4 + 1)) {
+			int d = aj - (A - lapDepth(gx, s * 4 + 1)) + 1;
+			if (d > bestDepth) { best = s; bestDepth = d; }
+		}
+		int w = lapClassAt(x - 1, y, own, now);
+		if (w >= 0 && ai < lapDepth(gy, w * 4 + 2)) {
+			int d = lapDepth(gy, w * 4 + 2) - ai;
+			if (d > bestDepth) { best = w; bestDepth = d; }
+		}
+		int e = lapClassAt(x + 1, y, own, now);
+		if (e >= 0 && ai >= A - lapDepth(gy, e * 4 + 3)) {
+			int d = ai - (A - lapDepth(gy, e * 4 + 3)) + 1;
+			if (d > bestDepth) { best = e; bestDepth = d; }
+		}
+		if (bestDepth > 0) {
+			return best;
+		}
+		// Rounded outer corners: where two cardinals share a higher diagonal
+		// neighbour, the diagonal's lap rounds the corner with a quarter-arc.
+		int R = 4; // corner radius, art-px
+		int nw = lapClassAt(x - 1, y - 1, own, now);
+		if (nw >= 0 && ai < R && aj < R && dist2(ai, aj, R, R) > R * R) {
+			return nw;
+		}
+		int ne = lapClassAt(x + 1, y - 1, own, now);
+		if (ne >= 0 && ai >= A - R && aj < R && dist2(ai, aj, A - 1 - R, R) > R * R) {
+			return ne;
+		}
+		int sw = lapClassAt(x - 1, y + 1, own, now);
+		if (sw >= 0 && ai < R && aj >= A - R && dist2(ai, aj, R, A - 1 - R) > R * R) {
+			return sw;
+		}
+		int se = lapClassAt(x + 1, y + 1, own, now);
+		if (se >= 0 && ai >= A - R && aj >= A - R && dist2(ai, aj, A - 1 - R, A - 1 - R) > R * R) {
+			return se;
+		}
+		return cls;
+	}
+
+	/** The neighbour's class if it out-ranks {@code ownRank} (so it laps into
+	 *  this tile), else -1. */
+	private int lapClassAt(int cx, int cy, int ownRank, long now) {
+		int c = groundClassAt(cx, cy, now);
+		if (c < 0) {
+			return -1;
+		}
+		int r = edgeRank(c);
+		return r > ownRank ? c : -1;
+	}
+
+	private static int dist2(int ax, int ay, int bx, int by) {
+		int dx = ax - bx, dy = ay - by;
+		return dx * dx + dy * dy;
 	}
 
 	/** Edge-fade bits (N=1, E=2, S=4, W=8) for edges whose neighbour isn't mottle. */
@@ -772,10 +908,17 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
+	/** A wall for lighting purposes: natural rock or man-made masonry. */
+	private boolean isWallish(int nx, int ny) {
+		return isType(nx, ny, Tile.TileType.TYPE_WALL)
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT);
+	}
+
 	/**
-	 * Per-tile distance to the nearest non-water tile, in tiles (0 on land, 1
-	 * on shoreline water, rising inward) -- a multi-source BFS over the level,
-	 * built once per ground render. Feeds the water depth shading.
+	 * Per-tile distance to the nearest true-land tile, in tiles (0 on land,
+	 * ~1 on the walkable shallows band, ~2 at the first open-water tile,
+	 * rising inward) -- a multi-source BFS over the level, built once per
+	 * ground render. Feeds the continuous shallows-to-abyss water surface.
 	 */
 	private int[][] waterDist() {
 		int cols = world.cols, rows = world.rows;
@@ -783,7 +926,8 @@ public class Grid {
 		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
-				if (tiles[x][y].getType() == Tile.TileType.TYPE_WATER) {
+				Tile.TileType tt = tiles[x][y].getType();
+				if (tt == Tile.TileType.TYPE_WATER || tt == Tile.TileType.TYPE_SHALLOWS) {
 					d[x][y] = Integer.MAX_VALUE;
 				} else {
 					q.add(x * rows + y);
@@ -806,10 +950,10 @@ public class Grid {
 	}
 
 	/**
-	 * Depth term in [0,1] for a water pixel: the shore-distance field sampled
+	 * The raw shore-distance for a water-surface pixel: the field sampled
 	 * bilinearly between tile centres (so contours curve instead of stepping
-	 * at tile edges), reaching full depth ~4 tiles offshore. An all-water map
-	 * has no shore seeds; the clamp treats its unreached tiles as deep.
+	 * at tile edges). An all-water map has no shore seeds; the clamp treats
+	 * its unreached tiles as deep.
 	 */
 	private static double depthAt(int[][] dist, double wx, double wy) {
 		double fx = wx - 0.5, fy = wy - 0.5;
@@ -817,9 +961,7 @@ public class Grid {
 		double tx = fx - x0, ty = fy - y0;
 		double top = distClamped(dist, x0, y0) * (1 - tx) + distClamped(dist, x0 + 1, y0) * tx;
 		double bot = distClamped(dist, x0, y0 + 1) * (1 - tx) + distClamped(dist, x0 + 1, y0 + 1) * tx;
-		double d = top * (1 - ty) + bot * ty;
-		d = (d - 1.0) / 3.0;
-		return d < 0 ? 0 : (d > 1 ? 1 : d);
+		return top * (1 - ty) + bot * ty;
 	}
 
 	private static double distClamped(int[][] dist, int x, int y) {
@@ -830,11 +972,13 @@ public class Grid {
 		return v > 8 ? 8 : v;
 	}
 
-	/** Whether any of the eight neighbours (or the tile itself) is water. */
+	/** Whether any of the eight neighbours (or the tile itself) is water --
+	 *  open water or its walkable shallows fringe. */
 	private boolean nearWater(int x, int y) {
 		for (int dy = -1; dy <= 1; dy++) {
 			for (int dx = -1; dx <= 1; dx++) {
-				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)) {
+				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)
+						|| isType(x + dx, y + dy, Tile.TileType.TYPE_SHALLOWS)) {
 					return true;
 				}
 			}

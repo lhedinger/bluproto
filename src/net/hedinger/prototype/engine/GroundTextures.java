@@ -40,7 +40,8 @@ public final class GroundTextures {
 	// art-style prototype. Colour = ramp indexed by a world-space shade noise.
 	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
 			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7, CLS_FUNGUS = 8, CLS_RUBBLE = 9,
-			CLS_SAND = 10, CLS_REEDS = 11;
+			CLS_SAND = 10, CLS_REEDS = 11, CLS_SHALLOWS = 12, CLS_QUICKSAND = 13,
+			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -54,6 +55,12 @@ public final class GroundTextures {
 			{ 0x333845, 0x515866, 0x747b8a }, // rubble (between stone floor and wall)
 			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // sand (pale warm)
 			{ 0x14301f, 0x2c5a36, 0x4f8752 }, // reeds (wet green)
+			{ 0x2b6a78, 0x4093a6, 0x63becd }, // shallows (the old SHORE turquoise family)
+			{ 0x483d2a, 0x685740, 0x8c795a }, // quicksand (wet, darker sand)
+			{ 0x232c44, 0x46568a, 0x7d96c8 }, // crystal (cool mineral blue)
+			{ 0x261f1c, 0x3c332c, 0x584c40 }, // vent (scorched stone)
+			{ 0x453f33, 0x665e4c, 0x8a8069 }, // built wall (dressed warm masonry)
+			{ 0x36342e, 0x504d44, 0x6d695d }, // paved floor (worn warm slabs)
 	};
 	/** The rare over-bright spore speck on a fungus clump -- the one colour
 	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
@@ -62,10 +69,13 @@ public final class GroundTextures {
 	 *  (Grid.SH_BERRY / SH_FLOWER) so meadow blossoms, shrub berries and
 	 *  thicket berries read as one flora. */
 	private static final int BLOOM_RED = 0xE0455F, BLOOM_CREAM = 0xF0E8C6;
+	/** Crystal facet glint and vent ember: the mineral accents, disciplined
+	 *  the same way as the fungus spark -- rare, small, deliberate. */
+	private static final int CRYSTAL_SPARK = 0xD0ECFF, VENT_EMBER = 0xD8622C;
 
-	/** Whether a class is a solid structure (wall) rather than open ground. */
+	/** Whether a class is a solid structure rather than open ground. */
 	public static boolean isStructure(int cls) {
-		return cls == CLS_WALL;
+		return cls == CLS_WALL || cls == CLS_WALL_BUILT || cls == CLS_CRYSTAL;
 	}
 
 	/** Terrain colour class for a tile: ground, structure, or -1 (ramp). */
@@ -91,6 +101,18 @@ public final class GroundTextures {
 			return CLS_SAND;
 		case TYPE_REEDS:
 			return CLS_REEDS;
+		case TYPE_SHALLOWS:
+			return CLS_SHALLOWS;
+		case TYPE_QUICKSAND:
+			return CLS_QUICKSAND;
+		case TYPE_CRYSTAL:
+			return CLS_CRYSTAL;
+		case TYPE_VENT:
+			return CLS_VENT;
+		case TYPE_WALL_BUILT:
+			return CLS_WALL_BUILT;
+		case TYPE_PAVED:
+			return CLS_PAVED;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -487,6 +509,162 @@ public final class GroundTextures {
 			}
 		}
 		return RAMP[CLS_REEDS][0]; // wet dark ground between tufts
+	}
+
+	/**
+	 * One continuous water surface across the shallows AND the open water,
+	 * driven by {@code d} -- the bilinear distance from true land (~1 on the
+	 * walkable shallows band, ~2 at the first open-water tile, rising toward
+	 * the middle). The sunlit turquoise darkens as it deepens, hands off to
+	 * the water blues through a Bayer-dithered blend band, and from there the
+	 * existing depth shading carries on down to the abyss tone. Both tile
+	 * classes render through this same function, so the walkable/unwalkable
+	 * boundary is invisible in the picture -- exactly like the deep-water
+	 * gradient, one material all the way across.
+	 */
+	public static int waterSurface(double wx, double wy, int px, int py, double d) {
+		double depth = Math.max(0, (d - 1.8) / 2.6);
+		double blend = (d - 1.3) / 0.9; // 0 inner shallows .. 1 fully open water
+		if (blend >= 1 || (blend > 0 && bayer(px, py) < blend)) {
+			return waterTop(wx, wy, px, py, depth);
+		}
+		if (hash01(px >> 1, py, 62) > 0.985) {
+			return RAMP[CLS_SHALLOWS][2]; // 2-px sparkle, denser than open water
+		}
+		double sh = Utils.noise2(wx + 9, wy + 3, 0.9);
+		double p = (sh - 0.18) / 0.38 - (d - 1.0) * 1.2; // deeper wading = darker turquoise
+		p = p < 0 ? 0 : (p > 1.9 ? 1.9 : p);
+		return ditherRamp(CLS_SHALLOWS, p, px, py);
+	}
+
+	/**
+	 * Quicksand: sodden, darker sand confined to the shadow/base shades so
+	 * the pocket reads sunken against the pale pan around it, swirled by a
+	 * coarse noise, with the rare 2-px surfacing bubble.
+	 */
+	public static int quicksand(double wx, double wy, int px, int py) {
+		if (hash01(px >> 1, py, 63) > 0.988) {
+			return RAMP[CLS_QUICKSAND][2]; // surfacing bubble
+		}
+		double sink = Utils.noise2(wx + 63, wy + 21, 0.8);
+		double p = (sink - 0.25) / 0.4;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_QUICKSAND, p, px, py);
+	}
+
+	/**
+	 * Crystal cluster: stamped diamond shards (Manhattan-radius caps) packed
+	 * over a dark mineral matrix. Each shard facets -- lit toward
+	 * screen-north-west, mid on the far side, a dark cut edge on its rim --
+	 * and some apexes carry the pale glint, the mineral counterpart of the
+	 * fungus spark.
+	 */
+	public static int crystal(int px, int py) {
+		int C = 4; // shard lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 74) > 0.8) {
+					continue; // a gap of bare matrix breaks the lattice rhythm
+				}
+				int sx = cx * C + 1 + (int) (hash01(cx, cy, 64) * (C - 2));
+				int sy = cy * C + 1 + (int) (hash01(cx, cy, 65) * (C - 2));
+				int r = 2 + (int) (hash01(cx, cy, 66) * 2); // shard radius 2..3
+				int dx = px - sx, dy = py - sy;
+				int m = Math.abs(dx) + Math.abs(dy);
+				if (m > r) {
+					continue;
+				}
+				if (m == 0 && hash01(cx, cy, 67) > 0.6) {
+					return CRYSTAL_SPARK; // glinting apex
+				}
+				if (m == r) {
+					return RAMP[CLS_CRYSTAL][0]; // dark cut edge
+				}
+				return RAMP[CLS_CRYSTAL][dx + dy < 0 ? 2 : 1]; // lit / far facet
+			}
+		}
+		return RAMP[CLS_CRYSTAL][0]; // dark matrix between shards
+	}
+
+	/**
+	 * Geothermal vent: scorched sooty stone with a near-black throat at the
+	 * tile centre and a dithered ember rim glowing around it -- the caves'
+	 * warm accent beside the fungus' cold one. ({@code ai},{@code aj}) are
+	 * tile-local art-pixel coordinates; the mouth sits per tile.
+	 */
+	public static int vent(int ai, int aj, int px, int py) {
+		double d = Math.hypot(ai - 5.5, aj - 5.5);
+		if (d < 2.2) {
+			return RAMP[CLS_HOLE][0]; // the throat
+		}
+		if (d < 3.2) {
+			return hash01(px, py, 68) < 0.5 ? VENT_EMBER : RAMP[CLS_VENT][0]; // ember rim
+		}
+		double g = hash01(px >> 1, py, 69);
+		return RAMP[CLS_VENT][g < 0.12 ? 0 : (g > 0.93 ? 2 : 1)]; // sooty ground
+	}
+
+	/**
+	 * The cross-section top of a man-made wall: running-bond masonry --
+	 * 4-px courses of 6-px dressed blocks, joints staggered course to
+	 * course, mortar in the shadow shade, each block hash-toned. The
+	 * regularity IS the tell: nature striates, builders course.
+	 */
+	public static int wallTopBuilt(int px, int py, boolean litEdge) {
+		int course = Math.floorDiv(py, 4);
+		int off = (course & 1) == 0 ? 0 : 3; // running bond
+		if (Math.floorMod(py, 4) == 0 || Math.floorMod(px + off, 6) == 0) {
+			return RAMP[CLS_WALL_BUILT][0]; // mortar seam
+		}
+		// Blocks lean bright: the raised masonry catches the light, and the
+		// tonal lift is what separates a wall top from the paving below it.
+		int idx = hash01(Math.floorDiv(px + off, 6), course, 70) > 0.35 ? 2 : 1;
+		if (litEdge) {
+			idx = 2;
+		}
+		return RAMP[CLS_WALL_BUILT][idx];
+	}
+
+	/**
+	 * The exposed south face of a man-made wall: tighter 3-px courses in the
+	 * darker paved ramp, so the shadowed face reads as coursed stone rather
+	 * than the natural wall's ragged dashes.
+	 */
+	public static int wallFaceBuilt(int px, int py) {
+		int course = Math.floorDiv(py, 3);
+		int off = (course & 1) == 0 ? 0 : 2;
+		if (Math.floorMod(py, 3) == 0 || Math.floorMod(px + off, 4) == 0) {
+			return RAMP[CLS_PAVED][0]; // joints
+		}
+		return RAMP[CLS_PAVED][hash01(Math.floorDiv(px + off, 4), course, 71) > 0.7 ? 2 : 1];
+	}
+
+	/**
+	 * Paved corridor floor: large tile-sized slabs with shadow-shade joints,
+	 * quiet worn grain, the odd sunken-dark slab and the odd diagonally
+	 * cracked one. Deliberately calm and dark against the bright, busy
+	 * masonry coursing of the walls: busy-wall/calm-floor is what makes a
+	 * built interior read from above.
+	 */
+	public static int paved(int px, int py) {
+		int S = 12; // slab size, art-px (one slab per tile)
+		if (Math.floorMod(px, S) == 0 || Math.floorMod(py, S) == 0) {
+			return RAMP[CLS_PAVED][0]; // joint
+		}
+		int sxi = Math.floorDiv(px, S), syi = Math.floorDiv(py, S);
+		double slab = hash01(sxi, syi, 72);
+		if (slab > 0.88 && Math.floorMod(px, S) == Math.floorMod(py, S)) {
+			return RAMP[CLS_PAVED][0]; // cracked slab: diagonal fracture
+		}
+		double g = hash01(px >> 1, py, 73);
+		int idx = g < 0.06 ? 0 : (g > 0.94 ? 2 : 1);
+		if (slab < 0.12) {
+			idx = 0; // a sunken, darker slab
+		}
+		return RAMP[CLS_PAVED][idx];
 	}
 
 	private static int darken(int rgb, double f) {

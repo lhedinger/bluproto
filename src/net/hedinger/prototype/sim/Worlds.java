@@ -327,8 +327,10 @@ public final class Worlds {
 					t = Tile.TileType.TYPE_COVER;
 					fert = 0.90; // thickets: lush, and they block line of sight
 				} else if (elev > 0.58 && moist < 0.30) {
-					t = Tile.TileType.TYPE_SAND;
-					fert = 0; // the badlands' driest core: a sand pan
+					// The badlands' driest core: a sand pan, with treacherous
+					// quicksand pockets where the detail noise peaks.
+					t = detail > 0.78 ? Tile.TileType.TYPE_QUICKSAND : Tile.TileType.TYPE_SAND;
+					fert = 0;
 				} else if (elev > 0.58 && moist < 0.40) {
 					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.0; // dry badlands: bare dirt, no grass, no food
@@ -351,11 +353,21 @@ public final class Worlds {
 					t = Tile.TileType.TYPE_WALL; // sealed edge
 				} else if (cave > 0.38 && cave < 0.66) {
 					// Pool cores are water; the damp ground skirting a pool grows
-					// bioluminescent fungus beds (the caves' only food); the rest
-					// is bare stone.
-					t = pool > 0.72 ? Tile.TileType.TYPE_WATER
-							: pool > 0.62 ? Tile.TileType.TYPE_FUNGUS
-									: Tile.TileType.TYPE_STONE;
+					// bioluminescent fungus beds (the caves' only food); the
+					// driest stone sprouts crystal clusters and, in the odd
+					// geothermal pocket, vent mouths; the rest is bare stone.
+					double deep = Utils.noise2(x + 40, y + 1500, 0.3);
+					if (pool > 0.72) {
+						t = Tile.TileType.TYPE_WATER;
+					} else if (pool > 0.62) {
+						t = Tile.TileType.TYPE_FUNGUS;
+					} else if (pool < 0.18) {
+						t = Tile.TileType.TYPE_CRYSTAL;
+					} else if (deep > 0.85) {
+						t = Tile.TileType.TYPE_VENT;
+					} else {
+						t = Tile.TileType.TYPE_STONE;
+					}
 				} else {
 					t = Tile.TileType.TYPE_WALL; // solid rock
 				}
@@ -368,6 +380,33 @@ public final class Worlds {
 
 		// ---- wire the levels together so every area is reachable ----
 		connectLevels(w, cols, rows);
+
+		// ---- shallows: every shore-touching water tile becomes a walkable,
+		// wading fringe, so lakes have fords instead of hard edges ----
+		for (int z = 0; z < 2; z++) {
+			java.util.ArrayList<int[]> shore = new java.util.ArrayList<int[]>();
+			for (int x = 1; x < cols - 1; x++) {
+				for (int y = 1; y < rows - 1; y++) {
+					if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_WATER) {
+						continue;
+					}
+					for (int k = 0; k < 4; k++) {
+						int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0);
+						int ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+						Tile.TileType n = w.getTile(nx, ny, z).getType();
+						if (n != Tile.TileType.TYPE_WATER && n != Tile.TileType.TYPE_SHALLOWS
+								&& w.getTile(nx, ny, z).isWalkable()) {
+							shore.add(new int[] { x, y });
+							break;
+						}
+					}
+				}
+			}
+			for (int[] p : shore) {
+				w.setTile(p[0], p[1], z, Tile.TileType.TYPE_SHALLOWS);
+				w.getTile(p[0], p[1], z).setFertility(0);
+			}
+		}
 
 		// Tune the surface grass's logistic recovery so a grazed-bare patch rests
 		// (Tile.REGROW_DELAY, ~1 min) and then climbs back slowly over another
