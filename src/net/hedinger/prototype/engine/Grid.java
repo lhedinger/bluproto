@@ -563,15 +563,23 @@ public class Grid {
 					for (int ai = 0; ai < A; ai++) {
 						int bx0 = ai * ts / A, bx1 = (ai + 1) * ts / A;
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
-						double amp = ownTight ? 0.22 : 0.9;
-						double jx = wx + (Utils.noise2(wx + 3.1, wy, 1.1) - 0.5) * amp;
-						double jy = wy + (Utils.noise2(wx, wy + 5.7, 1.1) - 0.5) * amp;
+						// Boundary raggedness: a SMALL displacement at HIGH
+						// frequency, so borders break into pixel-scale notches.
+						// (A large low-frequency jitter makes every edge meander
+						// in long parallel waves -- the lava-lamp look.)
+						double amp = ownTight ? 0.2 : 0.5;
+						double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * amp;
+						double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * amp;
 						int cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
 						if (cl < 0) {
 							cl = cls;
 						}
-						if (!ownTight && (GroundTextures.isStructure(cl) || cl == GroundTextures.CLS_HOLE)) {
-							cl = cls; // structures don't bleed out onto open ground
+						if (!ownTight && (GroundTextures.isStructure(cl) || cl == GroundTextures.CLS_HOLE
+								|| cl == GroundTextures.CLS_PAVED)) {
+							cl = cls; // structures and masonry don't bleed onto open ground
+						}
+						if (cls == GroundTextures.CLS_PAVED) {
+							cl = cls; // and nothing bleeds onto paving: built edges are straight
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
