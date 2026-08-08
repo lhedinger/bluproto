@@ -89,12 +89,17 @@ public class TestNPC extends NPC {
 	 * tile's regrowth rate so a patch does run down. Bigger grazers crop faster in
 	 * proportion to their mass — see {@link #grazeDemand()}.
 	 *
-	 * <p>Sized so a full tile takes a few seconds of steady work to strip rather than
-	 * well under one. At the old rate a single reference grazer stripped a whole tile
-	 * in 20 ticks, which meant a herd erased its pasture faster than it could spread
-	 * out over it, and the substrate behaved like a switch rather than a resource.
+	 * <p>Sized so stripping a tile is real work: the largest body in the world takes
+	 * about four seconds of standing on one patch and eating, a reference-size body
+	 * about ten. The original rate cleared a tile in 20 ticks — well under a second —
+	 * which meant a herd erased its pasture faster than it could spread out over it,
+	 * and the substrate behaved like a switch rather than a resource.
+	 *
+	 * <p>This and {@link NPC#GRASS_ENERGY} multiply into a herbivore's income per
+	 * tick, so slowing the crop without raising the energy per unit starves the herd
+	 * — measured, not assumed. See that constant for the calibration.
 	 */
-	private static final double GRAZE_DEMAND = 0.012;
+	private static final double GRAZE_DEMAND = 0.003;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). */

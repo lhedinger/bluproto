@@ -205,11 +205,19 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
   made a mouse and an animal the hunter's own size worth exactly the same
   (measured: 2.49 either way), which pointed selection at the smallest, easiest
   quarry and left no niche for a large hunter.
-- **Grass is bulk food.** A whole tile stripped bare is worth a small fraction of
-  a reference-mass carcass, and it is cropped a few percent at a time. So grazing
-  is a full-time occupation and predation is an event — which is why a herd is
-  spread thin across the map while hunters are few. Bite size scales with mass
-  like everything else, so a big grazer both eats and burns more.
+- **Grass is bulk food.** Stripping one tile bare takes about **4 seconds** for the
+  largest body in the world and **11 seconds** for a reference-size one, and yields
+  ~0.64 energy against the 2.5 a same-mass carcass is worth. So grazing is a
+  full-time occupation and predation is an event — a hunter banks its meal in a
+  handful of ticks, a grazer works for minutes. That is why a herd is spread thin
+  across the map while hunters are few. Bite size scales with mass like everything
+  else, so a big grazer both eats and burns more, and clears a patch sooner.
+- **Crop rate and energy density are one knob, not two.** They multiply into a
+  herbivore's income per tick, so grass cannot be made both slower to eat and
+  poorer without starving the herd. Measured over 60k ticks at the current crop
+  rate: below `GRASS_ENERGY` 0.75 predators fall to their floor on empty tanks, and
+  at 0.25 the herd stops breeding and only the steward keeps it alive. The shipped
+  value is the poorest grass the food chain will carry.
 - **A predator will not kill on a full tank.** The opportunistic bite is gated on
   having room for the meal; without that, a full hunter killed prey whose energy
   the tank cap then discarded.
