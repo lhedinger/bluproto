@@ -29,14 +29,11 @@ import net.hedinger.prototype.engine.View;
  */
 public class Door extends Entity {
 
-	public static final int TIMBER = 0, STONE = 1, GRATE = 2, HEDGE = 3;
+	public static final int TIMBER = 0, STONE = 1, GRATE = 2, HEDGE = 3, BLAST = 4;
 
 	private static final int DOOR_OPEN = 0;
 	private static final int DOOR_MOVING = 1;
 	private static final int DOOR_CLOSED = 2;
-
-	private static final int open_delay = -40;
-	private static final int close_delay = 40;
 
 	// Material palettes, drawn from the terrain ramps so doors sit in the
 	// same world: mud browns (timber), built-wall masonry (stone), pit darks
@@ -49,6 +46,8 @@ public class Door extends Entity {
 	private static final Color STONE_HI = new Color(0x8a8069);
 	private static final Color IRON_DARK = new Color(0x14161f);
 	private static final Color IRON_HI = new Color(0x7c828f);
+	private static final Color STEEL_MID = new Color(0x515862);
+	private static final Color STEEL_HI = new Color(0x707885);
 	private static final Color HEDGE_MID = new Color(0x2b5422);
 	private static final Color HEDGE_HI = new Color(0x456c36);
 
@@ -56,6 +55,7 @@ public class Door extends Entity {
 	private int delay_counter = 0;
 	private boolean triggered = false;
 	private final int flavor;
+	private final int open_delay, close_delay;
 
 	public Door(double x, double y, double z, int d) {
 		this(x, y, z, d, flavorAt((int) x, (int) y, (int) z));
@@ -65,6 +65,9 @@ public class Door extends Entity {
 		super((int) x, (int) y, (int) z, d % 2);
 		this.size_diameter = 64;
 		this.flavor = flavor;
+		// A blast door is tons of steel: it takes its time.
+		this.open_delay = flavor == BLAST ? -90 : -40;
+		this.close_delay = flavor == BLAST ? 90 : 40;
 	}
 
 	/** Position-derived flavour for legacy call sites: the built materials
@@ -169,18 +172,19 @@ public class Door extends Entity {
 		}
 		int box = (int) Math.ceil(step);
 		int reach = (int) Math.round(6 * extension()); // leaf length from each end
+		int rows = flavor == BLAST ? 5 : 3; // a blast door is a mass, not a bar
 		for (int i = 0; i < 12; i++) {
 			boolean post = i == 0 || i == 11;
 			if (!post && i >= reach && i < 12 - reach) {
 				continue; // the open middle
 			}
-			for (int j = 0; j < 3; j++) {
+			for (int j = 0; j < rows; j++) {
 				Color c = pattern(i, j, post);
 				if (c == null) {
 					continue; // a grate's see-through gap
 				}
 				double along = i / 12.0;
-				double across = (j - 1.5) / 12.0;
+				double across = (j - rows * 0.5) / 12.0;
 				double wx = lr ? X + across : X + along;
 				double wy = lr ? Y + along : Y + across;
 				g2.setColor(c);
@@ -206,6 +210,22 @@ public class Door extends Entity {
 				return null; // gap between bars: see straight through
 			}
 			return j == 0 ? IRON_HI : IRON_DARK; // lit bar tip, dark shaft
+		case BLAST:
+			// Segmented steel with a hazard-striped nose where the leaves
+			// meet: the Black-Mesa-grade door for facility mouths.
+			if (post) {
+				return IRON_DARK;
+			}
+			if (i == 5 || i == 6) {
+				return new Color(GroundTextures.hazardStripe(i, j)); // striped nose
+			}
+			if (i % 4 == 0) {
+				return IRON_DARK; // segment seam
+			}
+			if (j == 4) {
+				return IRON_DARK; // shadowed trailing edge of the slab
+			}
+			return j <= 1 ? STEEL_HI : STEEL_MID; // broad lit face, steel body
 		case HEDGE: {
 			// Woven wicker: a basket-weave of living green and timber withies
 			// on dark posts, so the gate reads as BUILT brush -- otherwise a

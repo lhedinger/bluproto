@@ -418,7 +418,7 @@ public class Tile {
 	}
 
 	public boolean isWalkable() {
-		return type.isOpen() && type != TileType.TYPE_HOLE && type != TileType.TYPE_WATER;
+		return type.isOpen() && !isDrop() && type != TileType.TYPE_WATER;
 	}
 
 	public boolean isFlyable() {
@@ -449,9 +449,17 @@ public class Tile {
 			return 0.5;
 		case TYPE_RUBBLE:
 			return 0.6;
+		case TYPE_PIPES:
+			return 0.6; // clambering over the runs
 		default:
 			return 1.0;
 		}
+	}
+
+	/** True where an unsupported body drops to the level below: natural
+	 *  holes and the facility's vertical shafts. */
+	public boolean isDrop() {
+		return type == TileType.TYPE_HOLE || type == TileType.TYPE_SHAFT;
 	}
 
 	/** True if this tile blocks line of sight: walls (natural or built),
@@ -553,7 +561,13 @@ public class Tile {
 		TYPE_CRYSTAL(15, false), // solid mineral cluster; blocks movement, not sight
 		TYPE_VENT(16, true), // geothermal vent mouth in cave stone
 		TYPE_WALL_BUILT(17, false), // man-made masonry wall
-		TYPE_PAVED(18, true); // man-made paved corridor floor
+		TYPE_PAVED(18, true), // man-made paved corridor floor
+		TYPE_PLATE(19, true), // facility steel deck floor
+		TYPE_CATWALK(20, true), // grated walkway; the void shows through
+		TYPE_SHAFT(21, true), // vertical shaft: open, drops like a hole
+		TYPE_PIPES(22, true), // floor pipe run; slow clambering ground
+		TYPE_AIRVENT(23, true), // louvered ventilation grille in the deck
+		TYPE_WALL_CONCRETE(24, false); // poured concrete facility wall
 
 		private int value;
 		private boolean open;

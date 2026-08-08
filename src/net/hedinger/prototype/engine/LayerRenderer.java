@@ -34,6 +34,15 @@ public class LayerRenderer {
 
 			mapLayers[z].image_layer = compileLayer(wallTiles, floorTiles);
 
+			// Bake the procedural ground over the base sprites, so this level
+			// shows its true art when seen from the level above (through open
+			// pits, shafts and catwalk grating) -- the downsized pyramid below
+			// inherits it.
+			Graphics2D lg = mapLayers[z].image_layer.createGraphics();
+			lg.setClip(0, 0, world.cols * tileSize, world.rows * tileSize);
+			world.levels[z].bakeGround(lg);
+			lg.dispose();
+
 			mapLayers[z].image_layer_downsized = new BufferedImage[world.max_view_depth];
 			for (int i = 0; i < world.max_view_depth; i++) {
 				mapLayers[z].image_layer_downsized[i] = Utils.resize(
@@ -86,7 +95,14 @@ public class LayerRenderer {
 		case TYPE_VENT:
 		case TYPE_WALL_BUILT:
 		case TYPE_PAVED:
+		case TYPE_PLATE:
+		case TYPE_PIPES:
+		case TYPE_AIRVENT:
+		case TYPE_WALL_CONCRETE:
 			return ResourceManager.getFloorTile(tilecode);
+		// TYPE_SHAFT and TYPE_CATWALK are intentionally omitted, like
+		// TYPE_HOLE: they bake to nothing, so the level below shows (and
+		// parallaxes) through the shaft void and the catwalk grating.
 		// TYPE_HOLE is intentionally omitted: a hole bakes to nothing so it is a
 		// see-through cut-out, letting the level below show (and parallax) through.
 		// The pit shade and lip are drawn live by Grid.renderGroundPixel instead.

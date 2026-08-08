@@ -41,7 +41,9 @@ public final class GroundTextures {
 	public static final int CLS_WATER = 0, CLS_GRASS = 1, CLS_SOIL = 2, CLS_MUD = 3, CLS_COVER = 4,
 			CLS_WALL = 5, CLS_HOLE = 6, CLS_STONE = 7, CLS_FUNGUS = 8, CLS_RUBBLE = 9,
 			CLS_SAND = 10, CLS_REEDS = 11, CLS_SHALLOWS = 12, CLS_QUICKSAND = 13,
-			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17;
+			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
+			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
+			CLS_AIRVENT = 22, CLS_CONCRETE = 23;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -61,7 +63,16 @@ public final class GroundTextures {
 			{ 0x261f1c, 0x3c332c, 0x584c40 }, // vent (scorched stone)
 			{ 0x453f33, 0x665e4c, 0x8a8069 }, // built wall (dressed warm masonry)
 			{ 0x36342e, 0x504d44, 0x6d695d }, // paved floor (worn warm slabs)
+			{ 0x353a42, 0x515862, 0x707885 }, // facility deck plate (cool steel)
+			{ 0x272b33, 0x454b56, 0x646b78 }, // catwalk grate metal
+			{ 0x0a0b10, 0x16181f, 0x232630 }, // shaft void
+			{ 0x2e3d3a, 0x4a615c, 0x6b8781 }, // pipes (industrial green-grey)
+			{ 0x2c3037, 0x474d57, 0x656c79 }, // air-vent housing
+			{ 0x45464a, 0x64656a, 0x86878c }, // poured concrete (neutral grey)
 	};
+	/** Facility accents: hazard striping for anything that drops or crushes,
+	 *  and a rust bloom for weathered pipework. */
+	private static final int HAZARD = 0xd8b028, HAZARD_DARK = 0x17171a, RUST = 0x8a5a34;
 	/** The rare over-bright spore speck on a fungus clump -- the one colour
 	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
 	private static final int FUNGUS_SPARK = 0x9df5c6;
@@ -75,7 +86,8 @@ public final class GroundTextures {
 
 	/** Whether a class is a solid structure rather than open ground. */
 	public static boolean isStructure(int cls) {
-		return cls == CLS_WALL || cls == CLS_WALL_BUILT || cls == CLS_CRYSTAL;
+		return cls == CLS_WALL || cls == CLS_WALL_BUILT || cls == CLS_CRYSTAL
+				|| cls == CLS_CONCRETE;
 	}
 
 	/** Terrain colour class for a tile: ground, structure, or -1 (ramp). */
@@ -113,6 +125,18 @@ public final class GroundTextures {
 			return CLS_WALL_BUILT;
 		case TYPE_PAVED:
 			return CLS_PAVED;
+		case TYPE_PLATE:
+			return CLS_PLATE;
+		case TYPE_CATWALK:
+			return CLS_CATWALK;
+		case TYPE_SHAFT:
+			return CLS_SHAFT;
+		case TYPE_PIPES:
+			return CLS_PIPES;
+		case TYPE_AIRVENT:
+			return CLS_AIRVENT;
+		case TYPE_WALL_CONCRETE:
+			return CLS_CONCRETE;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -665,6 +689,124 @@ public final class GroundTextures {
 			idx = 0; // a sunken, darker slab
 		}
 		return RAMP[CLS_PAVED][idx];
+	}
+
+	/**
+	 * The cross-section top of a poured concrete wall: broad 6-px form
+	 * panels separated by faint seams, a form-tie dimple in each panel, and
+	 * sparse 2-px weather stains -- utilitarian and calm, the mass the
+	 * facility is carved from.
+	 */
+	public static int concreteTop(int px, int py, boolean litEdge) {
+		int S = 6;
+		if (Math.floorMod(px, S) == 0 || Math.floorMod(py, S) == 0) {
+			return RAMP[CLS_CONCRETE][0]; // form seam
+		}
+		if (Math.floorMod(px, S) == 3 && Math.floorMod(py, S) == 3) {
+			return RAMP[CLS_CONCRETE][0]; // form-tie dimple
+		}
+		if (litEdge) {
+			return RAMP[CLS_CONCRETE][2];
+		}
+		return hash01(px >> 1, py, 84) < 0.07 ? RAMP[CLS_CONCRETE][0] : RAMP[CLS_CONCRETE][1];
+	}
+
+	/**
+	 * The exposed south face of a concrete wall: low-contrast vertical drip
+	 * streaks in the dark half of the ramp -- weathered pour lines, quieter
+	 * than natural rock's carved dashes.
+	 */
+	public static int concreteFace(int px, int py) {
+		int len = 5 + (int) (hash01(px, 0, 85) * 4);
+		int phase = (int) (hash01(px, 1, 86) * len);
+		int seg = Math.floorDiv(py + phase, len);
+		return RAMP[CLS_CONCRETE][hash01(px, seg, 87) < 0.55 ? 0 : 1];
+	}
+
+	/**
+	 * Facility deck plating: 6-px steel plates with shadow seams, a dark
+	 * rivet sunk at each plate corner, and diagonal tread ribs on a share of
+	 * the plates -- the workhorse floor of the base, quiet enough for
+	 * everything else to sit on.
+	 */
+	public static int plate(int px, int py) {
+		int S = 6;
+		int mx = Math.floorMod(px, S), my = Math.floorMod(py, S);
+		if (mx == 0 || my == 0) {
+			return RAMP[CLS_PLATE][0]; // plate seam
+		}
+		if (mx == 1 && my == 1) {
+			return RAMP[CLS_PLATE][0]; // corner rivet
+		}
+		int sxi = Math.floorDiv(px, S), syi = Math.floorDiv(py, S);
+		double sp = hash01(sxi, syi, 80);
+		if (sp > 0.7 && (mx + my) % 3 == 0) {
+			return RAMP[CLS_PLATE][2]; // tread rib on this plate
+		}
+		return hash01(px >> 1, py, 81) < 0.06 ? RAMP[CLS_PLATE][0] : RAMP[CLS_PLATE][1];
+	}
+
+	/**
+	 * Catwalk grating for art-pixel (i along the run, j across it): solid
+	 * side rails with a lit outer edge, cross-treads every second pixel --
+	 * and null in the gaps, so whatever lies a level below shows through the
+	 * grate exactly as it does through a pit.
+	 */
+	public static Integer catwalk(int along, int across, int px, int py) {
+		if (across <= 1 || across >= 10) {
+			return across == 0 || across == 11
+					? RAMP[CLS_CATWALK][2] : RAMP[CLS_CATWALK][1]; // rails, lit outer edge
+		}
+		if (Math.floorMod(along, 2) == 0) {
+			return hash01(px, py, 82) < 0.08
+					? RAMP[CLS_CATWALK][0] : RAMP[CLS_CATWALK][1]; // tread bar, the odd worn px
+		}
+		return null; // the gap: the level below shows through
+	}
+
+	/** Hazard striping (diagonal yellow/black) for a drop or crush edge. */
+	public static int hazardStripe(int px, int py) {
+		return Math.floorMod((px + py) / 2, 2) == 0 ? HAZARD : HAZARD_DARK;
+	}
+
+	/**
+	 * Pipe run along one axis at art-pixel (along, across): two parallel
+	 * pipes, each lit on its leading edge, with darker flange rings every
+	 * 6 px and the odd rust bloom -- drawn over deck plating.
+	 */
+	public static Integer pipeRun(int along, int across, int px, int py) {
+		boolean pipeA = across == 3 || across == 4;
+		boolean pipeB = across == 7 || across == 8;
+		if (!pipeA && !pipeB) {
+			return null; // deck shows between and beside the pipes
+		}
+		boolean flange = Math.floorMod(along, 6) == 0;
+		if (flange) {
+			return RAMP[CLS_PIPES][0]; // flange ring
+		}
+		if (hash01(px >> 1, py >> 1, 83) > 0.93) {
+			return RUST; // weathering bloom
+		}
+		boolean lit = across == 3 || across == 7; // lit edge of each cylinder
+		return RAMP[CLS_PIPES][lit ? 2 : 1];
+	}
+
+	/**
+	 * Floor-mounted ventilation grille: deck plating with a centred housing,
+	 * louver slats alternating dark and mid inside a framed square, and a
+	 * screw glint at each frame corner.
+	 */
+	public static int airVent(int ai, int aj, int px, int py) {
+		boolean inFrame = ai >= 2 && ai <= 9 && aj >= 2 && aj <= 9;
+		if (!inFrame) {
+			return plate(px, py); // the surrounding deck
+		}
+		boolean rim = ai == 2 || ai == 9 || aj == 2 || aj == 9;
+		if (rim) {
+			boolean corner = (ai == 2 || ai == 9) && (aj == 2 || aj == 9);
+			return corner ? RAMP[CLS_AIRVENT][2] : RAMP[CLS_AIRVENT][1]; // frame + screw glints
+		}
+		return RAMP[CLS_AIRVENT][Math.floorMod(aj, 2) == 0 ? 0 : 1]; // louver slats
 	}
 
 	private static int darken(int rgb, double f) {

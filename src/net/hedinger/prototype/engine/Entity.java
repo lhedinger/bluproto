@@ -304,7 +304,7 @@ public abstract class Entity {
 	}
 
 	private boolean isOverHole() {
-		return world.getTile(X, Y, Z).getType() == Tile.TileType.TYPE_HOLE;
+		return world.getTile(X, Y, Z).isDrop();
 	}
 
 	private boolean isInWall() {
@@ -340,9 +340,10 @@ public abstract class Entity {
 			if (dest != null && dest.isWater()) {
 				return true;
 			}
-			// A body that isn't choosing to descend won't step onto an open hole
-			// either -- it stops at the lip like it would at water.
-			if (dest != null && !descendIntent && dest.getType() == Tile.TileType.TYPE_HOLE) {
+			// A body that isn't choosing to descend won't step onto an open
+			// hole or shaft either -- it stops at the lip like it would at
+			// water.
+			if (dest != null && !descendIntent && dest.isDrop()) {
 				return true;
 			}
 		}
