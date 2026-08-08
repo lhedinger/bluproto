@@ -1555,13 +1555,19 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * Energy in one unit of vegetation. Grass is <b>bulk food</b>: a whole tile
-	 * stripped bare is worth a small fraction of what a body of reference mass is
-	 * worth as meat, so a herbivore has to spend most of its life eating while a
-	 * hunter eats in seconds and then rests. That asymmetry is the point — it is
-	 * what makes grazing a full-time occupation and predation an event, and it is
-	 * why a herd is spread thin over the map while hunters are few.
+	 * stripped bare is worth well under half of what a body of reference mass is
+	 * worth as meat, and it takes a hundred times as long to get. That asymmetry is
+	 * the point — it is what makes grazing a full-time occupation and predation an
+	 * event, and it is why a herd is spread thin over the map while hunters are few.
+	 *
+	 * <p>Calibrated against the live world rather than chosen: the crop rate and this
+	 * figure multiply into a herbivore's income per tick, so they cannot be set
+	 * independently. Measured over 60k ticks with the crop rate at 0.003, the herd
+	 * needs at least 0.75 here — at 0.5 predators starve down to their floor on empty
+	 * tanks, and at 0.25 the herd itself stops breeding and only the steward's floor
+	 * keeps it alive. This is the poorest grass the food chain will carry.
 	 */
-	protected static final double GRASS_ENERGY = 0.25;
+	protected static final double GRASS_ENERGY = 0.75;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from

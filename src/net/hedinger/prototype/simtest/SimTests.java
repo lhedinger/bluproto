@@ -1008,7 +1008,11 @@ public class SimTests {
 			w.spawnEntity(g);
 			w.think(); // register the spawn
 			snapshot(w, "before (full grass)");
-			tick(w, 120);
+			// 600, not 120: a grazer crops a sixteenth of what it used to per tick, so
+			// the same window fed it 0.27 against a 0.5 bar. The fact under test -- a
+			// grazer draws real food off the substrate and leaves ground visibly bare --
+			// is unchanged; it just takes longer to do.
+			tick(w, 600);
 			snapshot(w, "after (grazed patch)");
 
 			assertGreater("grazer fed on the substrate", g.totalIntake(), 0.5);
@@ -2179,17 +2183,19 @@ public class SimTests {
 				}
 			}
 			double finalMean = lateSum / 3.0;
-			// Fitness is vegetation cropped, so these thresholds are in graze-demand
-			// units -- and that unit shrank by 0.24 when GRAZE_DEMAND went 0.05 -> 0.012
-			// (grass became bulk food). Every figure below is the old one scaled by
-			// exactly that factor, so the test still measures what it always did: the
-			// gap between a random forager and an evolved one, not an absolute yield.
-			// Scaling the bar rather than the evaluation window keeps the run short.
-			assertLess("random founder brains forage almost nothing", initialMean, 0.048);
+			// Fitness is vegetation cropped, so these bars live in graze-demand units,
+			// and that unit shrank sixteenfold when grass became bulk food
+			// (GRAZE_DEMAND 0.05 -> 0.003). They are calibrated against measurement
+			// rather than scaled by that ratio, because the relationship is not linear:
+			// a patch runs out, so a slower crop does not reduce a good forager's haul
+			// in proportion. Measured here: random founders 0.000, champion 0.675, mean
+			// 0.533 -- so the gap the test exists to detect is if anything sharper than
+			// before, and each bar keeps well over half its headroom.
+			assertLess("random founder brains forage almost nothing", initialMean, 0.012);
 			assertGreater("evolution found a strong forager (a champion gathered real food)",
-					bestEver, 0.96);
+					bestEver, 0.4);
 			assertGreater("mean foraging rose far above the random start under selection",
-					finalMean, initialMean + 0.24);
+					finalMean, initialMean + 0.2);
 		}
 
 		/** Fitness = food each brain forages over K ticks on full grass. Bodies are
