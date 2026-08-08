@@ -276,6 +276,29 @@ public class SimTests {
 			w.think();
 			tick(w, 200);
 			assertEquals("a cave ramp climbs a walker back up to the surface", surface, climber.getLvl());
+
+			// Down-ramp: the descent is a walk too, not just a fall. A walker heading
+			// west off a surface RAMPDOWN steps down into the cave under its own feet.
+			int dx = -1, dy = -1;
+			for (int x = 0; x < cols && dx < 0; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (w.getTile(x, y, surface).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+						dx = x;
+						dy = y;
+						break;
+					}
+				}
+			}
+			assertGreater("the surface has ramps down into the cave", dx, -1);
+			// Seal the pit beside the ramp first. It descends to the same landing, so
+			// leaving it open would let gravity pass this test and prove nothing; with
+			// it walled off, only the ramp can carry the walker down.
+			w.setTile(dx - 1, dy, surface, Tile.TileType.TYPE_WALL);
+			TestNPC walker = TestNPC.mover(dx + 0.5, dy + 0.5, surface, Math.PI).withSpeed(0.05);
+			w.spawnEntity(walker);
+			w.think();
+			tick(w, 60);
+			assertEquals("a surface ramp walks a body down into the cave", surface - 1, walker.getLvl());
 		}
 	}
 
@@ -387,11 +410,11 @@ public class SimTests {
 	/**
 	 * A walker ascends to the level above via a ramp.
 	 *
-	 * <p>Pins the (non-obvious) ramp mechanic: standing on a RAMPUP tile makes
-	 * the move onto the next tile east legal even though that tile is WALL at
-	 * this level; executeMovement's in-wall check then pops the entity up one
-	 * level (dZ=+1), where it continues on the floor above. A control mover in
-	 * a ramp-less row is simply blocked by the same wall.
+	 * <p>Pins the ramp mechanic: a ramp is floor that spans two levels, so a body
+	 * that simply keeps walking east off a RAMPUP's top edge steps onto the level
+	 * above and carries on there. Nothing is willed and nothing is sensed — the
+	 * ground does it. A control mover in a ramp-less row meets the same wall and is
+	 * merely blocked, which is what proves the ramp (not the wall) is doing the work.
 	 */
 	static class RampAscends extends Scenario {
 		@Override
@@ -985,7 +1008,11 @@ public class SimTests {
 			w.spawnEntity(g);
 			w.think(); // register the spawn
 			snapshot(w, "before (full grass)");
-			tick(w, 120);
+			// 600, not 120: a grazer crops a sixteenth of what it used to per tick, so
+			// the same window fed it 0.27 against a 0.5 bar. The fact under test -- a
+			// grazer draws real food off the substrate and leaves ground visibly bare --
+			// is unchanged; it just takes longer to do.
+			tick(w, 600);
 			snapshot(w, "after (grazed patch)");
 
 			assertGreater("grazer fed on the substrate", g.totalIntake(), 0.5);
@@ -1211,7 +1238,11 @@ public class SimTests {
 			w.think();
 			int start = w.getAliveCount();
 			snapshot(w, "founders");
-			tick(w, 600);
+			// 3000, not 600: grass became bulk food (a quarter of the old energy per
+			// unit, cropped at a quarter of the old rate), so banking a breeding takes
+			// roughly sixteen times as long. The fact under test is unchanged -- a fed
+			// population still grows -- only the clock it grows on.
+			tick(w, 3000);
 			snapshot(w, "after (population grew)");
 			int end = w.getAliveCount();
 			assertGreater("a fed breeder population grows by reproduction", end, start);
@@ -1286,7 +1317,10 @@ public class SimTests {
 			// rather than a test of crossover.
 			int peak = founders;
 			boolean sawRecombinant = false;
-			for (int step = 0; step < 80; step++) {
+			// 400 steps rather than 80: grass is bulk food now, so a pair takes far
+			// longer to bank the energy for a birth, and the recombinant draw needs
+			// several births to stop being a coin toss.
+			for (int step = 0; step < 400; step++) {
 				tick(colony, 20);
 				peak = Math.max(peak, colony.getAliveCount());
 				sawRecombinant |= hasRecombinant(colony);
@@ -1668,39 +1702,180 @@ public class SimTests {
 	}
 
 	/**
-	 * The body guards survival basics for a mind: a minded creature over an open
-	 * hole holds its level unless it actively wills the descent (A_VERTICAL held
-	 * down), so a random policy cannot pitch it into the cave by accident. The same
-	 * body drops through the moment it does will the descent — the wish the terrain
-	 * grants. (Ordinary gravity-bound creatures, which never touch A_VERTICAL, still
-	 * fall — see HoleFallRespectsFlying.)
+	 * Intent steering: a mind that names a <i>kind of thing</i> gets there without
+	 * ever writing a turn. The body scores the ground it can see, picks a patch, and
+	 * supplies the heading; the mind spends one instruction saying what it wants.
+	 * The sign is the whole of approach-versus-avoid, so the same policy that hunts
+	 * a patch flees one by flipping a constant.
+	 *
+	 * <p>Both bodies start facing directly <i>away</i> from the only grass in the
+	 * room and never write A_TURN, so anything that arrives did so because the body
+	 * steered it.
 	 */
-	static class MindedBodyDescendsOnlyWhenItWills extends Scenario {
-		private int levelAfter(double verticalIntent) {
-			seed(80);
-			World w = room(9, 9, 2);
-			w.setTile(4, 4, 1, Tile.TileType.TYPE_HOLE);
+	static class SeekWalksToAPatchWithoutSteering extends Scenario {
+		private static final int PATCH_X = 32, PATCH_Y = 7;
+
+		/** Distance from the patch after walking with this A_SEEK value. */
+		private double distanceAfter(double seek) {
+			seed(90);
+			World w = room(40, 14);
+			for (int x = 0; x < 40; x++) {
+				for (int y = 0; y < 14; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren everywhere...
+				}
+			}
+			for (int x = PATCH_X - 1; x <= PATCH_X + 1; x++) {
+				for (int y = PATCH_Y - 1; y <= PATCH_Y + 1; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // ...except one lush patch
+				}
+			}
+			Genome g = new Genome();
+			g.size = 6;
+			g.losRange = 20; // far enough to see the patch from the start
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_SEEK] = seek; // the only steering it ever expresses
+				}
+			};
+			// Facing west, i.e. away from the patch: a body that ignores seek leaves.
+			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withSpeed(0.1)
+					.withHeading(Math.PI * 0.9);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 150);
+			return Math.hypot(body.getX() - (PATCH_X + 0.5), body.getY() - (PATCH_Y + 0.5));
+		}
+
+		@Override
+		public void run() {
+			double start = Math.hypot(20.5 - (PATCH_X + 0.5), 7.5 - (PATCH_Y + 0.5));
+			double toward = distanceAfter(0.1);
+			double away = distanceAfter(-0.1);
+			assertLess("seeking the forage patch walks the body onto it", toward, 2.0);
+			assertGreater("the same command with a minus sign walks it off", away, start);
+		}
+	}
+
+	/**
+	 * Spatial memory in two instructions. A_MARK latches where the body is standing;
+	 * A_SEEK = ±4 steers back to it later. The coordinate lives in the body on
+	 * purpose — a mind could hold two numbers in registers but could never turn them
+	 * into a heading, since the instruction set has no divide and no atan2.
+	 *
+	 * <p>The return leg also jams A_TURN hard the wrong way, which is what pins the
+	 * precedence: while a seek has something to steer by, it is the steering.
+	 */
+	static class WaypointRemembersAPlace extends Scenario {
+		@Override
+		public void run() {
+			seed(91);
+			World w = room(30, 14);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				private int t = 0;
+
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_MARK] = t == 0 ? 1.0 : 0.0; // remember here, once
+					if (t < 120) {
+						a[AgentIO.A_SEEK] = 0; // walk straight off
+						a[AgentIO.A_TURN] = 0;
+					} else {
+						a[AgentIO.A_SEEK] = 4; // go back...
+						a[AgentIO.A_TURN] = 1; // ...against a hard contrary turn
+					}
+					t++;
+				}
+			};
+			TestNPC body = TestNPC.minded(6.5, 7.5, 0, g, ctrl).withSpeed(0.08).withHeading(0);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 120);
+			double away = Math.hypot(body.getX() - 6.5, body.getY() - 7.5);
+			assertGreater("the body walked away from the place it marked", away, 5.0);
+			tick(w, 220);
+			double back = Math.hypot(body.getX() - 6.5, body.getY() - 7.5);
+			assertLess("seeking the waypoint brought it home", back, 2.0);
+			assertLess("...and home is nearer than where it had wandered", back, away);
+		}
+	}
+
+	/**
+	 * A seek is a preference, not a lock. Naming a target the body cannot currently
+	 * see steers nothing at all and leaves A_TURN in charge — so a mutation that
+	 * writes a seek constant can never freeze a creature pointing at a thing that
+	 * isn't there. Here the waypoint is never marked, so A_SEEK = 4 names nothing
+	 * and a body told to turn zero walks perfectly straight.
+	 */
+	static class SeekYieldsWhenItNamesNothing extends Scenario {
+		@Override
+		public void run() {
+			seed(92);
+			World w = room(30, 14);
 			Genome g = new Genome();
 			g.size = 6;
 			Mind ctrl = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_VERTICAL] = verticalIntent; // the only intent it expresses
-					a[AgentIO.A_THROTTLE] = 0; // sit on the hole
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_SEEK] = 4; // the waypoint... which was never marked
+					a[AgentIO.A_TURN] = 0;
 				}
 			};
-			TestNPC body = TestNPC.minded(4.5, 4.5, 1, g, ctrl); // spawned on the hole
+			TestNPC body = TestNPC.minded(6.5, 7.5, 0, g, ctrl).withSpeed(0.08).withHeading(0);
 			w.spawnEntity(body);
-			tick(w, 10);
+			w.think();
+			tick(w, 100);
+			assertGreater("the body kept walking east", body.getX(), 12.0);
+			assertNear("an unmarked waypoint bent its course not at all", 7.5, body.getY(), 0.001);
+		}
+	}
+
+	/**
+	 * A mind changes level by walking, not by wishing. A ramp is floor that spans
+	 * two levels, so a minded body that only ever asks for throttle crosses one and
+	 * comes out on the other side a level away — up an east-climbing RAMPUP, down a
+	 * west-descending RAMPDOWN. Both bodies here jam A_VERTICAL hard the WRONG way
+	 * throughout, which is the point: the actuator is retired and inert, and the
+	 * terrain is what moves them. Guards against reintroducing a vertical intent
+	 * that a random policy would have to get right before it could use a ramp.
+	 */
+	static class MindsChangeLevelByWalkingRamps extends Scenario {
+		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading} and
+		 *  reports the level it ends on. */
+		private int levelAfterWalking(double x, double y, int z, double heading,
+				double contraryVerticalIntent) {
+			seed(80);
+			World w = room(10, 6, 2);
+			// A ramp pair on row 2: climb east off (5,2,0), descend west off (5,2,1).
+			w.setTile(5, 2, 0, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(5, 2, 1, Tile.TileType.TYPE_RAMPDOWN);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1; // walk, and nothing else
+					a[AgentIO.A_VERTICAL] = contraryVerticalIntent; // inert: ignored
+				}
+			};
+			TestNPC body = TestNPC.minded(x, y, z, g, ctrl).withSpeed(0.05).withHeading(heading);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 200);
 			return body.getLvl();
 		}
 
 		@Override
 		public void run() {
-			assertEquals("a minded body holds its level over a hole it isn't willing to descend",
-					1, levelAfter(0.0));
-			assertEquals("...and drops through only when it wills the descent",
-					0, levelAfter(-1.0));
+			assertEquals("a mind that only walks east climbs the ramp to the level above",
+					1, levelAfterWalking(2.5, 2.5, 0, 0.0, 1.0));
+			assertEquals("a mind that only walks west descends the ramp to the level below",
+					0, levelAfterWalking(8.5, 2.5, 1, Math.PI, 1.0));
 		}
 	}
 
@@ -1941,7 +2116,9 @@ public class SimTests {
 			// population and every distinct mind seen across the run.
 			int peak = start;
 			java.util.Set<String> minds = new java.util.HashSet<String>();
-			for (int step = 0; step < 30; step++) {
+			// 150 steps rather than 30: see PopulationGrowsWithFood -- feeding on grass
+			// is a much longer job than it was, so the boom takes longer to arrive.
+			for (int step = 0; step < 150; step++) {
 				tick(w, 20);
 				peak = Math.max(peak, w.getAliveCount());
 				for (Entity e : w.getEntities()) {
@@ -2006,11 +2183,19 @@ public class SimTests {
 				}
 			}
 			double finalMean = lateSum / 3.0;
-			assertLess("random founder brains forage almost nothing", initialMean, 0.2);
+			// Fitness is vegetation cropped, so these bars live in graze-demand units,
+			// and that unit shrank sixteenfold when grass became bulk food
+			// (GRAZE_DEMAND 0.05 -> 0.003). They are calibrated against measurement
+			// rather than scaled by that ratio, because the relationship is not linear:
+			// a patch runs out, so a slower crop does not reduce a good forager's haul
+			// in proportion. Measured here: random founders 0.000, champion 0.675, mean
+			// 0.533 -- so the gap the test exists to detect is if anything sharper than
+			// before, and each bar keeps well over half its headroom.
+			assertLess("random founder brains forage almost nothing", initialMean, 0.012);
 			assertGreater("evolution found a strong forager (a champion gathered real food)",
-					bestEver, 4.0);
+					bestEver, 0.4);
 			assertGreater("mean foraging rose far above the random start under selection",
-					finalMean, initialMean + 1.0);
+					finalMean, initialMean + 0.2);
 		}
 
 		/** Fitness = food each brain forages over K ticks on full grass. Bodies are
@@ -2891,6 +3076,41 @@ public class SimTests {
 	 * an emergent nest -- builds up, and the growing lineage clusters around it
 	 * instead of smearing across the map.
 	 */
+	/** The strongest pheromone cloud right now as {@code {x, y, intensity}}, where
+	 *  intensity is what a homing creature actually smells there — the summed
+	 *  concentration of every cloud overlapping that point, not one cloud's own
+	 *  strength. All zeros when nothing has been laid. */
+	private static double[] strongestNest(World w) {
+		double maxP = 0, nx = 0, ny = 0;
+		for (Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.engine.PheromoneCloud && !e.isRemoved()) {
+				double s = ((net.hedinger.prototype.engine.PheromoneCloud) e).getStrength();
+				if (s > maxP) {
+					maxP = s;
+					nx = e.getX();
+					ny = e.getY();
+				}
+			}
+		}
+		return maxP == 0 ? new double[] { 0, 0, 0 }
+				: new double[] { nx, ny, w.pheromoneAt(nx, ny, 0) };
+	}
+
+	/** {@code {near, total}} living creatures, near meaning within {@code radius}
+	 *  tiles of {@code (cx, cy)}. */
+	private static int[] colonyNear(World w, double cx, double cy, double radius) {
+		int near = 0, total = 0;
+		for (Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
+				total++;
+				if (Math.hypot(e.getX() - cx, e.getY() - cy) < radius) {
+					near++;
+				}
+			}
+		}
+		return new int[] { near, total };
+	}
+
 	static class NestEmergesFromPheromone extends Scenario {
 		@Override
 		public void run() {
@@ -2904,24 +3124,31 @@ public class SimTests {
 			w.think();
 			int start = w.getAliveCount();
 			snapshot(w, "founders");
-			tick(w, 800);
-			snapshot(w, "after (colony around the nest)");
-
-			// The nest is the strongest pheromone cloud.
-			double maxP = 0, nx = w.getColums() / 2.0, ny = w.getRows() / 2.0;
-			for (Entity e : w.getEntities()) {
-				if (e instanceof net.hedinger.prototype.engine.PheromoneCloud && !e.isRemoved()) {
-					double s = ((net.hedinger.prototype.engine.PheromoneCloud) e).getStrength();
-					if (s > maxP) {
-						maxP = s;
-						nx = e.getX();
-						ny = e.getY();
-					}
+			// A nest is a process, not a state: it waxes while the colony breeds and
+			// fades as the pheromone decays. So sample it as the run goes and keep the
+			// strongest it ever got, rather than reading whatever happened to be
+			// standing on the tick the test stopped. Under the old grass economy the
+			// colony bred fast enough that the two coincided; now that grass is bulk
+			// food, breeding is spread out and the terminal reading undersells the nest
+			// by a factor of three. The claim under test is unchanged.
+			// Both facts are read at the SAME moment — the tick the nest is strongest.
+			// Asking whether the colony sits on its nest only means anything while
+			// there is a nest to sit on, and by the end of a long run the pheromone has
+			// faded and the colony has filled this small room, at which point every
+			// creature is near everything and the question answers itself.
+			double nestIntensity = 0;
+			int near = 0, total = 0;
+			for (int step = 0; step < 64; step++) {
+				tick(w, 50);
+				double[] nest = strongestNest(w);
+				if (nest[2] > nestIntensity) {
+					nestIntensity = nest[2];
+					int[] c = colonyNear(w, nest[0], nest[1], 3.0);
+					near = c[0];
+					total = c[1];
 				}
 			}
-			// Nest intensity is what a homing creature actually smells there: the
-			// summed concentration of every cloud overlapping the peak.
-			double nestIntensity = w.pheromoneAt(nx, ny, 0);
+			snapshot(w, "after (colony around the nest)");
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
 			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
 
@@ -2930,15 +3157,6 @@ public class SimTests {
 			// ~20% a uniform spread would put within that radius. A concentration
 			// fraction is robust to colony size, unlike a mean-distance threshold
 			// (which washes out once a fast-breeding colony fills the room).
-			int near = 0, total = 0;
-			for (Entity e : w.getEntities()) {
-				if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
-					total++;
-					if (Math.hypot(e.getX() - nx, e.getY() - ny) < 3.0) {
-						near++;
-					}
-				}
-			}
 			// Measured against what an even spread over the walkable interior would
 			// put inside that radius, NOT against a raw fraction. A thriving colony
 			// saturates this small room — 150-odd bodies over ~144 open tiles — and
@@ -3609,7 +3827,10 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
-				new MindedBodyDescendsOnlyWhenItWills(),
+				new SeekWalksToAPatchWithoutSteering(),
+				new WaypointRemembersAPlace(),
+				new SeekYieldsWhenItNamesNothing(),
+				new MindsChangeLevelByWalkingRamps(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),

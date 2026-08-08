@@ -131,8 +131,11 @@ public abstract class NPC extends Entity {
 	protected static final double MOVE_ENERGY = 0.2;
 
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
-	 *  Falls back to the reference when no size is set. */
-	protected double bodyMass() {
+	 *  Falls back to the reference when no size is set.
+	 *
+	 *  <p>Public because a body's mass is a fact about it that other creatures act
+	 *  on — a predator has to weigh its quarry to know what the meal is worth. */
+	public double bodyMass() {
 		double s = size > 0 ? size : REF_SIZE;
 		return s / REF_SIZE;
 	}
@@ -1551,10 +1554,30 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
+	 * Energy in one unit of vegetation. Grass is <b>bulk food</b>: a whole tile
+	 * stripped bare is worth well under half of what a body of reference mass is
+	 * worth as meat, and it takes a hundred times as long to get. That asymmetry is
+	 * the point — it is what makes grazing a full-time occupation and predation an
+	 * event, and it is why a herd is spread thin over the map while hunters are few.
+	 *
+	 * <p>Calibrated against the live world rather than chosen: the crop rate and this
+	 * figure multiply into a herbivore's income per tick, so they cannot be set
+	 * independently. Measured over 60k ticks with the crop rate at 0.003, the herd
+	 * needs at least 0.75 here — at 0.5 predators starve down to their floor on empty
+	 * tanks, and at 0.25 the herd itself stops breeding and only the steward's floor
+	 * keeps it alive. This is the poorest grass the food chain will carry.
+	 */
+	protected static final double GRASS_ENERGY = 0.75;
+
+	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
-	 * the living substrate and returns how much was actually eaten (0 on barren
-	 * ground). This is the herbivore's link to the environment -- the base of
-	 * the food chain.
+	 * the living substrate and returns how much <b>vegetation</b> was actually
+	 * eaten (0 on barren ground). This is the herbivore's link to the environment
+	 * -- the base of the food chain.
+	 *
+	 * <p>The return value is grass, not energy: callers measure grazing pressure on
+	 * the substrate with it. The conversion into the tank happens here, at
+	 * {@link #GRASS_ENERGY} per unit.
 	 */
 	protected double graze(double demand) {
 		World w = getWorld();
@@ -1562,7 +1585,7 @@ public abstract class NPC extends Entity {
 			return 0;
 		}
 		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), demand);
-		energy += eaten; // grass -> energy
+		energy += eaten * GRASS_ENERGY; // grass -> energy, at grass's poor rate
 		return eaten;
 	}
 
