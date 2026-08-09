@@ -1265,15 +1265,33 @@ public class TestNPC extends NPC {
 		// different sign. Naming something absent changes nothing, and A_TURN stands.
 		double seekWish = a[AgentIO.A_SEEK];
 		int seekClass = AgentIO.seekTarget(seekWish);
+		boolean away = seekWish < 0;
+		boolean pursuing = false; // the goal is named AND the body can see one
+		boolean searching = false; // the goal is named and the body cannot see one yet
 		if (seekClass != AgentIO.SEEK_NONE) {
 			double bearing = seekBearing(seekClass);
 			if (!Double.isNaN(bearing)) {
-				if (seekWish < 0) {
+				pursuing = true;
+				if (away) {
 					bearing = wrap(bearing + Math.PI); // the far side of the same target
 				}
 				t = clamp(bearing / MAX_TURN, -1, 1); // as far around as one tick allows
+			} else {
+				// Wanting something you cannot see is a reason to go looking, not a
+				// reason to stand still. The body drifts on the same oscillator the
+				// mind reads as S_CLOCK, so the search is a deterministic wander
+				// rather than a freeze -- "forage" means find food, not merely walk at
+				// food already in view.
+				searching = true;
+				t = clamp(sensors[AgentIO.S_CLOCK], -1, 1);
 			}
 		}
+		// Speed is deliberately NOT the intent's business. An intent says where to go
+		// and, on arrival, what to do there -- but how hard to push is the one part of
+		// locomotion worth leaving to selection, because movement costs the square of
+		// speed and so the throttle is where a lineage spends or saves its living. A
+		// body given a goal and no throttle wants something and stays put, which is a
+		// policy a mind is free to hold.
 		if (a[AgentIO.A_MARK] > 0.5) {
 			wpX = X; // remember here
 			wpY = Y;
@@ -1293,19 +1311,33 @@ public class TestNPC extends NPC {
 		// a ramp is floor that spans two levels and carries whatever walks across it,
 		// so a mind reaches the cave the same way it reaches anywhere else -- by
 		// walking there. A hole is a pit, and falling in one is a mistake, not a move.
+		// Carrying the intent through to the act. A goal with one unambiguous thing to
+		// do on arrival does it, so "forage" is a behaviour rather than half of one --
+		// which is the whole reason an intent is worth an instruction. Only the
+		// approach sense acts: fleeing a thing is not a reason to bite it.
+		boolean chasing = pursuing && !away;
+		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE;
+		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
+		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
+		boolean eats = a[AgentIO.A_EAT] > 0.5;
+
 		double eaten = 0;
-		if (a[AgentIO.A_EAT] > 0.5) {
+		if (eats || intentGraze) {
 			eaten = graze(grazeDemand());
 			totalIntake += eaten;
-			eatNearestItem(); // also devour a food (or bite a hazard) in reach
+		}
+		if (eats || intentTake) {
+			eatNearestItem(); // devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
 		boolean bit = false;
-		if (a[AgentIO.A_ATTACK] > 0.5) {
+		if (a[AgentIO.A_ATTACK] > 0.5 || intentBite) {
 			bit = attackNearest();
-			attackNearestItem(); // an object in reach can be smashed too
+			if (a[AgentIO.A_ATTACK] > 0.5) {
+				attackNearestItem(); // smashing crates is a deliberate act, not a side
+			}                        // effect of running something down
 		}
 		boolean bred = false;
 		if (a[AgentIO.A_MATE] > 0.5) {

@@ -73,19 +73,33 @@ intent:
 | `±0.25` | kin | | `±2` | item |
 | `±0.5` | prey | | `±4` | waypoint |
 
-Naming something absent does nothing at all and leaves `A_TURN` in charge, so a
-seek can never freeze a creature pointing at what isn't there.
+**An intent carries through to the act.** Where the goal has one unambiguous
+thing to do on arrival the body does it — forage grazes, prey gets bitten, an
+item gets taken — so foraging is a goal slot rather than a steering loop plus an
+eat gate. Naming a goal the body *cannot find* starts a deterministic search
+rather than leaving it planted: wanting what you can't see is a reason to go
+looking, and it means a stray seek constant can never freeze a creature.
+Avoidance never acts — fleeing a thing is not a reason to bite it.
+
+**Speed is deliberately not part of the bargain.** An intent says where to go and
+what to do there; how hard to push stays with the mind through `A_THROTTLE`.
+Movement costs the square of speed, so the throttle is precisely where a lineage
+spends or saves its living — it is worth making selection price that rather than
+deciding it on the mind's behalf. The cost of getting it wrong is not subtle:
+see the starter-brain figures below, where a seed ambling at 0.5 instead of 0.25
+starved its own cohort into permanent collapse.
 
 `A_MARK` plus the waypoint sensors are the whole of spatial memory: latch where
 you are, wander off, come back. **The coordinate lives in the body**, not in the
 mind's registers — necessarily so, because the instruction set has no divide and
 no `atan2`, so a mind holding two numbers could never turn them into a heading.
 
-Note what this does to the economy above: an intent command packs far more
-capability into one instruction than `A_TURN` does. Under one instruction per
-tick, a lineage that seeks is both more capable *and* faster to react than one
-that steers by hand. That is a deliberate widening of what selection can reach,
-and it means seed brains can be shorter still.
+Note what this does to the economy above: an intent packs more behaviour into one
+instruction than `A_TURN` does, so a seeking lineage buys capability without
+paying the usual reaction-time price for it. In practice the seeds came out about
+as long as before — the instructions saved on steering went back into choosing a
+pace — so the widening shows up as what the cohort achieves rather than as
+shorter programs.
 
 ### One instruction per tick — a deliberate invariant
 
@@ -103,10 +117,34 @@ Fully-random brains were tried first and never stumbled onto feeding, so
 selection had no gradient to climb. Founders instead get a crude, viable seed
 that mutation sharpens:
 
-| Brain | Strategy |
-|---|---|
-| `Worlds.starterBrain()` | Forager — drive, graze, breed, wander by the clock, turn **away** from anything bigger |
-| `Worlds.hitchhikerBrain()` | Hitch-hiker — the same sensors read with the opposite sign: turn **toward** anything bigger and ride it |
+| Brain | Length | Strategy |
+|---|---|---|
+| `Worlds.starterBrain()` | 13 | Forager — `A_SEEK = forage` finds grass, walks to it and grazes it; the same slot flips to `-threat` when something bigger closes, and the throttle goes with it (amble to eat, flat out to run) |
+| `Worlds.hitchhikerBrain()` | 9 | Hitch-hiker — `A_SEEK = +threat`, the forager's flee read with the opposite sign: close on anything bigger and cling to it |
+
+**Intents did not make these much shorter** — 13 against the motor-level version's
+14. Steering collapsed into one slot, but choosing a pace deliberately did *not*
+move into the body (see `A_SEEK`), so the saving mostly went back out again. The
+gain is in what the cohort *does*, not in what it costs to say.
+
+Measured over 100k ticks of the live world, same instrument, cohort ceiling 80:
+
+| Starter brains | cohort | grazing | mean tank |
+|---|---|---|---|
+| motor-level | 73–80, dips to 38 | 22–47 | 0.12–0.19 |
+| intent-based | **80–81, flat** | **43–65** | 0.13–0.27 |
+
+The cohort stops sagging: it sits at its ceiling for the whole run instead of
+repeatedly thinning, and roughly half again as many creatures are feeding at any
+moment.
+
+**The throttle is where the whole thing turns.** An intermediate version had the
+body pick the pace and the cohort oscillated 80 ↔ 6; the first mind-owned version
+ambled at 0.5 and collapsed to the floor at 50k without recovering across the next
+50k. Dropping the forage throttle to 0.25 produced the flat line above. Movement
+costs the square of speed, so a seed that wanders slightly too fast starves its
+own lineage — which is exactly why the throttle is worth leaving for selection to
+price rather than deciding on the mind's behalf.
 
 Every third minded founder is a hitch-hiker, so both strategies compete from tick
 one; survivor-seeding then propagates whichever is coping.
