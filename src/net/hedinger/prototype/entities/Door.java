@@ -195,11 +195,29 @@ public class Door extends Entity {
 		int L = span * 12; // door length in art-px across its whole doorway
 		int reach = (int) Math.round(L * 0.5 * extension()); // leaf length from each end
 		int rows = flavor == BLAST ? 5 : 3; // a blast door is a mass, not a bar
+		// Pass 1: the drop shadow, one art-pixel south of every door block --
+		// the slab sits ON the floor, and the shadow slides with the leaves.
+		g2.setColor(SHADOW);
 		for (int i = 0; i < L; i++) {
-			boolean post = i == 0 || i == L - 1;
-			if (!post && i >= reach && i < L - reach) {
+			if (!drawnCell(i, L, reach)) {
+				continue;
+			}
+			for (int j = 0; j < rows; j++) {
+				double along = i / 12.0;
+				double across = (j - rows * 0.5) / 12.0;
+				double wx = lr ? X + across : X + along;
+				double wy = (lr ? Y + along : Y + across) + 1.0 / 12.0;
+				g2.fillRect((int) Math.round(v.pixelX(wx, Z, 0)),
+						(int) Math.round(v.pixelY(wy, Z, 0)), box, box);
+			}
+		}
+		// Pass 2: the door itself, its screen-north edge lit and its south
+		// edge sunk -- the same raised grammar the walls use.
+		for (int i = 0; i < L; i++) {
+			if (!drawnCell(i, L, reach)) {
 				continue; // the open middle
 			}
+			boolean post = i == 0 || i == L - 1;
 			// The leading edge of each sliding leaf -- where they meet when
 			// sealed, and the crush edges while they move.
 			boolean nose = !post && (i == reach - 1 || i == L - reach);
@@ -207,6 +225,17 @@ public class Door extends Entity {
 				Color c = pattern(i, L, j, post, nose);
 				if (c == null) {
 					continue; // a grate's see-through gap
+				}
+				boolean northEdge = lr ? !drawnCell(i - 1, L, reach) : j == 0;
+				boolean southEdge = lr ? !drawnCell(i + 1, L, reach) : j == rows - 1;
+				boolean sideEdge = lr ? (j == 0 || j == rows - 1)
+						: (!drawnCell(i - 1, L, reach) || !drawnCell(i + 1, L, reach));
+				if (northEdge) {
+					c = shade(c, 1.3);
+				} else if (southEdge) {
+					c = shade(c, 0.65);
+				} else if (sideEdge) {
+					c = shade(c, 0.78); // the slab's long flanks, rimmed like a wall's
 				}
 				double along = i / 12.0; // world units along the doorway
 				double across = (j - rows * 0.5) / 12.0;
@@ -217,6 +246,23 @@ public class Door extends Entity {
 						(int) Math.round(v.pixelY(wy, Z, 0)), box, box);
 			}
 		}
+	}
+
+	/** Whether art-pixel {@code i} along the door is part of a leaf or post. */
+	private static boolean drawnCell(int i, int L, int reach) {
+		if (i < 0 || i >= L) {
+			return false;
+		}
+		return i == 0 || i == L - 1 || i < reach || i >= L - reach;
+	}
+
+	private static final Color SHADOW = new Color(0, 0, 0, 110);
+
+	private static Color shade(Color c, double f) {
+		int r = (int) Math.min(255, c.getRed() * f);
+		int g = (int) Math.min(255, c.getGreen() * f);
+		int b = (int) Math.min(255, c.getBlue() * f);
+		return new Color(r, g, b, c.getAlpha());
 	}
 
 	/** The material pattern for leaf art-pixel (i along a door of L art-px,
