@@ -350,25 +350,23 @@ public class Tile {
 			return false;
 		}
 
-		if (dz < 0) {
-			if ((type != TYPE_RAMPDOWN)) {
+		if (dz != 0) {
+			// Only a ramp joins two levels, and only along its own slope. A ramp is
+			// floor that spans the gap: a RAMPUP runs west-low to east-high, a
+			// RAMPDOWN east-high to west-low, so walking off the high side leaves you
+			// a level up and off the low side a level down. Everything else is a
+			// cliff. (dx is source minus destination, so dx < 0 is a step east.)
+			if (temp == null || dy != 0 || Math.abs(dx) != 1) {
 				return false;
 			}
-		} else if (dz > 0) {
-			if ((type != TYPE_RAMPUP)) {
-				return false;
+			if (dz < 0 && !(type == TYPE_RAMPUP && dx < 0)) {
+				return false; // destination above: only east, off a RAMPUP's top
 			}
+			if (dz > 0 && !(type == TYPE_RAMPDOWN && dx > 0)) {
+				return false; // destination below: only west, off a RAMPDOWN's foot
+			}
+			return floorsOnly ? temp.isWalkable() : !temp.isSolid();
 		} else {
-			if (type == TYPE_RAMPDOWN) {
-				if (dx > 0) {
-					return true;
-				}
-			}
-			if (type == TYPE_RAMPUP) {
-				if (dx < 0) {
-					return true;
-				}
-			}
 			if (floorsOnly && !temp.isWalkable()) {
 				return false;
 			}

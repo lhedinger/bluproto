@@ -79,13 +79,33 @@ public final class AgentIO {
 	 * hole) for a non-flyer, else 0 -- the sensed half of the body's "don't walk
 	 * into water/off a ledge unless you mean it" reflex. */
 	public static final int S_HAZARD_AHEAD = 22;
-	public static final int NUM_SENSORS = 23;
+	/** Proximity of the best forageable tile in sight, 1/(1+dist), 0 if none is
+	 * worth going to. Unlike {@link #S_FOOD}, which only answers "am I standing on
+	 * grass", this is a <b>place</b>: the body scans the ground it can see and
+	 * scores each patch by density against distance, so a rich patch far off loses
+	 * to a decent one underfoot. That makes it a gradient a policy can climb rather
+	 * than a wall it walks into. */
+	public static final int S_FORAGE_PROX = 23;
+	/** Relative bearing to that patch in the heading frame, -1..1 (of PI). */
+	public static final int S_FORAGE_BEARING = 24;
+	/** Proximity of the similarity-weighted centre of nearby kin, 1/(1+dist), 0 when
+	 * none are in sight — the magnitude {@link #S_KIN_BEARING} was missing, so a
+	 * policy can tell "my kind are far off that way" from "I am in the middle of
+	 * them". */
+	public static final int S_KIN_PROX = 25;
+	/** Proximity of the remembered waypoint, 1/(1+dist), 0 when none is marked or it
+	 * lies on another level. */
+	public static final int S_WAYPOINT_PROX = 26;
+	/** Relative bearing to the remembered waypoint, -1..1 (of PI). */
+	public static final int S_WAYPOINT_BEARING = 27;
+	public static final int NUM_SENSORS = 28;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
 			"item_prox", "item_bearing", "item_kind",
 			"prey_prox", "prey_bearing", "threat_prox", "threat_bearing", "kin_bearing",
-			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead" };
+			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead",
+			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -124,15 +144,92 @@ public final class AgentIO {
 	 * saved to a file. A mind may still write here; nothing reads it.
 	 */
 	public static final int A_SPRINT = 9;
-	/** Vertical intent: seek to climb when &gt; 0.5, to descend when &lt; -0.5, hold
-	 *  level otherwise. The body executes it only where a ramp or hole actually
-	 *  connects the levels (wired in the hybrid-boundary phase), so it is a wish the
-	 *  terrain may or may not grant, never teleportation. */
+	/**
+	 * Retired, and inert: there is no vertical intent to express. A ramp is floor
+	 * that spans two levels, so a body changes level by walking across one — the
+	 * ground decides, not the mind, and a creature needs no more sense of height
+	 * than it needs to know which tile it is standing on. A hole is the other case,
+	 * and it is gravity rather than a route: stand over one and you fall.
+	 *
+	 * <p>Kept rather than removed for the same reason as {@link #A_SPRINT}: brain
+	 * instructions store raw actuator indices, so deleting a slot silently rewrites
+	 * every genome already saved to a file. A mind may still write here; nothing
+	 * reads it.
+	 */
 	public static final int A_VERTICAL = 10;
-	public static final int NUM_ACT = 11;
+	/**
+	 * <b>Intent steering.</b> Names a <i>kind of thing to head for</i> instead of a
+	 * turn rate: while this is set and that thing is in sight, the body steers
+	 * toward it and {@link #A_TURN} is ignored. The sign flips it — a negative
+	 * value steers directly away, so fleeing and chasing cost the same one
+	 * instruction. Throttle is still the mind's to choose, and walls are still the
+	 * mind's to get around: the body supplies a direction, not a route.
+	 *
+	 * <p>The magnitude selects the target, on bands centred on the constant pool so
+	 * a single {@code SET}+{@code WRITE} can name any of them:
+	 * {@code 0}=none, {@code ±0.1}=forage patch, {@code ±0.25}=kin,
+	 * {@code ±0.5}=prey, {@code ±1}=threat, {@code ±2}=item, {@code ±4}=waypoint.
+	 * Naming something the body cannot currently see does nothing, and
+	 * {@link #A_TURN} applies as usual — so a seek is a preference, not a lock.
+	 *
+	 * @see #seekTarget(double)
+	 */
+	public static final int A_SEEK = 11;
+	/** <b>Remember here.</b> Above 0.5, latches the body's current position as its
+	 *  one waypoint; below -0.5, forgets it. Paired with {@code A_SEEK = ±4} and the
+	 *  waypoint sensors, this is the whole of spatial memory: a creature can mark a
+	 *  good patch, wander off, and come back to it. The coordinate lives in the
+	 *  body — a mind that had to hold one in its registers could not do arithmetic
+	 *  on it anyway, since the instruction set has no divide and no atan2. */
+	public static final int A_MARK = 12;
+	public static final int NUM_ACT = 13;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"sprint (retired)", "vertical" };
+			"sprint (retired)", "vertical (retired)", "seek", "mark" };
+
+	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
+	public static final int SEEK_NONE = 0;
+	public static final int SEEK_FORAGE = 1;
+	public static final int SEEK_KIN = 2;
+	public static final int SEEK_PREY = 3;
+	public static final int SEEK_THREAT = 4;
+	public static final int SEEK_ITEM = 5;
+	public static final int SEEK_WAYPOINT = 6;
+
+	/**
+	 * Decodes {@link #A_SEEK}'s magnitude into a target class. The thresholds sit at
+	 * the geometric midpoints between the constant-pool values a brain can actually
+	 * emit ({@code 0.1, 0.25, 0.5, 1, 2, 4}), so each pool constant lands squarely
+	 * inside its own band with the widest possible margin on both sides. A mutation
+	 * that nudges a value therefore usually keeps the same intent, and only a real
+	 * jump changes what the creature wants — which is what makes the encoding
+	 * evolvable rather than brittle.
+	 *
+	 * <p>The sign is <i>not</i> read here; it selects toward versus away, and the
+	 * body applies it.
+	 */
+	public static int seekTarget(double v) {
+		double m = Math.abs(v);
+		if (m < 0.05) {
+			return SEEK_NONE;
+		}
+		if (m < 0.175) {
+			return SEEK_FORAGE;
+		}
+		if (m < 0.375) {
+			return SEEK_KIN;
+		}
+		if (m < 0.75) {
+			return SEEK_PREY;
+		}
+		if (m < 1.5) {
+			return SEEK_THREAT;
+		}
+		if (m < 3.0) {
+			return SEEK_ITEM;
+		}
+		return SEEK_WAYPOINT;
+	}
 
 	private AgentIO() {
 	}

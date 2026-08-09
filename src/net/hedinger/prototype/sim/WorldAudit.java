@@ -15,10 +15,11 @@ import net.hedinger.prototype.engine.World;
  * land body actually travels between levels (see {@code Entity.updatePos}):
  * <ul>
  *   <li><b>land</b> — a walkable tile links to its four walkable neighbours;</li>
- *   <li><b>descend</b> — walking onto a {@code HOLE} drops the body to the tile
+ *   <li><b>fall</b> — walking onto a {@code HOLE} drops the body to the tile
  *       directly below (Z-1), if that tile is walkable;</li>
- *   <li><b>climb</b> — on a {@code RAMPUP} whose east neighbour is a {@code WALL},
- *       stepping east pops the body onto the tile above that wall (Z+1).</li>
+ *   <li><b>ramp</b> — a ramp is floor spanning two levels, so stepping east off a
+ *       {@code RAMPUP} lands on Z+1 and stepping west off a {@code RAMPDOWN} lands
+ *       on Z-1.</li>
  * </ul>
  * The four-neighbour model is deliberately conservative: anything it reports as
  * connected truly is, so a "fully connected" verdict is trustworthy.
@@ -155,11 +156,15 @@ public final class WorldAudit {
 					visit(walk, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}
-			// Climb: a RAMPUP with a WALL to its east lifts onto the tile above.
+			// Climb: walking east off a RAMPUP's top lands on the level above.
 			if (z + 1 < lvls && inBounds(x + 1, y, cols, rows)
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP
-					&& w.getTile(x + 1, y, z).getType() == Tile.TileType.TYPE_WALL) {
+					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP) {
 				visit(walk, seen, q, x + 1, y, z + 1, cols, rows);
+			}
+			// Descend: walking west off a RAMPDOWN's foot lands on the level below.
+			if (z - 1 >= 0 && inBounds(x - 1, y, cols, rows)
+					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+				visit(walk, seen, q, x - 1, y, z - 1, cols, rows);
 			}
 		}
 		return size;

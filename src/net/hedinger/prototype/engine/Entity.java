@@ -274,15 +274,17 @@ public abstract class Entity {
 			dY *= k;
 		}
 
-		if (isOverHole() && !isFlying() && descendIntent) {
+		if (isOverHole() && !isFlying()) {
+			// A pit is not a route, it is gravity: standing over one drops you.
 			// FIXME allow flying entities to go down the hole if they wish
 			dZ = -1;
-		} else if (isInWall()) {
-			dZ = 1;
-		} else if (isColliding()) {
-			dX = 0;
-			dY = 0;
-			dZ = 0;
+		} else {
+			dZ = rampStep();
+			if (isColliding()) {
+				dX = 0;
+				dY = 0;
+				dZ = 0;
+			}
 		}
 
 		if (jumpedTile()) {
@@ -307,8 +309,34 @@ public abstract class Entity {
 		return world.getTile(X, Y, Z).isDrop();
 	}
 
-	private boolean isInWall() {
-		return !world.getTile(X, Y, Z).getType().isOpen();
+	/**
+	 * How far this step changes the body's level — entirely the ground's doing. A
+	 * ramp is floor that spans two levels: its foot joins the level it sits on, its
+	 * top the level above. Walk off the top and you come out one level up; walk off
+	 * the foot and you come out one level down. The body decides nothing and needs
+	 * no sense of height — to a creature a ramp is just ground that leads somewhere,
+	 * which is the whole point of expressing it this way instead of as an actuator.
+	 *
+	 * <p>Ramps run east-west by convention, matching how every generator lays them:
+	 * a {@code RAMPUP} climbs eastward, a {@code RAMPDOWN} descends westward. The
+	 * change lands at the tile edge, so crossing the ramp itself is ordinary walking.
+	 */
+	private double rampStep() {
+		Tile here = world.getTile(X, Y, Z);
+		if (here == null) {
+			return 0;
+		}
+		int col = (int) X, destCol = (int) (X + dX);
+		if (destCol == col) {
+			return 0; // still on the ramp: the level only turns over at its edge
+		}
+		if (here.getType() == Tile.TileType.TYPE_RAMPUP && destCol > col) {
+			return 1;
+		}
+		if (here.getType() == Tile.TileType.TYPE_RAMPDOWN && destCol < col) {
+			return -1;
+		}
+		return 0;
 	}
 
 	private boolean jumpedTile() {
@@ -323,12 +351,6 @@ public abstract class Entity {
 		}
 		return false;
 	}
-
-	/** Whether this body will drop through a hole it stands over (and step onto one
-	 *  at all). Default true: ordinary creatures fall by gravity and use holes to
-	 *  descend. A mind sets it false unless it wills the descent, so a minded body
-	 *  treats an open hole as a ledge it won't step off by accident. */
-	protected boolean descendIntent = true;
 
 	protected boolean isColliding() {
 		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
@@ -345,12 +367,6 @@ public abstract class Entity {
 		if (!isFlying()) {
 			Tile dest = world.getTile(X + dX, Y + dY, Z + dZ);
 			if (dest != null && dest.isWater()) {
-				return true;
-			}
-			// A body that isn't choosing to descend won't step onto an open
-			// hole or shaft either -- it stops at the lip like it would at
-			// water.
-			if (dest != null && !descendIntent && dest.isDrop()) {
 				return true;
 			}
 		}
