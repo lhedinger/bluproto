@@ -169,8 +169,24 @@ public final class AgentIO {
 	 * a single {@code SET}+{@code WRITE} can name any of them:
 	 * {@code 0}=none, {@code ±0.1}=forage patch, {@code ±0.25}=kin,
 	 * {@code ±0.5}=prey, {@code ±1}=threat, {@code ±2}=item, {@code ±4}=waypoint.
-	 * Naming something the body cannot currently see does nothing, and
-	 * {@link #A_TURN} applies as usual — so a seek is a preference, not a lock.
+	 * Naming something the body cannot currently find puts it into a deterministic
+	 * search rather than leaving it planted — wanting what you cannot see is a
+	 * reason to go looking.
+	 *
+	 * <p><b>An intent carries through to the act.</b> Where the goal has one
+	 * unambiguous thing to do on arrival, the body does it: seeking a forage patch
+	 * grazes, seeking prey bites whatever comes into reach, seeking an item takes
+	 * it. So "forage" is one instruction rather than a steering loop plus an eat
+	 * gate, which is what makes an intent worth its slot under one instruction per
+	 * tick. Goals with no unambiguous terminal act — kin, threat, waypoint — stay
+	 * pure steering, and <b>avoidance never acts</b>: running from something is not
+	 * a reason to bite it.
+	 *
+	 * <p><b>Speed is not the intent's business.</b> An intent says where to go and
+	 * what to do there; how hard to push stays with the mind through
+	 * {@link #A_THROTTLE}. That is deliberate — movement costs the square of speed,
+	 * so the throttle is precisely where a lineage spends or saves its living, and
+	 * it is worth leaving for selection to price rather than deciding on its behalf.
 	 *
 	 * @see #seekTarget(double)
 	 */

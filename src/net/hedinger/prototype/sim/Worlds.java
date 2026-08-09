@@ -117,37 +117,43 @@ public final class Worlds {
 	/**
 	 * A minimal hand-written forager brain — the warm seed the minded cohort starts
 	 * from, so it survives long enough for selection to have something to work on.
-	 * It does four things, and nothing more: drive forward, graze continuously
-	 * (harmless off grass, so it feeds whenever it crosses a meadow), try to breed
-	 * (so a fed lineage grows), and steer — wandering by the clock, but turning away
-	 * when a bigger creature is close. Crude on purpose: mutation plus survivor-
-	 * seeding are meant to sharpen it (better wandering, real fleeing, hunting),
-	 * which is the whole experiment. Runs one instruction per tick, so it is kept
-	 * short; the actuator latches persist between writes.
+	 *
+	 * <p>It is written as <b>intents</b>, and that is what makes it short. The whole
+	 * of its living is one actuator: {@code A_SEEK = forage} sends it looking for
+	 * grass, walks it there at a cheap pace, and grazes when it arrives — steering,
+	 * searching, throttle and eating, from one instruction. When something bigger
+	 * comes close the same slot flips to {@code -threat} and the identical machinery
+	 * runs it away flat out. It breeds when it can afford to.
+	 *
+	 * <p>Nine instructions where the motor-level version needed fourteen, and under
+	 * one-instruction-per-tick that is not a tidiness win: it is a third off the
+	 * lineage's reaction time. That is the trade intents exist to offer — see
+	 * {@link net.hedinger.prototype.entities.AgentIO#A_SEEK}.
+	 *
+	 * <p>Still crude on purpose. Mutation and survivor-seeding are meant to sharpen
+	 * it — a better threat threshold, hunting, using the waypoint it never marks —
+	 * which is the whole experiment.
 	 */
 	static net.hedinger.prototype.entities.Brain starterBrain() {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
-		final int NEG = net.hedinger.prototype.entities.Brain.NEG;
 		final int GT = net.hedinger.prototype.entities.Brain.GT;
-		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
 		int[][] code = {
-				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9])
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // drive forward
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze whenever on grass
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // breed when well-fed
-				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_CLOCK, 0 }, // r2 = clock (wander)
-				{ SENSE, 3, net.hedinger.prototype.entities.AgentIO.S_THREAT_BEARING, 0 }, // r3 = threat bearing
-				{ SENSE, 4, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r4 = threat prox
-				{ NEG, 5, 3, 0 }, // r5 = -threat bearing (rough flee heading)
-				{ SET, 6, 7, 0 }, // r6 = 0.25 (const[7]) threat threshold
-				{ GT, 7, 4, 6, }, // r7 = threat is close?
-				{ MOV, 8, 2, 0 }, // r8 = wander (default)
-				{ SKIPZ, 7, 0, 0 }, // no threat near -> skip the flee override
-				{ MOV, 8, 5, 0 }, // r8 = flee turn
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_TURN, 8, 0 }, // steer
+				{ SET, 1, 6, 0 }, // r1 = 0.1 (const[6]) -- the forage intent
+				{ SET, 5, 7, 0 }, // r5 = 0.25 (const[7]) -- a cheap amble; movement costs v^2
+				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 },
+				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) threat threshold
+				{ GT, 4, 2, 3 }, // r4 = something bigger is close?
+				{ SKIPZ, 4, 0, 0 }, // nothing near -> keep foraging
+				{ SET, 1, 1, 0 }, // r1 = -1 (const[1]) -- flee the threat
+				{ SKIPZ, 4, 0, 0 }, // ...and only then
+				{ SET, 5, 9, 0 }, // r5 = 1.0 (const[9]) -- run flat out
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_SEEK, 1, 0 }, // where, and what to do there
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 5, 0 }, // how hard: the mind's call
+				{ SET, 6, 9, 0 }, // r6 = 1.0 (const[9])
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 6, 0 }, // breed when well-fed
 		};
 		return new net.hedinger.prototype.entities.Brain(code);
 	}
@@ -181,20 +187,15 @@ public final class Worlds {
 		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
 		int[][] code = {
-				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9])
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // drive forward
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze, aboard or not
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // breed when well-fed
-				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_CLOCK, 0 }, // r2 = clock (wander)
-				{ SENSE, 3, net.hedinger.prototype.entities.AgentIO.S_THREAT_BEARING, 0 }, // r3 = bearing to it
-				{ SENSE, 4, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r4 = how close
-				{ SET, 6, 7, 0 }, // r6 = 0.25 (const[7]) closeness threshold
-				{ GT, 7, 4, 6 }, // r7 = something bigger is close?
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_ATTACH, 7, 0 }, // cling; 0 lets go
-				{ MOV, 8, 2, 0 }, // r8 = wander (default)
-				{ SKIPZ, 7, 0, 0 }, // nothing bigger near -> keep wandering
-				{ MOV, 8, 3, 0 }, // else steer TOWARD it, to get within boarding reach
-				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_TURN, 8, 0 }, // steer
+				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9]) -- seek the THREAT channel, i.e.
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_SEEK, 1, 0 }, // ...ride what's bigger
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // chase it down
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze, aboard or not:
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // a seek-threat doesn't feed you
+				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r2 = how close
+				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) boarding threshold
+				{ GT, 4, 2, 3 }, // r4 = something bigger is within reach?
+				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_ATTACH, 4, 0 }, // cling; 0 lets go
 		};
 		return new net.hedinger.prototype.entities.Brain(code);
 	}

@@ -1759,6 +1759,108 @@ public class SimTests {
 	}
 
 	/**
+	 * An intent carries through to the act. This mind writes A_SEEK for the goal and
+	 * a throttle for the effort — no turn, no eat, no aiming — and the body finds
+	 * grass, walks to it and grazes it. That is the point of an intent under
+	 * one-instruction-per-tick: foraging costs a goal slot instead of a steering
+	 * loop plus an eat gate, which is what makes the trade against reaction time
+	 * worth taking. Speed stays deliberately outside the bargain, since movement
+	 * costs the square of it and that is where a lineage spends or saves its living.
+	 *
+	 * <p>The control is the same mind with the sign flipped. Avoidance must move the
+	 * body but never feed it, because running from a thing is not a reason to eat it
+	 * — and without that check "seek" could quietly feed a creature that was fleeing.
+	 */
+	static class OneIntentIsAWholeBehaviour extends Scenario {
+		/** {@code {energy gained, distance to the patch}} after walking on this intent. */
+		private double[] run(double seek) {
+			seed(93);
+			World w = room(40, 14);
+			for (int x = 0; x < 40; x++) {
+				for (int y = 0; y < 14; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren...
+				}
+			}
+			for (int x = 24; x <= 28; x++) {
+				for (int y = 5; y <= 9; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // ...but for one lush patch
+				}
+			}
+			Genome g = new Genome();
+			g.size = 8;
+			g.speed = 0.08; // the intent's forage pace is a deliberate amble; give it legs
+			g.losRange = 20;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_SEEK] = seek; // where to go, and what to do there
+					a[AgentIO.A_THROTTLE] = 1; // how hard: still the mind's to choose
+				}
+			};
+			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withMetabolic()
+					.withReproCooldown(1000000).withHeading(Math.PI * 0.9); // facing away
+			w.spawnEntity(body);
+			w.think();
+			body.withEnergy(0.5); // room in the tank so grazing shows up
+			double e0 = body.getEnergy();
+			tick(w, 900);
+			return new double[] { body.getEnergy() - e0,
+					Math.hypot(body.getX() - 26.5, body.getY() - 7.5) };
+		}
+
+		@Override
+		public void run() {
+			double[] toward = run(0.1);
+			double[] away = run(-0.1);
+			assertLess("a lone forage intent walked the body to the patch", toward[1], 3.0);
+			assertGreater("...and grazed it, with no A_EAT ever written", toward[0], 0.0);
+			assertGreater("the avoidance sense still moved the body", away[1], 8.0);
+			assertNear("...but fed it nothing at all", 0.0, Math.max(0, away[0]), 1e-9);
+		}
+	}
+
+	/**
+	 * The same coupling on the hunting side: a mind that names prey and asks for
+	 * speed runs its quarry down and bites it, with no A_ATTACK and no steering of
+	 * its own. Pins that the act travels with the goal, not just the heading.
+	 */
+	static class HuntIntentClosesAndBites extends Scenario {
+		@Override
+		public void run() {
+			seed(94);
+			World w = room(30, 12);
+			Genome g = new Genome();
+			g.size = 16;
+			g.losRange = 20;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_SEEK] = 0.5; // hunt: approach and bite, from one slot
+					a[AgentIO.A_THROTTLE] = 1;
+				}
+			};
+			TestNPC hunter = TestNPC.minded(5.5, 6.0, 0, g, ctrl).withMetabolic()
+					.withReproCooldown(1000000).withHeading(Math.PI * 0.9);
+			TestNPC quarry = TestNPC.inert(20.5, 6.0, 0).withSize(6);
+			w.spawnEntity(hunter);
+			w.spawnEntity(quarry);
+			w.think();
+			int hp0 = quarry.getHealth();
+			// Closest approach over the run, not the final gap: the hunt succeeds, and
+			// a hunter with nothing left to chase goes looking for the next one, so by
+			// tick 900 it has wandered off the corpse it made.
+			double closest = Double.MAX_VALUE;
+			for (int i = 0; i < 900; i++) {
+				tick(w, 1);
+				closest = Math.min(closest, Math.hypot(hunter.getX() - quarry.getX(),
+						hunter.getY() - quarry.getY()));
+			}
+			assertLess("a lone hunt intent closed the distance", closest, 2.0);
+			assertLess("...and bit, with no A_ATTACK ever written", quarry.getHealth(), hp0);
+		}
+	}
+
+	/**
 	 * Spatial memory in two instructions. A_MARK latches where the body is standing;
 	 * A_SEEK = ±4 steers back to it later. The coordinate lives in the body on
 	 * purpose — a mind could hold two numbers in registers but could never turn them
@@ -1805,11 +1907,16 @@ public class SimTests {
 	}
 
 	/**
-	 * A seek is a preference, not a lock. Naming a target the body cannot currently
-	 * see steers nothing at all and leaves A_TURN in charge — so a mutation that
-	 * writes a seek constant can never freeze a creature pointing at a thing that
-	 * isn't there. Here the waypoint is never marked, so A_SEEK = 4 names nothing
-	 * and a body told to turn zero walks perfectly straight.
+	 * Wanting something you cannot see is a reason to go looking. A goal the body
+	 * cannot currently find puts it into a deterministic search — drifting on the
+	 * same oscillator the mind reads as S_CLOCK — rather than leaving it planted.
+	 * That is what makes an intent a complete behaviour: "forage" has to mean find
+	 * food, not merely walk at food already in view.
+	 *
+	 * <p>It also means a mutation that writes a seek constant can never freeze a
+	 * creature pointing at a thing that isn't there, which is the survival floor the
+	 * old pure-steering version guaranteed a different way (by doing nothing at all).
+	 * Here the waypoint is never marked, so A_SEEK = 4 names something unfindable.
 	 */
 	static class SeekYieldsWhenItNamesNothing extends Scenario {
 		@Override
@@ -1829,9 +1936,12 @@ public class SimTests {
 			TestNPC body = TestNPC.minded(6.5, 7.5, 0, g, ctrl).withSpeed(0.08).withHeading(0);
 			w.spawnEntity(body);
 			w.think();
-			tick(w, 100);
-			assertGreater("the body kept walking east", body.getX(), 12.0);
-			assertNear("an unmarked waypoint bent its course not at all", 7.5, body.getY(), 0.001);
+			double x0 = body.getX(), y0 = body.getY();
+			tick(w, 300);
+			double travelled = Math.hypot(body.getX() - x0, body.getY() - y0);
+			assertGreater("an unfindable goal sends the body searching, not nowhere", travelled, 3.0);
+			assertTrue("...and the search steers it off the straight line it started on",
+					Math.abs(body.getY() - y0) > 0.5);
 		}
 	}
 
@@ -3828,6 +3938,8 @@ public class SimTests {
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
 				new SeekWalksToAPatchWithoutSteering(),
+				new OneIntentIsAWholeBehaviour(),
+				new HuntIntentClosesAndBites(),
 				new WaypointRemembersAPlace(),
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
