@@ -574,6 +574,8 @@ public class Grid {
 						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
 				boolean wallN = isWallish(x, y - 1);
 				boolean wallS = isWallish(x, y + 1);
+				boolean wallE = isWallish(x + 1, y);
+				boolean wallW = isWallish(x - 1, y);
 				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
 				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
 				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
@@ -609,38 +611,31 @@ public class Grid {
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
-						if (cl == GroundTextures.CLS_WALL) {
-							// A wall is two surfaces from above: the flat cross-section
-							// top (kept calm), and a band of carved vertical face dashes
-							// where the mass fronts open ground to the south.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.wallFace(gx, gy);
+						boolean wallCls = cl == GroundTextures.CLS_WALL
+								|| cl == GroundTextures.CLS_WALL_BUILT
+								|| cl == GroundTextures.CLS_CONCRETE
+								|| cl == GroundTextures.CLS_STEELWALL;
+						if (wallCls) {
+							// Every wall material is two surfaces from above: the flat
+							// cross-section top, and a face band where the mass fronts
+							// open ground to the south; wallDepth then adds the raised
+							// read -- cornice, base shadow, silhouette rims.
+							boolean face = !wallS && aj >= A * 0.55;
+							boolean lit = !wallN && aj < A * 0.28;
+							if (cl == GroundTextures.CLS_WALL) {
+								col = face ? GroundTextures.wallFace(gx, gy)
+										: GroundTextures.wallTop(gx, gy, lit);
+							} else if (cl == GroundTextures.CLS_WALL_BUILT) {
+								col = face ? GroundTextures.wallFaceBuilt(gx, gy)
+										: GroundTextures.wallTopBuilt(gx, gy, lit);
+							} else if (cl == GroundTextures.CLS_CONCRETE) {
+								col = face ? GroundTextures.concreteFace(gx, gy)
+										: GroundTextures.concreteTop(gx, gy, lit);
 							} else {
-								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
+								col = face ? GroundTextures.steelFace(gx, gy)
+										: GroundTextures.steelTop(gx, gy, lit);
 							}
-						} else if (cl == GroundTextures.CLS_WALL_BUILT) {
-							// Masonry: coursed block top, coursed shadowed face where
-							// the wall fronts open ground to the south.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.wallFaceBuilt(gx, gy);
-							} else {
-								col = GroundTextures.wallTopBuilt(gx, gy, !wallN && aj < A * 0.28);
-							}
-						} else if (cl == GroundTextures.CLS_CONCRETE) {
-							// Poured concrete: calm panelled top, drip-streaked face
-							// where it fronts open ground to the south.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.concreteFace(gx, gy);
-							} else {
-								col = GroundTextures.concreteTop(gx, gy, !wallN && aj < A * 0.28);
-							}
-						} else if (cl == GroundTextures.CLS_STEELWALL) {
-							// Steel bulkhead: riveted panel top, corrugated face.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.steelFace(gx, gy);
-							} else {
-								col = GroundTextures.steelTop(gx, gy, !wallN && aj < A * 0.28);
-							}
+							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							col = GroundTextures.crystal(gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
@@ -716,8 +711,8 @@ public class Grid {
 								wdist = waterDist();
 							}
 							col = GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
-							if (wallN && aj < A * 0.32) {
-								col = darken(col, 0.62); // shadow cast by the wall to the north
+							if (wallN) {
+								col = groundShadow(col, aj); // graded shadow from the wall north
 							}
 						} else {
 							if (cl == GroundTextures.CLS_PLATE) {
@@ -793,8 +788,8 @@ public class Grid {
 									}
 								}
 							}
-							if (wallN && aj < A * 0.32) {
-								col = darken(col, 0.62); // shadow cast by the wall to the north
+							if (wallN) {
+								col = groundShadow(col, aj); // graded shadow from the wall north
 							}
 						}
 						g2.setColor(new Color(col));
@@ -803,6 +798,51 @@ public class Grid {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Depth cues that make a wall read as a raised mass, applied on top of
+	 * any wall material's texture: a bright cornice line where the cap rolls
+	 * over into the face, the face darkening toward its base (its contact
+	 * shadow with the ground), and a dark silhouette rim on cap edges that
+	 * meet open ground east or west.
+	 */
+	private static int wallDepth(int col, int ai, int aj, int A,
+			boolean wallS, boolean wallE, boolean wallW) {
+		int faceTop = (int) (A * 0.55);
+		if (!wallS && aj >= faceTop) {
+			if (aj == faceTop) {
+				return lighten(col, 1.35); // the cornice catches the light
+			}
+			double f = 1.0 - 0.45 * (aj - faceTop) / (double) (A - 1 - faceTop);
+			return darken(col, f); // the face sinks into its own base shadow
+		}
+		if ((!wallW && ai == 0) || (!wallE && ai == A - 1)) {
+			return darken(col, 0.6); // crisp cap silhouette against open ground
+		}
+		return col;
+	}
+
+	/** The graded shadow a wall casts on standing ground to its south:
+	 *  deepest at the foot, fading out over five art-pixels. */
+	private static int groundShadow(int col, int aj) {
+		if (aj < 2) {
+			return darken(col, 0.5);
+		}
+		if (aj < 4) {
+			return darken(col, 0.68);
+		}
+		if (aj < 5) {
+			return darken(col, 0.84);
+		}
+		return col;
+	}
+
+	private static int lighten(int rgb, double f) {
+		int r = Math.min(255, (int) (((rgb >> 16) & 255) * f));
+		int g = Math.min(255, (int) (((rgb >> 8) & 255) * f));
+		int b = Math.min(255, (int) ((rgb & 255) * f));
+		return (r << 16) | (g << 8) | b;
 	}
 
 	private static int darken(int rgb, double f) {
