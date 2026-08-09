@@ -44,14 +44,23 @@ public class TestNPC extends NPC {
 	 *  win quickly: it lands weaker bites and needs far more of them, which is the
 	 *  whole trade — a long, costly, interruptible kill instead of a clean one. */
 	private static final double PRED_MAX_PREY_RATIO = 1.5;
-	/** Floor on the bite-strength multiplier, so taking on the largest quarry a
-	 *  hunter will engage stays a slow kill rather than an impossible one. */
-	private static final double PRED_MIN_BITE_SCALE = 0.25;
-	/** Energy a predator gains per bite (a kill is worth roughly a breeding's cost).
-	 *  Deliberately NOT scaled by size: a bigger animal takes more bites to bring
-	 *  down and so yields more energy in total, which is what makes the slow, risky
-	 *  kill worth attempting at all. */
-	private static final double PRED_BITE_ENERGY = 0.5;
+	/** Full health, and so the whole of a body: a bite that removes this much of a
+	 *  creature has consumed all of it. Health is flat across every body size, which
+	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
+	private static final int FULL_BODY_HEALTH = 100;
+	/**
+	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
+	 * body is worth what it weighs, so the meal tracks the quarry rather than the
+	 * effort: an animal that takes twice as many bites to bring down is not twice
+	 * as nutritious, it is just slower to eat.
+	 *
+	 * <p>This replaces a flat per-bite payout, under which a mouse and an animal the
+	 * hunter's own size were worth exactly the same (measured: 2.49 either way). That
+	 * pointed selection at the smallest, easiest quarry and left no niche for a large
+	 * hunter — the one corner of the economy where mass did not appear, while
+	 * metabolism, movement and tank capacity all scale with it.
+	 */
+	private static final double MEAT_ENERGY = 2.5;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
@@ -75,10 +84,22 @@ public class TestNPC extends NPC {
 	 *  prey) to break free. */
 	private static final int HUNT_GIVEUP_TICKS = 45;
 
-	/** Vegetation eaten per tick by a reference-size grazer (>> the tile's regrowth
-	 *  rate). Bigger grazers crop faster in proportion to their size — see
-	 *  {@link #grazeDemand()} — so a large body both burns and eats more. */
-	private static final double GRAZE_DEMAND = 0.05;
+	/**
+	 * Vegetation cropped per tick by a reference-size grazer, still well above the
+	 * tile's regrowth rate so a patch does run down. Bigger grazers crop faster in
+	 * proportion to their mass — see {@link #grazeDemand()}.
+	 *
+	 * <p>Sized so stripping a tile is real work: the largest body in the world takes
+	 * about four seconds of standing on one patch and eating, a reference-size body
+	 * about ten. The original rate cleared a tile in 20 ticks — well under a second —
+	 * which meant a herd erased its pasture faster than it could spread out over it,
+	 * and the substrate behaved like a switch rather than a resource.
+	 *
+	 * <p>This and {@link NPC#GRASS_ENERGY} multiply into a herbivore's income per
+	 * tick, so slowing the crop without raising the energy per unit starves the herd
+	 * — measured, not assumed. See that constant for the calibration.
+	 */
+	private static final double GRAZE_DEMAND = 0.003;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). */
@@ -149,6 +170,26 @@ public class TestNPC extends NPC {
 	private Mind mind = null;
 	private final double[] sensors = new double[AgentIO.NUM_SENSORS];
 	private final double[] actuators = new double[AgentIO.NUM_ACT];
+
+	/** The one place this body remembers, in world tiles; {@code wpLvl < 0} means
+	 *  nothing is marked. Spatial memory lives here rather than in the mind's
+	 *  registers because a coordinate is only useful if something can do geometry
+	 *  with it, and the instruction set has neither divide nor atan2. */
+	private double wpX = 0, wpY = 0;
+	private int wpLvl = -1;
+
+	/** The forage patch this body is currently steering by, as tile coordinates;
+	 *  {@code forageCol < 0} means none was found on the last scan. Cached because
+	 *  the scan is O(r^2) tile reads and the answer changes slowly, while the
+	 *  <i>bearing</i> to it changes every tick as the body moves — so the sensor
+	 *  stays live between scans without rescanning. */
+	private int forageCol = -1, forageRow = -1;
+	private long forageScanAt = Long.MIN_VALUE;
+
+	/** How often a body re-scans for a forage patch. Grass regrows over ~a minute
+	 *  (Tile.REGROW_DELAY), so a target a second old is still a good target, and
+	 *  rescanning every tick would buy nothing for 33x the cost. */
+	private static final int FORAGE_SCAN_PERIOD = 33;
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
@@ -463,6 +504,14 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Points the body along a heading in radians (0 = east). The {@code mover}
+	 *  fixture takes one up front; this lets the other fixtures — a minded body in
+	 *  particular — start out facing a chosen way without a mind having to turn. */
+	public TestNPC withHeading(double radians) {
+		D = radians;
+		return this;
+	}
+
 	/** Sets the body radius; gates grabbing and the carry offset. */
 	public TestNPC withSize(int s) {
 		size = s;
@@ -659,12 +708,12 @@ public class TestNPC extends NPC {
 		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
 		double reach = prey == null ? 0
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-		if (prey != null && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
+		boolean full = energy >= energyCapacity();
+		if (prey != null && !full && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
-			setAction("attacking", true); // in reach: bite whatever the hunger level
+			setAction("attacking", true); // in reach: bite at any hunger short of full
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
-			prey.damage(biteDamage(prey));
-			energy += PRED_BITE_ENERGY; // predation feeds the hunter
+			energy += biteFeeds(prey);
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
 			setAction(starving ? "starving" : "hunting", false);
@@ -692,8 +741,25 @@ public class TestNPC extends NPC {
 	 */
 	private int biteDamage(NPC prey) {
 		double ratio = getSize() / Math.max(1e-6, prey.getSize());
-		double scale = Math.max(PRED_MIN_BITE_SCALE, Math.min(1.0, ratio));
+		double scale = Math.min(1.0, ratio);
 		return Math.max(1, (int) Math.round(PRED_DAMAGE * scale));
+	}
+
+	/**
+	 * Takes one bite out of {@code prey} and returns what it fed the hunter.
+	 *
+	 * <p>The bite removes health; the meal is the share of the body that health
+	 * represented, {@code MEAT_ENERGY * preyMass * (damage / FULL_BODY_HEALTH)}. So
+	 * the whole carcass is worth {@code MEAT_ENERGY * preyMass} no matter how many
+	 * bites it took, and a hunter that arrives at an animal something else has
+	 * already chewed on gets only what is left of it. Damage past death feeds
+	 * nobody — you cannot eat more of an animal than there was.
+	 */
+	private double biteFeeds(NPC prey) {
+		int bite = biteDamage(prey);
+		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
+		prey.damage(bite);
+		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
 	}
 
 	/**
@@ -961,7 +1027,7 @@ public class TestNPC extends NPC {
 	private void senseFieldAndBody(double[] s) {
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
-		double kinX = 0, kinY = 0;
+		double kinX = 0, kinY = 0, kinWeight = 0;
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
 					|| n instanceof Item || n.getLvl() != getLvl() || !isInLOS(n)) {
@@ -987,6 +1053,7 @@ public class TestNPC extends NPC {
 				double sim = genome.similarityTo(og);
 				kinX += sim * dx; // similarity-weighted pull toward kin
 				kinY += sim * dy;
+				kinWeight += sim;
 			}
 		}
 		if (preyD < Double.MAX_VALUE) {
@@ -1006,6 +1073,17 @@ public class TestNPC extends NPC {
 		s[AgentIO.S_KIN_BEARING] = (kinX != 0 || kinY != 0)
 				? wrap(Math.atan2(kinY, kinX) - D) / Math.PI
 				: 0;
+		// The kin centroid's distance, which the bearing alone never carried. The
+		// weights are a positive scalar, so dividing them out moves the point but not
+		// the direction -- S_KIN_BEARING is unchanged by this.
+		if (kinWeight > 0 && (kinX != 0 || kinY != 0)) {
+			s[AgentIO.S_KIN_PROX] = 1.0 / (1.0 + Math.hypot(kinX / kinWeight, kinY / kinWeight));
+		} else {
+			s[AgentIO.S_KIN_PROX] = 0;
+		}
+
+		senseForage(s);
+		senseWaypoint(s);
 
 		s[AgentIO.S_HEALTH] = clampUnit(getHealth() / 100.0);
 		s[AgentIO.S_CARRIED] = isGrabbed() ? 1.0 : (getAttachTarget() != null ? -1.0 : 0.0);
@@ -1020,6 +1098,101 @@ public class TestNPC extends NPC {
 				&& (ahead.isWater()
 						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 		s[AgentIO.S_HAZARD_AHEAD] = hazard ? 1.0 : 0.0;
+	}
+
+	/**
+	 * Fills the forage channel: where the best patch of ground in sight is, as a
+	 * bearing and a proximity.
+	 *
+	 * <p>The patch is re-chosen only every {@link #FORAGE_SCAN_PERIOD} ticks, but the
+	 * bearing to it is recomputed every tick from the remembered tile — so the body
+	 * keeps a steady target it can actually walk to, instead of a direction that
+	 * jitters as ties change hands. That distinction is the whole point of naming a
+	 * <i>place</i> rather than a gradient: a creature can commit to it.
+	 */
+	private void senseForage(double[] s) {
+		long now = getWorld().getTick();
+		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
+				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
+				|| (forageCol >= 0 && vegetationAt(forageCol, forageRow, now) <= 0); // eaten bare
+		if (due) {
+			scanForage(now);
+		}
+		if (forageCol < 0) {
+			s[AgentIO.S_FORAGE_PROX] = 0;
+			s[AgentIO.S_FORAGE_BEARING] = 0;
+			return;
+		}
+		double dx = forageCol + 0.5 - X, dy = forageRow + 0.5 - Y;
+		s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
+	}
+
+	/**
+	 * Picks the best forage tile within sight and remembers it. Scored as
+	 * {@code vegetation / (1 + distance)}, so a rich patch across the map loses to a
+	 * fair one underfoot — the creature is choosing where to walk, and walking costs
+	 * energy. The sweep runs in a fixed row-major order and keeps the first strict
+	 * maximum, so ties break identically on every replay.
+	 */
+	private void scanForage(long now) {
+		forageScanAt = now;
+		forageCol = -1;
+		forageRow = -1;
+		int r = (int) Math.ceil(LOS_RANGE);
+		int cx = (int) X, cy = (int) Y, lvl = getLvl();
+		double best = 0;
+		for (int ty = cy - r; ty <= cy + r; ty++) {
+			for (int tx = cx - r; tx <= cx + r; tx++) {
+				double dist = Math.hypot(tx + 0.5 - X, ty + 0.5 - Y);
+				if (dist > LOS_RANGE) {
+					continue; // the square's corners fall outside the sight circle
+				}
+				// Prune before touching the tile: vegetation tops out at VEG_MAX, so
+				// nothing this far away can beat what we already hold no matter what
+				// grows on it. Since the winner is decided by a strict >, skipping a
+				// tile that can only tie or lose leaves the choice bit-for-bit
+				// identical -- this is a speed-up, not an approximation.
+				if (net.hedinger.prototype.engine.Tile.VEG_MAX / (1.0 + dist) <= best) {
+					continue;
+				}
+				double veg = vegetationAt(tx, ty, now);
+				if (veg <= 0) {
+					continue;
+				}
+				double score = veg / (1.0 + dist);
+				if (score > best) {
+					best = score;
+					forageCol = tx;
+					forageRow = ty;
+				}
+			}
+		}
+		if (forageCol >= 0 && !getWorld().isValid(forageCol, forageRow, lvl)) {
+			forageCol = -1; // paranoia: never hand the mind a tile off the map
+		}
+	}
+
+	/** Vegetation on a tile, or 0 if it is off the map or not walkable ground. */
+	private double vegetationAt(int col, int row, long now) {
+		if (!getWorld().isValid(col, row, getLvl())) {
+			return 0;
+		}
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(col, row, getLvl());
+		return (t == null || !t.isWalkable()) ? 0 : t.getVegetation(now);
+	}
+
+	/** Fills the waypoint channel; zeros when nothing is marked or the mark is on
+	 *  another level, since a bearing across levels would point at nothing walkable. */
+	private void senseWaypoint(double[] s) {
+		if (wpLvl != getLvl()) {
+			s[AgentIO.S_WAYPOINT_PROX] = 0;
+			s[AgentIO.S_WAYPOINT_BEARING] = 0;
+			return;
+		}
+		double dx = wpX - X, dy = wpY - Y;
+		s[AgentIO.S_WAYPOINT_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_WAYPOINT_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 	}
 
 	/** 1 if a one-tile step along {@code heading} lands on impassable ground, else 0. */
@@ -1041,10 +1214,73 @@ public class TestNPC extends NPC {
 				&& (t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 	}
 
+	/**
+	 * The relative bearing (radians) to a named seek target, or {@code NaN} when the
+	 * body cannot see one. Read straight off the sensor vector the mind was just
+	 * shown, so the body steers by exactly what it told the mind — there is no
+	 * second, privileged view of the world hiding behind the intent commands.
+	 */
+	private double seekBearing(int seekClass) {
+		int prox;
+		int bearing;
+		switch (seekClass) {
+		case AgentIO.SEEK_FORAGE:
+			prox = AgentIO.S_FORAGE_PROX;
+			bearing = AgentIO.S_FORAGE_BEARING;
+			break;
+		case AgentIO.SEEK_KIN:
+			prox = AgentIO.S_KIN_PROX;
+			bearing = AgentIO.S_KIN_BEARING;
+			break;
+		case AgentIO.SEEK_PREY:
+			prox = AgentIO.S_PREY_PROX;
+			bearing = AgentIO.S_PREY_BEARING;
+			break;
+		case AgentIO.SEEK_THREAT:
+			prox = AgentIO.S_THREAT_PROX;
+			bearing = AgentIO.S_THREAT_BEARING;
+			break;
+		case AgentIO.SEEK_ITEM:
+			prox = AgentIO.S_ITEM_PROX;
+			bearing = AgentIO.S_ITEM_BEARING;
+			break;
+		case AgentIO.SEEK_WAYPOINT:
+			prox = AgentIO.S_WAYPOINT_PROX;
+			bearing = AgentIO.S_WAYPOINT_BEARING;
+			break;
+		default:
+			return Double.NaN;
+		}
+		return sensors[prox] > 0 ? sensors[bearing] * Math.PI : Double.NaN;
+	}
+
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
 	private void actFrom(double[] a) {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
+		// Intent steering. A_SEEK names a kind of thing rather than a turn rate; when
+		// the body can see one, it works out the turn and A_TURN is ignored. A
+		// negative value means the same target repels instead of attracting, so
+		// running from a threat and running at prey are the same instruction with a
+		// different sign. Naming something absent changes nothing, and A_TURN stands.
+		double seekWish = a[AgentIO.A_SEEK];
+		int seekClass = AgentIO.seekTarget(seekWish);
+		if (seekClass != AgentIO.SEEK_NONE) {
+			double bearing = seekBearing(seekClass);
+			if (!Double.isNaN(bearing)) {
+				if (seekWish < 0) {
+					bearing = wrap(bearing + Math.PI); // the far side of the same target
+				}
+				t = clamp(bearing / MAX_TURN, -1, 1); // as far around as one tick allows
+			}
+		}
+		if (a[AgentIO.A_MARK] > 0.5) {
+			wpX = X; // remember here
+			wpY = Y;
+			wpLvl = getLvl();
+		} else if (a[AgentIO.A_MARK] < -0.5) {
+			wpLvl = -1; // forget it
+		}
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
 		// genome's top speed. There is no separate gear to engage — the movement
@@ -1053,11 +1289,10 @@ public class TestNPC extends NPC {
 		if (throttle > 0.02) {
 			move(throttle * speed, D);
 		}
-		// Vertical intent: the body only drops through (or steps onto) a hole when
-		// the mind actively wills the descent -- otherwise it treats an open hole as
-		// a ledge and stops at the lip. Climbing a ramp stays automatic where one
-		// exists (going up is not a survival hazard), so this gates only the fall.
-		descendIntent = a[AgentIO.A_VERTICAL] < -0.5;
+		// Nothing here steers vertically. Changing level is the ground's business:
+		// a ramp is floor that spans two levels and carries whatever walks across it,
+		// so a mind reaches the cave the same way it reaches anywhere else -- by
+		// walking there. A hole is a pit, and falling in one is a mistake, not a move.
 		double eaten = 0;
 		if (a[AgentIO.A_EAT] > 0.5) {
 			eaten = graze(grazeDemand());
