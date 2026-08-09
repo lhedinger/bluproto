@@ -43,7 +43,8 @@ public final class GroundTextures {
 			CLS_SAND = 10, CLS_REEDS = 11, CLS_SHALLOWS = 12, CLS_QUICKSAND = 13,
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
-			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25;
+			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
+			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -71,6 +72,8 @@ public final class GroundTextures {
 			{ 0x45464a, 0x64656a, 0x86878c }, // poured concrete (neutral grey)
 			{ 0x30343d, 0x4d535f, 0x6e7583 }, // steel bulkhead wall
 			{ 0x3f454c, 0x616974, 0x88929e }, // galvanised duct metal (brightest)
+			{ 0x1f2637, 0x38466e, 0x5f74a4 }, // crystal bed (grounded, a step darker)
+			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
 	};
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
@@ -121,6 +124,10 @@ public final class GroundTextures {
 			return CLS_QUICKSAND;
 		case TYPE_CRYSTAL:
 			return CLS_CRYSTAL;
+		case TYPE_CRYSTAL_BED:
+			return CLS_CRYSTAL_BED;
+		case TYPE_CRYSTAL_SPARSE:
+			return CLS_CRYSTAL_SPARSE;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -584,39 +591,149 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Crystal cluster: stamped diamond shards (Manhattan-radius caps) packed
-	 * over a dark mineral matrix. Each shard facets -- lit toward
-	 * screen-north-west, mid on the far side, a dark cut edge on its rim --
-	 * and some apexes carry the pale glint, the mineral counterpart of the
-	 * fungus spark.
+	 * The cap of a standing crystal formation, seen from above: big faceted
+	 * shard heads packed shoulder to shoulder with almost no matrix showing.
+	 * Each head splits along its diagonals into a lit north-west facet, a mid
+	 * flank and a shadowed south wedge, rimmed by a dark cut edge; apexes
+	 * carry the pale glint. Whole heads vary a step in tone so the mass reads
+	 * as many prisms, not a wallpaper. {@code litEdge} lifts the exposed
+	 * north rim a shade, the same cue the wall caps use.
 	 */
-	public static int crystal(int px, int py) {
-		int C = 4; // shard lattice pitch, art-px
+	public static int crystalTop(int px, int py, boolean litEdge) {
+		int C = 5; // head lattice pitch, art-px: large caps, packed
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		int best = -1; // nearest head owns the pixel: heads press together
+		int bestM = Integer.MAX_VALUE;
+		int bestCx = 0, bestCy = 0, bestDx = 0, bestDy = 0;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				int sx = cx * C + 1 + (int) (hash01(cx, cy, 64) * (C - 2));
+				int sy = cy * C + 1 + (int) (hash01(cx, cy, 65) * (C - 2));
+				int r = 3 + (int) (hash01(cx, cy, 66) * 1.99); // head radius 3..4
+				int dx = px - sx, dy = py - sy;
+				int m = Math.abs(dx) + Math.abs(dy);
+				if (m <= r && m < bestM) {
+					bestM = m;
+					best = r;
+					bestCx = cx;
+					bestCy = cy;
+					bestDx = dx;
+					bestDy = dy;
+				}
+			}
+		}
+		int col;
+		if (best < 0) {
+			col = RAMP[CLS_CRYSTAL][0]; // the rare crevice between heads
+		} else if (bestM == 0 && hash01(bestCx, bestCy, 67) > 0.45) {
+			col = CRYSTAL_SPARK; // glinting apex
+		} else if (bestM == best) {
+			col = RAMP[CLS_CRYSTAL][0]; // dark cut edge between heads
+		} else {
+			// Diagonal facet split: NW catches the light, the flanks hold the
+			// mid tone, the south wedge falls dark -- one light source.
+			int idx = bestDx + bestDy < 0 ? 2 : (bestDy > 0 && Math.abs(bestDy) > Math.abs(bestDx) ? 0 : 1);
+			if (hash01(bestCx, bestCy, 68) > 0.8) {
+				idx = Math.min(2, idx + 1); // an occasional paler prism
+			}
+			col = RAMP[CLS_CRYSTAL][idx];
+		}
+		if (litEdge) {
+			int r = Math.min(255, (int) (((col >> 16) & 255) * 1.25));
+			int g = Math.min(255, (int) (((col >> 8) & 255) * 1.25));
+			int b = Math.min(255, (int) ((col & 255) * 1.25));
+			col = (r << 16) | (g << 8) | b;
+		}
+		return col;
+	}
+
+	/**
+	 * The south face of a crystal formation where it fronts open ground:
+	 * vertical prism shafts, 2 px wide, each column holding one tone down its
+	 * whole length -- a light-catching edge shaft here and there, mid and
+	 * shadow shafts between -- with a rare spark where a facet edge breaks
+	 * the light. Reads as sheer standing prisms; wallDepth then sinks the
+	 * base into its contact shadow.
+	 */
+	public static int crystalFace(int px, int py) {
+		int shaft = Math.floorDiv(px, 2); // 2-px prism shafts
+		double r = hash01(shaft, 0, 69);
+		int idx = r < 0.30 ? 0 : (r > 0.82 ? 2 : 1);
+		if (hash01(shaft, Math.floorDiv(py, 4), 70) > 0.96) {
+			return CRYSTAL_SPARK; // a facet edge catches the light
+		}
+		return RAMP[CLS_CRYSTAL][idx];
+	}
+
+	/**
+	 * A packed crystal bed: the cave floor grown thick with knee-high shard
+	 * diamonds -- the walkable-but-slow middle density. The ground between
+	 * shards IS the stone floor (so the bed reads as passable ground, not a
+	 * pit), and the shards are big enough to count: radius-2 diamonds with
+	 * the formation's facet grammar, packing most of the lattice.
+	 */
+	public static int crystalBed(double wx, double wy, int px, int py) {
+		int C = 5; // shard lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
-				if (hash01(cx, cy, 74) > 0.8) {
-					continue; // a gap of bare matrix breaks the lattice rhythm
+				if (hash01(cx, cy, 74) > 0.9) {
+					continue; // the odd bare gap keeps the bed from tiling
 				}
 				int sx = cx * C + 1 + (int) (hash01(cx, cy, 64) * (C - 2));
 				int sy = cy * C + 1 + (int) (hash01(cx, cy, 65) * (C - 2));
-				int r = 2 + (int) (hash01(cx, cy, 66) * 2); // shard radius 2..3
+				int dx = px - sx, dy = py - sy;
+				int m = Math.abs(dx) + Math.abs(dy);
+				if (m > 2) {
+					continue; // readable diamonds, all one size
+				}
+				if (m == 0 && hash01(cx, cy, 67) > 0.8) {
+					return CRYSTAL_SPARK; // the odd glinting apex
+				}
+				if (m == 2) {
+					return RAMP[CLS_CRYSTAL_BED][0]; // dark cut edge
+				}
+				return RAMP[CLS_CRYSTAL_BED][dx + dy < 0 ? 2 : 1]; // lit / far facet
+			}
+		}
+		return quietGround(CLS_STONE, wx, wy, px, py); // floor between shards
+	}
+
+	/**
+	 * Sparse shards: ordinary cave-stone ground with the occasional small
+	 * crystal cluster grown through it -- fully walkable, and blending
+	 * seamlessly into plain stone because the ground IS plain stone. The
+	 * shards reuse the bed's facet grammar at cluster scale.
+	 */
+	public static int crystalSparse(double wx, double wy, int px, int py) {
+		int C = 6; // wide lattice: clusters are the exception, not the rule
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 71) > 0.30) {
+					continue; // most lattice cells grow nothing
+				}
+				int sx = cx * C + 1 + (int) (hash01(cx, cy, 64) * (C - 2));
+				int sy = cy * C + 1 + (int) (hash01(cx, cy, 65) * (C - 2));
+				int r = 1 + (int) (hash01(cx, cy, 66) * 1.99); // shard radius 1..2
 				int dx = px - sx, dy = py - sy;
 				int m = Math.abs(dx) + Math.abs(dy);
 				if (m > r) {
 					continue;
 				}
-				if (m == 0 && hash01(cx, cy, 67) > 0.6) {
+				if (m == 0 && hash01(cx, cy, 67) > 0.8) {
 					return CRYSTAL_SPARK; // glinting apex
 				}
 				if (m == r) {
-					return RAMP[CLS_CRYSTAL][0]; // dark cut edge
+					return RAMP[CLS_CRYSTAL_BED][0]; // dark cut edge
 				}
-				return RAMP[CLS_CRYSTAL][dx + dy < 0 ? 2 : 1]; // lit / far facet
+				return RAMP[CLS_CRYSTAL_BED][dx + dy < 0 ? 2 : 1]; // lit / far facet
 			}
 		}
-		return RAMP[CLS_CRYSTAL][0]; // dark matrix between shards
+		return quietGround(CLS_STONE, wx, wy, px, py); // the cave floor itself
 	}
 
 	/**

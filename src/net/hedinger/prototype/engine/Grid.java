@@ -637,7 +637,15 @@ public class Grid {
 							}
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
-							col = GroundTextures.crystal(gx, gy);
+							// A crystal formation is a standing prism mass, drawn with
+							// the walls' two-surface grammar: a faceted cap on top, a
+							// south face of sheer prism shafts where it fronts open
+							// ground, then the raised-edge cues.
+							boolean face = !wallS && aj >= A * 0.55;
+							boolean lit = !wallN && aj < A * 0.28;
+							col = face ? GroundTextures.crystalFace(gx, gy)
+									: GroundTextures.crystalTop(gx, gy, lit);
+							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground, as pixel-art: the
 							// lit north lip is a broken run of dashes whose depth varies
@@ -748,6 +756,10 @@ public class Grid {
 								double cap = t.vegetationCap();
 								double veg = cap > 0 ? t.getVegetation(now) / cap : 1;
 								col = GroundTextures.fungus(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_CRYSTAL_BED) {
+								col = GroundTextures.crystalBed(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_CRYSTAL_SPARSE) {
+								col = GroundTextures.crystalSparse(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_RUBBLE) {
 								col = GroundTextures.rubble(gx, gy);
 							} else if (cl == GroundTextures.CLS_SAND) {
@@ -870,12 +882,14 @@ public class Grid {
 		case GroundTextures.CLS_SAND: return 4;
 		case GroundTextures.CLS_SOIL: return 5;
 		case GroundTextures.CLS_STONE: return 6;
-		case GroundTextures.CLS_RUBBLE: return 7;
-		case GroundTextures.CLS_VENT: return 8;
-		case GroundTextures.CLS_FUNGUS: return 9;
-		case GroundTextures.CLS_GRASS: return 10;
-		case GroundTextures.CLS_REEDS: return 11;
-		case GroundTextures.CLS_COVER: return 12;
+		case GroundTextures.CLS_CRYSTAL_SPARSE: return 7;
+		case GroundTextures.CLS_CRYSTAL_BED: return 8;
+		case GroundTextures.CLS_RUBBLE: return 9;
+		case GroundTextures.CLS_VENT: return 10;
+		case GroundTextures.CLS_FUNGUS: return 11;
+		case GroundTextures.CLS_GRASS: return 12;
+		case GroundTextures.CLS_REEDS: return 13;
+		case GroundTextures.CLS_COVER: return 14;
 		default: return -1; // structures, holes, paving: no lapping
 		}
 	}
@@ -1042,13 +1056,15 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
-	/** A wall for lighting purposes: natural rock, masonry, concrete, or a
-	 *  steel bulkhead. */
+	/** A wall for lighting purposes: natural rock, masonry, concrete, a
+	 *  steel bulkhead -- or a standing crystal formation, which is just as
+	 *  tall a mass and casts the same shadow. */
 	private boolean isWallish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
-				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL)
+				|| isType(nx, ny, Tile.TileType.TYPE_CRYSTAL);
 	}
 
 	/** Open vertical space, for shaft rims: the drop continues into another

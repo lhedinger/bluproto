@@ -1166,6 +1166,43 @@ public class SimTests {
 	}
 
 	/**
+	 * Crystal comes in three densities: a solid formation stops a walker dead,
+	 * a packed bed lets it through slowed, and sparse shards are ordinary
+	 * ground -- a mover on them keeps pace with one on bare floor.
+	 */
+	static class CrystalDensityTiers extends Scenario {
+		@Override
+		public void run() {
+			seed(23);
+			World w = room(16, 7);
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_CRYSTAL);        // formation row
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_CRYSTAL_BED);    // bed row
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_CRYSTAL_SPARSE); // sparse row
+			}
+			TestNPC blocked = TestNPC.mover(2.5, 1.5, 0, 0); // walks into the formation
+			TestNPC wading = TestNPC.mover(2.5, 2.5, 0, 0);  // crosses the bed
+			TestNPC loose = TestNPC.mover(2.5, 3.5, 0, 0);   // crosses sparse shards
+			TestNPC clear = TestNPC.mover(2.5, 4.5, 0, 0);   // bare floor alongside
+			w.spawnEntity(blocked);
+			w.spawnEntity(wading);
+			w.spawnEntity(loose);
+			w.spawnEntity(clear);
+			w.think();
+			snapshot(w, "before (four lanes: formation, bed, sparse, floor)");
+			tick(w, 200);
+			snapshot(w, "after (stopped / slowed / normal / normal)");
+
+			assertLess("the formation stops a walker", blocked.getX(), 5.0);
+			assertGreater("the bed admits a walker", wading.getX(), 5.5);
+			assertGreater("but the bed slows it against clear ground",
+					clear.getX() - wading.getX(), 0.5);
+			assertLess("sparse shards walk like plain floor",
+					Math.abs(clear.getX() - loose.getX()), 0.5);
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -3815,6 +3852,7 @@ public class SimTests {
 				new FertileHabitatPatches(),
 				new WaterBlocksLandPassesFlyers(),
 				new MudSlowsMovement(),
+				new CrystalDensityTiers(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

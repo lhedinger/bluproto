@@ -362,7 +362,12 @@ public final class Worlds {
 					} else if (pool > 0.62) {
 						t = Tile.TileType.TYPE_FUNGUS;
 					} else if (pool < 0.18) {
-						t = Tile.TileType.TYPE_CRYSTAL;
+						// Crystal fields grade by density from the core out: a
+						// blocking formation spine, a packed bed that slows a
+						// wader, then loose shards on ordinary stone.
+						t = pool < 0.07 ? Tile.TileType.TYPE_CRYSTAL
+								: pool < 0.125 ? Tile.TileType.TYPE_CRYSTAL_BED
+								: Tile.TileType.TYPE_CRYSTAL_SPARSE;
 					} else if (deep > 0.85) {
 						t = Tile.TileType.TYPE_VENT;
 					} else {
