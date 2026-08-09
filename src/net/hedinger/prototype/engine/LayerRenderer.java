@@ -99,6 +99,8 @@ public class LayerRenderer {
 		case TYPE_PIPES:
 		case TYPE_AIRVENT:
 		case TYPE_WALL_CONCRETE:
+		case TYPE_WALL_STEEL:
+		case TYPE_DUCT:
 			return ResourceManager.getFloorTile(tilecode);
 		// TYPE_SHAFT and TYPE_CATWALK are intentionally omitted, like
 		// TYPE_HOLE: they bake to nothing, so the level below shows (and

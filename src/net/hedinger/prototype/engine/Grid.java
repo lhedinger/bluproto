@@ -142,12 +142,24 @@ public class Grid {
 		for (int key : veiled) {
 			int x = key % world.cols, y = key / world.cols;
 			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
+			boolean duct = tiles[x][y].getType() == Tile.TileType.TYPE_DUCT;
+			boolean ductVert = duct && (isType(x, y - 1, Tile.TileType.TYPE_DUCT)
+					|| isType(x, y + 1, Tile.TileType.TYPE_DUCT));
 			int sx = ox + x * ts, sy = oy + y * ts;
 			for (int aj = 0; aj < A; aj++) {
 				for (int ai = 0; ai < A; ai++) {
 					int gx = x * A + ai, gy = y * A + aj;
 					int col;
-					if (reedBed) {
+					if (duct) {
+						// The duct's ribbed lid: the crawler shows in the slots.
+						Integer lid = ductVert
+								? GroundTextures.ductLid(gy, ai, gx, gy)
+								: GroundTextures.ductLid(gx, aj, gx, gy);
+						if (lid == null) {
+							continue;
+						}
+						col = lid;
+					} else if (reedBed) {
 						col = GroundTextures.reeds(gx, gy);
 						if (col == reedGap) {
 							continue; // the body shows between the stalks
@@ -622,6 +634,13 @@ public class Grid {
 							} else {
 								col = GroundTextures.concreteTop(gx, gy, !wallN && aj < A * 0.28);
 							}
+						} else if (cl == GroundTextures.CLS_STEELWALL) {
+							// Steel bulkhead: riveted panel top, corrugated face.
+							if (!wallS && aj >= A * 0.55) {
+								col = GroundTextures.steelFace(gx, gy);
+							} else {
+								col = GroundTextures.steelTop(gx, gy, !wallN && aj < A * 0.28);
+							}
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							col = GroundTextures.crystal(gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
@@ -703,6 +722,14 @@ public class Grid {
 						} else {
 							if (cl == GroundTextures.CLS_PLATE) {
 								col = GroundTextures.plate(gx, gy);
+							} else if (cl == GroundTextures.CLS_DUCT) {
+								// The duct's open channel, oriented along its run; the
+								// lid re-stamps over crawlers in the concealment pass.
+								boolean vert = isType(x, y - 1, Tile.TileType.TYPE_DUCT)
+										|| isType(x, y + 1, Tile.TileType.TYPE_DUCT);
+								col = vert
+										? GroundTextures.ductChannel(gy, ai, gx, gy)
+										: GroundTextures.ductChannel(gx, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_PIPES) {
 								// Pipe runs follow their connectivity: vertical beside
 								// vertical neighbours, horizontal otherwise, over deck.
@@ -975,11 +1002,13 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
-	/** A wall for lighting purposes: natural rock, masonry, or concrete. */
+	/** A wall for lighting purposes: natural rock, masonry, concrete, or a
+	 *  steel bulkhead. */
 	private boolean isWallish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
-				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE);
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
 	}
 
 	/** Open vertical space, for shaft rims: the drop continues into another

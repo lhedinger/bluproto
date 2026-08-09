@@ -43,7 +43,7 @@ public final class GroundTextures {
 			CLS_SAND = 10, CLS_REEDS = 11, CLS_SHALLOWS = 12, CLS_QUICKSAND = 13,
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
-			CLS_AIRVENT = 22, CLS_CONCRETE = 23;
+			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -69,6 +69,8 @@ public final class GroundTextures {
 			{ 0x2e3d3a, 0x4a615c, 0x6b8781 }, // pipes (industrial green-grey)
 			{ 0x2c3037, 0x474d57, 0x656c79 }, // air-vent housing
 			{ 0x45464a, 0x64656a, 0x86878c }, // poured concrete (neutral grey)
+			{ 0x30343d, 0x4d535f, 0x6e7583 }, // steel bulkhead wall
+			{ 0x3f454c, 0x616974, 0x88929e }, // galvanised duct metal (brightest)
 	};
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
@@ -87,7 +89,7 @@ public final class GroundTextures {
 	/** Whether a class is a solid structure rather than open ground. */
 	public static boolean isStructure(int cls) {
 		return cls == CLS_WALL || cls == CLS_WALL_BUILT || cls == CLS_CRYSTAL
-				|| cls == CLS_CONCRETE;
+				|| cls == CLS_CONCRETE || cls == CLS_STEELWALL;
 	}
 
 	/** Terrain colour class for a tile: ground, structure, or -1 (ramp). */
@@ -137,6 +139,10 @@ public final class GroundTextures {
 			return CLS_AIRVENT;
 		case TYPE_WALL_CONCRETE:
 			return CLS_CONCRETE;
+		case TYPE_WALL_STEEL:
+			return CLS_STEELWALL;
+		case TYPE_DUCT:
+			return CLS_DUCT;
 		case TYPE_FLOOR:
 			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
 		default:
@@ -721,6 +727,72 @@ public final class GroundTextures {
 		int phase = (int) (hash01(px, 1, 86) * len);
 		int seg = Math.floorDiv(py + phase, len);
 		return RAMP[CLS_CONCRETE][hash01(px, seg, 87) < 0.55 ? 0 : 1];
+	}
+
+	/**
+	 * The cross-section top of a steel bulkhead: large 6-px riveted panels
+	 * -- rivets marching along the seams, not just the corners -- darker
+	 * than the deck so the wall mass reads heavy against the floor.
+	 */
+	public static int steelTop(int px, int py, boolean litEdge) {
+		int S = 6;
+		int mx = Math.floorMod(px, S), my = Math.floorMod(py, S);
+		if (mx == 0 || my == 0) {
+			// Seam, studded with rivets every third pixel.
+			return (mx == 0 && my % 3 == 1) || (my == 0 && mx % 3 == 1)
+					? RAMP[CLS_STEELWALL][2] : RAMP[CLS_STEELWALL][0];
+		}
+		if (litEdge) {
+			return RAMP[CLS_STEELWALL][2];
+		}
+		return hash01(px >> 1, py, 88) < 0.05 ? RAMP[CLS_STEELWALL][0] : RAMP[CLS_STEELWALL][1];
+	}
+
+	/**
+	 * The exposed south face of a steel bulkhead: corrugated -- hard 3-px
+	 * vertical ribs cycling shadow/body/lit, the machine-regular counterpart
+	 * of concrete's drip streaks.
+	 */
+	public static int steelFace(int px, int py) {
+		return RAMP[CLS_STEELWALL][Math.floorMod(px, 3)];
+	}
+
+	/**
+	 * The open channel of a crawl duct (its lid is drawn separately, over
+	 * whatever crawls inside): galvanised sheet floor with side walls along
+	 * the run and cross-seams every 6 px.
+	 */
+	public static int ductChannel(int along, int across, int px, int py) {
+		if (across == 0 || across == 11) {
+			return RAMP[CLS_DUCT][0]; // the duct's side walls
+		}
+		if (across == 1 || across == 10) {
+			return RAMP[CLS_DUCT][1]; // inner wall face
+		}
+		if (Math.floorMod(along, 6) == 0) {
+			return RAMP[CLS_DUCT][0]; // sheet seam
+		}
+		return hash01(px >> 1, py, 89) > 0.94 ? RAMP[CLS_DUCT][2] : RAMP[CLS_DUCT][1];
+	}
+
+	/**
+	 * The duct's ribbed lid, re-stamped over anything crawling inside (the
+	 * concealment pass): bright cross-ribs with slotted gaps, so a crawler
+	 * reads as glimpses between ribs -- the facility's answer to the thicket
+	 * canopy. Returns null in the slots.
+	 */
+	public static Integer ductLid(int along, int across, int px, int py) {
+		if (across == 0 || across == 11) {
+			return RAMP[CLS_DUCT][0]; // side walls stay solid
+		}
+		int m = Math.floorMod(along, 3);
+		if (m == 0) {
+			return RAMP[CLS_DUCT][2]; // lit rib
+		}
+		if (m == 1) {
+			return RAMP[CLS_DUCT][1]; // rib flank
+		}
+		return null; // the slot between ribs: the crawler shows through
 	}
 
 	/**

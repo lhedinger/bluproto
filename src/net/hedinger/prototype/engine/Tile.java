@@ -451,10 +451,16 @@ public class Tile {
 			return 0.6;
 		case TYPE_PIPES:
 			return 0.6; // clambering over the runs
+		case TYPE_DUCT:
+			return 0.5; // crawling
 		default:
 			return 1.0;
 		}
 	}
+
+	/** The biggest body (radius) that fits through a crawl duct; anything
+	 *  larger is stopped at the grille. */
+	public static final float DUCT_CLEARANCE = 8;
 
 	/** True where an unsupported body drops to the level below: natural
 	 *  holes and the facility's vertical shafts. */
@@ -463,13 +469,14 @@ public class Tile {
 	}
 
 	/** True if this tile blocks line of sight: walls (natural or built),
-	 *  thicket cover, and reed beds -- but NOT crystal, which is solid to
-	 *  movement yet clear to the eye. */
+	 *  thicket cover, reed beds, and enclosed crawl ducts -- but NOT
+	 *  crystal, which is solid to movement yet clear to the eye. */
 	public boolean blocksSight() {
 		if (type == TileType.TYPE_CRYSTAL) {
 			return false;
 		}
-		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS;
+		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
+				|| type == TileType.TYPE_DUCT;
 	}
 
 	public void updateTilecode(World world) {
@@ -567,7 +574,9 @@ public class Tile {
 		TYPE_SHAFT(21, true), // vertical shaft: open, drops like a hole
 		TYPE_PIPES(22, true), // floor pipe run; slow clambering ground
 		TYPE_AIRVENT(23, true), // louvered ventilation grille in the deck
-		TYPE_WALL_CONCRETE(24, false); // poured concrete facility wall
+		TYPE_WALL_CONCRETE(24, false), // poured concrete facility wall
+		TYPE_WALL_STEEL(25, false), // riveted steel bulkhead wall
+		TYPE_DUCT(26, true); // crawlable air duct: small bodies only, concealed
 
 		private int value;
 		private boolean open;
