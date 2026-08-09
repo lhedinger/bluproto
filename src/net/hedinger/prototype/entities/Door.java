@@ -55,6 +55,7 @@ public class Door extends Entity {
 	private int delay_counter = 0;
 	private boolean triggered = false;
 	private final int flavor;
+	private final int span; // doorway width in tiles the door seals
 	private final int open_delay, close_delay;
 
 	public Door(double x, double y, double z, int d) {
@@ -62,12 +63,29 @@ public class Door extends Entity {
 	}
 
 	public Door(double x, double y, double z, int d, int flavor) {
+		this(x, y, z, d, flavor, 1);
+	}
+
+	/**
+	 * A door sealing a doorway {@code span} tiles wide: (X,Y) is the first
+	 * doorway tile and the door extends toward +x (ud) or +y (lr). The two
+	 * leaves slide apart from the centre into the flanking walls -- a wide
+	 * blast door parts like a bay door, it never swings.
+	 */
+	public Door(double x, double y, double z, int d, int flavor, int span) {
 		super((int) x, (int) y, (int) z, d % 2);
-		this.size_diameter = 64;
+		this.span = Math.max(1, span);
+		this.size_diameter = 64 * this.span;
 		this.flavor = flavor;
 		// A blast door is tons of steel: it takes its time.
 		this.open_delay = flavor == BLAST ? -90 : -40;
 		this.close_delay = flavor == BLAST ? 90 : 40;
+	}
+
+	/** Asks the door to start opening (if closed) or closing (if open) on
+	 *  its next think -- the hook a switch, a sensor, or a demo pulls. */
+	public void trigger() {
+		triggered = true;
 	}
 
 	/** Position-derived flavour for legacy call sites: the built materials
@@ -99,13 +117,6 @@ public class Door extends Entity {
 				delay_counter++; // opening
 				if (delay_counter == 0) {
 					status = DOOR_OPEN;
-					if (r == 0) {
-						getWorld().getTile(X, Y + 1, Z).openDoor(1);
-						getWorld().getTile(X, Y, Z).openDoor(3);
-					} else {
-						getWorld().getTile(X, Y, Z).openDoor(2);
-						getWorld().getTile(X + 1, Y, Z).openDoor(4);
-					}
 				}
 			} else {
 				delay_counter--; // closing
@@ -115,22 +126,32 @@ public class Door extends Entity {
 			}
 		}
 
-		if (status == DOOR_CLOSED) {
-			if (r == 0) {
-				getWorld().getTile(X, Y, Z).closeDoor(0);
-				getWorld().getTile(X, Y - 1, Z).closeDoor(2);
-			} else {
-				getWorld().getTile(X - 1, Y, Z).closeDoor(1);
-				getWorld().getTile(X, Y, Z).closeDoor(3);
-			}
+		if (status == DOOR_CLOSED || status == DOOR_OPEN) {
+			applyFlags(status == DOOR_OPEN);
 		}
-		if (status == DOOR_OPEN) {
+	}
+
+	/** Applies the open/closed collision flags to every tile pair the door
+	 *  spans (a wide door seals its whole doorway). */
+	private void applyFlags(boolean open) {
+		int r = (int) (this.D % (Math.PI / 2));
+		for (int s = 0; s < span; s++) {
 			if (r == 0) {
-				getWorld().getTile(X, Y, Z).openDoor(0);
-				getWorld().getTile(X, Y - 1, Z).openDoor(2);
+				if (open) {
+					getWorld().getTile(X + s, Y, Z).openDoor(0);
+					getWorld().getTile(X + s, Y - 1, Z).openDoor(2);
+				} else {
+					getWorld().getTile(X + s, Y, Z).closeDoor(0);
+					getWorld().getTile(X + s, Y - 1, Z).closeDoor(2);
+				}
 			} else {
-				getWorld().getTile(X - 1, Y, Z).openDoor(1);
-				getWorld().getTile(X, Y, Z).openDoor(3);
+				if (open) {
+					getWorld().getTile(X - 1, Y + s, Z).openDoor(1);
+					getWorld().getTile(X, Y + s, Z).openDoor(3);
+				} else {
+					getWorld().getTile(X - 1, Y + s, Z).closeDoor(1);
+					getWorld().getTile(X, Y + s, Z).closeDoor(3);
+				}
 			}
 		}
 	}
@@ -171,19 +192,23 @@ public class Door extends Entity {
 			return;
 		}
 		int box = (int) Math.ceil(step);
-		int reach = (int) Math.round(6 * extension()); // leaf length from each end
+		int L = span * 12; // door length in art-px across its whole doorway
+		int reach = (int) Math.round(L * 0.5 * extension()); // leaf length from each end
 		int rows = flavor == BLAST ? 5 : 3; // a blast door is a mass, not a bar
-		for (int i = 0; i < 12; i++) {
-			boolean post = i == 0 || i == 11;
-			if (!post && i >= reach && i < 12 - reach) {
+		for (int i = 0; i < L; i++) {
+			boolean post = i == 0 || i == L - 1;
+			if (!post && i >= reach && i < L - reach) {
 				continue; // the open middle
 			}
+			// The leading edge of each sliding leaf -- where they meet when
+			// sealed, and the crush edges while they move.
+			boolean nose = !post && (i == reach - 1 || i == L - reach);
 			for (int j = 0; j < rows; j++) {
-				Color c = pattern(i, j, post);
+				Color c = pattern(i, L, j, post, nose);
 				if (c == null) {
 					continue; // a grate's see-through gap
 				}
-				double along = i / 12.0;
+				double along = i / 12.0; // world units along the doorway
 				double across = (j - rows * 0.5) / 12.0;
 				double wx = lr ? X + across : X + along;
 				double wy = lr ? Y + along : Y + across;
@@ -194,8 +219,9 @@ public class Door extends Entity {
 		}
 	}
 
-	/** The material pattern for leaf art-pixel (i along, j across). */
-	private Color pattern(int i, int j, boolean post) {
+	/** The material pattern for leaf art-pixel (i along a door of L art-px,
+	 *  j across); {@code nose} marks a leaf's sliding leading edge. */
+	private Color pattern(int i, int L, int j, boolean post, boolean nose) {
 		switch (flavor) {
 		case STONE:
 			if (post || i % 4 == 0) {
@@ -216,8 +242,8 @@ public class Door extends Entity {
 			if (post) {
 				return IRON_DARK;
 			}
-			if (i == 5 || i == 6) {
-				return new Color(GroundTextures.hazardStripe(i, j)); // striped nose
+			if (nose) {
+				return new Color(GroundTextures.hazardStripe(i, j)); // striped crush edge
 			}
 			if (i % 4 == 0) {
 				return IRON_DARK; // segment seam
