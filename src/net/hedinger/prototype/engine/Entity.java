@@ -254,8 +254,9 @@ public abstract class Entity {
 			return;
 		}
 
-		// Mud drags: scale this step by the tile the entity stands on.
-		double drag = world.getTile(X, Y, Z).speedFactor();
+		// Mud drags: scale this step by the tile the entity stands on -- and
+		// by how well this body fits it (a crystal bed drags by size).
+		double drag = world.getTile(X, Y, Z).speedFactorFor(getPixelSize());
 		if (drag != 1.0) {
 			dX *= drag;
 			dY *= drag;
@@ -360,13 +361,20 @@ public abstract class Entity {
 		// wider than the duct's clearance stops at the grille.
 		Tile duct = world.getTile(X + dX, Y + dY, Z + dZ);
 		if (duct != null && duct.getType() == Tile.TileType.TYPE_DUCT
-				&& size > Tile.DUCT_CLEARANCE) {
+				&& getPixelSize() > Tile.DUCT_CLEARANCE) {
 			return true;
 		}
 		// Water is impassable to land entities; flyers skim over it.
 		if (!isFlying()) {
 			Tile dest = world.getTile(X + dX, Y + dY, Z + dZ);
 			if (dest != null && dest.isWater()) {
+				return true;
+			}
+			// A crystal bed only admits bodies that fit between its shards;
+			// a bigger frame is stopped at the bed's edge. Flyers skim over
+			// -- unlike a duct, the bed is open to the air.
+			if (dest != null && dest.getType() == Tile.TileType.TYPE_CRYSTAL_BED
+					&& getPixelSize() > Tile.CRYSTAL_CLEARANCE) {
 				return true;
 			}
 		}
@@ -426,6 +434,14 @@ public abstract class Entity {
 
 	public float getSize() {
 		return size;
+	}
+
+	/** Body radius in pixels -- the unit the tile clearances (duct, crystal
+	 *  bed) are measured in. NPCs store their radius in a field of their own,
+	 *  so anything gating on body size must use this accessor, not the raw
+	 *  {@code size} field, or every NPC reads as size zero. */
+	public int getPixelSize() {
+		return (int) size;
 	}
 
 	public int getAge() {

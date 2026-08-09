@@ -590,32 +590,56 @@ public final class GroundTextures {
 		return ditherRamp(CLS_QUICKSAND, p, px, py);
 	}
 
+	/** Prism lattice pitch for the dense formation (art-px). */
+	private static final int XTAL_C = 6;
+
 	/**
-	 * The cap of a standing crystal formation, seen from above: big faceted
-	 * shard heads packed shoulder to shoulder with almost no matrix showing.
-	 * Each head splits along its diagonals into a lit north-west facet, a mid
-	 * flank and a shadowed south wedge, rimmed by a dark cut edge; apexes
-	 * carry the pale glint. Whole heads vary a step in tone so the mass reads
-	 * as many prisms, not a wallpaper. {@code litEdge} lifts the exposed
-	 * north rim a shade, the same cue the wall caps use.
+	 * A dense crystal formation: a thicket of big standing prisms grown from
+	 * the cave floor -- NOT a wall. Each prism head is its own faceted
+	 * diamond (lit north-west facet, mid flanks, shadowed south wedge, dark
+	 * cut rim, glinting apex), some carry a raised tip plateau for height,
+	 * and each drops a short contact shadow onto the ground south of it. The
+	 * ground showing in the crevices IS the stone floor, so the silhouette
+	 * stays jagged prism-by-prism -- impassable because the prisms stand
+	 * shoulder to shoulder, not because a mass has a face.
 	 */
-	public static int crystalTop(int px, int py, boolean litEdge) {
-		int C = 5; // head lattice pitch, art-px: large caps, packed
-		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
-		int best = -1; // nearest head owns the pixel: heads press together
+	public static int crystal(double wx, double wy, int px, int py) {
+		int c = crystalPrism(px, py);
+		if (c >= 0) {
+			return c;
+		}
+		int ground = quietGround(CLS_STONE, wx, wy, px, py);
+		// Each prism's own cast shadow: two softening steps of ground south
+		// of any head -- per-prism depth in place of a wall's graded band.
+		if (crystalPrism(px, py - 1) >= 0) {
+			return darken(ground, 0.55);
+		}
+		if (crystalPrism(px, py - 2) >= 0) {
+			return darken(ground, 0.75);
+		}
+		return ground;
+	}
+
+	/** The facet colour of the formation prism covering this art-pixel, or
+	 *  -1 where none does (a crevice between prisms). */
+	private static int crystalPrism(int px, int py) {
+		int cx0 = Math.floorDiv(px, XTAL_C), cy0 = Math.floorDiv(py, XTAL_C);
 		int bestM = Integer.MAX_VALUE;
-		int bestCx = 0, bestCy = 0, bestDx = 0, bestDy = 0;
+		int bestR = -1, bestCx = 0, bestCy = 0, bestDx = 0, bestDy = 0;
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
-				int sx = cx * C + 1 + (int) (hash01(cx, cy, 64) * (C - 2));
-				int sy = cy * C + 1 + (int) (hash01(cx, cy, 65) * (C - 2));
+				if (hash01(cx, cy, 74) > 0.94) {
+					continue; // the odd missing prism keeps the thicket jagged
+				}
+				int sx = cx * XTAL_C + 1 + (int) (hash01(cx, cy, 64) * (XTAL_C - 2));
+				int sy = cy * XTAL_C + 1 + (int) (hash01(cx, cy, 65) * (XTAL_C - 2));
 				int r = 3 + (int) (hash01(cx, cy, 66) * 1.99); // head radius 3..4
 				int dx = px - sx, dy = py - sy;
 				int m = Math.abs(dx) + Math.abs(dy);
-				if (m <= r && m < bestM) {
+				if (m <= r && m < bestM) { // nearest head owns the pixel
 					bestM = m;
-					best = r;
+					bestR = r;
 					bestCx = cx;
 					bestCy = cy;
 					bestDx = dx;
@@ -623,45 +647,24 @@ public final class GroundTextures {
 				}
 			}
 		}
-		int col;
-		if (best < 0) {
-			col = RAMP[CLS_CRYSTAL][0]; // the rare crevice between heads
-		} else if (bestM == 0 && hash01(bestCx, bestCy, 67) > 0.45) {
-			col = CRYSTAL_SPARK; // glinting apex
-		} else if (bestM == best) {
-			col = RAMP[CLS_CRYSTAL][0]; // dark cut edge between heads
-		} else {
-			// Diagonal facet split: NW catches the light, the flanks hold the
-			// mid tone, the south wedge falls dark -- one light source.
-			int idx = bestDx + bestDy < 0 ? 2 : (bestDy > 0 && Math.abs(bestDy) > Math.abs(bestDx) ? 0 : 1);
-			if (hash01(bestCx, bestCy, 68) > 0.8) {
-				idx = Math.min(2, idx + 1); // an occasional paler prism
-			}
-			col = RAMP[CLS_CRYSTAL][idx];
+		if (bestR < 0) {
+			return -1;
 		}
-		if (litEdge) {
-			int r = Math.min(255, (int) (((col >> 16) & 255) * 1.25));
-			int g = Math.min(255, (int) (((col >> 8) & 255) * 1.25));
-			int b = Math.min(255, (int) ((col & 255) * 1.25));
-			col = (r << 16) | (g << 8) | b;
+		if (bestM == 0 && hash01(bestCx, bestCy, 67) > 0.45) {
+			return CRYSTAL_SPARK; // glinting apex
 		}
-		return col;
-	}
-
-	/**
-	 * The south face of a crystal formation where it fronts open ground:
-	 * vertical prism shafts, 2 px wide, each column holding one tone down its
-	 * whole length -- a light-catching edge shaft here and there, mid and
-	 * shadow shafts between -- with a rare spark where a facet edge breaks
-	 * the light. Reads as sheer standing prisms; wallDepth then sinks the
-	 * base into its contact shadow.
-	 */
-	public static int crystalFace(int px, int py) {
-		int shaft = Math.floorDiv(px, 2); // 2-px prism shafts
-		double r = hash01(shaft, 0, 69);
-		int idx = r < 0.30 ? 0 : (r > 0.82 ? 2 : 1);
-		if (hash01(shaft, Math.floorDiv(py, 4), 70) > 0.96) {
-			return CRYSTAL_SPARK; // a facet edge catches the light
+		if (bestM == bestR) {
+			return RAMP[CLS_CRYSTAL][0]; // dark cut rim
+		}
+		// Diagonal facet split to one light source: NW catches the light, the
+		// flanks hold the mid tone, the south wedge falls dark.
+		int idx = bestDx + bestDy < 0 ? 2
+				: (bestDy > 0 && Math.abs(bestDy) > Math.abs(bestDx) ? 0 : 1);
+		if (bestM <= bestR - 3 && hash01(bestCx, bestCy, 72) > 0.5) {
+			idx = Math.min(2, idx + 1); // a raised tip plateau: the tall prisms
+		}
+		if (hash01(bestCx, bestCy, 68) > 0.8) {
+			idx = Math.min(2, idx + 1); // an occasional paler prism
 		}
 		return RAMP[CLS_CRYSTAL][idx];
 	}

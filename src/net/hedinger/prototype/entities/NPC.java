@@ -1520,6 +1520,7 @@ public abstract class NPC extends Entity {
 		return col;
 	}
 
+	@Override
 	public int getPixelSize() {
 		return size;
 	}

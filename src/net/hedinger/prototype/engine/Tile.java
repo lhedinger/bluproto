@@ -452,15 +452,35 @@ public class Tile {
 		case TYPE_DUCT:
 			return 0.5; // crawling
 		case TYPE_CRYSTAL_BED:
-			return 0.6; // picking a path between packed shards
+			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
 			return 1.0;
 		}
 	}
 
+	/**
+	 * Movement multiplier for a body of {@code size} (radius) standing on
+	 * this tile. Most ground drags every body alike; a crystal bed drags by
+	 * fit -- a small body slips between the shards nearly unhindered, one
+	 * near the clearance limit picks its way through at a crawl, and
+	 * anything above {@link #CRYSTAL_CLEARANCE} never got in at all (the
+	 * collision gate stops it at the bed's edge).
+	 */
+	public double speedFactorFor(double size) {
+		if (type == TileType.TYPE_CRYSTAL_BED) {
+			return 1.0 - 0.65 * Math.min(1.0, size / CRYSTAL_CLEARANCE);
+		}
+		return speedFactor();
+	}
+
 	/** The biggest body (radius) that fits through a crawl duct; anything
 	 *  larger is stopped at the grille. */
 	public static final float DUCT_CLEARANCE = 8;
+
+	/** The biggest body (radius) that fits between a crystal bed's shards;
+	 *  anything larger is stopped at the bed's edge -- so a bed is a refuge
+	 *  the apex hunters cannot follow prey into. */
+	public static final float CRYSTAL_CLEARANCE = 13;
 
 	/** True where an unsupported body drops to the level below: natural
 	 *  holes and the facility's vertical shafts. */

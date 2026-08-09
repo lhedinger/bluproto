@@ -637,15 +637,10 @@ public class Grid {
 							}
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
-							// A crystal formation is a standing prism mass, drawn with
-							// the walls' two-surface grammar: a faceted cap on top, a
-							// south face of sheer prism shafts where it fronts open
-							// ground, then the raised-edge cues.
-							boolean face = !wallS && aj >= A * 0.55;
-							boolean lit = !wallN && aj < A * 0.28;
-							col = face ? GroundTextures.crystalFace(gx, gy)
-									: GroundTextures.crystalTop(gx, gy, lit);
-							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
+							// A dense formation is a thicket of standing prisms on
+							// the cave floor -- each prism self-shaded with its own
+							// contact shadow, no wall grammar.
+							col = GroundTextures.crystal(wx, wy, gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground, as pixel-art: the
 							// lit north lip is a broken run of dashes whose depth varies
@@ -1056,15 +1051,14 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
-	/** A wall for lighting purposes: natural rock, masonry, concrete, a
-	 *  steel bulkhead -- or a standing crystal formation, which is just as
-	 *  tall a mass and casts the same shadow. */
+	/** A wall for lighting purposes: natural rock, masonry, concrete, or a
+	 *  steel bulkhead. A crystal formation is deliberately NOT wallish: it is
+	 *  a thicket of prisms, and each prism carries its own depth cues. */
 	private boolean isWallish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
-				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL)
-				|| isType(nx, ny, Tile.TileType.TYPE_CRYSTAL);
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
 	}
 
 	/** Open vertical space, for shaft rims: the drop continues into another
