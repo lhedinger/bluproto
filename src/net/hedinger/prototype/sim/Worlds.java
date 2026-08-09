@@ -664,7 +664,7 @@ public final class Worlds {
 				floodVisit(w, seen, q, n[0], n[1], z, cols, rows); // land
 				// Descend: a cardinal HOLE drops to the tile directly below it.
 				if (n[0] >= 0 && n[1] >= 0 && n[0] < cols && n[1] < rows && z - 1 >= 0
-						&& w.getTile(n[0], n[1], z).getType() == Tile.TileType.TYPE_HOLE) {
+						&& w.getTile(n[0], n[1], z).isDrop()) {
 					floodVisit(w, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}

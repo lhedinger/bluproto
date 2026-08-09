@@ -306,7 +306,7 @@ public abstract class Entity {
 	}
 
 	private boolean isOverHole() {
-		return world.getTile(X, Y, Z).getType() == Tile.TileType.TYPE_HOLE;
+		return world.getTile(X, Y, Z).isDrop();
 	}
 
 	/**
@@ -354,6 +354,13 @@ public abstract class Entity {
 
 	protected boolean isColliding() {
 		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
+			return true;
+		}
+		// A crawl duct only admits small bodies -- ground or flying, a frame
+		// wider than the duct's clearance stops at the grille.
+		Tile duct = world.getTile(X + dX, Y + dY, Z + dZ);
+		if (duct != null && duct.getType() == Tile.TileType.TYPE_DUCT
+				&& size > Tile.DUCT_CLEARANCE) {
 			return true;
 		}
 		// Water is impassable to land entities; flyers skim over it.

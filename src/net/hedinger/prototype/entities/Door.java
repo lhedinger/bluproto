@@ -29,14 +29,11 @@ import net.hedinger.prototype.engine.View;
  */
 public class Door extends Entity {
 
-	public static final int TIMBER = 0, STONE = 1, GRATE = 2, HEDGE = 3;
+	public static final int TIMBER = 0, STONE = 1, GRATE = 2, HEDGE = 3, BLAST = 4;
 
 	private static final int DOOR_OPEN = 0;
 	private static final int DOOR_MOVING = 1;
 	private static final int DOOR_CLOSED = 2;
-
-	private static final int open_delay = -40;
-	private static final int close_delay = 40;
 
 	// Material palettes, drawn from the terrain ramps so doors sit in the
 	// same world: mud browns (timber), built-wall masonry (stone), pit darks
@@ -49,6 +46,8 @@ public class Door extends Entity {
 	private static final Color STONE_HI = new Color(0x8a8069);
 	private static final Color IRON_DARK = new Color(0x14161f);
 	private static final Color IRON_HI = new Color(0x7c828f);
+	private static final Color STEEL_MID = new Color(0x515862);
+	private static final Color STEEL_HI = new Color(0x707885);
 	private static final Color HEDGE_MID = new Color(0x2b5422);
 	private static final Color HEDGE_HI = new Color(0x456c36);
 
@@ -56,15 +55,37 @@ public class Door extends Entity {
 	private int delay_counter = 0;
 	private boolean triggered = false;
 	private final int flavor;
+	private final int span; // doorway width in tiles the door seals
+	private final int open_delay, close_delay;
 
 	public Door(double x, double y, double z, int d) {
 		this(x, y, z, d, flavorAt((int) x, (int) y, (int) z));
 	}
 
 	public Door(double x, double y, double z, int d, int flavor) {
+		this(x, y, z, d, flavor, 1);
+	}
+
+	/**
+	 * A door sealing a doorway {@code span} tiles wide: (X,Y) is the first
+	 * doorway tile and the door extends toward +x (ud) or +y (lr). The two
+	 * leaves slide apart from the centre into the flanking walls -- a wide
+	 * blast door parts like a bay door, it never swings.
+	 */
+	public Door(double x, double y, double z, int d, int flavor, int span) {
 		super((int) x, (int) y, (int) z, d % 2);
-		this.size_diameter = 64;
+		this.span = Math.max(1, span);
+		this.size_diameter = 64 * this.span;
 		this.flavor = flavor;
+		// A blast door is tons of steel: it takes its time.
+		this.open_delay = flavor == BLAST ? -90 : -40;
+		this.close_delay = flavor == BLAST ? 90 : 40;
+	}
+
+	/** Asks the door to start opening (if closed) or closing (if open) on
+	 *  its next think -- the hook a switch, a sensor, or a demo pulls. */
+	public void trigger() {
+		triggered = true;
 	}
 
 	/** Position-derived flavour for legacy call sites: the built materials
@@ -96,13 +117,6 @@ public class Door extends Entity {
 				delay_counter++; // opening
 				if (delay_counter == 0) {
 					status = DOOR_OPEN;
-					if (r == 0) {
-						getWorld().getTile(X, Y + 1, Z).openDoor(1);
-						getWorld().getTile(X, Y, Z).openDoor(3);
-					} else {
-						getWorld().getTile(X, Y, Z).openDoor(2);
-						getWorld().getTile(X + 1, Y, Z).openDoor(4);
-					}
 				}
 			} else {
 				delay_counter--; // closing
@@ -112,22 +126,32 @@ public class Door extends Entity {
 			}
 		}
 
-		if (status == DOOR_CLOSED) {
-			if (r == 0) {
-				getWorld().getTile(X, Y, Z).closeDoor(0);
-				getWorld().getTile(X, Y - 1, Z).closeDoor(2);
-			} else {
-				getWorld().getTile(X - 1, Y, Z).closeDoor(1);
-				getWorld().getTile(X, Y, Z).closeDoor(3);
-			}
+		if (status == DOOR_CLOSED || status == DOOR_OPEN) {
+			applyFlags(status == DOOR_OPEN);
 		}
-		if (status == DOOR_OPEN) {
+	}
+
+	/** Applies the open/closed collision flags to every tile pair the door
+	 *  spans (a wide door seals its whole doorway). */
+	private void applyFlags(boolean open) {
+		int r = (int) (this.D % (Math.PI / 2));
+		for (int s = 0; s < span; s++) {
 			if (r == 0) {
-				getWorld().getTile(X, Y, Z).openDoor(0);
-				getWorld().getTile(X, Y - 1, Z).openDoor(2);
+				if (open) {
+					getWorld().getTile(X + s, Y, Z).openDoor(0);
+					getWorld().getTile(X + s, Y - 1, Z).openDoor(2);
+				} else {
+					getWorld().getTile(X + s, Y, Z).closeDoor(0);
+					getWorld().getTile(X + s, Y - 1, Z).closeDoor(2);
+				}
 			} else {
-				getWorld().getTile(X - 1, Y, Z).openDoor(1);
-				getWorld().getTile(X, Y, Z).openDoor(3);
+				if (open) {
+					getWorld().getTile(X - 1, Y + s, Z).openDoor(1);
+					getWorld().getTile(X, Y + s, Z).openDoor(3);
+				} else {
+					getWorld().getTile(X - 1, Y + s, Z).closeDoor(1);
+					getWorld().getTile(X, Y + s, Z).closeDoor(3);
+				}
 			}
 		}
 	}
@@ -168,19 +192,53 @@ public class Door extends Entity {
 			return;
 		}
 		int box = (int) Math.ceil(step);
-		int reach = (int) Math.round(6 * extension()); // leaf length from each end
-		for (int i = 0; i < 12; i++) {
-			boolean post = i == 0 || i == 11;
-			if (!post && i >= reach && i < 12 - reach) {
+		int L = span * 12; // door length in art-px across its whole doorway
+		int reach = (int) Math.round(L * 0.5 * extension()); // leaf length from each end
+		int rows = flavor == BLAST ? 5 : 3; // a blast door is a mass, not a bar
+		// Pass 1: the drop shadow, one art-pixel south of every door block --
+		// the slab sits ON the floor, and the shadow slides with the leaves.
+		g2.setColor(SHADOW);
+		for (int i = 0; i < L; i++) {
+			if (!drawnCell(i, L, reach)) {
+				continue;
+			}
+			for (int j = 0; j < rows; j++) {
+				double along = i / 12.0;
+				double across = (j - rows * 0.5) / 12.0;
+				double wx = lr ? X + across : X + along;
+				double wy = (lr ? Y + along : Y + across) + 1.0 / 12.0;
+				g2.fillRect((int) Math.round(v.pixelX(wx, Z, 0)),
+						(int) Math.round(v.pixelY(wy, Z, 0)), box, box);
+			}
+		}
+		// Pass 2: the door itself, its screen-north edge lit and its south
+		// edge sunk -- the same raised grammar the walls use.
+		for (int i = 0; i < L; i++) {
+			if (!drawnCell(i, L, reach)) {
 				continue; // the open middle
 			}
-			for (int j = 0; j < 3; j++) {
-				Color c = pattern(i, j, post);
+			boolean post = i == 0 || i == L - 1;
+			// The leading edge of each sliding leaf -- where they meet when
+			// sealed, and the crush edges while they move.
+			boolean nose = !post && (i == reach - 1 || i == L - reach);
+			for (int j = 0; j < rows; j++) {
+				Color c = pattern(i, L, j, post, nose);
 				if (c == null) {
 					continue; // a grate's see-through gap
 				}
-				double along = i / 12.0;
-				double across = (j - 1.5) / 12.0;
+				boolean northEdge = lr ? !drawnCell(i - 1, L, reach) : j == 0;
+				boolean southEdge = lr ? !drawnCell(i + 1, L, reach) : j == rows - 1;
+				boolean sideEdge = lr ? (j == 0 || j == rows - 1)
+						: (!drawnCell(i - 1, L, reach) || !drawnCell(i + 1, L, reach));
+				if (northEdge) {
+					c = shade(c, 1.3);
+				} else if (southEdge) {
+					c = shade(c, 0.65);
+				} else if (sideEdge) {
+					c = shade(c, 0.78); // the slab's long flanks, rimmed like a wall's
+				}
+				double along = i / 12.0; // world units along the doorway
+				double across = (j - rows * 0.5) / 12.0;
 				double wx = lr ? X + across : X + along;
 				double wy = lr ? Y + along : Y + across;
 				g2.setColor(c);
@@ -190,8 +248,26 @@ public class Door extends Entity {
 		}
 	}
 
-	/** The material pattern for leaf art-pixel (i along, j across). */
-	private Color pattern(int i, int j, boolean post) {
+	/** Whether art-pixel {@code i} along the door is part of a leaf or post. */
+	private static boolean drawnCell(int i, int L, int reach) {
+		if (i < 0 || i >= L) {
+			return false;
+		}
+		return i == 0 || i == L - 1 || i < reach || i >= L - reach;
+	}
+
+	private static final Color SHADOW = new Color(0, 0, 0, 110);
+
+	private static Color shade(Color c, double f) {
+		int r = (int) Math.min(255, c.getRed() * f);
+		int g = (int) Math.min(255, c.getGreen() * f);
+		int b = (int) Math.min(255, c.getBlue() * f);
+		return new Color(r, g, b, c.getAlpha());
+	}
+
+	/** The material pattern for leaf art-pixel (i along a door of L art-px,
+	 *  j across); {@code nose} marks a leaf's sliding leading edge. */
+	private Color pattern(int i, int L, int j, boolean post, boolean nose) {
 		switch (flavor) {
 		case STONE:
 			if (post || i % 4 == 0) {
@@ -206,6 +282,22 @@ public class Door extends Entity {
 				return null; // gap between bars: see straight through
 			}
 			return j == 0 ? IRON_HI : IRON_DARK; // lit bar tip, dark shaft
+		case BLAST:
+			// Segmented steel with a hazard-striped nose where the leaves
+			// meet: the Black-Mesa-grade door for facility mouths.
+			if (post) {
+				return IRON_DARK;
+			}
+			if (nose) {
+				return new Color(GroundTextures.hazardStripe(i, j)); // striped crush edge
+			}
+			if (i % 4 == 0) {
+				return IRON_DARK; // segment seam
+			}
+			if (j == 4) {
+				return IRON_DARK; // shadowed trailing edge of the slab
+			}
+			return j <= 1 ? STEEL_HI : STEEL_MID; // broad lit face, steel body
 		case HEDGE: {
 			// Woven wicker: a basket-weave of living green and timber withies
 			// on dark posts, so the gate reads as BUILT brush -- otherwise a

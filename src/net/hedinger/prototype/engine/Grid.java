@@ -142,12 +142,24 @@ public class Grid {
 		for (int key : veiled) {
 			int x = key % world.cols, y = key / world.cols;
 			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
+			boolean duct = tiles[x][y].getType() == Tile.TileType.TYPE_DUCT;
+			boolean ductVert = duct && (isType(x, y - 1, Tile.TileType.TYPE_DUCT)
+					|| isType(x, y + 1, Tile.TileType.TYPE_DUCT));
 			int sx = ox + x * ts, sy = oy + y * ts;
 			for (int aj = 0; aj < A; aj++) {
 				for (int ai = 0; ai < A; ai++) {
 					int gx = x * A + ai, gy = y * A + aj;
 					int col;
-					if (reedBed) {
+					if (duct) {
+						// The duct's ribbed lid: the crawler shows in the slots.
+						Integer lid = ductVert
+								? GroundTextures.ductLid(gy, ai, gx, gy)
+								: GroundTextures.ductLid(gx, aj, gx, gy);
+						if (lid == null) {
+							continue;
+						}
+						col = lid;
+					} else if (reedBed) {
 						col = GroundTextures.reeds(gx, gy);
 						if (col == reedGap) {
 							continue; // the body shows between the stalks
@@ -444,6 +456,14 @@ public class Grid {
 		}
 	}
 
+	/** Bakes the procedural ground into a level image whose pixel (0,0) is
+	 *  tile (0,0) -- so a level seen from above, through pits, shafts and
+	 *  catwalk grating, shows its real ground art rather than the bare base
+	 *  sprites. */
+	void bakeGround(Graphics2D g2) {
+		renderGround(g2, 0, 0);
+	}
+
 	private void renderGround(Graphics2D g2, int ox, int oy) {
 		if (RenderFx.pixelGround) {
 			renderGroundPixel(g2, ox, oy);
@@ -550,9 +570,12 @@ public class Grid {
 				if (cls < 0) {
 					continue; // ramps: baked layer shows through
 				}
-				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE;
+				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE
+						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
 				boolean wallN = isWallish(x, y - 1);
 				boolean wallS = isWallish(x, y + 1);
+				boolean wallE = isWallish(x + 1, y);
+				boolean wallW = isWallish(x - 1, y);
 				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
 				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
 				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
@@ -565,15 +588,19 @@ public class Grid {
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
 						int cl;
 						if (ownTight) {
-							// Structures keep a whisper of jitter so rock edges
-							// aren't laser-cut; they never trade pixels with
-							// open ground either way.
-							double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * 0.2;
-							double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * 0.2;
-							cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
-							if (cl < 0 || !(GroundTextures.isStructure(cl)
-									|| cl == GroundTextures.CLS_HOLE)) {
-								cl = cls;
+							if (cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK) {
+								cl = cls; // facility geometry: dead straight, no jitter
+							} else {
+								// Structures keep a whisper of jitter so rock edges
+								// aren't laser-cut; they never trade pixels with
+								// open ground either way.
+								double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * 0.2;
+								double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * 0.2;
+								cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
+								if (cl < 0 || !(GroundTextures.isStructure(cl)
+										|| cl == GroundTextures.CLS_HOLE)) {
+									cl = cls;
+								}
 							}
 						} else {
 							// Open ground: autotiled edges. Boundaries are drawn
@@ -584,23 +611,31 @@ public class Grid {
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
-						if (cl == GroundTextures.CLS_WALL) {
-							// A wall is two surfaces from above: the flat cross-section
-							// top (kept calm), and a band of carved vertical face dashes
-							// where the mass fronts open ground to the south.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.wallFace(gx, gy);
+						boolean wallCls = cl == GroundTextures.CLS_WALL
+								|| cl == GroundTextures.CLS_WALL_BUILT
+								|| cl == GroundTextures.CLS_CONCRETE
+								|| cl == GroundTextures.CLS_STEELWALL;
+						if (wallCls) {
+							// Every wall material is two surfaces from above: the flat
+							// cross-section top, and a face band where the mass fronts
+							// open ground to the south; wallDepth then adds the raised
+							// read -- cornice, base shadow, silhouette rims.
+							boolean face = !wallS && aj >= A * 0.55;
+							boolean lit = !wallN && aj < A * 0.28;
+							if (cl == GroundTextures.CLS_WALL) {
+								col = face ? GroundTextures.wallFace(gx, gy)
+										: GroundTextures.wallTop(gx, gy, lit);
+							} else if (cl == GroundTextures.CLS_WALL_BUILT) {
+								col = face ? GroundTextures.wallFaceBuilt(gx, gy)
+										: GroundTextures.wallTopBuilt(gx, gy, lit);
+							} else if (cl == GroundTextures.CLS_CONCRETE) {
+								col = face ? GroundTextures.concreteFace(gx, gy)
+										: GroundTextures.concreteTop(gx, gy, lit);
 							} else {
-								col = GroundTextures.wallTop(gx, gy, !wallN && aj < A * 0.28);
+								col = face ? GroundTextures.steelFace(gx, gy)
+										: GroundTextures.steelTop(gx, gy, lit);
 							}
-						} else if (cl == GroundTextures.CLS_WALL_BUILT) {
-							// Masonry: coursed block top, coursed shadowed face where
-							// the wall fronts open ground to the south.
-							if (!wallS && aj >= A * 0.55) {
-								col = GroundTextures.wallFaceBuilt(gx, gy);
-							} else {
-								col = GroundTextures.wallTopBuilt(gx, gy, !wallN && aj < A * 0.28);
-							}
+							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							col = GroundTextures.crystal(gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
@@ -633,6 +668,39 @@ public class Grid {
 							} else {
 								col = GroundTextures.rampColor(cl, 1);
 							}
+						} else if (cl == GroundTextures.CLS_SHAFT) {
+							// Vertical shaft: a hazard-striped lip on every side that
+							// meets standing ground, then the industrial void -- the
+							// same see-through dither as a natural pit, so the level
+							// below shows with its parallax.
+							boolean vN = isVoidish(x, y - 1), vS = isVoidish(x, y + 1);
+							boolean vW = isVoidish(x - 1, y), vE = isVoidish(x + 1, y);
+							int band = 2;
+							if ((!vN && aj < band) || (!vS && aj >= A - band)
+									|| (!vW && ai < band) || (!vE && ai >= A - band)) {
+								col = GroundTextures.hazardStripe(gx, gy);
+							} else if (RenderFx.holeTranslucent) {
+								if (GroundTextures.bayer(gx, gy) >= RenderFx.holeDepth) {
+									continue;
+								}
+								col = GroundTextures.rampColor(cl, 0);
+							} else {
+								col = GroundTextures.rampColor(cl, 1);
+							}
+						} else if (cl == GroundTextures.CLS_CATWALK) {
+							// Grated walkway: rails and cross-treads, with the void
+							// (and whatever lies below) showing through the gaps.
+							boolean ns = isType(x, y - 1, Tile.TileType.TYPE_CATWALK)
+									|| isType(x, y + 1, Tile.TileType.TYPE_CATWALK);
+							boolean ew = isType(x - 1, y, Tile.TileType.TYPE_CATWALK)
+									|| isType(x + 1, y, Tile.TileType.TYPE_CATWALK);
+							Integer cw = ns && !ew
+									? GroundTextures.catwalk(gy, ai, gx, gy)
+									: GroundTextures.catwalk(gx, aj, gx, gy);
+							if (cw == null) {
+								continue; // grate gap: the level below shows through
+							}
+							col = cw;
 						} else if (cl == GroundTextures.CLS_WATER
 								|| cl == GroundTextures.CLS_SHALLOWS) {
 							// One water surface from wading fringe to abyss: both
@@ -643,11 +711,32 @@ public class Grid {
 								wdist = waterDist();
 							}
 							col = GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
-							if (wallN && aj < A * 0.32) {
-								col = darken(col, 0.62); // shadow cast by the wall to the north
+							if (wallN) {
+								col = groundShadow(col, aj); // graded shadow from the wall north
 							}
 						} else {
-							if (cl == GroundTextures.CLS_QUICKSAND) {
+							if (cl == GroundTextures.CLS_PLATE) {
+								col = GroundTextures.plate(gx, gy);
+							} else if (cl == GroundTextures.CLS_DUCT) {
+								// The duct's open channel, oriented along its run; the
+								// lid re-stamps over crawlers in the concealment pass.
+								boolean vert = isType(x, y - 1, Tile.TileType.TYPE_DUCT)
+										|| isType(x, y + 1, Tile.TileType.TYPE_DUCT);
+								col = vert
+										? GroundTextures.ductChannel(gy, ai, gx, gy)
+										: GroundTextures.ductChannel(gx, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_PIPES) {
+								// Pipe runs follow their connectivity: vertical beside
+								// vertical neighbours, horizontal otherwise, over deck.
+								boolean vert = isType(x, y - 1, Tile.TileType.TYPE_PIPES)
+										|| isType(x, y + 1, Tile.TileType.TYPE_PIPES);
+								Integer p = vert
+										? GroundTextures.pipeRun(gy, ai, gx, gy)
+										: GroundTextures.pipeRun(gx, aj, gx, gy);
+								col = p != null ? p : GroundTextures.plate(gx, gy);
+							} else if (cl == GroundTextures.CLS_AIRVENT) {
+								col = GroundTextures.airVent(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
 								col = GroundTextures.vent(ai, aj, gx, gy);
@@ -699,8 +788,8 @@ public class Grid {
 									}
 								}
 							}
-							if (wallN && aj < A * 0.32) {
-								col = darken(col, 0.62); // shadow cast by the wall to the north
+							if (wallN) {
+								col = groundShadow(col, aj); // graded shadow from the wall north
 							}
 						}
 						g2.setColor(new Color(col));
@@ -709,6 +798,51 @@ public class Grid {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Depth cues that make a wall read as a raised mass, applied on top of
+	 * any wall material's texture: a bright cornice line where the cap rolls
+	 * over into the face, the face darkening toward its base (its contact
+	 * shadow with the ground), and a dark silhouette rim on cap edges that
+	 * meet open ground east or west.
+	 */
+	private static int wallDepth(int col, int ai, int aj, int A,
+			boolean wallS, boolean wallE, boolean wallW) {
+		int faceTop = (int) (A * 0.55);
+		if (!wallS && aj >= faceTop) {
+			if (aj == faceTop) {
+				return lighten(col, 1.35); // the cornice catches the light
+			}
+			double f = 1.0 - 0.45 * (aj - faceTop) / (double) (A - 1 - faceTop);
+			return darken(col, f); // the face sinks into its own base shadow
+		}
+		if ((!wallW && ai == 0) || (!wallE && ai == A - 1)) {
+			return darken(col, 0.6); // crisp cap silhouette against open ground
+		}
+		return col;
+	}
+
+	/** The graded shadow a wall casts on standing ground to its south:
+	 *  deepest at the foot, fading out over five art-pixels. */
+	private static int groundShadow(int col, int aj) {
+		if (aj < 2) {
+			return darken(col, 0.5);
+		}
+		if (aj < 4) {
+			return darken(col, 0.68);
+		}
+		if (aj < 5) {
+			return darken(col, 0.84);
+		}
+		return col;
+	}
+
+	private static int lighten(int rgb, double f) {
+		int r = Math.min(255, (int) (((rgb >> 16) & 255) * f));
+		int g = Math.min(255, (int) (((rgb >> 8) & 255) * f));
+		int b = Math.min(255, (int) ((rgb & 255) * f));
+		return (r << 16) | (g << 8) | b;
 	}
 
 	private static int darken(int rgb, double f) {
@@ -908,10 +1042,21 @@ public class Grid {
 		return tiles[nx][ny].getType() == type;
 	}
 
-	/** A wall for lighting purposes: natural rock or man-made masonry. */
+	/** A wall for lighting purposes: natural rock, masonry, concrete, or a
+	 *  steel bulkhead. */
 	private boolean isWallish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
-				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT);
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
+	}
+
+	/** Open vertical space, for shaft rims: the drop continues into another
+	 *  shaft, a natural hole, or under a catwalk. */
+	private boolean isVoidish(int nx, int ny) {
+		return isType(nx, ny, Tile.TileType.TYPE_SHAFT)
+				|| isType(nx, ny, Tile.TileType.TYPE_HOLE)
+				|| isType(nx, ny, Tile.TileType.TYPE_CATWALK);
 	}
 
 	/**

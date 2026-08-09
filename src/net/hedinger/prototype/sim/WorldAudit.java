@@ -152,7 +152,7 @@ public final class WorldAudit {
 				visit(walk, seen, q, n[0], n[1], z, cols, rows); // land
 				// Descend: a cardinal HOLE drops to the tile directly below it.
 				if (inBounds(n[0], n[1], cols, rows) && z - 1 >= 0
-						&& w.getTile(n[0], n[1], z).getType() == Tile.TileType.TYPE_HOLE) {
+						&& w.getTile(n[0], n[1], z).isDrop()) {
 					visit(walk, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}
