@@ -386,6 +386,9 @@ public final class Worlds {
 		// ---- wire the levels together so every area is reachable ----
 		connectLevels(w, cols, rows);
 
+		// ---- a buried installation: someone built down here, once ----
+		buryInstallation(w, cols, rows);
+
 		// ---- shallows: every shore-touching water tile becomes a walkable,
 		// wading fringe, so lakes have fords instead of hard edges ----
 		for (int z = 0; z < 2; z++) {
@@ -424,6 +427,184 @@ public final class Worlds {
 			}
 		}
 		return w;
+	}
+
+	/**
+	 * Carve a buried installation into the cave level: a concrete-shelled
+	 * facility hall with plate decking, a pipe run and air vents, a steel
+	 * inner vault, and a crawl duct punched through the vault wall as the
+	 * small-body shortcut -- the man-made counterweight to the caves' grown
+	 * terrain, sunk into solid rock and reached through a paved entrance
+	 * gallery tunnelled to the nearest cavern.
+	 *
+	 * <p>Runs after {@link #connectLevels}, so the gallery attaches to ground
+	 * that is already part of the world's single connected region — the new
+	 * rooms extend that region rather than gambling on surviving the seal.
+	 * The doorway mouths are left open (no {@code Door} entities yet): doors
+	 * are not shipped to the web client, and a door it cannot see would read
+	 * as an invisible barrier there. When door state joins the client
+	 * protocol, the blast door belongs in the 2-wide mouth.
+	 *
+	 * <p>Skipped quietly when no rock pocket fits the footprint (only a
+	 * concern on very small maps); everything it carves is deterministic and
+	 * draws no RNG.
+	 */
+	private static void buryInstallation(World w, int cols, int rows) {
+		final int W = 15, H = 9; // shell footprint, tiles
+		int[] site = findRockPocket(w, cols, rows, W, H);
+		if (site == null) {
+			return;
+		}
+		int x0 = site[0], y0 = site[1];
+
+		// Shell and deck: a concrete perimeter around plate flooring.
+		for (int x = x0; x < x0 + W; x++) {
+			for (int y = y0; y < y0 + H; y++) {
+				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
+				setBare(w, x, y, CAVE_Z, shell
+						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		// A pipe run hugging the hall's north wall.
+		for (int x = x0 + 2; x < x0 + W - 2; x++) {
+			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		}
+		// Air vents in the open deck.
+		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// The steel inner vault, east end of the hall, with a one-tile doorway
+		// facing the hall and a crawl duct through its north wall: the future
+		// grate-door room, already crawlable around the long way.
+		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
+		for (int x = vx; x < vx + vw; x++) {
+			for (int y = vy; y < vy + vh; y++) {
+				boolean shell = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, shell
+						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
+		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
+
+		// The 2-wide entrance mouth in the west shell -- blast-door sized --
+		// and the paved gallery tunnelled out to the nearest walkable cavern.
+		int my = y0 + H / 2 - 1;
+		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		if (!carveGallery(w, cols, rows, x0, my)) {
+			// No way out through the rock (a sealed map corner): un-carve, a
+			// walled-off installation would fail the connectivity audit.
+			for (int x = x0; x < x0 + W; x++) {
+				for (int y = y0; y < y0 + H; y++) {
+					setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_WALL);
+				}
+			}
+		}
+	}
+
+	/**
+	 * The all-rock rectangle of {@code pw x ph} (plus a one-tile rock margin)
+	 * nearest the map's centre on the cave level; null when none fits. The
+	 * margin keeps the installation clear of caverns and link stations, so
+	 * carving it disturbs nothing that already works.
+	 */
+	private static int[] findRockPocket(World w, int cols, int rows, int pw, int ph) {
+		int[] best = null;
+		double bestD = Double.MAX_VALUE;
+		for (int x0 = 2; x0 + pw < cols - 2; x0++) {
+			scan: for (int y0 = 2; y0 + ph < rows - 2; y0++) {
+				for (int x = x0 - 1; x <= x0 + pw; x++) {
+					for (int y = y0 - 1; y <= y0 + ph; y++) {
+						if (w.getTile(x, y, CAVE_Z).getType() != Tile.TileType.TYPE_WALL) {
+							continue scan;
+						}
+					}
+				}
+				double d = Math.pow(x0 + pw * 0.5 - cols * 0.5, 2)
+						+ Math.pow(y0 + ph * 0.5 - rows * 0.5, 2);
+				if (d < bestD) {
+					bestD = d;
+					best = new int[] { x0, y0 };
+				}
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * Tunnel a 2-wide paved entrance gallery from the installation's mouth to
+	 * the nearest already-walkable cave tile, breadth-first through solid rock
+	 * only -- so the gallery meets the world exactly once, at its far end,
+	 * and cannot nick a pool or cavern on the way. Deterministic: fixed
+	 * neighbour order, no RNG.
+	 */
+	private static boolean carveGallery(World w, int cols, int rows, int mx, int my) {
+		if (mx - 1 < 1) {
+			return false;
+		}
+		int[][] prev = new int[cols][rows];
+		for (int[] c : prev) {
+			java.util.Arrays.fill(c, -1);
+		}
+		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
+		prev[mx - 1][my] = (mx - 1) * rows + my; // start marks itself
+		// The mouth tiles are walkable but they're where we CAME from -- mark
+		// them visited so the search can't turn around and call them daylight.
+		prev[mx][my] = prev[mx][my + 1] = (mx - 1) * rows + my;
+		q.add(new int[] { mx - 1, my });
+		int[][] dirs = { { -1, 0 }, { 0, -1 }, { 0, 1 }, { 1, 0 } }; // west first
+		while (!q.isEmpty()) {
+			int[] p = q.poll();
+			for (int[] d : dirs) {
+				int nx = p[0] + d[0], ny = p[1] + d[1];
+				if (nx < 1 || ny < 1 || nx >= cols - 1 || ny >= rows - 1
+						|| prev[nx][ny] != -1) {
+					continue;
+				}
+				Tile t = w.getTile(nx, ny, CAVE_Z);
+				if (t.isWalkable()) {
+					// Found daylight: pave the path back to the mouth.
+					int cx = p[0], cy = p[1];
+					while (!(cx == mx - 1 && cy == my)) {
+						paveGalleryTile(w, cx, cy, cols, rows);
+						int code = prev[cx][cy];
+						cx = code / rows;
+						cy = code % rows;
+					}
+					paveGalleryTile(w, mx - 1, my, cols, rows);
+					return true;
+				}
+				if (t.getType() == Tile.TileType.TYPE_WALL) {
+					prev[nx][ny] = p[0] * rows + p[1];
+					q.add(new int[] { nx, ny });
+				}
+			}
+		}
+		return false;
+	}
+
+	/** One gallery step: a 2x2 brush of paved floor through rock only (built
+	 *  walls and open ground stand), clamped inside the rim -- so the gallery
+	 *  runs body-wide like the cave backbone's corridors. */
+	private static void paveGalleryTile(World w, int x, int y, int cols, int rows) {
+		for (int dx = 0; dx <= 1; dx++) {
+			for (int dy = 0; dy <= 1; dy++) {
+				int cx = x + dx, cy = y + dy;
+				if (cx < 1 || cy < 1 || cx >= cols - 1 || cy >= rows - 1) {
+					continue;
+				}
+				if (w.getTile(cx, cy, CAVE_Z).getType() == Tile.TileType.TYPE_WALL) {
+					setBare(w, cx, cy, CAVE_Z, Tile.TileType.TYPE_PAVED);
+				}
+			}
+		}
+	}
+
+	/** Sets a tile with zero fertility: nothing grows on built ground. */
+	private static void setBare(World w, int x, int y, int z, Tile.TileType t) {
+		w.setTile(x, y, z, t);
+		w.getTile(x, y, z).setFertility(0);
 	}
 
 	/**
