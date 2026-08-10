@@ -258,9 +258,11 @@ public final class Worlds {
 	static final int CAVE_Z = 0, SURFACE_Z = 1;
 
 	/**
-	 * The demo world's terrain — same seed, same tiles, same fertility, zero
-	 * entities: an exact twin of {@link #demo}'s ground, from which the server
-	 * bakes the static layer images (one per level). Two levels:
+	 * The demo world's terrain — same seed, same tiles, same fertility, no
+	 * creatures: an exact twin of {@link #demo}'s ground, from which the
+	 * server bakes the static layer images (one per level). The only entities
+	 * are the buried installation's doors (structural furniture, part of the
+	 * terrain's story rather than its population). Two levels:
 	 *
 	 * <ul>
 	 *   <li><b>Level 0 — the surface:</b> a patchwork of biomes inside a rocky
@@ -500,7 +502,17 @@ public final class Worlds {
 					setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_WALL);
 				}
 			}
+			return;
 		}
+		// The doors themselves: a two-tile blast door across the mouth and a
+		// grate on the vault. Doors are ordinary non-living entities (they
+		// ride the entity stream to the web client, which draws their sliding
+		// leaves) and they self-cycle, so the mouth seals and parts on its
+		// own rhythm -- with the vault duct as the constant small-body way in.
+		w.addDoor(new net.hedinger.prototype.entities.Door(x0, my, CAVE_Z, 1,
+				net.hedinger.prototype.entities.Door.BLAST, 2));
+		w.addDoor(new net.hedinger.prototype.entities.Door(vx, vy + vh / 2, CAVE_Z, 1,
+				net.hedinger.prototype.entities.Door.GRATE));
 	}
 
 	/**

@@ -89,6 +89,13 @@ public record EntityState(
 			kind = "item." + it.getKind().name().toLowerCase();
 			rgb = it.getColor().getRGB() & 0xFFFFFF;
 			aux = it.getHealth();
+		} else if (e instanceof net.hedinger.prototype.entities.Door dr) {
+			// A door is furniture, not fauna: the tag picks the material glyph,
+			// aux carries how far the leaves reach (1 sealed .. 0.15 open), and
+			// `size` below ships the doorway span in tiles.
+			kind = "door." + dr.flavorName();
+			rgb = dr.wireColor();
+			aux = dr.extension();
 		} else if (e instanceof NPC n) {
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;
@@ -119,8 +126,12 @@ public record EntityState(
 			flags |= actionCode(t.actionKey()) << ACTION_SHIFT;
 		}
 		int attachedTo = e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID();
+		// For a door, `size` is its doorway span in tiles; the raw entity size
+		// field stays zero so nothing in the sim mistakes a door for a body.
+		float size = e instanceof net.hedinger.prototype.entities.Door dr
+				? dr.getSpan() : e.getSize();
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),
-				e.getDirection(), e.getSize(), rgb, flags, attachedTo, aux, pheno);
+				e.getDirection(), size, rgb, flags, attachedTo, aux, pheno);
 	}
 
 	/** Order-sensitive bit-exact fold of every field, for determinism tests. */

@@ -16,7 +16,6 @@ public class Grid {
 	private Tile[][] tiles;
 	private int level;
 
-	LinkedHashSet<Entity> doors;
 	HashMap<Integer, Sector> sectors;
 
 	int counter = 0;
@@ -31,21 +30,14 @@ public class Grid {
 
 		level = l;
 
-		doors = new LinkedHashSet<Entity>();
-
 		sectors = new HashMap<Integer, Sector>();
 	}
 
 	boolean aligned = false;
 
 	public void think(World w) {
-
-		for (Entity d : doors) {
-			if (d != null) {
-				d.run();
-			}
-		}
-
+		// Doors used to think here; they are ordinary entities now and tick
+		// with everything else in World.think.
 	}
 
 	public void render(Graphics g, View v, LayerRenderer lr) {
@@ -82,19 +74,22 @@ public class Grid {
 			}
 		}
 
-		for (Entity d : doors) {
-			if (d != null) {
-				d.render(g, v);
+		// Doors first: structural furniture sits under the haze and the bodies.
+		for (Entity e : world.entities.values()) {
+			if (e instanceof net.hedinger.prototype.entities.Door && e.getLvl() == level) {
+				e.render(g, v);
 			}
 		}
-		// Pheromone clouds first, so the haze sits under the creatures.
+		// Pheromone clouds next, so the haze sits under the creatures.
 		for (Entity e : world.entities.values()) {
 			if (e instanceof PheromoneCloud && e.getLvl() == level) {
 				e.render(g, v);
 			}
 		}
 		for (Entity e : world.entities.values()) {
-			if (e != null && !(e instanceof PheromoneCloud) && e.getLvl() == level) {
+			if (e != null && !(e instanceof PheromoneCloud)
+					&& !(e instanceof net.hedinger.prototype.entities.Door)
+					&& e.getLvl() == level) {
 				e.render(g, v);
 			}
 		}

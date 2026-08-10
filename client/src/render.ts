@@ -9,6 +9,7 @@ import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
   ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED, F_MINDED,
 } from './protocol';
+import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
@@ -93,7 +94,9 @@ export function render(
 
   // Painter's order: haze, then dead, then items, then living creatures.
   const order = (t: Track): number =>
-    t.curr.kind === 'phero' ? 0 : (t.curr.flags & F_DEAD) ? 1 : t.curr.kind.startsWith('item.') ? 2 : 3;
+    t.curr.kind === 'phero' ? 0
+      : t.curr.kind.startsWith('door.') ? 1
+      : (t.curr.flags & F_DEAD) ? 1 : t.curr.kind.startsWith('item.') ? 2 : 3;
   const tracks = [...state.tracks.values()].sort((a, b) => order(a) - order(b));
 
   for (const t of tracks) {
@@ -101,6 +104,16 @@ export function render(
     if (Math.round(e.z) !== level) continue; // only entities on the shown level
     const p = state.sample(t, renderTime);
     const s = cam.worldToScreen(p.x, p.y);
+
+    // Doors reach up to `span` tiles from their anchor, so they get their own
+    // generous cull instead of the point cull below.
+    if (e.kind.startsWith('door.')) {
+      const m = (e.size + 1) * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      drawDoor(g, cam, e);
+      continue;
+    }
+
     if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
 
     if (e.kind === 'phero') {
@@ -247,6 +260,89 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
         const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * s;
         g.fillStyle = tones[i % tones.length];
         g.beginPath(); g.arc(bx, by, rad, 0, 7); g.fill();
+      }
+    }
+  }
+}
+
+/**
+ * A door: two leaves sliding along the doorway from its ends toward the
+ * middle, mirroring the Swing renderer. The anchor tile is (x,y); a non-zero
+ * `dir` means the bar runs north-south (sealing east-west passage), zero
+ * east-west. `size` carries the doorway span in tiles and `aux` how far each
+ * leaf reaches toward the middle (1 sealed .. 0.15 open stubs) — so the wire
+ * updates animate the slide for free. Flavours: segmented steel with a
+ * hazard-striped nose (blast), see-through bars (grate), planked timber,
+ * coursed stone, woven hedge — all as chunky slabs with a drop shadow.
+ */
+function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityState): void {
+  const lr = Math.abs(e.dir % (Math.PI / 2)) > 1e-6;
+  const span = Math.max(1, e.size);
+  const ext = Math.max(0.15, Math.min(1, e.aux));
+  const reach = (span / 2) * ext; // leaf length from each end, tiles
+  const blast = e.kind === 'door.blast';
+  const grate = e.kind === 'door.grate';
+  const th = (blast ? 5 : 3) / 12; // bar thickness, tiles
+  const col = '#' + e.rgb.toString(16).padStart(6, '0');
+  const sc = cam.scale;
+  const seam = 'rgba(0,0,0,0.45)';
+  const leaves: Array<[number, number, number]> = [
+    [0, reach, +1], // [start, end, direction the leaf's nose faces]
+    [span - reach, span, -1],
+  ];
+  for (const [a0, a1, nose] of leaves) {
+    if (a1 - a0 <= 0.01) continue;
+    const wx = lr ? e.x - th / 2 : e.x + a0;
+    const wy = lr ? e.y + a0 : e.y - th / 2;
+    const o = cam.worldToScreen(wx, wy);
+    const pw = (lr ? th : a1 - a0) * sc;
+    const ph = (lr ? a1 - a0 : th) * sc;
+    // Drop shadow south, so the slab visibly sits on the floor.
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(o.x + sc * 0.02, o.y + sc * 0.07, pw, ph);
+    if (grate) {
+      // Bars with honest gaps: the eye (like the sim) sees through a grate.
+      g.fillStyle = col;
+      const step = sc / 6;
+      if (lr) {
+        for (let y = o.y; y + step * 0.55 <= o.y + ph; y += step) {
+          g.fillRect(o.x, y, pw, Math.max(1, step * 0.55));
+        }
+      } else {
+        for (let x = o.x; x + step * 0.55 <= o.x + pw; x += step) {
+          g.fillRect(x, o.y, Math.max(1, step * 0.55), ph);
+        }
+      }
+      continue;
+    }
+    g.fillStyle = col;
+    g.fillRect(o.x, o.y, pw, ph);
+    g.strokeStyle = seam;
+    g.lineWidth = Math.max(1, sc * 0.03);
+    g.strokeRect(o.x, o.y, pw, ph);
+    // Segment/plank seams across the leaf.
+    const step = sc / 3;
+    g.beginPath();
+    if (lr) {
+      for (let y = o.y + step; y < o.y + ph - 1; y += step) {
+        g.moveTo(o.x, y); g.lineTo(o.x + pw, y);
+      }
+    } else {
+      for (let x = o.x + step; x < o.x + pw - 1; x += step) {
+        g.moveTo(x, o.y); g.lineTo(x, o.y + ph);
+      }
+    }
+    g.stroke();
+    if (blast) {
+      // The hazard-striped crush edge where the leaves meet.
+      const nb = Math.max(2, sc * 0.12);
+      g.fillStyle = '#d8b028';
+      if (lr) {
+        const y = nose > 0 ? o.y + ph - nb : o.y;
+        g.fillRect(o.x, y, pw, nb);
+      } else {
+        const x = nose > 0 ? o.x + pw - nb : o.x;
+        g.fillRect(x, o.y, nb, ph);
       }
     }
   }

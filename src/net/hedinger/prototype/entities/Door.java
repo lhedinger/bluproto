@@ -165,12 +165,50 @@ public class Door extends Entity {
 		triggered = false;
 	}
 
+	/** Doorway width in tiles this door seals. */
+	public int getSpan() {
+		return span;
+	}
+
+	/** Wire tag for the viewer ("door.<flavour>" selects the glyph). */
+	public String flavorName() {
+		switch (flavor) {
+		case STONE:
+			return "stone";
+		case GRATE:
+			return "grate";
+		case HEDGE:
+			return "hedge";
+		case BLAST:
+			return "blast";
+		default:
+			return "timber";
+		}
+	}
+
+	/** The flavour's body tone for the wire, so a client that has no door
+	 *  glyph yet still draws a plausible bar. */
+	public int wireColor() {
+		switch (flavor) {
+		case STONE:
+			return STONE_MID.getRGB() & 0xFFFFFF;
+		case GRATE:
+			return IRON_HI.getRGB() & 0xFFFFFF;
+		case HEDGE:
+			return HEDGE_MID.getRGB() & 0xFFFFFF;
+		case BLAST:
+			return STEEL_MID.getRGB() & 0xFFFFFF;
+		default:
+			return TIMBER_MID.getRGB() & 0xFFFFFF;
+		}
+	}
+
 	/**
 	 * How far the leaves reach toward the middle: 1 sealed, ~0.15 open (the
 	 * stubs by the posts), sliding smoothly through the transition -- the
 	 * old sprite door blinked instead.
 	 */
-	private double extension() {
+	public double extension() {
 		if (status == DOOR_CLOSED) {
 			return 1;
 		}
