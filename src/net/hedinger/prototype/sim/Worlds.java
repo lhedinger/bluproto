@@ -501,6 +501,15 @@ public final class Worlds {
 		setBare(w, x0 + 5, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0 + 11, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
 
+		// The ventilation runs: crawl ducting laid through both partitions'
+		// west sections, so a small body can move machine wing -> spine ->
+		// storage wing entirely inside the walls, concealed -- the base's
+		// second circulation system, parallel to the doorways.
+		for (int x = x0 + 2; x <= x0 + 4; x++) {
+			setBare(w, x, y0 + 4, CAVE_Z, Tile.TileType.TYPE_DUCT);
+			setBare(w, x, y0 + 8, CAVE_Z, Tile.TileType.TYPE_DUCT);
+		}
+
 		// Machine wing: a pipe run the room's whole width, vents in the deck.
 		for (int x = x0 + 2; x < x0 + W - 2; x++) {
 			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
@@ -540,6 +549,10 @@ public final class Worlds {
 		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
 		w.spawnEntity(Item.hazard(vx + 2.5, vy + 2.5, CAVE_Z));
 
+		// The ceiling: a ventilation shaft from the surface over the spine,
+		// so gravity is the base's third entrance.
+		dropShaft(w, x0 + 2, x0 + 10, y0 + 5, y0 + 7);
+
 		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
 	}
 
@@ -573,11 +586,12 @@ public final class Worlds {
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
 		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
 
-		// Furnishing, annex-sized: a crate pair by the south wall and the
-		// vault's small locked cache.
+		// Furnishing, annex-sized: a crate pair by the south wall, the
+		// vault's small locked cache, and the ceiling shaft over the hall.
 		w.spawnEntity(Item.crate(x0 + 2.5, y0 + H - 2.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 3.5, y0 + H - 2.5, CAVE_Z));
 		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
+		dropShaft(w, x0 + 1, x0 + 7, y0 + 1, y0 + H - 2);
 
 		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
 	}
@@ -633,6 +647,42 @@ public final class Worlds {
 				net.hedinger.prototype.entities.Switch.BUTTON); // mid-hall, facing the vault
 		wireSwitch(w, vx + 2, vy + vh - 2, grate,
 				net.hedinger.prototype.entities.Switch.BUTTON); // the vault's far corner
+	}
+
+	/**
+	 * A ventilation shaft dropping from the surface into the base: the third
+	 * way in -- one-way, by gravity, hazard-striped up top and open to the
+	 * base's lights below. Scans the given window (base-interior tiles, in
+	 * both levels' shared coordinates) for a surface tile that is plain open
+	 * ground with all eight neighbours walkable -- removing such an interior
+	 * tile cannot sever a surface path, and bodies can actually reach the
+	 * lip -- and converts the first fit. Skips quietly when the surface
+	 * overhead refuses (water, rock, or a link station's ramps).
+	 */
+	private static void dropShaft(World w, int lx0, int lx1, int ly0, int ly1) {
+		for (int x = lx0; x <= lx1; x++) {
+			for (int y = ly0; y <= ly1; y++) {
+				Tile s = w.getTile(x, y, SURFACE_Z);
+				if (!s.isWalkable() || s.getType() == Tile.TileType.TYPE_RAMPUP
+						|| s.getType() == Tile.TileType.TYPE_RAMPDOWN) {
+					continue;
+				}
+				boolean interior = true;
+				for (int dx = -1; dx <= 1 && interior; dx++) {
+					for (int dy = -1; dy <= 1; dy++) {
+						if (!w.getTile(x + dx, y + dy, SURFACE_Z).isWalkable()) {
+							interior = false;
+							break;
+						}
+					}
+				}
+				if (interior) {
+					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_SHAFT);
+					w.getTile(x, y, SURFACE_Z).setFertility(0);
+					return;
+				}
+			}
+		}
 	}
 
 	/** One switch: the floor tile with the baked pedestal base, plus the

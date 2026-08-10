@@ -260,7 +260,23 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
   const tones = ['rgba(44,84,34,0.42)', 'rgba(32,63,25,0.46)', 'rgba(74,120,52,0.38)'];
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
-      if (cover[ty * meta.cols + tx] !== 1) continue;
+      const cv2 = cover[ty * meta.cols + tx];
+      if (cv2 === 2) {
+        // A crawl duct: its concealment is a metal lid, not shrubbery —
+        // translucent slats with a dark seam, so a crawler underneath still
+        // half-reads through the gaps.
+        const o = cam.worldToScreen(tx, ty);
+        g.fillStyle = 'rgba(97,105,116,0.55)';
+        for (let i = 0; i < 3; i++) {
+          g.fillRect(o.x + s * 0.06, o.y + s * (0.10 + i * 0.30), s * 0.88, s * 0.20);
+        }
+        g.fillStyle = 'rgba(20,22,26,0.5)';
+        for (let i = 0; i < 2; i++) {
+          g.fillRect(o.x + s * 0.06, o.y + s * (0.30 + i * 0.30), s * 0.88, s * 0.04);
+        }
+        continue;
+      }
+      if (cv2 !== 1) continue;
       const o = cam.worldToScreen(tx, ty);
       for (let i = 0; i < 5; i++) {
         const bx = o.x + (0.15 + shrubRand(tx, ty, i * 3) * 0.70) * s;
