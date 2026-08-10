@@ -1789,6 +1789,56 @@ public class SimTests {
 	 * room and never write A_TURN, so anything that arrives did so because the body
 	 * steered it.
 	 */
+
+	/**
+	 * A mind holds only as many targets at once as its brain has room for, and the
+	 * room comes from the brain's own length. Both bodies here stand in the same
+	 * spot with the same things around them; the one running a longer program simply
+	 * perceives more of them. That is what makes a big brain worth its slower
+	 * reflexes — and what makes a small one single-minded.
+	 */
+	static class BrainSizeSetsHowMuchAMindTracks extends Scenario {
+		/** How many tracked channels come back non-zero for a brain of this length. */
+		private int channelsSeen(int brainLen) {
+			seed(97);
+			World w = room(20, 20);
+			Genome g = new Genome();
+			g.size = 8;
+			g.losRange = 14;
+			int[][] code = new int[brainLen][];
+			for (int i = 0; i < brainLen; i++) {
+				code[i] = new int[] { Brain.NOP, 0, 0, 0 }; // length is all that matters here
+			}
+			g.brain = new Brain(code);
+			TestNPC body = TestNPC.minded(10.5, 10.5, 0, g, (sn, a) -> {
+			});
+			w.spawnEntity(body);
+			// Something in every tracked channel, all within sight: grass underfoot,
+			// a smaller creature, a bigger one, and an item.
+			w.spawnEntity(TestNPC.inert(13.5, 10.5, 0).withSize(3));
+			w.spawnEntity(TestNPC.inert(10.5, 14.5, 0).withSize(19));
+			w.spawnEntity(net.hedinger.prototype.entities.Item.food(7.5, 10.5, 0));
+			tick(w, 2);
+			double[] s = body.sensorSnapshot();
+			int seen = 0;
+			for (int prox : new int[] { AgentIO.S_FORAGE_PROX, AgentIO.S_PREY_PROX,
+					AgentIO.S_THREAT_PROX, AgentIO.S_ITEM_PROX }) {
+				if (s[prox] > 0) {
+					seen++;
+				}
+			}
+			return seen;
+		}
+
+		@Override
+		public void run() {
+			int small = channelsSeen(4);   // 1 slot
+			int large = channelsSeen(48);  // capped at the maximum
+			assertEquals("a tiny brain keeps track of exactly one thing", 1, small);
+			assertGreater("a large brain holds several at once", large, small);
+		}
+	}
+
 	static class SeekWalksToAPatchWithoutSteering extends Scenario {
 		private static final int PATCH_X = 32, PATCH_Y = 7;
 
@@ -4016,6 +4066,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
 				new OneIntentIsAWholeBehaviour(),
 				new HuntIntentClosesAndBites(),

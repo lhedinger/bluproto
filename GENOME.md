@@ -101,6 +101,28 @@ as long as before — the instructions saved on steering went back into choosing
 pace — so the widening shows up as what the cohort achieves rather than as
 shorter programs.
 
+### Attention is finite, and its size is the brain's
+
+A mind holds only so many targets at once. The tracked channels — forage, prey,
+threat, item — are filled as usual and then **blanked past capacity, nearest
+kept first**, so a small-brained creature watching the grass under its nose may
+have no room left to watch the predator behind it.
+
+Capacity comes from **program length**, not a gene of its own: length already
+sets reaction time, so a longer brain now buys a wider attention span and pays
+for it in reflexes. One trade, priced at both ends, with nothing new to tune.
+Range is the existing `losRange` gene — attention decides how many things a mind
+can hold, eyesight decides how far away they may be.
+
+Two deliberate exemptions. **Kin is not tracked**: it is a flocking gradient
+rather than a thing being watched, and including it collapsed the cohort outright
+— measured, 80 down to the steward's floor by 45k ticks and never back — because
+in a herd the nearest thing is almost always a harmless neighbour, so kin crowded
+out both the grass and the predator. **The waypoint is not tracked either**: a
+mark is a *place*, and a place does not move, so recalling one is not the same
+claim as keeping watch on something. Homing would be impossible if a mark expired
+the moment its owner walked out of range.
+
 ### One instruction per tick — a deliberate invariant
 
 A brain executes **one instruction per tick**, so program length *is* the length
