@@ -98,14 +98,35 @@ public final class AgentIO {
 	public static final int S_WAYPOINT_PROX = 26;
 	/** Relative bearing to the remembered waypoint, -1..1 (of PI). */
 	public static final int S_WAYPOINT_BEARING = 27;
-	public static final int NUM_SENSORS = 28;
+	/**
+	 * How the standing {@link #A_SEEK} intent is going — the only channel that tells
+	 * a mind whether what it wanted actually happened. Without it a brain can infer
+	 * success only from its tank drifting upward, several thought-cycles late.
+	 *
+	 * <p>Four values, and deliberately not true/false: an intent here is a latched
+	 * <i>level</i>, not a call that returns, so there is no moment at which one
+	 * "finishes unsuccessfully". Every failure is already {@link #INTENT_INVALID}
+	 * (the guards no longer hold — nothing to seek, or the quarry died) or
+	 * {@link #INTENT_PENDING} (still closing). A distinct "false" would need the
+	 * body to decide when to give up, and how long to persist is far better left to
+	 * selection: a mind has {@link #S_CLOCK} and registers enough to evolve its own
+	 * patience.
+	 *
+	 * <p>{@link #INTENT_DONE} is a per-tick pulse rather than a completion flag —
+	 * grazing succeeds on every tick spent standing on grass, and a bite lands on
+	 * every tick in reach. "The kill finished" is a different claim from "the bite
+	 * landed", and only the latter is unambiguous to report.
+	 */
+	public static final int S_INTENT = 28;
+	public static final int NUM_SENSORS = 29;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
 			"item_prox", "item_bearing", "item_kind",
 			"prey_prox", "prey_bearing", "threat_prox", "threat_bearing", "kin_bearing",
 			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead",
-			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing" };
+			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
+			"intent" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -169,8 +190,24 @@ public final class AgentIO {
 	 * a single {@code SET}+{@code WRITE} can name any of them:
 	 * {@code 0}=none, {@code ±0.1}=forage patch, {@code ±0.25}=kin,
 	 * {@code ±0.5}=prey, {@code ±1}=threat, {@code ±2}=item, {@code ±4}=waypoint.
-	 * Naming something the body cannot currently see does nothing, and
-	 * {@link #A_TURN} applies as usual — so a seek is a preference, not a lock.
+	 * Naming something the body cannot currently find puts it into a deterministic
+	 * search rather than leaving it planted — wanting what you cannot see is a
+	 * reason to go looking.
+	 *
+	 * <p><b>An intent carries through to the act.</b> Where the goal has one
+	 * unambiguous thing to do on arrival, the body does it: seeking a forage patch
+	 * grazes, seeking prey bites whatever comes into reach, seeking an item takes
+	 * it. So "forage" is one instruction rather than a steering loop plus an eat
+	 * gate, which is what makes an intent worth its slot under one instruction per
+	 * tick. Goals with no unambiguous terminal act — kin, threat, waypoint — stay
+	 * pure steering, and <b>avoidance never acts</b>: running from something is not
+	 * a reason to bite it.
+	 *
+	 * <p><b>Speed is not the intent's business.</b> An intent says where to go and
+	 * what to do there; how hard to push stays with the mind through
+	 * {@link #A_THROTTLE}. That is deliberate — movement costs the square of speed,
+	 * so the throttle is precisely where a lineage spends or saves its living, and
+	 * it is worth leaving for selection to price rather than deciding on its behalf.
 	 *
 	 * @see #seekTarget(double)
 	 */
@@ -200,6 +237,16 @@ public final class AgentIO {
 	public static final int SEEK_THREAT = 4;
 	public static final int SEEK_ITEM = 5;
 	public static final int SEEK_WAYPOINT = 6;
+
+	// ---- intent status (the values of S_INTENT) ----------------------------
+	/** No intent is set; the mind is steering by hand or standing still. */
+	public static final double INTENT_IDLE = 0;
+	/** The guards failed: nothing of that kind is in reach of the senses. */
+	public static final double INTENT_INVALID = -1;
+	/** Under way — the goal is in sight and the body is closing on it. */
+	public static final double INTENT_PENDING = 0.5;
+	/** The terminal act fired this tick: grazed, bit, or took. */
+	public static final double INTENT_DONE = 1;
 
 	/**
 	 * Decodes {@link #A_SEEK}'s magnitude into a target class. The thresholds sit at

@@ -184,6 +184,29 @@ public class TestNPC extends NPC {
 	 *  the scan is O(r^2) tile reads and the answer changes slowly, while the
 	 *  <i>bearing</i> to it changes every tick as the body moves — so the sensor
 	 *  stays live between scans without rescanning. */
+	/** How the standing intent went last tick, as an {@link AgentIO} INTENT_* value.
+	 *  Reported back to the mind through S_INTENT, and to the viewer. */
+	private double intentStatus = AgentIO.INTENT_IDLE;
+	/**
+	 * How long a pair must stay together before a child arrives (~3s at 33 t/s).
+	 * Mating is an exchange, not an instant: the pair has to hold station, which
+	 * costs them both the time and leaves them stationary and conspicuous while it
+	 * happens. That is what makes breeding a decision with a price rather than a
+	 * collision, and it gives the pending state something real to describe.
+	 */
+	private static final int MATING_TICKS = 100;
+	/** The partner this body is currently exchanging with; null when not mating. */
+	private NPC matingWith = null;
+	/** Ticks spent in the current exchange. */
+	private int matingTicks = 0;
+	/** Relative bearing to a partner being approached, NaN when not approaching. */
+	private double mateSteer = Double.NaN;
+	/** Which tracked channels attention had no room for last tick, by index into
+	 *  {@link #TRACKED_CHANNELS}. Kept so the inspector can tell "nothing there"
+	 *  apart from "no room for it" -- a bare zero means both, and they are opposite
+	 *  facts about the creature. */
+	private final java.util.Set<Integer> attentionDropped = new java.util.TreeSet<Integer>();
+
 	private int forageCol = -1, forageRow = -1;
 	private long forageScanAt = Long.MIN_VALUE;
 
@@ -1029,7 +1052,10 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_ITEM_BEARING] = 0;
 			s[AgentIO.S_ITEM_KIND] = 0;
 		}
+		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
+		attentionDropped.clear();
+		limitAttention(s); // ...of which only as many as this mind can hold survive
 	}
 
 	/** Fills the wider-range hunt/flee/kin channels plus body-state and obstacle
@@ -1194,6 +1220,212 @@ public class TestNPC extends NPC {
 		return (t == null || !t.isWalkable()) ? 0 : t.getVegetation(now);
 	}
 
+	/** The channels a body can hold at once, as {prox, bearing} sensor pairs. Each
+	 *  one is a thing being kept track of; the waypoint is deliberately absent —
+	 *  see {@link #limitAttention}. */
+	private static final int[][] TRACKED_CHANNELS = {
+			{ AgentIO.S_FORAGE_PROX, AgentIO.S_FORAGE_BEARING },
+			{ AgentIO.S_PREY_PROX, AgentIO.S_PREY_BEARING },
+			{ AgentIO.S_THREAT_PROX, AgentIO.S_THREAT_BEARING },
+			{ AgentIO.S_ITEM_PROX, AgentIO.S_ITEM_BEARING },
+	};
+
+	/** Smallest and largest number of things any mind can keep track of. */
+	private static final int TRACK_MIN = 1, TRACK_MAX = 5;
+	/** Instructions of brain per extra thing tracked, past the first. */
+	private static final int TRACK_PER_INSTR = 12;
+
+	/**
+	 * How many targets this mind can hold at once, from the size of the brain
+	 * driving it. A body with no mind tracks everything, since the limit is a fact
+	 * about minds rather than about eyes.
+	 *
+	 * <p>Deriving it from program length rather than a gene of its own is the point:
+	 * length already sets reaction time under one-instruction-per-tick, so a longer
+	 * brain now buys a wider attention span and pays for it in reflexes. Selection
+	 * prices both ends of the same trade instead of being handed a free parameter.
+	 */
+	private int trackingSlots() {
+		if (genome == null || genome.brain == null) {
+			return TRACKED_CHANNELS.length;
+		}
+		int n = 1 + genome.brain.length() / TRACK_PER_INSTR;
+		return Math.max(TRACK_MIN, Math.min(TRACK_MAX, n));
+	}
+
+	/**
+	 * Blanks every tracked channel past what this mind can hold, nearest kept first.
+	 *
+	 * <p>Perception is not the scarce thing here — attention is. Everything in range
+	 * was already computed; what a small brain lacks is somewhere to put it, so it
+	 * ends up single-minded: a creature watching the grass under its nose may simply
+	 * not have the room to also be watching the predator behind it. That is the cost
+	 * of a short program, and the reason a long one is worth its slower reflexes.
+	 *
+	 * <p>Nearest-first is what a crowded mind keeps: deterministic, and it needs no
+	 * policy a mind must evolve before it can see at all. Note what is NOT in the
+	 * tracked set — kin. Including it collapsed the cohort outright (measured: 80
+	 * down to the steward's floor by 45k ticks and never back), because in a herd
+	 * the nearest thing is almost always a harmless neighbour, so kin crowded out
+	 * both the grass and the predator and left creatures unable to feed or flee. The
+	 * kin channel is a flocking gradient rather than a thing being tracked, and it
+	 * costs nothing to carry, so it is exempt.
+	 *
+	 * <p>The waypoint is exempt. A mark is a <i>place</i>, not a target being kept
+	 * track of — it does not move, so remembering it is not the same claim as
+	 * watching something — and homing would be impossible if it expired the moment
+	 * a creature walked out of range of it.
+	 */
+	private void limitAttention(double[] s) {
+		int slots = trackingSlots();
+		if (slots >= TRACKED_CHANNELS.length) {
+			return;
+		}
+		// Rank by proximity: prox is 1/(1+dist), so larger is nearer, and 0 is
+		// "nothing there" and never worth a slot. Ties break on channel order, which
+		// is fixed, so the whole thing replays identically.
+		int kept = 0;
+		boolean[] keep = new boolean[TRACKED_CHANNELS.length];
+		for (int pass = 0; pass < slots; pass++) {
+			int best = -1;
+			double bestProx = 0;
+			for (int c = 0; c < TRACKED_CHANNELS.length; c++) {
+				if (!keep[c] && s[TRACKED_CHANNELS[c][0]] > bestProx) {
+					bestProx = s[TRACKED_CHANNELS[c][0]];
+					best = c;
+				}
+			}
+			if (best < 0) {
+				break; // fewer things in range than slots to hold them
+			}
+			keep[best] = true;
+			kept++;
+		}
+		if (kept == 0) {
+			return;
+		}
+		for (int c = 0; c < TRACKED_CHANNELS.length; c++) {
+			if (!keep[c]) {
+				// Only a channel that HAD something counts as dropped: a blank one was
+				// empty anyway, and reporting it as crowded out would be a lie.
+				if (s[TRACKED_CHANNELS[c][0]] > 0) {
+					attentionDropped.add(c);
+				}
+				s[TRACKED_CHANNELS[c][0]] = 0;
+				s[TRACKED_CHANNELS[c][1]] = 0;
+			}
+		}
+	}
+
+	/** Names of the tracked channels attention had no room for last tick. */
+	public java.util.List<String> attentionDropped() {
+		java.util.List<String> out = new java.util.ArrayList<String>();
+		for (int c : attentionDropped) {
+			out.add(AgentIO.SENSOR_NAMES[TRACKED_CHANNELS[c][0]]);
+		}
+		return out;
+	}
+
+	/** How many targets this mind can hold at once (see {@link #trackingSlots}). */
+	public int trackingCapacity() {
+		return trackingSlots();
+	}
+
+	/** The standing intent's status, as an {@link AgentIO} INTENT_* value. */
+	public double intentStatus() {
+		return intentStatus;
+	}
+
+	/** True while this body is in the middle of an exchange with a partner. */
+	public boolean isMating() {
+		return matingWith != null;
+	}
+
+	/** Abandons any exchange under way. */
+	private void breakOffMating() {
+		matingWith = null;
+		matingTicks = 0;
+	}
+
+	/**
+	 * The nearest compatible partner in sight.
+	 *
+	 * <p>Scans the world directly rather than reading {@code targets}, which is the
+	 * short, tile-local perception set and is not filled for a minded body at all --
+	 * that is precisely why the old A_MATE could only ever fire at contact range,
+	 * and why breeding was something creatures blundered into. Same guards as the
+	 * prey and threat channels: this level, in line of sight, inside LOS_RANGE.
+	 */
+	private NPC nearestMate() {
+		NPC best = null;
+		double bestD = LOS_RANGE;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
+					|| n instanceof Item || n.getLvl() != getLvl() || !canMateWith(n)
+					|| !isInLOS(n)) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < bestD) {
+				bestD = d;
+				best = n;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * The mate intent: find a partner, walk to it, hold station together, and a
+	 * child follows. {@code A_MATE} is the whole behaviour rather than a gate that
+	 * only fires if a partner happens to already be in reach -- which is what made
+	 * breeding accidental, since nothing ever went looking.
+	 *
+	 * <p>Flocking is deliberately NOT this. Seeking kin gathers a creature into the
+	 * herd and does nothing else; a mind that wants to breed says so.
+	 *
+	 * <p>Returns the {@link AgentIO} INTENT_* status. Note that this is the one
+	 * intent whose guards include the creature's OWN state -- too hungry or too
+	 * recently bred both read as invalid, which tells a mind to go and eat instead.
+	 * And its {@code done} is a true completion rather than the per-tick pulse
+	 * grazing gives: a birth is discrete, and the cooldown it starts means the very
+	 * next tick reads invalid, so a mind sees a done->invalid edge.
+	 */
+	private double mateIntent() {
+		mateSteer = Double.NaN;
+		if (!fertile()) {
+			breakOffMating(); // too hungry, too soon, or not built to breed
+			return AgentIO.INTENT_INVALID;
+		}
+		if (matingWith != null) {
+			double reach = (getSize() + matingWith.getSize()) / 2.0 + MATE_REACH;
+			boolean together = !matingWith.isDead() && !matingWith.isRemoved()
+					&& distance(matingWith.getX(), matingWith.getY(), matingWith.getZ()) <= reach
+					&& canMateWith(matingWith);
+			if (together) {
+				matingTicks++;
+				if (matingTicks >= MATING_TICKS) {
+					NPC partner = matingWith;
+					breakOffMating();
+					return reproduceWith(partner) ? AgentIO.INTENT_DONE : AgentIO.INTENT_INVALID;
+				}
+				return AgentIO.INTENT_PENDING; // the exchange, in progress
+			}
+			breakOffMating(); // partner left, died, or stopped being willing
+		}
+		NPC p = nearestMate();
+		if (p == null) {
+			return AgentIO.INTENT_INVALID; // nobody here to breed with
+		}
+		double reach = (getSize() + p.getSize()) / 2.0 + MATE_REACH;
+		if (distance(p.getX(), p.getY(), p.getZ()) <= reach) {
+			matingWith = p; // in reach: the exchange starts next tick
+			matingTicks = 0;
+		} else {
+			mateSteer = wrap(Math.atan2(p.getY() - Y, p.getX() - X) - D);
+		}
+		return AgentIO.INTENT_PENDING;
+	}
+
 	/** Fills the waypoint channel; zeros when nothing is marked or the mark is on
 	 *  another level, since a bearing across levels would point at nothing walkable. */
 	private void senseWaypoint(double[] s) {
@@ -1277,14 +1509,44 @@ public class TestNPC extends NPC {
 		// different sign. Naming something absent changes nothing, and A_TURN stands.
 		double seekWish = a[AgentIO.A_SEEK];
 		int seekClass = AgentIO.seekTarget(seekWish);
+		boolean away = seekWish < 0;
+		boolean pursuing = false; // the goal is named AND the body can see one
+		boolean searching = false; // the goal is named and the body cannot see one yet
 		if (seekClass != AgentIO.SEEK_NONE) {
 			double bearing = seekBearing(seekClass);
 			if (!Double.isNaN(bearing)) {
-				if (seekWish < 0) {
+				pursuing = true;
+				if (away) {
 					bearing = wrap(bearing + Math.PI); // the far side of the same target
 				}
 				t = clamp(bearing / MAX_TURN, -1, 1); // as far around as one tick allows
+			} else {
+				// Wanting something you cannot see is a reason to go looking, not a
+				// reason to stand still. The body drifts on the same oscillator the
+				// mind reads as S_CLOCK, so the search is a deterministic wander
+				// rather than a freeze -- "forage" means find food, not merely walk at
+				// food already in view.
+				searching = true;
+				t = clamp(sensors[AgentIO.S_CLOCK], -1, 1);
 			}
+		}
+		// Speed is deliberately NOT the intent's business. An intent says where to go
+		// and, on arrival, what to do there -- but how hard to push is the one part of
+		// locomotion worth leaving to selection, because movement costs the square of
+		// speed and so the throttle is where a lineage spends or saves its living. A
+		// body given a goal and no throttle wants something and stays put, which is a
+		// policy a mind is free to hold.
+		// Mating is a commitment, so while it has a partner it takes the wheel: a
+		// creature walking to a mate is not also foraging, and one mid-exchange is
+		// standing still. A_SEEK resumes the moment the intent goes invalid.
+		boolean wantsMate = a[AgentIO.A_MATE] > 0.5;
+		double mateStatus = wantsMate ? mateIntent() : Double.NaN;
+		boolean mating = wantsMate && mateStatus == AgentIO.INTENT_PENDING;
+		if (mating && !Double.isNaN(mateSteer)) {
+			t = clamp(mateSteer / MAX_TURN, -1, 1); // walk to the partner
+		}
+		if (matingWith != null) {
+			throttle = 0; // hold station: the exchange happens in place
 		}
 		if (a[AgentIO.A_MARK] > 0.5) {
 			wpX = X; // remember here
@@ -1306,23 +1568,60 @@ public class TestNPC extends NPC {
 		// a ramp is floor that spans two levels and carries whatever walks across it,
 		// so a mind reaches the cave the same way it reaches anywhere else -- by
 		// walking there. A hole is a pit, and falling in one is a mistake, not a move.
+		// Carrying the intent through to the act. A goal with one unambiguous thing to
+		// do on arrival does it, so "forage" is a behaviour rather than half of one --
+		// which is the whole reason an intent is worth an instruction. Only the
+		// approach sense acts: fleeing a thing is not a reason to bite it.
+		boolean chasing = pursuing && !away;
+		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE;
+		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
+		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
+		boolean eats = a[AgentIO.A_EAT] > 0.5;
+
 		double eaten = 0;
-		if (a[AgentIO.A_EAT] > 0.5) {
+		if (eats || intentGraze) {
 			eaten = graze(grazeDemand());
 			totalIntake += eaten;
-			eatNearestItem(); // also devour a food (or bite a hazard) in reach
+		}
+		boolean ateItem = false;
+		if (eats || intentTake) {
+			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
 		boolean bit = false;
-		if (a[AgentIO.A_ATTACK] > 0.5) {
+		if (a[AgentIO.A_ATTACK] > 0.5 || intentBite) {
 			bit = attackNearest();
-			attackNearestItem(); // an object in reach can be smashed too
+			if (a[AgentIO.A_ATTACK] > 0.5) {
+				attackNearestItem(); // smashing crates is a deliberate act, not a side
+			}                        // effect of running something down
 		}
-		boolean bred = false;
-		if (a[AgentIO.A_MATE] > 0.5) {
-			bred = reproduce();
+		boolean bred = mateStatus == AgentIO.INTENT_DONE;
+		if (wantsMate && mateStatus == AgentIO.INTENT_INVALID && nearestMate() == null) {
+			// Nobody to breed with, but a well-fed body can still bud on its own --
+			// the asexual path the cohort has always had, kept so the intent adds a
+			// way to breed rather than taking one away.
+			bred = tryReproduce();
+		}
+		// How the intent went, for the mind to read next tick. DONE is the terminal
+		// act actually firing -- grass eaten, a bite landed, an item taken -- not
+		// merely arriving; PENDING is a goal in sight and not yet reached; INVALID is
+		// the guards failing, which covers both "there is no such thing here" and "the
+		// thing I was chasing is gone". Nothing reports a plain failure, because a
+		// latched intent never finishes losing: see AgentIO.S_INTENT.
+		if (wantsMate && mateStatus != AgentIO.INTENT_INVALID) {
+			intentStatus = mateStatus; // a commitment outranks a preference
+		} else if (wantsMate && seekClass == AgentIO.SEEK_NONE) {
+			intentStatus = mateStatus; // wanted to breed, and could not
+		} else if (seekClass == AgentIO.SEEK_NONE) {
+			intentStatus = AgentIO.INTENT_IDLE;
+		} else if (searching) {
+			intentStatus = AgentIO.INTENT_INVALID;
+		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)) {
+			intentStatus = AgentIO.INTENT_DONE;
+		} else {
+			intentStatus = AgentIO.INTENT_PENDING;
 		}
 		// A plain-language label for what this mind actually DID, so the viewer can
 		// follow a minded creature and read its behaviour without opening the mind
@@ -1331,6 +1630,8 @@ public class TestNPC extends NPC {
 		// read "mating" forever regardless of what the creature achieved.
 		if (bit) {
 			setAction("attacking", true); // an instant: latch it so it can be seen
+		} else if (matingWith != null) {
+			setAction("courting", false); // the exchange, visibly taking its time
 		} else if (bred) {
 			setAction("breeding", true);
 		} else if (eaten > 0) {
@@ -1529,12 +1830,16 @@ public class TestNPC extends NPC {
 		return distance(item.getX(), item.getY(), item.getZ()) <= reach ? item : null;
 	}
 
-	/** Eats the nearest food/hazard item in reach: food feeds, a hazard bites back. */
-	private void eatNearestItem() {
+	/** Eats the nearest food/hazard item in reach: food feeds, a hazard bites back.
+	 *  Reports whether anything was actually taken, so an intent can say whether it
+	 *  got what it went for. */
+	private boolean eatNearestItem() {
 		Item item = itemInReach();
 		if (item != null && item.isEdible()) {
 			item.beEatenBy(this);
+			return true;
 		}
+		return false;
 	}
 
 	/** Strikes the nearest item in reach: whittles a crate down (spilling food when

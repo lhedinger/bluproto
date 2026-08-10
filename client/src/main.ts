@@ -495,7 +495,20 @@ function renderMind(d: Record<string, any>): void {
   const disasm = (d.disasm as string[]) ?? [];
   // Headline: decode the actuators into a plain-language "what is it doing".
   const doing = `<div class="doing">${doingNow(actuators)}</div>`;
-  const sIn = sensors.map(c => channelRow(c, SENSOR_KIND)).join('');
+  // Attention: a blanked channel and an empty one both read 0, and they are
+  // opposite facts — "there is no grass" versus "there is grass and no room to
+  // hold it". The server says which were crowded out, so they can be labelled.
+  const dropped = new Set((d.trackDropped as string[]) ?? []);
+  const slots = d.trackSlots as number | undefined;
+  const attn = slots === undefined ? '' :
+    `<div class="grp">attention — holds ${slots} target${slots === 1 ? '' : 's'} at once` +
+    (dropped.size ? `, no room for ${[...dropped].join(', ')}` : '') + '</div>';
+  const intent = d.intent === undefined ? '' :
+    `<div class="grp">intent — ${esc(String(d.intent))}</div>`;
+  const sIn = sensors.map(c => {
+    const row = channelRow(c, SENSOR_KIND);
+    return dropped.has(c.name) ? row.replace('</div>', ' <i class="crowded">no room</i></div>') : row;
+  }).join('');
   const aOut = actuators.map(c => channelRow(c, ACT_KIND)).join('');
   const prog = disasm
     .map((ln, i) => `<div class="ins ${insClass(ln)}${i === d.pc ? ' pc' : ''}">${esc(ln)}</div>`)
@@ -503,7 +516,7 @@ function renderMind(d: Record<string, any>): void {
   const regChips = regs
     .map((v, i) => `<span class="reg">R${i} <b>${v.toFixed(2)}</b></span>`)
     .join('');
-  mindEl.innerHTML = hd + doing +
+  mindEl.innerHTML = hd + doing + intent + attn +
     '<div class="grp">sensors — what it perceives</div>' + sIn +
     '<div class="grp">actuators — what it drives</div>' + aOut +
     `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>` +

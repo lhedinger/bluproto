@@ -465,6 +465,20 @@ final class WorldHost {
 		return c;
 	}
 
+	/** The standing intent's status as a word, for the mind inspector. */
+	private static String intentLabel(double v) {
+		if (v == net.hedinger.prototype.entities.AgentIO.INTENT_DONE) {
+			return "done";
+		}
+		if (v == net.hedinger.prototype.entities.AgentIO.INTENT_PENDING) {
+			return "pending";
+		}
+		if (v == net.hedinger.prototype.entities.AgentIO.INTENT_INVALID) {
+			return "invalid";
+		}
+		return "idle";
+	}
+
 	private static double round(double v) {
 		return Math.round(v * 1000.0) / 1000.0;
 	}

@@ -128,20 +128,25 @@ alongside the tiers:
 
 ## The gap that matters most
 
-The apparatus is built and barely used. Of **28 sensors the starter brains read
-three** (`S_CLOCK`, `S_THREAT_PROX`, `S_THREAT_BEARING`); of 11 live actuators
-they write five. Never touched by any seed: `A_DEPOSIT`, `A_ATTACK`, `A_GRAB`,
-`A_STRUGGLE`, `A_SEEK`, `A_MARK`, and the sensors for forage, scent, prey, kin,
-health, items, whiskers, hazards and waypoints.
+The apparatus is built and barely used — though less so since the seeds went
+intent-based. Of **28 sensors the starter brains read two** (`S_THREAT_PROX`,
+and `S_CLOCK` indirectly through the body's search), and of 11 live actuators
+they write four. Never touched by any seed: `A_DEPOSIT`, `A_ATTACK`, `A_GRAB`,
+`A_STRUGGLE`, `A_MARK`, and the sensors for scent, prey, kin, health, items,
+whiskers, hazards and waypoints.
+
+Note the seeds now read *fewer* sensors than before, not more: an intent asks the
+body for a whole behaviour, so the mind no longer spends instructions reading
+bearings it only ever fed back into a turn.
 
 So the cheapest new behaviour is mostly behaviour already paid for:
 
-1. **A forager that actually seeks.** The sensing gap is now closed —
-   `S_FORAGE_BEARING` names where food is, and `A_SEEK = 0.1` walks there in one
-   instruction. What is missing is a *seed that uses it*: the minded cohort was
-   last measured at **wandering 71, grazing 4** out of 80, searching blind. A
-   starter brain built on seek should move that number, and it is the cheapest
-   experiment available.
+1. ✅ **A forager that actually seeks.** Both starter brains are written as intents
+   now. Measured over 100k ticks with a cohort ceiling of 80: the cohort holds
+   **flat at 80–81** where the motor-level seeds sagged to 73–80 with dips to 38,
+   and grazing rose from 22–47 to **43–65**. The brains barely shrank (13 against
+   14) — steering collapsed into one slot but pace deliberately stayed with the
+   mind, so the win is in behaviour, not brevity.
 2. **A hunter brain.** `A_ATTACK` + `S_PREY_*` are fully wired and unused — all
    predation is scripted. With `A_SEEK = 0.5` supplying the pursuit, a hunter seed
    is now little more than "seek prey, attack when close".

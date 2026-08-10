@@ -23,9 +23,10 @@ public final class GenomeCodec {
 	 * silently rewritten rather than merely extended. Rejecting the old tag is the
 	 * honest outcome: a stale token names a creature that can no longer be
 	 * reconstructed, and loading it would produce a different animal wearing its
-	 * name. (g1: 23 sensors / 11 actuators. g2: 28 / 13, intent commands added.)
+	 * name. (g1: 23 sensors / 11 actuators. g2: 28 / 13, intent commands added. g3: 29 / 13,
+	 * the intent-status channel added.)
 	 */
-	private static final String VERSION = "g2";
+	private static final String VERSION = "g3";
 
 	private GenomeCodec() {
 	}
