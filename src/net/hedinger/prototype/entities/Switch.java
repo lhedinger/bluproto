@@ -37,7 +37,8 @@ public class Switch extends Entity {
 
 	public static final int PLATE = 0, BUTTON = 1;
 
-	private static final Color TRAIL_DIM = new Color(0x3a3e49);
+	private static final Color LAMP_HOUSING = new Color(0x14161f);
+	private static final Color TRAIL_DIM = new Color(0x6a7280);
 	private static final Color TRAIL_LIT = new Color(0xD0ECFF);
 	private static final Color BTN_RED = new Color(0xE0455F);
 	private static final Color BTN_RED_DARK = new Color(0x7c2434);
@@ -126,25 +127,22 @@ public class Switch extends Entity {
 		double sx = getX() + 0.5, sy = getY() + 0.5;
 		double[] dc = doorCentre();
 
-		// The indicator trail: dotted lights every few art-pixels along the
-		// L-run (x-leg first) from switch to door, dim while idle and lit
-		// while the circuit is closed -- the test-chamber "what does this
-		// operate" line.
-		g2.setColor(pressed ? TRAIL_LIT : TRAIL_DIM);
+		// The indicator trail: lamps every few art-pixels along the L-run
+		// (x-leg first) from switch to door -- each a dark housing around a
+		// lens, dim while idle, lit while the circuit is closed. The
+		// test-chamber "what does this operate" line, readable on any floor.
 		int n = 0;
 		double px = sx, py = sy;
 		while (Math.abs(dc[0] - px) > 1.0 / 24) {
 			px += Math.signum(dc[0] - px) / 12.0;
-			if (n++ % 4 < 2) {
-				g2.fillRect((int) Math.round(v.pixelX(px, (int) getZ(), 0)),
-						(int) Math.round(v.pixelY(py, (int) getZ(), 0)), box, box);
+			if (n++ % 4 == 0) {
+				trailLamp(g2, v, px, py, box);
 			}
 		}
 		while (Math.abs(dc[1] - py) > 1.0 / 24) {
 			py += Math.signum(dc[1] - py) / 12.0;
-			if (n++ % 4 < 2) {
-				g2.fillRect((int) Math.round(v.pixelX(px, (int) getZ(), 0)),
-						(int) Math.round(v.pixelY(py, (int) getZ(), 0)), box, box);
+			if (n++ % 4 == 0) {
+				trailLamp(g2, v, px, py, box);
 			}
 		}
 
@@ -180,6 +178,16 @@ public class Switch extends Entity {
 				g2.fillRect(bx - box / 2, by - box / 2, d + box, box / 2 + 1); // lit rim
 			}
 		}
+	}
+
+	/** One trail lamp: a dark housing with a centred lens. */
+	private void trailLamp(Graphics2D g2, View v, double wx, double wy, int box) {
+		int lx = (int) Math.round(v.pixelX(wx, (int) getZ(), 0));
+		int ly = (int) Math.round(v.pixelY(wy, (int) getZ(), 0));
+		g2.setColor(LAMP_HOUSING);
+		g2.fillRect(lx - box / 2, ly - box / 2, box * 2, box * 2);
+		g2.setColor(pressed ? TRAIL_LIT : TRAIL_DIM);
+		g2.fillRect(lx, ly, box, box);
 	}
 
 	@Override

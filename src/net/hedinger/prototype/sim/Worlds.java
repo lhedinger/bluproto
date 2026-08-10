@@ -494,7 +494,8 @@ public final class Worlds {
 		int my = y0 + H / 2 - 1;
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		if (!carveGallery(w, cols, rows, x0, my)) {
+		java.util.List<int[]> gallery = carveGallery(w, cols, rows, x0, my);
+		if (gallery == null) {
 			// No way out through the rock (a sealed map corner): un-carve, a
 			// walled-off installation would fail the connectivity audit.
 			for (int x = x0; x < x0 + W; x++) {
@@ -516,20 +517,23 @@ public final class Worlds {
 		w.addDoor(grate);
 
 		// Switches on both sides of each door, wired to it, so a body is
-		// never trapped on either side. The blast door runs on weight-driven
-		// pressure plates -- anything crossing them parts the leaves. The
-		// vault runs on intent-driven buttons: a body must deliberately press
-		// (the A_USE actuator), so only a mind that has learned to use them
-		// opens the grate -- everything else takes the crawl duct. Wiring
-		// also stops these doors' idle random self-cycling.
-		wireSwitch(w, x0 - 1, my, blast,
-				net.hedinger.prototype.entities.Switch.PLATE); // gallery, before the mouth
-		wireSwitch(w, x0 + 1, my, blast,
-				net.hedinger.prototype.entities.Switch.PLATE); // hall deck, inside
-		wireSwitch(w, vx - 1, vy + vh / 2, grate,
-				net.hedinger.prototype.entities.Switch.BUTTON); // hall side of the vault
-		wireSwitch(w, vx + 1, vy + vh / 2, grate,
-				net.hedinger.prototype.entities.Switch.BUTTON); // inside the vault
+		// never trapped on either side -- and deliberately NOT beside their
+		// doors: the indicator trail from switch to door is the thing that
+		// says what operates what, so give it distance to say it. The blast
+		// door runs on weight-driven pressure plates -- anything crossing
+		// them parts the leaves. The vault runs on intent-driven buttons: a
+		// body must deliberately press (the A_USE actuator), so only a mind
+		// that has learned to use them opens the grate -- everything else
+		// takes the crawl duct. Wiring also stops the doors' idle cycling.
+		int[] outer = gallery.get(Math.min(3, gallery.size() - 1));
+		wireSwitch(w, outer[0], outer[1], blast,
+				net.hedinger.prototype.entities.Switch.PLATE); // down the gallery
+		wireSwitch(w, x0 + 3, my, blast,
+				net.hedinger.prototype.entities.Switch.PLATE); // out on the hall deck
+		wireSwitch(w, vx - 3, vy + vh / 2, grate,
+				net.hedinger.prototype.entities.Switch.BUTTON); // mid-hall, facing the vault
+		wireSwitch(w, vx + 2, vy + vh - 2, grate,
+				net.hedinger.prototype.entities.Switch.BUTTON); // the vault's far corner
 	}
 
 	/** One switch: the floor tile with the baked pedestal base, plus the
@@ -576,9 +580,10 @@ public final class Worlds {
 	 * and cannot nick a pool or cavern on the way. Deterministic: fixed
 	 * neighbour order, no RNG.
 	 */
-	private static boolean carveGallery(World w, int cols, int rows, int mx, int my) {
+	private static java.util.List<int[]> carveGallery(World w, int cols, int rows,
+			int mx, int my) {
 		if (mx - 1 < 1) {
-			return false;
+			return null;
 		}
 		int[][] prev = new int[cols][rows];
 		for (int[] c : prev) {
@@ -601,16 +606,22 @@ public final class Worlds {
 				}
 				Tile t = w.getTile(nx, ny, CAVE_Z);
 				if (t.isWalkable()) {
-					// Found daylight: pave the path back to the mouth.
+					// Found daylight: pave the path back to the mouth, and
+					// hand the caller the mouth-first path (real paved tiles,
+					// where a switch can safely stand).
+					java.util.List<int[]> path = new java.util.ArrayList<int[]>();
 					int cx = p[0], cy = p[1];
 					while (!(cx == mx - 1 && cy == my)) {
 						paveGalleryTile(w, cx, cy, cols, rows);
+						path.add(new int[] { cx, cy });
 						int code = prev[cx][cy];
 						cx = code / rows;
 						cy = code % rows;
 					}
 					paveGalleryTile(w, mx - 1, my, cols, rows);
-					return true;
+					path.add(new int[] { mx - 1, my });
+					java.util.Collections.reverse(path);
+					return path;
 				}
 				if (t.getType() == Tile.TileType.TYPE_WALL) {
 					prev[nx][ny] = p[0] * rows + p[1];
@@ -618,7 +629,7 @@ public final class Worlds {
 				}
 			}
 		}
-		return false;
+		return null;
 	}
 
 	/** One gallery step: a 2x2 brush of paved floor through rock only (built

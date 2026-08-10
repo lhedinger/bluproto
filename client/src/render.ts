@@ -295,12 +295,12 @@ function drawSwitch(
     const half = Math.max(1, door.size) / 2;
     const dx = lr ? door.x : door.x + half;
     const dy = lr ? door.y + half : door.y;
-    const w = Math.max(1.5, sc * 0.07);
+    const w = Math.max(2, sc * 0.09);
     const a = cam.worldToScreen(cx, cy);
     const k = cam.worldToScreen(dx, cy); // the L's corner: x-leg first
     const b = cam.worldToScreen(dx, dy);
-    // Dotted indicator lights along both legs.
-    g.fillStyle = pressed ? '#D0ECFF' : '#3a3e49';
+    // Indicator lamps along both legs: a dark housing around a lens, dim
+    // while idle, lit while the circuit is closed — readable on any floor.
     const legs: Array<[number, number, number, number]> = [[a.x, a.y, k.x, k.y], [k.x, k.y, b.x, b.y]];
     for (const [x0, y0, x1, y1] of legs) {
       const len = Math.hypot(x1 - x0, y1 - y0);
@@ -308,6 +308,9 @@ function drawSwitch(
       for (let i = 1; i <= n; i++) {
         const t = i / (n + 1);
         const sx = x0 + (x1 - x0) * t, sy = y0 + (y1 - y0) * t;
+        g.fillStyle = '#14161f';
+        g.fillRect(sx - w, sy - w, w * 2, w * 2);
+        g.fillStyle = pressed ? '#D0ECFF' : '#6a7280';
         g.fillRect(sx - w / 2, sy - w / 2, w, w);
       }
     }
