@@ -34,7 +34,7 @@ applies the actuator vector as intent. The mind never touches the world directly
 - **Registers** — 12 scalars that persist across ticks, so a brain has memory.
 - **Ops** — `NOP SET MOV ADD SUB MUL MIN MAX NEG TANH GT SKIPZ SKIPNZ SENSE WRITE`,
   over a fixed 12-value constant pool.
-- **I/O** — 28 sensors (`S_*`) in, 13 actuator slots (`A_*`) out, of which 11 are
+- **I/O** — 29 sensors (`S_*`) in, 13 actuator slots (`A_*`) out, of which 11 are
   live: `A_SPRINT` and `A_VERTICAL` are retired in place. Slots are never deleted,
   because instructions store raw actuator indices and renumbering would silently
   rewrite every saved genome. Actuator values **latch** between writes, so a
@@ -47,11 +47,12 @@ applies the actuator vector as intent. The mind never touches the world directly
 `Brain` masks operand indices **modulo the live array length** (`s[imod(y,
 s.length)]`), which is what makes every random mutation a legal program. The
 consequence is that *growing* a vector is as destructive as deleting a slot: a
-genome encoded against 23 sensors reads different sensors once there are 28. Its
+genome encoded against 23 sensors reads different sensors once there are 29. Its
 wiring is not extended, it is rewritten.
 
 So `GenomeCodec` carries a version tag, and it is bumped whenever either vector
-changes size — `g1` was 23/11, `g2` is 28/13. Old tokens are **rejected**, not
+changes size — `g1` was 23/11, `g2` 28/13, `g3` is 29/13. Old tokens are
+**rejected**, not
 migrated: a stale token names a creature that can no longer be reconstructed, and
 silently loading a different animal under its name is worse than refusing.
 
@@ -122,6 +123,30 @@ out both the grass and the predator. **The waypoint is not tracked either**: a
 mark is a *place*, and a place does not move, so recalling one is not the same
 claim as keeping watch on something. Homing would be impossible if a mark expired
 the moment its owner walked out of range.
+
+### An intent reports back — `S_INTENT`
+
+A mind could set a goal but never learn whether it worked; success showed up only
+as the tank drifting upward, several thought-cycles late. `S_INTENT` closes that
+loop with four values:
+
+| value | meaning |
+|---|---|
+| `0` | **idle** — no intent set |
+| `-1` | **invalid** — guards failed: nothing of that kind in reach, or the quarry is gone |
+| `0.5` | **pending** — in sight, still closing |
+| `1` | **done** — the terminal act fired this tick |
+
+**There is deliberately no "failed".** An intent here is a latched *level*, not a
+call that returns, so no intent ever finishes losing: every failure is already
+invalid (the guards stopped holding) or pending (still trying). A distinct
+failure state would need the body to decide when to give up, and how long to
+persist is much better left to selection — a mind has `S_CLOCK` and registers
+enough to evolve its own patience.
+
+`done` is a **per-tick pulse, not a completion flag**: grazing succeeds on every
+tick spent on grass and a bite lands on every tick in reach. "The kill finished"
+is a different claim from "the bite landed", and only the latter is unambiguous.
 
 ### One instruction per tick — a deliberate invariant
 
