@@ -524,26 +524,46 @@ public final class Worlds {
 		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 
-		// Storage wing: a vertical pipe drop and its own vents.
+		// Storage wing (west half): a vertical pipe drop and its own vents.
 		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 10, y0 + 11, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 6, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 
-		// The shaft bay: the storage wing's east end has given way to a
-		// bottomless pit -- whatever steps off the edge leaves the world --
-		// crossed by a catwalk out to a supply platform against the east
-		// wall. The reward on the platform is real; so is the drop.
-		for (int x = x0 + 12; x <= x0 + 15; x++) {
+		// The shaft bay, Black-Mesa style: the whole south-east quadrant has
+		// given way to a bottomless pit, crossed by two catwalks meeting at
+		// a junction over the void. The east-west walk runs from the storage
+		// wing's pipe end out to a supply platform against the east wall;
+		// the north-south walk drops from the spine's doorway down to a
+		// second mouth in the south shell -- so one of the base's entrances
+		// is a walk over the abyss.
+		for (int x = x0 + 9; x <= x0 + 16; x++) {
 			for (int y = y0 + 9; y <= y0 + 11; y++) {
 				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SHAFT);
 			}
 		}
-		for (int x = x0 + 12; x <= x0 + 14; x++) {
-			setBare(w, x, y0 + 10, CAVE_Z, Tile.TileType.TYPE_CATWALK);
+		for (int x = x0 + 9; x <= x0 + 15; x++) {
+			setBare(w, x, y0 + 10, CAVE_Z, Tile.TileType.TYPE_CATWALK); // east-west walk
 		}
-		setBare(w, x0 + 15, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PLATE); // the platform
-		w.spawnEntity(Item.food(x0 + 15.5, y0 + 10.5, CAVE_Z));
+		for (int y = y0 + 9; y <= y0 + 11; y++) {
+			setBare(w, x0 + 11, y, CAVE_Z, Tile.TileType.TYPE_CATWALK); // north-south walk
+		}
+		setBare(w, x0 + 16, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PLATE); // the platform
+		w.spawnEntity(Item.food(x0 + 16.5, y0 + 10.5, CAVE_Z));
+
+		// The south gate: the catwalk's south arm exits through the shell, a
+		// self-cycling maintenance grate over the doorway and its own gallery
+		// tunnelled to the nearest cavern -- the base's second ground
+		// entrance. If the rock refuses a way out, the mouth seals back up
+		// and the catwalk arm simply dead-ends over the void.
+		setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		if (carveGallery(w, cols, rows, x0 + 11, y0 + H,
+				new int[][] { { x0 + 11, y0 + H - 1 } }) != null) {
+			w.addDoor(new net.hedinger.prototype.entities.Door(x0 + 11, y0 + H - 1,
+					CAVE_Z, 0, net.hedinger.prototype.entities.Door.GRATE));
+		} else {
+			setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_WALL_CONCRETE);
+		}
 
 		// The steel vault, closing the spine's east end: steel walls over the
 		// partition rows, a grate doorway facing the spine, and the crawl
@@ -566,7 +586,7 @@ public final class Worlds {
 		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 10.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 11.5, y0 + 11.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 11.5, CAVE_Z));
 		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
 		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
 		w.spawnEntity(Item.hazard(vx + 2.5, vy + 2.5, CAVE_Z));
@@ -629,7 +649,8 @@ public final class Worlds {
 		int my = y0 + H / 2 - 1;
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		java.util.List<int[]> gallery = carveGallery(w, cols, rows, x0, my);
+		java.util.List<int[]> gallery = carveGallery(w, cols, rows, x0 - 1, my,
+				new int[][] { { x0, my }, { x0, my + 1 } });
 		if (gallery == null) {
 			// No way out through the rock (a sealed map corner): un-carve, a
 			// walled-off installation would fail the connectivity audit.
@@ -747,15 +768,19 @@ public final class Worlds {
 	}
 
 	/**
-	 * Tunnel a 2-wide paved entrance gallery from the installation's mouth to
-	 * the nearest already-walkable cave tile, breadth-first through solid rock
-	 * only -- so the gallery meets the world exactly once, at its far end,
-	 * and cannot nick a pool or cavern on the way. Deterministic: fixed
-	 * neighbour order, no RNG.
+	 * Tunnel a 2-wide paved entrance gallery from an installation mouth to
+	 * the nearest already-walkable cave tile, breadth-first through solid
+	 * rock only -- so the gallery meets the world exactly once, at its far
+	 * end, and cannot nick a pool or cavern on the way. {@code startX,startY}
+	 * is the first rock tile beyond the mouth; {@code mouths} are the mouth
+	 * tiles themselves (marked visited, so the search cannot turn around and
+	 * call its own doorway daylight), with the first one also setting the
+	 * preferred initial digging direction. Deterministic: derived neighbour
+	 * order, no RNG.
 	 */
 	private static java.util.List<int[]> carveGallery(World w, int cols, int rows,
-			int mx, int my) {
-		if (mx - 1 < 1) {
+			int startX, int startY, int[][] mouths) {
+		if (startX < 1 || startY < 1 || startX >= cols - 1 || startY >= rows - 1) {
 			return null;
 		}
 		int[][] prev = new int[cols][rows];
@@ -763,12 +788,18 @@ public final class Worlds {
 			java.util.Arrays.fill(c, -1);
 		}
 		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
-		prev[mx - 1][my] = (mx - 1) * rows + my; // start marks itself
+		prev[startX][startY] = startX * rows + startY; // start marks itself
 		// The mouth tiles are walkable but they're where we CAME from -- mark
 		// them visited so the search can't turn around and call them daylight.
-		prev[mx][my] = prev[mx][my + 1] = (mx - 1) * rows + my;
-		q.add(new int[] { mx - 1, my });
-		int[][] dirs = { { -1, 0 }, { 0, -1 }, { 0, 1 }, { 1, 0 } }; // west first
+		for (int[] m : mouths) {
+			prev[m[0]][m[1]] = startX * rows + startY;
+		}
+		q.add(new int[] { startX, startY });
+		// Prefer digging straight out from the mouth before wandering.
+		int[] away = { Integer.signum(startX - mouths[0][0]),
+				Integer.signum(startY - mouths[0][1]) };
+		int[][] dirs = { away, { away[1], away[0] }, { -away[1], -away[0] },
+				{ -away[0], -away[1] } };
 		while (!q.isEmpty()) {
 			int[] p = q.poll();
 			for (int[] d : dirs) {
@@ -784,15 +815,15 @@ public final class Worlds {
 					// where a switch can safely stand).
 					java.util.List<int[]> path = new java.util.ArrayList<int[]>();
 					int cx = p[0], cy = p[1];
-					while (!(cx == mx - 1 && cy == my)) {
+					while (!(cx == startX && cy == startY)) {
 						paveGalleryTile(w, cx, cy, cols, rows);
 						path.add(new int[] { cx, cy });
 						int code = prev[cx][cy];
 						cx = code / rows;
 						cy = code % rows;
 					}
-					paveGalleryTile(w, mx - 1, my, cols, rows);
-					path.add(new int[] { mx - 1, my });
+					paveGalleryTile(w, startX, startY, cols, rows);
+					path.add(new int[] { startX, startY });
 					java.util.Collections.reverse(path);
 					return path;
 				}
