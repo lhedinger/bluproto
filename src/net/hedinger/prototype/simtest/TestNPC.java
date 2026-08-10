@@ -183,6 +183,15 @@ public class TestNPC extends NPC {
 	 *  the scan is O(r^2) tile reads and the answer changes slowly, while the
 	 *  <i>bearing</i> to it changes every tick as the body moves — so the sensor
 	 *  stays live between scans without rescanning. */
+	/** How the standing intent went last tick, as an {@link AgentIO} INTENT_* value.
+	 *  Reported back to the mind through S_INTENT, and to the viewer. */
+	private double intentStatus = AgentIO.INTENT_IDLE;
+	/** Which tracked channels attention had no room for last tick, by index into
+	 *  {@link #TRACKED_CHANNELS}. Kept so the inspector can tell "nothing there"
+	 *  apart from "no room for it" -- a bare zero means both, and they are opposite
+	 *  facts about the creature. */
+	private final java.util.Set<Integer> attentionDropped = new java.util.TreeSet<Integer>();
+
 	private int forageCol = -1, forageRow = -1;
 	private long forageScanAt = Long.MIN_VALUE;
 
@@ -1017,7 +1026,10 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_ITEM_BEARING] = 0;
 			s[AgentIO.S_ITEM_KIND] = 0;
 		}
+		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
+		attentionDropped.clear();
+		limitAttention(s); // ...of which only as many as this mind can hold survive
 	}
 
 	/** Fills the wider-range hunt/flee/kin channels plus body-state and obstacle
@@ -1182,6 +1194,122 @@ public class TestNPC extends NPC {
 		return (t == null || !t.isWalkable()) ? 0 : t.getVegetation(now);
 	}
 
+	/** The channels a body can hold at once, as {prox, bearing} sensor pairs. Each
+	 *  one is a thing being kept track of; the waypoint is deliberately absent —
+	 *  see {@link #limitAttention}. */
+	private static final int[][] TRACKED_CHANNELS = {
+			{ AgentIO.S_FORAGE_PROX, AgentIO.S_FORAGE_BEARING },
+			{ AgentIO.S_PREY_PROX, AgentIO.S_PREY_BEARING },
+			{ AgentIO.S_THREAT_PROX, AgentIO.S_THREAT_BEARING },
+			{ AgentIO.S_ITEM_PROX, AgentIO.S_ITEM_BEARING },
+	};
+
+	/** Smallest and largest number of things any mind can keep track of. */
+	private static final int TRACK_MIN = 1, TRACK_MAX = 5;
+	/** Instructions of brain per extra thing tracked, past the first. */
+	private static final int TRACK_PER_INSTR = 12;
+
+	/**
+	 * How many targets this mind can hold at once, from the size of the brain
+	 * driving it. A body with no mind tracks everything, since the limit is a fact
+	 * about minds rather than about eyes.
+	 *
+	 * <p>Deriving it from program length rather than a gene of its own is the point:
+	 * length already sets reaction time under one-instruction-per-tick, so a longer
+	 * brain now buys a wider attention span and pays for it in reflexes. Selection
+	 * prices both ends of the same trade instead of being handed a free parameter.
+	 */
+	private int trackingSlots() {
+		if (genome == null || genome.brain == null) {
+			return TRACKED_CHANNELS.length;
+		}
+		int n = 1 + genome.brain.length() / TRACK_PER_INSTR;
+		return Math.max(TRACK_MIN, Math.min(TRACK_MAX, n));
+	}
+
+	/**
+	 * Blanks every tracked channel past what this mind can hold, nearest kept first.
+	 *
+	 * <p>Perception is not the scarce thing here — attention is. Everything in range
+	 * was already computed; what a small brain lacks is somewhere to put it, so it
+	 * ends up single-minded: a creature watching the grass under its nose may simply
+	 * not have the room to also be watching the predator behind it. That is the cost
+	 * of a short program, and the reason a long one is worth its slower reflexes.
+	 *
+	 * <p>Nearest-first is what a crowded mind keeps: deterministic, and it needs no
+	 * policy a mind must evolve before it can see at all. Note what is NOT in the
+	 * tracked set — kin. Including it collapsed the cohort outright (measured: 80
+	 * down to the steward's floor by 45k ticks and never back), because in a herd
+	 * the nearest thing is almost always a harmless neighbour, so kin crowded out
+	 * both the grass and the predator and left creatures unable to feed or flee. The
+	 * kin channel is a flocking gradient rather than a thing being tracked, and it
+	 * costs nothing to carry, so it is exempt.
+	 *
+	 * <p>The waypoint is exempt. A mark is a <i>place</i>, not a target being kept
+	 * track of — it does not move, so remembering it is not the same claim as
+	 * watching something — and homing would be impossible if it expired the moment
+	 * a creature walked out of range of it.
+	 */
+	private void limitAttention(double[] s) {
+		int slots = trackingSlots();
+		if (slots >= TRACKED_CHANNELS.length) {
+			return;
+		}
+		// Rank by proximity: prox is 1/(1+dist), so larger is nearer, and 0 is
+		// "nothing there" and never worth a slot. Ties break on channel order, which
+		// is fixed, so the whole thing replays identically.
+		int kept = 0;
+		boolean[] keep = new boolean[TRACKED_CHANNELS.length];
+		for (int pass = 0; pass < slots; pass++) {
+			int best = -1;
+			double bestProx = 0;
+			for (int c = 0; c < TRACKED_CHANNELS.length; c++) {
+				if (!keep[c] && s[TRACKED_CHANNELS[c][0]] > bestProx) {
+					bestProx = s[TRACKED_CHANNELS[c][0]];
+					best = c;
+				}
+			}
+			if (best < 0) {
+				break; // fewer things in range than slots to hold them
+			}
+			keep[best] = true;
+			kept++;
+		}
+		if (kept == 0) {
+			return;
+		}
+		for (int c = 0; c < TRACKED_CHANNELS.length; c++) {
+			if (!keep[c]) {
+				// Only a channel that HAD something counts as dropped: a blank one was
+				// empty anyway, and reporting it as crowded out would be a lie.
+				if (s[TRACKED_CHANNELS[c][0]] > 0) {
+					attentionDropped.add(c);
+				}
+				s[TRACKED_CHANNELS[c][0]] = 0;
+				s[TRACKED_CHANNELS[c][1]] = 0;
+			}
+		}
+	}
+
+	/** Names of the tracked channels attention had no room for last tick. */
+	public java.util.List<String> attentionDropped() {
+		java.util.List<String> out = new java.util.ArrayList<String>();
+		for (int c : attentionDropped) {
+			out.add(AgentIO.SENSOR_NAMES[TRACKED_CHANNELS[c][0]]);
+		}
+		return out;
+	}
+
+	/** How many targets this mind can hold at once (see {@link #trackingSlots}). */
+	public int trackingCapacity() {
+		return trackingSlots();
+	}
+
+	/** The standing intent's status, as an {@link AgentIO} INTENT_* value. */
+	public double intentStatus() {
+		return intentStatus;
+	}
+
 	/** Fills the waypoint channel; zeros when nothing is marked or the mark is on
 	 *  another level, since a bearing across levels would point at nothing walkable. */
 	private void senseWaypoint(double[] s) {
@@ -1326,8 +1454,9 @@ public class TestNPC extends NPC {
 			eaten = graze(grazeDemand());
 			totalIntake += eaten;
 		}
+		boolean ateItem = false;
 		if (eats || intentTake) {
-			eatNearestItem(); // devour a food (or bite a hazard) in reach
+			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach
 		}
 		if (a[AgentIO.A_DEPOSIT] > 0.5) {
 			depositPheromone(NEST_DEPOSIT * 0.25);
@@ -1342,6 +1471,21 @@ public class TestNPC extends NPC {
 		boolean bred = false;
 		if (a[AgentIO.A_MATE] > 0.5) {
 			bred = reproduce();
+		}
+		// How the intent went, for the mind to read next tick. DONE is the terminal
+		// act actually firing -- grass eaten, a bite landed, an item taken -- not
+		// merely arriving; PENDING is a goal in sight and not yet reached; INVALID is
+		// the guards failing, which covers both "there is no such thing here" and "the
+		// thing I was chasing is gone". Nothing reports a plain failure, because a
+		// latched intent never finishes losing: see AgentIO.S_INTENT.
+		if (seekClass == AgentIO.SEEK_NONE) {
+			intentStatus = AgentIO.INTENT_IDLE;
+		} else if (searching) {
+			intentStatus = AgentIO.INTENT_INVALID;
+		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)) {
+			intentStatus = AgentIO.INTENT_DONE;
+		} else {
+			intentStatus = AgentIO.INTENT_PENDING;
 		}
 		// A plain-language label for what this mind actually DID, so the viewer can
 		// follow a minded creature and read its behaviour without opening the mind
@@ -1548,12 +1692,16 @@ public class TestNPC extends NPC {
 		return distance(item.getX(), item.getY(), item.getZ()) <= reach ? item : null;
 	}
 
-	/** Eats the nearest food/hazard item in reach: food feeds, a hazard bites back. */
-	private void eatNearestItem() {
+	/** Eats the nearest food/hazard item in reach: food feeds, a hazard bites back.
+	 *  Reports whether anything was actually taken, so an intent can say whether it
+	 *  got what it went for. */
+	private boolean eatNearestItem() {
 		Item item = itemInReach();
 		if (item != null && item.isEdible()) {
 			item.beEatenBy(this);
+			return true;
 		}
+		return false;
 	}
 
 	/** Strikes the nearest item in reach: whittles a crate down (spilling food when

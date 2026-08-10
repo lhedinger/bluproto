@@ -1789,6 +1789,111 @@ public class SimTests {
 	 * room and never write A_TURN, so anything that arrives did so because the body
 	 * steered it.
 	 */
+
+	/**
+	 * A mind holds only as many targets at once as its brain has room for, and the
+	 * room comes from the brain's own length. Both bodies here stand in the same
+	 * spot with the same things around them; the one running a longer program simply
+	 * perceives more of them. That is what makes a big brain worth its slower
+	 * reflexes — and what makes a small one single-minded.
+	 */
+
+	/**
+	 * An intent reports back. A mind can finally tell whether what it wanted
+	 * happened, instead of inferring it from its tank drifting upward several
+	 * thought-cycles late. Three of the four states are pinned here; the fourth,
+	 * idle, is simply what a mind that names nothing reads.
+	 *
+	 * <p>Note what is NOT pinned: a "failed" state. A latched intent never finishes
+	 * losing — it is either still closing (pending) or its guards stopped holding
+	 * (invalid) — so how long to persist is left for a lineage to evolve rather than
+	 * for the body to decide. See AgentIO.S_INTENT.
+	 */
+	static class IntentReportsHowItWent extends Scenario {
+		private double statusAfter(boolean grassInWorld, int ticks) {
+			seed(98);
+			World w = room(16, 16);
+			if (!grassInWorld) {
+				for (int x = 0; x < 16; x++) {
+					for (int y = 0; y < 16; y++) {
+						w.getTile(x, y, 0).setFertility(0); // nothing to forage anywhere
+					}
+				}
+			}
+			Genome g = new Genome();
+			g.size = 8;
+			TestNPC body = TestNPC.minded(8.5, 8.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_SEEK] = 0.1; // forage
+				a[AgentIO.A_THROTTLE] = 0.3;
+			});
+			w.spawnEntity(body);
+			tick(w, ticks);
+			return body.intentStatus();
+		}
+
+		@Override
+		public void run() {
+			assertNear("seeking food where there is none reports invalid",
+					AgentIO.INTENT_INVALID, statusAfter(false, 5), 1e-9);
+			assertNear("standing on grass and grazing it reports done",
+					AgentIO.INTENT_DONE, statusAfter(true, 5), 1e-9);
+
+			// And idle when the mind names nothing at all.
+			seed(98);
+			World w = room(10, 10);
+			Genome g = new Genome();
+			g.size = 8;
+			TestNPC idle = TestNPC.minded(5.5, 5.5, 0, g, (sn, a) -> {
+			});
+			w.spawnEntity(idle);
+			tick(w, 5);
+			assertNear("a mind that wants nothing reports idle",
+					AgentIO.INTENT_IDLE, idle.intentStatus(), 1e-9);
+		}
+	}
+
+	static class BrainSizeSetsHowMuchAMindTracks extends Scenario {
+		/** How many tracked channels come back non-zero for a brain of this length. */
+		private int channelsSeen(int brainLen) {
+			seed(97);
+			World w = room(20, 20);
+			Genome g = new Genome();
+			g.size = 8;
+			g.losRange = 14;
+			int[][] code = new int[brainLen][];
+			for (int i = 0; i < brainLen; i++) {
+				code[i] = new int[] { Brain.NOP, 0, 0, 0 }; // length is all that matters here
+			}
+			g.brain = new Brain(code);
+			TestNPC body = TestNPC.minded(10.5, 10.5, 0, g, (sn, a) -> {
+			});
+			w.spawnEntity(body);
+			// Something in every tracked channel, all within sight: grass underfoot,
+			// a smaller creature, a bigger one, and an item.
+			w.spawnEntity(TestNPC.inert(13.5, 10.5, 0).withSize(3));
+			w.spawnEntity(TestNPC.inert(10.5, 14.5, 0).withSize(19));
+			w.spawnEntity(net.hedinger.prototype.entities.Item.food(7.5, 10.5, 0));
+			tick(w, 2);
+			double[] s = body.sensorSnapshot();
+			int seen = 0;
+			for (int prox : new int[] { AgentIO.S_FORAGE_PROX, AgentIO.S_PREY_PROX,
+					AgentIO.S_THREAT_PROX, AgentIO.S_ITEM_PROX }) {
+				if (s[prox] > 0) {
+					seen++;
+				}
+			}
+			return seen;
+		}
+
+		@Override
+		public void run() {
+			int small = channelsSeen(4);   // 1 slot
+			int large = channelsSeen(48);  // capped at the maximum
+			assertEquals("a tiny brain keeps track of exactly one thing", 1, small);
+			assertGreater("a large brain holds several at once", large, small);
+		}
+	}
+
 	static class SeekWalksToAPatchWithoutSteering extends Scenario {
 		private static final int PATCH_X = 32, PATCH_Y = 7;
 
@@ -4016,6 +4121,8 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new IntentReportsHowItWent(),
+				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
 				new OneIntentIsAWholeBehaviour(),
 				new HuntIntentClosesAndBites(),
