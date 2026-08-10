@@ -1937,6 +1937,56 @@ public class SimTests {
 	 * any steering from the mind, the exchange takes real time rather than
 	 * completing on contact, and the pair are stationary while it runs.
 	 */
+
+	/**
+	 * Tile-seeking is generic: A_TILE names a <i>property</i> and the same channel
+	 * that finds grass finds whatever was asked for instead. Which property is worth
+	 * wanting is left to the mind — hiding in cover and heading for water are the
+	 * same instruction with a different constant.
+	 *
+	 * <p>Properties rather than tile types on purpose: types are many and growing,
+	 * their indices are not pool-aligned, and new terrain would need new bands. These
+	 * six questions every tile already answers, and new ground inherits them free.
+	 */
+	static class TileSeekingIsGeneric extends Scenario {
+		/** Does a body asking for this property walk onto ground that has it? */
+		private boolean reaches(double want, Tile.TileType kind) {
+			seed(101);
+			World w = room(24, 12);
+			for (int x = 0; x < 24; x++) {
+				for (int y = 0; y < 12; y++) {
+					w.getTile(x, y, 0).setFertility(0); // no grass to distract the scan
+				}
+			}
+			for (int y = 5; y <= 7; y++) {
+				w.setTile(19, y, 0, kind); // the only ground of that kind, well east
+			}
+			Genome g = new Genome();
+			g.size = 8;
+			g.losRange = 22;
+			TestNPC body = TestNPC.minded(5.5, 6.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_TILE] = want; // what kind of ground
+				a[AgentIO.A_SEEK] = 0.1; // ...go to it
+				a[AgentIO.A_THROTTLE] = 0.8;
+			}).withHeading(Math.PI); // starts facing away
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 400);
+			return body.getX() > 16.0;
+		}
+
+		@Override
+		public void run() {
+			assertTrue("a body that asks for cover walks to the thicket",
+					reaches(0.25, Tile.TileType.TYPE_COVER));
+			assertTrue("the same machinery finds water when that is what was asked for",
+					reaches(1.0, Tile.TileType.TYPE_WATER));
+			// And the property genuinely selects: asking for cover does not walk a
+			// creature onto water, so the constant is doing the work.
+			assertTrue("asking for cover ignores water", !reaches(0.25, Tile.TileType.TYPE_WATER));
+		}
+	}
+
 	static class MatingTakesTimeAndSeeksAPartner extends Scenario {
 		@Override
 		public void run() {
@@ -4295,6 +4345,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new TileSeekingIsGeneric(),
 				new MatingTakesTimeAndSeeksAPartner(),
 				new IntentReportsHowItWent(),
 				new BrainSizeSetsHowMuchAMindTracks(),

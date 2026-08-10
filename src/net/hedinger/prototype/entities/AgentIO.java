@@ -166,6 +166,30 @@ public final class AgentIO {
 	 */
 	public static final int A_SPRINT = 9;
 	/**
+	 * <b>What kind of ground to look for.</b> Names a <i>property</i> a tile may
+	 * have, and the forage/tile channel then reports the nearest tile that has it —
+	 * so {@code A_SEEK = ±0.1} stops meaning "grass" and means "the ground I asked
+	 * for". Sign is not read here; {@code A_SEEK}'s sign still decides approach or
+	 * avoidance.
+	 *
+	 * <p>Properties, not tile types, on purpose. Types are the wrong axis: there are
+	 * a great many, their indices are not aligned to the constant pool, and every
+	 * new one would need a band of its own. Every tile already answers this handful
+	 * of orthogonal questions, they fit the pool exactly, and new terrain inherits
+	 * them for free — when temperature arrives it slots in as another property
+	 * rather than a special case.
+	 *
+	 * <p>Which property is worth wanting is deliberately NOT decided here. A mind
+	 * names one and discovers for itself whether it pays; hiding in cover, avoiding
+	 * ground that bogs you down and heading for open water are all the same
+	 * instruction with a different constant.
+	 *
+	 * <p>{@code 0}=food (the default, so a mind that never writes this forages),
+	 * {@code 0.1}=food, {@code 0.25}=blocks sight, {@code 0.5}=slow going,
+	 * {@code 1}=water, {@code 2}=solid, {@code 4}=hazardous underfoot.
+	 */
+	public static final int A_TILE = A_SPRINT; // the retired sprint slot, put back to work
+	/**
 	 * Retired, and inert: there is no vertical intent to express. A ramp is floor
 	 * that spans two levels, so a body changes level by walking across one — the
 	 * ground decides, not the mind, and a creature needs no more sense of height
@@ -227,7 +251,7 @@ public final class AgentIO {
 	public static final int NUM_ACT = 14;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"sprint (retired)", "vertical (retired)", "seek", "mark", "use" };
+			"tile", "vertical (retired)", "seek", "mark", "use" };
 
 	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
 	public static final int SEEK_NONE = 0;
@@ -239,6 +263,36 @@ public final class AgentIO {
 	public static final int SEEK_WAYPOINT = 6;
 
 	// ---- intent status (the values of S_INTENT) ----------------------------
+	// ---- tile properties (the values of A_TILE) ----------------------------
+	public static final int TILE_FOOD = 0;
+	public static final int TILE_COVER = 1;
+	public static final int TILE_SLOW = 2;
+	public static final int TILE_WATER = 3;
+	public static final int TILE_SOLID = 4;
+	public static final int TILE_HAZARD = 5;
+
+	/** Decodes {@link #A_TILE} into a property, on the same geometric-midpoint bands
+	 *  {@link #seekTarget} uses, so each pool constant sits squarely in its own. */
+	public static int tileWanted(double v) {
+		double m = Math.abs(v);
+		if (m < 0.175) {
+			return TILE_FOOD; // includes 0: forage is what a silent mind gets
+		}
+		if (m < 0.375) {
+			return TILE_COVER;
+		}
+		if (m < 0.75) {
+			return TILE_SLOW;
+		}
+		if (m < 1.5) {
+			return TILE_WATER;
+		}
+		if (m < 3.0) {
+			return TILE_SOLID;
+		}
+		return TILE_HAZARD;
+	}
+
 	/** No intent is set; the mind is steering by hand or standing still. */
 	public static final double INTENT_IDLE = 0;
 	/** The guards failed: nothing of that kind is in reach of the senses. */
