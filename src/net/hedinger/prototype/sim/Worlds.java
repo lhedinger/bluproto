@@ -528,6 +528,18 @@ public final class Worlds {
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
 		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct to the machine wing
 
+		// Furnishing: stacked crates in the storage wing (real items -- a
+		// hauler can move them, and one parked on a plate holds a door), and
+		// the vault's cache: the food worth locking behind buttons, plus a
+		// hazard standing guard over it.
+		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 10.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 11.5, y0 + 11.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
+		w.spawnEntity(Item.hazard(vx + 2.5, vy + 2.5, CAVE_Z));
+
 		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
 	}
 
@@ -560,6 +572,12 @@ public final class Worlds {
 		}
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
 		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
+
+		// Furnishing, annex-sized: a crate pair by the south wall and the
+		// vault's small locked cache.
+		w.spawnEntity(Item.crate(x0 + 2.5, y0 + H - 2.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 3.5, y0 + H - 2.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
 
 		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
 	}

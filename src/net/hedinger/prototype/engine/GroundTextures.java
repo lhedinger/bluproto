@@ -999,9 +999,14 @@ public final class GroundTextures {
 		boolean rim = ai == 2 || ai == 9 || aj == 2 || aj == 9;
 		if (rim) {
 			boolean corner = (ai == 2 || ai == 9) && (aj == 2 || aj == 9);
-			return corner ? RAMP[CLS_AIRVENT][2] : RAMP[CLS_AIRVENT][1]; // frame + screw glints
+			return corner ? RAMP[CLS_AIRVENT][2]
+					: aj == 2 ? lighten2(RAMP[CLS_AIRVENT][2], 1.15) // lit north frame
+					: RAMP[CLS_AIRVENT][1];
 		}
-		return RAMP[CLS_AIRVENT][Math.floorMod(aj, 2) == 0 ? 0 : 1]; // louver slats
+		// Louvers with real depth: near-black slots between lit slat edges, so
+		// the grille reads as an opening in the deck, not a patch of it.
+		return Math.floorMod(aj, 2) == 0
+				? darken(RAMP[CLS_AIRVENT][0], 0.5) : RAMP[CLS_AIRVENT][2];
 	}
 
 	/**
