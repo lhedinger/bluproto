@@ -452,14 +452,92 @@ public final class Worlds {
 	 * draws no RNG.
 	 */
 	private static void buryInstallation(World w, int cols, int rows) {
-		final int W = 15, H = 9; // shell footprint, tiles
-		int[] site = findRockPocket(w, cols, rows, W, H);
-		if (site == null) {
+		// The full three-band plan wants an 18x13 pocket. A cave too riddled
+		// with caverns to host one (commonly the mid sizes) gets the compact
+		// single-hall annex instead; only a truly tiny map gets nothing.
+		int[] site = findRockPocket(w, cols, rows, 18, 13);
+		if (site != null) {
+			buildFullBase(w, cols, rows, site[0], site[1]);
 			return;
 		}
-		int x0 = site[0], y0 = site[1];
+		site = findRockPocket(w, cols, rows, 15, 9);
+		if (site != null) {
+			buildCompactBase(w, cols, rows, site[0], site[1]);
+		}
+	}
 
-		// Shell and deck: a concrete perimeter around plate flooring.
+	/** The full station plan, in an 18x13 shell. */
+	private static void buildFullBase(World w, int cols, int rows, int x0, int y0) {
+		final int W = 18, H = 13;
+
+		// The plan is three bands under one concrete shell, each floored in
+		// its own material so the rooms read at a glance:
+		//
+		//   rows 1..3   machine wing  -- plate deck, pipe run, vents
+		//   rows 5..7   central spine -- paved, fed by the 2-wide blast mouth
+		//   rows 9..11  storage wing  -- plate deck, a pipe drop, vents
+		//
+		// Concrete partition walls at rows 4 and 8 separate the bands, each
+		// pierced by two open doorways; the steel vault closes the spine's
+		// east end, answering only its buttons (and the crawl duct through
+		// its north wall, from the machine wing).
+		for (int x = x0; x < x0 + W; x++) {
+			for (int y = y0; y < y0 + H; y++) {
+				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
+				boolean partition = (y == y0 + 4 || y == y0 + 8);
+				setBare(w, x, y, CAVE_Z, shell || partition
+						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		// The spine, paved from the mouth to the vault's step.
+		for (int x = x0 + 1; x < x0 + 12; x++) {
+			for (int y = y0 + 5; y <= y0 + 7; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_PAVED);
+			}
+		}
+		// Doorways through the partitions: two per wall, paved thresholds.
+		setBare(w, x0 + 5, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 11, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 5, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 11, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
+
+		// Machine wing: a pipe run the room's whole width, vents in the deck.
+		for (int x = x0 + 2; x < x0 + W - 2; x++) {
+			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		}
+		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// Storage wing: a vertical pipe drop and its own vents.
+		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 13, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// The steel vault, closing the spine's east end: steel walls over the
+		// partition rows, a grate doorway facing the spine, and the crawl
+		// duct through its north wall into the machine wing.
+		int vx = x0 + 12, vy = y0 + 4, vw = 5, vh = 5;
+		for (int x = vx; x < vx + vw; x++) {
+			for (int y = vy; y < vy + vh; y++) {
+				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, rim
+						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
+		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct to the machine wing
+
+		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
+	}
+
+	/**
+	 * The compact annex, in a 15x9 shell: one hall with the pipe run, vents,
+	 * and the steel vault at its east end -- the fallback plan for caves
+	 * whose rock cannot host the full station.
+	 */
+	private static void buildCompactBase(World w, int cols, int rows, int x0, int y0) {
+		final int W = 15, H = 9;
 		for (int x = x0; x < x0 + W; x++) {
 			for (int y = y0; y < y0 + H; y++) {
 				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
@@ -467,30 +545,33 @@ public final class Worlds {
 						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
 			}
 		}
-		// A pipe run hugging the hall's north wall.
 		for (int x = x0 + 2; x < x0 + W - 2; x++) {
 			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		}
-		// Air vents in the open deck.
 		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-
-		// The steel inner vault, east end of the hall, with a one-tile doorway
-		// facing the hall and a crawl duct through its north wall: the future
-		// grate-door room, already crawlable around the long way.
 		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
 		for (int x = vx; x < vx + vw; x++) {
 			for (int y = vy; y < vy + vh; y++) {
-				boolean shell = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
-				setBare(w, x, y, CAVE_Z, shell
+				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, rim
 						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
 			}
 		}
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
 		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
 
-		// The 2-wide entrance mouth in the west shell -- blast-door sized --
-		// and the paved gallery tunnelled out to the nearest walkable cavern.
+		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
+	}
+
+	/**
+	 * The shared finishing pass for either plan: the 2-wide blast mouth in
+	 * the west shell, the paved gallery tunnelled out to the nearest
+	 * walkable cavern (un-carving everything if no way out exists), the two
+	 * doors, and their switches.
+	 */
+	private static void finishBase(World w, int cols, int rows, int x0, int y0,
+			int W, int H, int vx, int vy, int vh) {
 		int my = y0 + H / 2 - 1;
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
@@ -545,18 +626,20 @@ public final class Worlds {
 	}
 
 	/**
-	 * The all-rock rectangle of {@code pw x ph} (plus a one-tile rock margin)
-	 * nearest the map's centre on the cave level; null when none fits. The
-	 * margin keeps the installation clear of caverns and link stations, so
-	 * carving it disturbs nothing that already works.
+	 * The all-rock rectangle of {@code pw x ph} nearest the map's centre on
+	 * the cave level; null when none fits. All-rock is the whole safety
+	 * argument: caverns, pools and link stations are all non-WALL tiles, so
+	 * requiring solid rock means carving overwrites nothing that already
+	 * works -- the shell may stand flush against a cavern wall, which only
+	 * reads as the buried structure surfacing in it.
 	 */
 	private static int[] findRockPocket(World w, int cols, int rows, int pw, int ph) {
 		int[] best = null;
 		double bestD = Double.MAX_VALUE;
 		for (int x0 = 2; x0 + pw < cols - 2; x0++) {
 			scan: for (int y0 = 2; y0 + ph < rows - 2; y0++) {
-				for (int x = x0 - 1; x <= x0 + pw; x++) {
-					for (int y = y0 - 1; y <= y0 + ph; y++) {
+				for (int x = x0; x < x0 + pw; x++) {
+					for (int y = y0; y < y0 + ph; y++) {
 						if (w.getTile(x, y, CAVE_Z).getType() != Tile.TileType.TYPE_WALL) {
 							continue scan;
 						}
