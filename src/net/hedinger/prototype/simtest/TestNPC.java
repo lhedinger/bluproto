@@ -186,6 +186,20 @@ public class TestNPC extends NPC {
 	/** How the standing intent went last tick, as an {@link AgentIO} INTENT_* value.
 	 *  Reported back to the mind through S_INTENT, and to the viewer. */
 	private double intentStatus = AgentIO.INTENT_IDLE;
+	/**
+	 * How long a pair must stay together before a child arrives (~3s at 33 t/s).
+	 * Mating is an exchange, not an instant: the pair has to hold station, which
+	 * costs them both the time and leaves them stationary and conspicuous while it
+	 * happens. That is what makes breeding a decision with a price rather than a
+	 * collision, and it gives the pending state something real to describe.
+	 */
+	private static final int MATING_TICKS = 100;
+	/** The partner this body is currently exchanging with; null when not mating. */
+	private NPC matingWith = null;
+	/** Ticks spent in the current exchange. */
+	private int matingTicks = 0;
+	/** Relative bearing to a partner being approached, NaN when not approaching. */
+	private double mateSteer = Double.NaN;
 	/** Which tracked channels attention had no room for last tick, by index into
 	 *  {@link #TRACKED_CHANNELS}. Kept so the inspector can tell "nothing there"
 	 *  apart from "no room for it" -- a bare zero means both, and they are opposite
@@ -1310,6 +1324,96 @@ public class TestNPC extends NPC {
 		return intentStatus;
 	}
 
+	/** True while this body is in the middle of an exchange with a partner. */
+	public boolean isMating() {
+		return matingWith != null;
+	}
+
+	/** Abandons any exchange under way. */
+	private void breakOffMating() {
+		matingWith = null;
+		matingTicks = 0;
+	}
+
+	/**
+	 * The nearest compatible partner in sight.
+	 *
+	 * <p>Scans the world directly rather than reading {@code targets}, which is the
+	 * short, tile-local perception set and is not filled for a minded body at all --
+	 * that is precisely why the old A_MATE could only ever fire at contact range,
+	 * and why breeding was something creatures blundered into. Same guards as the
+	 * prey and threat channels: this level, in line of sight, inside LOS_RANGE.
+	 */
+	private NPC nearestMate() {
+		NPC best = null;
+		double bestD = LOS_RANGE;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
+					|| n instanceof Item || n.getLvl() != getLvl() || !canMateWith(n)
+					|| !isInLOS(n)) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < bestD) {
+				bestD = d;
+				best = n;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * The mate intent: find a partner, walk to it, hold station together, and a
+	 * child follows. {@code A_MATE} is the whole behaviour rather than a gate that
+	 * only fires if a partner happens to already be in reach -- which is what made
+	 * breeding accidental, since nothing ever went looking.
+	 *
+	 * <p>Flocking is deliberately NOT this. Seeking kin gathers a creature into the
+	 * herd and does nothing else; a mind that wants to breed says so.
+	 *
+	 * <p>Returns the {@link AgentIO} INTENT_* status. Note that this is the one
+	 * intent whose guards include the creature's OWN state -- too hungry or too
+	 * recently bred both read as invalid, which tells a mind to go and eat instead.
+	 * And its {@code done} is a true completion rather than the per-tick pulse
+	 * grazing gives: a birth is discrete, and the cooldown it starts means the very
+	 * next tick reads invalid, so a mind sees a done->invalid edge.
+	 */
+	private double mateIntent() {
+		mateSteer = Double.NaN;
+		if (!fertile()) {
+			breakOffMating(); // too hungry, too soon, or not built to breed
+			return AgentIO.INTENT_INVALID;
+		}
+		if (matingWith != null) {
+			double reach = (getSize() + matingWith.getSize()) / 2.0 + MATE_REACH;
+			boolean together = !matingWith.isDead() && !matingWith.isRemoved()
+					&& distance(matingWith.getX(), matingWith.getY(), matingWith.getZ()) <= reach
+					&& canMateWith(matingWith);
+			if (together) {
+				matingTicks++;
+				if (matingTicks >= MATING_TICKS) {
+					NPC partner = matingWith;
+					breakOffMating();
+					return reproduceWith(partner) ? AgentIO.INTENT_DONE : AgentIO.INTENT_INVALID;
+				}
+				return AgentIO.INTENT_PENDING; // the exchange, in progress
+			}
+			breakOffMating(); // partner left, died, or stopped being willing
+		}
+		NPC p = nearestMate();
+		if (p == null) {
+			return AgentIO.INTENT_INVALID; // nobody here to breed with
+		}
+		double reach = (getSize() + p.getSize()) / 2.0 + MATE_REACH;
+		if (distance(p.getX(), p.getY(), p.getZ()) <= reach) {
+			matingWith = p; // in reach: the exchange starts next tick
+			matingTicks = 0;
+		} else {
+			mateSteer = wrap(Math.atan2(p.getY() - Y, p.getX() - X) - D);
+		}
+		return AgentIO.INTENT_PENDING;
+	}
+
 	/** Fills the waypoint channel; zeros when nothing is marked or the mark is on
 	 *  another level, since a bearing across levels would point at nothing walkable. */
 	private void senseWaypoint(double[] s) {
@@ -1420,6 +1524,18 @@ public class TestNPC extends NPC {
 		// speed and so the throttle is where a lineage spends or saves its living. A
 		// body given a goal and no throttle wants something and stays put, which is a
 		// policy a mind is free to hold.
+		// Mating is a commitment, so while it has a partner it takes the wheel: a
+		// creature walking to a mate is not also foraging, and one mid-exchange is
+		// standing still. A_SEEK resumes the moment the intent goes invalid.
+		boolean wantsMate = a[AgentIO.A_MATE] > 0.5;
+		double mateStatus = wantsMate ? mateIntent() : Double.NaN;
+		boolean mating = wantsMate && mateStatus == AgentIO.INTENT_PENDING;
+		if (mating && !Double.isNaN(mateSteer)) {
+			t = clamp(mateSteer / MAX_TURN, -1, 1); // walk to the partner
+		}
+		if (matingWith != null) {
+			throttle = 0; // hold station: the exchange happens in place
+		}
 		if (a[AgentIO.A_MARK] > 0.5) {
 			wpX = X; // remember here
 			wpY = Y;
@@ -1468,9 +1584,12 @@ public class TestNPC extends NPC {
 				attackNearestItem(); // smashing crates is a deliberate act, not a side
 			}                        // effect of running something down
 		}
-		boolean bred = false;
-		if (a[AgentIO.A_MATE] > 0.5) {
-			bred = reproduce();
+		boolean bred = mateStatus == AgentIO.INTENT_DONE;
+		if (wantsMate && mateStatus == AgentIO.INTENT_INVALID && nearestMate() == null) {
+			// Nobody to breed with, but a well-fed body can still bud on its own --
+			// the asexual path the cohort has always had, kept so the intent adds a
+			// way to breed rather than taking one away.
+			bred = tryReproduce();
 		}
 		// How the intent went, for the mind to read next tick. DONE is the terminal
 		// act actually firing -- grass eaten, a bite landed, an item taken -- not
@@ -1478,7 +1597,11 @@ public class TestNPC extends NPC {
 		// the guards failing, which covers both "there is no such thing here" and "the
 		// thing I was chasing is gone". Nothing reports a plain failure, because a
 		// latched intent never finishes losing: see AgentIO.S_INTENT.
-		if (seekClass == AgentIO.SEEK_NONE) {
+		if (wantsMate && mateStatus != AgentIO.INTENT_INVALID) {
+			intentStatus = mateStatus; // a commitment outranks a preference
+		} else if (wantsMate && seekClass == AgentIO.SEEK_NONE) {
+			intentStatus = mateStatus; // wanted to breed, and could not
+		} else if (seekClass == AgentIO.SEEK_NONE) {
 			intentStatus = AgentIO.INTENT_IDLE;
 		} else if (searching) {
 			intentStatus = AgentIO.INTENT_INVALID;
@@ -1494,6 +1617,8 @@ public class TestNPC extends NPC {
 		// read "mating" forever regardless of what the creature achieved.
 		if (bit) {
 			setAction("attacking", true); // an instant: latch it so it can be seen
+		} else if (matingWith != null) {
+			setAction("courting", false); // the exchange, visibly taking its time
 		} else if (bred) {
 			setAction("breeding", true);
 		} else if (eaten > 0) {

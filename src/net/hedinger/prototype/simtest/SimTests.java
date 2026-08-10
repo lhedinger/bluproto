@@ -1809,6 +1809,60 @@ public class SimTests {
 	 * (invalid) — so how long to persist is left for a lineage to evolve rather than
 	 * for the body to decide. See AgentIO.S_INTENT.
 	 */
+
+	/**
+	 * Mating is a behaviour, not a collision. A mind that wants to breed walks to a
+	 * partner and holds station with it while the exchange happens; a child follows
+	 * a few seconds later. Before this, A_MATE only fired if a partner happened
+	 * already to be in reach, so breeding was something creatures blundered into.
+	 *
+	 * <p>Pins the three things that make it an intent: the approach happens without
+	 * any steering from the mind, the exchange takes real time rather than
+	 * completing on contact, and the pair are stationary while it runs.
+	 */
+	static class MatingTakesTimeAndSeeksAPartner extends Scenario {
+		@Override
+		public void run() {
+			seed(99);
+			World w = room(20, 20);
+			// Two compatible partners, well apart, both willing and nothing else said.
+			// Willing, and walking: speed stays with the mind for mating exactly as it
+			// does for seeking, so an intent alone steers but does not travel.
+			Mind willing = (sn, a) -> {
+				a[AgentIO.A_MATE] = 1;
+				a[AgentIO.A_THROTTLE] = 0.6;
+			};
+			TestNPC a = mater(w, 5.5, 10.5, willing);
+			TestNPC b = mater(w, 13.5, 10.5, willing);
+			w.think();
+			int start = w.getAliveCount();
+			double gap0 = Math.hypot(a.getX() - b.getX(), a.getY() - b.getY());
+
+			tick(w, 90); // long enough to close an 8-tile gap, not to finish courting
+			double gap1 = Math.hypot(a.getX() - b.getX(), a.getY() - b.getY());
+			assertLess("they sought each other out with no steering of their own",
+					gap1, gap0 - 3.0);
+			assertTrue("the exchange is under way", a.isMating() || b.isMating());
+			assertEquals("...and no child yet: mating is not instant", start,
+					w.getAliveCount());
+
+			tick(w, 200); // now let it run to term
+            assertGreater("a child arrives once the pair have held station",
+					w.getAliveCount(), start);
+		}
+
+		private TestNPC mater(World w, double x, double y, Mind m) {
+			Genome g = new Genome();
+			g.size = 8;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.mateThreshold = 0.1; // compatible with each other
+			TestNPC t = TestNPC.minded(x, y, 0, g, m).withMetabolic().withSpeed(0.08);
+			t.withEnergy(t.energyCapacity());
+			w.spawnEntity(t);
+			return t;
+		}
+	}
+
 	static class IntentReportsHowItWent extends Scenario {
 		private double statusAfter(boolean grassInWorld, int ticks) {
 			seed(98);
@@ -4121,6 +4175,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new MatingTakesTimeAndSeeksAPartner(),
 				new IntentReportsHowItWent(),
 				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
