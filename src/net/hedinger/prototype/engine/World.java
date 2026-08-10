@@ -187,16 +187,12 @@ public class World {
 		return entities.values();
 	}
 
-	/** Registers a door with its level so it thinks and renders (doors live
-	 *  beside the entity stream, not in it). False if out of bounds. */
+	/** Registers a door. Doors are ordinary non-living entities (like crates):
+	 *  they ride the entity stream -- think, snapshot, wire -- so a web viewer
+	 *  sees them slide instead of meeting an invisible barrier. Perception
+	 *  ignores them (every scan filters to NPCs). False if out of bounds. */
 	public boolean addDoor(net.hedinger.prototype.entities.Door d) {
-		if (d == null || !isValid(d.getCol(), d.getRow(), d.getLvl())) {
-			return false;
-		}
-		d.buildID(this, spawnCounter);
-		spawnCounter++;
-		levels[(int) d.getZ()].doors.add(d);
-		return true;
+		return spawnEntity(d);
 	}
 
 	// ---- Pheromone: clouds are entities, not a per-tile scalar field --------

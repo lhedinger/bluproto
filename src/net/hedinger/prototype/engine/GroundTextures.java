@@ -44,7 +44,7 @@ public final class GroundTextures {
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
-			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27;
+			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -74,6 +74,7 @@ public final class GroundTextures {
 			{ 0x3f454c, 0x616974, 0x88929e }, // galvanised duct metal (brightest)
 			{ 0x1f2637, 0x38466e, 0x5f74a4 }, // crystal bed (grounded, a step darker)
 			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
+			{ 0x353a42, 0x515862, 0x707885 }, // switch plate (deck steel family)
 	};
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
@@ -128,6 +129,8 @@ public final class GroundTextures {
 			return CLS_CRYSTAL_BED;
 		case TYPE_CRYSTAL_SPARSE:
 			return CLS_CRYSTAL_SPARSE;
+		case TYPE_SWITCH:
+			return CLS_SWITCH;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -996,9 +999,47 @@ public final class GroundTextures {
 		boolean rim = ai == 2 || ai == 9 || aj == 2 || aj == 9;
 		if (rim) {
 			boolean corner = (ai == 2 || ai == 9) && (aj == 2 || aj == 9);
-			return corner ? RAMP[CLS_AIRVENT][2] : RAMP[CLS_AIRVENT][1]; // frame + screw glints
+			return corner ? RAMP[CLS_AIRVENT][2]
+					: aj == 2 ? lighten2(RAMP[CLS_AIRVENT][2], 1.15) // lit north frame
+					: RAMP[CLS_AIRVENT][1];
 		}
-		return RAMP[CLS_AIRVENT][Math.floorMod(aj, 2) == 0 ? 0 : 1]; // louver slats
+		// Louvers with real depth: near-black slots between lit slat edges, so
+		// the grille reads as an opening in the deck, not a patch of it.
+		return Math.floorMod(aj, 2) == 0
+				? darken(RAMP[CLS_AIRVENT][0], 0.5) : RAMP[CLS_AIRVENT][2];
+	}
+
+	/**
+	 * A switch pedestal tile, test-chamber style: a broad pale circular base
+	 * plate nearly filling the tile -- polished concrete, lit on its north
+	 * arc -- around a dark circular seat where the control sits. The base is
+	 * the socket only: the red control itself (a plate's broad disc or a
+	 * button's domed cap, up or pressed) is drawn live by the {@code Switch}
+	 * entity, since baked ground cannot animate.
+	 */
+	public static int switchPlate(int ai, int aj, int px, int py) {
+		double dx = ai - 5.5, dy = aj - 5.5; // centre of the 12-px tile
+		double d2 = dx * dx + dy * dy;
+		if (d2 > 27) {
+			return plate(px, py); // deck showing at the corners
+		}
+		if (d2 > 16) {
+			// The pale base ring, shaded to the one light source.
+			return dy < -Math.abs(dx) * 0.5 ? lighten2(RAMP[CLS_CONCRETE][2], 1.12)
+					: dy > Math.abs(dx) * 0.5 ? RAMP[CLS_CONCRETE][1]
+					: RAMP[CLS_CONCRETE][2];
+		}
+		if (d2 > 12) {
+			return RAMP[CLS_SWITCH][0]; // the dark seam between base and seat
+		}
+		return darken(RAMP[CLS_SWITCH][0], 0.8); // the recessed seat
+	}
+
+	private static int lighten2(int rgb, double f) {
+		int r = Math.min(255, (int) (((rgb >> 16) & 255) * f));
+		int g = Math.min(255, (int) (((rgb >> 8) & 255) * f));
+		int b = Math.min(255, (int) ((rgb & 255) * f));
+		return (r << 16) | (g << 8) | b;
 	}
 
 	private static int darken(int rgb, double f) {

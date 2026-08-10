@@ -278,6 +278,13 @@ public abstract class Entity {
 		if (isOverHole() && !isFlying()) {
 			// A pit is not a route, it is gravity: standing over one drops you.
 			// FIXME allow flying entities to go down the hole if they wish
+			if ((int) Z - 1 < 0) {
+				// A drop on the lowest level is bottomless: there is no floor
+				// below to land on, so the body simply falls out of the world
+				// -- no corpse, nothing to scavenge, just gone.
+				remove();
+				return;
+			}
 			dZ = -1;
 		} else {
 			dZ = rampStep();

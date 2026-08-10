@@ -346,16 +346,21 @@ public class WorldGenerator {
 			}
 		}
 
-		d.buildID(world, world.spawnCounter);
-		world.spawnCounter++;
-
-		world.levels[z].doors.add(d);
+		if (!world.addDoor(d)) {
+			return false;
+		}
+		placedDoors.add(d);
 		return true;
 	}
 
+	/** Doors placed this generation pass. Spawned doors sit in the world's
+	 *  spawn queue until its next think, so the crowding check below needs
+	 *  its own record of what this generator already placed. */
+	private final java.util.List<Door> placedDoors = new java.util.ArrayList<Door>();
+
 	public boolean hasNeighborDoor(int x, int y, int z, int d) {
 		int max = (int) (Utils.random() * 5) + 1;
-		for (Entity door : world.levels[z].doors) {
+		for (Entity door : placedDoors) {
 			if (door.getDirection() == d) {
 				if (door.getZ() == z) {
 					if (d == 0 && door.getX() == x) {

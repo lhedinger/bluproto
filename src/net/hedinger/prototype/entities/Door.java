@@ -58,6 +58,16 @@ public class Door extends Entity {
 	private final int span; // doorway width in tiles the door seals
 	private final int open_delay, close_delay;
 
+	/** A wired door is machinery, not weather: it stops the idle random
+	 *  self-cycling and answers only its switches (and explicit triggers). */
+	private boolean wired = false;
+	/** Ticks of open-hold remaining; refreshed every tick a wired switch is
+	 *  pressed, so the door closes only after every plate has gone quiet. */
+	private int holdTimer = 0;
+	/** How long the hold outlasts the last press (~3 s), so a body crossing
+	 *  the plate gets through before the leaves come back. */
+	private static final int HOLD = 100;
+
 	public Door(double x, double y, double z, int d) {
 		this(x, y, z, d, flavorAt((int) x, (int) y, (int) z));
 	}
@@ -83,9 +93,33 @@ public class Door extends Entity {
 	}
 
 	/** Asks the door to start opening (if closed) or closing (if open) on
-	 *  its next think -- the hook a switch, a sensor, or a demo pulls. */
+	 *  its next think -- the hook a sensor or a demo pulls. */
 	public void trigger() {
 		triggered = true;
+	}
+
+	/** Marks this door as switch-operated. Called by the switch that wires
+	 *  itself to the door, so placement stays one line per switch. */
+	public void setWired(boolean w) {
+		wired = w;
+	}
+
+	/**
+	 * A wired switch's per-tick request: keep (or get) this door open. Every
+	 * press refreshes the same hold timer, so several plates wired to one
+	 * door compose naturally -- it closes only when all have been quiet for
+	 * the linger.
+	 */
+	public void holdOpen() {
+		holdTimer = HOLD;
+	}
+
+	public boolean isOpen() {
+		return status == DOOR_OPEN;
+	}
+
+	public boolean isClosed() {
+		return status == DOOR_CLOSED;
 	}
 
 	/** Position-derived flavour for legacy call sites: the built materials
@@ -98,7 +132,18 @@ public class Door extends Entity {
 	protected void think() {
 		int r = (int) (this.D % (Math.PI / 2));
 
-		if (Utils.random() * 600 < 1) {
+		if (wired) {
+			// Machinery: open while any switch holds it, close after the
+			// linger runs out. Draws no RNG at all.
+			if (holdTimer > 0) {
+				holdTimer--;
+				if (status == DOOR_CLOSED && delay_counter == 0) {
+					triggered = true;
+				}
+			} else if (status == DOOR_OPEN && delay_counter == 0) {
+				triggered = true;
+			}
+		} else if (Utils.random() * 600 < 1) {
 			triggered = true;
 		}
 
@@ -165,12 +210,50 @@ public class Door extends Entity {
 		triggered = false;
 	}
 
+	/** Doorway width in tiles this door seals. */
+	public int getSpan() {
+		return span;
+	}
+
+	/** Wire tag for the viewer ("door.<flavour>" selects the glyph). */
+	public String flavorName() {
+		switch (flavor) {
+		case STONE:
+			return "stone";
+		case GRATE:
+			return "grate";
+		case HEDGE:
+			return "hedge";
+		case BLAST:
+			return "blast";
+		default:
+			return "timber";
+		}
+	}
+
+	/** The flavour's body tone for the wire, so a client that has no door
+	 *  glyph yet still draws a plausible bar. */
+	public int wireColor() {
+		switch (flavor) {
+		case STONE:
+			return STONE_MID.getRGB() & 0xFFFFFF;
+		case GRATE:
+			return IRON_HI.getRGB() & 0xFFFFFF;
+		case HEDGE:
+			return HEDGE_MID.getRGB() & 0xFFFFFF;
+		case BLAST:
+			return STEEL_MID.getRGB() & 0xFFFFFF;
+		default:
+			return TIMBER_MID.getRGB() & 0xFFFFFF;
+		}
+	}
+
 	/**
 	 * How far the leaves reach toward the middle: 1 sealed, ~0.15 open (the
 	 * stubs by the posts), sliding smoothly through the transition -- the
 	 * old sprite door blinked instead.
 	 */
-	private double extension() {
+	public double extension() {
 		if (status == DOOR_CLOSED) {
 			return 1;
 		}

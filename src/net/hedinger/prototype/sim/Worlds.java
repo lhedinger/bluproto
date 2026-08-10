@@ -259,9 +259,11 @@ public final class Worlds {
 	static final int CAVE_Z = 0, SURFACE_Z = 1;
 
 	/**
-	 * The demo world's terrain — same seed, same tiles, same fertility, zero
-	 * entities: an exact twin of {@link #demo}'s ground, from which the server
-	 * bakes the static layer images (one per level). Two levels:
+	 * The demo world's terrain — same seed, same tiles, same fertility, no
+	 * creatures: an exact twin of {@link #demo}'s ground, from which the
+	 * server bakes the static layer images (one per level). The only entities
+	 * are the buried installation's doors (structural furniture, part of the
+	 * terrain's story rather than its population). Two levels:
 	 *
 	 * <ul>
 	 *   <li><b>Level 0 — the surface:</b> a patchwork of biomes inside a rocky
@@ -371,6 +373,13 @@ public final class Worlds {
 								: Tile.TileType.TYPE_CRYSTAL_SPARSE;
 					} else if (deep > 0.85) {
 						t = Tile.TileType.TYPE_VENT;
+					} else if (deep < 0.08) {
+						// The odd cavern floor gives way entirely: a natural
+						// pit, and on the lowest level a pit is bottomless --
+						// whatever falls in leaves the world. The corridor
+						// carver paves straight through pit fields, so the
+						// backbone always bridges them.
+						t = Tile.TileType.TYPE_HOLE;
 					} else {
 						t = Tile.TileType.TYPE_STONE;
 					}
@@ -451,14 +460,152 @@ public final class Worlds {
 	 * draws no RNG.
 	 */
 	private static void buryInstallation(World w, int cols, int rows) {
-		final int W = 15, H = 9; // shell footprint, tiles
-		int[] site = findRockPocket(w, cols, rows, W, H);
-		if (site == null) {
+		// The full three-band plan wants an 18x13 pocket. A cave too riddled
+		// with caverns to host one (commonly the mid sizes) gets the compact
+		// single-hall annex instead; only a truly tiny map gets nothing.
+		int[] site = findRockPocket(w, cols, rows, 18, 13);
+		if (site != null) {
+			buildFullBase(w, cols, rows, site[0], site[1]);
 			return;
 		}
-		int x0 = site[0], y0 = site[1];
+		site = findRockPocket(w, cols, rows, 15, 9);
+		if (site != null) {
+			buildCompactBase(w, cols, rows, site[0], site[1]);
+		}
+	}
 
-		// Shell and deck: a concrete perimeter around plate flooring.
+	/** The full station plan, in an 18x13 shell. */
+	private static void buildFullBase(World w, int cols, int rows, int x0, int y0) {
+		final int W = 18, H = 13;
+
+		// The plan is three bands under one concrete shell, each floored in
+		// its own material so the rooms read at a glance:
+		//
+		//   rows 1..3   machine wing  -- plate deck, pipe run, vents
+		//   rows 5..7   central spine -- paved, fed by the 2-wide blast mouth
+		//   rows 9..11  storage wing  -- plate deck, a pipe drop, vents
+		//
+		// Concrete partition walls at rows 4 and 8 separate the bands, each
+		// pierced by two open doorways; the steel vault closes the spine's
+		// east end, answering only its buttons (and the crawl duct through
+		// its north wall, from the machine wing).
+		for (int x = x0; x < x0 + W; x++) {
+			for (int y = y0; y < y0 + H; y++) {
+				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
+				boolean partition = (y == y0 + 4 || y == y0 + 8);
+				setBare(w, x, y, CAVE_Z, shell || partition
+						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		// The spine, paved from the mouth to the vault's step.
+		for (int x = x0 + 1; x < x0 + 12; x++) {
+			for (int y = y0 + 5; y <= y0 + 7; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_PAVED);
+			}
+		}
+		// Doorways through the partitions: two per wall, paved thresholds.
+		setBare(w, x0 + 5, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 11, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 5, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		setBare(w, x0 + 11, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
+
+		// The ventilation runs: crawl ducting laid through both partitions'
+		// west sections, so a small body can move machine wing -> spine ->
+		// storage wing entirely inside the walls, concealed -- the base's
+		// second circulation system, parallel to the doorways.
+		for (int x = x0 + 2; x <= x0 + 4; x++) {
+			setBare(w, x, y0 + 4, CAVE_Z, Tile.TileType.TYPE_DUCT);
+			setBare(w, x, y0 + 8, CAVE_Z, Tile.TileType.TYPE_DUCT);
+		}
+
+		// Machine wing: a pipe run the room's whole width, vents in the deck.
+		for (int x = x0 + 2; x < x0 + W - 2; x++) {
+			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		}
+		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// Storage wing (west half): a vertical pipe drop and its own vents.
+		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 6, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// The shaft bay, Black-Mesa style: the whole south-east quadrant has
+		// given way to a bottomless pit, crossed by two catwalks meeting at
+		// a junction over the void. The east-west walk runs from the storage
+		// wing's pipe end out to a supply platform against the east wall;
+		// the north-south walk drops from the spine's doorway down to a
+		// second mouth in the south shell -- so one of the base's entrances
+		// is a walk over the abyss.
+		for (int x = x0 + 9; x <= x0 + 16; x++) {
+			for (int y = y0 + 9; y <= y0 + 11; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SHAFT);
+			}
+		}
+		for (int x = x0 + 9; x <= x0 + 15; x++) {
+			setBare(w, x, y0 + 10, CAVE_Z, Tile.TileType.TYPE_CATWALK); // east-west walk
+		}
+		for (int y = y0 + 9; y <= y0 + 11; y++) {
+			setBare(w, x0 + 11, y, CAVE_Z, Tile.TileType.TYPE_CATWALK); // north-south walk
+		}
+		setBare(w, x0 + 16, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PLATE); // the platform
+		w.spawnEntity(Item.food(x0 + 16.5, y0 + 10.5, CAVE_Z));
+
+		// The south gate: the catwalk's south arm exits through the shell, a
+		// self-cycling maintenance grate over the doorway and its own gallery
+		// tunnelled to the nearest cavern -- the base's second ground
+		// entrance. If the rock refuses a way out, the mouth seals back up
+		// and the catwalk arm simply dead-ends over the void.
+		setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		if (carveGallery(w, cols, rows, x0 + 11, y0 + H,
+				new int[][] { { x0 + 11, y0 + H - 1 } }) != null) {
+			w.addDoor(new net.hedinger.prototype.entities.Door(x0 + 11, y0 + H - 1,
+					CAVE_Z, 0, net.hedinger.prototype.entities.Door.GRATE));
+		} else {
+			setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_WALL_CONCRETE);
+		}
+
+		// The steel vault, closing the spine's east end: steel walls over the
+		// partition rows, a grate doorway facing the spine, and the crawl
+		// duct through its north wall into the machine wing.
+		int vx = x0 + 12, vy = y0 + 4, vw = 5, vh = 5;
+		for (int x = vx; x < vx + vw; x++) {
+			for (int y = vy; y < vy + vh; y++) {
+				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, rim
+						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
+		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct to the machine wing
+
+		// Furnishing: stacked crates in the storage wing (real items -- a
+		// hauler can move them, and one parked on a plate holds a door), and
+		// the vault's cache: the food worth locking behind buttons, plus a
+		// hazard standing guard over it.
+		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 10.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 11.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
+		w.spawnEntity(Item.hazard(vx + 2.5, vy + 2.5, CAVE_Z));
+
+		// The ceiling: a ventilation shaft from the surface over the spine,
+		// so gravity is the base's third entrance.
+		dropShaft(w, x0 + 2, x0 + 10, y0 + 5, y0 + 7);
+
+		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
+	}
+
+	/**
+	 * The compact annex, in a 15x9 shell: one hall with the pipe run, vents,
+	 * and the steel vault at its east end -- the fallback plan for caves
+	 * whose rock cannot host the full station.
+	 */
+	private static void buildCompactBase(World w, int cols, int rows, int x0, int y0) {
+		final int W = 15, H = 9;
 		for (int x = x0; x < x0 + W; x++) {
 			for (int y = y0; y < y0 + H; y++) {
 				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
@@ -466,34 +613,46 @@ public final class Worlds {
 						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
 			}
 		}
-		// A pipe run hugging the hall's north wall.
 		for (int x = x0 + 2; x < x0 + W - 2; x++) {
 			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		}
-		// Air vents in the open deck.
 		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-
-		// The steel inner vault, east end of the hall, with a one-tile doorway
-		// facing the hall and a crawl duct through its north wall: the future
-		// grate-door room, already crawlable around the long way.
 		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
 		for (int x = vx; x < vx + vw; x++) {
 			for (int y = vy; y < vy + vh; y++) {
-				boolean shell = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
-				setBare(w, x, y, CAVE_Z, shell
+				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, rim
 						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
 			}
 		}
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
 		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
 
-		// The 2-wide entrance mouth in the west shell -- blast-door sized --
-		// and the paved gallery tunnelled out to the nearest walkable cavern.
+		// Furnishing, annex-sized: a crate pair by the south wall, the
+		// vault's small locked cache, and the ceiling shaft over the hall.
+		w.spawnEntity(Item.crate(x0 + 2.5, y0 + H - 2.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 3.5, y0 + H - 2.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
+		dropShaft(w, x0 + 1, x0 + 7, y0 + 1, y0 + H - 2);
+
+		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
+	}
+
+	/**
+	 * The shared finishing pass for either plan: the 2-wide blast mouth in
+	 * the west shell, the paved gallery tunnelled out to the nearest
+	 * walkable cavern (un-carving everything if no way out exists), the two
+	 * doors, and their switches.
+	 */
+	private static void finishBase(World w, int cols, int rows, int x0, int y0,
+			int W, int H, int vx, int vy, int vh) {
 		int my = y0 + H / 2 - 1;
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		if (!carveGallery(w, cols, rows, x0, my)) {
+		java.util.List<int[]> gallery = carveGallery(w, cols, rows, x0 - 1, my,
+				new int[][] { { x0, my }, { x0, my + 1 } });
+		if (gallery == null) {
 			// No way out through the rock (a sealed map corner): un-carve, a
 			// walled-off installation would fail the connectivity audit.
 			for (int x = x0; x < x0 + W; x++) {
@@ -501,22 +660,98 @@ public final class Worlds {
 					setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_WALL);
 				}
 			}
+			return;
 		}
+		// The doors themselves: a two-tile blast door across the mouth and a
+		// grate on the vault. Doors are ordinary non-living entities (they
+		// ride the entity stream to the web client, which draws their sliding
+		// leaves) -- with the vault duct as the constant small-body way in.
+		net.hedinger.prototype.entities.Door blast = new net.hedinger.prototype.entities.Door(
+				x0, my, CAVE_Z, 1, net.hedinger.prototype.entities.Door.BLAST, 2);
+		net.hedinger.prototype.entities.Door grate = new net.hedinger.prototype.entities.Door(
+				vx, vy + vh / 2, CAVE_Z, 1, net.hedinger.prototype.entities.Door.GRATE);
+		w.addDoor(blast);
+		w.addDoor(grate);
+
+		// Switches on both sides of each door, wired to it, so a body is
+		// never trapped on either side -- and deliberately NOT beside their
+		// doors: the indicator trail from switch to door is the thing that
+		// says what operates what, so give it distance to say it. The blast
+		// door runs on weight-driven pressure plates -- anything crossing
+		// them parts the leaves. The vault runs on intent-driven buttons: a
+		// body must deliberately press (the A_USE actuator), so only a mind
+		// that has learned to use them opens the grate -- everything else
+		// takes the crawl duct. Wiring also stops the doors' idle cycling.
+		int[] outer = gallery.get(Math.min(3, gallery.size() - 1));
+		wireSwitch(w, outer[0], outer[1], blast,
+				net.hedinger.prototype.entities.Switch.PLATE); // down the gallery
+		wireSwitch(w, x0 + 3, my, blast,
+				net.hedinger.prototype.entities.Switch.PLATE); // out on the hall deck
+		wireSwitch(w, vx - 3, vy + vh / 2, grate,
+				net.hedinger.prototype.entities.Switch.BUTTON); // mid-hall, facing the vault
+		wireSwitch(w, vx + 2, vy + vh - 2, grate,
+				net.hedinger.prototype.entities.Switch.BUTTON); // the vault's far corner
 	}
 
 	/**
-	 * The all-rock rectangle of {@code pw x ph} (plus a one-tile rock margin)
-	 * nearest the map's centre on the cave level; null when none fits. The
-	 * margin keeps the installation clear of caverns and link stations, so
-	 * carving it disturbs nothing that already works.
+	 * A ventilation shaft dropping from the surface into the base: the third
+	 * way in -- one-way, by gravity, hazard-striped up top and open to the
+	 * base's lights below. Scans the given window (base-interior tiles, in
+	 * both levels' shared coordinates) for a surface tile that is plain open
+	 * ground with all eight neighbours walkable -- removing such an interior
+	 * tile cannot sever a surface path, and bodies can actually reach the
+	 * lip -- and converts the first fit. Skips quietly when the surface
+	 * overhead refuses (water, rock, or a link station's ramps).
+	 */
+	private static void dropShaft(World w, int lx0, int lx1, int ly0, int ly1) {
+		for (int x = lx0; x <= lx1; x++) {
+			for (int y = ly0; y <= ly1; y++) {
+				Tile s = w.getTile(x, y, SURFACE_Z);
+				if (!s.isWalkable() || s.getType() == Tile.TileType.TYPE_RAMPUP
+						|| s.getType() == Tile.TileType.TYPE_RAMPDOWN) {
+					continue;
+				}
+				boolean interior = true;
+				for (int dx = -1; dx <= 1 && interior; dx++) {
+					for (int dy = -1; dy <= 1; dy++) {
+						if (!w.getTile(x + dx, y + dy, SURFACE_Z).isWalkable()) {
+							interior = false;
+							break;
+						}
+					}
+				}
+				if (interior) {
+					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_SHAFT);
+					w.getTile(x, y, SURFACE_Z).setFertility(0);
+					return;
+				}
+			}
+		}
+	}
+
+	/** One switch: the floor tile with the baked pedestal base, plus the
+	 *  Switch entity that senses (and wires) its door. */
+	private static void wireSwitch(World w, int x, int y,
+			net.hedinger.prototype.entities.Door door, int mode) {
+		setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SWITCH);
+		w.spawnEntity(new net.hedinger.prototype.entities.Switch(x, y, CAVE_Z, door, mode));
+	}
+
+	/**
+	 * The all-rock rectangle of {@code pw x ph} nearest the map's centre on
+	 * the cave level; null when none fits. All-rock is the whole safety
+	 * argument: caverns, pools and link stations are all non-WALL tiles, so
+	 * requiring solid rock means carving overwrites nothing that already
+	 * works -- the shell may stand flush against a cavern wall, which only
+	 * reads as the buried structure surfacing in it.
 	 */
 	private static int[] findRockPocket(World w, int cols, int rows, int pw, int ph) {
 		int[] best = null;
 		double bestD = Double.MAX_VALUE;
 		for (int x0 = 2; x0 + pw < cols - 2; x0++) {
 			scan: for (int y0 = 2; y0 + ph < rows - 2; y0++) {
-				for (int x = x0 - 1; x <= x0 + pw; x++) {
-					for (int y = y0 - 1; y <= y0 + ph; y++) {
+				for (int x = x0; x < x0 + pw; x++) {
+					for (int y = y0; y < y0 + ph; y++) {
 						if (w.getTile(x, y, CAVE_Z).getType() != Tile.TileType.TYPE_WALL) {
 							continue scan;
 						}
@@ -534,27 +769,38 @@ public final class Worlds {
 	}
 
 	/**
-	 * Tunnel a 2-wide paved entrance gallery from the installation's mouth to
-	 * the nearest already-walkable cave tile, breadth-first through solid rock
-	 * only -- so the gallery meets the world exactly once, at its far end,
-	 * and cannot nick a pool or cavern on the way. Deterministic: fixed
-	 * neighbour order, no RNG.
+	 * Tunnel a 2-wide paved entrance gallery from an installation mouth to
+	 * the nearest already-walkable cave tile, breadth-first through solid
+	 * rock only -- so the gallery meets the world exactly once, at its far
+	 * end, and cannot nick a pool or cavern on the way. {@code startX,startY}
+	 * is the first rock tile beyond the mouth; {@code mouths} are the mouth
+	 * tiles themselves (marked visited, so the search cannot turn around and
+	 * call its own doorway daylight), with the first one also setting the
+	 * preferred initial digging direction. Deterministic: derived neighbour
+	 * order, no RNG.
 	 */
-	private static boolean carveGallery(World w, int cols, int rows, int mx, int my) {
-		if (mx - 1 < 1) {
-			return false;
+	private static java.util.List<int[]> carveGallery(World w, int cols, int rows,
+			int startX, int startY, int[][] mouths) {
+		if (startX < 1 || startY < 1 || startX >= cols - 1 || startY >= rows - 1) {
+			return null;
 		}
 		int[][] prev = new int[cols][rows];
 		for (int[] c : prev) {
 			java.util.Arrays.fill(c, -1);
 		}
 		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
-		prev[mx - 1][my] = (mx - 1) * rows + my; // start marks itself
+		prev[startX][startY] = startX * rows + startY; // start marks itself
 		// The mouth tiles are walkable but they're where we CAME from -- mark
 		// them visited so the search can't turn around and call them daylight.
-		prev[mx][my] = prev[mx][my + 1] = (mx - 1) * rows + my;
-		q.add(new int[] { mx - 1, my });
-		int[][] dirs = { { -1, 0 }, { 0, -1 }, { 0, 1 }, { 1, 0 } }; // west first
+		for (int[] m : mouths) {
+			prev[m[0]][m[1]] = startX * rows + startY;
+		}
+		q.add(new int[] { startX, startY });
+		// Prefer digging straight out from the mouth before wandering.
+		int[] away = { Integer.signum(startX - mouths[0][0]),
+				Integer.signum(startY - mouths[0][1]) };
+		int[][] dirs = { away, { away[1], away[0] }, { -away[1], -away[0] },
+				{ -away[0], -away[1] } };
 		while (!q.isEmpty()) {
 			int[] p = q.poll();
 			for (int[] d : dirs) {
@@ -565,16 +811,22 @@ public final class Worlds {
 				}
 				Tile t = w.getTile(nx, ny, CAVE_Z);
 				if (t.isWalkable()) {
-					// Found daylight: pave the path back to the mouth.
+					// Found daylight: pave the path back to the mouth, and
+					// hand the caller the mouth-first path (real paved tiles,
+					// where a switch can safely stand).
+					java.util.List<int[]> path = new java.util.ArrayList<int[]>();
 					int cx = p[0], cy = p[1];
-					while (!(cx == mx - 1 && cy == my)) {
+					while (!(cx == startX && cy == startY)) {
 						paveGalleryTile(w, cx, cy, cols, rows);
+						path.add(new int[] { cx, cy });
 						int code = prev[cx][cy];
 						cx = code / rows;
 						cy = code % rows;
 					}
-					paveGalleryTile(w, mx - 1, my, cols, rows);
-					return true;
+					paveGalleryTile(w, startX, startY, cols, rows);
+					path.add(new int[] { startX, startY });
+					java.util.Collections.reverse(path);
+					return path;
 				}
 				if (t.getType() == Tile.TileType.TYPE_WALL) {
 					prev[nx][ny] = p[0] * rows + p[1];
@@ -582,7 +834,7 @@ public final class Worlds {
 				}
 			}
 		}
-		return false;
+		return null;
 	}
 
 	/** One gallery step: a 2x2 brush of paved floor through rock only (built

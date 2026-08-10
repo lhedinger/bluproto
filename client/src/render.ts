@@ -9,6 +9,7 @@ import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
   ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED, F_MINDED,
 } from './protocol';
+import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
@@ -93,7 +94,10 @@ export function render(
 
   // Painter's order: haze, then dead, then items, then living creatures.
   const order = (t: Track): number =>
-    t.curr.kind === 'phero' ? 0 : (t.curr.flags & F_DEAD) ? 1 : t.curr.kind.startsWith('item.') ? 2 : 3;
+    t.curr.kind === 'phero' ? 0
+      : t.curr.kind.startsWith('switch.') ? 1 // wiring lowest: door leaves slide over it
+      : t.curr.kind.startsWith('door.') ? 2
+      : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
   const tracks = [...state.tracks.values()].sort((a, b) => order(a) - order(b));
 
   for (const t of tracks) {
@@ -101,6 +105,23 @@ export function render(
     if (Math.round(e.z) !== level) continue; // only entities on the shown level
     const p = state.sample(t, renderTime);
     const s = cam.worldToScreen(p.x, p.y);
+
+    // Doors reach up to `span` tiles from their anchor, so they get their own
+    // generous cull instead of the point cull below.
+    if (e.kind.startsWith('door.')) {
+      const m = (e.size + 1) * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      drawDoor(g, cam, e);
+      continue;
+    }
+    // A switch's indicator trail reaches its wired door, so cull loosely too.
+    if (e.kind.startsWith('switch.')) {
+      const m = 8 * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      drawSwitch(g, cam, e, state.tracks.get(e.pheno)?.curr);
+      continue;
+    }
+
     if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
 
     if (e.kind === 'phero') {
@@ -239,7 +260,23 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
   const tones = ['rgba(44,84,34,0.42)', 'rgba(32,63,25,0.46)', 'rgba(74,120,52,0.38)'];
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
-      if (cover[ty * meta.cols + tx] !== 1) continue;
+      const cv2 = cover[ty * meta.cols + tx];
+      if (cv2 === 2) {
+        // A crawl duct: its concealment is a metal lid, not shrubbery —
+        // translucent slats with a dark seam, so a crawler underneath still
+        // half-reads through the gaps.
+        const o = cam.worldToScreen(tx, ty);
+        g.fillStyle = 'rgba(97,105,116,0.55)';
+        for (let i = 0; i < 3; i++) {
+          g.fillRect(o.x + s * 0.06, o.y + s * (0.10 + i * 0.30), s * 0.88, s * 0.20);
+        }
+        g.fillStyle = 'rgba(20,22,26,0.5)';
+        for (let i = 0; i < 2; i++) {
+          g.fillRect(o.x + s * 0.06, o.y + s * (0.30 + i * 0.30), s * 0.88, s * 0.04);
+        }
+        continue;
+      }
+      if (cv2 !== 1) continue;
       const o = cam.worldToScreen(tx, ty);
       for (let i = 0; i < 5; i++) {
         const bx = o.x + (0.15 + shrubRand(tx, ty, i * 3) * 0.70) * s;
@@ -247,6 +284,169 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
         const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * s;
         g.fillStyle = tones[i % tones.length];
         g.beginPath(); g.arc(bx, by, rad, 0, 7); g.fill();
+      }
+    }
+  }
+}
+
+/**
+ * A switch, test-chamber style: an indicator trail of dotted lights from
+ * the switch to its wired door (x-leg first, matching the Swing renderer)
+ * — dim while idle, lit pale-blue while the circuit is closed (aux = 1) —
+ * then the control itself over the baked pedestal base. 'switch.plate' is
+ * the broad red floor button, sinking flush and dark while weighted;
+ * 'switch.button' is a small domed red cap on a dark pedestal that only a
+ * deliberate press operates. `door` is the wired door's track, looked up
+ * by the id in `pheno`; without it (not yet streamed) only the control
+ * draws.
+ */
+function drawSwitch(
+  g: CanvasRenderingContext2D, cam: Camera, e: EntityState, door?: EntityState,
+): void {
+  const sc = cam.scale;
+  const cx = e.x + 0.5, cy = e.y + 0.5;
+  const pressed = e.aux >= 0.5;
+  if (door) {
+    const lr = Math.abs(door.dir % (Math.PI / 2)) > 1e-6;
+    const half = Math.max(1, door.size) / 2;
+    const dx = lr ? door.x : door.x + half;
+    const dy = lr ? door.y + half : door.y;
+    const w = Math.max(2, sc * 0.09);
+    const a = cam.worldToScreen(cx, cy);
+    const k = cam.worldToScreen(dx, cy); // the L's corner: x-leg first
+    const b = cam.worldToScreen(dx, dy);
+    // Indicator lamps along both legs: a dark housing around a lens, dim
+    // while idle, lit while the circuit is closed — readable on any floor.
+    const legs: Array<[number, number, number, number]> = [[a.x, a.y, k.x, k.y], [k.x, k.y, b.x, b.y]];
+    for (const [x0, y0, x1, y1] of legs) {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const n = Math.floor(len / (sc * 0.34));
+      for (let i = 1; i <= n; i++) {
+        const t = i / (n + 1);
+        const sx = x0 + (x1 - x0) * t, sy = y0 + (y1 - y0) * t;
+        g.fillStyle = '#14161f';
+        g.fillRect(sx - w, sy - w, w * 2, w * 2);
+        g.fillStyle = pressed ? '#D0ECFF' : '#6a7280';
+        g.fillRect(sx - w / 2, sy - w / 2, w, w);
+      }
+    }
+    // A soft glow under the lit trail's endpoint at the door.
+    if (pressed) {
+      g.fillStyle = 'rgba(208,236,255,0.25)';
+      g.beginPath(); g.arc(b.x, b.y, sc * 0.3, 0, 7); g.fill();
+    }
+  }
+  const o = cam.worldToScreen(cx, cy);
+  if (e.kind === 'switch.plate') {
+    // The broad floor button: proud and bright when armed, flush and dark
+    // while weighted.
+    const r = Math.max(3, sc * 0.27);
+    g.fillStyle = pressed ? '#7c2434' : '#E0455F';
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.fill();
+    if (!pressed) {
+      g.fillStyle = '#F0788C';
+      g.beginPath(); g.arc(o.x - r * 0.2, o.y - r * 0.3, r * 0.45, 0, 7); g.fill();
+    }
+    g.strokeStyle = '#23262e';
+    g.lineWidth = 1;
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.stroke();
+  } else {
+    // The pedestal button: a small domed cap a body must choose to press.
+    const b = Math.max(3, sc * 0.2);
+    g.fillStyle = '#2c3037';
+    g.fillRect(o.x - b, o.y - b, b * 2, b * 2);
+    const r = Math.max(2, sc * 0.12);
+    g.fillStyle = pressed ? '#7c2434' : '#E0455F';
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.fill();
+    if (!pressed) {
+      g.fillStyle = '#F0788C';
+      g.beginPath(); g.arc(o.x - r * 0.25, o.y - r * 0.35, r * 0.4, 0, 7); g.fill();
+    } else {
+      g.strokeStyle = '#D0ECFF';
+      g.lineWidth = Math.max(1, sc * 0.03);
+      g.strokeRect(o.x - b, o.y - b, b * 2, b * 2);
+    }
+  }
+}
+
+/**
+ * A door: two leaves sliding along the doorway from its ends toward the
+ * middle, mirroring the Swing renderer. The anchor tile is (x,y); a non-zero
+ * `dir` means the bar runs north-south (sealing east-west passage), zero
+ * east-west. `size` carries the doorway span in tiles and `aux` how far each
+ * leaf reaches toward the middle (1 sealed .. 0.15 open stubs) — so the wire
+ * updates animate the slide for free. Flavours: segmented steel with a
+ * hazard-striped nose (blast), see-through bars (grate), planked timber,
+ * coursed stone, woven hedge — all as chunky slabs with a drop shadow.
+ */
+function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityState): void {
+  const lr = Math.abs(e.dir % (Math.PI / 2)) > 1e-6;
+  const span = Math.max(1, e.size);
+  const ext = Math.max(0.15, Math.min(1, e.aux));
+  const reach = (span / 2) * ext; // leaf length from each end, tiles
+  const blast = e.kind === 'door.blast';
+  const grate = e.kind === 'door.grate';
+  const th = (blast ? 5 : 3) / 12; // bar thickness, tiles
+  const col = '#' + e.rgb.toString(16).padStart(6, '0');
+  const sc = cam.scale;
+  const seam = 'rgba(0,0,0,0.45)';
+  const leaves: Array<[number, number, number]> = [
+    [0, reach, +1], // [start, end, direction the leaf's nose faces]
+    [span - reach, span, -1],
+  ];
+  for (const [a0, a1, nose] of leaves) {
+    if (a1 - a0 <= 0.01) continue;
+    const wx = lr ? e.x - th / 2 : e.x + a0;
+    const wy = lr ? e.y + a0 : e.y - th / 2;
+    const o = cam.worldToScreen(wx, wy);
+    const pw = (lr ? th : a1 - a0) * sc;
+    const ph = (lr ? a1 - a0 : th) * sc;
+    // Drop shadow south, so the slab visibly sits on the floor.
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(o.x + sc * 0.02, o.y + sc * 0.07, pw, ph);
+    if (grate) {
+      // Bars with honest gaps: the eye (like the sim) sees through a grate.
+      g.fillStyle = col;
+      const step = sc / 6;
+      if (lr) {
+        for (let y = o.y; y + step * 0.55 <= o.y + ph; y += step) {
+          g.fillRect(o.x, y, pw, Math.max(1, step * 0.55));
+        }
+      } else {
+        for (let x = o.x; x + step * 0.55 <= o.x + pw; x += step) {
+          g.fillRect(x, o.y, Math.max(1, step * 0.55), ph);
+        }
+      }
+      continue;
+    }
+    g.fillStyle = col;
+    g.fillRect(o.x, o.y, pw, ph);
+    g.strokeStyle = seam;
+    g.lineWidth = Math.max(1, sc * 0.03);
+    g.strokeRect(o.x, o.y, pw, ph);
+    // Segment/plank seams across the leaf.
+    const step = sc / 3;
+    g.beginPath();
+    if (lr) {
+      for (let y = o.y + step; y < o.y + ph - 1; y += step) {
+        g.moveTo(o.x, y); g.lineTo(o.x + pw, y);
+      }
+    } else {
+      for (let x = o.x + step; x < o.x + pw - 1; x += step) {
+        g.moveTo(x, o.y); g.lineTo(x, o.y + ph);
+      }
+    }
+    g.stroke();
+    if (blast) {
+      // The hazard-striped crush edge where the leaves meet.
+      const nb = Math.max(2, sc * 0.12);
+      g.fillStyle = '#d8b028';
+      if (lr) {
+        const y = nose > 0 ? o.y + ph - nb : o.y;
+        g.fillRect(o.x, y, pw, nb);
+      } else {
+        const x = nose > 0 ? o.x + pw - nb : o.x;
+        g.fillRect(x, o.y, nb, ph);
       }
     }
   }

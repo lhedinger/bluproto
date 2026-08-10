@@ -436,11 +436,13 @@ final class WorldHost {
 	}
 
 	/**
-	 * Per-tile cover mask for the shrub canopy overlay: one byte per tile of level
-	 * z — 1 where the tile is a walkable sight-blocker (a {@code TYPE_COVER}
-	 * thicket or a {@code TYPE_REEDS} bed), else 0. Static for the life of the
-	 * world, so the client fetches it once per level and draws foliage over the
-	 * entities standing in it — anything the sim hides, the viewer part-hides too.
+	 * Per-tile cover mask for the concealment overlay: one byte per tile of
+	 * level z — 1 where the tile is walkable foliage cover (a {@code
+	 * TYPE_COVER} thicket or a {@code TYPE_REEDS} bed, drawn as canopy), 2
+	 * where it is an enclosed crawl duct (drawn as a metal lid — a duct must
+	 * not sprout shrubbery), else 0. Static for the life of the world, so the
+	 * client fetches it once per level and draws the overlay over entities
+	 * standing in it — anything the sim hides, the viewer part-hides too.
 	 */
 	byte[] cover(int z) {
 		var w = runner.world();
@@ -452,7 +454,12 @@ final class WorldHost {
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
 				var t = w.getTile(x, y, z);
-				c[y * cols + x] = (byte) (t.blocksSight() && !t.isSolid() ? 1 : 0);
+				byte v = 0;
+				if (t.blocksSight() && !t.isSolid()) {
+					v = (byte) (t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_DUCT
+							? 2 : 1);
+				}
+				c[y * cols + x] = v;
 			}
 		}
 		return c;

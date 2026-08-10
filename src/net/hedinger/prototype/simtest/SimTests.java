@@ -1243,6 +1243,123 @@ public class SimTests {
 	}
 
 	/**
+	 * A pressure-plate switch drives its wired door: a mover crossing the
+	 * plate parts the door ahead of it, walks through, and the door seals
+	 * again once the plate has gone quiet -- while an identical wired door
+	 * with no switch never opens for its mover at all (wiring stops the idle
+	 * random cycling, so a switchless wired door is simply shut).
+	 */
+	static class SwitchOpensWiredDoor extends Scenario {
+		@Override
+		public void run() {
+			seed(25);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // switched doorway
+			w.setTile(7, 4, 0, Tile.TileType.TYPE_STONE); // control doorway
+			net.hedinger.prototype.entities.Door door = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.TIMBER);
+			net.hedinger.prototype.entities.Door control = new net.hedinger.prototype.entities.Door(
+					7, 4, 0, 1, net.hedinger.prototype.entities.Door.TIMBER);
+			w.addDoor(door);
+			w.addDoor(control);
+			control.setWired(true); // machinery with no switch: stays shut
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, door));
+			TestNPC crosser = TestNPC.mover(1.5, 2.5, 0, 0); // walks over the plate
+			TestNPC barred = TestNPC.mover(1.5, 4.5, 0, 0);  // no plate in its lane
+			w.spawnEntity(crosser);
+			w.spawnEntity(barred);
+			w.think();
+			snapshot(w, "before (plate at x=4 wired to the y=2 doorway)");
+			tick(w, 400);
+			snapshot(w, "after (crosser through; barred lane still sealed)");
+
+			assertGreater("the plate parted the door for its mover", crosser.getX(), 8.0);
+			assertLess("the switchless wired door stayed shut", barred.getX(), 8.0);
+			tick(w, 250);
+			assertTrue("the door sealed again after the linger", door.isClosed());
+		}
+	}
+
+	/**
+	 * An intent-driven button answers only a deliberate press (the A_USE
+	 * intent), never mere weight: a body carrying the use intent parts the
+	 * wired door as it passes the pedestal, while an identical body without
+	 * the intent walks right over the button and stays barred.
+	 */
+	static class ButtonNeedsIntent extends Scenario {
+		@Override
+		public void run() {
+			seed(26);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // both doorways
+			w.setTile(7, 4, 0, Tile.TileType.TYPE_STONE);
+			net.hedinger.prototype.entities.Door doorA = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			net.hedinger.prototype.entities.Door doorB = new net.hedinger.prototype.entities.Door(
+					7, 4, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			w.addDoor(doorA);
+			w.addDoor(doorB);
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, doorA,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 4, 0, doorB,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			TestNPC presser = TestNPC.mover(1.5, 2.5, 0, 0).withUse(); // chooses to press
+			TestNPC walker = TestNPC.mover(1.5, 4.5, 0, 0);            // weight only
+			w.spawnEntity(presser);
+			w.spawnEntity(walker);
+			w.think();
+			snapshot(w, "before (buttons at x=4, one deliberate presser)");
+			tick(w, 400);
+			snapshot(w, "after (presser through; walker barred over its button)");
+
+			assertGreater("the deliberate press parted the door", presser.getX(), 8.0);
+			assertLess("weight alone never operated the button", walker.getX(), 8.0);
+		}
+	}
+
+	/**
+	 * On the lowest level a pit is bottomless: a body that steps off the
+	 * edge is removed from the world outright -- no corpse, nothing below to
+	 * land on -- while a catwalk over the same void carries a walker across
+	 * untouched.
+	 */
+	static class BottomlessPitsAndCatwalks extends Scenario {
+		@Override
+		public void run() {
+			seed(27);
+			World w = room(14, 6);
+			for (int x = 5; x <= 8; x++) {
+				for (int y = 1; y <= 4; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_SHAFT); // the void
+				}
+			}
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_CATWALK); // the way across
+			}
+			TestNPC walker = TestNPC.mover(2.5, 2.5, 0, 0); // takes the catwalk
+			TestNPC faller = TestNPC.mover(2.5, 3.5, 0, 0); // walks off the edge
+			w.spawnEntity(walker);
+			w.spawnEntity(faller);
+			w.think();
+			snapshot(w, "before (catwalk lane and open-void lane)");
+			tick(w, 250);
+			snapshot(w, "after (walker across; faller gone entirely)");
+
+			assertGreater("the catwalk carries a walker over the void", walker.getX(), 9.0);
+			assertTrue("the void removed the faller from the world", faller.isRemoved());
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -4163,6 +4280,9 @@ public class SimTests {
 				new MudSlowsMovement(),
 				new CrystalDensityTiers(),
 				new DuctAdmitsOnlySmallBodies(),
+				new SwitchOpensWiredDoor(),
+				new ButtonNeedsIntent(),
+				new BottomlessPitsAndCatwalks(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),
