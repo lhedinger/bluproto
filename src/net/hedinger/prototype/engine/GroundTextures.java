@@ -1005,26 +1005,36 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * A pressure-plate switch tile: deck plating with a recessed circular
-	 * well in the middle and a bolt at each corner of the housing. The well
-	 * is the socket only -- the button itself (up or pressed flush) is drawn
-	 * live by the {@code Switch} entity, since baked ground cannot animate.
+	 * A switch pedestal tile, test-chamber style: a broad pale circular base
+	 * plate nearly filling the tile -- polished concrete, lit on its north
+	 * arc -- around a dark circular seat where the control sits. The base is
+	 * the socket only: the red control itself (a plate's broad disc or a
+	 * button's domed cap, up or pressed) is drawn live by the {@code Switch}
+	 * entity, since baked ground cannot animate.
 	 */
 	public static int switchPlate(int ai, int aj, int px, int py) {
-		int dx = ai - 5, dy = aj - 5; // centre of the 12-px tile (between 5 and 6)
-		int m2 = dx * dx + dy * dy + dx + dy; // ~squared distance to (5.5, 5.5)
-		if (m2 <= 6) {
-			return RAMP[CLS_SWITCH][0]; // the recessed well, in shadow
+		double dx = ai - 5.5, dy = aj - 5.5; // centre of the 12-px tile
+		double d2 = dx * dx + dy * dy;
+		if (d2 > 27) {
+			return plate(px, py); // deck showing at the corners
 		}
-		if (m2 <= 12) {
-			// The well's rim: lit on the screen-north arc, dark on the south.
-			return dy < 0 ? RAMP[CLS_SWITCH][2] : darken(RAMP[CLS_SWITCH][0], 0.8);
+		if (d2 > 16) {
+			// The pale base ring, shaded to the one light source.
+			return dy < -Math.abs(dx) * 0.5 ? lighten2(RAMP[CLS_CONCRETE][2], 1.12)
+					: dy > Math.abs(dx) * 0.5 ? RAMP[CLS_CONCRETE][1]
+					: RAMP[CLS_CONCRETE][2];
 		}
-		boolean bolt = (ai == 2 || ai == 9) && (aj == 2 || aj == 9);
-		if (bolt) {
-			return RAMP[CLS_SWITCH][2]; // housing bolts catch the light
+		if (d2 > 12) {
+			return RAMP[CLS_SWITCH][0]; // the dark seam between base and seat
 		}
-		return plate(px, py); // the surrounding deck
+		return darken(RAMP[CLS_SWITCH][0], 0.8); // the recessed seat
+	}
+
+	private static int lighten2(int rgb, double f) {
+		int r = Math.min(255, (int) (((rgb >> 16) & 255) * f));
+		int g = Math.min(255, (int) (((rgb >> 8) & 255) * f));
+		int b = Math.min(255, (int) ((rgb & 255) * f));
+		return (r << 16) | (g << 8) | b;
 	}
 
 	private static int darken(int rgb, double f) {

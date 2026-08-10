@@ -1285,6 +1285,48 @@ public class SimTests {
 	}
 
 	/**
+	 * An intent-driven button answers only a deliberate press (the A_USE
+	 * intent), never mere weight: a body carrying the use intent parts the
+	 * wired door as it passes the pedestal, while an identical body without
+	 * the intent walks right over the button and stays barred.
+	 */
+	static class ButtonNeedsIntent extends Scenario {
+		@Override
+		public void run() {
+			seed(26);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // both doorways
+			w.setTile(7, 4, 0, Tile.TileType.TYPE_STONE);
+			net.hedinger.prototype.entities.Door doorA = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			net.hedinger.prototype.entities.Door doorB = new net.hedinger.prototype.entities.Door(
+					7, 4, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			w.addDoor(doorA);
+			w.addDoor(doorB);
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, doorA,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 4, 0, doorB,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			TestNPC presser = TestNPC.mover(1.5, 2.5, 0, 0).withUse(); // chooses to press
+			TestNPC walker = TestNPC.mover(1.5, 4.5, 0, 0);            // weight only
+			w.spawnEntity(presser);
+			w.spawnEntity(walker);
+			w.think();
+			snapshot(w, "before (buttons at x=4, one deliberate presser)");
+			tick(w, 400);
+			snapshot(w, "after (presser through; walker barred over its button)");
+
+			assertGreater("the deliberate press parted the door", presser.getX(), 8.0);
+			assertLess("weight alone never operated the button", walker.getX(), 8.0);
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -3937,6 +3979,7 @@ public class SimTests {
 				new CrystalDensityTiers(),
 				new DuctAdmitsOnlySmallBodies(),
 				new SwitchOpensWiredDoor(),
+				new ButtonNeedsIntent(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

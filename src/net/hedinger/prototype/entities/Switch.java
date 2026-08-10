@@ -8,45 +8,65 @@ import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.View;
 
 /**
- * A pressure-plate switch wired to a door: a non-living entity (like the
- * doors it drives) standing on a {@code TYPE_SWITCH} floor tile. Any grounded
- * body on the plate -- creature, corpse, or a crate somebody parked there --
- * presses it, and every pressed tick refreshes the door's open-hold, so the
- * door parts while the plate is weighted and seals a linger after it clears.
- * Several switches wired to one door compose naturally through that timer.
+ * A switch wired to a door: a non-living entity (like the doors it drives)
+ * standing on a {@code TYPE_SWITCH} floor tile, in two modes:
  *
- * <p>Wiring a switch marks its door as machinery ({@link Door#setWired}),
- * which stops the door's idle random self-cycling. Perception never sees a
- * switch (every scan filters to NPCs), and its entity size stays zero so
- * nothing mistakes it for a body.
+ * <ul>
+ *   <li>{@link #PLATE} -- a weight-driven pressure plate, the test-chamber
+ *       floor button: any grounded body on it presses it, creature, corpse,
+ *       or a crate somebody parked there. Flyers pass over.</li>
+ *   <li>{@link #BUTTON} -- an intent-driven push button: a body on or beside
+ *       it must deliberately operate it (the {@code A_USE} actuator, or a
+ *       fixture's standing order). Standing on it does nothing -- use is a
+ *       choice, which is the entire point.</li>
+ * </ul>
  *
- * <p>Drawn as a wire decal -- an L-run of dark conduit with staples from the
- * plate to the door's centre, so the connection is readable at a glance --
- * plus the button itself: a lit steel dome when armed, pressed flush with an
- * amber live-ring while a body stands on it. The plate's housing is baked
- * into the ground tile; only these live parts draw here.
+ * Every pressed tick refreshes the door's open-hold, so the door parts while
+ * the switch is held and seals a linger after it goes quiet; several switches
+ * wired to one door compose through that one timer. Wiring a switch marks its
+ * door as machinery ({@link Door#setWired}), stopping the idle self-cycling.
+ * Perception never sees a switch, and its entity size stays zero.
+ *
+ * <p>Drawn test-chamber style: an indicator trail of dotted lights running
+ * from the switch to the door's centre -- dim while idle, lit while the
+ * circuit is closed -- and the control itself over the baked pedestal base: a
+ * broad red disc for a plate (sinking flush when weighted), a small domed red
+ * cap on a dark pedestal for a button.
  */
 public class Switch extends Entity {
 
-	private static final Color CABLE = new Color(0x14161f);
-	private static final Color STAPLE = new Color(0x515862);
-	private static final Color DOME = new Color(0x8a93a0);
-	private static final Color DOME_LIT = new Color(0xc6cdd8);
-	private static final Color WELL = new Color(0x23262e);
-	private static final Color LIVE = new Color(0xd8b028);
+	public static final int PLATE = 0, BUTTON = 1;
+
+	private static final Color TRAIL_DIM = new Color(0x3a3e49);
+	private static final Color TRAIL_LIT = new Color(0xD0ECFF);
+	private static final Color BTN_RED = new Color(0xE0455F);
+	private static final Color BTN_RED_DARK = new Color(0x7c2434);
+	private static final Color BTN_RED_LIT = new Color(0xF0788C);
+	private static final Color PEDESTAL = new Color(0x2c3037);
 
 	private final Door door;
+	private final int mode;
 	private boolean pressed = false;
 
 	public Switch(int x, int y, int z, Door door) {
+		this(x, y, z, door, PLATE);
+	}
+
+	public Switch(int x, int y, int z, Door door, int mode) {
 		super(x, y, z, 0);
 		this.door = door;
+		this.mode = mode;
 		door.setWired(true);
 	}
 
-	/** Whether a grounded body is weighting the plate right now. */
+	/** Whether the switch is held right now (weight or deliberate use). */
 	public boolean isPressed() {
 		return pressed;
+	}
+
+	/** {@link #PLATE} or {@link #BUTTON}. */
+	public int getMode() {
+		return mode;
 	}
 
 	/** The door this switch is wired to. */
@@ -58,17 +78,27 @@ public class Switch extends Entity {
 	protected void think() {
 		pressed = false;
 		for (Entity e : getWorld().getEntities()) {
-			// Grounded NPCs only (items included -- a parked crate holds the
-			// plate down); flyers pass over without weighting it.
-			if (!(e instanceof NPC) || e.isRemoved() || e.isFlying()) {
+			if (!(e instanceof NPC n) || e.isRemoved()) {
 				continue;
 			}
 			if ((int) e.getZ() != (int) getZ()) {
 				continue;
 			}
-			if ((int) e.getX() == (int) getX() && (int) e.getY() == (int) getY()) {
-				pressed = true;
-				break;
+			int dx = (int) e.getX() - (int) getX(), dy = (int) e.getY() - (int) getY();
+			if (mode == PLATE) {
+				// Weight: any grounded body on the plate (items included -- a
+				// parked crate holds it down); flyers pass over unfelt.
+				if (dx == 0 && dy == 0 && !e.isFlying()) {
+					pressed = true;
+					break;
+				}
+			} else {
+				// Intent: a body at or beside the pedestal, deliberately
+				// operating it. Weight alone does nothing.
+				if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && n.wantsUse()) {
+					pressed = true;
+					break;
+				}
 			}
 		}
 		if (pressed) {
@@ -76,7 +106,7 @@ public class Switch extends Entity {
 		}
 	}
 
-	/** The wired door's centre point, where the conduit runs to. */
+	/** The wired door's centre point, where the indicator trail runs to. */
 	private double[] doorCentre() {
 		boolean lr = ((int) (door.getDirection() % (Math.PI / 2))) != 0;
 		double half = door.getSpan() * 0.5;
@@ -96,44 +126,60 @@ public class Switch extends Entity {
 		double sx = getX() + 0.5, sy = getY() + 0.5;
 		double[] dc = doorCentre();
 
-		// The conduit: an art-pixel march, x-leg first then y-leg, dark cable
-		// with a lit staple every few pixels -- the decal that shows what
-		// this plate is wired to.
+		// The indicator trail: dotted lights every few art-pixels along the
+		// L-run (x-leg first) from switch to door, dim while idle and lit
+		// while the circuit is closed -- the test-chamber "what does this
+		// operate" line.
+		g2.setColor(pressed ? TRAIL_LIT : TRAIL_DIM);
 		int n = 0;
 		double px = sx, py = sy;
 		while (Math.abs(dc[0] - px) > 1.0 / 24) {
 			px += Math.signum(dc[0] - px) / 12.0;
-			wirePixel(g2, v, px, py, box, n++);
+			if (n++ % 4 < 2) {
+				g2.fillRect((int) Math.round(v.pixelX(px, (int) getZ(), 0)),
+						(int) Math.round(v.pixelY(py, (int) getZ(), 0)), box, box);
+			}
 		}
 		while (Math.abs(dc[1] - py) > 1.0 / 24) {
 			py += Math.signum(dc[1] - py) / 12.0;
-			wirePixel(g2, v, px, py, box, n++);
+			if (n++ % 4 < 2) {
+				g2.fillRect((int) Math.round(v.pixelX(px, (int) getZ(), 0)),
+						(int) Math.round(v.pixelY(py, (int) getZ(), 0)), box, box);
+			}
 		}
 
-		// The button: a domed cap riding proud of the baked well when armed,
-		// pressed flush and ringed amber while a body weights it.
-		int bx = (int) Math.round(v.pixelX(sx - 2.0 / 12, (int) getZ(), 0));
-		int by = (int) Math.round(v.pixelY(sy - 2.0 / 12, (int) getZ(), 0));
-		int d = box * 4;
-		if (pressed) {
-			g2.setColor(LIVE);
-			g2.fillRect(bx - box / 2, by - box / 2, d + box, d + box);
-			g2.setColor(WELL);
-			g2.fillRect(bx, by, d, d);
+		int z = (int) getZ();
+		if (mode == PLATE) {
+			// The floor button: a broad red disc riding proud of its seat,
+			// sinking flush (darker) while weighted.
+			int bx = (int) Math.round(v.pixelX(sx - 3.0 / 12, z, 0));
+			int by = (int) Math.round(v.pixelY(sy - 3.0 / 12, z, 0));
+			int d = box * 6;
+			g2.setColor(pressed ? BTN_RED_DARK : BTN_RED);
+			g2.fillRect(bx, by + box / 2, d, d - box); // disc, squarish-round
+			g2.fillRect(bx + box / 2, by, d - box, d);
+			if (!pressed) {
+				g2.setColor(BTN_RED_LIT);
+				g2.fillRect(bx + box, by + box / 2, d - box * 2, box); // lit north arc
+			}
 		} else {
-			g2.setColor(DOME);
-			g2.fillRect(bx, by, d, d);
-			g2.setColor(DOME_LIT);
-			g2.fillRect(bx, by, d, box); // the dome's lit north edge
-			g2.setColor(WELL);
-			g2.fillRect(bx, by + d - box / 2, d, Math.max(1, box / 2));
+			// The pedestal button: a dark base with a small domed red cap --
+			// pressed, the cap sinks dark and the pedestal rim lights.
+			int bx = (int) Math.round(v.pixelX(sx - 2.0 / 12, z, 0));
+			int by = (int) Math.round(v.pixelY(sy - 2.0 / 12, z, 0));
+			int d = box * 4;
+			g2.setColor(PEDESTAL);
+			g2.fillRect(bx - box / 2, by - box / 2, d + box, d + box);
+			g2.setColor(pressed ? BTN_RED_DARK : BTN_RED);
+			g2.fillRect(bx + box / 2, by + box / 2, d - box, d - box);
+			if (!pressed) {
+				g2.setColor(BTN_RED_LIT);
+				g2.fillRect(bx + box, by + box / 2, d - box * 2, box); // dome highlight
+			} else {
+				g2.setColor(TRAIL_LIT);
+				g2.fillRect(bx - box / 2, by - box / 2, d + box, box / 2 + 1); // lit rim
+			}
 		}
-	}
-
-	private void wirePixel(Graphics2D g2, View v, double wx, double wy, int box, int n) {
-		g2.setColor(n % 5 == 0 ? STAPLE : CABLE);
-		g2.fillRect((int) Math.round(v.pixelX(wx, (int) getZ(), 0)),
-				(int) Math.round(v.pixelY(wy, (int) getZ(), 0)), box, box);
 	}
 
 	@Override
