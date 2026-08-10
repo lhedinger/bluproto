@@ -95,8 +95,9 @@ export function render(
   // Painter's order: haze, then dead, then items, then living creatures.
   const order = (t: Track): number =>
     t.curr.kind === 'phero' ? 0
-      : t.curr.kind.startsWith('door.') ? 1
-      : (t.curr.flags & F_DEAD) ? 1 : t.curr.kind.startsWith('item.') ? 2 : 3;
+      : t.curr.kind === 'switch' ? 1 // wiring lowest: door leaves slide over it
+      : t.curr.kind.startsWith('door.') ? 2
+      : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
   const tracks = [...state.tracks.values()].sort((a, b) => order(a) - order(b));
 
   for (const t of tracks) {
@@ -111,6 +112,13 @@ export function render(
       const m = (e.size + 1) * cam.scale + 60;
       if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
       drawDoor(g, cam, e);
+      continue;
+    }
+    // A switch's conduit reaches its wired door, so cull loosely too.
+    if (e.kind === 'switch') {
+      const m = 8 * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      drawSwitch(g, cam, e, state.tracks.get(e.pheno)?.curr);
       continue;
     }
 
@@ -262,6 +270,65 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
         g.beginPath(); g.arc(bx, by, rad, 0, 7); g.fill();
       }
     }
+  }
+}
+
+/**
+ * A pressure-plate switch: the conduit decal from the plate to its wired
+ * door (an L-run of dark cable with lit staples, x-leg first — matching the
+ * Swing renderer), then the button: a lit steel dome when armed, pressed
+ * flush with an amber live-ring while a body weights it (aux = 1). The
+ * plate's housing is baked into the ground tile; only the live parts draw
+ * here. `door` is the wired door's track, looked up by the id the wire
+ * carries in `pheno`; without it (not yet streamed) only the button draws.
+ */
+function drawSwitch(
+  g: CanvasRenderingContext2D, cam: Camera, e: EntityState, door?: EntityState,
+): void {
+  const sc = cam.scale;
+  const cx = e.x + 0.5, cy = e.y + 0.5;
+  if (door) {
+    const lr = Math.abs(door.dir % (Math.PI / 2)) > 1e-6;
+    const half = Math.max(1, door.size) / 2;
+    const dx = lr ? door.x : door.x + half;
+    const dy = lr ? door.y + half : door.y;
+    const w = Math.max(1, sc * 0.05);
+    const a = cam.worldToScreen(cx, cy);
+    const k = cam.worldToScreen(dx, cy); // the L's corner: x-leg first
+    const b = cam.worldToScreen(dx, dy);
+    g.strokeStyle = '#14161f';
+    g.lineWidth = w;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(k.x, k.y); g.lineTo(b.x, b.y); g.stroke();
+    // Staples along the run, so it reads as fixed conduit rather than string.
+    g.fillStyle = '#515862';
+    const legs: Array<[number, number, number, number]> = [[a.x, a.y, k.x, k.y], [k.x, k.y, b.x, b.y]];
+    for (const [x0, y0, x1, y1] of legs) {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const n = Math.floor(len / (sc * 0.45));
+      for (let i = 1; i <= n; i++) {
+        const t = i / (n + 1);
+        const sx = x0 + (x1 - x0) * t, sy = y0 + (y1 - y0) * t;
+        g.fillRect(sx - w, sy - w, w * 2, w * 2);
+      }
+    }
+  }
+  // The button.
+  const o = cam.worldToScreen(cx, cy);
+  const r = Math.max(2.5, sc * 0.16);
+  if (e.aux >= 0.5) {
+    g.strokeStyle = '#d8b028';
+    g.lineWidth = Math.max(1, r * 0.4);
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.stroke();
+    g.fillStyle = '#23262e';
+    g.beginPath(); g.arc(o.x, o.y, r * 0.7, 0, 7); g.fill();
+  } else {
+    g.fillStyle = '#8a93a0';
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.fill();
+    g.fillStyle = '#c6cdd8';
+    g.beginPath(); g.arc(o.x - r * 0.25, o.y - r * 0.3, r * 0.4, 0, 7); g.fill();
+    g.strokeStyle = '#23262e';
+    g.lineWidth = 1;
+    g.beginPath(); g.arc(o.x, o.y, r, 0, 7); g.stroke();
   }
 }
 

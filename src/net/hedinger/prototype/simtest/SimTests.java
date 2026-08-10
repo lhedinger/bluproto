@@ -1243,6 +1243,48 @@ public class SimTests {
 	}
 
 	/**
+	 * A pressure-plate switch drives its wired door: a mover crossing the
+	 * plate parts the door ahead of it, walks through, and the door seals
+	 * again once the plate has gone quiet -- while an identical wired door
+	 * with no switch never opens for its mover at all (wiring stops the idle
+	 * random cycling, so a switchless wired door is simply shut).
+	 */
+	static class SwitchOpensWiredDoor extends Scenario {
+		@Override
+		public void run() {
+			seed(25);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // switched doorway
+			w.setTile(7, 4, 0, Tile.TileType.TYPE_STONE); // control doorway
+			net.hedinger.prototype.entities.Door door = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.TIMBER);
+			net.hedinger.prototype.entities.Door control = new net.hedinger.prototype.entities.Door(
+					7, 4, 0, 1, net.hedinger.prototype.entities.Door.TIMBER);
+			w.addDoor(door);
+			w.addDoor(control);
+			control.setWired(true); // machinery with no switch: stays shut
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, door));
+			TestNPC crosser = TestNPC.mover(1.5, 2.5, 0, 0); // walks over the plate
+			TestNPC barred = TestNPC.mover(1.5, 4.5, 0, 0);  // no plate in its lane
+			w.spawnEntity(crosser);
+			w.spawnEntity(barred);
+			w.think();
+			snapshot(w, "before (plate at x=4 wired to the y=2 doorway)");
+			tick(w, 400);
+			snapshot(w, "after (crosser through; barred lane still sealed)");
+
+			assertGreater("the plate parted the door for its mover", crosser.getX(), 8.0);
+			assertLess("the switchless wired door stayed shut", barred.getX(), 8.0);
+			tick(w, 250);
+			assertTrue("the door sealed again after the linger", door.isClosed());
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -3894,6 +3936,7 @@ public class SimTests {
 				new MudSlowsMovement(),
 				new CrystalDensityTiers(),
 				new DuctAdmitsOnlySmallBodies(),
+				new SwitchOpensWiredDoor(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

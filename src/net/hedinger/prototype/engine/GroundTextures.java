@@ -44,7 +44,7 @@ public final class GroundTextures {
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
-			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27;
+			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -74,6 +74,7 @@ public final class GroundTextures {
 			{ 0x3f454c, 0x616974, 0x88929e }, // galvanised duct metal (brightest)
 			{ 0x1f2637, 0x38466e, 0x5f74a4 }, // crystal bed (grounded, a step darker)
 			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
+			{ 0x353a42, 0x515862, 0x707885 }, // switch plate (deck steel family)
 	};
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
@@ -128,6 +129,8 @@ public final class GroundTextures {
 			return CLS_CRYSTAL_BED;
 		case TYPE_CRYSTAL_SPARSE:
 			return CLS_CRYSTAL_SPARSE;
+		case TYPE_SWITCH:
+			return CLS_SWITCH;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -999,6 +1002,29 @@ public final class GroundTextures {
 			return corner ? RAMP[CLS_AIRVENT][2] : RAMP[CLS_AIRVENT][1]; // frame + screw glints
 		}
 		return RAMP[CLS_AIRVENT][Math.floorMod(aj, 2) == 0 ? 0 : 1]; // louver slats
+	}
+
+	/**
+	 * A pressure-plate switch tile: deck plating with a recessed circular
+	 * well in the middle and a bolt at each corner of the housing. The well
+	 * is the socket only -- the button itself (up or pressed flush) is drawn
+	 * live by the {@code Switch} entity, since baked ground cannot animate.
+	 */
+	public static int switchPlate(int ai, int aj, int px, int py) {
+		int dx = ai - 5, dy = aj - 5; // centre of the 12-px tile (between 5 and 6)
+		int m2 = dx * dx + dy * dy + dx + dy; // ~squared distance to (5.5, 5.5)
+		if (m2 <= 6) {
+			return RAMP[CLS_SWITCH][0]; // the recessed well, in shadow
+		}
+		if (m2 <= 12) {
+			// The well's rim: lit on the screen-north arc, dark on the south.
+			return dy < 0 ? RAMP[CLS_SWITCH][2] : darken(RAMP[CLS_SWITCH][0], 0.8);
+		}
+		boolean bolt = (ai == 2 || ai == 9) && (aj == 2 || aj == 9);
+		if (bolt) {
+			return RAMP[CLS_SWITCH][2]; // housing bolts catch the light
+		}
+		return plate(px, py); // the surrounding deck
 	}
 
 	private static int darken(int rgb, double f) {

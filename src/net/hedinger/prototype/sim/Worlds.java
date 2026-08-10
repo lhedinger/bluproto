@@ -507,12 +507,31 @@ public final class Worlds {
 		// The doors themselves: a two-tile blast door across the mouth and a
 		// grate on the vault. Doors are ordinary non-living entities (they
 		// ride the entity stream to the web client, which draws their sliding
-		// leaves) and they self-cycle, so the mouth seals and parts on its
-		// own rhythm -- with the vault duct as the constant small-body way in.
-		w.addDoor(new net.hedinger.prototype.entities.Door(x0, my, CAVE_Z, 1,
-				net.hedinger.prototype.entities.Door.BLAST, 2));
-		w.addDoor(new net.hedinger.prototype.entities.Door(vx, vy + vh / 2, CAVE_Z, 1,
-				net.hedinger.prototype.entities.Door.GRATE));
+		// leaves) -- with the vault duct as the constant small-body way in.
+		net.hedinger.prototype.entities.Door blast = new net.hedinger.prototype.entities.Door(
+				x0, my, CAVE_Z, 1, net.hedinger.prototype.entities.Door.BLAST, 2);
+		net.hedinger.prototype.entities.Door grate = new net.hedinger.prototype.entities.Door(
+				vx, vy + vh / 2, CAVE_Z, 1, net.hedinger.prototype.entities.Door.GRATE);
+		w.addDoor(blast);
+		w.addDoor(grate);
+
+		// Pressure plates on both sides of each door, wired to it: stepping on
+		// a plate parts the leaves and holds them while the plate is weighted
+		// (plus a linger), so a body is never trapped on either side. Wiring
+		// also stops these doors' idle random self-cycling -- they are
+		// machinery now, answering only their switches.
+		wireSwitch(w, x0 - 1, my, blast); // on the gallery, before the mouth
+		wireSwitch(w, x0 + 1, my, blast); // on the hall deck, inside
+		wireSwitch(w, vx - 1, vy + vh / 2, grate); // hall side of the vault
+		wireSwitch(w, vx + 1, vy + vh / 2, grate); // inside the vault
+	}
+
+	/** One pressure plate: the floor tile with the baked button housing, plus
+	 *  the Switch entity that senses weight and drives (and wires) the door. */
+	private static void wireSwitch(World w, int x, int y,
+			net.hedinger.prototype.entities.Door door) {
+		setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SWITCH);
+		w.spawnEntity(new net.hedinger.prototype.entities.Switch(x, y, CAVE_Z, door));
 	}
 
 	/**

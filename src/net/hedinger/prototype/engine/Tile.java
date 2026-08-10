@@ -598,7 +598,8 @@ public class Tile {
 		TYPE_WALL_STEEL(25, false), // riveted steel bulkhead wall
 		TYPE_DUCT(26, true), // crawlable air duct: small bodies only, concealed
 		TYPE_CRYSTAL_BED(27, true), // packed shard bed: walkable, but it slows
-		TYPE_CRYSTAL_SPARSE(28, true); // scattered shards on stone: ordinary ground
+		TYPE_CRYSTAL_SPARSE(28, true), // scattered shards on stone: ordinary ground
+		TYPE_SWITCH(29, true); // pressure-plate floor: a button a body stands on
 
 		private int value;
 		private boolean open;

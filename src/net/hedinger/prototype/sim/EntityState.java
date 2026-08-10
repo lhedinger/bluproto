@@ -96,6 +96,14 @@ public record EntityState(
 			kind = "door." + dr.flavorName();
 			rgb = dr.wireColor();
 			aux = dr.extension();
+		} else if (e instanceof net.hedinger.prototype.entities.Switch sw) {
+			// A pressure plate: aux is its pressed state, and pheno (unused by
+			// furniture) carries the wired door's entity id, so the viewer can
+			// draw the conduit decal from plate to door.
+			kind = "switch";
+			rgb = 0x8a93a0;
+			aux = sw.isPressed() ? 1 : 0;
+			pheno = sw.getDoor().getID();
 		} else if (e instanceof NPC n) {
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;

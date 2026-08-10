@@ -74,7 +74,13 @@ public class Grid {
 			}
 		}
 
-		// Doors first: structural furniture sits under the haze and the bodies.
+		// Structural furniture first, under the haze and the bodies: switch
+		// wiring lowest (a door leaf may slide over its conduit), then doors.
+		for (Entity e : world.entities.values()) {
+			if (e instanceof net.hedinger.prototype.entities.Switch && e.getLvl() == level) {
+				e.render(g, v);
+			}
+		}
 		for (Entity e : world.entities.values()) {
 			if (e instanceof net.hedinger.prototype.entities.Door && e.getLvl() == level) {
 				e.render(g, v);
@@ -89,6 +95,7 @@ public class Grid {
 		for (Entity e : world.entities.values()) {
 			if (e != null && !(e instanceof PheromoneCloud)
 					&& !(e instanceof net.hedinger.prototype.entities.Door)
+					&& !(e instanceof net.hedinger.prototype.entities.Switch)
 					&& e.getLvl() == level) {
 				e.render(g, v);
 			}
@@ -734,6 +741,8 @@ public class Grid {
 								col = p != null ? p : GroundTextures.plate(gx, gy);
 							} else if (cl == GroundTextures.CLS_AIRVENT) {
 								col = GroundTextures.airVent(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_SWITCH) {
+								col = GroundTextures.switchPlate(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
