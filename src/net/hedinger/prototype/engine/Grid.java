@@ -637,7 +637,10 @@ public class Grid {
 							}
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
-							col = GroundTextures.crystal(gx, gy);
+							// A dense formation is a thicket of standing prisms on
+							// the cave floor -- each prism self-shaded with its own
+							// contact shadow, no wall grammar.
+							col = GroundTextures.crystal(wx, wy, gx, gy);
 						} else if (cl == GroundTextures.CLS_HOLE) {
 							// Rim on every side the pit meets ground, as pixel-art: the
 							// lit north lip is a broken run of dashes whose depth varies
@@ -748,6 +751,10 @@ public class Grid {
 								double cap = t.vegetationCap();
 								double veg = cap > 0 ? t.getVegetation(now) / cap : 1;
 								col = GroundTextures.fungus(wx, wy, gx, gy, veg);
+							} else if (cl == GroundTextures.CLS_CRYSTAL_BED) {
+								col = GroundTextures.crystalBed(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_CRYSTAL_SPARSE) {
+								col = GroundTextures.crystalSparse(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_RUBBLE) {
 								col = GroundTextures.rubble(gx, gy);
 							} else if (cl == GroundTextures.CLS_SAND) {
@@ -870,12 +877,14 @@ public class Grid {
 		case GroundTextures.CLS_SAND: return 4;
 		case GroundTextures.CLS_SOIL: return 5;
 		case GroundTextures.CLS_STONE: return 6;
-		case GroundTextures.CLS_RUBBLE: return 7;
-		case GroundTextures.CLS_VENT: return 8;
-		case GroundTextures.CLS_FUNGUS: return 9;
-		case GroundTextures.CLS_GRASS: return 10;
-		case GroundTextures.CLS_REEDS: return 11;
-		case GroundTextures.CLS_COVER: return 12;
+		case GroundTextures.CLS_CRYSTAL_SPARSE: return 7;
+		case GroundTextures.CLS_CRYSTAL_BED: return 8;
+		case GroundTextures.CLS_RUBBLE: return 9;
+		case GroundTextures.CLS_VENT: return 10;
+		case GroundTextures.CLS_FUNGUS: return 11;
+		case GroundTextures.CLS_GRASS: return 12;
+		case GroundTextures.CLS_REEDS: return 13;
+		case GroundTextures.CLS_COVER: return 14;
 		default: return -1; // structures, holes, paving: no lapping
 		}
 	}
@@ -1043,7 +1052,8 @@ public class Grid {
 	}
 
 	/** A wall for lighting purposes: natural rock, masonry, concrete, or a
-	 *  steel bulkhead. */
+	 *  steel bulkhead. A crystal formation is deliberately NOT wallish: it is
+	 *  a thicket of prisms, and each prism carries its own depth cues. */
 	private boolean isWallish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)

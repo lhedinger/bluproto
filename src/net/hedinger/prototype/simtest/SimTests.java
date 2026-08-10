@@ -1166,6 +1166,83 @@ public class SimTests {
 	}
 
 	/**
+	 * Crystal comes in three densities: a solid formation stops every walker,
+	 * a packed bed admits only bodies that fit between its shards -- dragging
+	 * them by size, the smaller the freer -- and sparse shards are ordinary
+	 * ground where a mover keeps pace with one on bare floor.
+	 */
+	static class CrystalDensityTiers extends Scenario {
+		@Override
+		public void run() {
+			seed(23);
+			World w = room(16, 8);
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_CRYSTAL);        // formation row
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_CRYSTAL_BED);    // bed rows
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_CRYSTAL_BED);
+				w.setTile(x, 4, 0, Tile.TileType.TYPE_CRYSTAL_BED);
+				w.setTile(x, 5, 0, Tile.TileType.TYPE_CRYSTAL_SPARSE); // sparse row
+			}
+			TestNPC blocked = TestNPC.mover(2.5, 1.5, 0, 0);              // into the formation
+			TestNPC small = TestNPC.mover(2.5, 2.5, 0, 0).withSize(3);    // slips through the bed
+			TestNPC mid = TestNPC.mover(2.5, 3.5, 0, 0).withSize(10);     // picks its way through
+			TestNPC big = TestNPC.mover(2.5, 4.5, 0, 0).withSize(16);     // over clearance: kept out
+			TestNPC loose = TestNPC.mover(2.5, 5.5, 0, 0);                // crosses sparse shards
+			TestNPC clear = TestNPC.mover(2.5, 6.5, 0, 0);                // bare floor control
+			w.spawnEntity(blocked);
+			w.spawnEntity(small);
+			w.spawnEntity(mid);
+			w.spawnEntity(big);
+			w.spawnEntity(loose);
+			w.spawnEntity(clear);
+			w.think();
+			snapshot(w, "before (formation / bed x3 / sparse / floor lanes)");
+			tick(w, 200);
+			snapshot(w, "after (stopped / by-size / kept out / normal / normal)");
+
+			assertLess("the formation stops a walker", blocked.getX(), 5.0);
+			assertLess("a body over clearance is stopped at the bed's edge", big.getX(), 5.0);
+			assertGreater("a mid body picks its way into the bed", mid.getX(), 5.0);
+			assertGreater("a small body outpaces a mid one through the shards",
+					small.getX() - mid.getX(), 0.5);
+			assertGreater("but even the small body pays a little against clear ground",
+					clear.getX() - small.getX(), 0.1);
+			assertLess("sparse shards walk like plain floor",
+					Math.abs(clear.getX() - loose.getX()), 0.5);
+		}
+	}
+
+	/**
+	 * A crawl duct admits only bodies inside its clearance: a small body
+	 * crawls through (slowly), a big one is stopped at the grille. Pins the
+	 * size gate against the field-shadowing trap -- NPCs keep their radius in
+	 * their own field, so the gate must read it polymorphically.
+	 */
+	static class DuctAdmitsOnlySmallBodies extends Scenario {
+		@Override
+		public void run() {
+			seed(24);
+			World w = room(14, 4);
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_DUCT);
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_DUCT);
+			}
+			TestNPC small = TestNPC.mover(2.5, 1.5, 0, 0).withSize(5);  // inside clearance
+			TestNPC big = TestNPC.mover(2.5, 2.5, 0, 0).withSize(12);   // too wide
+			w.spawnEntity(small);
+			w.spawnEntity(big);
+			w.think();
+			snapshot(w, "before (both west of the duct)");
+			tick(w, 300);
+			snapshot(w, "after (small crawled in, big stopped at the grille)");
+
+			assertGreater("a small body crawls into the duct", small.getX(), 5.0);
+			assertLess("a big body is stopped at the grille", big.getX(), 5.0);
+			assertGreater("the big body walked up to the duct", big.getX(), 4.0);
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -3925,6 +4002,8 @@ public class SimTests {
 				new FertileHabitatPatches(),
 				new WaterBlocksLandPassesFlyers(),
 				new MudSlowsMovement(),
+				new CrystalDensityTiers(),
+				new DuctAdmitsOnlySmallBodies(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

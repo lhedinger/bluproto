@@ -451,14 +451,36 @@ public class Tile {
 			return 0.6; // clambering over the runs
 		case TYPE_DUCT:
 			return 0.5; // crawling
+		case TYPE_CRYSTAL_BED:
+			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
 			return 1.0;
 		}
 	}
 
+	/**
+	 * Movement multiplier for a body of {@code size} (radius) standing on
+	 * this tile. Most ground drags every body alike; a crystal bed drags by
+	 * fit -- a small body slips between the shards nearly unhindered, one
+	 * near the clearance limit picks its way through at a crawl, and
+	 * anything above {@link #CRYSTAL_CLEARANCE} never got in at all (the
+	 * collision gate stops it at the bed's edge).
+	 */
+	public double speedFactorFor(double size) {
+		if (type == TileType.TYPE_CRYSTAL_BED) {
+			return 1.0 - 0.65 * Math.min(1.0, size / CRYSTAL_CLEARANCE);
+		}
+		return speedFactor();
+	}
+
 	/** The biggest body (radius) that fits through a crawl duct; anything
 	 *  larger is stopped at the grille. */
 	public static final float DUCT_CLEARANCE = 8;
+
+	/** The biggest body (radius) that fits between a crystal bed's shards;
+	 *  anything larger is stopped at the bed's edge -- so a bed is a refuge
+	 *  the apex hunters cannot follow prey into. */
+	public static final float CRYSTAL_CLEARANCE = 13;
 
 	/** True where an unsupported body drops to the level below: natural
 	 *  holes and the facility's vertical shafts. */
@@ -574,7 +596,9 @@ public class Tile {
 		TYPE_AIRVENT(23, true), // louvered ventilation grille in the deck
 		TYPE_WALL_CONCRETE(24, false), // poured concrete facility wall
 		TYPE_WALL_STEEL(25, false), // riveted steel bulkhead wall
-		TYPE_DUCT(26, true); // crawlable air duct: small bodies only, concealed
+		TYPE_DUCT(26, true), // crawlable air duct: small bodies only, concealed
+		TYPE_CRYSTAL_BED(27, true), // packed shard bed: walkable, but it slows
+		TYPE_CRYSTAL_SPARSE(28, true); // scattered shards on stone: ordinary ground
 
 		private int value;
 		private boolean open;
