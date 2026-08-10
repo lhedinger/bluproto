@@ -1380,6 +1380,14 @@ public class TestNPC extends NPC {
 	 */
 	private double mateIntent() {
 		mateSteer = Double.NaN;
+		if (genome != null && !genome.isSexual()) {
+			// An asexual body never courts. Reproduction is still what A_MATE asks
+			// for; the body just answers it alone. Reported invalid so a mind reads
+			// "this intent is not going to close" and can go and do something else --
+			// the budding itself is handled below, outside the courtship path.
+			breakOffMating();
+			return AgentIO.INTENT_INVALID;
+		}
 		if (!fertile()) {
 			breakOffMating(); // too hungry, too soon, or not built to breed
 			return AgentIO.INTENT_INVALID;
@@ -1585,12 +1593,15 @@ public class TestNPC extends NPC {
 			}                        // effect of running something down
 		}
 		boolean bred = mateStatus == AgentIO.INTENT_DONE;
-		if (wantsMate && mateStatus == AgentIO.INTENT_INVALID && nearestMate() == null) {
-			// Nobody to breed with, but a well-fed body can still bud on its own --
-			// the asexual path the cohort has always had, kept so the intent adds a
-			// way to breed rather than taking one away.
+		boolean asexual = genome == null || !genome.isSexual();
+		if (wantsMate && asexual) {
+			// The body's whole answer for an asexual lineage: bud, alone, whenever it
+			// can afford to. It will not court and does not care who is nearby.
 			bred = tryReproduce();
 		}
+		// A sexual body has no fallback: with nobody to court it simply waits. That is
+		// what makes the two strategies genuinely different, rather than one being the
+		// other plus a bonus.
 		// How the intent went, for the mind to read next tick. DONE is the terminal
 		// act actually firing -- grass eaten, a bite landed, an item taken -- not
 		// merely arriving; PENDING is a goal in sight and not yet reached; INVALID is

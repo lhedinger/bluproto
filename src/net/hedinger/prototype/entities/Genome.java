@@ -55,6 +55,21 @@ public class Genome {
 	public double gregariousness = 0; // approach the similar
 	public double boldness = 0; // reduces flight
 	public double mateThreshold = 0.85; // similarity above which mating is sought
+	/**
+	 * Which way this lineage reproduces, 0..1, sexual at or above 0.5. A creature is
+	 * one or the other and never both: a sexual body courts a partner and waits if
+	 * there is none, an asexual one buds alone and never courts.
+	 *
+	 * <p>Continuous rather than a flag on purpose — mutation can drift a lineage
+	 * across the boundary a little at a time, so the strategy is something selection
+	 * can move toward instead of a coin that flips whole.
+	 */
+	public double sexuality = 0.5;
+
+	/** True if this genome reproduces sexually; false if it buds. */
+	public boolean isSexual() {
+		return sexuality >= 0.5;
+	}
 
 	public Genome() {
 	}
@@ -88,6 +103,7 @@ public class Genome {
 		g.gregariousness = Utils.random();
 		g.boldness = Utils.random() * 0.3;
 		g.mateThreshold = 0.7 + Utils.random() * 0.3;
+		g.sexuality = Utils.random(); // an even split of strategies to start from
 		return g;
 	}
 
@@ -107,6 +123,7 @@ public class Genome {
 		g.gregariousness = gregariousness;
 		g.boldness = boldness;
 		g.mateThreshold = mateThreshold;
+		g.sexuality = sexuality;
 		g.brain = (brain == null) ? null : brain.copy();
 		return g;
 	}
@@ -146,6 +163,7 @@ public class Genome {
 		g.gregariousness = pick(a.gregariousness, b.gregariousness);
 		g.boldness = pick(a.boldness, b.boldness);
 		g.mateThreshold = pick(a.mateThreshold, b.mateThreshold);
+		g.sexuality = pick(a.sexuality, b.sexuality);
 		g.mutate(rate);
 		// Crossover the minds when both parents have one; otherwise inherit whichever
 		// exists. Guarded so brain-less pairs draw no extra RNG.
@@ -188,6 +206,9 @@ public class Genome {
 		turnRate = Math.max(1, (int) Math.round(turnRate * (1 + jitter(rate))));
 		losRange = pos(losRange * (1 + jitter(rate)));
 		losFov = clamp(losFov * (1 + jitter(rate)), 0, 2 * Math.PI);
+		// Additive, not multiplicative: a lineage sitting at 0 could never drift back
+		// across the boundary if the step were proportional to where it already is.
+		sexuality = clamp(sexuality + jitter(rate), 0, 1);
 		metabolism = pos(metabolism * (1 + jitter(rate)));
 		maxAge = Math.max(1, (int) Math.round(maxAge * (1 + jitter(rate))));
 		// flying is inherited as-is (no RNG draw here) so adding it does not shift
