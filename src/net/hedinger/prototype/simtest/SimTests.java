@@ -1327,6 +1327,39 @@ public class SimTests {
 	}
 
 	/**
+	 * On the lowest level a pit is bottomless: a body that steps off the
+	 * edge is removed from the world outright -- no corpse, nothing below to
+	 * land on -- while a catwalk over the same void carries a walker across
+	 * untouched.
+	 */
+	static class BottomlessPitsAndCatwalks extends Scenario {
+		@Override
+		public void run() {
+			seed(27);
+			World w = room(14, 6);
+			for (int x = 5; x <= 8; x++) {
+				for (int y = 1; y <= 4; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_SHAFT); // the void
+				}
+			}
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_CATWALK); // the way across
+			}
+			TestNPC walker = TestNPC.mover(2.5, 2.5, 0, 0); // takes the catwalk
+			TestNPC faller = TestNPC.mover(2.5, 3.5, 0, 0); // walks off the edge
+			w.spawnEntity(walker);
+			w.spawnEntity(faller);
+			w.think();
+			snapshot(w, "before (catwalk lane and open-void lane)");
+			tick(w, 250);
+			snapshot(w, "after (walker across; faller gone entirely)");
+
+			assertGreater("the catwalk carries a walker over the void", walker.getX(), 9.0);
+			assertTrue("the void removed the faller from the world", faller.isRemoved());
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -3980,6 +4013,7 @@ public class SimTests {
 				new DuctAdmitsOnlySmallBodies(),
 				new SwitchOpensWiredDoor(),
 				new ButtonNeedsIntent(),
+				new BottomlessPitsAndCatwalks(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

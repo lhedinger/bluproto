@@ -372,6 +372,13 @@ public final class Worlds {
 								: Tile.TileType.TYPE_CRYSTAL_SPARSE;
 					} else if (deep > 0.85) {
 						t = Tile.TileType.TYPE_VENT;
+					} else if (deep < 0.08) {
+						// The odd cavern floor gives way entirely: a natural
+						// pit, and on the lowest level a pit is bottomless --
+						// whatever falls in leaves the world. The corridor
+						// carver paves straight through pit fields, so the
+						// backbone always bridges them.
+						t = Tile.TileType.TYPE_HOLE;
 					} else {
 						t = Tile.TileType.TYPE_STONE;
 					}
@@ -521,7 +528,22 @@ public final class Worlds {
 		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 13, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 10, y0 + 11, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+
+		// The shaft bay: the storage wing's east end has given way to a
+		// bottomless pit -- whatever steps off the edge leaves the world --
+		// crossed by a catwalk out to a supply platform against the east
+		// wall. The reward on the platform is real; so is the drop.
+		for (int x = x0 + 12; x <= x0 + 15; x++) {
+			for (int y = y0 + 9; y <= y0 + 11; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SHAFT);
+			}
+		}
+		for (int x = x0 + 12; x <= x0 + 14; x++) {
+			setBare(w, x, y0 + 10, CAVE_Z, Tile.TileType.TYPE_CATWALK);
+		}
+		setBare(w, x0 + 15, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PLATE); // the platform
+		w.spawnEntity(Item.food(x0 + 15.5, y0 + 10.5, CAVE_Z));
 
 		// The steel vault, closing the spine's east end: steel walls over the
 		// partition rows, a grate doorway facing the spine, and the crawl
