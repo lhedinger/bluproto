@@ -220,6 +220,22 @@ final class WorldHost {
 				d.put("subtype", it.getKind().name().toLowerCase());
 				d.put("edible", it.isEdible());
 				d.put("durability", it.getHealth());
+			} else if (e instanceof net.hedinger.prototype.entities.Door dr) {
+				// Furniture is inspectable too: a tapped door says what it is
+				// made of, how wide a mouth it seals, and where its leaves are.
+				d.put("kind", "door." + dr.flavorName());
+				d.put("subtype", dr.flavorName());
+				d.put("span", dr.getSpan());
+				d.put("state", dr.isOpen() ? "open" : dr.isClosed() ? "closed" : "moving");
+			} else if (e instanceof net.hedinger.prototype.entities.Switch sw) {
+				boolean button = sw.getMode() == net.hedinger.prototype.entities.Switch.BUTTON;
+				d.put("kind", button ? "switch.button" : "switch.plate");
+				d.put("subtype", button ? "button" : "plate");
+				d.put("pressed", sw.isPressed());
+				d.put("wiredTo", sw.getDoor().getID()); // the door this switch drives
+			} else if (e instanceof net.hedinger.prototype.engine.PheromoneCloud p) {
+				d.put("kind", "phero");
+				d.put("strength", round(p.getStrength()));
 			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
 				d.put("subtype", n.getNpcTypeName().toLowerCase());

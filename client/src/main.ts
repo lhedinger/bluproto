@@ -359,6 +359,9 @@ function renderInspectSimple(d: Record<string, any>): void {
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const rows: string[] = [];
   if (d.action) rows.push(row('doing', d.action));
+  if (d.state) rows.push(row('state', d.state));
+  if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
+  if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
   if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
@@ -393,6 +396,11 @@ function renderInspectDebug(d: Record<string, any>): void {
   if (fl.length) status.push(row('flags', fl.join(', ')));
   if ('edible' in d) status.push(row('edible', d.edible ? 'yes' : 'no'));
   if ('durability' in d) status.push(row('durability', d.durability));
+  if (d.state) status.push(row('state', d.state));
+  if ('span' in d) status.push(row('span', d.span));
+  if ('pressed' in d) status.push(row('pressed', d.pressed ? 'yes' : 'no'));
+  if ('wiredTo' in d) status.push(row('wired to', `#${d.wiredTo}`));
+  if ('strength' in d) status.push(row('strength', d.strength));
   const sections = [group('identity', identity), group('status', status)];
   const gm = d.genome;
   if (gm) {
