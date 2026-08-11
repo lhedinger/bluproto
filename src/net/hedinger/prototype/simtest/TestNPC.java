@@ -207,6 +207,11 @@ public class TestNPC extends NPC {
 	 *  facts about the creature. */
 	private final java.util.Set<Integer> attentionDropped = new java.util.TreeSet<Integer>();
 
+	/** The tile property this mind is currently looking for (an AgentIO TILE_*),
+	 *  and the one the cached result was found under. */
+	private int tileWanted = AgentIO.TILE_FOOD;
+	private int tileScanned = AgentIO.TILE_FOOD;
+
 	private int forageCol = -1, forageRow = -1;
 	private long forageScanAt = Long.MIN_VALUE;
 
@@ -1053,6 +1058,9 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_ITEM_KIND] = 0;
 		}
 		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
+		// What kind of ground to look for is the mind's standing choice, read before
+		// the scan so the channel answers the question actually being asked.
+		tileWanted = AgentIO.tileWanted(actuators[AgentIO.A_TILE]);
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
 		attentionDropped.clear();
 		limitAttention(s); // ...of which only as many as this mind can hold survive
@@ -1151,8 +1159,10 @@ public class TestNPC extends NPC {
 	private void senseForage(double[] s) {
 		long now = getWorld().getTick();
 		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
+				|| tileWanted != tileScanned // the mind asked for different ground
 				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
-				|| (forageCol >= 0 && vegetationAt(forageCol, forageRow, now) <= 0); // eaten bare
+				|| (forageCol >= 0 && tileScoreAt(forageCol, forageRow, now) <= 0); // no longer matches
+		tileScanned = tileWanted;
 		if (due) {
 			scanForage(now);
 		}
@@ -1173,6 +1183,27 @@ public class TestNPC extends NPC {
 	 * energy. The sweep runs in a fixed row-major order and keeps the first strict
 	 * maximum, so ties break identically on every replay.
 	 */
+	/** How well a tile answers the property this body is currently looking for,
+	 *  0 when it does not. Vegetation is graded (a richer patch scores higher); the
+	 *  rest are yes-or-no, so any matching tile is judged purely on being close. */
+	private double tileScore(net.hedinger.prototype.engine.Tile t, long now) {
+		switch (tileWanted) {
+		case AgentIO.TILE_COVER:
+			return t.blocksSight() && t.isWalkable() ? 1 : 0;
+		case AgentIO.TILE_SLOW:
+			return t.isWalkable() && t.speedFactor() < 1.0 ? 1 : 0;
+		case AgentIO.TILE_WATER:
+			return t.isWater() ? 1 : 0;
+		case AgentIO.TILE_SOLID:
+			return t.isSolid() ? 1 : 0;
+		case AgentIO.TILE_HAZARD:
+			return t.isWater()
+					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE ? 1 : 0;
+		default:
+			return t.isWalkable() ? t.getVegetation(now) : 0;
+		}
+	}
+
 	private void scanForage(long now) {
 		forageScanAt = now;
 		forageCol = -1;
@@ -1194,11 +1225,13 @@ public class TestNPC extends NPC {
 				if (net.hedinger.prototype.engine.Tile.VEG_MAX / (1.0 + dist) <= best) {
 					continue;
 				}
-				double veg = vegetationAt(tx, ty, now);
-				if (veg <= 0) {
+				net.hedinger.prototype.engine.Tile t = getWorld().isValid(tx, ty, getLvl())
+						? getWorld().getTile(tx, ty, getLvl()) : null;
+				double q = t == null ? 0 : tileScore(t, now);
+				if (q <= 0) {
 					continue;
 				}
-				double score = veg / (1.0 + dist);
+				double score = q / (1.0 + dist);
 				if (score > best) {
 					best = score;
 					forageCol = tx;
@@ -1209,6 +1242,22 @@ public class TestNPC extends NPC {
 		if (forageCol >= 0 && !getWorld().isValid(forageCol, forageRow, lvl)) {
 			forageCol = -1; // paranoia: never hand the mind a tile off the map
 		}
+	}
+
+	/** True when this body is standing on ground of the kind it asked for -- which is
+	 *  what arrival means for a tile that is not food: there is nothing to do on it
+	 *  beyond being there. */
+	private boolean onWantedTile() {
+		return tileScoreAt((int) X, (int) Y, getWorld().getTick()) > 0;
+	}
+
+	/** {@link #tileScore} at a coordinate, or 0 off the map. */
+	private double tileScoreAt(int col, int row, long now) {
+		if (!getWorld().isValid(col, row, getLvl())) {
+			return 0;
+		}
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(col, row, getLvl());
+		return t == null ? 0 : tileScore(t, now);
 	}
 
 	/** Vegetation on a tile, or 0 if it is off the map or not walkable ground. */
@@ -1581,7 +1630,11 @@ public class TestNPC extends NPC {
 		// which is the whole reason an intent is worth an instruction. Only the
 		// approach sense acts: fleeing a thing is not a reason to bite it.
 		boolean chasing = pursuing && !away;
-		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE;
+		// Arriving only grazes when the ground being sought is food. A body that asked
+		// for cover and reached it has arrived, full stop -- there is nothing to eat
+		// in a thicket, and the terminal act has to follow what was actually wanted.
+		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE
+				&& tileWanted == AgentIO.TILE_FOOD;
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
 		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
 		boolean eats = a[AgentIO.A_EAT] > 0.5;
@@ -1629,7 +1682,9 @@ public class TestNPC extends NPC {
 			intentStatus = AgentIO.INTENT_IDLE;
 		} else if (searching) {
 			intentStatus = AgentIO.INTENT_INVALID;
-		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)) {
+		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)
+				|| (chasing && seekClass == AgentIO.SEEK_FORAGE
+						&& tileWanted != AgentIO.TILE_FOOD && onWantedTile())) {
 			intentStatus = AgentIO.INTENT_DONE;
 		} else {
 			intentStatus = AgentIO.INTENT_PENDING;
