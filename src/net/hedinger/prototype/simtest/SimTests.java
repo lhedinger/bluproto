@@ -1387,6 +1387,58 @@ public class SimTests {
 	}
 
 	/**
+	 * Fixtures are seekable: a mind that names SEEK_FIXTURE steers its body
+	 * to the nearest button from an arbitrary spawn heading -- the fixture
+	 * sense supplies the bearing, so no scripted aiming is needed -- and
+	 * arriving presses it (the intent's terminal act, no A_INTERACT write in
+	 * the program), parting and holding the wired door. This is the whole
+	 * "see the button, intend to go there, press it" story in six brain
+	 * instructions.
+	 */
+	static class BrainSeeksAndPressesButton extends Scenario {
+		@Override
+		public void run() {
+			seed(29);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // the doorway
+			net.hedinger.prototype.entities.Door door = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			w.addDoor(door);
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, door,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			// Drive, and name the fixture intent: SEEK_FIXTURE lives past every
+			// pool constant (magnitude >= 6), so naming it costs one ADD.
+			int[][] seeker = {
+					{ Brain.SET, 1, 9, 0 },                    // R1 = 1.0 (const[9])
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 }, // drive forward
+					{ Brain.SET, 2, 10, 0 },                   // R2 = 2 (const[10])
+					{ Brain.SET, 3, 11, 0 },                   // R3 = 4 (const[11])
+					{ Brain.ADD, 4, 2, 3 },                    // R4 = 6: the fixture band
+					{ Brain.WRITE, AgentIO.A_SEEK, 4, 0 },     // steer to the button
+			};
+			// Deliberately NO withHeading: the spawn heading is random, and the
+			// seek must not care.
+			TestNPC seekerBody = TestNPC.minded(1.5, 2.5, 0, new Genome(),
+					new LgpMind(new Brain(seeker), seeker.length));
+			w.spawnEntity(seekerBody);
+			w.think();
+			snapshot(w, "before (random heading; button at x=4, door at x=7)");
+			tick(w, 300);
+			snapshot(w, "after (steered to the button; door held open)");
+
+			double d = Math.hypot(seekerBody.getX() - 4.5, seekerBody.getY() - 2.5);
+			assertLess("the seek steered the body to the button", d, 1.6);
+			assertTrue("arriving pressed it: the wired door stands open", door.isOpen());
+			tick(w, 60);
+			assertTrue("and stays open while the intent holds the press", door.isOpen());
+		}
+	}
+
+	/**
 	 * On the lowest level a pit is bottomless: a body that steps off the
 	 * edge is removed from the world outright -- no corpse, nothing below to
 	 * land on -- while a catwalk over the same void carries a walker across
@@ -4427,6 +4479,7 @@ public class SimTests {
 				new SwitchOpensWiredDoor(),
 				new ButtonNeedsIntent(),
 				new BrainInteractsWithButton(),
+				new BrainSeeksAndPressesButton(),
 				new BottomlessPitsAndCatwalks(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
