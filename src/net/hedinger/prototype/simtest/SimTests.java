@@ -2068,6 +2068,43 @@ public class SimTests {
 	 * and that gate is the whole reason asking for cover (A_TILE) is worth an
 	 * instruction: without it, hiding would be theatre.
 	 */
+
+	/**
+	 * A hunter with a full tank does not kill. The meal would overflow the cap and be
+	 * discarded, so the prey would die for nothing.
+	 *
+	 * <p>Pins the boundary rather than the intent, because the first version of this
+	 * gate tested {@code energy >= capacity} and could never fire: run_extended caps
+	 * the tank and then burns metabolism, both before think(), so a metabolic body is
+	 * never exactly at its cap when it decides anything. A hungry hunter beside the
+	 * same prey must still kill, or this would pass by the hunter simply being broken.
+	 */
+	static class AFullHunterDoesNotKill extends Scenario {
+		private int preyHealthAfter(double tankFraction) {
+			seed(103);
+			World w = room(12, 9);
+			Genome pg = new Genome();
+			pg.size = 20;
+			TestNPC hunter = TestNPC.predator(5.5, 4.5, 0, pg).withMetabolic()
+					.withReproCooldown(1000000);
+			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(6); // already in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.think();
+			for (int i = 0; i < 40; i++) {
+				hunter.withEnergy(tankFraction * hunter.energyCapacity()); // hold it there
+				tick(w, 1);
+			}
+			return prey.getHealth();
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a full hunter leaves prey in reach alone", 100, preyHealthAfter(1.0));
+			assertLess("a hungry hunter beside the same prey still kills", preyHealthAfter(0.3), 100);
+		}
+	}
+
 	static class CoverHidesPreyFromAHunter extends Scenario {
 		@Override
 		public void run() {
@@ -4493,6 +4530,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new AFullHunterDoesNotKill(),
 				new CoverHidesPreyFromAHunter(),
 				new TileSeekingIsGeneric(),
 				new MatingTakesTimeAndSeeksAPartner(),

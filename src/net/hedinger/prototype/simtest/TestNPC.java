@@ -69,6 +69,11 @@ public class TestNPC extends NPC {
 	 *  at 0.6 and breeding at 0.75, a hunter only drops this low when it has been
 	 *  failing to feed, so cannibalism stays a genuine last resort. */
 	private static final double STARVE_FRACTION = 0.2;
+	/** At or above this share of its tank a hunter stops killing altogether: the meal
+	 *  would overflow the cap and be discarded, so the prey would die for nothing.
+	 *  Below the cap rather than at it, because metabolism means a body is never
+	 *  exactly full when it comes to decide. */
+	private static final double PRED_FULL_FRACTION = 0.95;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -748,7 +753,12 @@ public class TestNPC extends NPC {
 		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
 		double reach = prey == null ? 0
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-		boolean full = energy >= energyCapacity();
+		// Near enough to full that a kill would be thrown away. NOT `>= capacity`:
+		// run_extended caps the tank and then burns metabolism, both before think(),
+		// so a metabolic body is never exactly at its cap by the time it decides
+		// anything -- an equality here is a test that can never fire, which is what
+		// this was before and why full predators went on killing.
+		boolean full = energy >= PRED_FULL_FRACTION * energyCapacity();
 		if (prey != null && !full && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
 			setAction("attacking", true); // in reach: bite at any hunger short of full
