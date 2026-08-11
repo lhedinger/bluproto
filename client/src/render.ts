@@ -18,6 +18,19 @@ export interface WorldMeta { cols: number; rows: number; }
  *  for pixel-art style partial coverage — matching the ground bake's dithers. */
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
+/** Soil ramp {shadow, base, highlight} — GroundTextures.RAMP[CLS_SOIL], the
+ *  colours a fully grazed tile bakes to. Depletion must dither toward these
+ *  exact shades, never toward an alpha-blend the palette doesn't contain. */
+const SOIL = ['#40301f', '#63472e', '#866543'];
+
+/** Cheap integer lattice hash in [0,1) — stands in for the bake's shade noise
+ *  when scattering shadow/highlight speckles through overlay soil. */
+function hash01(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) >>> 0;
+  h = ((h ^ (h >>> 13)) * 1274126177) >>> 0;
+  return ((h >>> 16) & 0xffff) / 0x10000;
+}
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
@@ -63,19 +76,23 @@ export function render(
     }
   }
 
-  // Live grazing: darken depleted grass toward bare dirt (255 = non-grass, no
-  // overlay; 100 = lush, none; 0 = grazed bare, full dirt). Regrowth fades it.
-  // Drawn as ordered dither rather than a flat alpha square: depletion fills
-  // in as a Bayer pattern of dirt speckles (4x4 subcells, indexed by absolute
-  // subcell so the pattern is stable and tile seams interleave), so a tile
-  // changing state shades through pixel-art steps instead of snapping — the
-  // same grammar the ground textures use.
+  // Live grazing: depleted grass dithers toward bare soil (255 = non-grass, no
+  // overlay; 100 = lush, none; 0 = grazed bare, full soil). Regrowth fades it.
+  // Follows the ground bake's dither grammar exactly: cells are art-pixels
+  // (12 per tile side), the Bayer threshold is indexed by world-absolute
+  // art-pixel so the pattern interleaves with the textures' own dither, and
+  // the fills are opaque soil-ramp shades — soil pixels displacing grass
+  // pixels, never a translucent wash inventing in-between colours.
   if (veg) {
     const tl = cam.screenToWorld(0, 0);
     const br = cam.screenToWorld(cv.width, cv.height);
     const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
     const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
-    const dithered = cam.scale >= 12; // subcells readable; below this, flat alpha
+    // Below one screen pixel per art-pixel the dither is sub-pixel; a flat
+    // soil-coloured fill at alpha = coverage is what downscaling the true
+    // pattern would produce anyway.
+    const dithered = cam.scale >= 12;
+    const ap = cam.scale / 12; // screen size of one art-pixel
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const lvl = veg[ty * meta.cols + tx];
@@ -83,17 +100,20 @@ export function render(
         const depl = (100 - lvl) / 100;
         const o = cam.worldToScreen(tx, ty);
         if (!dithered) {
-          g.fillStyle = `rgba(78,60,38,${(depl * 0.72).toFixed(3)})`;
+          g.fillStyle = `rgba(99,71,46,${depl.toFixed(3)})`; // soil base at coverage
           g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
           continue;
         }
-        g.fillStyle = 'rgba(78,60,38,0.72)';
-        const sub = cam.scale / 4;
-        for (let sy = 0; sy < 4; sy++) {
-          for (let sx = 0; sx < 4; sx++) {
-            if ((BAYER4[((ty * 4 + sy) & 3) * 4 + ((tx * 4 + sx) & 3)] + 0.5) / 16 < depl) {
-              g.fillRect(o.x + sx * sub, o.y + sy * sub, sub + 0.5, sub + 0.5);
-            }
+        for (let ay = 0; ay < 12; ay++) {
+          const py = ty * 12 + ay;
+          const ry = Math.round(o.y + ay * ap), rh = Math.round(o.y + (ay + 1) * ap) - ry;
+          for (let ax = 0; ax < 12; ax++) {
+            const px = tx * 12 + ax;
+            if ((BAYER4[(py & 3) * 4 + (px & 3)] + 0.5) / 16 >= depl) continue;
+            const h = hash01(px, py); // sparse shadow/highlight grains, base-dominant
+            g.fillStyle = SOIL[h < 0.16 ? 0 : h > 0.94 ? 2 : 1];
+            const rx = Math.round(o.x + ax * ap);
+            g.fillRect(rx, ry, Math.round(o.x + (ax + 1) * ap) - rx, rh);
           }
         }
       }
