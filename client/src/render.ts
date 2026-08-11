@@ -3,7 +3,7 @@
 // keeps distant creatures visible when zoomed out. Pixel-art stays crisp via
 // nearest-neighbour scaling of the layer.
 
-import { ART_RADIUS, CELL, atlasFor, cell } from './atlas';
+import { ART_RADIUS, CELL, RIM_COLOUR, atlasFor, cell, rimFor } from './atlas';
 import type { Camera } from './camera';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
@@ -194,12 +194,28 @@ export function render(
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
       const { col: cc, row: rr } = cell(p.dir, nowMs);
       g.imageSmoothingEnabled = false;
+      // Minded cohort: a violet rim hugging the body, so a creature driven by an
+      // evolvable mind can be picked out of the scripted species at a glance. The
+      // ring this replaces was the one smooth curve on a screen of pixel art, and
+      // it also had to be told apart from the grab and carry rings by radius alone
+      // — a shape that follows the sprite is legible at any zoom and cannot be
+      // confused with them. Four offsets rather than eight: at one pixel the
+      // diagonals add nothing but cost two more draws per creature.
+      if (e.flags & F_MINDED) {
+        const rim = rimFor(e.pheno, atlas);
+        const d = Math.max(1, box / CELL); // one SPRITE pixel, never under one screen pixel
+        for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) {
+          g.drawImage(rim, cc * CELL, rr * CELL, CELL, CELL,
+            s.x - box / 2 + dx, s.y - box / 2 + dy, box, box);
+        }
+      }
       g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
     } else {
       g.fillStyle = col;
       g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
-      g.strokeStyle = 'rgba(0,0,0,0.45)';
-      g.lineWidth = 1;
+      // No sprite to hug yet, so the placeholder wears the rim as its edge.
+      g.strokeStyle = (e.flags & F_MINDED) ? RIM_COLOUR : 'rgba(0,0,0,0.45)';
+      g.lineWidth = (e.flags & F_MINDED) ? 2 : 1;
       g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.85)';
       g.beginPath();
@@ -208,14 +224,7 @@ export function render(
       g.lineTo(s.x + Math.cos(p.dir - 2.5) * r * 0.55, s.y + Math.sin(p.dir - 2.5) * r * 0.55);
       g.closePath(); g.fill();
     }
-    // Minded cohort: a crisp violet ring marks a creature whose behaviour comes
-    // from an evolvable mind, so it can be watched competing against the scripted
-    // species. Distinct from the grab (orange) and carry (cyan) rings.
-    if (e.flags & F_MINDED) {
-      g.strokeStyle = 'rgba(198,96,255,0.95)';
-      g.lineWidth = Math.max(1, r * 0.22);
-      g.beginPath(); g.arc(s.x, s.y, r * 1.25, 0, 7); g.stroke();
-    }
+
     // What it is doing, as a small badge hovering over the body. Only notable
     // acts carry a code, so this stays sparse rather than tagging every creature
     // on screen. Gated on the TRUE on-screen body size rather than `r`, which is
