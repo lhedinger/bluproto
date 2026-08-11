@@ -14,6 +14,10 @@ import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
 
+/** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
+ *  for pixel-art style partial coverage — matching the ground bake's dithers. */
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
@@ -61,18 +65,37 @@ export function render(
 
   // Live grazing: darken depleted grass toward bare dirt (255 = non-grass, no
   // overlay; 100 = lush, none; 0 = grazed bare, full dirt). Regrowth fades it.
+  // Drawn as ordered dither rather than a flat alpha square: depletion fills
+  // in as a Bayer pattern of dirt speckles (4x4 subcells, indexed by absolute
+  // subcell so the pattern is stable and tile seams interleave), so a tile
+  // changing state shades through pixel-art steps instead of snapping — the
+  // same grammar the ground textures use.
   if (veg) {
     const tl = cam.screenToWorld(0, 0);
     const br = cam.screenToWorld(cv.width, cv.height);
     const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
     const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
+    const dithered = cam.scale >= 12; // subcells readable; below this, flat alpha
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const lvl = veg[ty * meta.cols + tx];
         if (lvl >= 100 || lvl === 255) continue; // lush grass or non-grass: nothing
+        const depl = (100 - lvl) / 100;
         const o = cam.worldToScreen(tx, ty);
-        g.fillStyle = `rgba(78,60,38,${(((100 - lvl) / 100) * 0.72).toFixed(3)})`;
-        g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
+        if (!dithered) {
+          g.fillStyle = `rgba(78,60,38,${(depl * 0.72).toFixed(3)})`;
+          g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
+          continue;
+        }
+        g.fillStyle = 'rgba(78,60,38,0.72)';
+        const sub = cam.scale / 4;
+        for (let sy = 0; sy < 4; sy++) {
+          for (let sx = 0; sx < 4; sx++) {
+            if ((BAYER4[((ty * 4 + sy) & 3) * 4 + ((tx * 4 + sx) & 3)] + 0.5) / 16 < depl) {
+              g.fillRect(o.x + sx * sub, o.y + sy * sub, sub + 0.5, sub + 0.5);
+            }
+          }
+        }
       }
     }
   }

@@ -2069,6 +2069,7 @@ public class TestNPC extends NPC {
 			}
 		} else {
 			setAction("grazing", false);
+			settleOnPatch(); // stand over the patch being eaten, not on its seam
 		}
 	}
 
@@ -2188,6 +2189,25 @@ public class TestNPC extends NPC {
 		// grazing bores a clear depleted spot before the herbivore wanders off.
 		if (intake < grazeDemand() * 0.15) {
 			roam(speed, turn);
+		} else {
+			settleOnPatch();
+		}
+	}
+
+	/**
+	 * Eases a cropping body off the tile boundary toward the centre of the
+	 * patch it is actually eating. A grazer halts wherever the roam happened
+	 * to leave it -- uniformly across the tile, so half the time within a
+	 * step of a grid line -- and grazing eats the tile under {@code floor(X,
+	 * Y)}, which visually put bodies on the seam between their own depleted
+	 * square and the neighbour's fresh one. The drift is slow (a stroll, not
+	 * a step) and stops inside a small radius, so a settled body genuinely
+	 * rests and the RNG stream quiets with it.
+	 */
+	private void settleOnPatch() {
+		double dx = Math.floor(X) + 0.5 - X, dy = Math.floor(Y) + 0.5 - Y;
+		if (Math.hypot(dx, dy) > 0.12) {
+			move(speed * 0.3, Math.atan2(dy, dx));
 		}
 	}
 
