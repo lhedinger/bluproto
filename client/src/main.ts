@@ -42,16 +42,25 @@ let paused = false;
 // bust that cache on every redeploy. Without this, a stale ground layer renders
 // under live entities: they appear to walk through walls that no longer exist.
 const chunkCache = new Map<string, HTMLImageElement>();
-function getChunk(cx: number, cy: number): HTMLImageElement {
+function chunkImage(cx: number, cy: number, bare: boolean): HTMLImageElement {
   const v = hello ? hello.build : '0';
-  const key = `${v}/${currentLevel}/${cx}_${cy}`;
+  const name = bare ? `${cx}_${cy}_bare` : `${cx}_${cy}`;
+  const key = `${v}/${currentLevel}/${name}`;
   let img = chunkCache.get(key);
   if (!img) {
     img = new Image();
-    img.src = `/api/world/layers/${currentLevel}/${cx}_${cy}.png?v=${v}`;
+    img.src = `/api/world/layers/${currentLevel}/${name}.png?v=${v}`;
     chunkCache.set(key, img);
   }
   return img;
+}
+function getChunk(cx: number, cy: number): HTMLImageElement {
+  return chunkImage(cx, cy, false);
+}
+// The fully-grazed twin bake: what this chunk looks like with all vegetation
+// stripped. The renderer dithers depleted tiles toward it.
+function getBareChunk(cx: number, cy: number): HTMLImageElement {
+  return chunkImage(cx, cy, true);
 }
 
 function levelName(z: number): string {
@@ -786,7 +795,8 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, getChunk, vegGrid, coverGrid, renderTime, now, currentLevel,
+  render(g, cam, state, meta, chunkTiles, hello ? hello.tileSize : 0, getChunk, getBareChunk,
+    vegGrid, coverGrid, renderTime, now, currentLevel,
     { id: selectedId, tile: selectedTile });
   if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
 
