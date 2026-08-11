@@ -33,9 +33,9 @@ public abstract class NPC extends Entity {
 	protected double LOS_FOV; // max field of view (radians)
 	protected int status;
 	protected int size;
-	/** Deliberate use intent this tick (the A_USE actuator, or a fixture's
+	/** Deliberate interact intent this tick (the A_INTERACT actuator, or a fixture's
 	 *  standing order): what an intent-driven switch listens for. */
-	protected boolean useIntent = false;
+	protected boolean interactIntent = false;
 	protected double speed = 0.04; // tiles/tick; sourced from the genome
 	protected int turnRate = 5; // steering divisor; sourced from the genome
 	protected int maxAge = 3000; // ticks before old age; sourced from the genome
@@ -1530,8 +1530,8 @@ public abstract class NPC extends Entity {
 
 	/** Whether this body is deliberately operating a fixture this tick --
 	 *  what a button (as opposed to a pressure plate) responds to. */
-	public boolean wantsUse() {
-		return useIntent;
+	public boolean wantsInteract() {
+		return interactIntent;
 	}
 
 	@Override

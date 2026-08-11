@@ -118,7 +118,16 @@ public final class AgentIO {
 	 * landed", and only the latter is unambiguous to report.
 	 */
 	public static final int S_INTENT = 28;
-	public static final int NUM_SENSORS = 29;
+	/** Proximity of the nearest interactable fixture (a switch's pedestal),
+	 * 1/(1+dist), 0 if none is in sight range. Fixtures are furniture, not
+	 * fauna -- they never enter the perceived-creature channels -- so this is
+	 * their one window into a mind: paired with {@link #SEEK_FIXTURE} and
+	 * {@link #A_INTERACT}, "walk to the button and press it" becomes an
+	 * expressible, evolvable intent rather than a lucky stumble. */
+	public static final int S_FIXTURE_PROX = 29;
+	/** Relative bearing to that fixture in the heading frame, -1..1 (of PI). */
+	public static final int S_FIXTURE_BEARING = 30;
+	public static final int NUM_SENSORS = 31;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -126,7 +135,7 @@ public final class AgentIO {
 			"prey_prox", "prey_bearing", "threat_prox", "threat_bearing", "kin_bearing",
 			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead",
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
-			"intent" };
+			"intent", "fixture_prox", "fixture_bearing" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -243,15 +252,16 @@ public final class AgentIO {
 	 *  body — a mind that had to hold one in its registers could not do arithmetic
 	 *  on it anyway, since the instruction set has no divide and no atan2. */
 	public static final int A_MARK = 12;
-	/** Above 0.5, the body deliberately operates whatever usable fixture it is
-	 *  at -- today that means pressing an intent-driven switch (a button, as
-	 *  opposed to a weight-driven pressure plate). Standing on a button does
-	 *  nothing by itself: use is a choice, which is the entire point. */
-	public static final int A_USE = 13;
+	/** Above 0.5, the body deliberately operates whatever interactable fixture
+	 *  it is at -- today that means pressing an intent-driven switch (a
+	 *  button, as opposed to a weight-driven pressure plate). Standing on a
+	 *  button does nothing by itself: interaction is a choice, which is the
+	 *  entire point. */
+	public static final int A_INTERACT = 13;
 	public static final int NUM_ACT = 14;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"tile", "vertical (retired)", "seek", "mark", "use" };
+			"tile", "vertical (retired)", "seek", "mark", "interact" };
 
 	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
 	public static final int SEEK_NONE = 0;
@@ -261,6 +271,11 @@ public final class AgentIO {
 	public static final int SEEK_THREAT = 4;
 	public static final int SEEK_ITEM = 5;
 	public static final int SEEK_WAYPOINT = 6;
+	/** Steer toward the nearest interactable fixture; arriving presses it.
+	 *  Encoded past every pool constant (magnitude >= 6), so naming it costs a
+	 *  mind one arithmetic step (e.g. 4+2 or 2*4) -- the rarest intent is the
+	 *  most deliberate one, and no saved genome's seek changes meaning. */
+	public static final int SEEK_FIXTURE = 7;
 
 	// ---- intent status (the values of S_INTENT) ----------------------------
 	// ---- tile properties (the values of A_TILE) ----------------------------
@@ -334,7 +349,10 @@ public final class AgentIO {
 		if (m < 3.0) {
 			return SEEK_ITEM;
 		}
-		return SEEK_WAYPOINT;
+		if (m < 6.0) {
+			return SEEK_WAYPOINT;
+		}
+		return SEEK_FIXTURE;
 	}
 
 	private AgentIO() {

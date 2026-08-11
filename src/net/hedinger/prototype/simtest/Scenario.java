@@ -123,15 +123,28 @@ public abstract class Scenario {
 	private int recFrame = -1;
 	private java.io.File recDir;
 
+	/** In-process frame tap for the {@link RecordScenario} tool: when set,
+	 *  every tick of a running scenario hands its world here (the tool
+	 *  renders and subsamples as it pleases) instead of streaming PNGs the
+	 *  {@code -Dsimtest.record} way. */
+	static java.util.function.Consumer<World> frameSink;
+
 	/** Whether to record every tick of this scenario, via
 	 *  {@code -Dsimtest.record=<ScenarioName>} (or {@code *} for all). */
 	private boolean recording() {
+		if (frameSink != null) {
+			return true;
+		}
 		String want = System.getProperty("simtest.record");
 		return want != null && (want.equals("*") || want.equalsIgnoreCase(name()));
 	}
 
 	/** Writes one full-world frame per tick to {@code out/rec/<name>/}. */
 	private void captureFrame(World w) {
+		if (frameSink != null) {
+			frameSink.accept(w);
+			return;
+		}
 		try {
 			if (recFrame < 0) {
 				recDir = new java.io.File("out/rec/" + name());

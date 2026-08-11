@@ -132,7 +132,7 @@ public class TestNPC extends NPC {
 	private int turn = 5;
 	private boolean heard = false;
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
-	private boolean alwaysUse = false; // fixture: a standing order to press buttons
+	private boolean alwaysInteract = false; // fixture: a standing order to press buttons
 	private int generation = 0; // 0 = spawned by the world; a child is its parent's + 1
 	private boolean handPlaced = false; // placed by a person, not by the steward
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
@@ -637,10 +637,10 @@ public class TestNPC extends NPC {
 	}
 
 	/** Gives this fixture a standing order to press buttons: it carries the
-	 *  deliberate use intent every tick, so an intent-driven switch answers
-	 *  it -- the scripted stand-in for a mind writing {@code A_USE}. */
-	public TestNPC withUse() {
-		alwaysUse = true;
+	 *  deliberate interact intent every tick, so an intent-driven switch answers
+	 *  it -- the scripted stand-in for a mind writing {@code A_INTERACT}. */
+	public TestNPC withInteract() {
+		alwaysInteract = true;
 		return this;
 	}
 
@@ -657,8 +657,8 @@ public class TestNPC extends NPC {
 			actionHold--; // a latched act lapses; think() runs exactly once per tick
 		}
 		// Scripted bodies press buttons only under a standing order; a minded
-		// body overwrites this from its A_USE actuator in actFrom.
-		useIntent = alwaysUse;
+		// body overwrites this from its A_INTERACT actuator in actFrom.
+		interactIntent = alwaysInteract;
 		// If whoever was carrying us is dead or gone, we're free again -- a captive
 		// isn't clamped to a corpse.
 		if (getAttachTarget() != null && (getAttachTarget().isDead() || getAttachTarget().isRemoved())) {
@@ -1057,6 +1057,21 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_ITEM_BEARING] = 0;
 			s[AgentIO.S_ITEM_KIND] = 0;
 		}
+		// Dedicated fixture sense: the nearest interactable fixture (a switch's
+		// pedestal). Fixtures are furniture, not fauna -- they never enter the
+		// perceived-creature set -- so this scans the world directly; a
+		// fixture's indicator lamps make it readable at sight range from any
+		// facing, which is exactly what a control panel is for.
+		net.hedinger.prototype.entities.Switch fx = nearestFixture();
+		if (fx != null) {
+			double dx = fx.getX() + 0.5 - X, dy = fx.getY() + 0.5 - Y;
+			double dist = Math.hypot(dx, dy);
+			s[AgentIO.S_FIXTURE_PROX] = 1.0 / (1.0 + dist);
+			s[AgentIO.S_FIXTURE_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
+		} else {
+			s[AgentIO.S_FIXTURE_PROX] = 0;
+			s[AgentIO.S_FIXTURE_BEARING] = 0;
+		}
 		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
 		// What kind of ground to look for is the mind's standing choice, read before
 		// the scan so the channel answers the question actually being asked.
@@ -1277,6 +1292,7 @@ public class TestNPC extends NPC {
 			{ AgentIO.S_PREY_PROX, AgentIO.S_PREY_BEARING },
 			{ AgentIO.S_THREAT_PROX, AgentIO.S_THREAT_BEARING },
 			{ AgentIO.S_ITEM_PROX, AgentIO.S_ITEM_BEARING },
+			{ AgentIO.S_FIXTURE_PROX, AgentIO.S_FIXTURE_BEARING },
 	};
 
 	/** Smallest and largest number of things any mind can keep track of. */
@@ -1549,6 +1565,10 @@ public class TestNPC extends NPC {
 			prox = AgentIO.S_WAYPOINT_PROX;
 			bearing = AgentIO.S_WAYPOINT_BEARING;
 			break;
+		case AgentIO.SEEK_FIXTURE:
+			prox = AgentIO.S_FIXTURE_PROX;
+			bearing = AgentIO.S_FIXTURE_BEARING;
+			break;
 		default:
 			return Double.NaN;
 		}
@@ -1612,7 +1632,7 @@ public class TestNPC extends NPC {
 		} else if (a[AgentIO.A_MARK] < -0.5) {
 			wpLvl = -1; // forget it
 		}
-		useIntent = a[AgentIO.A_USE] > 0.5; // deliberately operate a fixture
+		interactIntent = a[AgentIO.A_INTERACT] > 0.5; // deliberately operate a fixture
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
 		// genome's top speed. There is no separate gear to engage — the movement
@@ -1637,6 +1657,15 @@ public class TestNPC extends NPC {
 				&& tileWanted == AgentIO.TILE_FOOD;
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
 		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
+		// Seeking a fixture and reaching it presses it: arriving IS the act,
+		// so the intent carries through without the mind also having to hold
+		// A_INTERACT high. In-reach is read off the same sensed proximity the
+		// mind was shown (0.45 ~ just over a tile, the switch's own reach).
+		boolean intentPress = chasing && seekClass == AgentIO.SEEK_FIXTURE
+				&& sensors[AgentIO.S_FIXTURE_PROX] >= 0.45;
+		if (intentPress) {
+			interactIntent = true;
+		}
 		boolean eats = a[AgentIO.A_EAT] > 0.5;
 
 		double eaten = 0;
@@ -1683,6 +1712,7 @@ public class TestNPC extends NPC {
 		} else if (searching) {
 			intentStatus = AgentIO.INTENT_INVALID;
 		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)
+				|| intentPress
 				|| (chasing && seekClass == AgentIO.SEEK_FORAGE
 						&& tileWanted != AgentIO.TILE_FOOD && onWantedTile())) {
 			intentStatus = AgentIO.INTENT_DONE;
@@ -1864,6 +1894,27 @@ public class TestNPC extends NPC {
 			if (d < best) {
 				best = d;
 				near = n;
+			}
+		}
+		return near;
+	}
+
+	/** Nearest interactable fixture (switch) in sight range on this level, or
+	 *  null. Scans the world's entities rather than the perceived-creature
+	 *  set, which is NPC-only by design -- furniture must never read as a
+	 *  body -- and fixtures are few, so the sweep stays cheap. */
+	private net.hedinger.prototype.entities.Switch nearestFixture() {
+		net.hedinger.prototype.entities.Switch near = null;
+		double best = LOS_RANGE;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof net.hedinger.prototype.entities.Switch sw) || e.isRemoved()
+					|| (int) e.getZ() != getLvl()) {
+				continue;
+			}
+			double d = distance(e.getX() + 0.5, e.getY() + 0.5, getZ());
+			if (d < best) {
+				best = d;
+				near = sw;
 			}
 		}
 		return near;
