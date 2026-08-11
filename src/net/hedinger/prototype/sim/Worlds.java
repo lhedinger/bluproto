@@ -25,9 +25,6 @@ public final class Worlds {
 	private Worlds() {
 	}
 
-	/** How long an ecosystem corpse lingers before it clears (ticks ≈ 3 s), so a
-	 *  predator's kills read as brief bodies rather than a growing grey field. */
-	private static final int ECO_DEATHSPAN = 90;
 
 	/** Herbivore "species": small, grazing prey — distinct marker barcodes drive
 	 *  distinct procedural bodies/colours; all metabolic breeders (they evolve). */
@@ -1236,12 +1233,12 @@ public final class Worlds {
 		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
-					.withHerding().withDeathspan(ECO_DEATHSPAN)); // born at its size-scaled reserve
+					.withHerding()); // corpse span comes from its body -- see configureGenomeBody
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]).withDeathspan(ECO_DEATHSPAN));
+			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]));
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
 		// competes inside the same world as the scripted species — the A/B seam
@@ -1251,7 +1248,7 @@ public final class Worlds {
 		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(nMinded);
 		for (int i = 0; i < nMinded; i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).withDeathspan(ECO_DEATHSPAN));
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]));
 		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.

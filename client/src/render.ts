@@ -3,7 +3,7 @@
 // keeps distant creatures visible when zoomed out. Pixel-art stays crisp via
 // nearest-neighbour scaling of the layer.
 
-import { ART_RADIUS, CELL, RIM_COLOUR, atlasFor, cell, rimFor } from './atlas';
+import { ART_RADIUS, CELL, RIM_COLOUR, atlasFor, cell, corpseFor, rimFor } from './atlas';
 import type { Camera } from './camera';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
@@ -212,14 +212,20 @@ export function render(
 
     // Creature.
     if (e.flags & F_DEAD) {
-      g.fillStyle = '#555a63';
-      g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
-      g.strokeStyle = '#14161a';
-      g.lineWidth = Math.max(1, r * 0.25);
-      g.beginPath();
-      g.moveTo(s.x - r * 0.5, s.y - r * 0.5); g.lineTo(s.x + r * 0.5, s.y + r * 0.5);
-      g.moveTo(s.x + r * 0.5, s.y - r * 0.5); g.lineTo(s.x - r * 0.5, s.y + r * 0.5);
-      g.stroke();
+      // A corpse keeps its body and loses its colour. It is not decoration: it
+      // lingers for a span set by its mass, it can be scavenged, and it is worth
+      // that mass as meat -- so what died, and how big it was, stays readable.
+      const dead = atlasFor(e.pheno);
+      if (dead) {
+        const box = r * 2 * (CELL / (2 * ART_RADIUS));
+        const { col: dc, row: dr } = cell(p.dir, nowMs);
+        g.imageSmoothingEnabled = false;
+        g.drawImage(corpseFor(e.pheno, dead), dc * CELL, dr * CELL, CELL, CELL,
+          s.x - box / 2, s.y - box / 2, box, box);
+      } else {
+        g.fillStyle = '#555a63'; // no sprite yet: a spent dot, no marker over it
+        g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
+      }
       continue;
     }
     // The real procedural organism, if its atlas has loaded; else a dot with a

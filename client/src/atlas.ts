@@ -67,3 +67,37 @@ export function rimFor(pheno: number, img: HTMLImageElement): HTMLCanvasElement 
 /** The minded rim's colour — the same violet the ring used, so nothing else in the
  *  palette has to move. */
 export const RIM_COLOUR = '#c660ff';
+
+/**
+ * A drained, greyed copy of an atlas — what a corpse looks like.
+ *
+ * <p>The body keeps its shape, size and pose; only its colour goes. That matters
+ * more here than a generic death marker would, because a corpse is not decoration:
+ * it lingers, it can be scavenged, and it is worth its mass as meat, so "what died
+ * and how big was it" is information worth keeping legible. The X-through-a-circle
+ * this replaces threw all of it away and drew smooth geometry over pixel art.
+ *
+ * <p>Two passes: `saturation` against a flat grey strips the colour, then a
+ * low-alpha black `source-atop` drains what is left so it reads as spent rather
+ * than merely colourless. Baked once per phenotype, like the rim.
+ */
+const corpseCache = new Map<number, HTMLCanvasElement>();
+
+export function corpseFor(pheno: number, img: HTMLImageElement): HTMLCanvasElement {
+  const hit = corpseCache.get(pheno);
+  if (hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = img.width;
+  cv.height = img.height;
+  const g = cv.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'saturation'; // colour out, luminance kept
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.globalCompositeOperation = 'source-atop'; // ...and darken only the body
+  g.fillStyle = 'rgba(10,12,15,0.45)';
+  g.fillRect(0, 0, cv.width, cv.height);
+  corpseCache.set(pheno, cv);
+  return cv;
+}
