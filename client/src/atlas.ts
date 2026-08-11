@@ -33,3 +33,37 @@ export function cell(dir: number, timeMs: number): { col: number; row: number } 
   const row = Math.floor((timeMs / 90) % ANIM); // ~90 ms/frame gentle shuffle
   return { col, row };
 }
+
+/**
+ * A violet silhouette of an atlas, cached alongside it.
+ *
+ * <p>Drawing this four times at one-pixel offsets behind the real sprite gives a
+ * rim that hugs the body's actual outline — the standard pixel-art dilation. It
+ * has to be a silhouette rather than a tint, because what we want is the SHAPE
+ * of the sprite in one flat colour, and `source-in` over a filled rectangle is
+ * the cheapest way to get exactly that.
+ *
+ * <p>Baked once per phenotype and kept, since an atlas never changes: the cost is
+ * one offscreen canvas per distinct creature design, not per creature or frame.
+ */
+const rimCache = new Map<number, HTMLCanvasElement>();
+
+export function rimFor(pheno: number, img: HTMLImageElement): HTMLCanvasElement {
+  const hit = rimCache.get(pheno);
+  if (hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = img.width;
+  cv.height = img.height;
+  const g = cv.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'source-in'; // keep the sprite's alpha, replace its colour
+  g.fillStyle = RIM_COLOUR;
+  g.fillRect(0, 0, cv.width, cv.height);
+  rimCache.set(pheno, cv);
+  return cv;
+}
+
+/** The minded rim's colour — the same violet the ring used, so nothing else in the
+ *  palette has to move. */
+export const RIM_COLOUR = '#c660ff';
