@@ -18,13 +18,42 @@ export interface WorldMeta { cols: number; rows: number; }
  *  for pixel-art style partial coverage — matching the ground bake's dithers. */
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
+/** Dither masks for the 16 depletion coverage levels: opaque where the Bayer
+ *  threshold admits the bare bake, transparent where lush ground survives.
+ *  Art-pixel resolution — a tile is 12 art-px a side and the pattern period
+ *  is 4, so one 12x12 mask tiles every world tile in phase with the bake's
+ *  own dithers. Built lazily, cached forever. */
+const MASKS: HTMLCanvasElement[] = [];
+function ditherMask(coverage16: number): HTMLCanvasElement {
+  let m = MASKS[coverage16];
+  if (!m) {
+    m = document.createElement('canvas');
+    m.width = 12;
+    m.height = 12;
+    const mg = m.getContext('2d')!;
+    mg.fillStyle = '#fff';
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 12; x++) {
+        if (BAYER4[(y & 3) * 4 + (x & 3)] < coverage16) mg.fillRect(x, y, 1, 1);
+      }
+    }
+    MASKS[coverage16] = m;
+  }
+  return m;
+}
+
+/** Scratch tile for compositing one bare-bake tile under a dither mask. */
+const SCRATCH = document.createElement('canvas');
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
   state: WorldState,
   meta: WorldMeta | null,
   chunkTiles: number,
+  tilePx: number,
   getChunk: (cx: number, cy: number) => HTMLImageElement,
+  getBareChunk: (cx: number, cy: number) => HTMLImageElement,
   veg: Uint8Array | null,
   cover: Uint8Array | null,
   renderTime: number,
@@ -63,39 +92,45 @@ export function render(
     }
   }
 
-  // Live grazing: darken depleted grass toward bare dirt (255 = non-grass, no
-  // overlay; 100 = lush, none; 0 = grazed bare, full dirt). Regrowth fades it.
-  // Drawn as ordered dither rather than a flat alpha square: depletion fills
-  // in as a Bayer pattern of dirt speckles (4x4 subcells, indexed by absolute
-  // subcell so the pattern is stable and tile seams interleave), so a tile
-  // changing state shades through pixel-art steps instead of snapping — the
-  // same grammar the ground textures use.
-  if (veg) {
+  // Live grazing: a depleted tile dithers toward the fully-grazed twin bake
+  // (255 = non-vegetated, no overlay; 100 = lush, none; 0 = grazed bare, the
+  // bare bake shows whole). Per art-pixel, the Bayer mask decides which bake
+  // wins — so depletion literally erases grass motifs (and fungus glow) down
+  // to what the Java renderer draws for bare ground, never a tint the palette
+  // doesn't contain. Regrowth runs the same dither in reverse.
+  if (veg && chunkTiles > 0 && tilePx > 0) {
     const tl = cam.screenToWorld(0, 0);
     const br = cam.screenToWorld(cv.width, cv.height);
     const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
     const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
-    const dithered = cam.scale >= 12; // subcells readable; below this, flat alpha
+    if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
+    const sg = SCRATCH.getContext('2d')!;
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const lvl = veg[ty * meta.cols + tx];
-        if (lvl >= 100 || lvl === 255) continue; // lush grass or non-grass: nothing
-        const depl = (100 - lvl) / 100;
+        if (lvl >= 100 || lvl === 255) continue; // lush or non-vegetated: nothing
+        const depl16 = Math.min(16, Math.round((100 - lvl) * 16 / 100));
+        if (depl16 <= 0) continue;
+        const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+        const bare = getBareChunk(ccx, ccy);
+        if (!bare.complete || !bare.naturalWidth) continue; // still streaming in
+        const sx = (tx - ccx * chunkTiles) * tilePx, sy = (ty - ccy * chunkTiles) * tilePx;
         const o = cam.worldToScreen(tx, ty);
-        if (!dithered) {
-          g.fillStyle = `rgba(78,60,38,${(depl * 0.72).toFixed(3)})`;
-          g.fillRect(o.x, o.y, cam.scale + 1, cam.scale + 1);
+        if (cam.scale < 12) {
+          // Art-pixels are sub-pixel here; coverage as alpha is exactly what
+          // downscaling the dithered composite would resolve to.
+          g.globalAlpha = depl16 / 16;
+          g.drawImage(bare, sx, sy, tilePx, tilePx, o.x, o.y, cam.scale, cam.scale);
+          g.globalAlpha = 1;
           continue;
         }
-        g.fillStyle = 'rgba(78,60,38,0.72)';
-        const sub = cam.scale / 4;
-        for (let sy = 0; sy < 4; sy++) {
-          for (let sx = 0; sx < 4; sx++) {
-            if ((BAYER4[((ty * 4 + sy) & 3) * 4 + ((tx * 4 + sx) & 3)] + 0.5) / 16 < depl) {
-              g.fillRect(o.x + sx * sub, o.y + sy * sub, sub + 0.5, sub + 0.5);
-            }
-          }
-        }
+        sg.clearRect(0, 0, tilePx, tilePx);
+        sg.drawImage(bare, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
+        sg.globalCompositeOperation = 'destination-in';
+        sg.imageSmoothingEnabled = false; // mask cells stay crisp when upscaled
+        sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
+        sg.globalCompositeOperation = 'source-over';
+        g.drawImage(SCRATCH, 0, 0, tilePx, tilePx, o.x, o.y, cam.scale, cam.scale);
       }
     }
   }
