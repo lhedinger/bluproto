@@ -55,21 +55,6 @@ public class Minimap {
 		}
 	}
 
-	public boolean mouseInMiniMap(int mouseX, int mouseY) {
-		if (mouseX <= view.getMinimapWidth() + view.getMiniMapX()) {
-			if (mouseY <= view.getMinimapHeight() + view.getMiniMapY()) {
-				if (mouseX >= view.getMiniMapX()) {
-					if (mouseY >= view.getMiniMapY()) {
-						view.camX = Utils.toTile(Math.round((mouseX - 20) / Minimap.minimap_scale), 0, 0);
-						view.camY = Utils.toTile(Math.round((mouseY - 20) / Minimap.minimap_scale), 0, 0);
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-
 	private void renderMinimap(Graphics g) {
 
 		int offsetX = 20;

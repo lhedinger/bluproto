@@ -136,6 +136,11 @@ concerns, last on purpose.
   identical snapshot stream; same seed + command log → identical world.
 - **Swing desktop app survives** through Phase 4 as the local dev harness and
   parity reference, then retires (`:desktop` module deleted or left dormant).
+  ✅ *Retired:* the Swing shell (`main.PrototypeWorld`), the MJPEG capture
+  diagnostics (`tools/`), and the desktop launcher are deleted. The Java
+  renderer itself stays headless as the visual source of truth — the server
+  bakes ground layers and sprite atlases through it, and the scenario suite
+  renders its captures and GIFs with it.
 - **Recording workflow upgrades:** today's `-Dsimtest.record` PNG pipeline
   keeps working; Phase 5's replay makes "recordings" a server feature — a
   stored seed + command log is smaller than any video and perfectly faithful.

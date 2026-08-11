@@ -115,9 +115,9 @@ public abstract class Scenario {
 	}
 
 	// ---- real-time recording ----------------------------------------------
-	// The live game steps the simulation about every 30 ms (PrototypeWorld only
-	// calls world.think() when >30 ms have accrued), so ~33 ticks/sec. Recording
-	// captures every tick; encode the frames at this rate for true real-time.
+	// The live simulation steps ~every 30 ms (SimulationRunner's fixed
+	// cadence), so ~33 ticks/sec. Recording captures every tick; encode the
+	// frames at this rate for true real-time.
 	public static final int REALTIME_FPS = 33;
 
 	private int recFrame = -1;

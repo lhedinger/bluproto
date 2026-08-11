@@ -112,10 +112,6 @@ public class View {
 		g2.drawString(s, windowX - w - 15, 18);
 	}
 
-	public void mousePressed() {
-		minimap.mouseInMiniMap(mouseX, mouseY);
-	}
-
 	public void clearScreen(Graphics g) {
 		Graphics2D graphics = (Graphics2D) g;
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -132,34 +128,8 @@ public class View {
 		}
 	}
 
-	public void renderFPS(Graphics g, int framerate) {
-		Graphics2D g2 = (Graphics2D) g;
-		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g.setColor(bg);
-		g2.setColor(Color.white);
-		g2.setFont(font);
-		g2.drawString("FPS: " + framerate, 20, 15);
-		// g2.drawString(">> args =" + arglist, 250, 15);
-	}
-
 	public void renderWorld(Graphics g) {
 		world.render(g, this, layerRenderer);
-	}
-
-	public int getMiniMapX() {
-		return 20;
-	}
-
-	public int getMiniMapY() {
-		return 20;
-	}
-
-	public int getMinimapWidth() {
-		return minimap.minimapX;
-	}
-
-	public int getMinimapHeight() {
-		return minimap.minimapY;
 	}
 
 	public int pixelX(double x, double z, float pixelOffset) {
@@ -168,11 +138,6 @@ public class View {
 
 	public int pixelY(double y, double z, float pixelOffset) {
 		return Utils.toPixelShift(pixelOffset, (float) y, (int) z, getCamY(), getCamZ(), windowY);
-	}
-
-	public void cycleViewMode() {
-		viewmode = viewmode.next();
-		System.out.println("Viewmode = " + viewmode);
 	}
 
 	public ViewMode getViewMode() {
@@ -233,10 +198,6 @@ public class View {
 
 		public boolean isAtLeast(ViewMode mode) {
 			return this.index >= mode.getIndex();
-		}
-
-		public ViewMode next() {
-			return valueOf((index + 1) % map.size());
 		}
 
 		public static ViewMode valueOf(int index) {

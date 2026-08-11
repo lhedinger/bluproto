@@ -1,4 +1,8 @@
-// The simulation engine + (legacy) Swing desktop app.
+// The simulation engine. The Java renderer survives headless as the visual
+// source of truth — the server bakes ground layers and sprite atlases through
+// it, and the scenario suite renders captures with it — but the Swing desktop
+// app is retired (MODERNIZATION.md: "survives until web parity, then
+// retires"); the web client at :server is the only interactive viewer.
 //
 // Sources deliberately stay at the repo root (src/, res/) so the historical
 // plain-javac workflow — `find src -name '*.java' > /tmp/srcs.txt && javac -d
@@ -7,7 +11,6 @@
 
 plugins {
 	id 'java-library'
-	id 'application'
 }
 
 java {
@@ -26,14 +29,6 @@ sourceSets {
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
-}
-
-// The legacy Swing desktop app (kept until the web viewer reaches parity).
-application {
-	mainClass = 'net.hedinger.prototype.main.PrototypeWorld'
-}
-tasks.named('run') {
-	workingDir = rootDir // sprites load from the filesystem-relative res/ dir
 }
 
 // The scenario suite is the project's regression backbone. It is a plain
