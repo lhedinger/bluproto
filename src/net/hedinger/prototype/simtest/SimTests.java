@@ -2079,6 +2079,42 @@ public class SimTests {
 	 * never exactly at its cap when it decides anything. A hungry hunter beside the
 	 * same prey must still kill, or this would pass by the hunter simply being broken.
 	 */
+
+	/**
+	 * A big animal leaves a big body. Corpse lifetime scales with the mass the
+	 * creature would have grown into, so a kill stays available to scavengers in
+	 * proportion to how much of it there is — the same principle as the meal being
+	 * worth what it weighs.
+	 */
+	static class ACorpseLingersByItsMass extends Scenario {
+		/** Ticks from death until the body is cleared, for a genome of this size. */
+		private int corpseTicks(double size) {
+			seed(104);
+			World w = room(10, 10);
+			Genome g = new Genome();
+			g.size = size;
+			TestNPC t = TestNPC.mindedForager(5.5, 5.5, 0, g);
+			w.spawnEntity(t);
+			w.think();
+			t.damage(1000); // killed outright
+			for (int i = 1; i <= 2000; i++) {
+				tick(w, 1);
+				if (t.isRemoved()) {
+					return i;
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			int small = corpseTicks(6);
+			int large = corpseTicks(20);
+			assertGreater("a small body clears at all", small, 0);
+			assertGreater("a bigger body lies there longer", large, small * 2);
+		}
+	}
+
 	static class AFullHunterDoesNotKill extends Scenario {
 		private int preyHealthAfter(double tankFraction) {
 			seed(103);
@@ -4530,6 +4566,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new ACorpseLingersByItsMass(),
 				new AFullHunterDoesNotKill(),
 				new CoverHidesPreyFromAHunter(),
 				new TileSeekingIsGeneric(),
