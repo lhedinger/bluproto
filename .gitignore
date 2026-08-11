@@ -30,3 +30,6 @@ hs_err_pid*
 
 # Generated output: scenario snapshots, capture tooling, render harness
 /out/
+
+# Scenario recordings (RecordScenario tool; served by /recordings)
+/recordings/

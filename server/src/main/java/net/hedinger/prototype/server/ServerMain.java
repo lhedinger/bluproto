@@ -95,6 +95,50 @@ public final class ServerMain {
 			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
 		});
 
+		// Scenario recordings gallery: the animated GIFs the RecordScenario
+		// tool writes into RECORDINGS_DIR (default "recordings/", git-ignored).
+		// A plain dark page of looping clips -- watchable behaviour tests.
+		String recordingsDir = cfg(args, "RECORDINGS_DIR", "recordings");
+		app.get("/recordings", ctx -> {
+			java.io.File[] gifs = new java.io.File(recordingsDir)
+					.listFiles(f -> f.getName().endsWith(".gif"));
+			StringBuilder b = new StringBuilder();
+			b.append("<!doctype html><meta charset=utf-8><title>scenario recordings</title>")
+					.append("<style>body{background:#14161a;color:#c8cdd5;font:14px system-ui;")
+					.append("margin:2em}figure{margin:0 0 2.5em}img{max-width:100%;")
+					.append("image-rendering:pixelated;border:1px solid #2a2e36}")
+					.append("figcaption{margin:.4em 0;color:#8a93a0}</style>")
+					.append("<h2>scenario recordings</h2>");
+			if (gifs == null || gifs.length == 0) {
+				b.append("<p>none yet -- run <code>RecordScenario &lt;ScenarioName&gt;</code>")
+						.append(" and refresh.</p>");
+			} else {
+				java.util.Arrays.sort(gifs, java.util.Comparator.comparing(java.io.File::getName));
+				for (java.io.File f : gifs) {
+					String n = f.getName();
+					b.append("<figure><figcaption>").append(n.replace(".gif", ""))
+							.append(" (").append(f.length() / 1024).append(" KB)</figcaption>")
+							.append("<img src=\"/recordings/").append(n).append("\"></figure>");
+				}
+			}
+			ctx.contentType("text/html").result(b.toString());
+		});
+		app.get("/recordings/{file}", ctx -> {
+			String name = ctx.pathParam("file");
+			// Names come from the scenario class names; anything else -- and in
+			// particular anything path-shaped -- is refused outright.
+			if (!name.matches("[A-Za-z0-9_-]+\\.gif")) {
+				ctx.status(404);
+				return;
+			}
+			java.io.File f = new java.io.File(recordingsDir, name);
+			if (!f.isFile()) {
+				ctx.status(404);
+				return;
+			}
+			ctx.contentType("image/gif").result(java.nio.file.Files.readAllBytes(f.toPath()));
+		});
+
 		// Download the current session as a replayable recording (seed + log).
 		app.get("/api/world/recording", ctx ->
 				ctx.header("Content-Disposition", "attachment; filename=recording.json")

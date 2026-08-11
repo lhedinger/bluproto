@@ -4431,7 +4431,7 @@ public class SimTests {
 		}
 	}
 
-	private static Scenario[] all() {
+	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new GenomeSavefileRoundTrips(),
