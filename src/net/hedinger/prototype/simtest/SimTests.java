@@ -1285,7 +1285,7 @@ public class SimTests {
 	}
 
 	/**
-	 * An intent-driven button answers only a deliberate press (the A_USE
+	 * An intent-driven button answers only a deliberate press (the A_INTERACT
 	 * intent), never mere weight: a body carrying the use intent parts the
 	 * wired door as it passes the pedestal, while an identical body without
 	 * the intent walks right over the button and stays barred.
@@ -1312,7 +1312,7 @@ public class SimTests {
 					net.hedinger.prototype.entities.Switch.BUTTON));
 			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 4, 0, doorB,
 					net.hedinger.prototype.entities.Switch.BUTTON));
-			TestNPC presser = TestNPC.mover(1.5, 2.5, 0, 0).withUse(); // chooses to press
+			TestNPC presser = TestNPC.mover(1.5, 2.5, 0, 0).withInteract(); // chooses to press
 			TestNPC walker = TestNPC.mover(1.5, 4.5, 0, 0);            // weight only
 			w.spawnEntity(presser);
 			w.spawnEntity(walker);
@@ -1323,6 +1323,66 @@ public class SimTests {
 
 			assertGreater("the deliberate press parted the door", presser.getX(), 8.0);
 			assertLess("weight alone never operated the button", walker.getX(), 8.0);
+		}
+	}
+
+	/**
+	 * The full evolved-mind route to a door: an LGP brain that WRITEs the
+	 * A_INTERACT actuator opens a button-wired door as its body passes the
+	 * pedestal -- brain instruction to actuator latch to interact intent to
+	 * switch to sliding leaves -- while an identical brain that never writes
+	 * A_INTERACT stays barred. Pins the actuator plumbing itself, which the
+	 * scripted {@code withInteract()} fixture in {@link ButtonNeedsIntent}
+	 * deliberately bypasses: if the actuator index shifted or the body
+	 * stopped reading it, this is the test that goes red.
+	 */
+	static class BrainInteractsWithButton extends Scenario {
+		@Override
+		public void run() {
+			seed(28);
+			World w = room(14, 6);
+			for (int y = 1; y <= 4; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(7, 2, 0, Tile.TileType.TYPE_STONE); // both doorways
+			w.setTile(7, 4, 0, Tile.TileType.TYPE_STONE);
+			net.hedinger.prototype.entities.Door doorA = new net.hedinger.prototype.entities.Door(
+					7, 2, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			net.hedinger.prototype.entities.Door doorB = new net.hedinger.prototype.entities.Door(
+					7, 4, 0, 1, net.hedinger.prototype.entities.Door.GRATE);
+			w.addDoor(doorA);
+			w.addDoor(doorB);
+			w.setTile(4, 2, 0, Tile.TileType.TYPE_SWITCH);
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 2, 0, doorA,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(4, 4, 0, doorB,
+					net.hedinger.prototype.entities.Switch.BUTTON));
+			// Drive east and hold the interact intent -- three instructions,
+			// the same latched-actuator pattern the starter brains use.
+			int[][] presser = {
+					{ Brain.SET, 1, 9, 0 },                    // R1 = 1.0 (const[9])
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 }, // drive forward
+					{ Brain.WRITE, AgentIO.A_INTERACT, 1, 0 }, // operate what you pass
+			};
+			int[][] walker = {
+					{ Brain.SET, 1, 9, 0 },
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 }, // drive, never interact
+			};
+			TestNPC minded = TestNPC.minded(1.5, 2.5, 0, new Genome(),
+					new LgpMind(new Brain(presser), presser.length)).withHeading(0);
+			TestNPC barred = TestNPC.minded(1.5, 4.5, 0, new Genome(),
+					new LgpMind(new Brain(walker), walker.length)).withHeading(0);
+			w.spawnEntity(minded);
+			w.spawnEntity(barred);
+			w.think();
+			snapshot(w, "before (two brains, one writes A_INTERACT)");
+			tick(w, 400);
+			snapshot(w, "after (interacting brain through; silent one barred)");
+
+			assertGreater("a brain writing A_INTERACT opened its door and crossed",
+					minded.getX(), 8.0);
+			assertLess("a brain that never interacts stayed barred", barred.getX(), 8.0);
 		}
 	}
 
@@ -4366,6 +4426,7 @@ public class SimTests {
 				new DuctAdmitsOnlySmallBodies(),
 				new SwitchOpensWiredDoor(),
 				new ButtonNeedsIntent(),
+				new BrainInteractsWithButton(),
 				new BottomlessPitsAndCatwalks(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),

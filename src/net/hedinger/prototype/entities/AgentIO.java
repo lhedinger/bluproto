@@ -243,15 +243,16 @@ public final class AgentIO {
 	 *  body — a mind that had to hold one in its registers could not do arithmetic
 	 *  on it anyway, since the instruction set has no divide and no atan2. */
 	public static final int A_MARK = 12;
-	/** Above 0.5, the body deliberately operates whatever usable fixture it is
-	 *  at -- today that means pressing an intent-driven switch (a button, as
-	 *  opposed to a weight-driven pressure plate). Standing on a button does
-	 *  nothing by itself: use is a choice, which is the entire point. */
-	public static final int A_USE = 13;
+	/** Above 0.5, the body deliberately operates whatever interactable fixture
+	 *  it is at -- today that means pressing an intent-driven switch (a
+	 *  button, as opposed to a weight-driven pressure plate). Standing on a
+	 *  button does nothing by itself: interaction is a choice, which is the
+	 *  entire point. */
+	public static final int A_INTERACT = 13;
 	public static final int NUM_ACT = 14;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"tile", "vertical (retired)", "seek", "mark", "use" };
+			"tile", "vertical (retired)", "seek", "mark", "interact" };
 
 	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
 	public static final int SEEK_NONE = 0;

@@ -16,8 +16,8 @@ import net.hedinger.prototype.engine.View;
  *       floor button: any grounded body on it presses it, creature, corpse,
  *       or a crate somebody parked there. Flyers pass over.</li>
  *   <li>{@link #BUTTON} -- an intent-driven push button: a body on or beside
- *       it must deliberately operate it (the {@code A_USE} actuator, or a
- *       fixture's standing order). Standing on it does nothing -- use is a
+ *       it must deliberately operate it (the {@code A_INTERACT} actuator, or a
+ *       fixture's standing order). Standing on it does nothing -- interaction is a
  *       choice, which is the entire point.</li>
  * </ul>
  *
@@ -60,7 +60,7 @@ public class Switch extends Entity {
 		door.setWired(true);
 	}
 
-	/** Whether the switch is held right now (weight or deliberate use). */
+	/** Whether the switch is held right now (weight or deliberate interaction). */
 	public boolean isPressed() {
 		return pressed;
 	}
@@ -96,7 +96,7 @@ public class Switch extends Entity {
 			} else {
 				// Intent: a body at or beside the pedestal, deliberately
 				// operating it. Weight alone does nothing.
-				if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && n.wantsUse()) {
+				if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && n.wantsInteract()) {
 					pressed = true;
 					break;
 				}

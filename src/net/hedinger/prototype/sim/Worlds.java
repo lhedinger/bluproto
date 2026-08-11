@@ -679,7 +679,7 @@ public final class Worlds {
 		// says what operates what, so give it distance to say it. The blast
 		// door runs on weight-driven pressure plates -- anything crossing
 		// them parts the leaves. The vault runs on intent-driven buttons: a
-		// body must deliberately press (the A_USE actuator), so only a mind
+		// body must deliberately press (the A_INTERACT actuator), so only a mind
 		// that has learned to use them opens the grate -- everything else
 		// takes the crawl duct. Wiring also stops the doors' idle cycling.
 		int[] outer = gallery.get(Math.min(3, gallery.size() - 1));

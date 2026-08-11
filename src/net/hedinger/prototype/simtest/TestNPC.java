@@ -132,7 +132,7 @@ public class TestNPC extends NPC {
 	private int turn = 5;
 	private boolean heard = false;
 	private boolean vigilant = false; // eco herbivore: flee predators, herd with kin
-	private boolean alwaysUse = false; // fixture: a standing order to press buttons
+	private boolean alwaysInteract = false; // fixture: a standing order to press buttons
 	private int generation = 0; // 0 = spawned by the world; a child is its parent's + 1
 	private boolean handPlaced = false; // placed by a person, not by the steward
 	private String ecoAction = ""; // what this creature did on its last tick (for inspect)
@@ -637,10 +637,10 @@ public class TestNPC extends NPC {
 	}
 
 	/** Gives this fixture a standing order to press buttons: it carries the
-	 *  deliberate use intent every tick, so an intent-driven switch answers
-	 *  it -- the scripted stand-in for a mind writing {@code A_USE}. */
-	public TestNPC withUse() {
-		alwaysUse = true;
+	 *  deliberate interact intent every tick, so an intent-driven switch answers
+	 *  it -- the scripted stand-in for a mind writing {@code A_INTERACT}. */
+	public TestNPC withInteract() {
+		alwaysInteract = true;
 		return this;
 	}
 
@@ -657,8 +657,8 @@ public class TestNPC extends NPC {
 			actionHold--; // a latched act lapses; think() runs exactly once per tick
 		}
 		// Scripted bodies press buttons only under a standing order; a minded
-		// body overwrites this from its A_USE actuator in actFrom.
-		useIntent = alwaysUse;
+		// body overwrites this from its A_INTERACT actuator in actFrom.
+		interactIntent = alwaysInteract;
 		// If whoever was carrying us is dead or gone, we're free again -- a captive
 		// isn't clamped to a corpse.
 		if (getAttachTarget() != null && (getAttachTarget().isDead() || getAttachTarget().isRemoved())) {
@@ -1612,7 +1612,7 @@ public class TestNPC extends NPC {
 		} else if (a[AgentIO.A_MARK] < -0.5) {
 			wpLvl = -1; // forget it
 		}
-		useIntent = a[AgentIO.A_USE] > 0.5; // deliberately operate a fixture
+		interactIntent = a[AgentIO.A_INTERACT] > 0.5; // deliberately operate a fixture
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
 		// genome's top speed. There is no separate gear to engage — the movement
