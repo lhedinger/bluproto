@@ -1948,6 +1948,40 @@ public class SimTests {
 	 * their indices are not pool-aligned, and new terrain would need new bands. These
 	 * six questions every tile already answers, and new ground inherits them free.
 	 */
+
+	/**
+	 * Cover is a refuge from a HUNTER, not merely from the generic chaser
+	 * {@link CoverHidesFromPerception} pins. A predator picks its quarry through
+	 * nearestPrey, which is a different code path with its own line-of-sight gate,
+	 * and that gate is the whole reason asking for cover (A_TILE) is worth an
+	 * instruction: without it, hiding would be theatre.
+	 */
+	static class CoverHidesPreyFromAHunter extends Scenario {
+		@Override
+		public void run() {
+			seed(102);
+			World w = room(14, 9);
+			for (int y = 3; y <= 5; y++) {
+				w.setTile(11, y, 0, Tile.TileType.TYPE_COVER); // a thicket to the east
+			}
+			Genome pg = new Genome();
+			pg.size = 20;
+			TestNPC hunter = TestNPC.predator(3.5, 4.5, 0, pg).withMetabolic();
+			TestNPC inCover = TestNPC.inert(11.5, 4.5, 0).withSize(6);
+			TestNPC inOpen = TestNPC.inert(7.5, 7.5, 0).withSize(6);
+			w.spawnEntity(hunter);
+			w.spawnEntity(inCover);
+			w.spawnEntity(inOpen);
+			w.think();
+			snapshot(w, "before (prey in the open, prey in the thicket)");
+			tick(w, 600);
+			snapshot(w, "after (the hunter took the one it could see)");
+
+			assertLess("the hunter is hurt or dead in the open", inOpen.getHealth(), 100);
+			assertEquals("the prey in cover was never touched", 100, inCover.getHealth());
+		}
+	}
+
 	static class TileSeekingIsGeneric extends Scenario {
 		/** Does a body asking for this property walk onto ground that has it? */
 		private boolean reaches(double want, Tile.TileType kind) {
@@ -4345,6 +4379,7 @@ public class SimTests {
 				new MindHuntsViaPreyChannel(),
 				new MindFleesViaThreatChannel(),
 				new ThrottleSetsSpeedAndCostsItsSquare(),
+				new CoverHidesPreyFromAHunter(),
 				new TileSeekingIsGeneric(),
 				new MatingTakesTimeAndSeeksAPartner(),
 				new IntentReportsHowItWent(),
