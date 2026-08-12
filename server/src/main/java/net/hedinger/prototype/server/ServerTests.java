@@ -25,6 +25,8 @@ public final class ServerTests {
 		fullMessageJsonRoundTrips();
 		deltaAppliedToFullMatchesNextSnapshot();
 		replayReconstructsLiveSessionExactly();
+		visitorLogCountsWithoutIdentifying();
+		visitorLogReadsTheClientThroughTheProxy();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -110,6 +112,52 @@ public final class ServerTests {
 
 		WorldSnapshot mid = net.hedinger.prototype.sim.Replays.reconstruct(rec, 40);
 		check("scrub-to-tick lands on the requested tick", mid.tick() == 40);
+	}
+
+	/**
+	 * The visitor log answers "how many" and "how often" and nothing else. Note
+	 * what it does NOT expose: there is no accessor that returns an address, a
+	 * hash, or the set itself, so "cannot name a visitor" is a property of the
+	 * class shape rather than something a test could catch after the fact.
+	 */
+	static void visitorLogCountsWithoutIdentifying() {
+		VisitorLog log = new VisitorLog();
+		log.record("1.2.3.4");
+		log.record("1.2.3.4");
+		log.record("5.6.7.8");
+		check("repeat contacts are one visitor", log.distinct() == 2);
+		check("every contact is a request", log.requests() == 3);
+
+		log.record(null);
+		log.record("   ");
+		check("an unidentifiable contact cannot invent a visitor", log.distinct() == 2);
+		check("an unidentifiable contact still counts as traffic", log.requests() == 5);
+		check("an uncapped count is exact", !log.saturated());
+
+		VisitorLog full = new VisitorLog();
+		for (int i = 0; i < 20_050; i++) {
+			full.record("10.0." + (i / 256) + "." + (i % 256));
+		}
+		check("the distinct set stops growing at its cap", full.distinct() == 20_000);
+		check("a capped count says it is a floor", full.saturated());
+		check("traffic keeps counting past the cap", full.requests() == 20_050);
+	}
+
+	/** Behind Caddy the direct peer is the proxy, so the client comes from the header. */
+	static void visitorLogReadsTheClientThroughTheProxy() {
+		check("no header means the peer is the client",
+				"9.9.9.9".equals(VisitorLog.clientAddress("9.9.9.9", null)));
+		check("a blank header falls back to the peer",
+				"9.9.9.9".equals(VisitorLog.clientAddress("9.9.9.9", "  ")));
+		check("the first hop is the client, the rest are proxies",
+				"1.1.1.1".equals(VisitorLog.clientAddress("10.0.0.1", "1.1.1.1, 10.0.0.1")));
+		check("surrounding whitespace is not part of the address",
+				"1.1.1.1".equals(VisitorLog.clientAddress("10.0.0.1", " 1.1.1.1 ")));
+
+		VisitorLog log = new VisitorLog();
+		log.record(VisitorLog.clientAddress("10.0.0.1", "1.1.1.1, 10.0.0.1"));
+		log.record(VisitorLog.clientAddress("10.0.0.1", "2.2.2.2, 10.0.0.1"));
+		check("two clients behind one proxy are two visitors", log.distinct() == 2);
 	}
 
 	private static EntityState probe(int id, double x) {

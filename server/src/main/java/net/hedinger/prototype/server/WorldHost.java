@@ -532,6 +532,9 @@ final class WorldHost {
 
 	// ---- metrics + recording ----------------------------------------------
 
+	/** Visitor counts for this uptime; addresses are hashed and never stored. */
+	final VisitorLog visitors = new VisitorLog();
+
 	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */
 	java.util.Map<String, Object> metrics() {
 		Runtime rt = Runtime.getRuntime();
@@ -547,7 +550,14 @@ final class WorldHost {
 				java.util.Map.entry("paused", runner.isPaused()),
 				java.util.Map.entry("speed", runner.getSpeed()),
 				java.util.Map.entry("uptimeSec", (System.currentTimeMillis() - startedAt) / 1000),
-				java.util.Map.entry("heapMb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024))));
+				java.util.Map.entry("heapMb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)),
+				// Who has been here, in the only sense worth keeping: how many and how
+				// often. Addresses are hashed against a per-boot salt, so these count
+				// visitors without being able to name one. `visitorsCapped` says whether
+				// the distinct figure is exact or a floor -- see VisitorLog.
+				java.util.Map.entry("visitors", visitors.distinct()),
+				java.util.Map.entry("visitorsCapped", visitors.saturated()),
+				java.util.Map.entry("httpRequests", visitors.requests())));
 	}
 
 	/** The current session as a downloadable, replayable recording. */

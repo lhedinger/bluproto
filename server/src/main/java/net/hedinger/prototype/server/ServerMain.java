@@ -80,6 +80,20 @@ public final class ServerMain {
 			c.staticFiles.add("/public", Location.CLASSPATH);
 		});
 
+		// Count every contact, once, before anything else handles it. Hashed inside
+		// VisitorLog -- the address itself is read here and never stored. X-Forwarded-For
+		// matters because Caddy sits in front: without it every visitor would look like
+		// the proxy and the distinct count would be 1 forever.
+		//
+		// Only the initial dispatch counts. Jetty re-enters this handler when it
+		// forwards "/" to the welcome file, so counting every dispatch would bill the
+		// site root -- the single most requested URL here -- at double everything else.
+		app.before(ctx -> {
+			if (ctx.req().getDispatcherType() == jakarta.servlet.DispatcherType.REQUEST) {
+				host.visitors.record(VisitorLog.clientAddress(ctx.ip(), ctx.header("X-Forwarded-For")));
+			}
+		});
+
 		// Liveness, and whether the world is keeping up with real time. The runner
 		// already times every tick into a rolling window; what was missing was anywhere
 		// to read it. Cost alone is not actionable, so the budget it is measured
