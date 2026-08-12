@@ -1,11 +1,6 @@
 package net.hedinger.prototype.entities;
 
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-
 import net.hedinger.prototype.engine.Entity;
-import net.hedinger.prototype.engine.View;
 
 
 public class Grenade extends Entity
@@ -84,13 +79,11 @@ public class Grenade extends Entity
 
 	}
 
-	@Override
-	protected void draw(Graphics g, View v)
+	/** Shell size in pixels, for the painter ({@code size} here shadows the
+	 *  Entity field, so {@link #getPixelSize()} would read zero). */
+	public int getShellSize()
 	{
-		Graphics2D g2 = (Graphics2D) g;
-
-		g2.setColor(Color.WHITE);
-		g2.fillOval(pixelX(v, 0), pixelY(v, 0), size, size);
+		return size;
 	}
 
 	@Override

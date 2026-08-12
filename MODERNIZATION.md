@@ -27,6 +27,10 @@ An honest inventory of what helps and what hurts:
   convention (33 ticks/s). Determinism is seed-driven and test-pinned.
 - **Hurts:** rendering is *interleaved with the domain* — 45 of 64 files touch
   `java.awt`, because every entity draws itself (`draw(Graphics, View)`).
+  *(Since resolved: every entity `draw` method now lives in the
+  `net.hedinger.prototype.render` painter layer; entities expose state,
+  painters draw it, and the only `java.awt` left in domain files is `Color`
+  as body-tint data.)*
   There is no build tool (plain `javac`), no CI, and engine globals
   (`Utils.seed`, `PrototypeWorld.stopwatch`, `ResourceManager.tileSize`) assume
   one world per process.

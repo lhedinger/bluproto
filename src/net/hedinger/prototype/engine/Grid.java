@@ -78,18 +78,18 @@ public class Grid {
 		// wiring lowest (a door leaf may slide over its conduit), then doors.
 		for (Entity e : world.entities.values()) {
 			if (e instanceof net.hedinger.prototype.entities.Switch && e.getLvl() == level) {
-				e.render(g, v);
+				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}
 		}
 		for (Entity e : world.entities.values()) {
 			if (e instanceof net.hedinger.prototype.entities.Door && e.getLvl() == level) {
-				e.render(g, v);
+				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}
 		}
 		// Pheromone clouds next, so the haze sits under the creatures.
 		for (Entity e : world.entities.values()) {
 			if (e instanceof PheromoneCloud && e.getLvl() == level) {
-				e.render(g, v);
+				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}
 		}
 		for (Entity e : world.entities.values()) {
@@ -97,7 +97,7 @@ public class Grid {
 					&& !(e instanceof net.hedinger.prototype.entities.Door)
 					&& !(e instanceof net.hedinger.prototype.entities.Switch)
 					&& e.getLvl() == level) {
-				e.render(g, v);
+				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}
 		}
 		// What perception cannot see, the eye should only half see: re-stamp

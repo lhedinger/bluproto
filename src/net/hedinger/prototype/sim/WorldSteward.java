@@ -1,10 +1,7 @@
 package net.hedinger.prototype.sim;
 
-import java.awt.Graphics;
-
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.Utils;
-import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.simtest.TestNPC;
@@ -189,11 +186,6 @@ public final class WorldSteward extends Entity {
 				removed++;
 			}
 		}
-	}
-
-	@Override
-	protected void draw(Graphics g, View v) {
-		// Invisible: the steward is machinery, not a creature.
 	}
 
 	@Override
