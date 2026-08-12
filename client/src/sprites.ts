@@ -13,6 +13,30 @@ import { drawDoor, drawItem, drawSwitch } from './render';
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 
+// One page, two addresses: /sprites shows the java bake beside each client
+// canvas (the comparison), /sprites/web hides the java halves — the catalog
+// of what THIS browser's own drawing code produces, nothing else.
+const webOnly = location.pathname.replace(/\/+$/, '').endsWith('/web');
+
+{
+  if (webOnly) {
+    const intro = document.getElementById('intro');
+    if (intro) {
+      intro.innerHTML = 'The art system as the <b>web client alone</b> renders it: every '
+        + 'canvas below is painted live by the viewer\'s own drawing code, driven by '
+        + 'scripted state — the pixels this very browser puts on the live world.';
+    }
+  }
+  const nav = document.createElement('p');
+  nav.className = 'note';
+  nav.innerHTML = webOnly
+    ? 'See also the <a href="/sprites">side-by-side comparison</a> '
+      + 'or the <a href="/sprites/java">pure java bake</a>.'
+    : 'Also: <a href="/sprites/web">web-client rendering only</a> · '
+      + '<a href="/sprites/java">pure java bake</a>.';
+  root.append(nav);
+}
+
 /** A fixed pseudo-camera: `tiles * scale` px, origin at the canvas corner. */
 function fixedCam(scale: number): Camera {
   return {
@@ -54,11 +78,13 @@ function pair(parent: HTMLElement, javaSrc: string, javaW: number, label: string
   const outer = document.createElement('figure');
   const box = document.createElement('div');
   box.className = 'pair';
-  const img = document.createElement('img');
-  img.src = javaSrc;
-  img.style.width = `${javaW}px`;
-  img.loading = 'lazy';
-  figure(img, '<b>java bake</b>', box);
+  if (!webOnly) {
+    const img = document.createElement('img');
+    img.src = javaSrc;
+    img.style.width = `${javaW}px`;
+    img.loading = 'lazy';
+    figure(img, '<b>java bake</b>', box);
+  }
   figure(liveCanvas(w, h, paint), '<b>web client</b>', box);
   const cap = document.createElement('figcaption');
   cap.textContent = label;
@@ -98,11 +124,15 @@ const DOOR_RGB: Record<string, number> = {
   timber: 0x574024, stone: 0x665e4c, grate: 0x7c828f, hedge: 0x2b5422, blast: 0x515862,
 };
 
-const furniture = section('Furniture & items — java bake vs web client',
-  'Left of each box: the Java renderer (staged world, entity painters). Right: the exact '
-  + 'drawing code the live viewer runs, driven by scripted state over a flat ground tone. '
-  + 'Doors cycle closed → open → closed; the switches press and release; the corpse and '
-  + 'rim are the client-side atlas bakes.');
+const furniture = webOnly
+  ? section('Furniture & items — web client',
+    'The exact drawing code the live viewer runs, driven by scripted state over a flat '
+    + 'ground tone. Doors cycle closed → open → closed; the switches press and release.')
+  : section('Furniture & items — java bake vs web client',
+    'Left of each box: the Java renderer (staged world, entity painters). Right: the exact '
+    + 'drawing code the live viewer runs, driven by scripted state over a flat ground tone. '
+    + 'Doors cycle closed → open → closed; the switches press and release; the corpse and '
+    + 'rim are the client-side atlas bakes.');
 
 for (const flavour of ['timber', 'stone', 'grate', 'hedge', 'blast']) {
   const S = 64;
