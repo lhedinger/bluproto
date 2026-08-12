@@ -95,6 +95,11 @@ export function corpseFor(pheno: number, img: HTMLImageElement): HTMLCanvasEleme
   g.globalCompositeOperation = 'saturation'; // colour out, luminance kept
   g.fillStyle = '#808080';
   g.fillRect(0, 0, cv.width, cv.height);
+  // 'saturation' is a blend mode, not a clip: it composites source-over, so the
+  // grey fill lands opaque wherever the atlas was transparent. Re-clip to the
+  // sprite's silhouette before darkening, or every corpse stamps a grey square.
+  g.globalCompositeOperation = 'destination-in';
+  g.drawImage(img, 0, 0);
   g.globalCompositeOperation = 'source-atop'; // ...and darken only the body
   g.fillStyle = 'rgba(10,12,15,0.45)';
   g.fillRect(0, 0, cv.width, cv.height);
