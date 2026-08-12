@@ -100,9 +100,22 @@ public final class ServerMain {
 			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
 		});
 
-		// The sprite catalog: the art system's static reference page, everything
-		// pre-rendered at startup and served from memory (see SpriteCatalog).
-		app.get("/sprites", ctx -> ctx.contentType("text/html").result(catalog.page()));
+		// The sprite catalog. Two views of the same art system:
+		//  /sprites       the client-built comparison page (each web-drawn entry
+		//                 rendered live by the viewer's own code, beside its java
+		//                 bake) — falls back to the server page on a bare checkout;
+		//  /sprites/java  the pure server-rendered reference (see SpriteCatalog).
+		java.io.File clientSprites = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
+				"sprites.html");
+		app.get("/sprites", ctx -> {
+			if (clientSprites.isFile()) {
+				ctx.contentType("text/html")
+						.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
+			} else {
+				ctx.contentType("text/html").result(catalog.page());
+			}
+		});
+		app.get("/sprites/java", ctx -> ctx.contentType("text/html").result(catalog.page()));
 		app.get("/sprites/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;

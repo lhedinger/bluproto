@@ -373,7 +373,7 @@ function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, c
  * by the id in `pheno`; without it (not yet streamed) only the control
  * draws.
  */
-function drawSwitch(
+export function drawSwitch(
   g: CanvasRenderingContext2D, cam: Camera, e: EntityState, door?: EntityState,
 ): void {
   const sc = cam.scale;
@@ -452,7 +452,7 @@ function drawSwitch(
  * hazard-striped nose (blast), see-through bars (grate), planked timber,
  * coursed stone, woven hedge — all as chunky slabs with a drop shadow.
  */
-function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityState): void {
+export function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityState): void {
   const lr = Math.abs(e.dir % (Math.PI / 2)) > 1e-6;
   const span = Math.max(1, e.size);
   const ext = Math.max(0.15, Math.min(1, e.aux));
@@ -525,7 +525,7 @@ function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityState): voi
   }
 }
 
-function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
+export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
   g.fillStyle = col;
   if (kind === 'item.crate') {
     g.fillRect(x - r, y - r, r * 2, r * 2);
