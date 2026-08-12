@@ -60,6 +60,10 @@ public final class ServerMain {
 		// to override — e.g. to scale down under a tight heap without a rebuild.
 		int worldCols = Integer.parseInt(cfg(args, "WORLD_COLS", "0"));
 		int worldRows = Integer.parseInt(cfg(args, "WORLD_ROWS", "0"));
+		// The sprite catalog pre-renders BEFORE the live world exists: its staged
+		// scenes tick and draw from the shared engine RNG, which must never be
+		// touched once the deterministic sim thread is running.
+		SpriteCatalog catalog = SpriteCatalog.render();
 		WorldHost host = new WorldHost(seed, worldCols, worldRows);
 
 		Javalin app = Javalin.create(c -> {
@@ -94,6 +98,21 @@ public final class ServerMain {
 				}
 			});
 			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
+		});
+
+		// The sprite catalog: the art system's static reference page, everything
+		// pre-rendered at startup and served from memory (see SpriteCatalog).
+		app.get("/sprites", ctx -> ctx.contentType("text/html").result(catalog.page()));
+		app.get("/sprites/{file}", ctx -> {
+			String name = ctx.pathParam("file");
+			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
+			if (bytes == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.contentType(SpriteCatalog.contentType(name))
+					.header("Cache-Control", "public, max-age=3600")
+					.result(bytes);
 		});
 
 		// Scenario recordings gallery: the animated GIFs the RecordScenario
