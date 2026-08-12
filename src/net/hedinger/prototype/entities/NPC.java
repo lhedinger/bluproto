@@ -1,21 +1,12 @@
 package net.hedinger.prototype.entities;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.geom.Rectangle2D;
 import java.util.Stack;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.engine.Entity;
-import net.hedinger.prototype.engine.ProcCreature;
 import net.hedinger.prototype.engine.ResourceManager;
 import net.hedinger.prototype.engine.Utils;
-import net.hedinger.prototype.engine.View;
-import net.hedinger.prototype.engine.View.ViewMode;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.engine.Perf;
 
@@ -449,148 +440,82 @@ public abstract class NPC extends Entity {
 		}
 	}
 
-	@Override
-	protected void draw_dead(Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
+	// ---- render-layer accessors -------------------------------------------
+	// The painters (net.hedinger.prototype.render) draw this creature; they
+	// read its state through here and never reach into sim internals.
 
-		g2.drawImage(ResourceManager.getCropseSprite(hostile),
-				pixelX(v, size * 2),
-				pixelY(v, size * 2),
-				size * 4,
-				size * 4, null);
-
+	/** Species hostility index, keyed into the sprite sheets. */
+	public int getHostility() {
+		return hostile;
 	}
 
-	@Override
-	protected void draw(Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-		int width = (int) g.getClipBounds().getMaxX();
-		int height = (int) g.getClipBounds().getMaxY();
+	public double getLosRange() {
+		return LOS_RANGE;
+	}
 
-		if (drawLOS && v.getViewMode() == ViewMode.ALL) {
-			g2.setStroke(new BasicStroke(2));
-			g2.setColor(new Color(250, 250, 250, 100));
-			int x = pixelX(v, 0);
-			int y = pixelY(v, 0);
-			int r = toPixel(v, LOS_RANGE);
-			g2.drawOval(x - r, y - r, r * 2, r * 2);
-			if (LOS_FOV >= Math.PI - 0.0001) {
-				g2.drawLine(round(x + 32 * Math.cos(D)), round(y + 32 * Math.sin(D)), round(x + r
-						* Math.cos(D)), round(y + r * Math.sin(D)));
-			} else {
-				g2.drawLine(round(x + 32 * Math.cos(D - LOS_FOV)), round(y + 32
-						* Math.sin(D - LOS_FOV)), round(x + r * Math.cos(D - LOS_FOV)), round(y + r
-								* Math.sin(D - LOS_FOV)));
-				g2.drawLine(round(x + 32 * Math.cos(D + LOS_FOV)), round(y + 32
-						* Math.sin(D + LOS_FOV)), round(x + r * Math.cos(D + LOS_FOV)), round(y + r
-								* Math.sin(D + LOS_FOV)));
-			}
+	public double getLosFov() {
+		return LOS_FOV;
+	}
+
+	public boolean debugDrawLOS() {
+		return drawLOS;
+	}
+
+	public boolean debugDrawPing() {
+		return drawPing;
+	}
+
+	public boolean debugDrawLine() {
+		return drawLine;
+	}
+
+	public boolean debugDrawTrace() {
+		return drawTrace;
+	}
+
+	public float getPing() {
+		return ping;
+	}
+
+	/** Advances the debug ping sweep one frame (render-driven, sim-inert). */
+	public void advancePing() {
+		ping += 0.3;
+		if (ping > LOS_RANGE) {
+			ping = -SEARCH_FREQ;
 		}
-		if (drawPing) {
-			g2.setStroke(new BasicStroke(2));
-			g2.setColor(new Color(250, 250, 250, 100));
-			if (ping > 0) {
-				for (int i = 0; i < 10; i++) {
-					g2.setColor(new Color(0, 255, 0, 5 * i));
-					g2.drawOval(pixelX(v, toPixel(v, ping)) - i, pixelY(v, toPixel(v, ping)) - i,
-							toPixel(v, ping * 2) + i * 2, toPixel(v, ping * 2) + i * 2);
-				}
-			}
-			ping += 0.3;
-			if (ping > LOS_RANGE) {
-				ping = -SEARCH_FREQ;
-			}
-		}
+	}
 
-		if (v.getViewMode() == ViewMode.ALL && this.getNpcTypeName() == "Human") {
-			g2.setColor(new Color(255, 255, 255, 50));
-			for (NPC e : targets.values()) {
-				if (e != null) {
-					g2.drawLine(
-							e.pixelX(v, 0),
-							e.pixelY(v, 0),
-							pixelX(v, 0),
-							pixelY(v, 0));
-				}
-			}
+	public double getTargetX() {
+		return tX;
+	}
 
-			g2.setColor(new Color(255, 100, 100, 140));
-			for (NPC e : focusTargets.values()) {
-				if (e != null) {
-					g2.drawLine(
-							e.pixelX(v, 0),
-							e.pixelY(v, 0),
-							pixelX(v, 0),
-							pixelY(v, 0));
-				}
-			}
-		}
+	public double getTargetY() {
+		return tY;
+	}
 
-		g2.setColor(col);
-		// g2.fillOval(pixelX(v, size * 0.5), pixelY(v, size * 0.5), size,
-		// size);
-		g2.setStroke(new BasicStroke(1));
+	public java.util.Collection<NPC> targetsView() {
+		return targets.values();
+	}
 
-		if (drawLine) {
-			float ts = Utils.scaleZ((int) Z, v.getCamZ());
-			g2.drawLine(round((X - v.getCamX()) * ts + width / 2), (int) Math
-					.round((Y - v.getCamY()) * ts + height / 2), round(size * Math.cos(D)
-							+ round((X - v.getCamX()) * ts + width / 2)),
-					round(size * Math.sin(D)
-							+ Math.round((Y - v.getCamY()) * ts + height / 2)));
-		}
-		g2.setStroke(new BasicStroke(1));
-		g2.setColor(new Color(col.getRed(), col.getGreen(), col.getBlue(), 100));
-		if (drawTrace) {
-			float ts = Utils.scaleZ((int) Z, v.getCamZ());
-			g2.drawLine(round((X - v.getCamX()) * ts + width / 2), (int) Math
-					.round((Y - v.getCamY()) * ts + height / 2), (int) Math
-					.round((tX - v.getCamX()) * ts + width / 2),
-					(int) Math
-					.round((tY - v.getCamY()) * ts + height / 2));
-		}
+	public java.util.Collection<NPC> focusTargetsView() {
+		return focusTargets.values();
+	}
 
-		float relativeSize = Utils.scaleZ2((int) Z, v.getCamZ(), size);
-		int relativeSize2 = round(relativeSize * 2);
+	public String getMessage() {
+		return message;
+	}
 
-		if (genome != null) {
-			// Genome-driven top-down organism: oriented to the heading; animated
-			// faster while moving, gently while idle (offset by id so they aren't
-			// in lockstep). Newborns pop in with the generic spawn action.
-			double spd = Math.hypot(dX, dY);
-			double phase = getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + getID();
-			ProcCreature.Phenotype ph = ProcCreature.phenotype(genome);
-			int cx = pixelX(v, 0), cy = pixelY(v, 0);
-			boolean spawning = age >= 0 && age < 24;
-			int action = spawning ? ProcCreature.A_SPAWN : ProcCreature.A_IDLE;
-			double actionT = spawning ? age / 24.0 : 0;
-			ProcCreature.drawCached(g2, cx, cy, relativeSize2, ph, D, phase, action, actionT);
-		} else {
-			g2.drawImage(ResourceManager.getNpcSprite(hostile), pixelX(v, relativeSize2), pixelY(v,
-					relativeSize2), relativeSize2 * 2, relativeSize2 * 2, null);
-		}
+	public int getMessageFade() {
+		return message_fade;
+	}
 
-		if (message_fade > 0) {
-			g2.setFont(new Font("Arial", Font.BOLD, 10));
-			g2.setColor(new Color(250, 250, 250));
-			if (message_fade < mesage_fade_max) {
-				float alpha = message_fade;
-				alpha = alpha / mesage_fade_max;
-				alpha = alpha * 250;
+	public int getMessageFadeMax() {
+		return mesage_fade_max;
+	}
 
-				g2.setColor(new Color(250, 250, 250, Math.round(alpha)));
-			}
-
-			FontMetrics fm = g.getFontMetrics();
-			Rectangle2D textsize = fm.getStringBounds(message, g);
-
-			float ts = Utils.scaleZ((int) Z, v.getCamZ());
-			g.drawString(message, round((X - v.getCamX()) * ts + width / 2 - size * 0.5
-					- textsize.getWidth() * 0.5), round((Y - v.getCamY()) * ts + height
-							/ 2 - size * 0.5 - 5));
-
-			message_fade--;
-		}
+	/** Ages the floating speech bubble one frame (render-driven, sim-inert). */
+	public void fadeMessage() {
+		message_fade--;
 	}
 
 	@Override
@@ -1796,10 +1721,6 @@ public abstract class NPC extends Entity {
 		message = msg.trim();
 		mesage_fade_max = fade;
 		message_fade = fade;
-	}
-
-	protected String getMessage() {
-		return message;
 	}
 
 	protected double distance() {

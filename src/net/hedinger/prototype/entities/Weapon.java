@@ -1,9 +1,6 @@
 package net.hedinger.prototype.entities;
 
-import java.awt.Graphics;
-
 import net.hedinger.prototype.engine.Entity;
-import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 
 
@@ -136,18 +133,6 @@ public abstract class Weapon extends Entity
 		temp = temp / fire_velocity;
 
 		return round(temp);
-	}
-
-	@Override
-	protected void draw(Graphics g, View v)
-	{
-
-	}
-
-	@Override
-	protected void draw_dead(Graphics g, View v)
-	{
-
 	}
 
 	public abstract String WeaponType();

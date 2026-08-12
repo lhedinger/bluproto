@@ -1,13 +1,8 @@
 package net.hedinger.prototype.entities;
 
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-
 import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.Utils;
-import net.hedinger.prototype.engine.View;
 
 /**
  * A gate spanning the boundary between two tiles: closed it seals the edge
@@ -35,21 +30,23 @@ public class Door extends Entity {
 	private static final int DOOR_MOVING = 1;
 	private static final int DOOR_CLOSED = 2;
 
-	// Material palettes, drawn from the terrain ramps so doors sit in the
-	// same world: mud browns (timber), built-wall masonry (stone), pit darks
-	// + wall highlight (iron), thicket greens (hedge).
-	private static final Color FRAME = new Color(0x38291a);
-	private static final Color TIMBER_MID = new Color(0x574024);
-	private static final Color TIMBER_HI = new Color(0x775a38);
-	private static final Color MORTAR = new Color(0x36342e);
-	private static final Color STONE_MID = new Color(0x665e4c);
-	private static final Color STONE_HI = new Color(0x8a8069);
-	private static final Color IRON_DARK = new Color(0x14161f);
-	private static final Color IRON_HI = new Color(0x7c828f);
-	private static final Color STEEL_MID = new Color(0x515862);
-	private static final Color STEEL_HI = new Color(0x707885);
-	private static final Color HEDGE_MID = new Color(0x2b5422);
-	private static final Color HEDGE_HI = new Color(0x456c36);
+	// Material palettes as plain RGB, drawn from the terrain ramps so doors
+	// sit in the same world: mud browns (timber), built-wall masonry (stone),
+	// pit darks + wall highlight (iron), thicket greens (hedge). The render
+	// layer's DoorPainter wraps these for AWT; the mids double as the wire
+	// colour a spriteless client falls back to.
+	public static final int FRAME_RGB = 0x38291a;
+	public static final int TIMBER_MID_RGB = 0x574024;
+	public static final int TIMBER_HI_RGB = 0x775a38;
+	public static final int MORTAR_RGB = 0x36342e;
+	public static final int STONE_MID_RGB = 0x665e4c;
+	public static final int STONE_HI_RGB = 0x8a8069;
+	public static final int IRON_DARK_RGB = 0x14161f;
+	public static final int IRON_HI_RGB = 0x7c828f;
+	public static final int STEEL_MID_RGB = 0x515862;
+	public static final int STEEL_HI_RGB = 0x707885;
+	public static final int HEDGE_MID_RGB = 0x2b5422;
+	public static final int HEDGE_HI_RGB = 0x456c36;
 
 	private int status = DOOR_CLOSED;
 	private int delay_counter = 0;
@@ -236,16 +233,21 @@ public class Door extends Entity {
 	public int wireColor() {
 		switch (flavor) {
 		case STONE:
-			return STONE_MID.getRGB() & 0xFFFFFF;
+			return STONE_MID_RGB;
 		case GRATE:
-			return IRON_HI.getRGB() & 0xFFFFFF;
+			return IRON_HI_RGB;
 		case HEDGE:
-			return HEDGE_MID.getRGB() & 0xFFFFFF;
+			return HEDGE_MID_RGB;
 		case BLAST:
-			return STEEL_MID.getRGB() & 0xFFFFFF;
+			return STEEL_MID_RGB;
 		default:
-			return TIMBER_MID.getRGB() & 0xFFFFFF;
+			return TIMBER_MID_RGB;
 		}
+	}
+
+	/** Material flavour ({@link #TIMBER} .. {@link #BLAST}), for the painter. */
+	public int getFlavor() {
+		return flavor;
 	}
 
 	/**
@@ -264,141 +266,6 @@ public class Door extends Entity {
 			return Math.max(0.15, delay_counter / (double) open_delay); // opening: 1 -> 0
 		}
 		return Math.max(0.15, 1 - delay_counter / (double) close_delay); // closing: 0 -> 1
-	}
-
-	@Override
-	protected void draw(Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-		boolean lr = ((int) (D % (Math.PI / 2))) != 0;
-		double step = (v.pixelX(X + 1, Z, 0) - v.pixelX(X, Z, 0)) / 12.0;
-		if (step <= 0) {
-			return;
-		}
-		int box = (int) Math.ceil(step);
-		int L = span * 12; // door length in art-px across its whole doorway
-		int reach = (int) Math.round(L * 0.5 * extension()); // leaf length from each end
-		int rows = flavor == BLAST ? 5 : 3; // a blast door is a mass, not a bar
-		// Pass 1: the drop shadow, one art-pixel south of every door block --
-		// the slab sits ON the floor, and the shadow slides with the leaves.
-		g2.setColor(SHADOW);
-		for (int i = 0; i < L; i++) {
-			if (!drawnCell(i, L, reach)) {
-				continue;
-			}
-			for (int j = 0; j < rows; j++) {
-				double along = i / 12.0;
-				double across = (j - rows * 0.5) / 12.0;
-				double wx = lr ? X + across : X + along;
-				double wy = (lr ? Y + along : Y + across) + 1.0 / 12.0;
-				g2.fillRect((int) Math.round(v.pixelX(wx, Z, 0)),
-						(int) Math.round(v.pixelY(wy, Z, 0)), box, box);
-			}
-		}
-		// Pass 2: the door itself, its screen-north edge lit and its south
-		// edge sunk -- the same raised grammar the walls use.
-		for (int i = 0; i < L; i++) {
-			if (!drawnCell(i, L, reach)) {
-				continue; // the open middle
-			}
-			boolean post = i == 0 || i == L - 1;
-			// The leading edge of each sliding leaf -- where they meet when
-			// sealed, and the crush edges while they move.
-			boolean nose = !post && (i == reach - 1 || i == L - reach);
-			for (int j = 0; j < rows; j++) {
-				Color c = pattern(i, L, j, post, nose);
-				if (c == null) {
-					continue; // a grate's see-through gap
-				}
-				boolean northEdge = lr ? !drawnCell(i - 1, L, reach) : j == 0;
-				boolean southEdge = lr ? !drawnCell(i + 1, L, reach) : j == rows - 1;
-				boolean sideEdge = lr ? (j == 0 || j == rows - 1)
-						: (!drawnCell(i - 1, L, reach) || !drawnCell(i + 1, L, reach));
-				if (northEdge) {
-					c = shade(c, 1.3);
-				} else if (southEdge) {
-					c = shade(c, 0.65);
-				} else if (sideEdge) {
-					c = shade(c, 0.78); // the slab's long flanks, rimmed like a wall's
-				}
-				double along = i / 12.0; // world units along the doorway
-				double across = (j - rows * 0.5) / 12.0;
-				double wx = lr ? X + across : X + along;
-				double wy = lr ? Y + along : Y + across;
-				g2.setColor(c);
-				g2.fillRect((int) Math.round(v.pixelX(wx, Z, 0)),
-						(int) Math.round(v.pixelY(wy, Z, 0)), box, box);
-			}
-		}
-	}
-
-	/** Whether art-pixel {@code i} along the door is part of a leaf or post. */
-	private static boolean drawnCell(int i, int L, int reach) {
-		if (i < 0 || i >= L) {
-			return false;
-		}
-		return i == 0 || i == L - 1 || i < reach || i >= L - reach;
-	}
-
-	private static final Color SHADOW = new Color(0, 0, 0, 110);
-
-	private static Color shade(Color c, double f) {
-		int r = (int) Math.min(255, c.getRed() * f);
-		int g = (int) Math.min(255, c.getGreen() * f);
-		int b = (int) Math.min(255, c.getBlue() * f);
-		return new Color(r, g, b, c.getAlpha());
-	}
-
-	/** The material pattern for leaf art-pixel (i along a door of L art-px,
-	 *  j across); {@code nose} marks a leaf's sliding leading edge. */
-	private Color pattern(int i, int L, int j, boolean post, boolean nose) {
-		switch (flavor) {
-		case STONE:
-			if (post || i % 4 == 0) {
-				return MORTAR; // frame and joints
-			}
-			return GroundTextures.hash01(i / 4, j + (int) (X + Y), 59) > 0.6 ? STONE_HI : STONE_MID;
-		case GRATE:
-			if (post) {
-				return IRON_DARK;
-			}
-			if (i % 2 == 1) {
-				return null; // gap between bars: see straight through
-			}
-			return j == 0 ? IRON_HI : IRON_DARK; // lit bar tip, dark shaft
-		case BLAST:
-			// Segmented steel with a hazard-striped nose where the leaves
-			// meet: the Black-Mesa-grade door for facility mouths.
-			if (post) {
-				return IRON_DARK;
-			}
-			if (nose) {
-				return new Color(GroundTextures.hazardStripe(i, j)); // striped crush edge
-			}
-			if (i % 4 == 0) {
-				return IRON_DARK; // segment seam
-			}
-			if (j == 4) {
-				return IRON_DARK; // shadowed trailing edge of the slab
-			}
-			return j <= 1 ? STEEL_HI : STEEL_MID; // broad lit face, steel body
-		case HEDGE: {
-			// Woven wicker: a basket-weave of living green and timber withies
-			// on dark posts, so the gate reads as BUILT brush -- otherwise a
-			// closed hedge gate vanishes into the hedge it hangs in.
-			if (post) {
-				return FRAME;
-			}
-			if (GroundTextures.hash01(i + (int) X * 7, j + (int) Y * 5, 60) > 0.85) {
-				return HEDGE_HI; // a live sprig poking from the weave
-			}
-			return ((i + j) & 1) == 0 ? HEDGE_MID : TIMBER_MID;
-		}
-		default: // TIMBER
-			if (post || i % 3 == 0) {
-				return FRAME; // posts and plank seams
-			}
-			return ((i / 3) & 1) == 0 ? TIMBER_MID : TIMBER_HI;
-		}
 	}
 
 	@Override

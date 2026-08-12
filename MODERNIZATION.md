@@ -27,6 +27,10 @@ An honest inventory of what helps and what hurts:
   convention (33 ticks/s). Determinism is seed-driven and test-pinned.
 - **Hurts:** rendering is *interleaved with the domain* — 45 of 64 files touch
   `java.awt`, because every entity draws itself (`draw(Graphics, View)`).
+  *(Since resolved: every entity `draw` method now lives in the
+  `net.hedinger.prototype.render` painter layer; entities expose state,
+  painters draw it, and the only `java.awt` left in domain files is `Color`
+  as body-tint data.)*
   There is no build tool (plain `javac`), no CI, and engine globals
   (`Utils.seed`, `PrototypeWorld.stopwatch`, `ResourceManager.tileSize`) assume
   one world per process.
@@ -136,6 +140,11 @@ concerns, last on purpose.
   identical snapshot stream; same seed + command log → identical world.
 - **Swing desktop app survives** through Phase 4 as the local dev harness and
   parity reference, then retires (`:desktop` module deleted or left dormant).
+  ✅ *Retired:* the Swing shell (`main.PrototypeWorld`), the MJPEG capture
+  diagnostics (`tools/`), and the desktop launcher are deleted. The Java
+  renderer itself stays headless as the visual source of truth — the server
+  bakes ground layers and sprite atlases through it, and the scenario suite
+  renders its captures and GIFs with it.
 - **Recording workflow upgrades:** today's `-Dsimtest.record` PNG pipeline
   keeps working; Phase 5's replay makes "recordings" a server feature — a
   stored seed + command log is smaller than any video and perfectly faithful.

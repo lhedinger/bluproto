@@ -2,14 +2,9 @@ package net.hedinger.prototype.entities;
 
 import net.hedinger.prototype.engine.Utils;
 
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.engine.Entity;
-import net.hedinger.prototype.engine.View;
 
 public class Bullet extends Entity {
 
@@ -19,7 +14,6 @@ public class Bullet extends Entity {
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
 	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Weapon", "Entity.Grenade",
 	"Entity.Explosion" };
-	private int length = 10;
 
 	public Bullet(double x, double y, double z, double d) {
 
@@ -79,19 +73,6 @@ public class Bullet extends Entity {
 				kill();
 			}
 		}
-	}
-
-	@Override
-	protected void draw(Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-
-		g2.setColor(Color.WHITE);
-		g2.setStroke(new BasicStroke(1));
-		g2.drawLine(
-				pixelX(v, 0),
-				pixelY(v, 0),
-				pixelX(v, length * Math.cos(D)),
-				pixelY(v, length * Math.sin(D)));
 	}
 
 	@Override

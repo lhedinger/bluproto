@@ -1,6 +1,5 @@
 package net.hedinger.prototype.engine;
 
-import java.awt.Graphics;
 
 import net.hedinger.prototype.entities.Sound;
 
@@ -66,14 +65,6 @@ public abstract class Entity {
 	protected void collisionCheck() {
 
 	}
-
-	protected abstract void draw(Graphics g, View v);
-
-	protected void draw_dead(Graphics g, View v) {
-
-	}
-
-	// protected abstract void draw_dead(Graphics g);
 
 	public Entity() {
 		X = -1;
@@ -171,61 +162,8 @@ public abstract class Entity {
 		return true;
 	}
 
-	public void render(Graphics g, View v) {
-		if (!isVisible(g, v)) {
-			return;
-		}
-
-		draw_extended(g);
-
-		if (age < 0) {
-			draw_dead(g, v);
-		} else {
-			draw(g, v);
-		}
-	}
-
 	protected void run_extended() {
 		// to be overwritten by other classes
-	}
-
-	protected void draw_extended(Graphics g) {
-		// to be overwritten by other classes
-	}
-
-	public boolean isVisible(Graphics g, View v) {
-		double zk = v.getCamZ() - Z + 1;
-		int width = (int) g.getClipBounds().getMaxX();
-		int height = (int) g.getClipBounds().getMaxY();
-
-		if (zk <= 0) {
-			return false;
-		}
-
-		if (pixelX(v, 0) > width + size_diameter) {
-			return false;
-		}
-
-		if (pixelX(v, 0) < -size_diameter) {
-			return false;
-		}
-
-		if (pixelY(v, 0) > height + size_diameter) {
-			return false;
-		}
-
-		if (pixelY(v, 0) < -size_diameter) {
-			return false;
-		}
-
-		if (age > 0 && world.hasFog()) {
-			if (isHostile() && !isDetected()) {
-				return false;
-			}
-		}
-
-		return true;
-
 	}
 
 	// |///////////////////////////////
@@ -455,6 +393,23 @@ public abstract class Entity {
 		return age;
 	}
 
+	public int getLifespan() {
+		return lifespan;
+	}
+
+	public double getDX() {
+		return dX;
+	}
+
+	public double getDY() {
+		return dY;
+	}
+
+	/** Screen-cull margin in pixels, for the render layer's visibility test. */
+	public int getCullMargin() {
+		return size_diameter;
+	}
+
 	public int getHealth() {
 		return health;
 	}
@@ -623,26 +578,6 @@ public abstract class Entity {
 
 	public double distance(double tx, double ty, double tz) {
 		return world.distance(X, Y, Z, tx, ty, tz);
-	}
-
-	protected int toPixel(View v, double tiles) {
-		return Utils.toPixel(tiles, (int) Z, v.getCamZ());
-	}
-
-	protected int pixelX(View v, double pixelOffset) {
-		return v.pixelX(X, Z, round(pixelOffset));
-	}
-
-	protected int pixelY(View v, double pixelOffset) {
-		return v.pixelY(Y, Z, round(pixelOffset));
-	}
-
-	protected int pixelX(View v, double offset, double pixelOffset) {
-		return v.pixelX(X - offset, Z, round(pixelOffset));
-	}
-
-	protected int pixelY(View v, double offset, double pixelOffset) {
-		return v.pixelY(Y - offset, Z, round(pixelOffset));
 	}
 
 	public abstract String getEntityTypeName();
