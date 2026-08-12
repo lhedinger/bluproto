@@ -245,7 +245,11 @@ cam.attach(tap => {
     if (e.kind === 'phero') continue;
     if (Math.round(e.z) !== currentLevel) continue; // only the visible level is selectable
     const d = Math.hypot(e.x - tap.x, e.y - tap.y);
-    if (d < Math.max(fingerTiles, e.size * 2.5) && d < bestD) {
+    // Reach is the body OR a finger's width, whichever is larger -- not a multiple
+    // of the body. Scaling by size padded small creatures into tappability but
+    // inflated large furniture along with it: a blast door already fills its tile,
+    // and 2.5x its radius swallowed everything standing near it.
+    if (d < Math.max(fingerTiles, e.size) && d < bestD) {
       best = id;
       bestD = d;
     }
