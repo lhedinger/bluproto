@@ -1275,7 +1275,17 @@ public final class Worlds {
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
 				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
 				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
-				Math.max(6, sc(6, scale)), Math.max(80, sc(80, scale)))); // minded
+				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
+				// long stretches, which meant the warden -- not grass, not predators --
+				// was setting the population, and a ceiling that binds is a governor
+				// rather than the backstop this is meant to be. 250 is well clear of
+				// anything the ecosystem reaches unaided, so what the headcount settles
+				// at is now a fact about the world instead of about this constant.
+				// The real limit is the deploy's heap and the 10 Hz broadcast, neither
+				// of which is measured yet; /api/health now reports tick cost so it can
+				// be watched. (Sim CPU is not the binding constraint: the world audit
+				// measures thousands of ticks/s against a 33 t/s requirement.)
+				Math.max(6, sc(6, scale)), Math.max(250, sc(250, scale)))); // minded
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;

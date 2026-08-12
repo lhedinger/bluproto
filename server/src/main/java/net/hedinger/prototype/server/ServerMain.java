@@ -17,7 +17,7 @@ import net.hedinger.prototype.sim.SpawnItemCommand;
  *
  * <pre>
  *   GET  /                      debug viewer page (Phase 3 replaces it)
- *   GET  /api/health            liveness + current tick
+ *   GET  /api/health            liveness, current tick, and tick cost vs budget
  *   GET  /api/world             world info (seed, geometry, tick, viewers)
  *   POST /api/world/reset       fresh world from {"seed": n}
  *   GET  /api/world/layers/{z}/{cx}_{cy}.png  baked ground chunk (level z)
@@ -80,10 +80,24 @@ public final class ServerMain {
 			c.staticFiles.add("/public", Location.CLASSPATH);
 		});
 
-		app.get("/api/health", ctx ->
-				ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(),
-						"entities", host.runner().snapshot().entities().size(),
-						"commit", commitShort, "deployedAt", deployedAt)));
+		// Liveness, and whether the world is keeping up with real time. The runner
+		// already times every tick into a rolling window; what was missing was anywhere
+		// to read it. Cost alone is not actionable, so the budget it is measured
+		// against travels with it: at 33 t/s a tick has 30.3 ms, and once the average
+		// passes that the loop can no longer drain its time bank and the world quietly
+		// runs slow -- no crash, no error, just behind. That is the failure worth being
+		// able to see from outside.
+		app.get("/api/health", ctx -> {
+			double tickMs = host.runner().avgTickMillis();
+			double budgetMs = 1000.0 / net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
+			ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(),
+					"entities", host.runner().snapshot().entities().size(),
+					"tickMillis", Math.round(tickMs * 1000) / 1000.0,
+					"tickBudgetMillis", Math.round(budgetMs * 1000) / 1000.0,
+					"tickLoad", budgetMs <= 0 ? 0 : Math.round(tickMs / budgetMs * 1000) / 1000.0,
+					"keepingUp", tickMs < budgetMs,
+					"commit", commitShort, "deployedAt", deployedAt));
+		});
 
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.
 		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
