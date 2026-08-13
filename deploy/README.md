@@ -94,8 +94,18 @@ curl -X POST https://yourdomain/api/world/reset \
 ## Metrics & replay
 
 ```bash
-curl https://yourdomain/api/metrics            # JSON: tick, tickMs, entities, viewers, heap, uptime
+curl https://yourdomain/api/metrics            # JSON: tick, tickMs, entities, viewers, heap, uptime, visitors
 curl https://yourdomain/metrics                # Prometheus text (for scraping)
+```
+
+`visitors` is how many distinct addresses have contacted this server since it
+started, and `httpRequests` how many times. Addresses are hashed against a salt
+generated at boot and never written down, so the server can count its audience
+but cannot name anyone in it — and the numbers do not survive a restart, which is
+what "since it started" already meant. `visitorsCapped` turns true if the
+distinct count hits its 20 000 ceiling, at which point read it as "at least".
+
+```bash
 curl https://yourdomain/api/world/recording -o recording.json   # download the session
 curl "https://yourdomain/api/replay?tick=5000"                  # reconstruct the world at tick 5000
 curl -X POST https://yourdomain/api/replay -d @recording.json   # replay a downloaded recording
