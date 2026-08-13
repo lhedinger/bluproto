@@ -2769,6 +2769,14 @@ public class SimTests {
 					w.getTile(x, y, 0).setFertility(1.0); // a lush meadow, grass everywhere
 				}
 			}
+			// A pond: the world now has water as a need, so a survival room
+			// without a shore is a death chamber — the forager wanders across
+			// the meadow and sips whenever it passes the water's edge.
+			for (int x = 10; x <= 13; x++) {
+				for (int y = 10; y <= 13; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_SHALLOWS);
+				}
+			}
 			tick(w, 1); // advance the clock so vegetation is defined
 			// A fresh starter-brained genome (empty cohort -> mindedReseedGenome yields
 			// the founder starter), on a body in the usual size band.
@@ -3883,6 +3891,16 @@ public class SimTests {
 			snapshot(w, "after (colony around the nest)");
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
 			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
+			// The physical fixture matches the scent: births claimed a Nest.
+			int nests = 0, broods = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.entities.Nest n && !e.isRemoved()) {
+					nests++;
+					broods += n.getBroods();
+				}
+			}
+			assertGreater("births raised a physical nest fixture", nests, 0);
+			assertGreater("...that counted its broods", broods, 1);
 
 			// The living colony concentrates near that nest: a good share of it sits
 			// within a few tiles of the pheromone peak — noticeably denser than the
@@ -4504,6 +4522,91 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Water as a need: a parched grazer drops everything, walks to the shore,
+	 * and drinks itself back above the thirst line — the scripted species'
+	 * water drive, plus the body's sip-by-adjacency refill.
+	 */
+	static class ThirstyGrazerWalksToWater extends Scenario {
+		@Override
+		public void run() {
+			seed(93);
+			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			for (int y = 1; y < 11; y++) {
+				w.setTile(17, y, 0, Tile.TileType.TYPE_SHALLOWS); // the east shore
+				w.setTile(18, y, 0, Tile.TileType.TYPE_WATER);
+			}
+			tick(w, 1);
+			TestNPC g = TestNPC.breeder(3.5, 6.5, 0,
+					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
+					.withHydration(0.2).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			tick(w, 1500);
+			assertTrue("the parched grazer is still alive", !g.isDead() && !g.isRemoved());
+			assertGreater("it walked to the shore and drank itself back over the thirst line",
+					g.getHydration(), 0.3);
+		}
+	}
+
+	/**
+	 * The other side of the need: in a world with no water at all, a fully fed
+	 * grazer still declines and dies once its tank runs dry — dehydration is a
+	 * slow wear on health, not a starvation clone (the full energy tank rules
+	 * starving out as the cause on this timeline).
+	 */
+	static class DehydrationWearsABodyDown extends Scenario {
+		@Override
+		public void run() {
+			seed(94);
+			World w = room(16, 16);
+			for (int x = 1; x < 15; x++) {
+				for (int y = 1; y < 15; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // lush — but bone dry
+				}
+			}
+			tick(w, 1);
+			TestNPC g = TestNPC.breeder(8.5, 8.5, 0,
+					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
+					.withHydration(0.01).withEnergy(6.0).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			tick(w, 2500);
+			assertTrue("with no water anywhere, dehydration wears the fed grazer down",
+					g.isDead() || g.isRemoved());
+		}
+	}
+
+	/**
+	 * Nutrient closure: a corpse that rots away feeds the ground it lay on —
+	 * tile fertility rises where the body expired, so kill sites green up and
+	 * the grass-grazer-predator loop closes.
+	 */
+	static class CorpseFeedsTheGround extends Scenario {
+		@Override
+		public void run() {
+			seed(95);
+			World w = room(10, 10);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 9; y++) {
+					w.getTile(x, y, 0).setFertility(0.3); // poor ground, so the gift shows
+				}
+			}
+			double before = w.getTile(5, 5, 0).getFertility();
+			TestNPC victim = TestNPC.inert(5.5, 5.5, 0).withSize(8).withDeathspan(40);
+			w.spawnEntity(victim);
+			tick(w, 2);
+			victim.kill();
+			tick(w, 60); // longer than the deathspan: the corpse rots away
+			assertTrue("the corpse rotted away", victim.isRemoved());
+			assertGreater("the ground it rotted on is richer than before",
+					w.getTile(5, 5, 0).getFertility(), before + 0.05);
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
@@ -4554,6 +4657,9 @@ public class SimTests {
 				new BrainInteractsWithButton(),
 				new BrainSeeksAndPressesButton(),
 				new BottomlessPitsAndCatwalks(),
+				new ThirstyGrazerWalksToWater(),
+				new DehydrationWearsABodyDown(),
+				new CorpseFeedsTheGround(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
 				new PopulationGrowsWithFood(),

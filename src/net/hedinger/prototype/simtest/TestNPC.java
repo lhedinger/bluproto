@@ -577,6 +577,12 @@ public class TestNPC extends NPC {
 	}
 
 	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
+	/** Starts this body at the given hydration (tests: make it thirsty). */
+	public TestNPC withHydration(double h) {
+		hydration = h;
+		return this;
+	}
+
 	public TestNPC withEnergy(double e) {
 		energy = e;
 		return this;
@@ -715,27 +721,96 @@ public class TestNPC extends NPC {
 			thinkGenome();
 			return;
 		case GRAZE:
+			if (thirstOverride()) {
+				return;
+			}
 			thinkGraze();
 			return;
 		case BREEDER:
+			if (thirstOverride()) {
+				return;
+			}
 			thinkBreeder();
 			return;
 		case NEST:
+			if (thirstOverride()) {
+				return;
+			}
 			thinkNester();
 			return;
 		case MATER:
+			if (thirstOverride()) {
+				return;
+			}
 			thinkMater();
 			return;
 		case MINDED:
-			thinkMinded();
+			thinkMinded(); // a minded body drinks by its own choices, not a script
 			return;
 		case HAUL:
 			thinkHaul();
 			return;
 		case PREDATOR:
+			if (thirstOverride()) {
+				return;
+			}
 			thinkPredator();
 			return;
 		}
+	}
+
+	/** How dry an eco creature gets before finding water outranks everything. */
+	private static final double THIRST_THRESHOLD = 0.35;
+	/** How far (tiles) a creature can know about a shore. Deliberately wider
+	 *  than sight: animals remember water, they don't have to see it. */
+	private static final int WATER_SENSE_R = 20;
+
+	/**
+	 * The scripted species' water drive: when hydration runs low, walking to the
+	 * nearest shore in sense range outranks grazing, breeding and hunting — a
+	 * genuinely parched body has no other business. At the water it simply
+	 * stands and sips (the body drinks by adjacency); the override releases as
+	 * soon as the tank is comfortably refilled. Out of sense range of any water
+	 * it roams, which doubles as searching. Returns true when it ran this tick.
+	 */
+	private boolean thirstOverride() {
+		if (!metabolic || hydration >= THIRST_THRESHOLD) {
+			return false;
+		}
+		setAction("thirst", false);
+		if (nearWater()) {
+			settleOnPatch(); // stay put and drink; drift off tile intersections
+			return true;
+		}
+		double dir = waterDirection(WATER_SENSE_R);
+		if (Double.isNaN(dir)) {
+			roam(speed, turn); // no shore in known range: search
+		} else {
+			move(speed, dir);
+		}
+		return true;
+	}
+
+	/** Distance to the nearest water/shallows tile within {@code r} tiles, or
+	 *  MAX_VALUE when none is in range. O(1): reads the world's water field. */
+	private double waterDistance(int r) {
+		int packed = getWorld().nearestWaterTile(X, Y, Z);
+		if (packed < 0) {
+			return Double.MAX_VALUE;
+		}
+		double d = Math.hypot((packed >> 16) + 0.5 - X, (packed & 0xFFFF) + 0.5 - Y);
+		return d <= r ? d : Double.MAX_VALUE;
+	}
+
+	/** Bearing to the nearest water/shallows tile within {@code r} tiles, or
+	 *  NaN when none is in range. O(1): reads the world's water field. */
+	private double waterDirection(int r) {
+		int packed = getWorld().nearestWaterTile(X, Y, Z);
+		if (packed < 0) {
+			return Double.NaN;
+		}
+		double dx = (packed >> 16) + 0.5 - X, dy = (packed & 0xFFFF) + 0.5 - Y;
+		return Math.hypot(dx, dy) <= r ? Math.atan2(dy, dx) : Double.NaN;
 	}
 
 	/**
@@ -1093,6 +1168,20 @@ public class TestNPC extends NPC {
 		} else {
 			s[AgentIO.S_FIXTURE_PROX] = 0;
 			s[AgentIO.S_FIXTURE_BEARING] = 0;
+		}
+
+		// The water channel: thirst level, and the nearest drinkable shore. The
+		// body reads the tile map (water is terrain, not an entity); the mind
+		// reads these three numbers -- "when dry, steer to water" is then a
+		// two-instruction reflex away.
+		s[AgentIO.S_THIRST] = 1.0 - hydration;
+		double wDir = waterDirection(WATER_SENSE_R);
+		if (!Double.isNaN(wDir)) {
+			s[AgentIO.S_WATER_PROX] = 1.0 / (1.0 + waterDistance(WATER_SENSE_R));
+			s[AgentIO.S_WATER_BEARING] = wrap(wDir - D) / Math.PI;
+		} else {
+			s[AgentIO.S_WATER_PROX] = 0;
+			s[AgentIO.S_WATER_BEARING] = 0;
 		}
 		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
 		// What kind of ground to look for is the mind's standing choice, read before
@@ -1590,6 +1679,10 @@ public class TestNPC extends NPC {
 		case AgentIO.SEEK_FIXTURE:
 			prox = AgentIO.S_FIXTURE_PROX;
 			bearing = AgentIO.S_FIXTURE_BEARING;
+			break;
+		case AgentIO.SEEK_WATER:
+			prox = AgentIO.S_WATER_PROX;
+			bearing = AgentIO.S_WATER_BEARING;
 			break;
 		default:
 			return Double.NaN;
@@ -2153,6 +2246,7 @@ public class TestNPC extends NPC {
 				// At (or in) the nest: reinforce the mark and breed here.
 				depositPheromone(NEST_DEPOSIT);
 				tryReproduce();
+				net.hedinger.prototype.entities.Nest.claimAt(getWorld(), X, Y, Z);
 				homing = false;
 			} else {
 				move(speed, home); // walk home up the pheromone gradient
@@ -2348,7 +2442,11 @@ public class TestNPC extends NPC {
 		if (behavior == Behavior.PREDATOR) {
 			return "predator";
 		}
-		return behavior == Behavior.BREEDER ? "prey" : "";
+		// Nesters are prey like any other herbivore: hunted by predators,
+		// counted and trimmed by the steward. Leaving them roleless made them
+		// invisible to every population check — an unhunted, uncapped lineage
+		// that exploded exponentially the moment the demo seeded some.
+		return behavior == Behavior.BREEDER || behavior == Behavior.NEST ? "prey" : "";
 	}
 
 	@Override

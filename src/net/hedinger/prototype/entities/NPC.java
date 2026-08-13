@@ -437,7 +437,90 @@ public abstract class NPC extends Entity {
 				energy = 0;
 				kill(); // starved
 			}
+
+			// Water economy (WORLDGEN-RESEARCH.md: water as a need). Hydration
+			// drains slower than the energy tank, refills by simply being at
+			// water — a body adjacent to any water or shallows sips as it goes
+			// about its business, no dedicated act required — and an empty tank
+			// wears health down instead of killing outright, so a parched
+			// creature has a real (but closing) window to reach a shore.
+			hydration -= HYDRATION_DRAIN;
+			if (hydration < 1.0 && nearWater()) {
+				hydration = Math.min(1.0, hydration + DRINK_RATE);
+			}
+			if (hydration <= 0) {
+				hydration = 0;
+				if (age % 8 == 0) {
+					damage(1); // dehydration: a slow decline, not a switch
+				}
+			}
 		}
+	}
+
+	// --- thirst -------------------------------------------------------------
+	/** Ticks a full hydration tank lasts unaided (~4.5 min at 33 t/s) — longer
+	 *  than the energy tank, so water is a rhythm, not a treadmill. */
+	protected static final double HYDRATION_DRAIN = 1.0 / 9000;
+	/** Refill per tick while at water: a short stop at a shore tops up. */
+	protected static final double DRINK_RATE = 0.01;
+
+	/** Water reserve, 0..1. Only metabolic creatures track it. */
+	protected double hydration = 1.0;
+
+	public double getHydration() {
+		return hydration;
+	}
+
+	/** Whether this body is standing at (or right beside) drinkable water:
+	 *  any water or shallows tile in the 3x3 around its feet. */
+	public boolean nearWater() {
+		if (getWorld() == null) {
+			return false;
+		}
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dy = -1; dy <= 1; dy++) {
+				if (!getWorld().isValid(X + dx, Y + dy, Z)) {
+					continue;
+				}
+				var t = getWorld().getTile(X + dx, Y + dy, Z).getType();
+				if (t == net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER
+						|| t == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHALLOWS) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Fertility a reference-size corpse returns to the tile it rotted on
+	 *  (neighbours get a fraction). Sized so a kill site visibly greens up
+	 *  over a few generations without one death making a jungle. */
+	private static final double ROT_FERTILITY = 0.10;
+
+	@Override
+	protected void onCorpseExpired() {
+		// Nutrient closure (WORLDGEN-RESEARCH.md): a body that rots where it
+		// fell feeds the ground. The bump scales with body mass and bleeds
+		// into the four neighbouring tiles, so death sites become meadows —
+		// grass feeds grazers feed predators feed grass. Items are inanimate
+		// and return nothing.
+		if (this instanceof Item) {
+			return;
+		}
+		double bump = ROT_FERTILITY * bodyMass();
+		enrich(X, Y, Z, bump);
+		enrich(X + 1, Y, Z, bump * 0.4);
+		enrich(X - 1, Y, Z, bump * 0.4);
+		enrich(X, Y + 1, Z, bump * 0.4);
+		enrich(X, Y - 1, Z, bump * 0.4);
+	}
+
+	private void enrich(double x, double y, double z, double amount) {
+		if (getWorld() == null || !getWorld().isValid(x, y, z)) {
+			return;
+		}
+		var t = getWorld().getTile(x, y, z);
+		t.setFertility(Math.min(1.0, t.getFertility() + amount));
 	}
 
 	// ---- render-layer accessors -------------------------------------------

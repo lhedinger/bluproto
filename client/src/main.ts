@@ -400,6 +400,7 @@ function renderInspectDebug(d: Record<string, any>): void {
   status.push(row('age', d.age));
   status.push(row('health', d.health));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  if ('hydration' in d) status.push(bar('water', Number(d.hydration).toFixed(2), Math.max(0, Math.min(1, d.hydration))));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
   if (d.flying) fl.push('flying');
@@ -414,6 +415,7 @@ function renderInspectDebug(d: Record<string, any>): void {
   if ('pressed' in d) status.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) status.push(row('wired to', `#${d.wiredTo}`));
   if ('strength' in d) status.push(row('strength', d.strength));
+  if ('broods' in d) status.push(row('broods', d.broods));
   const sections = [group('identity', identity), group('status', status)];
   const gm = d.genome;
   if (gm) {

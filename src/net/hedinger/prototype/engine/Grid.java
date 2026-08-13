@@ -77,7 +77,8 @@ public class Grid {
 		// Structural furniture first, under the haze and the bodies: switch
 		// wiring lowest (a door leaf may slide over its conduit), then doors.
 		for (Entity e : world.entities.values()) {
-			if (e instanceof net.hedinger.prototype.entities.Switch && e.getLvl() == level) {
+			if ((e instanceof net.hedinger.prototype.entities.Switch
+					|| e instanceof net.hedinger.prototype.entities.Nest) && e.getLvl() == level) {
 				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}
 		}
@@ -96,6 +97,7 @@ public class Grid {
 			if (e != null && !(e instanceof PheromoneCloud)
 					&& !(e instanceof net.hedinger.prototype.entities.Door)
 					&& !(e instanceof net.hedinger.prototype.entities.Switch)
+				&& !(e instanceof net.hedinger.prototype.entities.Nest)
 					&& e.getLvl() == level) {
 				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
 			}

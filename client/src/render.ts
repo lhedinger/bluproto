@@ -153,7 +153,7 @@ export function render(
   // Painter's order: haze, then dead, then items, then living creatures.
   const order = (t: Track): number =>
     t.curr.kind === 'phero' ? 0
-      : t.curr.kind.startsWith('switch.') ? 1 // wiring lowest: door leaves slide over it
+      : t.curr.kind.startsWith('switch.') || t.curr.kind === 'nest' ? 1 // floor fixtures lowest
       : t.curr.kind.startsWith('door.') ? 2
       : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
   const tracks = [...state.tracks.values()].sort((a, b) => order(a) - order(b));
@@ -203,6 +203,11 @@ export function render(
       g.strokeStyle = 'rgba(0,229,255,0.55)';
       g.lineWidth = Math.max(1, cam.scale * 0.02);
       g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(cs.x, cs.y); g.stroke();
+    }
+
+    if (e.kind === 'nest') {
+      drawNest(g, s.x, s.y, cam.scale);
+      continue;
     }
 
     if (e.kind.startsWith('item.')) {
@@ -523,6 +528,22 @@ export function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityStat
       }
     }
   }
+}
+
+/** A nest: a woven twig ring with a shaded hollow — a brood site made solid.
+ *  Drawn under the bodies, so a brooding nester stands IN its nest. */
+export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
+  const r = Math.max(4, sc * 0.3);
+  g.fillStyle = 'rgba(20,14,8,0.35)';
+  g.beginPath(); g.arc(x, y, r * 0.85, 0, 7); g.fill();
+  g.strokeStyle = '#574024';
+  g.lineWidth = Math.max(2, sc * 0.11);
+  g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
+  g.strokeStyle = '#8a6a3c'; // straw wisps woven through the rim
+  g.lineWidth = Math.max(1, sc * 0.045);
+  g.setLineDash([sc * 0.09, sc * 0.07]);
+  g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
+  g.setLineDash([]);
 }
 
 export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
