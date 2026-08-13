@@ -961,7 +961,7 @@ public final class Worlds {
 		}
 		if (sites.isEmpty()) {
 			sites.add(new int[] { Math.min(cols - 5, Math.max(3, cols / 2)),
-					Math.min(rows - 3, Math.max(2, rows / 2)) });
+					Math.min(rows - 4, Math.max(2, rows / 2)) });
 		}
 
 		// 4. Carve a station at each site, then link the cave landings.
@@ -988,8 +988,9 @@ public final class Worlds {
 		double bestD = Double.MAX_VALUE;
 		for (int[] p : members) {
 			int sx = p[0], sy = p[1];
-			// linkStation touches sx-2..sx+3 (apron + up-ramp wall) and sy-1..sy+1.
-			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 3) {
+			// linkStation touches sx-2..sx+3 (apron + up-ramp wall) and sy-1..sy+2
+			// (the ramp run is two rows wide).
+			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 4) {
 				continue;
 			}
 			double d = (sx - gx) * (double) (sx - gx) + (sy - gy) * (double) (sy - gy);
@@ -1027,7 +1028,7 @@ public final class Worlds {
 		double bestD = Double.MAX_VALUE;
 		for (int[] p : members) {
 			int sx = p[0], sy = p[1];
-			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 3) {
+			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 4) {
 				continue;
 			}
 			boolean crowded = false;
@@ -1143,7 +1144,10 @@ public final class Worlds {
 	 * down. A HOLE is not a route at all, just a pit that drops whatever stands on
 	 * it — kept here because a second way down costs nothing.
 	 *
-	 * <p>Laid out along one row at {@code (sx,sy)}:
+	 * <p>Laid out along two adjacent rows at {@code (sx, sy)} and {@code (sx,
+	 * sy+1)} — the ramps run east-west as the engine's movement rules require,
+	 * and the run is two tiles wide so bodies pass each other on it instead of
+	 * queueing on a one-tile thread. Per row:
 	 * <ul>
 	 *   <li><b>Down</b> — on the surface, a RAMPDOWN whose foot faces west onto the
 	 *       cave floor carved below, with a HOLE beside it that falls to the same
@@ -1154,23 +1158,29 @@ public final class Worlds {
 	 * </ul>
 	 */
 	private static void linkStation(World w, int sx, int sy) {
-		// A small open patch on both levels so creatures can reach the link.
+		// A small open patch on both levels so creatures can reach the link; the
+		// two-row ramp run needs the apron to cover both rows.
 		carveFloor(w, sx, sy, SURFACE_Z);
+		carveFloor(w, sx, sy + 1, SURFACE_Z);
 		carveFloor(w, sx, sy, CAVE_Z);
+		carveFloor(w, sx, sy + 1, CAVE_Z);
 
-		// Down: ramp on the surface descending west, with a hole beside it; the cave
-		// floor below (sx, sy) is what both routes land on.
-		w.setTile(sx, sy, SURFACE_Z, Tile.TileType.TYPE_HOLE);
-		w.setTile(sx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
-		w.setTile(sx, sy, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
-		w.getTile(sx, sy, CAVE_Z).setFertility(0);
+		for (int r = 0; r <= 1; r++) {
+			int y = sy + r;
+			// Down: ramp on the surface descending west, with a hole beside it; the
+			// cave floor below (sx, y) is what both routes land on.
+			w.setTile(sx, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+			w.setTile(sx + 1, y, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
+			w.setTile(sx, y, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
+			w.getTile(sx, y, CAVE_Z).setFertility(0);
 
-		// Up: ramp in the cave climbing east onto the surface floor carved above it.
-		int rx = sx + 2;
-		w.setTile(rx, sy, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
-		w.setTile(rx + 1, sy, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
-		w.setTile(rx + 1, sy, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
-		w.getTile(rx + 1, sy, SURFACE_Z).setFertility(0.7);
+			// Up: ramp in the cave climbing east onto the surface floor carved above.
+			int rx = sx + 2;
+			w.setTile(rx, y, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(rx + 1, y, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
+			w.setTile(rx + 1, y, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
+			w.getTile(rx + 1, y, SURFACE_Z).setFertility(0.7);
+		}
 	}
 
 	/** Clears a 5x3 patch of walkable floor around a tile (a link landing/apron),
@@ -1187,6 +1197,21 @@ public final class Worlds {
 				w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
 			}
 		}
+	}
+
+	/** A random open cave tile, for seeding the underground cohort onto stone or
+	 *  fungus — never into rock, and never onto a pit or shaft (a drop on the
+	 *  lowest level is bottomless, and a founder should not spawn into the void). */
+	private static double[] caveSpot(World w) {
+		for (int tries = 0; tries < 60; tries++) {
+			double x = 2 + Utils.random() * (w.getColums() - 4);
+			double y = 2 + Utils.random() * (w.getRows() - 4);
+			Tile t = w.getTile(x, y, CAVE_Z);
+			if (t.isWalkable() && !t.isDrop()) {
+				return new double[] { x, y };
+			}
+		}
+		return new double[] { w.getColums() / 2.0, w.getRows() / 2.0 };
 	}
 
 	/** A random open (walkable) surface tile, for scattering founders and items
@@ -1250,6 +1275,16 @@ public final class Worlds {
 			double[] p = openSpot(w);
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]));
 		}
+		// The underground gets its own minded seed group — separate founder
+		// lineages, so cave life starts as its own experiment. Fungus beds feed
+		// them, and the cave's fixtures (the buried base's plates and buttons)
+		// are theirs to discover.
+		int nCaveMinded = Math.max(3, sc(3, scale));
+		net.hedinger.prototype.entities.Genome[] caveMinded = mindedSpecies(nCaveMinded);
+		for (int i = 0; i < nCaveMinded; i++) {
+			double[] p = caveSpot(w);
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]));
+		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < sc(10, scale); i++) {
@@ -1272,7 +1307,7 @@ public final class Worlds {
 		// minded cap in particular is generous — predators hunt minded creatures
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
-		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z,
+		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
 				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
 				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
 				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for

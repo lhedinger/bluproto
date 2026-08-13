@@ -36,17 +36,26 @@ public final class WorldSteward extends Entity {
 	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
+	private final int caveZ; // the underground level, or -1 for a one-level world
 	private int n = 0; // rotates species / placement, deterministically
+	private boolean seedBelow = false; // alternates minded reseeds between the levels
 
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
 	private static final int ECO_DEATHSPAN = 90;
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
+		this(w, preySpecies, predSpecies, surfaceZ, -1, preyBounds, predBounds,
+				mindedFloor, mindedMax);
+	}
+
+	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
 		this.surfaceZ = surfaceZ;
+		this.caveZ = caveZ;
 		this.preySpecies = preySpecies;
 		this.predSpecies = predSpecies;
 		this.preyBounds = preyBounds;
@@ -132,23 +141,30 @@ public final class WorldSteward extends Entity {
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Spawns one minded creature at a random open surface tile. Under survivor-
-	 *  seeding it descends from the longest-lived minded creature currently alive
-	 *  (a mutated child, inheriting its brain); only a wiped-out cohort falls back
-	 *  to a fresh random lineage. */
+	/** Spawns one minded creature at a random open tile. Reseeds alternate
+	 *  between the surface and the underground (when the world has one), so the
+	 *  cave cohort persists instead of draining one-way to the surface. Under
+	 *  survivor-seeding the newcomer descends from the longest-lived minded
+	 *  creature currently alive (a mutated child, inheriting its brain); only a
+	 *  wiped-out cohort falls back to a fresh random lineage. */
 	private void seedMinded() {
 		Genome g = Worlds.mindedReseedGenome(getWorld());
+		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
+		seedBelow = !seedBelow;
 		double x = cols / 2.0, y = rows / 2.0;
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);
 			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
+			var t = getWorld().getTile(px, py, z);
+			// Underground, never onto a drop: pits on the lowest level are
+			// bottomless, and a reseed into the void is a wasted creature.
+			if (t.isWalkable() && !(z != surfaceZ && t.isDrop())) {
 				x = px;
 				y = py;
 				break;
 			}
 		}
-		getWorld().spawnEntity(TestNPC.mindedForager(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
+		getWorld().spawnEntity(TestNPC.mindedForager(x, y, z, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Removes up to {@code count} minded creatures (iteration order) -- the ceiling
