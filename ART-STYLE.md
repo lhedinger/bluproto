@@ -121,6 +121,12 @@ One sun, straight overhead-north. The grammar:
   colours; wiring is shown (lamp trails), not implied.
 - **Items** are compact glyphs with a shadow, a body, and one readable
   identity feature (leaf, braces, spikes).
+- **Authored beats computed.** Small fixtures and glyphs are hand-drawn
+  stamps (a string-array sprite in the painter), not geometry rasterised by
+  distance tests — a computed ring of blocks is on-lattice and ramp-coloured
+  and *still* reads as lumpy math, because pixel art is symmetric runs and a
+  deliberate outline. Procedural texture is for *fields* (ground, patterns);
+  discrete objects get drawn.
 
 ## 6. The two renderers
 
