@@ -8,7 +8,7 @@
 import { CELL, atlasFor, corpseFor, rimFor } from './atlas';
 import type { Camera } from './camera';
 import type { EntityState } from './protocol';
-import { drawDoor, drawItem, drawSwitch } from './render';
+import { drawDoor, drawItem, drawNest, drawSwitch } from './render';
 
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
@@ -174,6 +174,15 @@ for (const mode of ['plate', 'button']) {
     drawItem(g, 'item.food', 1 * S, 1 * S, r, '#C8402E');
     drawItem(g, 'item.crate', 3 * S, 1 * S, r * 1.6, '#9C6B3C');
     drawItem(g, 'item.hazard', 5 * S, 1 * S, r * 1.3, '#7A2E8A');
+  });
+}
+
+{
+  const S = 56;
+  pair(furniture, '/sprites/nest.png', 160, 'nest (brood site)', 3 * S, 3 * S, (g) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, 3 * S, 3 * S);
+    drawNest(g, 1.5 * S, 1.5 * S, S);
   });
 }
 

@@ -120,6 +120,7 @@ final class SpriteCatalog {
 		switchScene("switch_plate", Switch.PLATE);
 		switchScene("switch_button", Switch.BUTTON);
 		items();
+		nest();
 		pheromone();
 	}
 
@@ -257,6 +258,20 @@ final class SpriteCatalog {
 		int ts = ResourceManager.tileSize;
 		add("items.png", png(img.getSubimage(ts, ts, 7 * ts, 3 * ts)),
 				"food · crate · hazard", 224);
+	}
+
+	/** A brood nest on open grass — the woven twig ring births claim. */
+	private void nest() {
+		World w = stage(5, 5);
+		w.alignTiles();
+		for (int i = 0; i < 3; i++) {
+			net.hedinger.prototype.entities.Nest.claimAt(w, 2.5, 2.5, 0);
+		}
+		w.think();
+		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
+		int ts = ResourceManager.tileSize;
+		add("nest.png", png(img.getSubimage(ts, ts, 3 * ts, 3 * ts)),
+				"nest (brood site)", 160);
 	}
 
 	/** A pheromone deposit evaporating: the stipple haze thinning away. */

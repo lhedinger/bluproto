@@ -530,20 +530,33 @@ export function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityStat
   }
 }
 
-/** A nest: a woven twig ring with a shaded hollow — a brood site made solid.
- *  Drawn under the bodies, so a brooding nester stands IN its nest. */
+/** A nest per ART-STYLE.md: a woven ring of twig art-pixel blocks (no smooth
+ *  curves in world art), mud-ramp tones with the rare straw wisp, north arc
+ *  lit / south arc sunk, and a blocky translucent hollow. Mirrors the Java
+ *  NestPainter so /sprites shows the two pipelines agreeing. */
 export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
-  const r = Math.max(4, sc * 0.3);
-  g.fillStyle = 'rgba(20,14,8,0.35)';
-  g.beginPath(); g.arc(x, y, r * 0.85, 0, 7); g.fill();
-  g.strokeStyle = '#574024';
-  g.lineWidth = Math.max(2, sc * 0.11);
-  g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
-  g.strokeStyle = '#8a6a3c'; // straw wisps woven through the rim
-  g.lineWidth = Math.max(1, sc * 0.045);
-  g.setLineDash([sc * 0.09, sc * 0.07]);
-  g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
-  g.setLineDash([]);
+  const p = Math.max(1, sc / 12); // one art-pixel on screen
+  for (let dy = -5; dy <= 5; dy++) {
+    for (let dx = -5; dx <= 5; dx++) {
+      const rr = Math.hypot(dx, dy);
+      if (rr > 4.6) continue;
+      const bx = x + dx * p, by = y + dy * p;
+      if (rr <= 2.6) {
+        g.fillStyle = 'rgba(20,14,8,0.35)'; // the hollow: blocky, tinting
+        g.fillRect(bx, by, p + 0.5, p + 0.5);
+        continue;
+      }
+      // Hash-varied twig shades, deterministic per cell; lit north, sunk south.
+      let h = ((dx * 374761393 + dy * 668265263) >>> 0);
+      h = (((h ^ (h >>> 13)) * 1274126177) >>> 0) >>> 16;
+      const t = (h & 0xff) / 255;
+      let c = t > 0.93 ? '#8a6a3c' : t > 0.5 ? '#574024' : '#38291a';
+      if (dy <= -3) c = t > 0.93 ? '#8a6a3c' : '#775a38';
+      else if (dy >= 3) c = '#38291a';
+      g.fillStyle = c;
+      g.fillRect(bx, by, p + 0.5, p + 0.5);
+    }
+  }
 }
 
 export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
