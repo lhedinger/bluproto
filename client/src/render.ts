@@ -530,31 +530,41 @@ export function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityStat
   }
 }
 
-/** A nest per ART-STYLE.md: a woven ring of twig art-pixel blocks (no smooth
- *  curves in world art), mud-ramp tones with the rare straw wisp, north arc
- *  lit / south arc sunk, and a blocky translucent hollow. Mirrors the Java
- *  NestPainter so /sprites shows the two pipelines agreeing. */
+/** The nest stamp, 11x9 art-pixels — hand-authored pixel art, identical to
+ *  the Java NestPainter's STAMP so /sprites shows the pipelines agreeing.
+ *  H/M/D are the mud ramp's twig tones, S the rare straw accent, o the
+ *  blocky translucent hollow. */
+const NEST_STAMP = [
+  '...HHSHH...',
+  '..HHMMMHH..',
+  '.MMoooooMM.',
+  '.MSoooooMM.',
+  '.MMoooooMD.',
+  '.MMoooooDD.',
+  '.DMoooooDD.',
+  '..DDMMMDD..',
+  '...DDDDD...',
+];
+const NEST_SHADES: Record<string, string> = {
+  H: '#775a38', M: '#574024', D: '#38291a', S: '#8a6a3c', o: 'rgba(20,14,8,0.35)',
+};
+
+/** A nest: the authored stamp scaled to one art-pixel per cell — drawn
+ *  sprite-style, no computed geometry, no smooth curves (ART-STYLE.md). */
 export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
   const p = Math.max(1, sc / 12); // one art-pixel on screen
-  for (let dy = -5; dy <= 5; dy++) {
-    for (let dx = -5; dx <= 5; dx++) {
-      const rr = Math.hypot(dx, dy);
-      if (rr > 4.6) continue;
-      const bx = x + dx * p, by = y + dy * p;
-      if (rr <= 2.6) {
-        g.fillStyle = 'rgba(20,14,8,0.35)'; // the hollow: blocky, tinting
-        g.fillRect(bx, by, p + 0.5, p + 0.5);
-        continue;
-      }
-      // Hash-varied twig shades, deterministic per cell; lit north, sunk south.
-      let h = ((dx * 374761393 + dy * 668265263) >>> 0);
-      h = (((h ^ (h >>> 13)) * 1274126177) >>> 0) >>> 16;
-      const t = (h & 0xff) / 255;
-      let c = t > 0.93 ? '#8a6a3c' : t > 0.5 ? '#574024' : '#38291a';
-      if (dy <= -3) c = t > 0.93 ? '#8a6a3c' : '#775a38';
-      else if (dy >= 3) c = '#38291a';
+  const x0 = x - (NEST_STAMP[0].length / 2) * p;
+  const y0 = y - (NEST_STAMP.length / 2) * p;
+  for (let row = 0; row < NEST_STAMP.length; row++) {
+    for (let col = 0; col < NEST_STAMP[row].length; col++) {
+      const c = NEST_SHADES[NEST_STAMP[row][col]];
+      if (!c) continue;
+      // Edge-exact blocks: the translucent hollow must tile without overlap,
+      // or the double-tinted seams read as grid lines.
+      const rx = Math.round(x0 + col * p), ry = Math.round(y0 + row * p);
       g.fillStyle = c;
-      g.fillRect(bx, by, p + 0.5, p + 0.5);
+      g.fillRect(rx, ry, Math.round(x0 + (col + 1) * p) - rx,
+        Math.round(y0 + (row + 1) * p) - ry);
     }
   }
 }
