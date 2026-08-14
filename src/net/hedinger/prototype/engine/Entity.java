@@ -227,9 +227,19 @@ public abstract class Entity {
 		} else {
 			dZ = rampStep();
 			if (isColliding()) {
-				dX = 0;
-				dY = 0;
-				dZ = 0;
+				// A refused step used to cancel the whole vector, so a body moving
+				// at any angle into an obstacle lost the component that was never
+				// blocked -- it stopped dead against the edge rather than sliding
+				// past it. With no slide, whatever the mind was steering toward
+				// kept it pressed there, and "walked into the crystal and got
+				// stuck" was the visible result. Try each axis alone before
+				// giving the step up entirely.
+				double wantX = dX, wantY = dY;
+				if (!tryStep(wantX, 0) && !tryStep(0, wantY)) {
+					dX = 0;
+					dY = 0;
+					dZ = 0;
+				}
 			}
 		}
 
@@ -249,6 +259,22 @@ public abstract class Entity {
 		dX = 0;
 		dY = 0;
 		dZ = 0;
+	}
+
+	/**
+	 * Proposes {@code (sx, sy)} as this tick's step and reports whether the engine
+	 * allows it. The step vector is left set to whatever was tried, so a caller
+	 * that gets {@code true} can simply stop -- the accepted move is already in
+	 * place, level change included.
+	 */
+	private boolean tryStep(double sx, double sy) {
+		if (sx == 0 && sy == 0) {
+			return false; // standing still is not a way past an obstacle
+		}
+		dX = sx;
+		dY = sy;
+		dZ = rampStep(); // the level turnover depends on dX, so re-read it
+		return !isColliding();
 	}
 
 	private boolean isOverHole() {
@@ -302,11 +328,21 @@ public abstract class Entity {
 		if (!world.isConnectedSpace(X, Y, Z, X + dX, Y + dY, Z + dZ)) {
 			return true;
 		}
+		// Clearance gates keep an oversized body OUT; they must never seal one
+		// IN. Bodies grow into their adult size, so one can enter a duct or a
+		// bed as a juvenile and cross the clearance while inside. Gating on the
+		// way out too left it permanently immobile -- inside a bed a step is
+		// capped well below the half-tile needed to leave, so every escape route
+		// was refused and the body never moved again. A body already standing on
+		// the restricted ground is on its way out and is let past.
+		Tile here = world.getTile(X, Y, Z);
+
 		// A crawl duct only admits small bodies -- ground or flying, a frame
 		// wider than the duct's clearance stops at the grille.
 		Tile duct = world.getTile(X + dX, Y + dY, Z + dZ);
 		if (duct != null && duct.getType() == Tile.TileType.TYPE_DUCT
-				&& getPixelSize() > Tile.DUCT_CLEARANCE) {
+				&& getPixelSize() > Tile.DUCT_CLEARANCE
+				&& (here == null || here.getType() != Tile.TileType.TYPE_DUCT)) {
 			return true;
 		}
 		// Water is impassable to land entities; flyers skim over it.
@@ -319,7 +355,8 @@ public abstract class Entity {
 			// a bigger frame is stopped at the bed's edge. Flyers skim over
 			// -- unlike a duct, the bed is open to the air.
 			if (dest != null && dest.getType() == Tile.TileType.TYPE_CRYSTAL_BED
-					&& getPixelSize() > Tile.CRYSTAL_CLEARANCE) {
+					&& getPixelSize() > Tile.CRYSTAL_CLEARANCE
+					&& (here == null || here.getType() != Tile.TileType.TYPE_CRYSTAL_BED)) {
 				return true;
 			}
 		}
