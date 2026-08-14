@@ -139,7 +139,43 @@ colours over invented ones, dither over alpha washes. `/sprites` renders both
 pipelines side by side precisely so drift between them is visible; treat a
 divergence there as a bug report.
 
-## 7. Conformance checklist
+## 7. Case law — how these rules were learned
+
+Every rule above that reads like an opinion was paid for by a visual bug.
+The precedents, so nobody pays twice:
+
+- **The depletion wash** — grazing depletion was first drawn as a translucent
+  brown alpha wash in 3×3-art-pixel blocks, Bayer-indexed per tile. Three
+  violations in one: invented in-between colours, cells coarser than the art
+  grid, and a dither out of phase with the bake's own. The lasting lesson went
+  further than fixing the overlay: *a state is another bake, not a tint* — the
+  server now bakes a fully-grazed twin and the client dithers between the two
+  bakes per art-pixel, so every pixel shown is one the renderer authored.
+- **The corpse grey square** — the client's corpse bake filled the whole atlas
+  cell with grey in `'saturation'` mode, assuming the blend would clip to the
+  sprite. Blend modes composite source-over: everywhere the cell was
+  transparent turned opaque grey, and every corpse stamped a grey tile.
+  Rule: blend modes are not clips — re-clip to the silhouette
+  (`destination-in`) after any whole-canvas pass. Corollary: `/sprites` exists
+  so a bug like this is on display the day it ships.
+- **The smooth nest ring** — the first client nest was stroked, dashed arcs;
+  the Java hollow a `fillOval`; the ring blocks art-pixel-*sized* but placed
+  off-lattice by continuous angles; the raised ring unshaded. Four checklist
+  failures in one fixture — the checklist works, walk it.
+- **The computed nest ring** — the second attempt rasterised a distance-tested
+  ring of lattice blocks: on-grid, ramp-coloured, and still lumpy math.
+  That is where "authored beats computed" (§5) comes from: procedural
+  belongs to fields, discrete objects are drawn stamps.
+- **The overlap seams** — the stamp's translucent hollow cells were sized
+  `ceil(step)` on fractional spacing, so neighbours overlapped and the
+  double-tinted overlaps read as grid lines. Rule: translucent cells tile
+  **edge-exact** — each block's extent computed from its neighbour's rounded
+  edge, never a rounded-up box.
+- **The straw at one-in-five** — the first nest ring hash-gated its straw
+  accent at ~20% of ring pixels, and the accent started reading as texture.
+  Accents are rare or they are ramp colours (§2); the stamp keeps exactly two.
+
+## 8. Conformance checklist
 
 Before a new visual merges, ask:
 
