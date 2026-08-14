@@ -1243,6 +1243,76 @@ public class SimTests {
 	}
 
 	/**
+	 * A body refused a step keeps whatever part of it was never blocked, so it
+	 * slides along an obstacle instead of stopping dead against it. Without
+	 * this, a creature steering diagonally into a wall lost its parallel
+	 * motion too and stood pressed there for as long as its mind kept aiming
+	 * that way -- which is what made a crystal bed look like flypaper.
+	 */
+	static class BlockedBodySlidesAlongAnObstacle extends Scenario {
+		@Override
+		public void run() {
+			seed(26);
+			World w = room(14, 8);
+			for (int y = 1; y <= 6; y++) {
+				w.setTile(8, y, 0, Tile.TileType.TYPE_WALL); // a wall to slide along
+			}
+			// Started already against the wall, heading north-east: the eastward
+			// half is blocked from the first tick, the northward half is open
+			// floor the whole way. Starting in contact is what makes this
+			// discriminating -- measured from further off, the diagonal approach
+			// alone would satisfy the northward assertion before anything was
+			// ever blocked.
+			TestNPC slider = TestNPC.mover(7.5, 5.5, 0, -Math.PI / 4);
+			w.spawnEntity(slider);
+			double startY = slider.getY();
+			w.think();
+			snapshot(w, "before (heading north-east into a wall)");
+			tick(w, 300);
+			snapshot(w, "after (pressed to the wall, still travelling north)");
+
+			assertLess("the wall still stops the eastward half", slider.getX(), 8.0);
+			assertGreater("but the northward half survives the block",
+					startY - slider.getY(), 2.0);
+		}
+	}
+
+	/**
+	 * A clearance gate keeps an oversized body out; it must never seal one in.
+	 * Bodies grow into their adult size, so one can walk into a crystal bed as
+	 * a juvenile and cross the clearance while inside -- and inside a bed the
+	 * drag caps a step well below the half-tile needed to leave, so gating the
+	 * way out as well left it immobile for good.
+	 */
+	static class GrownBodyEscapesTheBedItGrewInside extends Scenario {
+		@Override
+		public void run() {
+			seed(27);
+			World w = room(16, 6);
+			for (int x = 5; x <= 8; x++) {
+				for (int y = 1; y <= 4; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_CRYSTAL_BED);
+				}
+			}
+			TestNPC grower = TestNPC.mover(2.5, 2.5, 0, 0).withSize(10);
+			w.spawnEntity(grower);
+			tick(w, 200);
+			snapshot(w, "juvenile walked into the bed");
+			assertGreater("the juvenile got into the bed", grower.getX(), 5.0);
+
+			grower.withSize(17); // grew past the clearance while inside
+			grower.withHeading(Math.PI); // turn back the way it came
+			double trapped = grower.getX();
+			tick(w, 600);
+			snapshot(w, "grown body walked back out westward");
+
+			assertGreater("a body that outgrew the bed can still walk out",
+					trapped - grower.getX(), 1.0);
+			assertLess("and it is clear of the bed", grower.getX(), 5.0);
+		}
+	}
+
+	/**
 	 * A pressure-plate switch drives its wired door: a mover crossing the
 	 * plate parts the door ahead of it, walks through, and the door seals
 	 * again once the plate has gone quiet -- while an identical wired door
@@ -4549,6 +4619,8 @@ public class SimTests {
 				new MudSlowsMovement(),
 				new CrystalDensityTiers(),
 				new DuctAdmitsOnlySmallBodies(),
+				new BlockedBodySlidesAlongAnObstacle(),
+				new GrownBodyEscapesTheBedItGrewInside(),
 				new SwitchOpensWiredDoor(),
 				new ButtonNeedsIntent(),
 				new BrainInteractsWithButton(),
