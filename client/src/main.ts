@@ -41,25 +41,37 @@ let paused = false;
 // a long CDN/browser cache — so the url is tagged with the server build id to
 // bust that cache on every redeploy. Without this, a stale ground layer renders
 // under live entities: they appear to walk through walls that no longer exist.
-const chunkCache = new Map<string, HTMLImageElement>();
-function chunkImage(cx: number, cy: number, bare: boolean): HTMLImageElement {
+// Cached as CANVAS copies rather than the <img> elements themselves: blitting
+// from an <img> can pay a pixel-format conversion on EVERY drawImage (brutal
+// on software-rendered canvases), while a canvas source blits at memcpy speed.
+// One copy per chunk at decode time buys back every frame thereafter.
+const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
+function chunkImage(cx: number, cy: number, bare: boolean): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
   const name = bare ? `${cx}_${cy}_bare` : `${cx}_${cy}`;
   const key = `${v}/${currentLevel}/${name}`;
-  let img = chunkCache.get(key);
-  if (!img) {
-    img = new Image();
-    img.src = `/api/world/layers/${currentLevel}/${name}.png?v=${v}`;
-    chunkCache.set(key, img);
-  }
-  return img;
+  const hit = chunkCache.get(key);
+  if (hit !== undefined) return hit;
+  chunkCache.set(key, null); // mark in-flight so we fetch once
+  const img = new Image();
+  img.onload = () => {
+    const copy = document.createElement('canvas');
+    copy.width = img.naturalWidth;
+    copy.height = img.naturalHeight;
+    copy.getContext('2d')!.drawImage(img, 0, 0);
+    chunkCache.set(key, copy);
+  };
+  // On error the entry stays null: the chunk simply never draws (same as the
+  // old broken-<img> behaviour) rather than refetching every frame.
+  img.src = `/api/world/layers/${currentLevel}/${name}.png?v=${v}`;
+  return null;
 }
-function getChunk(cx: number, cy: number): HTMLImageElement {
+function getChunk(cx: number, cy: number): HTMLCanvasElement | null {
   return chunkImage(cx, cy, false);
 }
 // The fully-grazed twin bake: what this chunk looks like with all vegetation
 // stripped. The renderer dithers depleted tiles toward it.
-function getBareChunk(cx: number, cy: number): HTMLImageElement {
+function getBareChunk(cx: number, cy: number): HTMLCanvasElement | null {
   return chunkImage(cx, cy, true);
 }
 

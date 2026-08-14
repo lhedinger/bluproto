@@ -226,7 +226,7 @@ const bakes = section('Atlas bakes — web client only',
   });
   if (!pheno) return;
   // atlasFor starts the fetch and returns null until loaded; poll until ready.
-  const atlas = await new Promise<HTMLImageElement>((resolve) => {
+  const atlas = await new Promise<HTMLCanvasElement>((resolve) => {
     const poll = () => { const a = atlasFor(pheno); a ? resolve(a) : setTimeout(poll, 100); };
     poll();
   });

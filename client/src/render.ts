@@ -45,6 +45,79 @@ function ditherMask(coverage16: number): HTMLCanvasElement {
 /** Scratch tile for compositing one bare-bake tile under a dither mask. */
 const SCRATCH = document.createElement('canvas');
 
+// The depletion layer: the whole level's grazing overlay composited ONCE per
+// vegetation update (the grid polls every ~1.5 s) into an offscreen canvas at
+// art-pixel resolution (12 px per tile), then blitted in a single drawImage
+// per frame. The naive per-frame path drew one scaled drawImage per depleted
+// tile — with a thriving ecosystem keeping ~1000 tiles grazed, that was
+// ~60k image draws a second and the fit view ran at one frame per second.
+// At 12 px/tile, one layer pixel is exactly one art-pixel: upscaled crisply
+// it matches the per-tile dither, downscaled with smoothing it resolves to
+// the same coverage the old far-zoom alpha path approximated.
+let deplLayer: HTMLCanvasElement | null = null;
+// Far-zoom mip of the layer (3 px per tile), rebuilt with it: one smooth
+// downscale per vegetation update instead of one per frame — a full-layer
+// smooth blit every frame is exactly the kind of work that melts a software
+// canvas (the desktop renderer keeps a downsized pyramid for the same reason).
+let deplLayerLow: HTMLCanvasElement | null = null;
+let deplSrc: Uint8Array | null = null; // the veg grid the layer was built from
+let deplLevel = -1;
+let deplMissing = 0; // bare chunks still streaming when last built
+let deplRetryAt = 0;
+const ART = 12;
+
+function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
+    getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    veg: Uint8Array, level: number, nowMs: number): HTMLCanvasElement | null {
+  const stale = veg !== deplSrc || level !== deplLevel
+    || (deplMissing > 0 && nowMs >= deplRetryAt);
+  if (!stale && deplLayer) return deplLayer;
+  if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
+    deplLayer = document.createElement('canvas');
+    deplLayer.width = meta.cols * ART;
+    deplLayer.height = meta.rows * ART;
+  }
+  const ctx = deplLayer.getContext('2d')!;
+  ctx.clearRect(0, 0, deplLayer.width, deplLayer.height);
+  ctx.imageSmoothingEnabled = false;
+  if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
+  const sg = SCRATCH.getContext('2d')!;
+  deplMissing = 0;
+  for (let ty = 0; ty < meta.rows; ty++) {
+    for (let tx = 0; tx < meta.cols; tx++) {
+      const lvl = veg[ty * meta.cols + tx];
+      if (lvl >= 100 || lvl === 255) continue; // lush or non-vegetated
+      const depl16 = Math.min(16, Math.round((100 - lvl) * 16 / 100));
+      if (depl16 <= 0) continue;
+      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+      const bare = getBareChunk(ccx, ccy);
+      if (!bare) { deplMissing++; continue; }
+      const sx = (tx - ccx * chunkTiles) * tilePx, sy = (ty - ccy * chunkTiles) * tilePx;
+      sg.clearRect(0, 0, tilePx, tilePx);
+      sg.drawImage(bare, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
+      sg.globalCompositeOperation = 'destination-in';
+      sg.imageSmoothingEnabled = false;
+      sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
+      sg.globalCompositeOperation = 'source-over';
+      ctx.drawImage(SCRATCH, 0, 0, tilePx, tilePx, tx * ART, ty * ART, ART, ART);
+    }
+  }
+  const LOW = 3;
+  if (!deplLayerLow || deplLayerLow.width !== meta.cols * LOW) {
+    deplLayerLow = document.createElement('canvas');
+    deplLayerLow.width = meta.cols * LOW;
+    deplLayerLow.height = meta.rows * LOW;
+  }
+  const lg = deplLayerLow.getContext('2d')!;
+  lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
+  lg.imageSmoothingEnabled = true;
+  lg.drawImage(deplLayer, 0, 0, deplLayerLow.width, deplLayerLow.height);
+  deplSrc = veg;
+  deplLevel = level;
+  deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
+  return deplLayer;
+}
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
@@ -52,8 +125,8 @@ export function render(
   meta: WorldMeta | null,
   chunkTiles: number,
   tilePx: number,
-  getChunk: (cx: number, cy: number) => HTMLImageElement,
-  getBareChunk: (cx: number, cy: number) => HTMLImageElement,
+  getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+  getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
   veg: Uint8Array | null,
   cover: Uint8Array | null,
   renderTime: number,
@@ -82,7 +155,7 @@ export function render(
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
         const img = getChunk(cx, cy); // lazily fetches + caches this chunk
-        if (!img.complete || !img.naturalWidth) continue;
+        if (!img) continue;
         const wx = cx * chunkTiles, wy = cy * chunkTiles;
         const cw = Math.min(chunkTiles, meta.cols - wx);
         const ch = Math.min(chunkTiles, meta.rows - wy);
@@ -92,46 +165,21 @@ export function render(
     }
   }
 
-  // Live grazing: a depleted tile dithers toward the fully-grazed twin bake
-  // (255 = non-vegetated, no overlay; 100 = lush, none; 0 = grazed bare, the
-  // bare bake shows whole). Per art-pixel, the Bayer mask decides which bake
-  // wins — so depletion literally erases grass motifs (and fungus glow) down
-  // to what the Java renderer draws for bare ground, never a tint the palette
-  // doesn't contain. Regrowth runs the same dither in reverse.
+  // Live grazing: the pre-composited depletion layer (see depletionLayer) —
+  // one drawImage per frame, whatever the herds have eaten. Crisp art-pixels
+  // when zoomed in; smoothing on the downscale resolves to coverage when the
+  // whole map is in view.
   if (veg && chunkTiles > 0 && tilePx > 0) {
-    const tl = cam.screenToWorld(0, 0);
-    const br = cam.screenToWorld(cv.width, cv.height);
-    const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
-    const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
-    if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
-    const sg = SCRATCH.getContext('2d')!;
-    for (let ty = y0; ty <= y1; ty++) {
-      for (let tx = x0; tx <= x1; tx++) {
-        const lvl = veg[ty * meta.cols + tx];
-        if (lvl >= 100 || lvl === 255) continue; // lush or non-vegetated: nothing
-        const depl16 = Math.min(16, Math.round((100 - lvl) * 16 / 100));
-        if (depl16 <= 0) continue;
-        const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-        const bare = getBareChunk(ccx, ccy);
-        if (!bare.complete || !bare.naturalWidth) continue; // still streaming in
-        const sx = (tx - ccx * chunkTiles) * tilePx, sy = (ty - ccy * chunkTiles) * tilePx;
-        const o = cam.worldToScreen(tx, ty);
-        if (cam.scale < 12) {
-          // Art-pixels are sub-pixel here; coverage as alpha is exactly what
-          // downscaling the dithered composite would resolve to.
-          g.globalAlpha = depl16 / 16;
-          g.drawImage(bare, sx, sy, tilePx, tilePx, o.x, o.y, cam.scale, cam.scale);
-          g.globalAlpha = 1;
-          continue;
-        }
-        sg.clearRect(0, 0, tilePx, tilePx);
-        sg.drawImage(bare, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
-        sg.globalCompositeOperation = 'destination-in';
-        sg.imageSmoothingEnabled = false; // mask cells stay crisp when upscaled
-        sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
-        sg.globalCompositeOperation = 'source-over';
-        g.drawImage(SCRATCH, 0, 0, tilePx, tilePx, o.x, o.y, cam.scale, cam.scale);
-      }
+    const layer = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
+    if (layer) {
+      const o = cam.worldToScreen(0, 0);
+      // Near zoom blits the art-pixel layer crisply; far zoom blits the small
+      // mip (already smoothed once at build time), so no frame ever pays for
+      // a full-resolution smooth downscale.
+      const src2 = cam.scale < ART && deplLayerLow ? deplLayerLow : layer;
+      g.imageSmoothingEnabled = cam.scale < ART;
+      g.drawImage(src2, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+      g.imageSmoothingEnabled = false;
     }
   }
 
