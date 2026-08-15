@@ -135,9 +135,18 @@ layers and creature atlases the web serves, and draws scenario captures.
 The web client repaints what it must live (furniture glyphs, overlays,
 corpse/rim bakes) in a deliberately simpler idiom — but that idiom follows
 the same rules where it counts: art-pixel blocks over smooth curves, ramp
-colours over invented ones, dither over alpha washes. `/sprites` renders both
-pipelines side by side precisely so drift between them is visible; treat a
-divergence there as a bug report.
+colours over invented ones, dither over alpha washes. Where the client
+overlays state onto the bake — grazing, concealment — it does not paint its
+own idea of the state: it **re-composites the bake's own pixels** (the bare
+twin through the dither mask; the cover tile's pixels through the ported gap
+mask), so every pixel shown is one the Java renderer authored.
+
+**`/sprites` is the catalog of record for the web view.** Everything the
+client draws into the world must have an entry there, rendered by the *same
+code path* the live view runs (the exported painters and compositors —
+`drawDoor`, `veilTile`, `ditherTile`, the atlas bakes), with the Java bake
+beside it wherever a Java twin exists. A client visual with no catalog entry
+is a review failure; a divergence visible on the page is a bug report.
 
 ## 7. Case law — how these rules were learned
 
@@ -174,6 +183,14 @@ The precedents, so nobody pays twice:
 - **The straw at one-in-five** — the first nest ring hash-gated its straw
   accent at ~20% of ring pixels, and the accent started reading as texture.
   Accents are rare or they are ramp colours (§2); the stamp keeps exactly two.
+- **The wash canopy** — the web client's thicket concealment was a translucent
+  green wash: three invented alpha tones blobbed over every cover tile, while
+  the Java pass re-stamps the tile's *own baked pixels* through a clustered
+  gap mask (invisible where nothing is beneath). Nobody noticed for months
+  because the canopy had no catalog entry. Two rules came out of it: a state
+  overlay re-composites the bake, never repaints it (§6) — and `/sprites` is
+  the catalog of record, so a client visual without an entry drawn by its own
+  live code path does not merge.
 
 ## 8. Conformance checklist
 

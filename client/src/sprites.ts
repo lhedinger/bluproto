@@ -1,14 +1,28 @@
 // The client half of the sprite catalog (/sprites): every entry here is drawn
-// by the SAME functions the live viewer uses — drawDoor/drawSwitch/drawItem
-// from render.ts, the corpse/rim bakes from atlas.ts — driven by scripted
-// state instead of the world stream. The server-baked (Java) counterpart of
-// each entry sits beside it as an <img>, so the two render pipelines can be
-// compared at a glance and any drift between them is immediately visible.
+// by the SAME functions the live viewer uses — drawDoor/drawSwitch/drawItem,
+// the veil and dither compositors, the overlay language from render.ts, the
+// corpse/rim/mip bakes from atlas.ts — driven by scripted state instead of
+// the world stream. The server-baked (Java) counterpart of each entry sits
+// beside it as an <img>, so the two render pipelines can be compared at a
+// glance and any drift between them is immediately visible.
+//
+// The catalog is NORMATIVE for the web view (ART-STYLE.md §6): everything the
+// client draws into the world must have an entry on this page rendered by the
+// same code path. A visual with no catalog entry is a review failure; a
+// reimplementation that merely imitates one is a bug waiting to drift.
 
-import { CELL, atlasFor, corpseFor, rimFor } from './atlas';
+import {
+  CELL, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor, mindedMipFor, rimFor,
+} from './atlas';
 import type { Camera } from './camera';
+import {
+  ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE, ACT_NEST,
+} from './protocol';
 import type { EntityState } from './protocol';
-import { drawDoor, drawItem, drawNest, drawSwitch } from './render';
+import {
+  ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
+  drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
+} from './render';
 
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
@@ -191,19 +205,74 @@ for (const mode of ['plate', 'button']) {
   pair(furniture, '/sprites/pheromone.gif', 224, 'pheromone cloud, evaporating', 4 * S, 4 * S, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 4 * S, 4 * S);
-    // The viewer's haze: a soft radial magenta breathing out as strength decays
-    // (the exact gradient render.ts draws for kind "phero").
+    // The viewer's haze, breathing out as strength decays — the same baked
+    // puff sprite render.ts blits for kind "phero".
     const decay = 1 - ((t % 8) / 8);
     const r = Math.max(2, (1.4 + 2.6 * decay) * S * 0.5);
-    const grad = g.createRadialGradient(2 * S, 2 * S, 0, 2 * S, 2 * S, r);
-    grad.addColorStop(0, 'rgba(230,40,190,0.20)');
-    grad.addColorStop(1, 'rgba(230,40,190,0)');
-    g.fillStyle = grad;
-    g.beginPath();
-    g.arc(2 * S, 2 * S, r, 0, 7);
-    g.fill();
+    g.imageSmoothingEnabled = true;
+    g.drawImage(pheroPuff(), 2 * S - r, 2 * S - r, r * 2, r * 2);
+    g.imageSmoothingEnabled = false;
   });
 }
+
+// ---- concealment: the veil over bodies in cover -------------------------
+
+/** Fetch an image into a canvas (null on failure), for catalog inputs. */
+function loadCanvas(src: string): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = img.naturalWidth;
+      cv.height = img.naturalHeight;
+      cv.getContext('2d')!.drawImage(img, 0, 0);
+      resolve(cv);
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+const conceal = webOnly
+  ? section('Concealment — web client',
+    'A body in cover is part-hidden by the tile\'s own re-stamped bake pixels — the '
+    + 'clustered canopy mask, stalk-exact reeds, the duct\'s ribbed lid — built by the '
+    + 'same veilTile/ductLidTile code the live view runs, over the server\'s ground bake.')
+  : section('Concealment — java bake vs web client',
+    'Left: the Java renderer\'s concealment pass over a staged scene. Right: the client\'s '
+    + 'veil code (the SAME hash-gated mask, ported bit for bit) re-stamping the identical '
+    + 'ground image over its own creature. The veils should agree pixel for pixel; the '
+    + 'bodies underneath differ by design (each pipeline stamps its own sample creature).');
+
+// ---- grazing depletion: the client's dither between the two bakes -------
+
+const depl = webOnly
+  ? section('Grazing depletion — web client',
+    'The live dither: the fully-grazed bake admitted through the Bayer mask, per '
+    + 'art-pixel, sweeping lush to bare — the exact compositing the world view runs.')
+  : section('Grazing depletion — java bake vs web client',
+    'Left: the Java bake grazed down frame by frame. Right: the client\'s own dither '
+    + 'compositing (ditherTile) sweeping between the served lush and bare endpoint bakes '
+    + '— the same code that draws live grazing.');
+
+(async () => {
+  const lush = await loadCanvas('/sprites/depletion_lush.png');
+  const bare = await loadCanvas('/sprites/depletion_bare.png');
+  if (!lush || !bare) return;
+  const ts = lush.width / 4; // the staged strip is 4x4 tiles
+  const D = 224, T = D / 4;
+  pair(depl, '/sprites/ground_grass_depletion.gif', 128, 'grass, grazed bare', D, D, (g, t) => {
+    g.imageSmoothingEnabled = false;
+    g.drawImage(lush, 0, 0, D, D);
+    const depl16 = Math.min(16, Math.floor(((t % 6) / 6) * 17));
+    if (depl16 <= 0) return;
+    for (let ty = 0; ty < 4; ty++) {
+      for (let tx = 0; tx < 4; tx++) {
+        ditherTile(g, bare, tx * ts, ty * ts, ts, tx * T, ty * T, T, T, depl16);
+      }
+    }
+  });
+})();
 
 // ---- web-only bakes: living body, corpse, minded rim --------------------
 
@@ -255,7 +324,99 @@ const bakes = section('Atlas bakes — web client only',
     }
     g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
   }), '<b>minded rim</b> (violet halo)', bakes);
+
+  // The far-zoom mips: what the world view actually stamps when the whole map
+  // is in view — quarter-size cells, smoothed once at bake time, the minded
+  // variant with its rim fused in (one draw per creature).
+  const M = CELL / MIP;
+  const mipStamp = (src: HTMLCanvasElement) => liveCanvas(D, D, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, D, D);
+    const dir = Math.floor((t / 1.2) % 8);
+    const anim = Math.floor((t * 6) % 8);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(src, anim * M, dir * M, M, M, 0, 0, D, D);
+  });
+  figure(mipStamp(atlasMipFor(pheno, atlas)), '<b>far-zoom mip</b> (quarter cell)', bakes);
+  figure(mipStamp(mindedMipFor(pheno, atlas)), '<b>minded mip</b> (rim fused)', bakes);
+  figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
+
+  // Concealment pairs: the client's veil code over the SAME staged ground the
+  // Java scene was baked from. The Java pass veils the 3x3 tiles around the
+  // occupant (tile 3,3 of the staged 7x7 world; the crop starts at tile 1,1),
+  // so the demo veils exactly those — the live view veils every foliage tile,
+  // which is equivalent because re-stamped pixels are invisible over the
+  // identical ground.
+  for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2]] as const) {
+    const ground = await loadCanvas(`/sprites/${name}_ground.png`);
+    if (!ground) continue;
+    const ts = ground.width / 5;
+    const veil = document.createElement('canvas');
+    veil.width = veil.height = 5 * 12;
+    const vg = veil.getContext('2d')!;
+    for (let ty = 2; ty <= 4; ty++) {
+      for (let tx = 2; tx <= 4; tx++) {
+        if (kind === 2) {
+          vg.imageSmoothingEnabled = false;
+          vg.drawImage(ductLidTile(true), (tx - 1) * 12, (ty - 1) * 12);
+        } else {
+          veilTile(vg, kind, tx, ty, (tx - 1) * 12, (ty - 1) * 12,
+            ground, (tx - 1) * ts, (ty - 1) * ts, ts);
+        }
+      }
+    }
+    const DC = 280, box = (DC / 5) * 1.6;
+    pair(conceal, `/sprites/${name}.png`, 160, `a body veiled in ${name}`, DC, DC, (g, t) => {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(ground, 0, 0, DC, DC);
+      const dir = Math.floor((t / 1.2) % 8);
+      const anim = Math.floor((t * 6) % 8);
+      g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
+        (DC - box) / 2, (DC - box) / 2, box, box);
+      g.drawImage(veil, 0, 0, DC, DC);
+    });
+  }
 })();
+
+// ---- the viewer's overlay language --------------------------------------
+
+{
+  const overlay = section('Viewer overlay language — web client only',
+    'Not world art: the badges and rings the viewer floats over creatures to say what '
+    + 'they are doing and how the camera and inspector relate to them. Smooth strokes are '
+    + 'allowed here by design (ART-STYLE.md keeps the overlay language apart from the '
+    + 'world\'s pixel grammar). Glyph shapes and colours mirror the Java scenario renderer.');
+  const ACTS: Array<[number, string]> = [
+    [ACT_ATTACK, 'attack'], [ACT_FLEE, 'flee'], [ACT_MATE, 'mate'],
+    [ACT_AFFILIATE, 'affiliate'], [ACT_GRAZE, 'graze'], [ACT_NEST, 'nest'],
+    [ACT_GRAB, 'grab'], [ACT_HUNT, 'hunt'],
+  ];
+  const S = 56;
+  figure(liveCanvas(ACTS.length * S, S, (g) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, ACTS.length * S, S);
+    ACTS.forEach(([act], i) => drawActionGlyph(g, i * S + S / 2, S / 2, S * 0.24, act));
+  }), 'action badges: ' + ACTS.map(([, n]) => n).join(' · '), overlay);
+  const RINGS = ['grabbed', 'carrying', 'follow', 'selected'] as const;
+  figure(liveCanvas(RINGS.length * S * 1.5, S * 1.5, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, RINGS.length * S * 1.5, S * 1.5);
+    RINGS.forEach((kind, i) => {
+      const x = i * S * 1.5 + S * 0.75, y = S * 0.75;
+      g.fillStyle = '#b98a5a';
+      g.beginPath(); g.arc(x, y, S * 0.18, 0, 7); g.fill();
+      drawRing(g, kind, x, y, S * 0.18, t * 1000);
+    });
+  }), 'status rings: ' + RINGS.join(' · '), overlay);
+  figure(liveCanvas(4 * S, S * 1.5, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, 4 * S, S * 1.5);
+    const y = S * 0.75;
+    drawCarryLink(g, S, y, 3 * S, y, S);
+    drawPlaceholder(g, S, y, S * 0.2, t, '#5a8ab9', false);
+    drawPlaceholder(g, 3 * S, y, S * 0.2, -t, '#b95a8a', true);
+  }), 'pre-atlas placeholders (plain · minded) with a carry tether', overlay);
+}
 
 // ---- pointers to the java-only sections ---------------------------------
 
