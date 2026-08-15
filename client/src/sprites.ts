@@ -261,6 +261,7 @@ const depl = webOnly
     + 'compositing (ditherTile) sweeping between the served lush and bare endpoint bakes '
     + '— the same code that draws live grazing.');
 
+
 (async () => {
   const lush = await loadCanvas('/sprites/depletion_lush.png');
   const bare = await loadCanvas('/sprites/depletion_bare.png');
@@ -287,11 +288,58 @@ const bakes = section('Atlas bakes — web client only',
   + 'stamp, the drained corpse bake (colour stripped, body kept), and the minded rim. '
   + 'The atlas comes from a phenotype alive in this world right now.');
 
+/** The live sprite, once the stream and the atlas endpoint have produced one.
+ *  Null until then; every canvas that can do without it simply does. */
+let liveAtlas: HTMLCanvasElement | null = null;
+
 const expressions = section('Expressions — what each badge says',
   'The action badge hovering over a creature, exactly as the live view draws it, with '
   + 'the behaviour it flags. Only notable acts earn a badge — wandering, resting and '
   + 'herding show nothing — and badges fade out as you zoom away, so the map view '
   + 'stays clean. Shapes and colours mirror the Java scenario renderer\'s.');
+
+// The expressions gallery: each badge over a body, composed exactly as the live
+// loop composes it (glyph at two body-radii above, sized to the body), so the
+// icon is seen the way the world shows it.
+//
+// Rendered HERE, at module load, and deliberately NOT inside the async block
+// below. A badge needs no phenotype, no atlas and no world: it is a glyph. Built
+// down there it inherited that block's whole waiting list -- a WebSocket
+// handshake, a full world snapshot, then an atlas PNG -- and on a real
+// connection the section sat empty under its own heading for seconds, which
+// reads exactly like a gallery that is missing. It now draws immediately over
+// the placeholder body the live viewer itself uses, and quietly upgrades to the
+// real sprite the moment `liveAtlas` arrives, because liveCanvas repaints every
+// frame anyway.
+const EXPR: Array<[number, string, string]> = [
+  [ACT_ATTACK, 'attack', 'striking at a target'],
+  [ACT_HUNT, 'hunt', 'locked onto prey'],
+  [ACT_FLEE, 'flee', 'running from a threat'],
+  [ACT_GRAZE, 'graze', 'foraging vegetation'],
+  [ACT_MATE, 'mate', 'courting a partner'],
+  [ACT_AFFILIATE, 'affiliate', 'bonding with a packmate'],
+  [ACT_GRAB, 'grab', 'carrying a captive, or riding a host'],
+  [ACT_NEST, 'nest', 'homing to its nest'],
+];
+for (const [act, name, meaning] of EXPR) {
+  const W = 150, H = 195, bx = W / 2, by = 125;
+  const rb = (W * 0.75) * (ART_RADIUS / CELL); // the stamped body's on-screen radius
+  figure(liveCanvas(W, H, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, W, H);
+    const dir = Math.floor((t / 1.2) % 8);
+    const anim = Math.floor((t * 6) % 8);
+    const box = W * 0.75;
+    g.imageSmoothingEnabled = false;
+    if (liveAtlas) {
+      g.drawImage(liveAtlas, anim * CELL, dir * CELL, CELL, CELL,
+        bx - box / 2, by - box / 2, box, box);
+    } else {
+      drawPlaceholder(g, bx, by, rb, (dir / 8) * Math.PI * 2, '#8b9bb4', false);
+    }
+    drawActionGlyph(g, bx, by - rb * 2.0, rb * 0.95, act);
+  }), `<b>${name}</b> — ${meaning}`, expressions);
+}
 
 (async () => {
   // A live phenotype from the stream, so the atlas endpoint has it baked.
@@ -316,6 +364,9 @@ const expressions = section('Expressions — what each badge says',
       poll();
     })
     : null;
+  // Hand it to the galleries that started without one; they repaint every frame,
+  // so they pick the real body up on the next tick with no rebuild.
+  liveAtlas = atlas;
   if (!atlas) {
     const note = document.createElement('p');
     note.className = 'note';
@@ -376,41 +427,6 @@ const expressions = section('Expressions — what each badge says',
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
   } // end of the entries that need a live atlas
 
-  // The expressions gallery: each badge over a living body, composed exactly
-  // as the live loop composes it (glyph at two body-radii above, sized to the
-  // body), so the icon is seen the way the world shows it.
-  const EXPR: Array<[number, string, string]> = [
-    [ACT_ATTACK, 'attack', 'striking at a target'],
-    [ACT_HUNT, 'hunt', 'locked onto prey'],
-    [ACT_FLEE, 'flee', 'running from a threat'],
-    [ACT_GRAZE, 'graze', 'foraging vegetation'],
-    [ACT_MATE, 'mate', 'courting a partner'],
-    [ACT_AFFILIATE, 'affiliate', 'bonding with a packmate'],
-    [ACT_GRAB, 'grab', 'carrying a captive, or riding a host'],
-    [ACT_NEST, 'nest', 'homing to its nest'],
-  ];
-  for (const [act, name, meaning] of EXPR) {
-    const W = 150, H = 195, bx = W / 2, by = 125;
-    const rb = (W * 0.75) * (ART_RADIUS / CELL); // the stamped body's on-screen radius
-    figure(liveCanvas(W, H, (g, t) => {
-      g.fillStyle = GRASS;
-      g.fillRect(0, 0, W, H);
-      const dir = Math.floor((t / 1.2) % 8);
-      const anim = Math.floor((t * 6) % 8);
-      const box = W * 0.75;
-      g.imageSmoothingEnabled = false;
-      // The badge is the subject here, not the body under it, so this gallery
-      // renders with or without a live phenotype -- falling back to the same
-      // placeholder the live viewer draws while an atlas is still in flight.
-      if (atlas) {
-        g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
-          bx - box / 2, by - box / 2, box, box);
-      } else {
-        drawPlaceholder(g, bx, by, rb, (dir / 8) * Math.PI * 2, '#8b9bb4', false);
-      }
-      drawActionGlyph(g, bx, by - rb * 2.0, rb * 0.95, act);
-    }), `<b>${name}</b> — ${meaning}`, expressions);
-  }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
   // Java scene was baked from. The Java pass veils the 3x3 tiles around the
