@@ -1,5 +1,6 @@
 package net.hedinger.prototype.sim;
 
+import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.Perf;
 import net.hedinger.prototype.engine.StopWatch;
 import net.hedinger.prototype.engine.Tile;
@@ -133,6 +134,8 @@ public final class Worlds {
 	 */
 	static net.hedinger.prototype.entities.Brain starterBrain() {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
+		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
+		final int ADD = net.hedinger.prototype.entities.Brain.ADD;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
 		final int GT = net.hedinger.prototype.entities.Brain.GT;
@@ -140,6 +143,19 @@ public final class Worlds {
 		int[][] code = {
 				{ SET, 1, 6, 0 }, // r1 = 0.1 (const[6]) -- the forage intent
 				{ SET, 5, 7, 0 }, // r5 = 0.25 (const[7]) -- a cheap amble; movement costs v^2
+				// The drink reflex: parched outranks foraging (a threat, below,
+				// still outranks both). SEEK_WATER lives at magnitude >= 9, so the
+				// intent value is composed as 4+4+2 from the const pool -- the warm
+				// seed knows how to drink; evolution tunes or loses it from here.
+				{ SENSE, 7, net.hedinger.prototype.entities.AgentIO.S_THIRST, 0 }, // r7 = how dry
+				{ SET, 8, 8, 0 }, // r8 = 0.5 (const[8]) -- the dry line
+				{ GT, 9, 7, 8 }, // r9 = parched?
+				{ SET, 10, 11, 0 }, // r10 = 4 (const[11])
+				{ ADD, 10, 10, 10 }, // r10 = 8
+				{ SET, 11, 10, 0 }, // r11 = 2 (const[10])
+				{ ADD, 10, 10, 11 }, // r10 = 10 -- names the water intent
+				{ SKIPZ, 9, 0, 0 }, // sated -> keep foraging
+				{ MOV, 1, 10, 0 }, // parched -> steer to water instead
 				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 },
 				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) threat threshold
 				{ GT, 4, 2, 3 }, // r4 = something bigger is close?
@@ -343,6 +359,11 @@ public final class Worlds {
 			}
 		}
 
+		// ---- rivers: droplet walks down the same elevation field the biomes
+		// read, so water runs out of the highlands, through the meadows, and
+		// into the lakes (WORLDGEN-RESEARCH.md #2) ----
+		carveRivers(w, cols, rows);
+
 		// ---- cave: underground caverns carved from solid rock ----
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
@@ -389,6 +410,13 @@ public final class Worlds {
 						t == Tile.TileType.TYPE_FUNGUS ? 0.6 : 0);
 			}
 		}
+
+		// ---- cellular-automata polish: a couple of rounds over the cave's
+		// wall/floor boundary rounds cavern edges organically and merges
+		// near-touching pockets, so less ends up sealed later. Only plain rock
+		// and plain stone flip; pools, fungus, crystal, vents and pits keep
+		// their ground truth (WORLDGEN-RESEARCH.md #3). ----
+		smoothCave(w, cols, rows);
 
 		// ---- wire the levels together so every area is reachable ----
 		connectLevels(w, cols, rows);
@@ -1050,17 +1078,206 @@ public final class Worlds {
 		return best;
 	}
 
-	/** Carve a 2-wide L-shaped cave corridor between two station landings, so the
-	 *  underground forms one connected backbone. */
+	/**
+	 * Rivers as seeded droplet walks (WORLDGEN-RESEARCH.md #2): each starts on
+	 * high, damp ground and follows the elevation field downhill — the SAME
+	 * noise the biome classifier reads, so rivers run where the terrain says
+	 * they should — carving a channel that widens as it runs, until it reaches
+	 * standing water, a basin with no way down (where it ponds), or the rim.
+	 *
+	 * <p>Crossable by construction: every few steps the whole cross-section is
+	 * laid as SHALLOWS (a ford), and the later shore pass fringes the rest of
+	 * the channel — so rivers structure the map without severing the walkable
+	 * region (the audit's connectivity gate holds).
+	 */
+	private static void carveRivers(World w, int cols, int rows) {
+		int n = Math.max(2, (int) Math.round(cols * (double) rows / 3000.0));
+		for (int r = 0; r < n; r++) {
+			// Source: the highest of a handful of probes on damp, open ground --
+			// ridge springs, not desert trickles (and never inside the rock line).
+			int sx = -1, sy = -1;
+			double best = 0.56;
+			for (int t = 0; t < 30; t++) {
+				int px = 4 + Utils.random(cols - 8), py = 4 + Utils.random(rows - 8);
+				double e = Utils.noise2(px, py, 0.055);
+				double m = Utils.noise2(px + 500, py + 300, 0.075);
+				if (e > best && e < 0.80 && m > 0.35) {
+					best = e;
+					sx = px;
+					sy = py;
+				}
+			}
+			if (sx >= 0) {
+				runRiver(w, cols, rows, sx, sy);
+			}
+		}
+	}
+
+	/** One river: walk downhill with a light meander, carving as it goes. */
+	private static void runRiver(World w, int cols, int rows, int x, int y) {
+		int prevDx = 0, prevDy = 0, sinceFord = 0;
+		for (int steps = 0; steps < cols + rows; steps++) {
+			if (x < 3 || y < 3 || x >= cols - 3 || y >= rows - 3) {
+				return; // reached the rim
+			}
+			if (steps > 4 && w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WATER) {
+				return; // joined a lake (or an earlier river)
+			}
+			// The channel: a brook near the spring, two tiles wide lower down.
+			boolean ford = ++sinceFord >= 9;
+			int width = steps < 12 ? 1 : 2;
+			for (int dx = 0; dx < width; dx++) {
+				for (int dy = 0; dy < width; dy++) {
+					int cx = x + dx, cy = y + dy;
+					if (cx < 2 || cy < 2 || cx >= cols - 2 || cy >= rows - 2) {
+						continue;
+					}
+					w.setTile(cx, cy, SURFACE_Z, ford
+							? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_WATER);
+					w.getTile(cx, cy, SURFACE_Z).setFertility(0);
+				}
+			}
+			if (ford) {
+				sinceFord = 0;
+			}
+			// Descend: the lowest of the four neighbours, with a whisper of
+			// deterministic jitter so parallel rivers don't run identical rails,
+			// and never straight back uphill the way we came.
+			int bx = 0, by = 0;
+			double bestE = Double.MAX_VALUE;
+			for (int k = 0; k < 4; k++) {
+				int dx = k == 0 ? 1 : k == 1 ? -1 : 0;
+				int dy = k == 2 ? 1 : k == 3 ? -1 : 0;
+				if (dx == -prevDx && dy == -prevDy && (dx != 0 || dy != 0)) {
+					continue; // no immediate backtrack
+				}
+				double e = Utils.noise2(x + dx, y + dy, 0.055)
+						+ 0.06 * GroundTextures.hash01(x + dx, y + dy, 71);
+				if (e < bestE) {
+					bestE = e;
+					bx = dx;
+					by = dy;
+				}
+			}
+			double here = Utils.noise2(x, y, 0.055);
+			if (bestE >= here + 0.045) {
+				// A true basin with no lake: the river ponds and ends here.
+				for (int dx = -1; dx <= 1; dx++) {
+					for (int dy = -1; dy <= 1; dy++) {
+						int cx = x + dx, cy = y + dy;
+						if (cx >= 2 && cy >= 2 && cx < cols - 2 && cy < rows - 2) {
+							w.setTile(cx, cy, SURFACE_Z, Tile.TileType.TYPE_WATER);
+							w.getTile(cx, cy, SURFACE_Z).setFertility(0);
+						}
+					}
+				}
+				return;
+			}
+			prevDx = bx;
+			prevDy = by;
+			x += bx;
+			y += by;
+		}
+	}
+
+	/**
+	 * Cellular-automata smoothing over the cave's rock/floor boundary
+	 * (WORLDGEN-RESEARCH.md #3): a wall spur with almost no rock around it
+	 * opens, a floor sliver walled nearly all round closes. Special ground
+	 * (pools, fungus, crystals, vents, pits) is fixed truth — it neither
+	 * flips nor counts as more than what it is (crystal counts as rock, all
+	 * else as open), so the pass only rounds edges, never rewrites features.
+	 */
+	private static void smoothCave(World w, int cols, int rows) {
+		for (int round = 0; round < 2; round++) {
+			Tile.TileType[][] snap = new Tile.TileType[cols][rows];
+			for (int x = 0; x < cols; x++) {
+				for (int y = 0; y < rows; y++) {
+					snap[x][y] = w.getTile(x, y, CAVE_Z).getType();
+				}
+			}
+			for (int x = 1; x < cols - 1; x++) {
+				for (int y = 1; y < rows - 1; y++) {
+					Tile.TileType t = snap[x][y];
+					if (t != Tile.TileType.TYPE_WALL && t != Tile.TileType.TYPE_STONE) {
+						continue;
+					}
+					int rock = 0;
+					for (int dx = -1; dx <= 1; dx++) {
+						for (int dy = -1; dy <= 1; dy++) {
+							if (dx == 0 && dy == 0) {
+								continue;
+							}
+							Tile.TileType nt = snap[x + dx][y + dy];
+							if (nt == Tile.TileType.TYPE_WALL
+									|| nt == Tile.TileType.TYPE_CRYSTAL) {
+								rock++;
+							}
+						}
+					}
+					if (t == Tile.TileType.TYPE_WALL && rock <= 3) {
+						w.setTile(x, y, CAVE_Z, Tile.TileType.TYPE_STONE);
+						w.getTile(x, y, CAVE_Z).setFertility(0);
+					} else if (t == Tile.TileType.TYPE_STONE && rock >= 6) {
+						w.setTile(x, y, CAVE_Z, Tile.TileType.TYPE_WALL);
+						w.getTile(x, y, CAVE_Z).setFertility(0);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Carve a wandering 2-wide tunnel between two station landings: a directed
+	 * random walker with heading persistence, so the backbone meanders like a
+	 * worm-bore instead of an L of hallways (WORLDGEN-RESEARCH.md #4). The odd
+	 * bulge opens a small chamber. The walk is biased toward the target and
+	 * hard-capped; whatever distance remains when the cap hits is closed with
+	 * the old straight carve, so the corridor contract — the two landings end
+	 * up connected — is unconditional.
+	 */
 	private static void carveCaveCorridor(World w, int[] a, int[] b, int cols, int rows) {
 		int x = a[0], y = a[1];
+		int dx = Integer.signum(b[0] - a[0]), dy = 0;
+		if (dx == 0) {
+			dy = Integer.signum(b[1] - a[1]) == 0 ? 1 : Integer.signum(b[1] - a[1]);
+		}
+		int cap = 3 * (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1])) + 40;
+		for (int s = 0; s < cap && (x != b[0] || y != b[1]); s++) {
+			carveCaveTile(w, x, y, cols, rows);
+			if (Utils.random() < 0.05) {
+				// A bulge: the tunnel balloons into a small chamber.
+				carveCaveTile(w, x - 1, y - 1, cols, rows);
+				carveCaveTile(w, x + 1, y + 1, cols, rows);
+			}
+			int tx = Integer.signum(b[0] - x), ty = Integer.signum(b[1] - y);
+			boolean wayward = (dx != 0 && tx != 0 && dx != tx) || (dy != 0 && ty != 0 && dy != ty);
+			if (wayward || Utils.random() < 0.35) {
+				// Re-aim at the target: pick the axis weighted by remaining
+				// distance, so long legs still meander but converge.
+				int rx = Math.abs(b[0] - x), ry = Math.abs(b[1] - y);
+				if (rx + ry > 0 && Utils.random(rx + ry) < rx) {
+					dx = tx;
+					dy = 0;
+				} else {
+					dx = 0;
+					dy = ty;
+				}
+				if (dx == 0 && dy == 0) {
+					dx = tx != 0 ? tx : 1; // degenerate: already on the target axis
+				}
+			}
+			x = Math.max(1, Math.min(cols - 2, x + dx));
+			y = Math.max(1, Math.min(rows - 2, y + dy));
+		}
+		// Close any remainder (the cap hit): the old deterministic straight carve.
 		while (x != b[0]) {
 			carveCaveTile(w, x, y, cols, rows);
-			x += b[0] > x ? 1 : -1;
+			x += Integer.signum(b[0] - x);
 		}
 		while (y != b[1]) {
 			carveCaveTile(w, x, y, cols, rows);
-			y += b[1] > y ? 1 : -1;
+			y += Integer.signum(b[1] - y);
 		}
 		carveCaveTile(w, b[0], b[1], cols, rows);
 	}
@@ -1254,11 +1471,15 @@ public final class Worlds {
 		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 
 		// Founder herbivores: metabolic grazers that breed and evolve, scattered
-		// onto open meadow (never into water or rock).
+		// onto open meadow (never into water or rock). Every fourth founder is a
+		// nester — it homes on its pheromone peak to breed, and each birth
+		// claims a physical Nest fixture there, so brood sites appear on the map.
 		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
-					.withHerding()); // corpse span comes from its body -- see configureGenomeBody
+			w.spawnEntity(i % 4 == 3
+					? TestNPC.nester(p[0], p[1], SURFACE_Z, prey[i % prey.length])
+					: TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
+							.withHerding()); // corpse span comes from its body -- see configureGenomeBody
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < sc(4, scale); i++) {

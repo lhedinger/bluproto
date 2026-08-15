@@ -528,6 +528,58 @@ public class World {
 		levels[l].setTile(c, r, l);
 	}
 
+	/** Per-level nearest-water lookup, built lazily: for every tile, the packed
+	 *  coords (x<<16|y) of its nearest water/shallows tile, or -1 when the level
+	 *  has none. Terrain types never change during a run, so one multi-source
+	 *  BFS per level serves every thirsty creature for the world's lifetime —
+	 *  the per-tick tile scans this replaces were quadratic misery. */
+	private int[][][] waterNearest;
+
+	/** Packed (x<<16|y) of the nearest water/shallows tile to {@code (x,y,z)},
+	 *  or -1 when the level is dry. */
+	public int nearestWaterTile(double x, double y, double z) {
+		int l = (int) z;
+		if (l < 0 || l >= levels.length || !isValid(x, y, z)) {
+			return -1;
+		}
+		if (waterNearest == null) {
+			waterNearest = new int[levels.length][][];
+		}
+		if (waterNearest[l] == null) {
+			waterNearest[l] = buildWaterField(l);
+		}
+		return waterNearest[l][(int) x][(int) y];
+	}
+
+	private int[][] buildWaterField(int l) {
+		int c = getColums(), r = getRows();
+		int[][] near = new int[c][r];
+		java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+		for (int x = 0; x < c; x++) {
+			for (int y = 0; y < r; y++) {
+				Tile.TileType t = getTile(x, y, l).getType();
+				boolean wet = t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS;
+				near[x][y] = wet ? (x << 16 | y) : -1;
+				if (wet) {
+					q.add(new int[] { x, y });
+				}
+			}
+		}
+		while (!q.isEmpty()) {
+			int[] p = q.poll();
+			int source = near[p[0]][p[1]];
+			for (int k = 0; k < 4; k++) {
+				int nx = p[0] + (k == 0 ? 1 : k == 1 ? -1 : 0);
+				int ny = p[1] + (k == 2 ? 1 : k == 3 ? -1 : 0);
+				if (nx >= 0 && ny >= 0 && nx < c && ny < r && near[nx][ny] == -1) {
+					near[nx][ny] = source;
+					q.add(new int[] { nx, ny });
+				}
+			}
+		}
+		return near;
+	}
+
 	public Tile getTile(double x, double y, double z) {
 		if (!isValid(x, y, z)) {
 			return new Tile(toCol(x), toRow(y), toLvl(z), Tile.TileType.TYPE_WALL);

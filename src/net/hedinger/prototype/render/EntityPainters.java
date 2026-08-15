@@ -51,6 +51,8 @@ public final class EntityPainters {
 			DoorPainter.draw(door, g, v);
 		} else if (e instanceof Switch sw) {
 			SwitchPainter.draw(sw, g, v);
+		} else if (e instanceof net.hedinger.prototype.entities.Nest nest) {
+			NestPainter.draw(nest, g, v);
 		} else if (e instanceof PheromoneCloud cloud) {
 			PheromonePainter.draw(cloud, g, v);
 		} else if (e instanceof Bullet bullet) {

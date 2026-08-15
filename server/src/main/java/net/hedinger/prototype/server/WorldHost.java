@@ -260,6 +260,10 @@ final class WorldHost {
 				d.put("subtype", button ? "button" : "plate");
 				d.put("pressed", sw.isPressed());
 				d.put("wiredTo", sw.getDoor().getID()); // the door this switch drives
+			} else if (e instanceof net.hedinger.prototype.entities.Nest nest) {
+				// A brood site: how many births this ring of twigs has hosted.
+				d.put("kind", "nest");
+				d.put("broods", nest.getBroods());
 			} else if (e instanceof net.hedinger.prototype.engine.PheromoneCloud p) {
 				d.put("kind", "phero");
 				d.put("strength", round(p.getStrength()));
@@ -267,6 +271,7 @@ final class WorldHost {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
 				d.put("subtype", n.getNpcTypeName().toLowerCase());
 				d.put("energy", round(n.getEnergy()));
+				d.put("hydration", round(n.getHydration()));
 				d.put("carrying", n.getCarriedLoad() > 0);
 				d.put("grabbed", n.isGrabbed());
 				// Growth: a juvenile is still climbing toward its genome's body, so a

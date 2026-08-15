@@ -12,16 +12,25 @@ export const DIRS = 8;
 export const ANIM = 8;
 export const ART_RADIUS = 0.22 * CELL;
 
-const cache = new Map<number, HTMLImageElement | null>(); // null = loading
+const cache = new Map<number, HTMLCanvasElement | null>(); // null = loading
 
-/** The loaded atlas image for a key, or null while it loads / on failure. */
-export function atlasFor(pheno: number): HTMLImageElement | null {
+/** The loaded atlas for a key, or null while it loads / on failure. Cached as
+ *  a CANVAS copy, not the <img>: canvases blit orders of magnitude faster on
+ *  software-rendered canvases (an <img> source can pay a format conversion on
+ *  every draw), and creatures are stamped hundreds of times a frame. */
+export function atlasFor(pheno: number): HTMLCanvasElement | null {
   if (pheno === 0) return null;
   const hit = cache.get(pheno);
   if (hit !== undefined) return hit;
   cache.set(pheno, null); // mark in-flight so we fetch once
   const img = new Image();
-  img.onload = () => cache.set(pheno, img);
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth;
+    cv.height = img.naturalHeight;
+    cv.getContext('2d')!.drawImage(img, 0, 0);
+    cache.set(pheno, cv);
+  };
   img.onerror = () => cache.set(pheno, null);
   img.src = `/api/world/atlas/${pheno}.png`;
   return null;
@@ -48,7 +57,7 @@ export function cell(dir: number, timeMs: number): { col: number; row: number } 
  */
 const rimCache = new Map<number, HTMLCanvasElement>();
 
-export function rimFor(pheno: number, img: HTMLImageElement): HTMLCanvasElement {
+export function rimFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement {
   const hit = rimCache.get(pheno);
   if (hit) return hit;
   const cv = document.createElement('canvas');
@@ -83,7 +92,7 @@ export const RIM_COLOUR = '#c660ff';
  */
 const corpseCache = new Map<number, HTMLCanvasElement>();
 
-export function corpseFor(pheno: number, img: HTMLImageElement): HTMLCanvasElement {
+export function corpseFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement {
   const hit = corpseCache.get(pheno);
   if (hit) return hit;
   const cv = document.createElement('canvas');

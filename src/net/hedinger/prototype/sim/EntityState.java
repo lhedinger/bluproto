@@ -106,6 +106,12 @@ public record EntityState(
 			rgb = 0xE0455F;
 			aux = sw.isPressed() ? 1 : 0;
 			pheno = sw.getDoor().getID();
+		} else if (e instanceof net.hedinger.prototype.entities.Nest nest) {
+			// A nest is a place, not a body: aux carries how many broods this
+			// site has raised, so the viewer can size its ring by history.
+			kind = "nest";
+			rgb = 0x8a6a3c;
+			aux = nest.getBroods();
 		} else if (e instanceof NPC n) {
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;

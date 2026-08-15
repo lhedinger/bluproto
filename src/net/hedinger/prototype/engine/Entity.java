@@ -139,6 +139,7 @@ public abstract class Entity {
 		}
 
 		if (age < -deathspan) {
+			onCorpseExpired();
 			markRemoved();
 		}
 
@@ -164,6 +165,12 @@ public abstract class Entity {
 
 	protected void run_extended() {
 		// to be overwritten by other classes
+	}
+
+	/** Called once, on the tick a corpse finishes rotting away (whether it
+	 *  decayed on its own or was scavenged down to nothing) — the hook for
+	 *  returning what the body was made of to the world. Default: nothing. */
+	protected void onCorpseExpired() {
 	}
 
 	// |///////////////////////////////

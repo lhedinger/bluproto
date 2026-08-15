@@ -8,7 +8,7 @@
 import { CELL, atlasFor, corpseFor, rimFor } from './atlas';
 import type { Camera } from './camera';
 import type { EntityState } from './protocol';
-import { drawDoor, drawItem, drawSwitch } from './render';
+import { drawDoor, drawItem, drawNest, drawSwitch } from './render';
 
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
@@ -179,6 +179,15 @@ for (const mode of ['plate', 'button']) {
 
 {
   const S = 56;
+  pair(furniture, '/sprites/nest.png', 160, 'nest (brood site)', 3 * S, 3 * S, (g) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, 3 * S, 3 * S);
+    drawNest(g, 1.5 * S, 1.5 * S, S);
+  });
+}
+
+{
+  const S = 56;
   pair(furniture, '/sprites/pheromone.gif', 224, 'pheromone cloud, evaporating', 4 * S, 4 * S, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 4 * S, 4 * S);
@@ -217,7 +226,7 @@ const bakes = section('Atlas bakes — web client only',
   });
   if (!pheno) return;
   // atlasFor starts the fetch and returns null until loaded; poll until ready.
-  const atlas = await new Promise<HTMLImageElement>((resolve) => {
+  const atlas = await new Promise<HTMLCanvasElement>((resolve) => {
     const poll = () => { const a = atlasFor(pheno); a ? resolve(a) : setTimeout(poll, 100); };
     poll();
   });
