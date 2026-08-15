@@ -149,12 +149,30 @@ public final class ServerMain {
 			// longer true. The page is small and rebuilt on every deploy under the
 			// same URL, so there is nothing here worth a cache hit.
 			ctx.header("Cache-Control", "no-store");
+			ctx.contentType("text/html");
+			// Three places to look, in order of how directly they answer "what does
+			// the CLIENT draw": the external dist a dev run points at, then the copy
+			// folded into the jar, then the java page as a genuine last resort.
+			//
+			// The middle one was missing, and it is the only one that exists in the
+			// deployed image. `copyClient` folds client/dist into the jar's static
+			// resources, and the runtime stage copies only the server install and
+			// res/ -- so /app/client/dist does not exist and this route quietly
+			// served the java catalog on every deploy since it was written. The world
+			// page never showed the fault because Javalin serves it from the same
+			// classpath copy; only this route asked the filesystem instead.
 			if (clientSprites.isFile()) {
-				ctx.contentType("text/html")
-						.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
-			} else {
-				ctx.contentType("text/html").result(catalog.page());
+				ctx.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
+				return;
 			}
+			try (java.io.InputStream in =
+					ServerMain.class.getResourceAsStream("/public/sprites.html")) {
+				if (in != null) {
+					ctx.result(in.readAllBytes());
+					return;
+				}
+			}
+			ctx.result(catalog.page()); // no client built at all (bare checkout)
 		};
 		app.get("/sprites", clientCatalog); // the web view: what a viewer actually sees
 		app.get("/sprites/compare", clientCatalog); // java bake beside each canvas
