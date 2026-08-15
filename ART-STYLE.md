@@ -98,12 +98,16 @@ One sun, straight overhead-north. The grammar:
 - **Drop shadows**: one art-pixel south of the body, translucent black
   (~`alpha 110`), art-pixel-aligned blocks. Entities that stand (doors,
   shrubs, creatures) sit ON the ground because of this; nothing floats.
-- **Sanctioned translucency** — exactly three: (1) drop/contact shadows as
+- **Sanctioned translucency** — exactly four: (1) drop/contact shadows as
   above; (2) the **blocky translucent oval** — an ellipse rasterised into
   art-pixel steps, each block *tinting* the ground (shrub shadows, hollows);
   (3) pheromone haze blocks (chunky art-pixels at low alpha — structure stays
-  pixelated, only the tint is soft). Smooth `fillOval`/`arc`/anti-aliased
-  curves are **never** drawn into world art.
+  pixelated, only the tint is soft); (4) the **concealment veil** — every
+  cover re-stamp (thicket canopy, reed stalks, duct lids) draws at a single
+  global **25% translucency** (`VEIL_ALPHA = 0.75`, defined once in
+  `GroundTextures` and mirrored in the web client's `render.ts`), so a veiled
+  body always half-reads through its cover. Smooth `fillOval`/`arc`/
+  anti-aliased curves are **never** drawn into world art.
 
 ## 5. Entities
 
@@ -203,7 +207,7 @@ Before a new visual merges, ask:
    **motif lattice**?
 4. Does anything raised follow **north-lit/south-sunk**, and anything
    standing cast its **south drop shadow**?
-5. Is translucency limited to the three sanctioned uses?
+5. Is translucency limited to the four sanctioned uses (§4)?
 6. Is it a **pure function** of position/seed/state — no RNG, no wall-clock?
 7. Does the web client's version (if any) agree with the Java bake on
    `/sprites`?

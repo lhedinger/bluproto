@@ -366,7 +366,9 @@ export function render(
     const o = cam.worldToScreen(0, 0);
     const src = cam.scale < ART && canopyLow ? canopyLow : layer;
     g.imageSmoothingEnabled = cam.scale < ART;
+    g.globalAlpha = VEIL_ALPHA;
     g.drawImage(src, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+    g.globalAlpha = 1;
     g.imageSmoothingEnabled = false;
 
     // Duct lids are different: a lid is visibly not the duct's open floor, so
@@ -387,6 +389,7 @@ export function render(
         }
       }
     }
+    g.globalAlpha = VEIL_ALPHA;
     for (const key of lids) {
       const tx = key % meta.cols, ty = Math.floor(key / meta.cols);
       const o2 = cam.worldToScreen(tx, ty);
@@ -395,6 +398,7 @@ export function render(
         || (ty < meta.rows - 1 && cover[(ty + 1) * meta.cols + tx] === 2);
       g.drawImage(ductLidTile(vert), o2.x, o2.y, cam.scale, cam.scale);
     }
+    g.globalAlpha = 1;
   }
 }
 
@@ -420,6 +424,14 @@ export function hash01(x: number, y: number, s: number): number {
 // Reeds (cover 3): stalk-exact — every baked pixel EXCEPT the reed-bed's gap
 // colour is re-stamped, so a body shows between the stalks.
 const REED_GAP = 0x14301f; // GroundTextures.RAMP[CLS_REEDS][0]
+
+/** The design system's cover translucency: every concealment veil — canopy,
+ *  reed stalks, duct lids — draws at 25% translucency, so a veiled body
+ *  always half-reads through its cover. One global constant, shared with the
+ *  Java renderer (GroundTextures.VEIL_ALPHA) and documented in ART-STYLE.md
+ *  §4. Applied where the veil meets the screen (the layer blit and the lid
+ *  stamps), so the cached layer itself stays opaque and composable. */
+export const VEIL_ALPHA = 0.75;
 
 const VEIL_SCRATCH = document.createElement('canvas');
 VEIL_SCRATCH.width = 12;

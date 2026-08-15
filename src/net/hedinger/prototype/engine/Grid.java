@@ -143,6 +143,11 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		int A = 12; // must match renderGroundPixel's art-pixel grid
 		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
+		// The design system's cover translucency: the whole veil draws at
+		// VEIL_ALPHA, so the body underneath always half-reads through it.
+		java.awt.Composite oldComposite = g2.getComposite();
+		g2.setComposite(java.awt.AlphaComposite.getInstance(
+				java.awt.AlphaComposite.SRC_OVER, GroundTextures.VEIL_ALPHA));
 		for (int key : veiled) {
 			int x = key % world.cols, y = key / world.cols;
 			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
@@ -180,6 +185,7 @@ public class Grid {
 				}
 			}
 		}
+		g2.setComposite(oldComposite);
 	}
 
 	/**

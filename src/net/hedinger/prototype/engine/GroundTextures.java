@@ -76,6 +76,13 @@ public final class GroundTextures {
 			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
 			{ 0x353a42, 0x515862, 0x707885 }, // switch plate (deck steel family)
 	};
+	/** The design system's cover translucency: every concealment veil — the
+	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
+	 *  re-stamped pixels at 25% translucency, so a veiled body always
+	 *  half-reads through its cover. One global constant, shared with the web
+	 *  client (VEIL_ALPHA in render.ts) and documented in ART-STYLE.md §4. */
+	public static final float VEIL_ALPHA = 0.75f;
+
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
 	private static final int HAZARD = 0xd8b028, HAZARD_DARK = 0x17171a, RUST = 0x8a5a34;
