@@ -35,6 +35,29 @@ public class TestNPC extends NPC {
 		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL, PREDATOR
 	}
 
+	/**
+	 * What a body can turn into energy. This is the ONE thing that makes a
+	 * scavenger a scavenger — it is a property of the body, not of the mind, so a
+	 * minded scavenger runs the same brain and the same forage intent as any other
+	 * minded creature and simply finds carrion where a grazer finds grass.
+	 *
+	 * <p>Deliberately not a gene. Diet decides what a lineage can eat at all, and a
+	 * mutation that flipped it would strand a creature in a world with none of its
+	 * food; the genome already carries everything that should drift.
+	 */
+	public enum Diet {
+		/** Vegetation from the tile underfoot. */
+		HERBIVORE,
+		/** Living bodies, taken by force. Predation is its own hardcoded loop. */
+		CARNIVORE,
+		/** Carrion. Eating a corpse both feeds the eater and hastens the corpse's
+		 *  return to the world -- {@link net.hedinger.prototype.entities.NPC#eat}
+		 *  ages a dead body toward removal, so a fed scavenger IS decomposition. */
+		SCAVENGER,
+	}
+
+	private Diet diet = Diet.HERBIVORE;
+
 	/** Damage a predator's bite does to prey of its own size or smaller (prey
 	 *  health 100 -> a few-second kill). Scaled down against bigger quarry — see
 	 *  {@link #biteDamage}. */
@@ -61,6 +84,22 @@ public class TestNPC extends NPC {
 	 * metabolism, movement and tank capacity all scale with it.
 	 */
 	private static final double MEAT_ENERGY = 2.5;
+	/**
+	 * Energy in a whole FRESH carcass to a scavenger, per unit of body mass — the
+	 * carrion counterpart of {@link #MEAT_ENERGY}. Lower than predation on purpose:
+	 * a scavenger is paid less per kilo than the hunter that took the risk, which is
+	 * what keeps hunting worth doing in a world now carpeted with corpses.
+	 */
+	private static final double CARRION_ENERGY = 1.2;
+	/**
+	 * How much of a carcass a scavenger can process in one tick, as a fraction of
+	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
+	 * rate a body takes ~2 seconds to strip, long enough that two scavengers on one
+	 * corpse genuinely compete and short enough that it does not pin them in place.
+	 */
+	private static final double CARRION_BITE = 0.015;
+	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
+	private static final double CARRION_REACH = 0.6;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
@@ -445,6 +484,19 @@ public class TestNPC extends NPC {
 	 * prey, and offspring inherit the mutated brain, so the behaviour evolves. Used
 	 * to seed the parallel minded cohort that competes against the scripted species.
 	 */
+	/**
+	 * A minded scavenger: the same brain, body and forage intent as any other
+	 * minded creature, with a diet that makes carrion its food. Nothing about its
+	 * mind is scavenger-specific — it forages, and forage means carcasses. Whether
+	 * a lineage actually makes a living that way is left to selection, which is the
+	 * same bargain the rest of the minded cohort is on.
+	 */
+	public static TestNPC mindedScavenger(double x, double y, double z, Genome g) {
+		TestNPC t = mindedForager(x, y, z, g);
+		t.diet = Diet.SCAVENGER;
+		return t;
+	}
+
 	public static TestNPC mindedForager(double x, double y, double z, Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
 		configureGenomeBody(t, g); // size-scaled reserve, burn and repro thresholds
@@ -559,6 +611,12 @@ public class TestNPC extends NPC {
 	 *  particular — start out facing a chosen way without a mind having to turn. */
 	public TestNPC withHeading(double radians) {
 		D = radians;
+		return this;
+	}
+
+	/** Sets what this body can turn into energy — see {@link Diet}. */
+	public TestNPC withDiet(Diet d) {
+		diet = d;
 		return this;
 	}
 
@@ -1288,6 +1346,23 @@ public class TestNPC extends NPC {
 	 */
 	private void senseForage(double[] s) {
 		long now = getWorld().getTick();
+		// A scavenger's food is a body, not a patch of ground, so its forage channel
+		// points at the best carcass in sight instead of the best vegetation. Same
+		// channel, same units, same intent: what changes is only what counts as food,
+		// which is exactly what a diet is. Rescanned every tick because a carcass can
+		// be eaten out from under it by another scavenger, unlike a tile of grass.
+		if (diet == Diet.SCAVENGER) {
+			scanCarrion();
+			if (forageCol < 0) {
+				s[AgentIO.S_FORAGE_PROX] = 0;
+				s[AgentIO.S_FORAGE_BEARING] = 0;
+				return;
+			}
+			double cdx = forageCol + 0.5 - X, cdy = forageRow + 0.5 - Y;
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(cdx, cdy));
+			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
+			return;
+		}
 		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
 				|| tileWanted != tileScanned // the mind asked for different ground
 				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
@@ -1331,6 +1406,40 @@ public class TestNPC extends NPC {
 					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE ? 1 : 0;
 		default:
 			return t.isWalkable() ? t.getVegetation(now) : 0;
+		}
+	}
+
+	/**
+	 * Points the forage channel at the best carcass in sight, scored the same way
+	 * vegetation is: value over distance, so a fat body across the map loses to a
+	 * fair one underfoot. Value is mass times freshness — a big fresh kill is the
+	 * prize, a nearly-rotted mouse barely worth the walk.
+	 *
+	 * <p>Sweeps in id order and keeps the first strict maximum, so ties break
+	 * identically on every replay.
+	 */
+	private void scanCarrion() {
+		forageCol = -1;
+		forageRow = -1;
+		if (getWorld() == null) {
+			return;
+		}
+		double best = 0;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || !n.isDead() || n.isRemoved()
+					|| n.getLvl() != getLvl()) {
+				continue;
+			}
+			double dist = distance(n.getX(), n.getY(), n.getZ());
+			if (dist > LOS_RANGE) {
+				continue;
+			}
+			double score = n.bodyMass() * (1.0 - n.decayProgress()) / (1.0 + dist);
+			if (score > best) {
+				best = score;
+				forageCol = (int) n.getX();
+				forageRow = (int) n.getY();
+			}
 		}
 	}
 
@@ -1772,8 +1881,13 @@ public class TestNPC extends NPC {
 		// Arriving only grazes when the ground being sought is food. A body that asked
 		// for cover and reached it has arrived, full stop -- there is nothing to eat
 		// in a thicket, and the terminal act has to follow what was actually wanted.
+		// A scavenger's forage is a body, not ground, so the tile-property gate does
+		// not apply to it: there is no "wanted tile" underneath a carcass, and
+		// requiring one meant a scavenger could steer to its food and then refuse to
+		// eat it. What the gate is really for is not acting on ground that was asked
+		// for as cover or as water, and that reasoning only concerns a grazer.
 		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE
-				&& tileWanted == AgentIO.TILE_FOOD;
+				&& (diet == Diet.SCAVENGER || tileWanted == AgentIO.TILE_FOOD);
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
 		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
 		// Seeking a fixture and reaching it presses it: arriving IS the act,
@@ -1789,7 +1903,12 @@ public class TestNPC extends NPC {
 
 		double eaten = 0;
 		if (eats || intentGraze) {
-			eaten = graze(grazeDemand());
+			// "Forage" means the food THIS body eats. For a grazer that is the
+			// vegetation underfoot; for a scavenger it is the carcass it walked to.
+			// Routing both through the same intent is what lets a scavenger inherit
+			// the forage behaviour every starter brain already has, instead of
+			// needing a sensor and a policy of its own.
+			eaten = diet == Diet.SCAVENGER ? scavenge() : graze(grazeDemand());
 			totalIntake += eaten;
 		}
 		boolean ateItem = false;
@@ -2076,6 +2195,61 @@ public class TestNPC extends NPC {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Takes one bite out of the nearest carcass in reach, if any. Returns the mass
+	 * consumed, on the same scale {@link #graze} reports, so both feed the same
+	 * intake counter.
+	 *
+	 * <p>The bite does two things at once, and they are the same thing: it converts
+	 * carcass mass into the eater's energy, and it ages the corpse toward removal
+	 * ({@link net.hedinger.prototype.entities.NPC#eat}). A scavenger does not
+	 * "trigger" decomposition — feeding IS the decomposition, which is why this
+	 * needs no separate decay hook.
+	 *
+	 * <p>Freshness prices the meal. A body that has all but rotted away is worth
+	 * almost nothing, so a scavenger that reaches a carcass late is paid late-value
+	 * for it -- the incentive is to find bodies early, which is what a scavenger is
+	 * actually for.
+	 */
+	private double scavenge() {
+		NPC carrion = carrionInReach();
+		if (carrion == null) {
+			return 0;
+		}
+		double freshness = 1.0 - carrion.decayProgress();
+		double mass = carrion.bodyMass() * CARRION_BITE;
+		energy += mass * CARRION_ENERGY * freshness;
+		// Aged in ticks of its own remaining span: a bite takes the same FRACTION
+		// out of a mouse as out of an apex body, so a big carcass is genuinely more
+		// meals rather than merely a bigger number.
+		carrion.eat(Math.max(1, (int) Math.round(carrion.getDeathspan() * CARRION_BITE)));
+		setAction("eating", true);
+		return mass;
+	}
+
+	/** The nearest carcass this body could bite right now, or null. Corpses only --
+	 *  a scavenger has no way to kill, so a living body is not food to it. */
+	private NPC carrionInReach() {
+		if (getWorld() == null) {
+			return null;
+		}
+		NPC best = null;
+		double bestD = Double.MAX_VALUE;
+		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+			if (!(e instanceof NPC n) || n == this || !n.isDead() || n.isRemoved()
+					|| n.getLvl() != getLvl()) {
+				continue;
+			}
+			double reach = (getSize() + n.getSize()) / 2.0 + CARRION_REACH;
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d <= reach && d < bestD) {
+				bestD = d;
+				best = n;
+			}
+		}
+		return best;
 	}
 
 	/** Strikes the nearest item in reach: whittles a crate down (spilling food when
@@ -2443,6 +2617,12 @@ public class TestNPC extends NPC {
 	/** Ecosystem role, for the world steward's population census: {@code
 	 *  "predator"}, {@code "prey"}, or {@code ""} for anything else. */
 	public String ecoRole() {
+		// Diet decides this before behaviour does: a scavenger is a scavenger
+		// whatever loop drives it, and the census has to see it as its own trophic
+		// level rather than folding it in with the herbivores it is sized like.
+		if (diet == Diet.SCAVENGER) {
+			return "scavenger";
+		}
 		if (behavior == Behavior.PREDATOR) {
 			return "predator";
 		}

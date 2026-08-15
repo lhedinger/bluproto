@@ -198,6 +198,104 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A scavenger makes its living off carrion, and eating it IS decomposition:
+	 * the same bite that feeds the eater ages the body toward removal. Pins the
+	 * whole third trophic level -- that carrion feeds, that it decomposes faster
+	 * for being eaten, that freshness prices the meal, and that a scavenger has no
+	 * interest in the living.
+	 */
+	static class ScavengerEatsCarrionAndHastensItsDecay extends Scenario {
+		@Override
+		public void run() {
+			seed(29);
+			World w = room(12, 12);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+
+			// Two identical worlds, ticked in lockstep. The ONLY difference is that
+			// one carcass has a scavenger stood on it -- an earlier version of this
+			// test let the eaten body run one tick longer than the control, and a
+			// one-tick head start alone satisfied "decays faster", so the assertion
+			// passed against a sabotage that removed the decay entirely.
+			World w2 = room(12, 12);
+			TestNPC body = TestNPC.breeder(6.5, 6.5, 0, g);
+			TestNPC alone = TestNPC.breeder(6.5, 6.5, 0, g);
+			w.spawnEntity(body);
+			w2.spawnEntity(alone);
+			tick(w, 2);
+			tick(w2, 2);
+			body.damage(500);
+			alone.damage(500);
+			tick(w, 1);
+			tick(w2, 1);
+			assertTrue("there is a carcass", body.isDead());
+
+			// Driven by a scripted mind that simply holds "eat": this pins the BODY's
+			// scavenging, not whatever a starter brain happens to have evolved into.
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder).withDiet(TestNPC.Diet.SCAVENGER);
+			w.spawnEntity(scav);
+			tick(w, 1);
+			tick(w2, 1);
+			assertTrue("a scavenger is its own trophic level", "scavenger".equals(scav.ecoRole()));
+
+			double fed = scav.getEnergy();
+			tick(w, 60);
+			tick(w2, 60);
+			assertGreater("carrion feeds the scavenger", scav.getEnergy() - fed, 0);
+			// Both corpses have now been dead for exactly the same number of ticks,
+			// so every bit of this gap is the eating.
+			assertGreater("an eaten body decays far faster than one left alone",
+					body.decayProgress() - alone.decayProgress(), 0.2);
+		}
+	}
+
+	/**
+	 * A scavenger's forage channel points at carrion, not at grass -- the whole
+	 * mechanism by which it inherits the forage intent every starter brain already
+	 * runs, without a sensor or a policy of its own.
+	 */
+	static class ScavengerForagesTowardBodies extends Scenario {
+		@Override
+		public void run() {
+			seed(30);
+			World w = room(16, 10);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+
+			// Five tiles east — inside the genome's losRange of 6. Placed beyond it,
+			// the scavenger correctly senses nothing, which is sight working rather
+			// than foraging failing.
+			TestNPC body = TestNPC.breeder(8.5, 5.5, 0, g);
+			w.spawnEntity(body);
+			tick(w, 2);
+			body.damage(500);
+			tick(w, 1);
+
+			// Inert minds and a fixed heading: bearing is measured in the heading
+			// frame, so a creature free to turn would make "dead ahead" a statement
+			// about what its brain did rather than about where its food is.
+			Mind still = (sensors, act) -> { };
+			TestNPC scav = TestNPC.minded(3.5, 5.5, 0, g, still)
+					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+			TestNPC grazer = TestNPC.minded(3.5, 7.5, 0, g, still).withHeading(0);
+			w.spawnEntity(scav);
+			w.spawnEntity(grazer);
+			tick(w, 1);
+			snapshot(w, "a carcass east, a scavenger and a grazer west");
+			tick(w, 2); // let both sense at least once after being admitted
+
+			assertGreater("the scavenger senses the carcass as its forage",
+					scav.sensorSnapshot()[AgentIO.S_FORAGE_PROX], 0);
+			assertNear("and it is dead ahead of it",
+					0, scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING], 0.1);
+			// The grazer stands on grass, so its forage is underfoot -- much nearer
+			// than a body eleven tiles away. Same channel, different food.
+			assertGreater("a grazer's forage is the ground, not the body",
+					grazer.sensorSnapshot()[AgentIO.S_FORAGE_PROX],
+					scav.sensorSnapshot()[AgentIO.S_FORAGE_PROX]);
+		}
+	}
+
 	/** The Sound->hear() channel: a listener is inert until a sound reaches it. */
 	static class SoundWakesListener extends Scenario {
 		@Override
@@ -4736,6 +4834,8 @@ public class SimTests {
 				new ChaserClosesIn(),
 				new AgesOutAndIsRemoved(),
 				new LethalDamageAndScavenging(),
+				new ScavengerEatsCarrionAndHastensItsDecay(),
+				new ScavengerForagesTowardBodies(),
 				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
 				new HoleFallRespectsFlying(),

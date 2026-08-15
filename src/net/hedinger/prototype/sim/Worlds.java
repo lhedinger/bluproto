@@ -1507,6 +1507,19 @@ public final class Worlds {
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]));
 		}
 
+		// Founder scavengers: minded, like the cohort above and running the same
+		// brains, but eating carrion instead of grass. A third trophic level rather
+		// than a third species -- nothing dies for them, they live on what the other
+		// two leave behind, and by eating it they are the world's decomposition.
+		// Few: they are paid less per kilo than a hunter and their supply is
+		// mortality itself, so a handful is a niche and a crowd is a famine.
+		int nScav = Math.max(3, sc(3, scale));
+		net.hedinger.prototype.entities.Genome[] scavengers = mindedSpecies(nScav);
+		for (int i = 0; i < nScav; i++) {
+			double[] p = openSpot(w);
+			w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, scavengers[i]));
+		}
+
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < sc(10, scale); i++) {
 			double[] p = openSpot(w);
@@ -1541,7 +1554,13 @@ public final class Worlds {
 				// of which is measured yet; /api/health now reports tick cost so it can
 				// be watched. (Sim CPU is not the binding constraint: the world audit
 				// measures thousands of ticks/s against a 33 t/s requirement.)
-				Math.max(6, sc(6, scale)), Math.max(250, sc(250, scale)))); // minded
+				Math.max(6, sc(6, scale)), Math.max(250, sc(250, scale)), // minded
+				// Scavengers. A floor so the niche is never simply empty, and a
+				// ceiling well above it -- the binding control is meant to be the
+				// carrion supply, which is finite and self-limiting in a way grass is
+				// not: eating a body destroys it, so a scavenger bloom consumes its
+				// own larder and starves back without the steward touching it.
+				new int[] { Math.max(3, sc(3, scale)), Math.max(60, sc(60, scale)) }));
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
