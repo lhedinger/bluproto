@@ -131,10 +131,14 @@ public abstract class Entity {
 		run_extended();
 
 		if (age >= 0 && health <= 0) {
+			// Whatever wore the health down names the death; plain "wounds" if
+			// nothing bothered to say.
+			recordDeath(lastHarm != null ? lastHarm : "wounds");
 			kill();
 		}
 
 		if (age >= lifespan && lifespan > -1) {
+			recordDeath("old age");
 			kill();
 		}
 
@@ -550,6 +554,36 @@ public abstract class Entity {
 	 */
 	public void damage(int dmg) {
 		health -= dmg;
+	}
+
+	/**
+	 * Damage that knows what dealt it: remembers {@code cause} as the last harm,
+	 * so if this wound (or an accumulation ending in it) proves fatal, the corpse
+	 * can say what killed it. Callers that hurt creatures should prefer this over
+	 * the bare overload.
+	 */
+	public void damage(int dmg, String cause) {
+		lastHarm = cause;
+		damage(dmg);
+	}
+
+	/** Why this body died ("starvation", "predation", "old age", ...), or null
+	 *  while it is alive (or died before causes were tracked). Set once at the
+	 *  moment of death; the inspector reports it so a corpse explains itself. */
+	private String deathCause = null;
+	/** What last hurt this body — promoted to the death cause if fatal. */
+	private String lastHarm = null;
+
+	public String getDeathCause() {
+		return deathCause;
+	}
+
+	/** Records why this body died. The first recorded cause wins: a body that
+	 *  starved and was then scavenged still starved. */
+	public void recordDeath(String cause) {
+		if (deathCause == null) {
+			deathCause = cause;
+		}
 	}
 
 	public void kill() {

@@ -462,7 +462,8 @@ public abstract class NPC extends Entity {
 			energy -= base + grip + travel;
 			if (energy <= 0) {
 				energy = 0;
-				kill(); // starved
+				recordDeath("starvation");
+				kill();
 			}
 
 			// Water economy (WORLDGEN-RESEARCH.md: water as a need). Hydration
@@ -478,7 +479,7 @@ public abstract class NPC extends Entity {
 			if (hydration <= 0) {
 				hydration = 0;
 				if (age % 8 == 0) {
-					damage(1); // dehydration: a slow decline, not a switch
+					damage(1, "thirst"); // dehydration: a slow decline, not a switch
 				}
 			}
 		}

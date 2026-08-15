@@ -62,9 +62,10 @@ public class Bullet extends Entity {
 				for (Entity e : entities.values()) {
 					if (e != null) {
 						if (Utils.random() < accuracy) {
+							e.recordDeath("shot");
 							e.kill();
 						} else {
-							e.damage((int) variation(50, 25));
+							e.damage((int) variation(50, 25), "shot");
 						}
 					}
 				}

@@ -386,6 +386,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const rows: string[] = [];
+  if (d.diedOf) rows.push(row('died of', d.diedOf));
   if (d.action) rows.push(row('doing', d.action));
   if (d.state) rows.push(row('state', d.state));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
@@ -416,6 +417,7 @@ function renderInspectDebug(d: Record<string, any>): void {
   status.push(row('health', d.health));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
   if ('hydration' in d) status.push(bar('water', Number(d.hydration).toFixed(2), Math.max(0, Math.min(1, d.hydration))));
+  if (d.diedOf) status.push(row('died of', d.diedOf));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
   if (d.flying) fl.push('flying');

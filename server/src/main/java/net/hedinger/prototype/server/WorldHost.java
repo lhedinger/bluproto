@@ -239,6 +239,9 @@ final class WorldHost {
 			d.put("dir", round(e.getDirection()));
 			d.put("age", e.getAge());
 			d.put("dead", e.isDead());
+			if (e.isDead() && e.getDeathCause() != null) {
+				d.put("diedOf", e.getDeathCause()); // a corpse explains itself
+			}
 			d.put("flying", e.isFlying());
 			d.put("health", e.getHealth());
 			d.put("attachedTo", e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID());
