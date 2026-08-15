@@ -78,6 +78,75 @@ export function rimFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement
 export const RIM_COLOUR = '#c660ff';
 
 /**
+ * Far-zoom mips: quarter-size copies of the atlas variants, smoothed ONCE at
+ * bake time (like the depletion layer's mip). When the whole map is in view a
+ * creature is ~a dozen pixels tall; nearest-sampling that out of a 96-px cell
+ * every frame both wastes memory bandwidth and shimmers (it skips source
+ * pixels), while a pre-smoothed small cell resolves to stable coverage.
+ */
+export const MIP = 4; // mip cells are CELL / MIP px
+
+function downscale(src: HTMLCanvasElement): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.width = src.width / MIP;
+  cv.height = src.height / MIP;
+  const g = cv.getContext('2d')!;
+  g.imageSmoothingEnabled = true; // resolve to coverage once, here, never per frame
+  g.drawImage(src, 0, 0, cv.width, cv.height);
+  return cv;
+}
+
+const mipCache = new Map<number, HTMLCanvasElement>();
+
+export function atlasMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+  let m = mipCache.get(pheno);
+  if (!m) { m = downscale(atlas); mipCache.set(pheno, m); }
+  return m;
+}
+
+const corpseMipCache = new Map<number, HTMLCanvasElement>();
+
+export function corpseMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+  let m = corpseMipCache.get(pheno);
+  if (!m) { m = downscale(corpseFor(pheno, atlas)); corpseMipCache.set(pheno, m); }
+  return m;
+}
+
+/**
+ * The far-zoom minded variant: rim and body FUSED into one sprite, so a minded
+ * creature at fit zoom costs one drawImage instead of five. Baked at mip
+ * resolution — the rim is one mip-pixel wide, which at map-overview sizes is
+ * exactly what the live four-offset path resolves to anyway. Near zoom keeps
+ * the live path: there the rim must hug the body at one SCREEN pixel, which no
+ * baked asset can promise at every scale.
+ */
+const mindedMipCache = new Map<number, HTMLCanvasElement>();
+
+export function mindedMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+  let m = mindedMipCache.get(pheno);
+  if (m) return m;
+  const body = atlasMipFor(pheno, atlas);
+  const rim = document.createElement('canvas');
+  rim.width = body.width;
+  rim.height = body.height;
+  const rg = rim.getContext('2d')!;
+  rg.drawImage(body, 0, 0);
+  rg.globalCompositeOperation = 'source-in'; // the mip's silhouette in rim violet
+  rg.fillStyle = RIM_COLOUR;
+  rg.fillRect(0, 0, rim.width, rim.height);
+  m = document.createElement('canvas');
+  m.width = body.width;
+  m.height = body.height;
+  const g = m.getContext('2d')!;
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    g.drawImage(rim, dx, dy);
+  }
+  g.drawImage(body, 0, 0);
+  mindedMipCache.set(pheno, m);
+  return m;
+}
+
+/**
  * A drained, greyed copy of an atlas — what a corpse looks like.
  *
  * <p>The body keeps its shape, size and pose; only its colour goes. That matters

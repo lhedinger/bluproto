@@ -12,7 +12,10 @@ import { render, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
-const g = cv.getContext('2d')!;
+// alpha:false — every frame starts with an opaque fill, so the canvas never
+// needs an alpha channel; declaring it lets the browser composite the canvas
+// into the page without per-frame blending.
+const g = cv.getContext('2d', { alpha: false })!;
 const statsEl = document.getElementById('stats')!;
 const pauseBtn = document.getElementById('pause') as HTMLButtonElement;
 const speedSel = document.getElementById('speed') as HTMLSelectElement;

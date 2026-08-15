@@ -3,7 +3,10 @@
 // keeps distant creatures visible when zoomed out. Pixel-art stays crisp via
 // nearest-neighbour scaling of the layer.
 
-import { ART_RADIUS, CELL, RIM_COLOUR, atlasFor, cell, corpseFor, rimFor } from './atlas';
+import {
+  ART_RADIUS, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
+  corpseMipFor, mindedMipFor, rimFor,
+} from './atlas';
 import type { Camera } from './camera';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
@@ -232,11 +235,9 @@ export function render(
 
     if (e.kind === 'phero') {
       const r = Math.max(2, e.size * cam.scale);
-      const grad = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      grad.addColorStop(0, 'rgba(230,40,190,0.20)');
-      grad.addColorStop(1, 'rgba(230,40,190,0)');
-      g.fillStyle = grad;
-      g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
+      g.imageSmoothingEnabled = true; // the haze's tint stays soft by design
+      g.drawImage(pheroPuff(), s.x - r, s.y - r, r * 2, r * 2);
+      g.imageSmoothingEnabled = false;
       continue;
     }
 
@@ -273,7 +274,10 @@ export function render(
         const box = r * 2 * (CELL / (2 * ART_RADIUS));
         const { col: dc, row: dr } = cell(p.dir, nowMs);
         g.imageSmoothingEnabled = false;
-        g.drawImage(corpseFor(e.pheno, dead), dc * CELL, dr * CELL, CELL, CELL,
+        // Far zoom stamps from the pre-smoothed quarter-size mip (see atlas.ts).
+        const c = box <= CELL / MIP ? CELL / MIP : CELL;
+        const src = c === CELL ? corpseFor(e.pheno, dead) : corpseMipFor(e.pheno, dead);
+        g.drawImage(src, dc * c, dr * c, c, c,
           s.x - box / 2, s.y - box / 2, box, box);
       } else {
         g.fillStyle = '#555a63'; // no sprite yet: a spent dot, no marker over it
@@ -288,22 +292,30 @@ export function render(
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
       const { col: cc, row: rr } = cell(p.dir, nowMs);
       g.imageSmoothingEnabled = false;
-      // Minded cohort: a violet rim hugging the body, so a creature driven by an
-      // evolvable mind can be picked out of the scripted species at a glance. The
-      // ring this replaces was the one smooth curve on a screen of pixel art, and
-      // it also had to be told apart from the grab and carry rings by radius alone
-      // — a shape that follows the sprite is legible at any zoom and cannot be
-      // confused with them. Four offsets rather than eight: at one pixel the
-      // diagonals add nothing but cost two more draws per creature.
-      if (e.flags & F_MINDED) {
-        const rim = rimFor(e.pheno, atlas);
-        const d = Math.max(1, box / CELL); // one SPRITE pixel, never under one screen pixel
-        for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) {
-          g.drawImage(rim, cc * CELL, rr * CELL, CELL, CELL,
-            s.x - box / 2 + dx, s.y - box / 2 + dy, box, box);
+      if (box <= CELL / MIP) {
+        // Far zoom: one stamp from the quarter-size mip — the minded variant has
+        // its rim baked in, so the whole herd view costs one draw per creature.
+        const c = CELL / MIP;
+        const src = (e.flags & F_MINDED) ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas);
+        g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
+      } else {
+        // Minded cohort: a violet rim hugging the body, so a creature driven by an
+        // evolvable mind can be picked out of the scripted species at a glance. The
+        // ring this replaces was the one smooth curve on a screen of pixel art, and
+        // it also had to be told apart from the grab and carry rings by radius alone
+        // — a shape that follows the sprite is legible at any zoom and cannot be
+        // confused with them. Four offsets rather than eight: at one pixel the
+        // diagonals add nothing but cost two more draws per creature.
+        if (e.flags & F_MINDED) {
+          const rim = rimFor(e.pheno, atlas);
+          const d = Math.max(1, box / CELL); // one SPRITE pixel, never under one screen pixel
+          for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) {
+            g.drawImage(rim, cc * CELL, rr * CELL, CELL, CELL,
+              s.x - box / 2 + dx, s.y - box / 2 + dy, box, box);
+          }
         }
+        g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
-      g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
     } else {
       g.fillStyle = col;
       g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
@@ -359,8 +371,16 @@ export function render(
   // Shrub canopy: thickets (cover tiles) grow foliage that draws OVER the
   // creatures, so anything standing in cover is partly hidden — matching the
   // fact that cover blocks line of sight. The clumps are translucent and leave
-  // gaps, so you can still make out what's underneath.
-  if (cover) drawCanopy(g, cam, meta, cover);
+  // gaps, so you can still make out what's underneath. Blitted from the cached
+  // layer (see canopyLayer) — crisp art-pixels near, the smoothed mip far.
+  if (cover) {
+    const layer = canopyLayer(meta, cover, level);
+    const o = cam.worldToScreen(0, 0);
+    const src = cam.scale < ART && canopyLow ? canopyLow : layer;
+    g.imageSmoothingEnabled = cam.scale < ART;
+    g.drawImage(src, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+    g.imageSmoothingEnabled = false;
+  }
 }
 
 // Stable per-tile pseudo-random in [0,1): same tile+index always yields the
@@ -371,48 +391,100 @@ function shrubRand(x: number, y: number, i: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-// Draws a bush canopy over every visible cover tile: a deterministic cluster of
-// translucent green blobs per tile, spilling slightly across tile edges so
-// adjacent thickets merge into a continuous stand.
-function drawCanopy(g: CanvasRenderingContext2D, cam: Camera, meta: WorldMeta, cover: Uint8Array): void {
-  const cv = g.canvas;
-  const tl = cam.screenToWorld(0, 0);
-  const br = cam.screenToWorld(cv.width, cv.height);
-  const x0 = Math.max(0, Math.floor(tl.x)), y0 = Math.max(0, Math.floor(tl.y));
-  const x1 = Math.min(meta.cols - 1, Math.ceil(br.x)), y1 = Math.min(meta.rows - 1, Math.ceil(br.y));
-  const s = cam.scale;
+// The shrub canopy, cached the same way as the depletion layer: the cover mask
+// is static per level, so the foliage over it is composited ONCE into an
+// offscreen canvas at art-pixel resolution and blitted in a single drawImage
+// per frame — the per-frame path drew five arc/fill blobs per visible cover
+// tile. Rasterising at art-pixel resolution also brings the canopy into
+// ART-STYLE.md conformance: its blobs become blocky translucent ovals on the
+// lattice (sanctioned translucency #2) instead of smooth anti-aliased circles.
+let canopyCv: HTMLCanvasElement | null = null;
+let canopyLow: HTMLCanvasElement | null = null;
+let canopySrc: Uint8Array | null = null;
+let canopyLevel = -1;
+
+function canopyLayer(meta: WorldMeta, cover: Uint8Array, level: number): HTMLCanvasElement {
+  if (canopyCv && cover === canopySrc && level === canopyLevel) return canopyCv;
+  if (!canopyCv || canopyCv.width !== meta.cols * ART || canopyCv.height !== meta.rows * ART) {
+    canopyCv = document.createElement('canvas');
+    canopyCv.width = meta.cols * ART;
+    canopyCv.height = meta.rows * ART;
+  }
+  const ctx = canopyCv.getContext('2d')!;
+  ctx.clearRect(0, 0, canopyCv.width, canopyCv.height);
   // Translucent tones, kept light enough that a creature under the canopy still
   // reads through the gaps and the foliage itself.
   const tones = ['rgba(44,84,34,0.42)', 'rgba(32,63,25,0.46)', 'rgba(74,120,52,0.38)'];
-  for (let ty = y0; ty <= y1; ty++) {
-    for (let tx = x0; tx <= x1; tx++) {
-      const cv2 = cover[ty * meta.cols + tx];
-      if (cv2 === 2) {
+  for (let ty = 0; ty < meta.rows; ty++) {
+    for (let tx = 0; tx < meta.cols; tx++) {
+      const v = cover[ty * meta.cols + tx];
+      if (v === 2) {
         // A crawl duct: its concealment is a metal lid, not shrubbery —
         // translucent slats with a dark seam, so a crawler underneath still
-        // half-reads through the gaps.
-        const o = cam.worldToScreen(tx, ty);
-        g.fillStyle = 'rgba(97,105,116,0.55)';
-        for (let i = 0; i < 3; i++) {
-          g.fillRect(o.x + s * 0.06, o.y + s * (0.10 + i * 0.30), s * 0.88, s * 0.20);
-        }
-        g.fillStyle = 'rgba(20,22,26,0.5)';
-        for (let i = 0; i < 2; i++) {
-          g.fillRect(o.x + s * 0.06, o.y + s * (0.30 + i * 0.30), s * 0.88, s * 0.04);
-        }
+        // half-reads through the gaps. Authored on the lattice: three 2-px
+        // slats with 1-px seams between them.
+        const ox = tx * ART, oy = ty * ART;
+        ctx.fillStyle = 'rgba(97,105,116,0.55)';
+        for (let i = 0; i < 3; i++) ctx.fillRect(ox + 1, oy + 1 + i * 4, 10, 3);
+        ctx.fillStyle = 'rgba(20,22,26,0.5)';
+        for (let i = 0; i < 2; i++) ctx.fillRect(ox + 1, oy + 4 + i * 4, 10, 1);
         continue;
       }
-      if (cv2 !== 1) continue;
-      const o = cam.worldToScreen(tx, ty);
+      if (v !== 1) continue;
+      // Five deterministic blobs per tile, spilling slightly across tile edges
+      // so adjacent thickets merge — rasterised art-pixel by art-pixel into
+      // blocky translucent ovals (no anti-aliased edges, no overdrawn seams
+      // within one blob).
       for (let i = 0; i < 5; i++) {
-        const bx = o.x + (0.15 + shrubRand(tx, ty, i * 3) * 0.70) * s;
-        const by = o.y + (0.15 + shrubRand(tx, ty, i * 3 + 1) * 0.70) * s;
-        const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * s;
-        g.fillStyle = tones[i % tones.length];
-        g.beginPath(); g.arc(bx, by, rad, 0, 7); g.fill();
+        const bx = (tx + 0.15 + shrubRand(tx, ty, i * 3) * 0.70) * ART;
+        const by = (ty + 0.15 + shrubRand(tx, ty, i * 3 + 1) * 0.70) * ART;
+        const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * ART;
+        ctx.fillStyle = tones[i % tones.length];
+        const gx0 = Math.floor(bx - rad), gx1 = Math.ceil(bx + rad);
+        const gy0 = Math.floor(by - rad), gy1 = Math.ceil(by + rad);
+        for (let gy = gy0; gy < gy1; gy++) {
+          for (let gx = gx0; gx < gx1; gx++) {
+            const dx = gx + 0.5 - bx, dy = gy + 0.5 - by;
+            if (dx * dx + dy * dy <= rad * rad) ctx.fillRect(gx, gy, 1, 1);
+          }
+        }
       }
     }
   }
+  const LOW = 3;
+  if (!canopyLow || canopyLow.width !== meta.cols * LOW) {
+    canopyLow = document.createElement('canvas');
+    canopyLow.width = meta.cols * LOW;
+    canopyLow.height = meta.rows * LOW;
+  }
+  const lg = canopyLow.getContext('2d')!;
+  lg.clearRect(0, 0, canopyLow.width, canopyLow.height);
+  lg.imageSmoothingEnabled = true;
+  lg.drawImage(canopyCv, 0, 0, canopyLow.width, canopyLow.height);
+  canopySrc = cover;
+  canopyLevel = level;
+  return canopyCv;
+}
+
+// The pheromone puff's soft radial falloff, baked once and blitted scaled: a
+// per-frame createRadialGradient allocates and rasterises a fresh gradient for
+// every puff on screen. The haze must stay smooth (sanctioned translucency #3
+// keeps the TINT soft), so the blit re-enables smoothing for just this draw.
+let pheroSprite: HTMLCanvasElement | null = null;
+
+function pheroPuff(): HTMLCanvasElement {
+  if (!pheroSprite) {
+    pheroSprite = document.createElement('canvas');
+    pheroSprite.width = 64;
+    pheroSprite.height = 64;
+    const pg = pheroSprite.getContext('2d')!;
+    const grad = pg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(230,40,190,0.20)');
+    grad.addColorStop(1, 'rgba(230,40,190,0)');
+    pg.fillStyle = grad;
+    pg.fillRect(0, 0, 64, 64);
+  }
+  return pheroSprite;
 }
 
 /**
