@@ -48,6 +48,26 @@ function ditherMask(coverage16: number): HTMLCanvasElement {
 /** Scratch tile for compositing one bare-bake tile under a dither mask. */
 const SCRATCH = document.createElement('canvas');
 
+/**
+ * Composite one tile of the bare (fully-grazed) bake through the depletion
+ * dither mask into `ctx` — the ONE way grazing is allowed to show (a state is
+ * another bake, dithered per art-pixel; ART-STYLE.md case law). Exported so
+ * /sprites runs the identical compositing beside the Java depletion strip.
+ */
+export function ditherTile(ctx: CanvasRenderingContext2D, src: CanvasImageSource,
+    sx: number, sy: number, tilePx: number,
+    dx: number, dy: number, dw: number, dh: number, depl16: number): void {
+  if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
+  const sg = SCRATCH.getContext('2d')!;
+  sg.clearRect(0, 0, tilePx, tilePx);
+  sg.drawImage(src, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
+  sg.globalCompositeOperation = 'destination-in';
+  sg.imageSmoothingEnabled = false;
+  sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
+  sg.globalCompositeOperation = 'source-over';
+  ctx.drawImage(SCRATCH, 0, 0, tilePx, tilePx, dx, dy, dw, dh);
+}
+
 // The depletion layer: the whole level's grazing overlay composited ONCE per
 // vegetation update (the grid polls every ~1.5 s) into an offscreen canvas at
 // art-pixel resolution (12 px per tile), then blitted in a single drawImage
@@ -83,8 +103,6 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   const ctx = deplLayer.getContext('2d')!;
   ctx.clearRect(0, 0, deplLayer.width, deplLayer.height);
   ctx.imageSmoothingEnabled = false;
-  if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
-  const sg = SCRATCH.getContext('2d')!;
   deplMissing = 0;
   for (let ty = 0; ty < meta.rows; ty++) {
     for (let tx = 0; tx < meta.cols; tx++) {
@@ -95,14 +113,8 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
       const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
       const bare = getBareChunk(ccx, ccy);
       if (!bare) { deplMissing++; continue; }
-      const sx = (tx - ccx * chunkTiles) * tilePx, sy = (ty - ccy * chunkTiles) * tilePx;
-      sg.clearRect(0, 0, tilePx, tilePx);
-      sg.drawImage(bare, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
-      sg.globalCompositeOperation = 'destination-in';
-      sg.imageSmoothingEnabled = false;
-      sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
-      sg.globalCompositeOperation = 'source-over';
-      ctx.drawImage(SCRATCH, 0, 0, tilePx, tilePx, tx * ART, ty * ART, ART, ART);
+      ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
+        tilePx, tx * ART, ty * ART, ART, ART, depl16);
     }
   }
   const LOW = 3;
@@ -249,9 +261,7 @@ export function render(
     if (carrier) {
       const cp = state.sample(carrier, renderTime);
       const cs = cam.worldToScreen(cp.x, cp.y);
-      g.strokeStyle = 'rgba(0,229,255,0.55)';
-      g.lineWidth = Math.max(1, cam.scale * 0.02);
-      g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(cs.x, cs.y); g.stroke();
+      drawCarryLink(g, s.x, s.y, cs.x, cs.y, cam.scale);
     }
 
     if (e.kind === 'nest') {
@@ -317,18 +327,7 @@ export function render(
         g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
-      g.fillStyle = col;
-      g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
-      // No sprite to hug yet, so the placeholder wears the rim as its edge.
-      g.strokeStyle = (e.flags & F_MINDED) ? RIM_COLOUR : 'rgba(0,0,0,0.45)';
-      g.lineWidth = (e.flags & F_MINDED) ? 2 : 1;
-      g.stroke();
-      g.fillStyle = 'rgba(255,255,255,0.85)';
-      g.beginPath();
-      g.moveTo(s.x + Math.cos(p.dir) * r * 1.35, s.y + Math.sin(p.dir) * r * 1.35);
-      g.lineTo(s.x + Math.cos(p.dir + 2.5) * r * 0.55, s.y + Math.sin(p.dir + 2.5) * r * 0.55);
-      g.lineTo(s.x + Math.cos(p.dir - 2.5) * r * 0.55, s.y + Math.sin(p.dir - 2.5) * r * 0.55);
-      g.closePath(); g.fill();
+      drawPlaceholder(g, s.x, s.y, r, p.dir, col, (e.flags & F_MINDED) !== 0);
     }
 
     // What it is doing, as a small badge hovering over the body. Only notable
@@ -342,69 +341,166 @@ export function render(
       drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
     }
 
-    if (e.flags & F_GRABBED) {
-      g.strokeStyle = 'rgba(255,160,60,0.9)';
-      g.lineWidth = Math.max(1, r * 0.2);
-      g.beginPath(); g.arc(s.x, s.y, r * 1.4, 0, 7); g.stroke();
-    } else if (e.flags & F_CARRYING) {
-      g.strokeStyle = 'rgba(0,229,255,0.6)';
-      g.lineWidth = 1;
-      g.beginPath(); g.arc(s.x, s.y, r * 1.3, 0, 7); g.stroke();
-    }
+    if (e.flags & F_GRABBED) drawRing(g, 'grabbed', s.x, s.y, r);
+    else if (e.flags & F_CARRYING) drawRing(g, 'carrying', s.x, s.y, r);
 
     // Follow highlight: a gentle pulsing ring around the tracked creature.
-    if (cam.followId === e.id) {
-      const pulse = 1.6 + 0.25 * Math.sin(renderTime / 180);
-      g.strokeStyle = 'rgba(255,255,255,0.8)';
-      g.lineWidth = 2;
-      g.beginPath(); g.arc(s.x, s.y, r * pulse + 4, 0, 7); g.stroke();
-    }
+    if (cam.followId === e.id) drawRing(g, 'follow', s.x, s.y, r, renderTime);
     // Selection highlight: a steady amber ring on the inspected creature, so it's
     // obvious which one the panel describes (distinct from the follow pulse).
-    if (selection.id === e.id) {
-      g.strokeStyle = 'rgba(255,214,64,0.95)';
-      g.lineWidth = Math.max(2, r * 0.18);
-      g.beginPath(); g.arc(s.x, s.y, r * 1.7 + 3, 0, 7); g.stroke();
-    }
+    if (selection.id === e.id) drawRing(g, 'selected', s.x, s.y, r);
   }
 
-  // Shrub canopy: thickets (cover tiles) grow foliage that draws OVER the
-  // creatures, so anything standing in cover is partly hidden — matching the
-  // fact that cover blocks line of sight. The clumps are translucent and leave
-  // gaps, so you can still make out what's underneath. Blitted from the cached
-  // layer (see canopyLayer) — crisp art-pixels near, the smoothed mip far.
-  if (cover) {
-    const layer = canopyLayer(meta, cover, level);
+  // Concealment over the creatures: anything standing in a walkable
+  // sight-blocker is part-hidden, matching the fact that cover blocks line of
+  // sight. Foliage veils (thicket, reeds) blit from the cached layer — crisp
+  // art-pixels near, the smoothed mip far.
+  if (cover && chunkTiles > 0 && tilePx > 0) {
+    const layer = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
     const o = cam.worldToScreen(0, 0);
     const src = cam.scale < ART && canopyLow ? canopyLow : layer;
     g.imageSmoothingEnabled = cam.scale < ART;
     g.drawImage(src, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
     g.imageSmoothingEnabled = false;
+
+    // Duct lids are different: a lid is visibly not the duct's open floor, so
+    // it cannot sit in the static layer — like the Java renderer, the lid
+    // materialises only over ducts an entity is in or beside (the 3x3
+    // neighbourhood Grid.renderConcealment veils), and an empty duct shows
+    // its floor.
+    const lids = new Set<number>();
+    for (const t of tracks) {
+      const e = t.curr;
+      if (e.kind === 'phero' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      const ex = Math.floor(e.x), ey = Math.floor(e.y);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const tx = ex + dx, ty = ey + dy;
+          if (tx < 0 || ty < 0 || tx >= meta.cols || ty >= meta.rows) continue;
+          if (cover[ty * meta.cols + tx] === 2) lids.add(ty * meta.cols + tx);
+        }
+      }
+    }
+    for (const key of lids) {
+      const tx = key % meta.cols, ty = Math.floor(key / meta.cols);
+      const o2 = cam.worldToScreen(tx, ty);
+      if (o2.x < -cam.scale || o2.y < -cam.scale || o2.x > cv.width || o2.y > cv.height) continue;
+      const vert = (ty > 0 && cover[(ty - 1) * meta.cols + tx] === 2)
+        || (ty < meta.rows - 1 && cover[(ty + 1) * meta.cols + tx] === 2);
+      g.drawImage(ductLidTile(vert), o2.x, o2.y, cam.scale, cam.scale);
+    }
   }
 }
 
-// Stable per-tile pseudo-random in [0,1): same tile+index always yields the
-// same value, so the foliage doesn't shimmer between frames.
-function shrubRand(x: number, y: number, i: number): number {
-  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(i, 2246822519)) >>> 0;
+/** Ported verbatim from GroundTextures.hash01 (32-bit int arithmetic via
+ *  Math.imul) — the concealment gap mask must agree with the Java renderer's
+ *  bit for bit, or /sprites shows the pipelines disagreeing. */
+export function hash01(x: number, y: number, s: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 2246822519 | 0)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  return ((h ^ (h >>> 16)) & 0x7fffffff) / 0x7fffffff;
 }
 
-// The shrub canopy, cached the same way as the depletion layer: the cover mask
-// is static per level, so the foliage over it is composited ONCE into an
-// offscreen canvas at art-pixel resolution and blitted in a single drawImage
-// per frame — the per-frame path drew five arc/fill blobs per visible cover
-// tile. Rasterising at art-pixel resolution also brings the canopy into
-// ART-STYLE.md conformance: its blobs become blocky translucent ovals on the
-// lattice (sanctioned translucency #2) instead of smooth anti-aliased circles.
+// The concealment veil, mirroring Grid.renderConcealment: a body standing in
+// a walkable sight-blocker is part-hidden by the tile's OWN pixels re-stamped
+// over the entity layer. The client does not regenerate the texture functions
+// — it re-stamps the baked chunk pixels, which the same functions produced —
+// so every veil pixel is one the Java renderer authored, and where nothing is
+// underneath the veil is invisible (identical pixels over identical pixels).
+// This replaced a translucent green wash (see ART-STYLE.md case law).
+//
+// Thicket (cover 1): clustered 2x2 art-px blocks at ~half coverage — the gap
+// mask is hash01(gx>>1, gy>>1, 61) > 0.55, identical to the Java pass.
+// Reeds (cover 3): stalk-exact — every baked pixel EXCEPT the reed-bed's gap
+// colour is re-stamped, so a body shows between the stalks.
+const REED_GAP = 0x14301f; // GroundTextures.RAMP[CLS_REEDS][0]
+
+const VEIL_SCRATCH = document.createElement('canvas');
+VEIL_SCRATCH.width = 12;
+VEIL_SCRATCH.height = 12;
+
+/** Stamp one cover tile's veil into an art-pixel-resolution (12 px/tile)
+ *  context. (tx, ty) index the world tile (they seed the world-absolute gap
+ *  hash); (dx, dy) is where the tile lands in `ctx`; (sx, sy, srcTilePx)
+ *  locate the tile in the baked ground source. Kinds: 1 thicket, 3 reeds. */
+export function veilTile(ctx: CanvasRenderingContext2D, kind: number,
+    tx: number, ty: number, dx: number, dy: number,
+    src: CanvasImageSource, sx: number, sy: number, srcTilePx: number): void {
+  if (kind === 3) {
+    const vg = VEIL_SCRATCH.getContext('2d', { willReadFrequently: true })!;
+    vg.clearRect(0, 0, ART, ART);
+    vg.imageSmoothingEnabled = false;
+    vg.drawImage(src, sx, sy, srcTilePx, srcTilePx, 0, 0, ART, ART);
+    const id = vg.getImageData(0, 0, ART, ART);
+    const px = id.data;
+    for (let i = 0; i < px.length; i += 4) {
+      if ((px[i] << 16 | px[i + 1] << 8 | px[i + 2]) === REED_GAP) px[i + 3] = 0;
+    }
+    ctx.putImageData(id, dx, dy);
+    return;
+  }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(src, sx, sy, srcTilePx, srcTilePx, dx, dy, ART, ART);
+  for (let j = 0; j < 6; j++) {
+    for (let i = 0; i < 6; i++) {
+      if (hash01(tx * 6 + i, ty * 6 + j, 61) > 0.55) {
+        ctx.clearRect(dx + i * 2, dy + j * 2, 2, 2);
+      }
+    }
+  }
+}
+
+/**
+ * The duct's ribbed lid tile (cover 2) — ported from GroundTextures.ductLid:
+ * solid side walls, lit rib / rib flank / open slot on a 3-px cycle, so a
+ * crawler shows through the slots. Two orientations, baked once at art-pixel
+ * size. Unlike the foliage veils this is NOT in the static layer: a lid is
+ * visibly different from the duct's open floor, and the Java renderer shows
+ * an empty duct open — lids materialise only around occupants (see render()).
+ */
+const DUCT_RAMP = ['#3f454c', '#616974', '#88929e']; // GroundTextures.RAMP[CLS_DUCT]
+const lidTiles: (HTMLCanvasElement | null)[] = [null, null];
+
+export function ductLidTile(vertical: boolean): HTMLCanvasElement {
+  let cv = lidTiles[vertical ? 1 : 0];
+  if (cv) return cv;
+  cv = document.createElement('canvas');
+  cv.width = ART;
+  cv.height = ART;
+  const g = cv.getContext('2d')!;
+  for (let aj = 0; aj < ART; aj++) {
+    for (let ai = 0; ai < ART; ai++) {
+      const along = vertical ? aj : ai, across = vertical ? ai : aj;
+      let c: string | null;
+      if (across === 0 || across === ART - 1) c = DUCT_RAMP[0]; // side walls stay solid
+      else if (along % 3 === 0) c = DUCT_RAMP[2]; // lit rib
+      else if (along % 3 === 1) c = DUCT_RAMP[1]; // rib flank
+      else c = null; // the slot between ribs: the crawler shows through
+      if (c) { g.fillStyle = c; g.fillRect(ai, aj, 1, 1); }
+    }
+  }
+  lidTiles[vertical ? 1 : 0] = cv;
+  return cv;
+}
+
+// The foliage veil layer, cached like the depletion layer: cover is static per
+// level and the veil is a pure re-stamp of the (static) bake, so it is built
+// once and blitted in a single drawImage per frame. Thicket and reed veils can
+// safely cover EVERY cover tile — where no body is beneath, re-stamped pixels
+// land on identical pixels and nothing changes.
 let canopyCv: HTMLCanvasElement | null = null;
 let canopyLow: HTMLCanvasElement | null = null;
 let canopySrc: Uint8Array | null = null;
 let canopyLevel = -1;
+let canopyMissing = 0; // chunks still streaming when last built
+let canopyRetryAt = 0;
 
-function canopyLayer(meta: WorldMeta, cover: Uint8Array, level: number): HTMLCanvasElement {
-  if (canopyCv && cover === canopySrc && level === canopyLevel) return canopyCv;
+function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
+    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    cover: Uint8Array, level: number, nowMs: number): HTMLCanvasElement {
+  const stale = cover !== canopySrc || level !== canopyLevel
+    || (canopyMissing > 0 && nowMs >= canopyRetryAt);
+  if (!stale && canopyCv) return canopyCv;
   if (!canopyCv || canopyCv.width !== meta.cols * ART || canopyCv.height !== meta.rows * ART) {
     canopyCv = document.createElement('canvas');
     canopyCv.width = meta.cols * ART;
@@ -412,43 +508,16 @@ function canopyLayer(meta: WorldMeta, cover: Uint8Array, level: number): HTMLCan
   }
   const ctx = canopyCv.getContext('2d')!;
   ctx.clearRect(0, 0, canopyCv.width, canopyCv.height);
-  // Translucent tones, kept light enough that a creature under the canopy still
-  // reads through the gaps and the foliage itself.
-  const tones = ['rgba(44,84,34,0.42)', 'rgba(32,63,25,0.46)', 'rgba(74,120,52,0.38)'];
+  canopyMissing = 0;
   for (let ty = 0; ty < meta.rows; ty++) {
     for (let tx = 0; tx < meta.cols; tx++) {
       const v = cover[ty * meta.cols + tx];
-      if (v === 2) {
-        // A crawl duct: its concealment is a metal lid, not shrubbery —
-        // translucent slats with a dark seam, so a crawler underneath still
-        // half-reads through the gaps. Authored on the lattice: three 2-px
-        // slats with 1-px seams between them.
-        const ox = tx * ART, oy = ty * ART;
-        ctx.fillStyle = 'rgba(97,105,116,0.55)';
-        for (let i = 0; i < 3; i++) ctx.fillRect(ox + 1, oy + 1 + i * 4, 10, 3);
-        ctx.fillStyle = 'rgba(20,22,26,0.5)';
-        for (let i = 0; i < 2; i++) ctx.fillRect(ox + 1, oy + 4 + i * 4, 10, 1);
-        continue;
-      }
-      if (v !== 1) continue;
-      // Five deterministic blobs per tile, spilling slightly across tile edges
-      // so adjacent thickets merge — rasterised art-pixel by art-pixel into
-      // blocky translucent ovals (no anti-aliased edges, no overdrawn seams
-      // within one blob).
-      for (let i = 0; i < 5; i++) {
-        const bx = (tx + 0.15 + shrubRand(tx, ty, i * 3) * 0.70) * ART;
-        const by = (ty + 0.15 + shrubRand(tx, ty, i * 3 + 1) * 0.70) * ART;
-        const rad = (0.16 + shrubRand(tx, ty, i * 3 + 2) * 0.16) * ART;
-        ctx.fillStyle = tones[i % tones.length];
-        const gx0 = Math.floor(bx - rad), gx1 = Math.ceil(bx + rad);
-        const gy0 = Math.floor(by - rad), gy1 = Math.ceil(by + rad);
-        for (let gy = gy0; gy < gy1; gy++) {
-          for (let gx = gx0; gx < gx1; gx++) {
-            const dx = gx + 0.5 - bx, dy = gy + 0.5 - by;
-            if (dx * dx + dy * dy <= rad * rad) ctx.fillRect(gx, gy, 1, 1);
-          }
-        }
-      }
+      if (v !== 1 && v !== 3) continue;
+      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+      const chunk = getChunk(ccx, ccy);
+      if (!chunk) { canopyMissing++; continue; }
+      veilTile(ctx, v, tx, ty, tx * ART, ty * ART, chunk,
+        (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx, tilePx);
     }
   }
   const LOW = 3;
@@ -463,6 +532,7 @@ function canopyLayer(meta: WorldMeta, cover: Uint8Array, level: number): HTMLCan
   lg.drawImage(canopyCv, 0, 0, canopyLow.width, canopyLow.height);
   canopySrc = cover;
   canopyLevel = level;
+  canopyRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
   return canopyCv;
 }
 
@@ -472,7 +542,7 @@ function canopyLayer(meta: WorldMeta, cover: Uint8Array, level: number): HTMLCan
 // keeps the TINT soft), so the blit re-enables smoothing for just this draw.
 let pheroSprite: HTMLCanvasElement | null = null;
 
-function pheroPuff(): HTMLCanvasElement {
+export function pheroPuff(): HTMLCanvasElement {
   if (!pheroSprite) {
     pheroSprite = document.createElement('canvas');
     pheroSprite.width = 64;
@@ -722,6 +792,67 @@ export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y
   }
 }
 
+/**
+ * The viewer's status rings — grab (warm amber, being held), carry (cool cyan,
+ * holding), follow (soft white pulse on the tracked creature), selected
+ * (steady amber, the inspected one). Part of the overlay language, not world
+ * art: smooth strokes are allowed here, and radius + colour together keep the
+ * four meanings apart. `timeMs` drives the follow pulse only.
+ */
+export function drawRing(g: CanvasRenderingContext2D,
+    kind: 'grabbed' | 'carrying' | 'follow' | 'selected',
+    x: number, y: number, r: number, timeMs = 0): void {
+  switch (kind) {
+    case 'grabbed':
+      g.strokeStyle = 'rgba(255,160,60,0.9)';
+      g.lineWidth = Math.max(1, r * 0.2);
+      g.beginPath(); g.arc(x, y, r * 1.4, 0, 7); g.stroke();
+      return;
+    case 'carrying':
+      g.strokeStyle = 'rgba(0,229,255,0.6)';
+      g.lineWidth = 1;
+      g.beginPath(); g.arc(x, y, r * 1.3, 0, 7); g.stroke();
+      return;
+    case 'follow': {
+      const pulse = 1.6 + 0.25 * Math.sin(timeMs / 180);
+      g.strokeStyle = 'rgba(255,255,255,0.8)';
+      g.lineWidth = 2;
+      g.beginPath(); g.arc(x, y, r * pulse + 4, 0, 7); g.stroke();
+      return;
+    }
+    case 'selected':
+      g.strokeStyle = 'rgba(255,214,64,0.95)';
+      g.lineWidth = Math.max(2, r * 0.18);
+      g.beginPath(); g.arc(x, y, r * 1.7 + 3, 0, 7); g.stroke();
+  }
+}
+
+/** The tether between a carrier and its cargo, drawn under both bodies. */
+export function drawCarryLink(g: CanvasRenderingContext2D,
+    x0: number, y0: number, x1: number, y1: number, scale: number): void {
+  g.strokeStyle = 'rgba(0,229,255,0.55)';
+  g.lineWidth = Math.max(1, scale * 0.02);
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+}
+
+/** The pre-atlas placeholder: a coloured dot with a heading wedge, worn while
+ *  a creature's sprite atlas is still in flight. A minded creature wears the
+ *  rim violet as its edge, since there is no sprite to hug yet. */
+export function drawPlaceholder(g: CanvasRenderingContext2D, x: number, y: number,
+    r: number, dir: number, col: string, minded: boolean): void {
+  g.fillStyle = col;
+  g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.strokeStyle = minded ? RIM_COLOUR : 'rgba(0,0,0,0.45)';
+  g.lineWidth = minded ? 2 : 1;
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.beginPath();
+  g.moveTo(x + Math.cos(dir) * r * 1.35, y + Math.sin(dir) * r * 1.35);
+  g.lineTo(x + Math.cos(dir + 2.5) * r * 0.55, y + Math.sin(dir + 2.5) * r * 0.55);
+  g.lineTo(x + Math.cos(dir - 2.5) * r * 0.55, y + Math.sin(dir - 2.5) * r * 0.55);
+  g.closePath(); g.fill();
+}
+
 /** Smallest on-screen body radius (device px) that earns an action badge. Below
  *  this the shape cannot be told apart from a coloured dot, so drawing it is
  *  noise; the map-overview zoom sits well under it. */
@@ -748,8 +879,8 @@ const ACTION_COLOUR: Record<number, string> = {
  *
  * Drawn on a dark disc so it stays legible over grass, water or a pale body.
  */
-function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: number,
-                         u: number, action: number): void {
+export function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: number,
+                                u: number, action: number): void {
   if (!action) return; // nothing worth showing (the zoom gate is at the call site)
   const col = ACTION_COLOUR[action];
   if (!col) return;

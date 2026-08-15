@@ -485,12 +485,14 @@ final class WorldHost {
 
 	/**
 	 * Per-tile cover mask for the concealment overlay: one byte per tile of
-	 * level z — 1 where the tile is walkable foliage cover (a {@code
-	 * TYPE_COVER} thicket or a {@code TYPE_REEDS} bed, drawn as canopy), 2
-	 * where it is an enclosed crawl duct (drawn as a metal lid — a duct must
-	 * not sprout shrubbery), else 0. Static for the life of the world, so the
-	 * client fetches it once per level and draws the overlay over entities
-	 * standing in it — anything the sim hides, the viewer part-hides too.
+	 * level z — 1 where the tile is a {@code TYPE_COVER} thicket (drawn as a
+	 * canopy veil), 2 where it is an enclosed crawl duct (drawn as a metal
+	 * lid — a duct must not sprout shrubbery), 3 where it is a {@code
+	 * TYPE_REEDS} bed (redrawn stalk-exact, so a body shows between the
+	 * stalks), else 0. The values match the web client's veil kinds in
+	 * render.ts. Static for the life of the world, so the client fetches it
+	 * once per level and draws the overlay over entities standing in it —
+	 * anything the sim hides, the viewer part-hides too.
 	 */
 	byte[] cover(int z) {
 		var w = runner.world();
@@ -504,8 +506,9 @@ final class WorldHost {
 				var t = w.getTile(x, y, z);
 				byte v = 0;
 				if (t.blocksSight() && !t.isSolid()) {
-					v = (byte) (t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_DUCT
-							? 2 : 1);
+					var type = t.getType();
+					v = (byte) (type == net.hedinger.prototype.engine.Tile.TileType.TYPE_DUCT ? 2
+							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_REEDS ? 3 : 1);
 				}
 				c[y * cols + x] = v;
 			}

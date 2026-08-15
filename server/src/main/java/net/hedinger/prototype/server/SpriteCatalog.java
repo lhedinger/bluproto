@@ -58,6 +58,7 @@ final class SpriteCatalog {
 		SpriteCatalog c = new SpriteCatalog();
 		Utils.seed(CATALOG_SEED);
 		c.groundSection();
+		c.concealmentSection();
 		c.furnitureSection();
 		c.creatureSection();
 		System.out.println("sprite catalog: " + c.assets.size() + " assets in "
@@ -161,6 +162,40 @@ final class SpriteCatalog {
 				name.replace('_', ' '), 128);
 	}
 
+	/**
+	 * Concealment: a body standing in a walkable sight-blocker is part-hidden
+	 * by the tile's own re-stamped pixels ({@code Grid.renderConcealment}).
+	 * Each scene is baked twice from the same staged world — empty ground,
+	 * then with an inert occupant — so the web catalog can run ITS veil code
+	 * over the identical ground image and sit the result beside this one.
+	 */
+	private void concealmentSection() {
+		section("Concealment", "A body in cover is veiled by the tile's own re-stamped "
+				+ "pixels — clustered canopy blocks over a thicket, stalk-exact reeds, the "
+				+ "duct's ribbed lid. Left: empty ground. Right: an occupant, part-hidden.");
+		conceal("canopy", Tile.TileType.TYPE_COVER);
+		conceal("reeds", Tile.TileType.TYPE_REEDS);
+		conceal("duct", Tile.TileType.TYPE_DUCT);
+	}
+
+	private void conceal(String name, Tile.TileType type) {
+		World w = stage(7, 7);
+		for (int x = 1; x <= 5; x++) {
+			for (int y = 1; y <= 5; y++) {
+				w.setTile(x, y, 0, type);
+			}
+		}
+		w.alignTiles();
+		LayerRenderer lr = LayerBaker.chunkRenderer(w);
+		int ts = ResourceManager.tileSize;
+		BufferedImage ground = frame(w, lr).getSubimage(ts, ts, 5 * ts, 5 * ts);
+		add(name + "_ground.png", png(ground), name + ", empty", 160);
+		w.spawnEntity(TestNPC.inert(3.5, 3.5, 0).withSize(8));
+		w.think();
+		BufferedImage veiled = frame(w, lr).getSubimage(ts, ts, 5 * ts, 5 * ts);
+		add(name + ".png", png(veiled), "a body veiled in " + name, 160);
+	}
+
 	/** Lush grass grazed down to bare soil, one bite per frame — the live
 	 *  depletion dither stepping through its art-pixel stages. */
 	private void grassDepletion() {
@@ -179,6 +214,11 @@ final class SpriteCatalog {
 			}
 		}
 		add("ground_grass_depletion.gif", gif(frames, 25), "grass, grazed bare", 128);
+		// The lush and fully-grazed endpoints as silent assets (no catalog
+		// figure of their own): the web catalog fetches them and runs the
+		// client's OWN dither compositing between the two, beside this gif.
+		assets.put("depletion_lush.png", png(frames.get(0)));
+		assets.put("depletion_bare.png", png(frames.get(frames.size() - 1)));
 	}
 
 	// ---- furniture ---------------------------------------------------------
