@@ -83,36 +83,35 @@ let deplSrc: Uint8Array | null = null; // the veg grid the layer was built from
 let deplLevel = -1;
 let deplMissing = 0; // bare chunks still streaming when last built
 let deplRetryAt = 0;
+// The depletion bucket (0..16) each tile is CURRENTLY painted at, so a veg
+// update only repaints tiles whose bucket actually moved. Grazing shifts a
+// handful of tiles per poll; repainting all ~1000 depleted tiles on every
+// poll was a repeated whole-layer rebuild — a visible hitch every 1.5 s once
+// the herds grew. -1 marks a tile that still needs paint (its chunk was not
+// streamed in yet), which never equals a real bucket, so the retry pass
+// naturally picks exactly those up.
+let deplBuckets: Int16Array | null = null;
 const ART = 12;
 
 function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
     veg: Uint8Array, level: number, nowMs: number): HTMLCanvasElement | null {
-  const stale = veg !== deplSrc || level !== deplLevel
-    || (deplMissing > 0 && nowMs >= deplRetryAt);
-  if (!stale && deplLayer) return deplLayer;
-  if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
-    deplLayer = document.createElement('canvas');
-    deplLayer.width = meta.cols * ART;
-    deplLayer.height = meta.rows * ART;
-  }
-  const ctx = deplLayer.getContext('2d')!;
-  ctx.clearRect(0, 0, deplLayer.width, deplLayer.height);
-  ctx.imageSmoothingEnabled = false;
-  deplMissing = 0;
-  for (let ty = 0; ty < meta.rows; ty++) {
-    for (let tx = 0; tx < meta.cols; tx++) {
-      const lvl = veg[ty * meta.cols + tx];
-      if (lvl >= 100 || lvl === 255) continue; // lush or non-vegetated
-      const depl16 = Math.min(16, Math.round((100 - lvl) * 16 / 100));
-      if (depl16 <= 0) continue;
-      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-      const bare = getBareChunk(ccx, ccy);
-      if (!bare) { deplMissing++; continue; }
-      ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
-        tilePx, tx * ART, ty * ART, ART, ART, depl16);
+  const full = !deplLayer || !deplBuckets || level !== deplLevel
+    || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART;
+  const stale = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt);
+  if (!stale) return deplLayer;
+  if (full) {
+    if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
+      deplLayer = document.createElement('canvas');
+      deplLayer.width = meta.cols * ART;
+      deplLayer.height = meta.rows * ART;
     }
+    deplLayer.getContext('2d')!.clearRect(0, 0, deplLayer.width, deplLayer.height);
+    deplBuckets = new Int16Array(meta.cols * meta.rows); // all painted "lush"
   }
+  const layer = deplLayer!; // allocated above whenever it was missing or stale
+  const ctx = layer.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
   const LOW = 3;
   if (!deplLayerLow || deplLayerLow.width !== meta.cols * LOW) {
     deplLayerLow = document.createElement('canvas');
@@ -120,13 +119,89 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     deplLayerLow.height = meta.rows * LOW;
   }
   const lg = deplLayerLow.getContext('2d')!;
-  lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
   lg.imageSmoothingEnabled = true;
-  lg.drawImage(deplLayer, 0, 0, deplLayerLow.width, deplLayerLow.height);
+  deplMissing = 0;
+  const patched: number[] = []; // tiles whose layer cell was repainted this pass
+  for (let ty = 0; ty < meta.rows; ty++) {
+    for (let tx = 0; tx < meta.cols; tx++) {
+      const i = ty * meta.cols + tx;
+      const lvl = veg[i];
+      const bucket = (lvl >= 100 || lvl === 255) ? 0
+        : Math.max(0, Math.min(16, Math.round((100 - lvl) * 16 / 100)));
+      if (deplBuckets![i] === bucket) continue;
+      ctx.clearRect(tx * ART, ty * ART, ART, ART);
+      if (bucket > 0) {
+        const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+        const bare = getBareChunk(ccx, ccy);
+        if (!bare) { deplMissing++; deplBuckets![i] = -1; continue; }
+        ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
+          tilePx, tx * ART, ty * ART, ART, ART, bucket);
+      }
+      deplBuckets![i] = bucket;
+      patched.push(i);
+    }
+  }
+  // Mip maintenance is a trade of two per-call costs: patching each changed
+  // tile's 3x3 cell beats one whole-layer smooth downscale for the steady
+  // trickle a veg poll brings, but loses badly for bulk changes (a full
+  // rebuild patching every tile is seconds of per-call overhead). Cross-over
+  // is a few hundred tiles.
+  if (full || patched.length > 256) {
+    lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
+    lg.drawImage(layer, 0, 0, deplLayerLow.width, deplLayerLow.height);
+  } else {
+    for (const i of patched) {
+      const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
+      lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
+      lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+    }
+  }
   deplSrc = veg;
   deplLevel = level;
   deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
-  return deplLayer;
+  return layer;
+}
+
+// The whole ground at art-pixel resolution (12 px/tile), assembled once per
+// level from the chunk bakes with a nearest 4:1 downscale — the bake draws
+// art-pixels as 4x4 blocks, so this is the EXACT art, just not oversampled.
+// Far zoom blits this instead of every chunk: downscaling the 48 px/tile
+// chunks each frame strides across ~16x more source memory than the art
+// actually holds, which is what made the fit-zoom ground the single most
+// expensive section on a software canvas.
+let groundCv: HTMLCanvasElement | null = null;
+let groundLevel = -1;
+let groundMissing = 0;
+let groundRetryAt = 0;
+
+function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
+    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    level: number, nowMs: number): HTMLCanvasElement | null {
+  const stale = level !== groundLevel || !groundCv
+    || (groundMissing > 0 && nowMs >= groundRetryAt);
+  if (!stale) return groundCv;
+  if (!groundCv || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART) {
+    groundCv = document.createElement('canvas');
+    groundCv.width = meta.cols * ART;
+    groundCv.height = meta.rows * ART;
+  }
+  const ctx = groundCv.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  groundMissing = 0;
+  const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
+  for (let cy = 0; cy < cyN; cy++) {
+    for (let cx = 0; cx < cxN; cx++) {
+      const chunk = getChunk(cx, cy);
+      if (!chunk) { groundMissing++; continue; }
+      const wTiles = Math.min(chunkTiles, meta.cols - cx * chunkTiles);
+      const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
+      ctx.drawImage(chunk, 0, 0, wTiles * tilePx, hTiles * tilePx,
+        cx * chunkTiles * ART, cy * chunkTiles * ART, wTiles * ART, hTiles * ART);
+    }
+  }
+  groundLevel = level;
+  groundRetryAt = nowMs + 1000; // chunks still streaming: try again shortly
+  return groundCv;
 }
 
 export function render(
@@ -151,9 +226,17 @@ export function render(
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
 
-  // Ground: draw the baked map chunks covering the viewport, streamed on
-  // demand (nearest-neighbour so zooming in shows fat crisp pixels, not blur).
-  if (chunkTiles > 0) {
+  // Ground: far zoom blits the assembled art-resolution layer in one draw
+  // (see groundLayer); near zoom draws the full-resolution chunks in view.
+  // Both nearest-neighbour, so pixels stay fat and crisp either way.
+  if (chunkTiles > 0 && cam.scale < ART) {
+    const layer = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
+    if (layer) {
+      const o = cam.worldToScreen(0, 0);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(layer, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+    }
+  } else if (chunkTiles > 0) {
     const cxN = Math.ceil(meta.cols / chunkTiles);
     const cyN = Math.ceil(meta.rows / chunkTiles);
     const tl = cam.screenToWorld(0, 0);
@@ -249,7 +332,6 @@ export function render(
       continue;
     }
 
-    const col = '#' + e.rgb.toString(16).padStart(6, '0');
     const r = Math.max(3.5, e.size * cam.scale);
 
     // Carry link under the bodies.
@@ -266,7 +348,7 @@ export function render(
     }
 
     if (e.kind.startsWith('item.')) {
-      drawItem(g, e.kind, s.x, s.y, r, col);
+      drawItem(g, e.kind, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'));
       continue;
     }
 
@@ -333,7 +415,10 @@ export function render(
         g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
-      drawPlaceholder(g, s.x, s.y, r, p.dir, col, (e.flags & F_MINDED) !== 0);
+      // The colour string is built only here: the atlas path never needs it,
+      // and building one per creature per frame is measurable at herd scale.
+      drawPlaceholder(g, s.x, s.y, r, p.dir,
+        '#' + e.rgb.toString(16).padStart(6, '0'), (e.flags & F_MINDED) !== 0);
     }
 
     // What it is doing, as a small badge hovering over the body. Only notable
