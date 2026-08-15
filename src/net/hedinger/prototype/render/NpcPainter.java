@@ -115,7 +115,13 @@ final class NpcPainter {
 			// faster while moving, gently while idle (offset by id so they aren't
 			// in lockstep). Newborns pop in with the generic spawn action.
 			double spd = Math.hypot(n.getDX(), n.getDY());
-			double phase = n.getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + n.getID();
+			// A corpse holds one phase. The idle rate is deliberately slow rather
+			// than zero, so a body that had stopped moving still breathed -- which
+			// is right for something alive and standing still, and wrong for
+			// something dead: it left corpses gently walking on the spot for their
+			// whole decay.
+			double phase = n.isDead() ? 0
+					: n.getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + n.getID();
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(n.getGenome());
 			int cx = px(n, v, 0), cy = py(n, v, 0);
 			boolean spawning = n.getAge() >= 0 && n.getAge() < 24;

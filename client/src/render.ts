@@ -282,7 +282,13 @@ export function render(
       const dead = atlasFor(e.pheno);
       if (dead) {
         const box = r * 2 * (CELL / (2 * ART_RADIUS));
-        const { col: dc, row: dr } = cell(p.dir, nowMs);
+        // Frozen on one frame, not cell(dir, nowMs): the atlas rows are gait
+        // phases, so feeding a corpse the clock had it walking on the spot for
+        // its whole decay. It keeps the heading it died on -- that still says
+        // something -- but the legs stop. Row 0 is the frame nearest phase 0,
+        // the closest thing the cycle has to a neutral stance.
+        const { col: dc } = cell(p.dir, 0);
+        const dr = 0;
         g.imageSmoothingEnabled = false;
         // Far zoom stamps from the pre-smoothed quarter-size mip (see atlas.ts).
         const c = box <= CELL / MIP ? CELL / MIP : CELL;
