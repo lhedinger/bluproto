@@ -28,10 +28,15 @@ import {
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 
-// One page, two addresses: /sprites shows the java bake beside each client
-// canvas (the comparison), /sprites/web hides the java halves — the catalog
-// of what THIS browser's own drawing code produces, nothing else.
-const webOnly = location.pathname.replace(/\/+$/, '').endsWith('/web');
+// One page, two addresses. /sprites is the WEB view: what this browser's own
+// drawing code produces, which is what the live world actually shows anyone —
+// so it is the default, and the question "what does the art look like" is
+// answered without asking a second one. /sprites/compare puts the java bake
+// beside each client canvas, for the narrower question of whether the two
+// pipelines have drifted. /sprites/web stays as an alias so old links keep
+// working.
+const compare = location.pathname.replace(/\/+$/, '').endsWith('/compare');
+const webOnly = !compare;
 
 {
   if (webOnly) {
@@ -45,9 +50,9 @@ const webOnly = location.pathname.replace(/\/+$/, '').endsWith('/web');
   const nav = document.createElement('p');
   nav.className = 'note';
   nav.innerHTML = webOnly
-    ? 'See also the <a href="/sprites">side-by-side comparison</a> '
+    ? 'See also the <a href="/sprites/compare">side-by-side comparison</a> '
       + 'or the <a href="/sprites/java">pure java bake</a>.'
-    : 'Also: <a href="/sprites/web">web-client rendering only</a> · '
+    : 'Also: <a href="/sprites">web-client rendering only</a> · '
       + '<a href="/sprites/java">pure java bake</a>.';
   root.append(nav);
 }
@@ -300,12 +305,25 @@ const expressions = section('Expressions — what each badge says',
     };
     setTimeout(() => resolve(0), 20000);
   });
-  if (!pheno) return;
-  // atlasFor starts the fetch and returns null until loaded; poll until ready.
-  const atlas = await new Promise<HTMLCanvasElement>((resolve) => {
-    const poll = () => { const a = atlasFor(pheno); a ? resolve(a) : setTimeout(poll, 100); };
-    poll();
-  });
+  // No live phenotype (the stream never delivered one inside the timeout) is
+  // survivable for most of this page, and it used to end it: everything below
+  // sat after an early return, so the headings rendered and their contents
+  // silently did not -- the badges gallery in particular, which does not need a
+  // real body at all. Only the sections that genuinely stamp an atlas bow out.
+  const atlas = pheno
+    ? await new Promise<HTMLCanvasElement>((resolve) => {
+      const poll = () => { const a = atlasFor(pheno); a ? resolve(a) : setTimeout(poll, 100); };
+      poll();
+    })
+    : null;
+  if (!atlas) {
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = 'No creature phenotype arrived from the world stream, so the '
+      + 'atlas-stamped entries below are unavailable. Everything drawn without one '
+      + 'still renders.';
+    bakes.append(note);
+  }
   const D = 192;
   const stamp = (src: CanvasImageSource) => liveCanvas(D, D, (g, t) => {
     g.fillStyle = GRASS;
@@ -315,6 +333,7 @@ const expressions = section('Expressions — what each badge says',
     g.imageSmoothingEnabled = false;
     g.drawImage(src, anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
   });
+  if (atlas) {
   figure(stamp(atlas), '<b>living stamp</b> (atlas cell)', bakes);
   figure(stamp(corpseFor(pheno, atlas)), '<b>corpse bake</b> (drained, transparent)', bakes);
   // The rot, stage by stage. A corpse lasts as long as the animal took to grow
@@ -355,6 +374,7 @@ const expressions = section('Expressions — what each badge says',
   figure(mipStamp(atlasMipFor(pheno, atlas)), '<b>far-zoom mip</b> (quarter cell)', bakes);
   figure(mipStamp(mindedMipFor(pheno, atlas)), '<b>minded mip</b> (rim fused)', bakes);
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
+  } // end of the entries that need a live atlas
 
   // The expressions gallery: each badge over a living body, composed exactly
   // as the live loop composes it (glyph at two body-radii above, sized to the
@@ -379,8 +399,15 @@ const expressions = section('Expressions — what each badge says',
       const anim = Math.floor((t * 6) % 8);
       const box = W * 0.75;
       g.imageSmoothingEnabled = false;
-      g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
-        bx - box / 2, by - box / 2, box, box);
+      // The badge is the subject here, not the body under it, so this gallery
+      // renders with or without a live phenotype -- falling back to the same
+      // placeholder the live viewer draws while an atlas is still in flight.
+      if (atlas) {
+        g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
+          bx - box / 2, by - box / 2, box, box);
+      } else {
+        drawPlaceholder(g, bx, by, rb, (dir / 8) * Math.PI * 2, '#8b9bb4', false);
+      }
       drawActionGlyph(g, bx, by - rb * 2.0, rb * 0.95, act);
     }), `<b>${name}</b> — ${meaning}`, expressions);
   }
@@ -392,6 +419,7 @@ const expressions = section('Expressions — what each badge says',
   // which is equivalent because re-stamped pixels are invisible over the
   // identical ground.
   for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2]] as const) {
+    if (!atlas) break; // the whole point is a body under the veil
     const ground = await loadCanvas(`/sprites/${name}_ground.png`);
     if (!ground) continue;
     const ts = ground.width / 5;
