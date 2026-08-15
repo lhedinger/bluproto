@@ -131,10 +131,21 @@ public final class ProcCreature {
 			break;
 		}
 		case A_DEATH:
-			m.rot = t * Math.PI * 3;
-			m.sA = Math.max(0.05, 1 - t);
-			m.sP = Math.max(0.05, 1 - t);
-			m.dissolve = t;
+			// A rot, not a throe. This used to spin three times and shrink to 5%,
+			// which reads well over half a second and badly over the half-minute a
+			// corpse now actually lasts: the body became a speck around t=0.6 and
+			// was drawn as nothing for the rest of a span it spent lying there,
+			// still solid, still worth its mass to a scavenger. What is drawn has
+			// to match what exists.
+			//
+			// So the silhouette survives -- how big the animal was stays readable
+			// until it is genuinely gone. It slumps a little (settling, not
+			// vanishing), and the dissolve carries the decay on a quadratic so the
+			// body holds together early and thins out at the end.
+			m.rot = t * 0.15; // a slight settle, as if the body has given up its footing
+			m.sA = 1 - 0.16 * t; // flattens as it goes
+			m.sP = 1 - 0.10 * t;
+			m.dissolve = t * t;
 			break;
 		case A_SPAWN:
 			m.sA = Math.min(1, t * 1.25);

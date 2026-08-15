@@ -12,7 +12,7 @@
 // reimplementation that merely imitates one is a bug waiting to drift.
 
 import {
-  CELL, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor, mindedMipFor, rimFor,
+  CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor, mindedMipFor, rimFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -310,6 +310,14 @@ const bakes = section('Atlas bakes — web client only',
   });
   figure(stamp(atlas), '<b>living stamp</b> (atlas cell)', bakes);
   figure(stamp(corpseFor(pheno, atlas)), '<b>corpse bake</b> (drained, transparent)', bakes);
+  // The rot, stage by stage. A corpse lasts as long as the animal took to grow
+  // up -- most of a minute for a big one -- so decay is a thing you watch, not a
+  // single image, and the catalog of record should show all of it.
+  for (let i = 0; i < DECAY_STEPS; i++) {
+    const t = (i + 0.5) / DECAY_STEPS;
+    figure(stamp(corpseFor(pheno, atlas, t)),
+      `<b>rot ${i + 1}/${DECAY_STEPS}</b> (${Math.round(t * 100)}%)`, bakes);
+  }
   figure(liveCanvas(D, D, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, D, D);

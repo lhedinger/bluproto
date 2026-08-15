@@ -441,6 +441,11 @@ public abstract class Entity {
 		return lifespan;
 	}
 
+	/** Ticks this body lies there once dead, before the world reclaims it. */
+	public int getDeathspan() {
+		return deathspan;
+	}
+
 	public double getDX() {
 		return dX;
 	}

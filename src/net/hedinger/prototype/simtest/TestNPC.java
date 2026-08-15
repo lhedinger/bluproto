@@ -480,22 +480,18 @@ public class TestNPC extends NPC {
 		return g.brain != null ? new LgpMind(g.brain) : INERT_MIND;
 	}
 
-	/**
-	 * Ticks a corpse lingers, per unit of adult body mass. A big animal leaves a big
-	 * body: it takes longer to disappear, and so stays available to scavengers for
-	 * longer, which is the same principle as the meal being worth what it weighs.
-	 * At the reference size this is about two seconds, and the largest body the
-	 * world can express lasts about five.
-	 */
-	private static final double CORPSE_TICKS_PER_MASS = 66;
-
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
 		// Born a juvenile and grow into the genome's body (see NPC.beginGrowth).
 		t.beginGrowth(g.size);
-		// How long its body will lie there, from the body it will grow into -- so a
-		// creature that dies young still leaves the corpse its species leaves.
-		t.deathspan = (int) Math.round(CORPSE_TICKS_PER_MASS * (g.size / REF_SIZE));
+		// A body takes as long to rot away as it took to build: the corpse span IS
+		// the childhood, read off the same two growth constants rather than a
+		// separate figure that could drift out of step. Both are linear in adult
+		// size and so linear in mass, which is the scaling that matters -- a big
+		// animal leaves a big body, lying there for a big scavenger's window.
+		// Measured from the body it will grow INTO, so a creature that dies young
+		// still leaves the corpse its species leaves.
+		t.deathspan = growthTicks(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
 		t.metabolic = true;

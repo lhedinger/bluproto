@@ -4,7 +4,7 @@
 // nearest-neighbour scaling of the layer.
 
 import {
-  ART_RADIUS, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
+  ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
   corpseMipFor, mindedMipFor, rimFor,
 } from './atlas';
 import type { Camera } from './camera';
@@ -16,10 +16,6 @@ import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
-
-/** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
- *  for pixel-art style partial coverage — matching the ground bake's dithers. */
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 /** Dither masks for the 16 depletion coverage levels: opaque where the Bayer
  *  threshold admits the bare bake, transparent where lush ground survives.
@@ -291,8 +287,12 @@ export function render(
         const dr = 0;
         g.imageSmoothingEnabled = false;
         // Far zoom stamps from the pre-smoothed quarter-size mip (see atlas.ts).
+        // aux carries how far this body has rotted once F_DEAD is set (see
+        // EntityState) -- energy means nothing to a corpse, so the slot is reused.
         const c = box <= CELL / MIP ? CELL / MIP : CELL;
-        const src = c === CELL ? corpseFor(e.pheno, dead) : corpseMipFor(e.pheno, dead);
+        const src = c === CELL
+          ? corpseFor(e.pheno, dead, e.aux)
+          : corpseMipFor(e.pheno, dead, e.aux);
         g.drawImage(src, dc * c, dr * c, c, c,
           s.x - box / 2, s.y - box / 2, box, box);
       } else {

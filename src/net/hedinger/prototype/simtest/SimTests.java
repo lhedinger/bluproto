@@ -156,6 +156,48 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A body takes as long to rot away as it took to build, and both scale with
+	 * mass. Pins the two to each other: the corpse span is read off the growth
+	 * constants, so tuning childhood retunes decay and neither can drift.
+	 * Also pins the decay clock the renderers draw from.
+	 */
+	static class CorpseRotsForAsLongAsItTookToGrow extends Scenario {
+		@Override
+		public void run() {
+			seed(28);
+			World w = room(9, 9);
+			Genome small = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
+			Genome big = Genome.phenotype(18, 0.0, 5, 6, Math.PI * 2, 100000);
+			// breeder, not grazer(x,y,z,g): the latter is a body-only fixture that
+			// never runs configureGenomeBody, so it keeps the default deathspan and
+			// would pin nothing.
+			TestNPC s = TestNPC.breeder(3.5, 3.5, 0, small);
+			TestNPC b = TestNPC.breeder(5.5, 5.5, 0, big);
+			w.spawnEntity(s);
+			w.spawnEntity(b);
+			tick(w, 2);
+
+			assertEquals("a small body rots for exactly its childhood",
+					net.hedinger.prototype.entities.NPC.growthTicks(6), s.getDeathspan());
+			assertEquals("and a big one for its own, longer childhood",
+					net.hedinger.prototype.entities.NPC.growthTicks(18), b.getDeathspan());
+			assertGreater("mass is the variable factor: the bigger body lasts longer",
+					b.getDeathspan() - s.getDeathspan(), 0);
+
+			// The decay clock the renderers read: 0 while alive, then 0 -> 1 across
+			// the span. Without this a corpse cannot be drawn rotting at all.
+			assertEquals("a living body reports no decay", 0, (long) (s.decayProgress() * 100));
+			b.damage(500);
+			tick(w, 1);
+			assertTrue("dead", b.isDead());
+			assertLess("a fresh corpse has barely decayed", b.decayProgress(), 0.05);
+			tick(w, b.getDeathspan() / 2);
+			assertNear("halfway through the span it is halfway rotted",
+					0.5, b.decayProgress(), 0.05);
+		}
+	}
+
 	/** The Sound->hear() channel: a listener is inert until a sound reaches it. */
 	static class SoundWakesListener extends Scenario {
 		@Override
@@ -4694,6 +4736,7 @@ public class SimTests {
 				new ChaserClosesIn(),
 				new AgesOutAndIsRemoved(),
 				new LethalDamageAndScavenging(),
+				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
 				new HoleFallRespectsFlying(),
 				new GrabCarriesSmallerEntity(),
