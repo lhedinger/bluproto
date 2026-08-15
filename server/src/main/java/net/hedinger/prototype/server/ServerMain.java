@@ -136,7 +136,19 @@ public final class ServerMain {
 		//  /sprites/java  the pure server-rendered reference (see SpriteCatalog).
 		java.io.File clientSprites = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
 				"sprites.html");
+		// What this running build is, for cache validation. deployedAt is the
+		// process start time, so this changes on every deploy AND every local
+		// restart -- which is what a catalog needs: the art it shows is rebuilt
+		// with the server, under filenames that never change.
+		String buildTag = commitShort + "@" + deployedAt;
+
 		io.javalin.http.Handler clientCatalog = ctx -> {
+			// Never cached. The catalog is the normative record of what the art
+			// system currently looks like (ART-STYLE.md), so a stale copy is worse
+			// than no copy -- it asserts, with authority, something that is no
+			// longer true. The page is small and rebuilt on every deploy under the
+			// same URL, so there is nothing here worth a cache hit.
+			ctx.header("Cache-Control", "no-store");
 			if (clientSprites.isFile()) {
 				ctx.contentType("text/html")
 						.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
@@ -146,7 +158,8 @@ public final class ServerMain {
 		};
 		app.get("/sprites", clientCatalog);
 		app.get("/sprites/web", clientCatalog); // the page reads its mode off the URL
-		app.get("/sprites/java", ctx -> ctx.contentType("text/html").result(catalog.page()));
+		app.get("/sprites/java", ctx -> ctx.header("Cache-Control", "no-store")
+				.contentType("text/html").result(catalog.page()));
 		app.get("/sprites/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
@@ -154,8 +167,20 @@ public final class ServerMain {
 				ctx.status(404);
 				return;
 			}
+			// These are baked by THIS build under names that never change, so a
+			// plain max-age served week-old art from a browser (and from Cloudflare)
+			// after a redeploy -- the catalog would show the previous release's
+			// sprites next to this release's live canvases and read as drift.
+			// `no-cache` keeps the copy but forces revalidation; the ETag carries
+			// the build, so an unchanged deploy still costs only a 304.
+			String etag = "\"" + buildTag + "-" + name + "\"";
+			if (etag.equals(ctx.header("If-None-Match"))) {
+				ctx.status(304);
+				return;
+			}
 			ctx.contentType(SpriteCatalog.contentType(name))
-					.header("Cache-Control", "public, max-age=3600")
+					.header("Cache-Control", "no-cache")
+					.header("ETag", etag)
 					.result(bytes);
 		});
 
