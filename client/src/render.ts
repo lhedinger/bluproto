@@ -204,6 +204,32 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   return groundCv;
 }
 
+/** True on-screen body diameter (px) below which a creature is drawn as a
+ *  flat colour block instead of a sprite stamp. At that size the stamp reads
+ *  as a couple of noisy pixels anyway, but still costs a drawImage — the
+ *  block keeps the map view's herd colours readable for about a tenth of the
+ *  cost. Bigger bodies keep their sprites slightly longer, so the megafauna
+ *  stay recognisable on the map. */
+export const DOT_LOD_PX = 8;
+
+/** The map-view dot: a corpse is a spent grey block; a minded body wears its
+ *  rim violet as an underlying block, one pixel proud on every side. */
+export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
+    bodyPx: number, col: string, minded: boolean, dead: boolean): void {
+  const s = Math.max(4, bodyPx);
+  if (dead) {
+    g.fillStyle = '#5a5f66';
+    g.fillRect(x - s / 2, y - s / 2, s, s);
+    return;
+  }
+  if (minded) {
+    g.fillStyle = RIM_COLOUR;
+    g.fillRect(x - s / 2 - 1, y - s / 2 - 1, s + 2, s + 2);
+  }
+  g.fillStyle = col;
+  g.fillRect(x - s / 2, y - s / 2, s, s);
+}
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
@@ -352,8 +378,15 @@ export function render(
       continue;
     }
 
-    // Creature.
+    // Creature. Dot-sized bodies (see DOT_LOD_PX) skip the sprite pipeline:
+    // one or two fillRects instead of a drawImage, which is most of the frame
+    // at map zoom with a large population.
+    const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
+      if (bodyPx < DOT_LOD_PX) {
+        drawDot(g, s.x, s.y, bodyPx, '', false, true);
+        continue;
+      }
       // A corpse keeps its body and loses its colour. It is not decoration: it
       // lingers for a span set by its mass, it can be scavenged, and it is worth
       // that mass as meat -- so what died, and how big it was, stays readable.
@@ -384,9 +417,14 @@ export function render(
       continue;
     }
     // The real procedural organism, if its atlas has loaded; else a dot with a
-    // heading wedge so it still reads while the sprite is in flight.
+    // heading wedge so it still reads while the sprite is in flight. atlasFor
+    // is called even on the dot path — it is a map lookup that kicks off the
+    // fetch, so the sprite is ready the moment the user zooms in.
     const atlas = atlasFor(e.pheno);
-    if (atlas) {
+    if (bodyPx < DOT_LOD_PX) {
+      drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'),
+        (e.flags & F_MINDED) !== 0, false);
+    } else if (atlas) {
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
       const { col: cc, row: rr } = cell(p.dir, nowMs);
       g.imageSmoothingEnabled = false;

@@ -21,8 +21,8 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  VEIL_ALPHA, ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
-  drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
+  DOT_LOD_PX, VEIL_ALPHA, ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawDot,
+  drawItem, drawNest, drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
 } from './render';
 
 const root = document.getElementById('root')!;
@@ -484,6 +484,19 @@ const expressions = section('Expressions — what each badge says',
     drawPlaceholder(g, S, y, S * 0.2, t, '#5a8ab9', false);
     drawPlaceholder(g, 3 * S, y, S * 0.2, -t, '#b95a8a', true);
   }), 'pre-atlas placeholders (plain · minded) with a carry tether', overlay);
+  figure(liveCanvas(6 * S, S * 1.5, (g) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, 6 * S, S * 1.5);
+    // Actual map-view size on the left, the same dots at 6x beside them.
+    const y = S * 0.75, d = DOT_LOD_PX - 2;
+    drawDot(g, S * 0.5, y, d, '#5a8ab9', false, false);
+    drawDot(g, S * 0.85, y, d, '#b95a8a', true, false);
+    drawDot(g, S * 1.2, y, d, '', false, true);
+    drawDot(g, S * 2.6, y, d * 6, '#5a8ab9', false, false);
+    drawDot(g, S * 3.9, y, d * 6, '#b95a8a', true, false);
+    drawDot(g, S * 5.2, y, d * 6, '', false, true);
+  }), `map-view dots — bodies under ${DOT_LOD_PX} px draw as blocks `
+    + '(plain · minded · corpse; actual size, then 6×)', overlay);
 }
 
 // ---- pointers to the java-only sections ---------------------------------
