@@ -32,6 +32,11 @@ public final class WorldSteward extends Entity {
 	// left to grass, predation and starvation, and these are only the guardrails
 	// that stop it emptying or swarming.
 	private final int[] preyBounds, predBounds;
+	/** Bounds for the scavenger cohort. Its own guardrails rather than the minded
+	 *  cohort's, because it feeds on a completely different supply: carrion is
+	 *  produced by every death in the world, so a scavenger population is coupled to
+	 *  total mortality and not to grass. Held together they would mask each other. */
+	private final int[] scavBounds;
 	private final Genome[] preySpecies, predSpecies;
 	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
 	private final int cols, rows;
@@ -51,6 +56,13 @@ public final class WorldSteward extends Entity {
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
+		this(w, preySpecies, predSpecies, surfaceZ, caveZ, preyBounds, predBounds,
+				mindedFloor, mindedMax, new int[] { 0, Integer.MAX_VALUE });
+	}
+
+	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax,
+			int[] scavBounds) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
@@ -62,6 +74,7 @@ public final class WorldSteward extends Entity {
 		this.predBounds = predBounds;
 		this.mindedFloor = mindedFloor;
 		this.mindedMax = mindedMax;
+		this.scavBounds = scavBounds;
 	}
 
 	@Override
@@ -71,10 +84,16 @@ public final class WorldSteward extends Entity {
 		int predMin = predBounds[0];
 		int predMax = predBounds[1];
 
-		int prey = 0, pred = 0, minded = 0;
+		int prey = 0, pred = 0, minded = 0, scav = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
-				if (t.isMinded()) {
+				// Scavengers are minded too, but they are counted apart: folded into
+				// the minded cohort they would satisfy its floor while eating from a
+				// different supply entirely, and its ceiling would cull them for a
+				// crowding they had no part in.
+				if (t.ecoRole().equals("scavenger")) {
+					scav++;
+				} else if (t.isMinded()) {
 					minded++; // the hybrid cohort is its own category (role emerges)
 				} else {
 					String r = t.ecoRole();
@@ -120,6 +139,46 @@ public final class WorldSteward extends Entity {
 		if (pred > predMax) {
 			trim("predator", Math.min(2, pred - predMax));
 		}
+
+		// The scavenger cohort. Its floor is conditional on there being anything to
+		// scavenge: reseeding one into a world with no bodies is spawning it to
+		// starve, and the corpse layer is the whole of its living.
+		if (scav < scavBounds[0] && carrionPresent()) {
+			seedScavenger();
+		}
+		if (scav > scavBounds[1]) {
+			trim("scavenger", Math.min(3, scav - scavBounds[1]));
+		}
+	}
+
+	/** Whether any carcass is lying about — the precondition for a scavenger
+	 *  having a living at all. */
+	private boolean carrionPresent() {
+		for (Entity e : getWorld().getEntities()) {
+			if (e instanceof TestNPC t && t.isDead() && !t.isRemoved()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Spawns one minded scavenger, descending from the longest-lived minded
+	 *  creature alive where there is one (same survivor-seeding as the rest of the
+	 *  cohort), on the surface where the bodies mostly fall. */
+	private void seedScavenger() {
+		Genome g = Worlds.mindedReseedGenome(getWorld());
+		double x = cols / 2.0, y = rows / 2.0;
+		for (int tries = 0; tries < 40; tries++) {
+			double px = 3 + Utils.random() * (cols - 6);
+			double py = 3 + Utils.random() * (rows - 6);
+			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
+				x = px;
+				y = py;
+				break;
+			}
+		}
+		getWorld().spawnEntity(
+				TestNPC.mindedScavenger(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Spawns one creature of a rotating species at a random open surface tile. */
