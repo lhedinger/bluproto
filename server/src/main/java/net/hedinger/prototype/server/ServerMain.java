@@ -156,8 +156,10 @@ public final class ServerMain {
 				ctx.contentType("text/html").result(catalog.page());
 			}
 		};
-		app.get("/sprites", clientCatalog);
-		app.get("/sprites/web", clientCatalog); // the page reads its mode off the URL
+		app.get("/sprites", clientCatalog); // the web view: what a viewer actually sees
+		app.get("/sprites/compare", clientCatalog); // java bake beside each canvas
+		app.get("/sprites/web", clientCatalog); // alias for /sprites, so old links live
+		// (the page reads which of the three it is off the URL)
 		app.get("/sprites/java", ctx -> ctx.header("Cache-Control", "no-store")
 				.contentType("text/html").result(catalog.page()));
 		app.get("/sprites/{file}", ctx -> {
