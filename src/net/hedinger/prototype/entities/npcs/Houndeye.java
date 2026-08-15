@@ -52,10 +52,14 @@ public class Houndeye extends NPC
 
 		hunger -= metabolism;
 
-		if (hunger <= 0)
+		if (hunger <= 0) {
+			recordDeath("starvation");
 			kill();
-		if (age > maxAge)
+		}
+		if (age > maxAge) {
+			recordDeath("old age");
 			kill();
+		}
 		if (age > 100)
 			size = 3;
 		if (age > 200)

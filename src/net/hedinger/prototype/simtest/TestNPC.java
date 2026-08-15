@@ -899,7 +899,7 @@ public class TestNPC extends NPC {
 	private double biteFeeds(NPC prey) {
 		int bite = biteDamage(prey);
 		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
-		prey.damage(bite);
+		prey.damage(bite, "predation");
 		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
 	}
 
@@ -1976,7 +1976,7 @@ public class TestNPC extends NPC {
 		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
 			return false;
 		}
-		near.damage(ATTACK_DAMAGE);
+		near.damage(ATTACK_DAMAGE, "combat");
 		energy += BITE_ENERGY; // predation feeds the attacker
 		return true;
 	}

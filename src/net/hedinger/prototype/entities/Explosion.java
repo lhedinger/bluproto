@@ -36,7 +36,7 @@ public class Explosion extends Entity {
 					for (Entity e : entities.values()) {
 						if (e != null) {
 							double d = distance(e.getX(), e.getY(), e.getZ());
-							e.damage(round(EXPLOSION_DMG * ratioInv(d, EXPLOSION_RADIUS)));
+							e.damage(round(EXPLOSION_DMG * ratioInv(d, EXPLOSION_RADIUS)), "explosion");
 						}
 					}
 				}

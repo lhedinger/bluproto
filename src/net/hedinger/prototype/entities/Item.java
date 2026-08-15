@@ -178,7 +178,7 @@ public class Item extends NPC {
 			return;
 		}
 		if (kind == Kind.HAZARD) {
-			attacker.damage(hazardDamage); // striking a spiky/thorny object hurts
+			attacker.damage(hazardDamage, "hazard"); // striking a spiky/thorny object hurts
 		}
 		damage(dmg);
 		if (kind == Kind.CRATE && health <= 0 && !broken) {
