@@ -244,6 +244,14 @@ public class TestNPC extends NPC {
 		return new TestNPC(x, y, z, Behavior.INERT);
 	}
 
+	/** Wears the given genome's body, so a staged scene (the sprite catalog's
+	 *  reference occupants) shows a real procedural creature rather than the
+	 *  genome-less plain dot. */
+	public TestNPC withGenome(net.hedinger.prototype.entities.Genome g) {
+		applyGenome(g);
+		return this;
+	}
+
 	/** Wanders randomly. */
 	public static TestNPC roamer(double x, double y, double z) {
 		return new TestNPC(x, y, z, Behavior.ROAM);

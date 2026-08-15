@@ -12,7 +12,8 @@
 // reimplementation that merely imitates one is a bug waiting to drift.
 
 import {
-  CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor, mindedMipFor, rimFor,
+  ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
+  mindedMipFor, rimFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -20,7 +21,7 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
+  VEIL_ALPHA, ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
   drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
 } from './render';
 
@@ -281,6 +282,12 @@ const bakes = section('Atlas bakes — web client only',
   + 'stamp, the drained corpse bake (colour stripped, body kept), and the minded rim. '
   + 'The atlas comes from a phenotype alive in this world right now.');
 
+const expressions = section('Expressions — what each badge says',
+  'The action badge hovering over a creature, exactly as the live view draws it, with '
+  + 'the behaviour it flags. Only notable acts earn a badge — wandering, resting and '
+  + 'herding show nothing — and badges fade out as you zoom away, so the map view '
+  + 'stays clean. Shapes and colours mirror the Java scenario renderer\'s.');
+
 (async () => {
   // A live phenotype from the stream, so the atlas endpoint has it baked.
   const pheno = await new Promise<number>((resolve) => {
@@ -349,6 +356,35 @@ const bakes = section('Atlas bakes — web client only',
   figure(mipStamp(mindedMipFor(pheno, atlas)), '<b>minded mip</b> (rim fused)', bakes);
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
 
+  // The expressions gallery: each badge over a living body, composed exactly
+  // as the live loop composes it (glyph at two body-radii above, sized to the
+  // body), so the icon is seen the way the world shows it.
+  const EXPR: Array<[number, string, string]> = [
+    [ACT_ATTACK, 'attack', 'striking at a target'],
+    [ACT_HUNT, 'hunt', 'locked onto prey'],
+    [ACT_FLEE, 'flee', 'running from a threat'],
+    [ACT_GRAZE, 'graze', 'foraging vegetation'],
+    [ACT_MATE, 'mate', 'courting a partner'],
+    [ACT_AFFILIATE, 'affiliate', 'bonding with a packmate'],
+    [ACT_GRAB, 'grab', 'carrying a captive, or riding a host'],
+    [ACT_NEST, 'nest', 'homing to its nest'],
+  ];
+  for (const [act, name, meaning] of EXPR) {
+    const W = 150, H = 195, bx = W / 2, by = 125;
+    const rb = (W * 0.75) * (ART_RADIUS / CELL); // the stamped body's on-screen radius
+    figure(liveCanvas(W, H, (g, t) => {
+      g.fillStyle = GRASS;
+      g.fillRect(0, 0, W, H);
+      const dir = Math.floor((t / 1.2) % 8);
+      const anim = Math.floor((t * 6) % 8);
+      const box = W * 0.75;
+      g.imageSmoothingEnabled = false;
+      g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
+        bx - box / 2, by - box / 2, box, box);
+      drawActionGlyph(g, bx, by - rb * 2.0, rb * 0.95, act);
+    }), `<b>${name}</b> — ${meaning}`, expressions);
+  }
+
   // Concealment pairs: the client's veil code over the SAME staged ground the
   // Java scene was baked from. The Java pass veils the 3x3 tiles around the
   // occupant (tile 3,3 of the staged 7x7 world; the crop starts at tile 1,1),
@@ -373,7 +409,11 @@ const bakes = section('Atlas bakes — web client only',
         }
       }
     }
-    const DC = 280, box = (DC / 5) * 1.6;
+    // The stamped body matches the Java scene's occupant scale: a size-12
+    // reference body is 12/32 tiles in radius; the live formula maps body
+    // radius to an atlas-cell box (cells carry padding around the art).
+    const DC = 280, scale = DC / 5;
+    const box = (12 / 32) * scale * 2 * (CELL / (2 * ART_RADIUS));
     pair(conceal, `/sprites/${name}.png`, 160, `a body veiled in ${name}`, DC, DC, (g, t) => {
       g.imageSmoothingEnabled = false;
       g.drawImage(ground, 0, 0, DC, DC);
@@ -381,7 +421,9 @@ const bakes = section('Atlas bakes — web client only',
       const anim = Math.floor((t * 6) % 8);
       g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
         (DC - box) / 2, (DC - box) / 2, box, box);
+      g.globalAlpha = VEIL_ALPHA;
       g.drawImage(veil, 0, 0, DC, DC);
+      g.globalAlpha = 1;
     });
   }
 })();
@@ -390,21 +432,11 @@ const bakes = section('Atlas bakes — web client only',
 
 {
   const overlay = section('Viewer overlay language — web client only',
-    'Not world art: the badges and rings the viewer floats over creatures to say what '
-    + 'they are doing and how the camera and inspector relate to them. Smooth strokes are '
-    + 'allowed here by design (ART-STYLE.md keeps the overlay language apart from the '
-    + 'world\'s pixel grammar). Glyph shapes and colours mirror the Java scenario renderer.');
-  const ACTS: Array<[number, string]> = [
-    [ACT_ATTACK, 'attack'], [ACT_FLEE, 'flee'], [ACT_MATE, 'mate'],
-    [ACT_AFFILIATE, 'affiliate'], [ACT_GRAZE, 'graze'], [ACT_NEST, 'nest'],
-    [ACT_GRAB, 'grab'], [ACT_HUNT, 'hunt'],
-  ];
+    'Not world art: the rings and markers the viewer floats over creatures to say how '
+    + 'the camera and inspector relate to them (the action badges have their own '
+    + 'expressions gallery above). Smooth strokes are allowed here by design — '
+    + 'ART-STYLE.md keeps the overlay language apart from the world\'s pixel grammar.');
   const S = 56;
-  figure(liveCanvas(ACTS.length * S, S, (g) => {
-    g.fillStyle = GRASS;
-    g.fillRect(0, 0, ACTS.length * S, S);
-    ACTS.forEach(([act], i) => drawActionGlyph(g, i * S + S / 2, S / 2, S * 0.24, act));
-  }), 'action badges: ' + ACTS.map(([, n]) => n).join(' · '), overlay);
   const RINGS = ['grabbed', 'carrying', 'follow', 'selected'] as const;
   figure(liveCanvas(RINGS.length * S * 1.5, S * 1.5, (g, t) => {
     g.fillStyle = GRASS;

@@ -156,6 +156,13 @@ final class SpriteCatalog {
 		World w = stage(8, 8);
 		fill(w, type);
 		w.alignTiles();
+		// A reference body in every walkable swatch, so the texture reads at
+		// creature scale (and cover types demonstrate their veil). Walls,
+		// water and drops stay empty — nothing stands there.
+		if (w.getTile(4, 4, 0).isWalkable()) {
+			w.spawnEntity(TestNPC.inert(4.0, 4.0, 0).withGenome(referenceBody()));
+			settle(w); // past the spawn queue AND the newborn dissolve-in
+		}
 		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
 		int ts = ResourceManager.tileSize;
 		add("ground_" + name + ".png", png(img.getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts)),
@@ -190,8 +197,8 @@ final class SpriteCatalog {
 		int ts = ResourceManager.tileSize;
 		BufferedImage ground = frame(w, lr).getSubimage(ts, ts, 5 * ts, 5 * ts);
 		add(name + "_ground.png", png(ground), name + ", empty", 160);
-		w.spawnEntity(TestNPC.inert(3.5, 3.5, 0).withSize(8));
-		w.think();
+		w.spawnEntity(TestNPC.inert(3.5, 3.5, 0).withGenome(referenceBody()));
+		settle(w);
 		BufferedImage veiled = frame(w, lr).getSubimage(ts, ts, 5 * ts, 5 * ts);
 		add(name + ".png", png(veiled), "a body veiled in " + name, 160);
 	}
@@ -389,6 +396,22 @@ final class SpriteCatalog {
 
 	/** A one-level world whose interior is open grass floor (engine walls the
 	 *  1-tile border on its own). */
+	/** Ticks a staged world past the spawn queue and the newborn's 24-tick
+	 *  dissolve-in, so a reference occupant is baked fully materialised. */
+	private static void settle(World w) {
+		for (int i = 0; i < 30; i++) {
+			w.think();
+		}
+	}
+
+	/** The genome every staged reference occupant wears: the founder grazer's
+	 *  markers (so it is the same creature the gallery leads with) at herd-
+	 *  matriarch size, because a size-6 body at true world scale reads as a
+	 *  dot in a 128-px swatch — the reference must read as a creature. */
+	private static Genome referenceBody() {
+		return sample(12, 0.05, false, 0, new double[] { 0.20, 0.50, 0.80 });
+	}
+
 	private static World stage(int cols, int rows) {
 		World w = new World(cols, rows, 1);
 		fill(w, Tile.TileType.TYPE_FLOOR);
