@@ -802,6 +802,8 @@ function toast(msg: string): void {
 (window as unknown as Record<string, unknown>).__blu = { cam, state };
 
 let lastStats = 0;
+let lastMini = 0;
+let miniCx = NaN, miniCy = NaN, miniScale = NaN;
 function frame(now: number): void {
   const renderTime = now - RENDER_DELAY_MS;
 
@@ -821,7 +823,15 @@ function frame(now: number): void {
   render(g, cam, state, meta, chunkTiles, hello ? hello.tileSize : 0, getChunk, getBareChunk,
     vegGrid, coverGrid, renderTime, now, currentLevel,
     { id: selectedId, tile: selectedTile });
-  if (meta) drawMinimap(mm, cam, state, meta, cv, currentLevel);
+  // The minimap is ambient, not mission-critical: entity drift redraws at
+  // 4 Hz, but a camera move redraws at once so the viewport rectangle never
+  // visibly lags a pan or zoom.
+  if (meta && (now - lastMini > 250
+      || cam.cx !== miniCx || cam.cy !== miniCy || cam.scale !== miniScale)) {
+    lastMini = now;
+    miniCx = cam.cx; miniCy = cam.cy; miniScale = cam.scale;
+    drawMinimap(mm, cam, state, meta, cv, currentLevel);
+  }
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;
