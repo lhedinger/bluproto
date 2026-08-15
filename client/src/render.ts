@@ -4,7 +4,7 @@
 // nearest-neighbour scaling of the layer.
 
 import {
-  ART_RADIUS, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
+  ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
   corpseMipFor, mindedMipFor, rimFor,
 } from './atlas';
 import type { Camera } from './camera';
@@ -16,10 +16,6 @@ import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
-
-/** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
- *  for pixel-art style partial coverage — matching the ground bake's dithers. */
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 /** Dither masks for the 16 depletion coverage levels: opaque where the Bayer
  *  threshold admits the bare bake, transparent where lush ground survives.
@@ -282,11 +278,21 @@ export function render(
       const dead = atlasFor(e.pheno);
       if (dead) {
         const box = r * 2 * (CELL / (2 * ART_RADIUS));
-        const { col: dc, row: dr } = cell(p.dir, nowMs);
+        // Frozen on one frame, not cell(dir, nowMs): the atlas rows are gait
+        // phases, so feeding a corpse the clock had it walking on the spot for
+        // its whole decay. It keeps the heading it died on -- that still says
+        // something -- but the legs stop. Row 0 is the frame nearest phase 0,
+        // the closest thing the cycle has to a neutral stance.
+        const { col: dc } = cell(p.dir, 0);
+        const dr = 0;
         g.imageSmoothingEnabled = false;
         // Far zoom stamps from the pre-smoothed quarter-size mip (see atlas.ts).
+        // aux carries how far this body has rotted once F_DEAD is set (see
+        // EntityState) -- energy means nothing to a corpse, so the slot is reused.
         const c = box <= CELL / MIP ? CELL / MIP : CELL;
-        const src = c === CELL ? corpseFor(e.pheno, dead) : corpseMipFor(e.pheno, dead);
+        const src = c === CELL
+          ? corpseFor(e.pheno, dead, e.aux)
+          : corpseMipFor(e.pheno, dead, e.aux);
         g.drawImage(src, dc * c, dr * c, c, c,
           s.x - box / 2, s.y - box / 2, box, box);
       } else {

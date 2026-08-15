@@ -93,6 +93,33 @@ public abstract class NPC extends Entity {
 		size = (int) Math.round(grownSize);
 	}
 
+	/**
+	 * Ticks a body of adult radius {@code adult} spends growing up: the climb from
+	 * birth size to full size at the fixed {@link #GROWTH_RATE}. Linear in adult
+	 * size, and therefore linear in mass, since {@link #bodyMass()} is just size
+	 * normalised to {@link #REF_SIZE}.
+	 *
+	 * <p>Exposed because rotting is pinned to it — a body takes as long to return
+	 * to the world as it took to build. Deriving both from these two constants
+	 * keeps that relationship true when either is tuned, instead of leaving a
+	 * second magic number to drift out of step.
+	 */
+	public static int growthTicks(double adult) {
+		return (int) Math.round((1 - BIRTH_SIZE_FRACTION) * adult / GROWTH_RATE);
+	}
+
+	/**
+	 * How far this corpse has rotted, 0 (just died) to 1 (gone). A living body
+	 * reports 0. Age counts down from 0 to {@code -deathspan} once dead, so this
+	 * is simply how far through that it has fallen.
+	 */
+	public double decayProgress() {
+		if (age >= 0 || deathspan <= 0) {
+			return 0;
+		}
+		return Math.min(1.0, -age / (double) deathspan);
+	}
+
 	/** True while this body is still growing into its adult size. */
 	public boolean isJuvenile() {
 		return adultSize > 0 && grownSize < adultSize;

@@ -12,6 +12,12 @@ export const DIRS = 8;
 export const ANIM = 8;
 export const ART_RADIUS = 0.22 * CELL;
 
+/** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
+ *  for pixel-art style partial coverage — the ground bake's dithers, the
+ *  depletion masks and the corpse dissolve all read from this one table so
+ *  every partial coverage in the world erodes on the same grid. */
+export const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
 const cache = new Map<number, HTMLCanvasElement | null>(); // null = loading
 
 /** The loaded atlas for a key, or null while it loads / on failure. Cached as
@@ -104,11 +110,15 @@ export function atlasMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvas
   return m;
 }
 
+// Keyed by (phenotype, decay stage) like the full-size corpse cache: a rotting
+// body has to erode at far zoom too, or a corpse would decay while you watched
+// it up close and sit there intact the moment you zoomed out.
 const corpseMipCache = new Map<number, HTMLCanvasElement>();
 
-export function corpseMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
-  let m = corpseMipCache.get(pheno);
-  if (!m) { m = downscale(corpseFor(pheno, atlas)); corpseMipCache.set(pheno, m); }
+export function corpseMipFor(pheno: number, atlas: HTMLCanvasElement, decay = 0): HTMLCanvasElement {
+  const key = pheno * DECAY_STEPS + decayStage(decay);
+  let m = corpseMipCache.get(key);
+  if (!m) { m = downscale(corpseFor(pheno, atlas, decay)); corpseMipCache.set(key, m); }
   return m;
 }
 
@@ -157,12 +167,56 @@ export function mindedMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanva
  *
  * <p>Two passes: `saturation` against a flat grey strips the colour, then a
  * low-alpha black `source-atop` drains what is left so it reads as spent rather
- * than merely colourless. Baked once per phenotype, like the rim.
+ * than merely colourless.
+ *
+ * <p>Then it rots. A corpse now lasts as long as the animal took to grow up —
+ * half a minute for a big one — so a single static image would have it lying
+ * there unchanged and then blinking out. The body dissolves instead: pixels are
+ * punched out on the same ordered-dither the ground depletion uses, so it erodes
+ * in the art's own idiom rather than fading smoothly, which nothing else here
+ * does. The silhouette survives to the end, because what is drawn should match
+ * what exists — the body is solid meat to a scavenger right up until it is gone.
+ *
+ * <p>Quantised to {@link DECAY_STEPS} stages and baked once per (phenotype,
+ * stage): the cost is a handful of offscreen canvases per creature design, not
+ * per corpse or frame.
  */
 const corpseCache = new Map<number, HTMLCanvasElement>();
 
-export function corpseFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement {
-  const hit = corpseCache.get(pheno);
+/** Decay stages baked per phenotype. Enough that erosion reads as continuous
+ *  over a half-minute rot, few enough to stay a cheap cache. */
+export const DECAY_STEPS = 6;
+
+/** Art-pixel size of the dither cell, in atlas pixels. The sprites are drawn
+ *  chunky, so an erosion at the atlas's own resolution would be invisible —
+ *  this matches the hole size to the art. */
+const DITHER_PIX = 4;
+
+/** An opaque tile of the Bayer cells that should be erased at `amount` (0..1),
+ *  for use as a `destination-out` pattern. */
+function dissolveMask(amount: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.width = 4 * DITHER_PIX;
+  cv.height = 4 * DITHER_PIX;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#000';
+  for (let i = 0; i < 16; i++) {
+    if (BAYER4[i] < amount * 16) {
+      g.fillRect((i % 4) * DITHER_PIX, Math.floor(i / 4) * DITHER_PIX, DITHER_PIX, DITHER_PIX);
+    }
+  }
+  return cv;
+}
+
+/** Which of the baked decay stages a progress of `decay` (0..1) falls in. */
+export function decayStage(decay: number): number {
+  return Math.max(0, Math.min(DECAY_STEPS - 1, Math.floor(decay * DECAY_STEPS)));
+}
+
+export function corpseFor(pheno: number, img: HTMLCanvasElement, decay = 0): HTMLCanvasElement {
+  const stage = decayStage(decay);
+  const key = pheno * DECAY_STEPS + stage;
+  const hit = corpseCache.get(key);
   if (hit) return hit;
   const cv = document.createElement('canvas');
   cv.width = img.width;
@@ -181,6 +235,15 @@ export function corpseFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElem
   g.globalCompositeOperation = 'source-atop'; // ...and darken only the body
   g.fillStyle = 'rgba(10,12,15,0.45)';
   g.fillRect(0, 0, cv.width, cv.height);
-  corpseCache.set(pheno, cv);
+  // Erode. Quadratic, matching the engine's own decay curve (ProcCreature's
+  // A_DEATH): the body holds together early and goes quickly at the end.
+  const t = (stage + 0.5) / DECAY_STEPS;
+  if (t > 0) {
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = g.createPattern(dissolveMask(t * t), 'repeat')!;
+    g.fillRect(0, 0, cv.width, cv.height);
+  }
+  g.globalCompositeOperation = 'source-over';
+  corpseCache.set(key, cv);
   return cv;
 }

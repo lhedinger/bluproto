@@ -115,12 +115,23 @@ final class NpcPainter {
 			// faster while moving, gently while idle (offset by id so they aren't
 			// in lockstep). Newborns pop in with the generic spawn action.
 			double spd = Math.hypot(n.getDX(), n.getDY());
-			double phase = n.getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + n.getID();
+			// A corpse holds one phase. The idle rate is deliberately slow rather
+			// than zero, so a body that had stopped moving still breathed -- which
+			// is right for something alive and standing still, and wrong for
+			// something dead: it left corpses gently walking on the spot for their
+			// whole decay.
+			double phase = n.isDead() ? 0
+					: n.getWorld().getTick() * (spd > 0.001 ? 0.5 : 0.14) + n.getID();
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(n.getGenome());
 			int cx = px(n, v, 0), cy = py(n, v, 0);
+			// A corpse plays the death action across its whole rot, so decay is one
+			// continuous thing the eye can read rather than a body that vanishes on
+			// a timer. A newborn pops in with the generic spawn action.
 			boolean spawning = n.getAge() >= 0 && n.getAge() < 24;
-			int action = spawning ? ProcCreature.A_SPAWN : ProcCreature.A_IDLE;
-			double actionT = spawning ? n.getAge() / 24.0 : 0;
+			int action = n.isDead() ? ProcCreature.A_DEATH
+					: spawning ? ProcCreature.A_SPAWN : ProcCreature.A_IDLE;
+			double actionT = n.isDead() ? n.decayProgress()
+					: spawning ? n.getAge() / 24.0 : 0;
 			ProcCreature.drawCached(g2, cx, cy, relativeSize2, ph, D, phase, action, actionT);
 		} else {
 			g2.drawImage(ResourceManager.getNpcSprite(n.getHostility()), px(n, v, relativeSize2),
