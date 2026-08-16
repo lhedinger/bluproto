@@ -1,10 +1,15 @@
-// The client half of the sprite catalog (/sprites): every entry here is drawn
-// by the SAME functions the live viewer uses — drawDoor/drawSwitch/drawItem,
-// the veil and dither compositors, the overlay language from render.ts, the
-// corpse/rim/mip bakes from atlas.ts — driven by scripted state instead of
-// the world stream. The server-baked (Java) counterpart of each entry sits
-// beside it as an <img>, so the two render pipelines can be compared at a
-// glance and any drift between them is immediately visible.
+// The sprite catalog (/sprites): every entry here is drawn by the SAME
+// functions the live viewer uses — drawDoor/drawSwitch/drawItem, the veil and
+// dither compositors, the overlay language from render.ts, the corpse/rim/mip
+// bakes from atlas.ts — driven by scripted state instead of the world stream.
+// It shows what a viewer actually sees, because it is painted by the code that
+// paints the world.
+//
+// One page. There used to be three (/sprites, /sprites/web, /sprites/java),
+// which meant two of them could be wrong without anyone noticing — and one
+// silently was, for weeks. Java bakes are still fetched as source images where
+// the client composites over them, but they no longer have a catalog of their
+// own to be confused with this one.
 //
 // The catalog is NORMATIVE for the web view (ART-STYLE.md §6): everything the
 // client draws into the world must have an entry on this page rendered by the
@@ -28,33 +33,13 @@ import {
 const root = document.getElementById('root')!;
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 
-// One page, two addresses. /sprites is the WEB view: what this browser's own
-// drawing code produces, which is what the live world actually shows anyone —
-// so it is the default, and the question "what does the art look like" is
-// answered without asking a second one. /sprites/compare puts the java bake
-// beside each client canvas, for the narrower question of whether the two
-// pipelines have drifted. /sprites/web stays as an alias so old links keep
-// working.
-const compare = location.pathname.replace(/\/+$/, '').endsWith('/compare');
-const webOnly = !compare;
-
 {
-  if (webOnly) {
-    const intro = document.getElementById('intro');
-    if (intro) {
-      intro.innerHTML = 'The art system as the <b>web client alone</b> renders it: every '
-        + 'canvas below is painted live by the viewer\'s own drawing code, driven by '
-        + 'scripted state — the pixels this very browser puts on the live world.';
-    }
+  const intro = document.getElementById('intro');
+  if (intro) {
+    intro.innerHTML = 'The art system as the <b>web client renders it</b>: every canvas '
+      + 'below is painted live by the viewer\'s own drawing code, driven by scripted '
+      + 'state — the pixels this very browser puts on the live world.';
   }
-  const nav = document.createElement('p');
-  nav.className = 'note';
-  nav.innerHTML = webOnly
-    ? 'See also the <a href="/sprites/compare">side-by-side comparison</a> '
-      + 'or the <a href="/sprites/java">pure java bake</a>.'
-    : 'Also: <a href="/sprites">web-client rendering only</a> · '
-      + '<a href="/sprites/java">pure java bake</a>.';
-  root.append(nav);
 }
 
 /** A fixed pseudo-camera: `tiles * scale` px, origin at the canvas corner. */
@@ -92,19 +77,15 @@ function figure(el: HTMLElement, caption: string, parent: HTMLElement): void {
   parent.append(f);
 }
 
-/** A java-bake <img> and a live client canvas boxed together for comparison. */
-function pair(parent: HTMLElement, javaSrc: string, javaW: number, label: string,
+/** A captioned live canvas. Kept as its own helper (rather than folded into
+ *  `figure`) because these entries carry a label under a boxed canvas, and
+ *  because it used to place a java bake beside each one -- the comparison the
+ *  three-page catalog existed for. */
+function pair(parent: HTMLElement, label: string,
     w: number, h: number, paint: (g: CanvasRenderingContext2D, t: number) => void): void {
   const outer = document.createElement('figure');
   const box = document.createElement('div');
   box.className = 'pair';
-  if (!webOnly) {
-    const img = document.createElement('img');
-    img.src = javaSrc;
-    img.style.width = `${javaW}px`;
-    img.loading = 'lazy';
-    figure(img, '<b>java bake</b>', box);
-  }
   figure(liveCanvas(w, h, paint), '<b>web client</b>', box);
   const cap = document.createElement('figcaption');
   cap.textContent = label;
@@ -144,19 +125,13 @@ const DOOR_RGB: Record<string, number> = {
   timber: 0x574024, stone: 0x665e4c, grate: 0x7c828f, hedge: 0x2b5422, blast: 0x515862,
 };
 
-const furniture = webOnly
-  ? section('Furniture & items — web client',
-    'The exact drawing code the live viewer runs, driven by scripted state over a flat '
-    + 'ground tone. Doors cycle closed → open → closed; the switches press and release.')
-  : section('Furniture & items — java bake vs web client',
-    'Left of each box: the Java renderer (staged world, entity painters). Right: the exact '
-    + 'drawing code the live viewer runs, driven by scripted state over a flat ground tone. '
-    + 'Doors cycle closed → open → closed; the switches press and release; the corpse and '
-    + 'rim are the client-side atlas bakes.');
+const furniture = section('Furniture & items',
+  'The exact drawing code the live viewer runs, driven by scripted state over a flat '
+  + 'ground tone. Doors cycle closed → open → closed; the switches press and release.');
 
 for (const flavour of ['timber', 'stone', 'grate', 'hedge', 'blast']) {
   const S = 64;
-  pair(furniture, `/sprites/door_${flavour}.gif`, 224, `${flavour} door`, 4 * S, 3 * S, (g, t) => {
+  pair(furniture, `${flavour} door`, 4 * S, 3 * S, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 4 * S, 3 * S);
     drawDoor(g, fixedCam(S), ent({
@@ -168,7 +143,7 @@ for (const flavour of ['timber', 'stone', 'grate', 'hedge', 'blast']) {
 
 for (const mode of ['plate', 'button']) {
   const S = 48;
-  pair(furniture, `/sprites/switch_${mode}.gif`, 288,
+  pair(furniture,
       mode === 'plate' ? 'pressure plate (weight)' : 'button (intent)', 7 * S, 4 * S, (g, t) => {
     const pressed = (t % 6) >= 3; // held three seconds, released three
     // The wired door follows the press with the slide the wire would carry.
@@ -187,7 +162,7 @@ for (const mode of ['plate', 'button']) {
 
 {
   const S = 56;
-  pair(furniture, '/sprites/items.png', 288, 'food · crate · hazard', 6 * S, 2 * S, (g) => {
+  pair(furniture, 'food · crate · hazard', 6 * S, 2 * S, (g) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 6 * S, 2 * S);
     const r = S * 0.14;
@@ -199,7 +174,7 @@ for (const mode of ['plate', 'button']) {
 
 {
   const S = 56;
-  pair(furniture, '/sprites/nest.png', 160, 'nest (brood site)', 3 * S, 3 * S, (g) => {
+  pair(furniture, 'nest (brood site)', 3 * S, 3 * S, (g) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 3 * S, 3 * S);
     drawNest(g, 1.5 * S, 1.5 * S, S);
@@ -208,7 +183,7 @@ for (const mode of ['plate', 'button']) {
 
 {
   const S = 56;
-  pair(furniture, '/sprites/pheromone.gif', 224, 'pheromone cloud, evaporating', 4 * S, 4 * S, (g, t) => {
+  pair(furniture, 'pheromone cloud, evaporating', 4 * S, 4 * S, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 4 * S, 4 * S);
     // The viewer's haze, breathing out as strength decays — the same baked
@@ -239,27 +214,16 @@ function loadCanvas(src: string): Promise<HTMLCanvasElement | null> {
   });
 }
 
-const conceal = webOnly
-  ? section('Concealment — web client',
-    'A body in cover is part-hidden by the tile\'s own re-stamped bake pixels — the '
-    + 'clustered canopy mask, stalk-exact reeds, the duct\'s ribbed lid — built by the '
-    + 'same veilTile/ductLidTile code the live view runs, over the server\'s ground bake.')
-  : section('Concealment — java bake vs web client',
-    'Left: the Java renderer\'s concealment pass over a staged scene. Right: the client\'s '
-    + 'veil code (the SAME hash-gated mask, ported bit for bit) re-stamping the identical '
-    + 'ground image over its own creature. The veils should agree pixel for pixel; the '
-    + 'bodies underneath differ by design (each pipeline stamps its own sample creature).');
+const conceal = section('Concealment',
+  'A body in cover is part-hidden by the tile\'s own re-stamped bake pixels — the '
+  + 'clustered canopy mask, stalk-exact reeds, the duct\'s ribbed lid — built by the '
+  + 'same veilTile/ductLidTile code the live view runs, over the server\'s ground bake.');
 
 // ---- grazing depletion: the client's dither between the two bakes -------
 
-const depl = webOnly
-  ? section('Grazing depletion — web client',
-    'The live dither: the fully-grazed bake admitted through the Bayer mask, per '
-    + 'art-pixel, sweeping lush to bare — the exact compositing the world view runs.')
-  : section('Grazing depletion — java bake vs web client',
-    'Left: the Java bake grazed down frame by frame. Right: the client\'s own dither '
-    + 'compositing (ditherTile) sweeping between the served lush and bare endpoint bakes '
-    + '— the same code that draws live grazing.');
+const depl = section('Grazing depletion',
+  'The live dither: the fully-grazed bake admitted through the Bayer mask, per '
+  + 'art-pixel, sweeping lush to bare — the exact compositing the world view runs.');
 
 
 (async () => {
@@ -268,7 +232,7 @@ const depl = webOnly
   if (!lush || !bare) return;
   const ts = lush.width / 4; // the staged strip is 4x4 tiles
   const D = 224, T = D / 4;
-  pair(depl, '/sprites/ground_grass_depletion.gif', 128, 'grass, grazed bare', D, D, (g, t) => {
+  pair(depl, 'grass, grazed bare', D, D, (g, t) => {
     g.imageSmoothingEnabled = false;
     g.drawImage(lush, 0, 0, D, D);
     const depl16 = Math.min(16, Math.floor(((t % 6) / 6) * 17));
@@ -283,7 +247,7 @@ const depl = webOnly
 
 // ---- web-only bakes: living body, corpse, minded rim --------------------
 
-const bakes = section('Atlas bakes — web client only',
+const bakes = section('Atlas bakes',
   'What the viewer itself makes of a creature\'s server-baked sprite atlas: the living '
   + 'stamp, the drained corpse bake (colour stripped, body kept), and the minded rim. '
   + 'The atlas comes from a phenotype alive in this world right now.');
@@ -458,7 +422,7 @@ for (const [act, name, meaning] of EXPR) {
     // radius to an atlas-cell box (cells carry padding around the art).
     const DC = 280, scale = DC / 5;
     const box = (12 / 32) * scale * 2 * (CELL / (2 * ART_RADIUS));
-    pair(conceal, `/sprites/${name}.png`, 160, `a body veiled in ${name}`, DC, DC, (g, t) => {
+    pair(conceal, `a body veiled in ${name}`, DC, DC, (g, t) => {
       g.imageSmoothingEnabled = false;
       g.drawImage(ground, 0, 0, DC, DC);
       const dir = Math.floor((t / 1.2) % 8);
@@ -475,7 +439,7 @@ for (const [act, name, meaning] of EXPR) {
 // ---- the viewer's overlay language --------------------------------------
 
 {
-  const overlay = section('Viewer overlay language — web client only',
+  const overlay = section('Viewer overlay language',
     'Not world art: the rings and markers the viewer floats over creatures to say how '
     + 'the camera and inspector relate to them (the action badges have their own '
     + 'expressions gallery above). Smooth strokes are allowed here by design — '
@@ -515,16 +479,17 @@ for (const [act, name, meaning] of EXPR) {
     + '(plain · minded · corpse; actual size, then 6×)', overlay);
 }
 
-// ---- pointers to the java-only sections ---------------------------------
+// ---- what the server bakes, and where to see it --------------------------
 
-const rest = section('Ground & creatures — java bake',
-  'Ground chunks and creature bodies genuinely come from the server on the web too '
-  + '(baked chunk PNGs; ProcCreature sprite atlases), so those sections have a single '
-  + 'source of truth and live on the server-rendered reference page.');
+const rest = section('Server-baked art',
+  'Ground chunks and creature bodies are baked on the server for the web view too — '
+  + 'chunk PNGs and ProcCreature atlases — so they have a single source of truth rather '
+  + 'than a second implementation here.');
 {
   const p = document.createElement('p');
   p.className = 'note';
-  p.innerHTML = 'See the <a href="/sprites/java">server-rendered catalog</a> for all 28 '
-    + 'ground swatches, the depletion strip, the six creature samples and the action envelopes.';
+  p.innerHTML = 'The full set of ground swatches is served under <code>/sprites/'
+    + 'ground_*.png</code>; the creature atlases under <code>/api/world/atlas/&lt;pheno&gt;'
+    + '.png</code>. Both are fetched straight into the entries above.';
   rest.append(p);
 }

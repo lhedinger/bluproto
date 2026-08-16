@@ -128,12 +128,18 @@ public final class ServerMain {
 			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
 		});
 
-		// The sprite catalog. Three views of the same art system:
-		//  /sprites       the client-built comparison page (each web-drawn entry
-		//                 rendered live by the viewer's own code, beside its java
-		//                 bake) — falls back to the server page on a bare checkout;
-		//  /sprites/web   the same client page in web-only mode (no java halves);
-		//  /sprites/java  the pure server-rendered reference (see SpriteCatalog).
+		// The sprite catalog: ONE page, at /sprites, drawn by the viewer's own code.
+		// That is the question worth answering -- what does the art look like to
+		// someone who opens the world -- and there is exactly one answer to it.
+		//
+		// The /web and /java variants are gone. /java rendered a second, differently
+		// organised catalog from the Java pipeline, and /web was an alias for a
+		// distinction that no longer exists. Two pages that both claimed to be "the
+		// catalog" was not a feature: it is what let this route serve the java page
+		// on every deploy for weeks without anyone being able to tell, because the
+		// wrong answer looked like a real catalog. The java bakes are still served
+		// as ASSETS under /sprites/*.png -- the client page composites several of
+		// them -- they simply no longer have a page of their own.
 		java.io.File clientSprites = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
 				"sprites.html");
 		// What this running build is, for cache validation. deployedAt is the
@@ -150,17 +156,12 @@ public final class ServerMain {
 			// same URL, so there is nothing here worth a cache hit.
 			ctx.header("Cache-Control", "no-store");
 			ctx.contentType("text/html");
-			// Three places to look, in order of how directly they answer "what does
-			// the CLIENT draw": the external dist a dev run points at, then the copy
-			// folded into the jar, then the java page as a genuine last resort.
-			//
-			// The middle one was missing, and it is the only one that exists in the
-			// deployed image. `copyClient` folds client/dist into the jar's static
-			// resources, and the runtime stage copies only the server install and
-			// res/ -- so /app/client/dist does not exist and this route quietly
-			// served the java catalog on every deploy since it was written. The world
-			// page never showed the fault because Javalin serves it from the same
-			// classpath copy; only this route asked the filesystem instead.
+			// Two places the client page can live: the external dist a dev run points
+			// at, and the copy `copyClient` folds into the jar -- which is the only
+			// one that exists in the deployed image, since the Dockerfile's runtime
+			// stage copies just the server install and res/. Asking only the
+			// filesystem is what made this route serve something else entirely on
+			// every deploy for weeks.
 			if (clientSprites.isFile()) {
 				ctx.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
 				return;
@@ -172,14 +173,18 @@ public final class ServerMain {
 					return;
 				}
 			}
-			ctx.result(catalog.page()); // no client built at all (bare checkout)
+			// No client build anywhere: say so, rather than substituting a different
+			// page. Serving a plausible-looking stand-in is precisely how the missing
+			// catalog stayed invisible -- a 503 that names the cause is worth more
+			// than a page that answers a question nobody asked.
+			ctx.status(503).result("<h1>sprite catalog unavailable</h1><p>No web client "
+					+ "build was found — neither <code>client/dist/sprites.html</code> nor "
+					+ "<code>public/sprites.html</code> in the server jar. Run "
+					+ "<code>npm run build</code> in <code>client/</code>, or build the "
+					+ "server with <code>./gradlew :server:installDist</code>, which folds "
+					+ "the client in.</p>");
 		};
-		app.get("/sprites", clientCatalog); // the web view: what a viewer actually sees
-		app.get("/sprites/compare", clientCatalog); // java bake beside each canvas
-		app.get("/sprites/web", clientCatalog); // alias for /sprites, so old links live
-		// (the page reads which of the three it is off the URL)
-		app.get("/sprites/java", ctx -> ctx.header("Cache-Control", "no-store")
-				.contentType("text/html").result(catalog.page()));
+		app.get("/sprites", clientCatalog); // the one catalog: what a viewer sees
 		app.get("/sprites/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
