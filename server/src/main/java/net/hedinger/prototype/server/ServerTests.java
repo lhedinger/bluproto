@@ -54,7 +54,7 @@ public final class ServerTests {
 	/** The wire form carries every field a client draws from. */
 	static void fullMessageJsonRoundTrips() throws Exception {
 		WorldSnapshot s = WorldSnapshot.of(Worlds.demo(42));
-		String json = Protocol.write(Protocol.Full.of(s.tick(), s.entities()));
+		String json = Protocol.write(Protocol.Full.of(s.tick(), s.entities(), s.entities().size()));
 		JsonNode n = Protocol.read(json);
 		check("type tag", n.path("type").asText().equals("full"));
 		check("tick carried", n.path("tick").asLong() == s.tick());

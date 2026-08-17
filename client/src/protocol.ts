@@ -51,8 +51,10 @@ export interface HelloMsg {
   build: string; // server process id; changes on every restart/redeploy
 }
 
-export interface FullMsg { type: 'full'; tick: number; entities: EntityState[]; }
-export interface DeltaMsg { type: 'delta'; tick: number; upsert: EntityState[]; gone: number[]; }
+export interface FullMsg { type: 'full'; tick: number; entities: EntityState[]; total?: number; }
+export interface DeltaMsg {
+  type: 'delta'; tick: number; upsert: EntityState[]; gone: number[]; total?: number;
+}
 export interface StatusMsg { type: 'status'; tick: number; paused: boolean; speed: number; }
 export interface AckMsg { type: 'ack'; cmd: string; tick: number; }
 export interface ErrorMsg { type: 'error'; message: string; }
@@ -63,4 +65,5 @@ export type Command =
   | { cmd: 'spawnItem'; kind: string; x: number; y: number; z: number }
   | { cmd: 'pause' }
   | { cmd: 'resume' }
-  | { cmd: 'speed'; value: number };
+  | { cmd: 'speed'; value: number }
+  | { cmd: 'level'; z: number }; // view preference: which level to stream

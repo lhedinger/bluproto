@@ -430,6 +430,12 @@ public final class ServerMain {
 				try {
 					JsonNode m = Protocol.read(ctx.message());
 					String cmd = m.path("cmd").asText("");
+					if (cmd.equals("level")) {
+						// A view preference, not a mutation: read-only viewers
+						// switch levels too, so this sits before the token gate.
+						host.setViewerLevel(ctx, m.path("z").asInt(0));
+						return;
+					}
 					if (!token.isEmpty() && !token.equals(m.path("token").asText(""))) {
 						ctx.send(Protocol.write(Protocol.Error.of("command token required")));
 						return;

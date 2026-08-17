@@ -39,15 +39,18 @@ final class Protocol {
 		}
 	}
 
-	record Full(String type, long tick, List<EntityState> entities) {
-		static Full of(long tick, List<EntityState> entities) {
-			return new Full("full", tick, entities);
+	/** {@code total} is the WORLD population, across every level — the entity
+	 *  list itself is filtered to the viewer's level, so the HUD needs the
+	 *  true count carried separately. */
+	record Full(String type, long tick, List<EntityState> entities, int total) {
+		static Full of(long tick, List<EntityState> entities, int total) {
+			return new Full("full", tick, entities, total);
 		}
 	}
 
-	record Delta(String type, long tick, List<EntityState> upsert, List<Integer> gone) {
-		static Delta of(long tick, List<EntityState> upsert, List<Integer> gone) {
-			return new Delta("delta", tick, upsert, gone);
+	record Delta(String type, long tick, List<EntityState> upsert, List<Integer> gone, int total) {
+		static Delta of(long tick, List<EntityState> upsert, List<Integer> gone, int total) {
+			return new Delta("delta", tick, upsert, gone, total);
 		}
 	}
 
