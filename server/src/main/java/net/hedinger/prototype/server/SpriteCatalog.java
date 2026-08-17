@@ -51,6 +51,12 @@ final class SpriteCatalog {
 	private static final long CATALOG_SEED = 424242;
 
 	private final Map<String, byte[]> assets = new LinkedHashMap<>();
+	// Captions and layout accumulated while baking. Nothing reads it any more:
+	// this class had a page() that rendered a second, java-flavoured catalog, and
+	// that page is gone -- /sprites is now the single catalog, drawn by the client
+	// that draws the world. What survives here is the BAKING, because the client
+	// page composites several of these images. Kept rather than unpicked so the
+	// section()/add() helpers still read as a description of what is being baked.
 	private final StringBuilder body = new StringBuilder();
 
 	static SpriteCatalog render() {
@@ -514,28 +520,4 @@ final class SpriteCatalog {
 				.append("<figcaption>").append(label).append("</figcaption></figure>\n");
 	}
 
-	/** The gallery page. */
-	String page() {
-		return "<!doctype html><meta charset=utf-8><title>bluproto — sprite catalog</title>"
-				+ "<style>"
-				+ "body{background:#0f1115;color:#cdd3de;font:14px/1.5 system-ui,sans-serif;"
-				+ "margin:2rem auto;max-width:1200px;padding:0 1rem}"
-				+ "h1{font-size:1.4rem}h2{margin-top:2.2rem;border-bottom:1px solid #262b36;"
-				+ "padding-bottom:.3rem}"
-				+ ".note{color:#8b93a3;max-width:70ch}"
-				+ ".grid{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}"
-				+ "figure{margin:0;text-align:center}"
-				+ "img{image-rendering:pixelated;background:#14161a;border:1px solid #262b36;"
-				+ "border-radius:4px;display:block;margin:0 auto}"
-				+ "figcaption{color:#8b93a3;font-size:12px;margin-top:4px}"
-				+ "a{color:#7aa2f7}"
-				+ "</style>"
-				+ "<h1>sprite catalog</h1>"
-				+ "<p class=note>The art system, rendered by the same Java pipeline that bakes "
-				+ "the world: ground swatches from the layer bake, furniture and items played "
-				+ "through their state changes, and hand-picked samples of the procedural "
-				+ "creature space. Static per build — this page is a reference, not a census "
-				+ "of what is alive right now.</p>"
-				+ body + "</div>";
-	}
 }
