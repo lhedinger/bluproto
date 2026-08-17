@@ -178,7 +178,7 @@ final class WorldHost {
 			var w = runner.world();
 			viewerLevel.put(ctx, surfaceLevel());
 			ctx.send(Protocol.write(Protocol.Hello.of(seed, w.getColums(), w.getRows(), w.getLevels(),
-					net.hedinger.prototype.engine.ResourceManager.tileSize,
+					net.hedinger.prototype.engine.ResourceManager.tileSize, LayerBaker.CHUNK_PX,
 					s.tick(), runner.isPaused(), runner.getSpeed(),
 					java.util.List.of(), CHUNK_TILES, String.valueOf(startedAt))));
 			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, surfaceLevel()),

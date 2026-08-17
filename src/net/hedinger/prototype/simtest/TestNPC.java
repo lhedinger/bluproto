@@ -1062,7 +1062,7 @@ public class TestNPC extends NPC {
 	private NPC nearestPrey(double radius, boolean cannibal) {
 		NPC best = null;
 		double bestD = radius;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
+		for (NPC n : getWorld().census().creatures(getLvl())) {
 			// A hunter takes anything up to PRED_MAX_PREY_RATIO times its own size —
 			// its own weight class, plus quarry somewhat above it. Body size is
 			// clamped to Genome.SIZE_MAX for every creature alike, so a strictly-
@@ -1070,8 +1070,8 @@ public class TestNPC extends NPC {
 			// predator able to exist above them; reaching past its own size closes
 			// that hole. Punching up is not free: the bite lands weaker the bigger the
 			// quarry (see biteDamage), so the kill takes proportionally longer.
-			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl()
+			// (Census walk: live same-level non-item bodies only.)
+			if (n == this || n.isDead() || n.isRemoved()
 					|| n.getSize() > getSize() * PRED_MAX_PREY_RATIO
 					|| !isInLOS(n)) {
 				// Same level only (can't reach a floor away), and only prey actually in
@@ -1262,10 +1262,11 @@ public class TestNPC extends NPC {
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
 		double kinX = 0, kinY = 0, kinWeight = 0;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl() || !isInLOS(n)) {
-				continue; // same level, in line of sight (cover and walls hide neighbours)
+		// Census walk: live same-level bodies, then line of sight (cover and
+		// walls hide neighbours; hasLOS range-gates before it raycasts).
+		for (NPC n : getWorld().census().creatures(getLvl())) {
+			if (n == this || n.isDead() || n.isRemoved() || !isInLOS(n)) {
+				continue;
 			}
 			double dx = n.getX() - X, dy = n.getY() - Y;
 			double dist = Math.hypot(dx, dy);
@@ -1425,9 +1426,9 @@ public class TestNPC extends NPC {
 			return;
 		}
 		double best = 0;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof NPC n) || n == this || !n.isDead() || n.isRemoved()
-					|| n.getLvl() != getLvl()) {
+		// Census walk: this level's corpses only.
+		for (NPC n : getWorld().census().corpses(getLvl())) {
+			if (n == this || !n.isDead() || n.isRemoved()) {
 				continue;
 			}
 			double dist = distance(n.getX(), n.getY(), n.getZ());
@@ -1648,9 +1649,9 @@ public class TestNPC extends NPC {
 	private NPC nearestMate() {
 		NPC best = null;
 		double bestD = LOS_RANGE;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof NPC n) || n == this || n.isDead() || n.isRemoved()
-					|| n instanceof Item || n.getLvl() != getLvl() || !canMateWith(n)
+		// Census walk: live same-level bodies (see World.Census).
+		for (NPC n : getWorld().census().creatures(getLvl())) {
+			if (n == this || n.isDead() || n.isRemoved() || !canMateWith(n)
 					|| !isInLOS(n)) {
 				continue;
 			}
@@ -2144,11 +2145,12 @@ public class TestNPC extends NPC {
 	private net.hedinger.prototype.entities.Switch nearestFixture() {
 		net.hedinger.prototype.entities.Switch near = null;
 		double best = LOS_RANGE;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof net.hedinger.prototype.entities.Switch sw) || e.isRemoved()
-					|| (int) e.getZ() != getLvl()) {
+		// Census walk: this level's switches — a handful, not the whole world.
+		for (net.hedinger.prototype.entities.Switch sw : getWorld().census().switches(getLvl())) {
+			if (sw.isRemoved()) {
 				continue;
 			}
+			net.hedinger.prototype.engine.Entity e = sw;
 			double d = distance(e.getX() + 0.5, e.getY() + 0.5, getZ());
 			if (d < best) {
 				best = d;
@@ -2237,9 +2239,9 @@ public class TestNPC extends NPC {
 		}
 		NPC best = null;
 		double bestD = Double.MAX_VALUE;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof NPC n) || n == this || !n.isDead() || n.isRemoved()
-					|| n.getLvl() != getLvl()) {
+		// Census walk: this level's corpses only.
+		for (NPC n : getWorld().census().corpses(getLvl())) {
+			if (n == this || !n.isDead() || n.isRemoved()) {
 				continue;
 			}
 			double reach = (getSize() + n.getSize()) / 2.0 + CARRION_REACH;
@@ -2373,10 +2375,11 @@ public class TestNPC extends NPC {
 	private NPC nearestThreat(double radius) {
 		NPC best = null;
 		double bestD = radius;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
-					|| t.getLvl() != getLvl() || !t.ecoRole().equals("predator")) {
-				continue; // same level only: no fleeing a hunter a floor away
+		// Census walk (see World.Census): the predators of this level only —
+		// same level only, no fleeing a hunter a floor away.
+		for (NPC t : getWorld().census().predators(getLvl())) {
+			if (t == this || t.isDead() || t.isRemoved()) {
+				continue;
 			}
 			double d = distance(t.getX(), t.getY(), t.getZ());
 			if (d < bestD) {
@@ -2393,10 +2396,10 @@ public class TestNPC extends NPC {
 	private double herdDir(double radius) {
 		double sx = 0, sy = 0;
 		int k = 0;
-		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
-			if (!(e instanceof TestNPC t) || t == this || t.isDead() || t.isRemoved()
-					|| t.getLvl() != getLvl() || !t.ecoRole().equals("prey")) {
-				continue; // same level only: herd with kin you can actually reach
+		// Census walk: this level's prey — herd with kin you can actually reach.
+		for (NPC t : getWorld().census().prey(getLvl())) {
+			if (t == this || t.isDead() || t.isRemoved()) {
+				continue;
 			}
 			double d = distance(t.getX(), t.getY(), t.getZ());
 			if (d > radius || d < 1e-6) {
