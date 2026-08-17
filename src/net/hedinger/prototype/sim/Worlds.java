@@ -1471,15 +1471,21 @@ public final class Worlds {
 		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 
 		// Founder herbivores: metabolic grazers that breed and evolve, scattered
-		// onto open meadow (never into water or rock). Every fourth founder is a
-		// nester — it homes on its pheromone peak to breed, and each birth
-		// claims a physical Nest fixture there, so brood sites appear on the map.
+		// onto open meadow (never into water or rock).
+		//
+		// No nesters. A quarter of the founders used to home on their pheromone
+		// peak to breed and leave a Nest fixture there, and measured over 40k ticks
+		// that lineage drove the plain breeders extinct by tick 20k -- a decisive
+		// outcome for a mechanic whose fixture does nothing at all (no shelter, no
+		// safety, no bonus; the minded cohort can neither build one nor perceive
+		// one). A strategy that wins that hard while meaning that little is shaping
+		// the ecosystem for no reason anyone chose, so it is out of the seeded world
+		// until it earns its place. The behaviour and the fixture both still exist
+		// and stay covered by the scenario suite.
 		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(i % 4 == 3
-					? TestNPC.nester(p[0], p[1], SURFACE_Z, prey[i % prey.length])
-					: TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
-							.withHerding()); // corpse span comes from its body -- see configureGenomeBody
+			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
+					.withHerding()); // corpse span comes from its body -- see configureGenomeBody
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
 		for (int i = 0; i < sc(4, scale); i++) {

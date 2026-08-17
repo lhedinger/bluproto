@@ -437,6 +437,10 @@ function renderInspectSimple(d: Record<string, any>): void {
   const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const rows: string[] = [];
+  // Where it sits in the food chain, and whether a mind is driving it. The
+  // header shows the role as its title, but that alone cannot say "prey, and
+  // evolvable" — which for the hybrid cohort is most of what you want to know.
+  if (d.role) rows.push(row('role', d.minded ? `${d.role} · minded` : d.role));
   if (d.diedOf) rows.push(row('died of', d.diedOf));
   if (d.action) rows.push(row('doing', d.action));
   if (d.state) rows.push(row('state', d.state));

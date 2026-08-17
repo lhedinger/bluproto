@@ -2619,6 +2619,28 @@ public class TestNPC extends NPC {
 
 	/** Ecosystem role, for the world steward's population census: {@code
 	 *  "predator"}, {@code "prey"}, or {@code ""} for anything else. */
+	/**
+	 * Where this body sits in the food chain, for the viewer: {@code "prey"},
+	 * {@code "predator"} or {@code "scavenger"}. Every creature has one.
+	 *
+	 * <p>Deliberately NOT {@link #ecoRole()}, which returns {@code ""} for the
+	 * minded cohort because its role is meant to emerge rather than be assigned.
+	 * That blank is right for the steward -- which counts minded creatures as their
+	 * own category -- and useless to someone looking at a creature and asking what
+	 * it eats. The two must stay separate: {@code ecoRole} is also the key the
+	 * population trims and the flee/herd scans match on, so widening it to cover
+	 * minded bodies would quietly enrol them in the prey ceiling and the herds.
+	 */
+	public String trophicRole() {
+		if (diet == Diet.SCAVENGER) {
+			return "scavenger";
+		}
+		if (diet == Diet.CARNIVORE || behavior == Behavior.PREDATOR) {
+			return "predator";
+		}
+		return "prey"; // grazes, and is hunted by anything its size or larger
+	}
+
 	public String ecoRole() {
 		// Diet decides this before behaviour does: a scavenger is a scavenger
 		// whatever loop drives it, and the census has to see it as its own trophic
