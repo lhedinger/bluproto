@@ -43,6 +43,9 @@ export interface HelloMsg {
   rows: number;
   levels: number;
   tileSize: number;
+  /** Pixels per tile of the served chunk PNGs (the art resolution); falls
+   *  back to tileSize against an older server. */
+  chunkPx?: number;
   tick: number;
   paused: boolean;
   speed: number;

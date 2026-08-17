@@ -835,7 +835,7 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, hello ? hello.tileSize : 0, getChunk, getBareChunk,
+  render(g, cam, state, meta, chunkTiles, hello ? (hello.chunkPx ?? hello.tileSize) : 0, getChunk, getBareChunk,
     vegGrid, coverGrid, renderTime, now, currentLevel,
     { id: selectedId, tile: selectedTile });
   // The minimap is ambient, not mission-critical: entity drift redraws at

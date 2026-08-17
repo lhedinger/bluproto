@@ -25,6 +25,11 @@ import net.hedinger.prototype.engine.World;
  */
 final class LayerBaker {
 
+	/** Pixels per tile in the ENCODED chunks: the art-pixel grid (Grid draws
+	 *  12 art-px to a tile). Announced to the client in hello as chunkPx so
+	 *  its chunk-space maths match the served resolution. */
+	static final int CHUNK_PX = 12;
+
 	private static boolean resourcesLoaded = false;
 
 	/** Renders level {@code z} of the terrain world to one full-size image
@@ -92,12 +97,24 @@ final class LayerBaker {
 
 	/** Encodes a sub-rectangle of {@code full} (a map chunk) to PNG bytes. */
 	static byte[] chunkPng(BufferedImage full, int x0, int y0, int w, int h) {
-		BufferedImage sub = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		// Encode at ART resolution, not render resolution: the bake draws
+		// art-pixels as (tileSize/CHUNK_PX)-square blocks, so the full-res
+		// slice carries 16x more pixels than the art holds — the whole level's
+		// chunks were ~18 MB of PNG, alone putting the first paint tens of
+		// seconds out on an ordinary connection. Nearest sampling keeps exactly
+		// one sample per art-pixel (lossless for everything on the art grid;
+		// the legacy tall-grass tufts get snapped onto it). The client
+		// upscales nearest-neighbour, so the screen shows the same art.
+		int ts = ResourceManager.tileSize;
+		int aw = w / ts * CHUNK_PX, ah = h / ts * CHUNK_PX;
+		BufferedImage sub = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_RGB);
 		Graphics2D g = sub.createGraphics();
-		g.drawImage(full, 0, 0, w, h, x0, y0, x0 + w, y0 + h, null);
+		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+		g.drawImage(full, 0, 0, aw, ah, x0, y0, x0 + w, y0 + h, null);
 		g.dispose();
 		try {
-			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 18);
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 16);
 			ImageIO.write(sub, "png", out);
 			return out.toByteArray();
 		} catch (IOException e) {
@@ -152,9 +169,25 @@ final class LayerBaker {
 		view.renderWorld(g);
 		view.renderEffects(g);
 		g.dispose();
+		// Encode at ART resolution, not render resolution. The bake draws
+		// art-pixels as (tileSize/12)-square blocks, so the full-res image
+		// carries 16x more pixels than the art actually holds — and the whole
+		// level's chunks were ~18 MB of PNG, which alone put the first paint
+		// tens of seconds out on an ordinary connection. A nearest downscale
+		// keeps exactly one sample per art-pixel (lossless for everything on
+		// the art grid; the legacy tall-grass tufts get snapped onto it, which
+		// the design system counts as a feature). The client upscales
+		// nearest-neighbour, so what reaches the screen is the same art.
+		int aw = cw * CHUNK_PX, ah = ch * CHUNK_PX;
+		BufferedImage art = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_RGB);
+		Graphics2D ag = art.createGraphics();
+		ag.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+		ag.drawImage(img, 0, 0, aw, ah, null);
+		ag.dispose();
 		try {
-			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 18);
-			ImageIO.write(img, "png", out);
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 16);
+			ImageIO.write(art, "png", out);
 			return out.toByteArray();
 		} catch (IOException e) {
 			throw new IllegalStateException("chunk encode failed", e);

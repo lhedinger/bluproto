@@ -30,12 +30,15 @@ final class Protocol {
 
 	static final ObjectMapper JSON = new ObjectMapper();
 
-	record Hello(String type, long seed, int cols, int rows, int levels, int tileSize,
+	/** {@code chunkPx} is the pixels-per-tile of the served chunk PNGs (the
+	 *  art resolution), distinct from {@code tileSize} (the render/bake
+	 *  resolution some assets still use). */
+	record Hello(String type, long seed, int cols, int rows, int levels, int tileSize, int chunkPx,
 			long tick, boolean paused, double speed, List<String> layers, int chunkTiles, String build) {
-		static Hello of(long seed, int cols, int rows, int levels, int tileSize,
+		static Hello of(long seed, int cols, int rows, int levels, int tileSize, int chunkPx,
 				long tick, boolean paused, double speed, List<String> layers, int chunkTiles, String build) {
-			return new Hello("hello", seed, cols, rows, levels, tileSize, tick, paused, speed, layers, chunkTiles,
-					build);
+			return new Hello("hello", seed, cols, rows, levels, tileSize, chunkPx, tick, paused, speed,
+					layers, chunkTiles, build);
 		}
 	}
 
