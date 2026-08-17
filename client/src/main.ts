@@ -36,6 +36,10 @@ let loadedBuild: string | null = null; // server build this tab loaded against; 
 let chunkTiles = 0;
 let currentLevel = 0;
 let paused = false;
+// World population across every level: the stream itself only carries the
+// entities of the level in view (the server filters per viewer), so the HUD
+// count comes with the messages instead of from tracks.size.
+let worldTotal = 0;
 
 // Baked ground streams as map chunks, fetched lazily and cached by "z/cx_cy"
 // (google-maps style). The render loop asks for whatever chunks are in view.
@@ -126,9 +130,15 @@ async function fetchCover(): Promise<void> {
 }
 
 function resize(): void {
-  const dpr = window.devicePixelRatio || 1;
-  cv.width = Math.round(cv.clientWidth * dpr);
-  cv.height = Math.round(cv.clientHeight * dpr);
+  // 1x CSS pixels, deliberately ignoring devicePixelRatio: a retina display
+  // would otherwise quadruple every blit and fill for detail pixel art does
+  // not have — the ground is 12 art-px per tile however many device pixels
+  // show it. The browser upscales the canvas instead (image-rendering:
+  // pixelated in the stylesheet keeps that upscale crisp), and the camera
+  // derives its input scale from cv.width / cv.clientWidth, so pointer maths
+  // are unaffected.
+  cv.width = cv.clientWidth;
+  cv.height = cv.clientHeight;
 }
 window.addEventListener('resize', resize);
 resize();
@@ -229,9 +239,11 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
     }
     case 'full':
       state.applyFull(m, receivedAt);
+      if (m.total !== undefined) worldTotal = m.total;
       break;
     case 'delta':
       state.applyDelta(m, receivedAt);
+      if (m.total !== undefined) worldTotal = m.total;
       break;
     case 'status':
       paused = m.paused;
@@ -740,6 +752,9 @@ levelBtn.onclick = () => {
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
+  // The entity stream is filtered server-side to the watched level; asking
+  // for the new one resyncs us with a full snapshot of it.
+  net.send({ cmd: 'level', z: currentLevel });
 };
 function reflect(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
@@ -835,7 +850,7 @@ function frame(now: number): void {
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;
-    statsEl.textContent = `tick ${state.tick} · ${state.tracks.size} entities` +
+    statsEl.textContent = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
         (hello ? ` · seed ${hello.seed}` : '');
   }
   requestAnimationFrame(frame);

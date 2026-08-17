@@ -148,46 +148,116 @@ final class WorldHost {
 
 	// ---- viewer lifecycle --------------------------------------------------
 
-	/** New viewer: greet with world geometry, then the complete entity list. */
+	/** The level each viewer is watching — the stream is filtered to it, so a
+	 *  browser never parses the cave cohort while looking at the surface.
+	 *  Defaults to the surface (top level) on connect. */
+	private final java.util.concurrent.ConcurrentHashMap<WsContext, Integer> viewerLevel =
+			new java.util.concurrent.ConcurrentHashMap<>();
+
+	private int surfaceLevel() {
+		return runner.world().getLevels() - 1;
+	}
+
+	/** Entities of the snapshot on one level (z rounds, matching the client). */
+	private static java.util.List<net.hedinger.prototype.sim.EntityState> onLevel(
+			WorldSnapshot s, int z) {
+		java.util.List<net.hedinger.prototype.sim.EntityState> out = new java.util.ArrayList<>();
+		for (net.hedinger.prototype.sim.EntityState e : s.entities()) {
+			if ((int) Math.round(e.z()) == z) {
+				out.add(e);
+			}
+		}
+		return out;
+	}
+
+	/** New viewer: greet with world geometry, then its level's entity list. */
 	void onConnect(WsContext ctx) {
 		ctx.enableAutomaticPings(15, TimeUnit.SECONDS); // keep proxies from idling us out
 		synchronized (lock) {
 			WorldSnapshot s = runner.snapshot();
 			var w = runner.world();
+			viewerLevel.put(ctx, surfaceLevel());
 			ctx.send(Protocol.write(Protocol.Hello.of(seed, w.getColums(), w.getRows(), w.getLevels(),
 					net.hedinger.prototype.engine.ResourceManager.tileSize,
 					s.tick(), runner.isPaused(), runner.getSpeed(),
 					java.util.List.of(), CHUNK_TILES, String.valueOf(startedAt))));
-			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), s.entities())));
+			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, surfaceLevel()),
+					s.entities().size())));
 			sessions.add(ctx);
 		}
 	}
 
 	void onClose(WsContext ctx) {
 		sessions.remove(ctx);
+		viewerLevel.remove(ctx);
 	}
 
-	/** ~10 Hz: send what changed since the last broadcast to every viewer. */
+	/** A viewer switched levels: refilter its stream and resync it with a full
+	 *  snapshot of the new level (its old tracks are cleared by the full). */
+	void setViewerLevel(WsContext ctx, int z) {
+		var w = runner.world();
+		int clamped = Math.max(0, Math.min(w.getLevels() - 1, z));
+		viewerLevel.put(ctx, clamped);
+		synchronized (lock) {
+			WorldSnapshot s = runner.snapshot();
+			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, clamped),
+					s.entities().size())));
+		}
+	}
+
+	/** ~10 Hz: send what changed since the last broadcast to every viewer,
+	 *  filtered to the level each viewer watches. Messages are encoded once
+	 *  per DISTINCT level in use, not per viewer. */
 	private void broadcast() {
 		try {
-			String msg;
+			java.util.Map<Integer, String> byLevel = new java.util.HashMap<>();
 			synchronized (lock) {
 				WorldSnapshot now = runner.snapshot();
 				if (now.tick() == lastSent.tick() && !forceFull) {
 					return; // paused (or stalled): nothing new to say
 				}
+				int total = now.entities().size();
+				java.util.Set<Integer> levels = new java.util.HashSet<>(viewerLevel.values());
 				if (forceFull) {
-					msg = Protocol.write(Protocol.Full.of(now.tick(), now.entities()));
+					for (int z : levels) {
+						byLevel.put(z, Protocol.write(Protocol.Full.of(now.tick(), onLevel(now, z), total)));
+					}
 					forceFull = false;
 				} else {
 					DeltaEncoder.Delta d = DeltaEncoder.diff(lastSent, now);
-					msg = Protocol.write(Protocol.Delta.of(now.tick(), d.upsert(), d.gone()));
+					// Previous level per id, to turn a ramp crossing into a
+					// departure on the level left behind.
+					java.util.Map<Integer, Integer> prevZ = new java.util.HashMap<>();
+					for (net.hedinger.prototype.sim.EntityState e : lastSent.entities()) {
+						prevZ.put(e.id(), (int) Math.round(e.z()));
+					}
+					for (int z : levels) {
+						java.util.List<net.hedinger.prototype.sim.EntityState> up = new java.util.ArrayList<>();
+						// gone-if-unknown is a no-op client-side, so globally
+						// vanished ids can go to every level unfiltered.
+						java.util.List<Integer> gone = new java.util.ArrayList<>(d.gone());
+						for (net.hedinger.prototype.sim.EntityState e : d.upsert()) {
+							int ez = (int) Math.round(e.z());
+							if (ez == z) {
+								up.add(e);
+							} else {
+								Integer was = prevZ.get(e.id());
+								if (was != null && was == z) {
+									gone.add(e.id()); // walked a ramp off this level
+								}
+							}
+						}
+						byLevel.put(z, Protocol.write(Protocol.Delta.of(now.tick(), up, gone, total)));
+					}
 				}
 				lastSent = now;
 			}
 			for (WsContext ctx : sessions) {
 				if (ctx.session.isOpen()) {
-					ctx.send(msg);
+					String msg = byLevel.get(viewerLevel.getOrDefault(ctx, surfaceLevel()));
+					if (msg != null) {
+						ctx.send(msg);
+					}
 				}
 			}
 		} catch (Exception e) {
