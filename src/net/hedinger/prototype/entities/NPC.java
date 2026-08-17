@@ -151,6 +151,13 @@ public abstract class NPC extends Entity {
 	 */
 	protected static final double MOVE_ENERGY = 0.2;
 
+	/** This creature's ecological guild ("prey", "predator", ...), or "" for
+	 *  species outside the eco simulation. Virtual so the engine's per-tick
+	 *  census can bucket bodies without knowing their concrete classes. */
+	public String ecoRole() {
+		return "";
+	}
+
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
 	 *  Falls back to the reference when no size is set.
 	 *

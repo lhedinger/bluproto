@@ -72,8 +72,104 @@ public class World {
 		}
 	}
 
+	/**
+	 * Per-tick role census: the entity table bucketed once per tick by level
+	 * and ecological guild, so a creature's perception scans walk a dozen
+	 * predators (or the corpses, or the switches) instead of the whole world.
+	 * The full-table scans this replaces were O(population) per scanning
+	 * creature — the sim's dominant cost once herds passed a few hundred.
+	 *
+	 * <p>Rebuilt at the top of {@link #think()} and read-only for the rest of
+	 * the tick. A body that dies mid-tick is caught by the per-candidate
+	 * liveness checks every consumer already makes; a body spawned mid-tick
+	 * enters the world (and the census) at the next tick boundary anyway.
+	 */
+	public static final class Census {
+		private final java.util.List<java.util.List<NPC>> creatures = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<NPC>> predators = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<NPC>> prey = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<NPC>> corpses = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<net.hedinger.prototype.entities.Switch>> switches =
+				new java.util.ArrayList<>();
+
+		private Census(int levels) {
+			for (int z = 0; z < levels; z++) {
+				creatures.add(new java.util.ArrayList<>());
+				predators.add(new java.util.ArrayList<>());
+				prey.add(new java.util.ArrayList<>());
+				corpses.add(new java.util.ArrayList<>());
+				switches.add(new java.util.ArrayList<>());
+			}
+		}
+
+		static Census build(World w) {
+			Census c = new Census(w.getLevels());
+			for (Entity e : w.entities.values()) {
+				if (e == null || e.isRemoved()) {
+					continue;
+				}
+				int z = e.getLvl();
+				if (z < 0 || z >= c.creatures.size()) {
+					continue;
+				}
+				if (e instanceof net.hedinger.prototype.entities.Switch sw) {
+					c.switches.get(z).add(sw);
+					continue;
+				}
+				if (!(e instanceof NPC n) || e instanceof net.hedinger.prototype.entities.Item) {
+					continue;
+				}
+				if (n.isDead()) {
+					c.corpses.get(z).add(n); // scavengeable while it lasts
+					continue;
+				}
+				c.creatures.get(z).add(n);
+				String role = n.ecoRole();
+				if ("predator".equals(role)) {
+					c.predators.get(z).add(n);
+				} else if ("prey".equals(role)) {
+					c.prey.get(z).add(n);
+				}
+			}
+			return c;
+		}
+
+		/** Live non-item bodies on the level (every guild, minded included). */
+		public java.util.List<NPC> creatures(int z) {
+			return creatures.get(z);
+		}
+
+		public java.util.List<NPC> predators(int z) {
+			return predators.get(z);
+		}
+
+		public java.util.List<NPC> prey(int z) {
+			return prey.get(z);
+		}
+
+		public java.util.List<NPC> corpses(int z) {
+			return corpses.get(z);
+		}
+
+		public java.util.List<net.hedinger.prototype.entities.Switch> switches(int z) {
+			return switches.get(z);
+		}
+	}
+
+	private Census census;
+
+	/** This tick's census; built lazily for callers that poke a freshly
+	 *  constructed world before its first tick. */
+	public Census census() {
+		if (census == null) {
+			census = Census.build(this);
+		}
+		return census;
+	}
+
 	public void think() {
 		tick++;
+		census = Census.build(this);
 		int removecount = 0;
 		for (Entity e : entities.values()) {
 			if (e != null) {
