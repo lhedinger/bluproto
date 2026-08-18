@@ -77,6 +77,7 @@ let paused = false;
 // entities of the level in view (the server filters per viewer), so the HUD
 // count comes with the messages instead of from tracks.size.
 let worldTotal = 0;
+let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 
 // Baked ground streams as map chunks, fetched lazily and cached by "z/cx_cy"
 // (google-maps style). The render loop asks for whatever chunks are in view.
@@ -279,6 +280,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
     case 'full':
       state.applyFull(m, receivedAt);
       if (m.total !== undefined) worldTotal = m.total;
+      if (firstFullAt === 0) firstFullAt = performance.now();
       break;
     case 'delta':
       state.applyDelta(m, receivedAt);
@@ -878,6 +880,19 @@ function hudFrame(now: number): void {
   if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
   hudLastFrame = now;
   hudUpMax = Math.max(hudUpMax, hudGl.uploadMs);
+  // Structured mirror of the HUD for the automated benchmark (client/bench):
+  // numbers, not display text, so the harness never parses a string. Published
+  // every frame whether or not the HUD is visible.
+  (window as unknown as Record<string, unknown>).__bluPerf = {
+    renderer: glr ? 'webgl' : 'canvas2d',
+    frameMs: hudFrameEma,
+    drawCalls: hudGl.drawCalls, quads: hudGl.quads, uploadMs: hudGl.uploadMs,
+    secLayers: hudGl.secLayers, secEnts: hudGl.secEnts, secTail: hudGl.secTail,
+    streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
+    tex: hudGl.textures, atlases: atlasCount(),
+    onLevel: state.tracks.size, world: worldTotal,
+    scale: cam.scale, firstFullMs: firstFullAt, now,
+  };
   if (!hudOn || now - hudLastText < 250) return;
   hudLastText = now;
   const _resetUp = hudUpMax; hudUpMax = 0; void _resetUp;
