@@ -456,10 +456,12 @@ export function render(
       continue;
     }
     // The real procedural organism, if its atlas has loaded; else a dot with a
-    // heading wedge so it still reads while the sprite is in flight. atlasFor
-    // is called even on the dot path — it is a map lookup that kicks off the
-    // fetch, so the sprite is ready the moment the user zooms in.
-    const atlas = atlasFor(e.pheno);
+    // heading wedge so it still reads while the sprite is in flight. The dot
+    // path does NOT touch atlasFor: prefetching every phenotype the map view
+    // ever glimpsed is how an old world's 800+ atlases (~2MB of canvas each)
+    // ended up resident at once — zooming in shows a dot for the beat the
+    // fetch takes instead.
+    const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
     if (bodyPx < dotLod) {
       drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'),
         (e.flags & F_MINDED) !== 0, false);
@@ -756,7 +758,9 @@ export function renderGL(
       continue;
     }
 
-    const atlas = atlasFor(e.pheno); // kicks the fetch even on the dot path
+    // No atlas fetch at dot size — see render() above for why prefetching
+    // every glimpsed phenotype is a memory cliff on long-evolved worlds.
+    const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
     const minded = (e.flags & F_MINDED) !== 0;
     if (bodyPx < dotLod || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
