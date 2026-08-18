@@ -296,6 +296,51 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A body only forages toward food it could actually walk to. The seek intent
+	 * steers a straight bearing with no pathfinding anywhere in the loop, so a
+	 * patch chosen through a wall is not a meal -- it is a wall to press against.
+	 * Measured underground before this rule, minded foragers spent up to 19% of
+	 * their lives motionless against rock at part throttle, aiming at grass on the
+	 * far side of it.
+	 */
+	static class ForageIgnoresFoodBehindWalls extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(16, 12);
+			// A full-height wall two tiles east of the forager. Rich ground lies
+			// straight beyond it; a thinner patch lies north, on this side.
+			for (int y = 1; y <= 10; y++) {
+				w.setTile(6, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			// Strip this side bare except one tile due north of the forager: ground
+			// starts lush, so grazing everything else leaves exactly one patch.
+			for (int x = 1; x <= 5; x++) {
+				for (int y = 1; y <= 10; y++) {
+					if (x == 4 && y == 2) {
+						continue; // the reachable patch
+					}
+					w.getTile(x, y, 0).graze(0, Tile.VEG_MAX);
+				}
+			}
+			Genome g = Genome.phenotype(8, 0.0, 5, 9, Math.PI * 2, 100000);
+			Mind still = (sensors, act) -> { };
+			TestNPC forager = TestNPC.minded(4.5, 8.5, 0, g, still).withHeading(0);
+			w.spawnEntity(forager);
+			tick(w, 4);
+			snapshot(w, "wall east, rich ground beyond it, a patch north");
+
+			double prox = forager.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
+			double bearing = forager.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
+			assertGreater("it found food at all", prox, 0);
+			// Heading is east (0 rad). North is -PI/2, i.e. -0.5 in the normalised
+			// bearing; the walled-off ground due east would read ~0.
+			assertLess("it did not pick the ground behind the wall", Math.abs(bearing), 0.95);
+			assertGreater("it steered off the wall's bearing entirely", Math.abs(bearing), 0.2);
+		}
+	}
+
 	/** The Sound->hear() channel: a listener is inert until a sound reaches it. */
 	static class SoundWakesListener extends Scenario {
 		@Override
@@ -4834,6 +4879,7 @@ public class SimTests {
 				new ChaserClosesIn(),
 				new AgesOutAndIsRemoved(),
 				new LethalDamageAndScavenging(),
+				new ForageIgnoresFoodBehindWalls(),
 				new ScavengerEatsCarrionAndHastensItsDecay(),
 				new ScavengerForagesTowardBodies(),
 				new CorpseRotsForAsLongAsItTookToGrow(),

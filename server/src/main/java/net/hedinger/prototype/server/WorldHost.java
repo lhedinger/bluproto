@@ -356,9 +356,11 @@ final class WorldHost {
 				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
 					d.put("minded", tn.isMinded());
 					d.put("generation", tn.generation()); // 0 = world-spawned, +1 per birth
-					if (!tn.ecoRole().isEmpty()) {
-						d.put("role", tn.ecoRole());
-					}
+					// Every creature reports where it sits in the food chain. This used
+					// to be ecoRole(), which is blank for the minded cohort by design --
+					// so the majority of the world's creatures showed no role at all,
+					// which is the one thing you want to know when you tap one.
+					d.put("role", tn.trophicRole());
 					if (!tn.currentAction().isEmpty()) {
 						d.put("action", tn.currentAction());
 					}
