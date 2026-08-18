@@ -94,6 +94,17 @@ let deplBuckets: Int16Array | null = null;
 // The tile rects the last depletion pass repainted (null = full rebuild), so
 // the GL path can patch its texture instead of re-uploading the whole layer.
 let deplPatchRects: Array<[number, number, number, number]> | null = null;
+// Tiles repainted since the GPU copy last reconciled. Normally each poll's
+// handful ships as texSubImage2D patches, but a big herd can graze more tiles
+// per poll than patching beats (>256), which forces a whole-layer re-upload —
+// multi-millisecond on weak GPUs. Those bulk uploads are rate-limited: while
+// the window is closed the repaints accumulate here (null = overflowed, a
+// bulk is owed) and the GPU copy runs up to BULK_MIN_MS stale, which on a
+// slow-moving vegetation field nobody can see. Level switches bypass this —
+// they take the `full` path, which always ships immediately.
+let deplPending: number[] | null = [];
+let deplBulkAt = 0;
+const DEPL_BULK_MIN_MS = 3000;
 const ART = 12;
 
 function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
@@ -101,7 +112,10 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     veg: Uint8Array, level: number, nowMs: number): HTMLCanvasElement | null {
   const full = !deplLayer || !deplBuckets || level !== deplLevel
     || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART;
-  const stale = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt);
+  // An owed bulk upload whose rate-limit window just opened re-enters even if
+  // the vegetation itself brought nothing new this frame.
+  const bulkDue = deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS;
+  const stale = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt) || bulkDue;
   if (!stale) return deplLayer;
   if (full) {
     if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
@@ -162,10 +176,28 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   deplSrc = veg;
   deplLevel = level;
   deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
-  if (full || patched.length > 0) {
-    deplRev++; // the GL pass reconciles its texture copy
-    deplPatchRects = full ? null
-      : patched.map(i => [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
+  if (full) {
+    deplRev++; // whole layer changed (level switch, first build): ship NOW
+    deplPatchRects = null;
+    deplPending = [];
+    deplBulkAt = nowMs;
+  } else if (patched.length > 0 || deplPending === null) {
+    if (deplPending !== null) {
+      for (const i of patched) deplPending.push(i);
+      if (deplPending.length > 256) deplPending = null; // overflow: a bulk is owed
+    }
+    if (deplPending !== null) {
+      deplRev++; // small delta: ships as texSubImage2D patches
+      deplPatchRects = deplPending.map(i =>
+        [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
+      deplPending = [];
+    } else if (nowMs - deplBulkAt >= DEPL_BULK_MIN_MS) {
+      deplRev++; // the owed whole-layer upload, at most once per window
+      deplPatchRects = null;
+      deplPending = [];
+      deplBulkAt = nowMs;
+    }
+    // else: hold — the GPU copy stays a beat stale until the window opens.
   }
   return layer;
 }
