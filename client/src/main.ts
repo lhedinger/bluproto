@@ -868,10 +868,24 @@ let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0,
   secLayers: 0, secEnts: 0, secTail: 0 };
 let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
 let hudFrameEma = 16.7;
+let hudCbEma = 0; // JS spent INSIDE the rAF callback — the part of the frame that is ours
 let hudLastFrame = 0;
 let hudLastText = 0;
 let hudTick = ''; // sim load, polled while the HUD is open
 let hudTickAt = 0;
+// Main-thread stalls >50ms from ANY source — GC, stream parsing, layout — via
+// the Long Tasks API. The section timers only see inside the render call;
+// this is the net that catches everything else the frame budget bleeds into.
+let hudLongN = 0;
+let hudLongMax = 0;
+try {
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      hudLongN++;
+      hudLongMax = Math.max(hudLongMax, e.duration);
+    }
+  }).observe({ type: 'longtask' });
+} catch { /* API missing (e.g. Safari): the HUD line just stays 0 */ }
 window.addEventListener('keydown', (ev) => {
   if (ev.key === 'h' && !(ev.target instanceof HTMLInputElement)) {
     hudOn = !hudOn;
@@ -895,11 +909,16 @@ function hudFrame(now: number): void {
     streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
     tex: hudGl.textures, atlases: atlasCount(),
     onLevel: state.tracks.size, world: worldTotal,
+    cbMs: hudCbEma, longN: hudLongN, longMax: hudLongMax,
     scale: cam.scale, firstFullMs: firstFullAt, now,
   };
   if (!hudOn || now - hudLastText < 250) return;
   hudLastText = now;
-  const _resetUp = hudUpMax; hudUpMax = 0; void _resetUp;
+  // Capture-and-reset the since-last-redraw maxima BEFORE building the text —
+  // and print the captured values. (The first version printed the variable it
+  // had just zeroed, so the HUD swore uploads were 0.0ms no matter what.)
+  const upMax = hudUpMax; hudUpMax = 0;
+  const longN = hudLongN, longMax = hudLongMax; hudLongN = 0; hudLongMax = 0;
   if (now - hudTickAt > 3000) {
     hudTickAt = now;
     fetch('/api/health').then(r => r.json()).then(h => {
@@ -908,13 +927,14 @@ function hudFrame(now: number): void {
   }
   const net2 = Net.streamStats;
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'} · ${(1000 / hudFrameEma).toFixed(0)} fps`
-    + ` (${hudFrameEma.toFixed(1)} ms)`
-    + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${hudUpMax.toFixed(1)}ms` : '')
+    + ` (${hudFrameEma.toFixed(1)} ms · cb ${hudCbEma.toFixed(1)})`
+    + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
       + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
     + `\nstream ${net2.msgMs.toFixed(1)}ms/${net2.msgKb.toFixed(0)}kb`
     + ` · tex ${hudGl.textures} · atlases ${atlasCount()}`
-    + `\n${state.tracks.size} on level · ${worldTotal} world`
+    + `\nlong ${longN}×/${longMax.toFixed(0)}ms`
+    + ` · ${state.tracks.size} on level · ${worldTotal} world`
     + (hudTick ? `\n${hudTick}` : '');
 }
 
@@ -922,6 +942,7 @@ let lastStats = 0;
 let lastMini = 0;
 let miniCx = NaN, miniCy = NaN, miniScale = NaN;
 function frame(now: number): void {
+  const cb0 = performance.now();
   const renderTime = now - RENDER_DELAY_MS;
 
   // Follow: glue the camera to the tracked creature's interpolated position.
@@ -962,6 +983,10 @@ function frame(now: number): void {
     statsEl.textContent = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
         (hello ? ` · seed ${hello.seed}` : '');
   }
+  // Our whole share of the frame: everything above, GL submission included.
+  // A big gap between this and the frame interval is time spent OUTSIDE this
+  // callback — compositing, GPU, GC, or the browser pacing rAF down.
+  hudCbEma += (performance.now() - cb0 - hudCbEma) * 0.08;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
