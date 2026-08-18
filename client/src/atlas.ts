@@ -20,14 +20,52 @@ export const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 const cache = new Map<number, HTMLCanvasElement | null>(); // null = loading
 
+// Per-phenotype LRU over EVERY CPU-side variant cache below. A long-evolved
+// world breeds a new phenotype with nearly every lineage; each one resident
+// costs ~2.4MB for the atlas canvas alone (768px RGBA) and several times that
+// once rim/minded/corpse variants bake. Left uncapped this grew to gigabytes
+// of canvases on old worlds and the browser spent the frame budget in GC and
+// paging stalls, not rendering. Eviction is by idle time with a floor, never
+// touching a phenotype drawn in the last few seconds — the on-screen set must
+// stay resident even when it exceeds the cap (see gl.ts for the same rule on
+// GPU textures). A re-sighted evicted phenotype refetches through the
+// browser's HTTP cache and wears the dot placeholder for a beat.
+const touched = new Map<number, number>(); // pheno -> last sprite-path use, ms
+const PHENO_CAP = 64;
+const EVICT_IDLE_MS = 5000;
+
+function dropPheno(p: number): void {
+  cache.delete(p);
+  touched.delete(p);
+  mipCache.delete(p);
+  mindedCache.delete(p);
+  mindedMipCache.delete(p);
+  for (let s = 0; s < DECAY_STEPS; s++) {
+    corpseCache.delete(p * DECAY_STEPS + s);
+    corpseMipCache.delete(p * DECAY_STEPS + s);
+  }
+}
+
+function evictStale(now: number): void {
+  if (cache.size <= PHENO_CAP) return;
+  const order = [...touched.entries()].sort((a, b) => a[1] - b[1]);
+  for (const [p, at] of order) {
+    if (cache.size <= PHENO_CAP || now - at < EVICT_IDLE_MS) break;
+    dropPheno(p);
+  }
+}
+
 /** The loaded atlas for a key, or null while it loads / on failure. Cached as
  *  a CANVAS copy, not the <img>: canvases blit orders of magnitude faster on
  *  software-rendered canvases (an <img> source can pay a format conversion on
  *  every draw), and creatures are stamped hundreds of times a frame. */
 export function atlasFor(pheno: number): HTMLCanvasElement | null {
   if (pheno === 0) return null;
+  const now = performance.now();
+  touched.set(pheno, now);
   const hit = cache.get(pheno);
   if (hit !== undefined) return hit;
+  evictStale(now); // a new resident is what grows the pool past its cap
   cache.set(pheno, null); // mark in-flight so we fetch once
   const img = new Image();
   img.onload = () => {
@@ -54,7 +92,9 @@ export function atlasCount(): number {
  *  every creature on screen reads as a screen-wide flicker, not motion. */
 export function cell(dir: number, timeMs: number, phase = 0): { col: number; row: number } {
   const col = ((Math.round(dir / (Math.PI * 2 / DIRS)) % DIRS) + DIRS) % DIRS;
-  const row = Math.floor(timeMs / 90 + phase) % ANIM; // ~90 ms/frame gentle shuffle
+  // Double-mod: entity ids (the phase) can be NEGATIVE, and a negative row
+  // samples outside the atlas — an invisible body on 7 of 8 frames.
+  const row = ((Math.floor(timeMs / 90 + phase) % ANIM) + ANIM) % ANIM;
   return { col, row };
 }
 
@@ -79,22 +119,14 @@ export function headingCol(dir: number, prev: number): number {
 }
 
 /**
- * A violet silhouette of an atlas, cached alongside it.
- *
- * <p>Drawing this four times at one-pixel offsets behind the real sprite gives a
- * rim that hugs the body's actual outline — the standard pixel-art dilation. It
- * has to be a silhouette rather than a tint, because what we want is the SHAPE
- * of the sprite in one flat colour, and `source-in` over a filled rectangle is
- * the cheapest way to get exactly that.
- *
- * <p>Baked once per phenotype and kept, since an atlas never changes: the cost is
- * one offscreen canvas per distinct creature design, not per creature or frame.
+ * A violet silhouette of an atlas — the SHAPE of the sprite in one flat
+ * colour, via `source-in` over a filled rectangle. Drawing it at one-pixel
+ * offsets behind the real sprite gives a rim that hugs the body's actual
+ * outline — the standard pixel-art dilation. Built transiently: its only
+ * consumer is the fused minded bake below, so caching it was 2.4MB per
+ * minded phenotype held for nothing.
  */
-const rimCache = new Map<number, HTMLCanvasElement>();
-
-export function rimFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement {
-  const hit = rimCache.get(pheno);
-  if (hit) return hit;
+function rimOf(img: HTMLCanvasElement): HTMLCanvasElement {
   const cv = document.createElement('canvas');
   cv.width = img.width;
   cv.height = img.height;
@@ -104,7 +136,6 @@ export function rimFor(pheno: number, img: HTMLCanvasElement): HTMLCanvasElement
   g.globalCompositeOperation = 'source-in'; // keep the sprite's alpha, replace its colour
   g.fillStyle = RIM_COLOUR;
   g.fillRect(0, 0, cv.width, cv.height);
-  rimCache.set(pheno, cv);
   return cv;
 }
 
@@ -199,7 +230,7 @@ const mindedCache = new Map<number, HTMLCanvasElement>();
 export function mindedFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
   let m = mindedCache.get(pheno);
   if (m) return m;
-  const rim = rimFor(pheno, atlas);
+  const rim = rimOf(atlas);
   m = document.createElement('canvas');
   m.width = atlas.width;
   m.height = atlas.height;
