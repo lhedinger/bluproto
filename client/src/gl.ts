@@ -45,7 +45,11 @@ export class GLRenderer {
   private textures = new Map<string, TexEntry>();
   private white: WebGLTexture;
   private boundKey: string | null = null;
-  private stats = { drawCalls: 0, quads: 0 };
+  private stats = { drawCalls: 0, quads: 0, uploadMs: 0 };
+  /** Scratch canvas for cross-browser texSubImage2D patches: a tile region is
+   *  copied here and uploaded from (0,0) — UNPACK_SKIP_* on DOM sources is
+   *  spottier across browsers than a 12x12 blit is expensive. */
+  private patchCv = document.createElement('canvas');
 
   constructor(cv: HTMLCanvasElement, allowSoftware = false) {
     const gl = cv.getContext('webgl2', { alpha: false, antialias: false });
@@ -122,11 +126,11 @@ export class GLRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.vertCount = 0;
     this.boundKey = null;
-    this.stats = { drawCalls: 0, quads: 0 };
+    this.stats = { drawCalls: 0, quads: 0, uploadMs: 0 };
   }
 
   /** Flushes what remains and reports the frame's batching stats. */
-  end(): { drawCalls: number; quads: number } {
+  end(): { drawCalls: number; quads: number; uploadMs: number } {
     this.flush();
     return this.stats;
   }
@@ -148,6 +152,7 @@ export class GLRenderer {
       this.textures.set(key, e);
     }
     if (e.rev !== rev) {
+      const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample
       gl.bindTexture(gl.TEXTURE_2D, e.tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
@@ -160,6 +165,7 @@ export class GLRenderer {
       e.w = src.width;
       e.h = src.height;
       this.boundKey = key; // texImage2D left it bound
+      this.stats.uploadMs += performance.now() - t0;
     }
     return e;
   }
@@ -171,6 +177,58 @@ export class GLRenderer {
       this.gl.deleteTexture(e.tex);
       this.textures.delete(key);
     }
+  }
+
+  /**
+   * A world-layer quad: like sprite(), but the texture has NO mipmaps (layers
+   * barely minify — they live at art resolution) and a bumped revision can be
+   * reconciled by PATCHING the changed tile rects instead of re-uploading the
+   * whole canvas. The full upload of a level-sized layer plus its mipmap
+   * chain was a rhythmic multi-millisecond hitch on phones, every single
+   * vegetation poll; the compositor already knows the handful of tiles it
+   * repainted, so the GPU copy follows the same increments. A null patch
+   * list, a size change, or a skipped revision falls back to a full upload.
+   */
+  layer(key: string, src: TexImageSource & { width: number; height: number }, rev: number,
+      patches: Array<[number, number, number, number]> | null,
+      dx: number, dy: number, dw: number, dh: number, alpha = 1): void {
+    const gl = this.gl;
+    let e = this.textures.get(key);
+    if (!e) {
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0 };
+      this.textures.set(key, e);
+    }
+    if (e.rev !== rev) {
+      const t0 = performance.now();
+      this.flush(); // never mutate a texture the buffered quads still sample
+      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      const patchable = e.rev >= 0 && rev - e.rev === 1 && patches !== null
+        && e.w === src.width && e.h === src.height;
+      if (patchable) {
+        const pg = this.patchCv.getContext('2d')!;
+        for (const [x, y, w, h] of patches) {
+          if (this.patchCv.width < w || this.patchCv.height < h) {
+            this.patchCv.width = Math.max(this.patchCv.width, w);
+            this.patchCv.height = Math.max(this.patchCv.height, h);
+          }
+          pg.clearRect(0, 0, w, h);
+          pg.drawImage(src as CanvasImageSource, x, y, w, h, 0, 0, w, h);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.patchCv);
+        }
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        e.w = src.width;
+        e.h = src.height;
+      }
+      e.rev = rev;
+      this.boundKey = key; // the upload left it bound
+      this.stats.uploadMs += performance.now() - t0;
+    }
+    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha);
   }
 
   /** A textured quad: source rect (pixels of `src`) to destination rect

@@ -857,7 +857,8 @@ function toast(msg: string): void {
 // ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
 const hudEl = document.getElementById('hud') as HTMLElement;
 let hudOn = /[?&]hud\b/.test(location.search);
-let hudGl: { drawCalls: number; quads: number } = { drawCalls: 0, quads: 0 };
+let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0 };
+let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
 let hudFrameEma = 16.7;
 let hudLastFrame = 0;
 let hudLastText = 0;
@@ -874,8 +875,10 @@ if (hudOn) hudEl.style.display = 'block';
 function hudFrame(now: number): void {
   if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
   hudLastFrame = now;
+  hudUpMax = Math.max(hudUpMax, hudGl.uploadMs);
   if (!hudOn || now - hudLastText < 250) return;
   hudLastText = now;
+  const _resetUp = hudUpMax; hudUpMax = 0; void _resetUp;
   if (now - hudTickAt > 3000) {
     hudTickAt = now;
     fetch('/api/health').then(r => r.json()).then(h => {
@@ -884,7 +887,7 @@ function hudFrame(now: number): void {
   }
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'} · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms)`
-    + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads` : '')
+    + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${hudUpMax.toFixed(1)}ms` : '')
     + `\n${state.tracks.size} on level · ${worldTotal} world`
     + (hudTick ? `\n${hudTick}` : '');
 }
