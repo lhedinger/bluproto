@@ -1436,12 +1436,54 @@ public class TestNPC extends NPC {
 				continue;
 			}
 			double score = n.bodyMass() * (1.0 - n.decayProgress()) / (1.0 + dist);
-			if (score > best) {
+			// Same reachability rule as the grazer's forage: a carcass on the far
+			// side of rock is not a meal, it is a wall to press against.
+			if (score > best && walkableLineTo((int) n.getX(), (int) n.getY())) {
 				best = score;
 				forageCol = (int) n.getX();
 				forageRow = (int) n.getY();
 			}
 		}
+	}
+
+	/**
+	 * Whether this body could actually walk to the centre of tile
+	 * {@code (tx, ty)} in a straight line from where it stands.
+	 *
+	 * <p>A straight line is exactly the right question, because a straight line is
+	 * exactly what the body will do: {@code A_SEEK} steers at a bearing and walks
+	 * it, with no pathfinding anywhere in the loop. So a target chosen without this
+	 * check is a target the creature will walk INTO A WALL trying to reach --
+	 * measured underground, a minded forager picking a patch six tiles away through
+	 * rock, then pressing against the stone at quarter throttle until it starved.
+	 * The engine has a real {@code findPath}, but asking it here would answer a
+	 * question the body cannot act on: it has no way to follow a path around a
+	 * corner, so "reachable by some route" would still strand it.
+	 *
+	 * <p>Walks the segment in half-tile steps -- short enough that no step skips
+	 * over a wall, since {@link net.hedinger.prototype.engine.Entity#MAX_STEP} is
+	 * itself half a tile -- and requires every one of them to be a legal move from
+	 * the last. Pure tile reads, no allocation.
+	 */
+	private boolean walkableLineTo(int tx, int ty) {
+		double gx = tx + 0.5, gy = ty + 0.5;
+		double dx = gx - X, dy = gy - Y;
+		double dist = Math.hypot(dx, dy);
+		if (dist <= 0.5) {
+			return true; // already there, or as good as
+		}
+		int steps = (int) Math.ceil(dist / 0.5);
+		double px = X, py = Y;
+		for (int i = 1; i <= steps; i++) {
+			double f = i / (double) steps;
+			double nx = X + dx * f, ny = Y + dy * f;
+			if (!getWorld().isConnectedSpace(px, py, Z, nx, ny, Z)) {
+				return false;
+			}
+			px = nx;
+			py = ny;
+		}
+		return true;
 	}
 
 	private void scanForage(long now) {
@@ -1472,7 +1514,10 @@ public class TestNPC extends NPC {
 					continue;
 				}
 				double score = q / (1.0 + dist);
-				if (score > best) {
+				// Reachability is checked ONLY for a tile that would take the lead,
+				// not for every candidate: the ray is the expensive part and the
+				// running maximum improves a handful of times per scan.
+				if (score > best && walkableLineTo(tx, ty)) {
 					best = score;
 					forageCol = tx;
 					forageRow = ty;
