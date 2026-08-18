@@ -14,7 +14,8 @@ export interface EntityState {
   flags: number;
   attachedTo: number; // carrier id, or -1
   aux: number; // energy / strength / durability
-  pheno: number; // procedural-creature atlas key, 0 if none (items, clouds)
+  pheno: number; // procedural-creature SHAPE key (atlas id; colour-neutral —
+                 // tint with `rgb` at draw), 0 if none (items, clouds)
 }
 
 export const F_DEAD = 1;

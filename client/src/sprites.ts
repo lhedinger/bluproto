@@ -18,7 +18,7 @@
 
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
-  mindedFor, mindedMipFor,
+  mindedFor, mindedMipFor, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -306,17 +306,20 @@ for (const [act, name, meaning] of EXPR) {
 }
 
 (async () => {
-  // A live phenotype from the stream, so the atlas endpoint has it baked.
-  const pheno = await new Promise<number>((resolve) => {
+  // A live phenotype from the stream, so the atlas endpoint has it baked. The
+  // atlas is keyed by SHAPE and baked colour-neutral; the creature's rgb rides
+  // the same stream entity, and the page re-tints exactly as the live view does.
+  const found = await new Promise<{ pheno: number; rgb: number }>((resolve) => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/api/world/stream`);
     ws.onmessage = (ev) => {
       const m = JSON.parse(ev.data);
       const n = (m.entities || []).find((e: EntityState) => e.kind.startsWith('npc.') && e.pheno);
-      if (m.type === 'full' && n) { resolve(n.pheno); ws.close(); }
+      if (m.type === 'full' && n) { resolve({ pheno: n.pheno, rgb: n.rgb }); ws.close(); }
     };
-    setTimeout(() => resolve(0), 20000);
+    setTimeout(() => resolve({ pheno: 0, rgb: 0 }), 20000);
   });
+  const pheno = found.pheno;
   // No live phenotype (the stream never delivered one inside the timeout) is
   // survivable for most of this page, and it used to end it: everything below
   // sat after an early return, so the headings rendered and their contents
@@ -328,9 +331,14 @@ for (const [act, name, meaning] of EXPR) {
       poll();
     })
     : null;
+  // The re-tinted living body — one bake per (shape, colour), the 2D path's
+  // equivalent of the GL ramp shader. The galleries stamp this; the corpse
+  // bakes stay on the neutral sheet, exactly as the live view derives them.
+  const tinted = atlas ? tintedFor(pheno, found.rgb, atlas) : null;
+  const tk = pheno + ':' + found.rgb;
   // Hand it to the galleries that started without one; they repaint every frame,
   // so they pick the real body up on the next tick with no rebuild.
-  liveAtlas = atlas;
+  liveAtlas = tinted;
   if (!atlas) {
     const note = document.createElement('p');
     note.className = 'note';
@@ -348,8 +356,9 @@ for (const [act, name, meaning] of EXPR) {
     g.imageSmoothingEnabled = false;
     g.drawImage(src, anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
   });
-  if (atlas) {
-  figure(stamp(atlas), '<b>living stamp</b> (atlas cell)', bakes);
+  if (atlas && tinted) {
+  figure(stamp(atlas), '<b>neutral shape bake</b> (mid-grey ramp, one sheet per shape)', bakes);
+  figure(stamp(tinted), '<b>living stamp</b> (re-tinted with the creature\'s rgb)', bakes);
   figure(stamp(corpseFor(pheno, atlas)), '<b>corpse bake</b> (drained, transparent)', bakes);
   // The rot, stage by stage. A corpse lasts as long as the animal took to grow
   // up -- most of a minute for a big one -- so decay is a thing you watch, not a
@@ -367,7 +376,7 @@ for (const [act, name, meaning] of EXPR) {
     g.imageSmoothingEnabled = false;
     // The viewer's halo, pre-fused with the body (atlas.mindedFor) — the
     // same single-draw stamp the live view uses at sprite zoom.
-    g.drawImage(mindedFor(pheno, atlas), anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
+    g.drawImage(mindedFor(tk, tinted), anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
   }), '<b>minded rim</b> (violet halo, fused)', bakes);
 
   // The far-zoom mips: what the world view actually stamps when the whole map
@@ -382,8 +391,8 @@ for (const [act, name, meaning] of EXPR) {
     g.imageSmoothingEnabled = false;
     g.drawImage(src, anim * M, dir * M, M, M, 0, 0, D, D);
   });
-  figure(mipStamp(atlasMipFor(pheno, atlas)), '<b>far-zoom mip</b> (quarter cell)', bakes);
-  figure(mipStamp(mindedMipFor(pheno, atlas)), '<b>minded mip</b> (rim fused)', bakes);
+  figure(mipStamp(atlasMipFor(tk, tinted)), '<b>far-zoom mip</b> (quarter cell)', bakes);
+  figure(mipStamp(mindedMipFor(tk, tinted)), '<b>minded mip</b> (rim fused)', bakes);
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
   } // end of the entries that need a live atlas
 
@@ -423,7 +432,7 @@ for (const [act, name, meaning] of EXPR) {
       g.drawImage(ground, 0, 0, DC, DC);
       const dir = Math.floor((t / 1.2) % 8);
       const anim = Math.floor((t * 6) % 8);
-      g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL,
+      g.drawImage(tinted!, anim * CELL, dir * CELL, CELL, CELL,
         (DC - box) / 2, (DC - box) / 2, box, box);
       g.globalAlpha = VEIL_ALPHA;
       g.drawImage(veil, 0, 0, DC, DC);

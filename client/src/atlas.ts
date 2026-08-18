@@ -37,12 +37,18 @@ const EVICT_IDLE_MS = 5000;
 function dropPheno(p: number): void {
   cache.delete(p);
   touched.delete(p);
-  mipCache.delete(p);
-  mindedCache.delete(p);
-  mindedMipCache.delete(p);
   for (let s = 0; s < DECAY_STEPS; s++) {
     corpseCache.delete(p * DECAY_STEPS + s);
     corpseMipCache.delete(p * DECAY_STEPS + s);
+  }
+  // Variant caches key by shape id or by 'shape:rgb' for the 2D path's
+  // tinted copies — sweep both forms of this shape's keys.
+  const prefix = p + ':';
+  for (const m of [mipCache, mindedCache, mindedMipCache, tintCache]) {
+    m.delete(p);
+    for (const k of m.keys()) {
+      if (typeof k === 'string' && k.startsWith(prefix)) m.delete(k);
+    }
   }
 }
 
@@ -80,10 +86,50 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
   return null;
 }
 
-/** Distinct atlases this session has seen — on a long-evolved world this is
- *  the phenotype count, and each one is a 768px image in memory. */
+/** Distinct atlases resident — one per SHAPE now that colour tints at draw
+ *  time, so this stays in the dozens even on a long-evolved world. */
 export function atlasCount(): number {
   return cache.size;
+}
+
+/**
+ * Re-tints a colour-neutral shape atlas for one creature colour — the 2D
+ * fallback's version of the GL ramp shader (see gl.ts FS mode 1): greys at or
+ * below the mid-grey pivot invert the bake's shade(), greys above invert
+ * mixWhite(), saturated pixels (nothing in a raw bake, the violet rim in a
+ * fused one) pass through. Baked once per (shape, colour) actually drawn at
+ * sprite size by a non-GL browser; the LRU sweep drops them with their shape.
+ */
+const tintCache = new Map<number | string, HTMLCanvasElement>();
+
+export function tintedFor(pheno: number, rgb: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+  const key = pheno + ':' + rgb;
+  const hit = tintCache.get(key);
+  if (hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = atlas.width;
+  cv.height = atlas.height;
+  const g = cv.getContext('2d')!;
+  g.drawImage(atlas, 0, 0);
+  const img = g.getImageData(0, 0, cv.width, cv.height);
+  const d = img.data;
+  const tr = (rgb >> 16) & 255, tg = (rgb >> 8) & 255, tb = rgb & 255;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const r = d[i], gg = d[i + 1], b = d[i + 2];
+    const hi = Math.max(r, gg, b);
+    if (hi - Math.min(r, gg, b) > 24) continue; // saturated: not body grey
+    if (hi <= 128) {
+      const f = hi / 128;
+      d[i] = tr * f; d[i + 1] = tg * f; d[i + 2] = tb * f;
+    } else {
+      const t = (hi - 128) / 127;
+      d[i] = tr + (255 - tr) * t; d[i + 1] = tg + (255 - tg) * t; d[i + 2] = tb + (255 - tb) * t;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  tintCache.set(key, cv);
+  return cv;
 }
 
 /** Column (heading bucket) and row (animation frame) for the given pose.
@@ -162,9 +208,11 @@ function downscale(src: HTMLCanvasElement): HTMLCanvasElement {
   return cv;
 }
 
-const mipCache = new Map<number, HTMLCanvasElement>();
+// Variant caches key by the shape id (the GL path's colour-neutral variants)
+// or by 'shape:rgb' strings (the 2D path's tinted copies).
+const mipCache = new Map<number | string, HTMLCanvasElement>();
 
-export function atlasMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+export function atlasMipFor(pheno: number | string, atlas: HTMLCanvasElement): HTMLCanvasElement {
   let m = mipCache.get(pheno);
   if (!m) { m = downscale(atlas); mipCache.set(pheno, m); }
   return m;
@@ -190,9 +238,9 @@ export function corpseMipFor(pheno: number, atlas: HTMLCanvasElement, decay = 0)
  * the live path: there the rim must hug the body at one SCREEN pixel, which no
  * baked asset can promise at every scale.
  */
-const mindedMipCache = new Map<number, HTMLCanvasElement>();
+const mindedMipCache = new Map<number | string, HTMLCanvasElement>();
 
-export function mindedMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+export function mindedMipFor(pheno: number | string, atlas: HTMLCanvasElement): HTMLCanvasElement {
   let m = mindedMipCache.get(pheno);
   if (m) return m;
   const body = atlasMipFor(pheno, atlas);
@@ -225,9 +273,9 @@ export function mindedMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanva
  * surviving down to the mip handoff (box = CELL/MIP) while reading at most a
  * couple of pixels thick near 1:1. Baked once per phenotype.
  */
-const mindedCache = new Map<number, HTMLCanvasElement>();
+const mindedCache = new Map<number | string, HTMLCanvasElement>();
 
-export function mindedFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+export function mindedFor(pheno: number | string, atlas: HTMLCanvasElement): HTMLCanvasElement {
   let m = mindedCache.get(pheno);
   if (m) return m;
   const rim = rimOf(atlas);
