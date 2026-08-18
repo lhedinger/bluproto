@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, decayStage, mindedFor, mindedMipFor,
+  corpseMipFor, decayStage, headingCol, mindedFor, mindedMipFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -436,7 +436,8 @@ export function render(
         // its whole decay. It keeps the heading it died on -- that still says
         // something -- but the legs stop. Row 0 is the frame nearest phase 0,
         // the closest thing the cycle has to a neutral stance.
-        const { col: dc } = cell(p.dir, 0);
+        const dc = headingCol(p.dir, t.col ?? -1);
+        t.col = dc;
         const dr = 0;
         g.imageSmoothingEnabled = false;
         // Far zoom stamps from the pre-smoothed quarter-size mip (see atlas.ts).
@@ -464,7 +465,12 @@ export function render(
         (e.flags & F_MINDED) !== 0, false);
     } else if (atlas) {
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
-      const { col: cc, row: rr } = cell(p.dir, nowMs);
+      // Sticky heading bucket (see atlas.headingCol): neighbouring columns are
+      // very different silhouettes, so bucket noise while walking reads as
+      // flicker rather than turning.
+      const cc = headingCol(p.dir, t.col ?? -1);
+      t.col = cc;
+      const { row: rr } = cell(p.dir, nowMs, e.id);
       g.imageSmoothingEnabled = false;
       if (box <= CELL / MIP) {
         // Far zoom: one stamp from the quarter-size mip — the minded variant has
@@ -734,7 +740,8 @@ export function renderGL(
       const dead = atlasFor(e.pheno);
       if (dead) {
         const box = r * 2 * (CELL / (2 * ART_RADIUS));
-        const { col: dc } = cell(p.dir, 0); // frozen gait: the legs stop (see render())
+        const dc = headingCol(p.dir, t.col ?? -1); // frozen gait: the legs stop (see render())
+        t.col = dc;
         // Far zoom stamps from the quarter-size mip, same rule as the 2D path —
         // and the texture behind it is 16x smaller, which is what lets hundreds
         // of distinct phenotypes stay GPU-resident at once (see gl.ts caps).
@@ -764,7 +771,11 @@ export function renderGL(
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
     } else {
       const box = r * 2 * (CELL / (2 * ART_RADIUS));
-      const { col: cc, row: rr } = cell(p.dir, nowMs);
+      // Sticky heading bucket (see atlas.headingCol): bucket noise while
+      // walking would otherwise flip the pose at frame rate.
+      const cc = headingCol(p.dir, t.col ?? -1);
+      t.col = cc;
+      const { row: rr } = cell(p.dir, nowMs, e.id);
       // Far zoom: quarter-size mip source, same threshold as the 2D path. This
       // is not just fewer pixels — the herd view is where EVERY phenotype is on
       // screen at once, and only the small mip textures can all stay resident.

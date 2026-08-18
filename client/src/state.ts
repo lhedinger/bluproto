@@ -14,6 +14,9 @@ export interface Track {
   tPrev: number;
   curr: EntityState;
   tCurr: number;
+  /** Last atlas heading column drawn, for the renderer's turn hysteresis —
+   *  pose memory lives here because the Track object survives deltas. */
+  col?: number;
 }
 
 export class WorldState {
