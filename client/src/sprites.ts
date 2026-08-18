@@ -18,7 +18,7 @@
 
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
-  mindedMipFor, rimFor,
+  mindedFor, mindedMipFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -365,14 +365,10 @@ for (const [act, name, meaning] of EXPR) {
     const dir = Math.floor((t / 1.2) % 8);
     const anim = Math.floor((t * 6) % 8);
     g.imageSmoothingEnabled = false;
-    // The viewer's halo: four one-sprite-pixel offset rim stamps, body on top.
-    const rim = rimFor(pheno, atlas);
-    const d = Math.max(1, D / CELL);
-    for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) {
-      g.drawImage(rim, anim * CELL, dir * CELL, CELL, CELL, dx, dy, D, D);
-    }
-    g.drawImage(atlas, anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
-  }), '<b>minded rim</b> (violet halo)', bakes);
+    // The viewer's halo, pre-fused with the body (atlas.mindedFor) — the
+    // same single-draw stamp the live view uses at sprite zoom.
+    g.drawImage(mindedFor(pheno, atlas), anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
+  }), '<b>minded rim</b> (violet halo, fused)', bakes);
 
   // The far-zoom mips: what the world view actually stamps when the whole map
   // is in view — quarter-size cells, smoothed once at bake time, the minded

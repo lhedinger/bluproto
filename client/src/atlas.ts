@@ -157,6 +157,36 @@ export function mindedMipFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanva
 }
 
 /**
+ * The full-resolution minded variant: rim and body FUSED into one sprite, so
+ * a minded creature costs one drawImage at sprite zoom instead of five (four
+ * rim offsets plus the body). The live four-offset path drew the rim at one
+ * SCREEN pixel; a baked rim is one ATLAS pixel, which nearest-downsamples to
+ * dots below half scale — so the baked rim is dilated to TWO atlas pixels,
+ * surviving down to the mip handoff (box = CELL/MIP) while reading at most a
+ * couple of pixels thick near 1:1. Baked once per phenotype.
+ */
+const mindedCache = new Map<number, HTMLCanvasElement>();
+
+export function mindedFor(pheno: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
+  let m = mindedCache.get(pheno);
+  if (m) return m;
+  const rim = rimFor(pheno, atlas);
+  m = document.createElement('canvas');
+  m.width = atlas.width;
+  m.height = atlas.height;
+  const g = m.getContext('2d')!;
+  for (const [dx, dy] of [
+    [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1],
+    [-2, 0], [2, 0], [0, -2], [0, 2],
+  ] as const) {
+    g.drawImage(rim, dx, dy);
+  }
+  g.drawImage(atlas, 0, 0);
+  mindedCache.set(pheno, m);
+  return m;
+}
+
+/**
  * A drained, greyed copy of an atlas — what a corpse looks like.
  *
  * <p>The body keeps its shape, size and pose; only its colour goes. That matters

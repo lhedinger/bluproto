@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, mindedMipFor, rimFor,
+  corpseMipFor, mindedFor, mindedMipFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -212,6 +212,28 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
  *  stay recognisable on the map. */
 export const DOT_LOD_PX = 8;
 
+// Adaptive degradation: when frames run long for a sustained stretch, the dot
+// threshold rises so more of the herd draws as blocks — trading sprite detail
+// the eye can barely use for the frame rate it definitely can. An EMA with
+// hysteresis keeps the mode from flapping; both bounds sit ABOVE the 16.7 ms
+// a locked-60 machine settles at (an exit bound below it would trap the mode
+// on forever — a machine holding exactly 60 fps could never leave), so a
+// machine that can hold 60 fps always recovers full detail.
+let frameEma = 16.7;
+let lastFrameAt = 0;
+let herdMode = false;
+
+function adaptiveDotLod(nowMs: number): number {
+  if (lastFrameAt > 0) {
+    const dt = Math.min(100, nowMs - lastFrameAt);
+    frameEma += (dt - frameEma) * 0.1;
+    if (!herdMode && frameEma > 26) herdMode = true;
+    else if (herdMode && frameEma < 18.5) herdMode = false;
+  }
+  lastFrameAt = nowMs;
+  return herdMode ? DOT_LOD_PX * 2.5 : DOT_LOD_PX;
+}
+
 /** The map-view dot: a corpse is a spent grey block; a minded body wears its
  *  rim violet as an underlying block, one pixel proud on every side. */
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
@@ -248,6 +270,7 @@ export function render(
     { id: null, tile: null },
 ): void {
   const cv = g.canvas;
+  const dotLod = adaptiveDotLod(nowMs);
   g.fillStyle = '#14161a';
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
@@ -324,7 +347,12 @@ export function render(
       : t.curr.kind.startsWith('switch.') || t.curr.kind === 'nest' ? 1 // floor fixtures lowest
       : t.curr.kind.startsWith('door.') ? 2
       : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
-  const tracks = [...state.tracks.values()].sort((a, b) => order(a) - order(b));
+  // Secondary sort by phenotype: a GPU canvas batches consecutive draws from
+  // the SAME source texture, and each phenotype's atlas is its own texture —
+  // interleaved phenotypes break every batch. Within a class the paint order
+  // is otherwise arbitrary, so grouping by atlas is free.
+  const tracks = [...state.tracks.values()]
+    .sort((a, b) => order(a) - order(b) || a.curr.pheno - b.curr.pheno);
 
   for (const t of tracks) {
     const e = t.curr;
@@ -378,12 +406,13 @@ export function render(
       continue;
     }
 
-    // Creature. Dot-sized bodies (see DOT_LOD_PX) skip the sprite pipeline:
+    // Creature. Dot-sized bodies (see DOT_LOD_PX; threshold rises under
+    // sustained frame pressure) skip the sprite pipeline:
     // one or two fillRects instead of a drawImage, which is most of the frame
     // at map zoom with a large population.
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
-      if (bodyPx < DOT_LOD_PX) {
+      if (bodyPx < dotLod) {
         drawDot(g, s.x, s.y, bodyPx, '', false, true);
         continue;
       }
@@ -421,7 +450,7 @@ export function render(
     // is called even on the dot path — it is a map lookup that kicks off the
     // fetch, so the sprite is ready the moment the user zooms in.
     const atlas = atlasFor(e.pheno);
-    if (bodyPx < DOT_LOD_PX) {
+    if (bodyPx < dotLod) {
       drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'),
         (e.flags & F_MINDED) !== 0, false);
     } else if (atlas) {
@@ -435,22 +464,13 @@ export function render(
         const src = (e.flags & F_MINDED) ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas);
         g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
-        // Minded cohort: a violet rim hugging the body, so a creature driven by an
-        // evolvable mind can be picked out of the scripted species at a glance. The
-        // ring this replaces was the one smooth curve on a screen of pixel art, and
-        // it also had to be told apart from the grab and carry rings by radius alone
-        // — a shape that follows the sprite is legible at any zoom and cannot be
-        // confused with them. Four offsets rather than eight: at one pixel the
-        // diagonals add nothing but cost two more draws per creature.
-        if (e.flags & F_MINDED) {
-          const rim = rimFor(e.pheno, atlas);
-          const d = Math.max(1, box / CELL); // one SPRITE pixel, never under one screen pixel
-          for (const [dx, dy] of [[-d, 0], [d, 0], [0, -d], [0, d]] as const) {
-            g.drawImage(rim, cc * CELL, rr * CELL, CELL, CELL,
-              s.x - box / 2 + dx, s.y - box / 2 + dy, box, box);
-          }
-        }
-        g.drawImage(atlas, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+        // Minded cohort: a violet rim hugging the body, so a creature driven by
+        // an evolvable mind can be picked out of the scripted species at a
+        // glance. Rim and body come pre-fused (see atlas.mindedFor) — one draw
+        // per creature, not five, which is what a GPU canvas feels when a herd
+        // of hundreds is on screen.
+        const src = (e.flags & F_MINDED) ? mindedFor(e.pheno, atlas) : atlas;
+        g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
       // The colour string is built only here: the atlas path never needs it,
