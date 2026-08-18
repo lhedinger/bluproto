@@ -48,11 +48,34 @@ export function atlasCount(): number {
   return cache.size;
 }
 
-/** Column (heading bucket) and row (animation frame) for the given pose. */
-export function cell(dir: number, timeMs: number): { col: number; row: number } {
+/** Column (heading bucket) and row (animation frame) for the given pose.
+ *  `phase` (any integer, e.g. the entity id) offsets the animation clock so
+ *  a herd doesn't switch pose in lockstep — a synchronized 90 ms step across
+ *  every creature on screen reads as a screen-wide flicker, not motion. */
+export function cell(dir: number, timeMs: number, phase = 0): { col: number; row: number } {
   const col = ((Math.round(dir / (Math.PI * 2 / DIRS)) % DIRS) + DIRS) % DIRS;
-  const row = Math.floor((timeMs / 90) % ANIM); // ~90 ms/frame gentle shuffle
+  const row = Math.floor(timeMs / 90 + phase) % ANIM; // ~90 ms/frame gentle shuffle
   return { col, row };
+}
+
+/** How far past its own bucket's edge a heading must swing before the sprite
+ *  turns to the neighbouring column (10°). Neighbouring heading cells are
+ *  procedurally quite different silhouettes, so a walker whose heading noise
+ *  straddles a bucket boundary would otherwise flip pose at frame rate —
+ *  which reads as flicker, not turning. */
+const HEADING_HYST = Math.PI / 18;
+
+/** The heading column with hysteresis: keeps `prev` (pass -1 for none) until
+ *  the heading has moved clearly INTO a neighbouring bucket. */
+export function headingCol(dir: number, prev: number): number {
+  const bucket = (Math.PI * 2) / DIRS;
+  if (prev >= 0) {
+    let d = (dir - prev * bucket) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) <= bucket / 2 + HEADING_HYST) return prev;
+  }
+  return ((Math.round(dir / bucket) % DIRS) + DIRS) % DIRS;
 }
 
 /**
