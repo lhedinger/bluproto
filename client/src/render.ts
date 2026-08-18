@@ -735,9 +735,14 @@ export function renderGL(
       if (dead) {
         const box = r * 2 * (CELL / (2 * ART_RADIUS));
         const { col: dc } = cell(p.dir, 0); // frozen gait: the legs stop (see render())
-        const corpse = corpseFor(e.pheno, dead, e.aux);
-        glr.sprite('corpse:' + e.pheno + ':' + decayStage(e.aux), corpse, 1,
-          dc * CELL, 0, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+        // Far zoom stamps from the quarter-size mip, same rule as the 2D path —
+        // and the texture behind it is 16x smaller, which is what lets hundreds
+        // of distinct phenotypes stay GPU-resident at once (see gl.ts caps).
+        const c = box <= CELL / MIP ? CELL / MIP : CELL;
+        const corpse = c === CELL
+          ? corpseFor(e.pheno, dead, e.aux) : corpseMipFor(e.pheno, dead, e.aux);
+        glr.sprite((c === CELL ? 'corpse:' : 'corpsem:') + e.pheno + ':' + decayStage(e.aux),
+          corpse, 1, dc * c, 0, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
         glr.quad(s.x - r, s.y - r, r * 2, r * 2, 0x55 / 255, 0x5a / 255, 0x63 / 255, 1);
       }
@@ -760,9 +765,16 @@ export function renderGL(
     } else {
       const box = r * 2 * (CELL / (2 * ART_RADIUS));
       const { col: cc, row: rr } = cell(p.dir, nowMs);
-      const src = minded ? mindedFor(e.pheno, atlas) : atlas;
-      glr.sprite((minded ? 'minded:' : 'atlas:') + e.pheno, src, 1,
-        cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+      // Far zoom: quarter-size mip source, same threshold as the 2D path. This
+      // is not just fewer pixels — the herd view is where EVERY phenotype is on
+      // screen at once, and only the small mip textures can all stay resident.
+      const c = box <= CELL / MIP ? CELL / MIP : CELL;
+      const src = c === CELL
+        ? (minded ? mindedFor(e.pheno, atlas) : atlas)
+        : (minded ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas));
+      const key = c === CELL ? (minded ? 'minded:' : 'atlas:') : (minded ? 'mindedm:' : 'atlasm:');
+      glr.sprite(key + e.pheno, src, 1,
+        cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
     }
 
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {

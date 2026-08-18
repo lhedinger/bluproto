@@ -47,12 +47,16 @@ export class GLRenderer {
   private boundKey: string | null = null;
   private stats = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0 };
   private frameNo = 0;
-  /** Sprite textures kept resident at most; a long-evolved world breeds a new
-   *  phenotype (= a new atlas) with nearly every lineage, so an uncapped
-   *  cache grows with world AGE — hundreds of mipmapped 768px textures will
-   *  eventually thrash any phone GPU. Only per-pheno sprites are evictable;
-   *  layers, stamps and the white pixel are permanent. */
-  private static readonly MAX_SPRITE_TEXTURES = 48;
+  /** Resident-texture caps. A long-evolved world breeds a new phenotype
+   *  (= a new atlas) with nearly every lineage, so an uncapped cache grows
+   *  with world AGE — hundreds of mipmapped 768px textures will eventually
+   *  thrash any phone GPU. Two pools: full-res atlases (~3MB each, only
+   *  needed at sprite zoom where few phenotypes fit on screen) stay scarce;
+   *  quarter-res mips (~0.2MB each, what the herd view stamps from) get
+   *  room for every phenotype a zoomed-out screen can plausibly show.
+   *  Layers, stamps and the white pixel are permanent. */
+  private static readonly MAX_FULL_SPRITES = 48;
+  private static readonly MAX_MIP_SPRITES = 320;
   /** Scratch canvas for cross-browser texSubImage2D patches: a tile region is
    *  copied here and uploaded from (0,0) — UNPACK_SKIP_* on DOM sources is
    *  spottier across browsers than a 12x12 blit is expensive. */
@@ -139,23 +143,33 @@ export class GLRenderer {
   /** Flushes what remains and reports the frame's batching stats. */
   end(): { drawCalls: number; quads: number; uploadMs: number; textures: number } {
     this.flush();
+    this.evictPool(/^(atlas|minded|corpse):/, GLRenderer.MAX_FULL_SPRITES);
+    this.evictPool(/^(atlasm|mindedm|corpsem):/, GLRenderer.MAX_MIP_SPRITES);
     this.frameNo++;
-    // LRU cap on the evictable (per-pheno) sprite textures.
-    let evictable = 0;
-    for (const key of this.textures.keys()) {
-      if (/^(atlas|minded|corpse):/.test(key)) evictable++;
-    }
-    if (evictable > GLRenderer.MAX_SPRITE_TEXTURES) {
-      const olds = [...this.textures.entries()]
-        .filter(([k]) => /^(atlas|minded|corpse):/.test(k))
-        .sort((a, b) => a[1].lastUse - b[1].lastUse);
-      for (let i = 0; i < evictable - GLRenderer.MAX_SPRITE_TEXTURES; i++) {
-        this.gl.deleteTexture(olds[i][1].tex);
-        this.textures.delete(olds[i][0]);
-      }
-    }
     this.stats.textures = this.textures.size;
     return this.stats;
+  }
+
+  /** LRU-trims one sprite pool to its cap — but NEVER a texture drawn this
+   *  frame. When more phenotypes are on screen than the cap, evicting live
+   *  textures makes every frame delete-and-reupload the same atlases; the
+   *  resulting frame-time spike trips the adaptive dot LOD and the whole
+   *  view oscillates between sprites and blocks. Briefly exceeding the cap
+   *  is the far cheaper failure. */
+  private evictPool(re: RegExp, cap: number): void {
+    const pool: Array<[string, TexEntry]> = [];
+    for (const ent of this.textures) {
+      if (re.test(ent[0])) pool.push(ent);
+    }
+    if (pool.length <= cap) return;
+    pool.sort((a, b) => a[1].lastUse - b[1].lastUse);
+    let excess = pool.length - cap;
+    for (const [key, e] of pool) {
+      if (excess === 0 || e.lastUse >= this.frameNo) break;
+      this.gl.deleteTexture(e.tex);
+      this.textures.delete(key);
+      excess--;
+    }
   }
 
   /**
