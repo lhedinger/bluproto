@@ -36,16 +36,20 @@ final class AtlasBaker {
 
 	private static final ConcurrentHashMap<Long, byte[]> CACHE = new ConcurrentHashMap<Long, byte[]>();
 
-	/** PNG bytes for a phenotype key, or null if the key was never registered. */
-	static byte[] atlas(long phenoKey) {
-		ProcCreature.Phenotype ph = PhenoRegistry.get(phenoKey);
+	/** PNG bytes for a shape key, or null if the key was never registered. */
+	static byte[] atlas(long shapeKey) {
+		ProcCreature.Phenotype ph = PhenoRegistry.get(shapeKey);
 		if (ph == null) {
 			return null;
 		}
-		return CACHE.computeIfAbsent(phenoKey, k -> bake(ph));
+		return CACHE.computeIfAbsent(shapeKey, k -> bake(ph));
 	}
 
-	private static byte[] bake(ProcCreature.Phenotype ph) {
+	private static byte[] bake(ProcCreature.Phenotype registered) {
+		// Colour-neutral: baked at exact mid-grey so every shade()/mixWhite()
+		// tone lands on an invertible grey ramp (pivot 128) the client re-tints
+		// per creature. One sheet serves a shape's every colour variant.
+		ProcCreature.Phenotype ph = ProcCreature.neutral(registered);
 		int dirs = ProcCreature.DIRS, anim = ProcCreature.ANIM;
 		BufferedImage atlas = new BufferedImage(dirs * CELL, anim * CELL, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = atlas.createGraphics();

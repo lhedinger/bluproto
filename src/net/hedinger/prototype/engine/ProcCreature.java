@@ -224,6 +224,51 @@ public final class ProcCreature {
 		return k;
 	}
 
+	/**
+	 * The SHAPE of a phenotype: {@link #phenoKey} minus the colour bits. Colour
+	 * mutates almost continuously under evolution while the 16 bits of shape
+	 * barely move within a lineage, so keying baked sprite atlases by colour
+	 * meant a new 768px atlas for nearly every lineage variant — hundreds of
+	 * sheets of essentially identical bodies. Every colour in an idle bake is
+	 * {@code shade()} or {@code mixWhite()} of the base colour (or achromatic
+	 * shadow), so one NEUTRAL atlas per shape (baked at {@link #NEUTRAL_COLOR})
+	 * carries the full palette as a two-segment grey ramp the client re-tints
+	 * per creature at draw time.
+	 */
+	public static long shapeKey(Phenotype ph) {
+		long k = ph.form & 7;
+		k = (k << 3) | (ph.legs & 7);
+		k = (k << 2) | (ph.core & 3);
+		k = (k << 2) | (ph.pattern & 3);
+		k = (k << 1) | (ph.antennae ? 1 : 0);
+		k = (k << 1) | (ph.tail ? 1 : 0);
+		k = (k << 1) | (ph.flying ? 1 : 0);
+		k = (k << 3) | (ph.r & 7);
+		return k;
+	}
+
+	/** The base colour neutral atlases bake at: exact mid-grey, so
+	 *  {@code shade(c,f)} lands in 0..128 and {@code mixWhite(c,t)} in 128..255
+	 *  and the client's ramp can invert both exactly (pivot 128). */
+	public static final int NEUTRAL_COLOR = 0x808080;
+
+	/** A copy of a phenotype with the colour neutralised for a shape bake. The
+	 *  colour also seeds the form jitter, so same-shape creatures share their
+	 *  jitter under this — the price of sharing the sheet. */
+	public static Phenotype neutral(Phenotype ph) {
+		Phenotype n = new Phenotype();
+		n.color = NEUTRAL_COLOR;
+		n.form = ph.form;
+		n.legs = ph.legs;
+		n.core = ph.core;
+		n.pattern = ph.pattern;
+		n.antennae = ph.antennae;
+		n.tail = ph.tail;
+		n.flying = ph.flying;
+		n.r = ph.r;
+		return n;
+	}
+
 	/** Art-px margin around the body: room for appendages/glyph/ring, plus extra
 	 * headroom below/above for a flyer's lifted body and its detached shadow. */
 	private static int spriteMargin(Phenotype ph) {

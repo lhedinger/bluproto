@@ -298,8 +298,10 @@ public final class ServerMain {
 			ctx.json(Map.of("ok", true, "seed", s));
 		});
 
-		// Baked procedural-creature sprite atlas for a phenotype key (the `pheno`
-		// field on streamed entities). Immutable per key -> cache hard.
+		// Baked procedural-creature sprite atlas for a SHAPE key (the `pheno`
+		// field on streamed entities). Colour-neutral: the client re-tints with
+		// the entity's rgb, so one sheet serves a shape's every colour variant.
+		// Immutable per key -> cache hard.
 		app.get("/api/world/atlas/{key}.png", ctx -> {
 			byte[] png = AtlasBaker.atlas(Long.parseLong(ctx.pathParam("key").replace(".png", "")));
 			if (png == null) {

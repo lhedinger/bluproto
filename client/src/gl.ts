@@ -15,24 +15,46 @@
 // is still painted by the same authoring code; the GPU only composites it.
 
 const MAX_QUADS = 4096;
-const FLOATS_PER_VERT = 8; // x, y, u, v, r, g, b, a (premultiplied)
+const FLOATS_PER_VERT = 9; // x, y, u, v, r, g, b, a, mode
 
 const VS = `#version 300 es
-in vec2 aPos; in vec2 aUV; in vec4 aCol;
+in vec2 aPos; in vec2 aUV; in vec4 aCol; in float aMode;
 uniform vec2 uRes;
-out vec2 vUV; out vec4 vCol;
+out vec2 vUV; out vec4 vCol; out float vMode;
 void main() {
   gl_Position = vec4(aPos.x * 2.0 / uRes.x - 1.0, 1.0 - aPos.y * 2.0 / uRes.y, 0.0, 1.0);
   vUV = aUV;
   vCol = aCol;
+  vMode = aMode;
 }`;
 
+// Mode 0 is the plain premultiplied multiply every layer, stamp and dot uses.
+// Mode 1 is the creature tint: the texel is a COLOUR-NEUTRAL bake (the body's
+// palette encoded as greys around a mid-grey pivot — see ProcCreature.neutral
+// server-side), and the quad's colour is the creature's rgb. Greys at or below
+// the pivot invert the bake's shade() (tint scaled toward black); greys above
+// invert mixWhite() (tint mixed toward white) — so one atlas per SHAPE serves
+// every colour a lineage drifts through. Saturated texels (the fused minded
+// rim's violet) pass through untinted, with a soft gate so downscaled edge
+// pixels blend instead of fringing.
 const FS = `#version 300 es
 precision mediump float;
-in vec2 vUV; in vec4 vCol;
+in vec2 vUV; in vec4 vCol; in float vMode;
 uniform sampler2D uTex;
 out vec4 outColor;
-void main() { outColor = texture(uTex, vUV) * vCol; }`;
+void main() {
+  vec4 t = texture(uTex, vUV);
+  if (vMode < 0.5) { outColor = t * vCol; return; }
+  float a = max(t.a, 1e-4);
+  vec3 u = t.rgb / a;
+  float hi = max(u.r, max(u.g, u.b)), lo = min(u.r, min(u.g, u.b));
+  float pivot = 128.0 / 255.0;
+  vec3 tinted = hi <= pivot
+    ? vCol.rgb * (hi / pivot)
+    : mix(vCol.rgb, vec3(1.0), (hi - pivot) / (1.0 - pivot));
+  vec3 c = mix(tinted, u, smoothstep(0.08, 0.30, hi - lo));
+  outColor = vec4(c, 1.0) * (t.a * vCol.a);
+}`;
 
 interface TexEntry { tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number; }
 
@@ -86,6 +108,12 @@ export class GLRenderer {
       }
       gl.attachShader(prog, sh);
     }
+    // Pin attribute slots to the vertexAttribPointer indices below — linkers
+    // are free to order them otherwise.
+    gl.bindAttribLocation(prog, 0, 'aPos');
+    gl.bindAttribLocation(prog, 1, 'aUV');
+    gl.bindAttribLocation(prog, 2, 'aCol');
+    gl.bindAttribLocation(prog, 3, 'aMode');
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       throw new Error('link: ' + gl.getProgramInfoLog(prog));
@@ -113,6 +141,8 @@ export class GLRenderer {
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 8);
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, 16);
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, stride, 32);
 
     // Premultiplied-alpha compositing throughout (canvas uploads premultiply).
     gl.enable(gl.BLEND);
@@ -267,30 +297,39 @@ export class GLRenderer {
       this.boundKey = key; // the upload left it bound
       this.stats.uploadMs += performance.now() - t0;
     }
-    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha);
+    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
   }
 
   /** A textured quad: source rect (pixels of `src`) to destination rect
-   *  (canvas pixels), modulated by alpha. Quads sharing a texture batch. */
+   *  (canvas pixels), modulated by alpha. Quads sharing a texture batch.
+   *  Pass `tint` (an rgb int) to draw a colour-neutral creature bake through
+   *  the ramp-tint shader mode — the quad colour becomes the creature's rgb. */
   sprite(key: string, src: TexImageSource & { width: number; height: number }, rev: number,
       sx: number, sy: number, sw: number, sh: number,
-      dx: number, dy: number, dw: number, dh: number, alpha = 1): void {
+      dx: number, dy: number, dw: number, dh: number, alpha = 1, tint = -1): void {
     const e = this.texFor(key, src, rev);
-    this.push(key, e.tex,
-      sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
-      dx, dy, dw, dh, alpha, alpha, alpha, alpha);
+    if (tint >= 0) {
+      this.push(key, e.tex,
+        sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
+        dx, dy, dw, dh,
+        ((tint >> 16) & 255) / 255, ((tint >> 8) & 255) / 255, (tint & 255) / 255, alpha, 1);
+    } else {
+      this.push(key, e.tex,
+        sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
+        dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
+    }
   }
 
   /** A solid premultiplied-colour quad (the dot LOD, fills). */
   quad(dx: number, dy: number, dw: number, dh: number,
       r: number, g: number, b: number, a: number): void {
-    this.push(' white', this.white, 0, 0, 1, 1, dx, dy, dw, dh, r * a, g * a, b * a, a);
+    this.push(' white', this.white, 0, 0, 1, 1, dx, dy, dw, dh, r * a, g * a, b * a, a, 0);
   }
 
   private push(key: string, tex: WebGLTexture,
       u0: number, v0: number, u1: number, v1: number,
       dx: number, dy: number, dw: number, dh: number,
-      r: number, g: number, b: number, a: number): void {
+      r: number, g: number, b: number, a: number, mode: number): void {
     if (key !== this.boundKey || this.vertCount >= MAX_QUADS) {
       this.flush();
       this.gl.bindTexture(this.gl.TEXTURE_2D, tex);
@@ -300,7 +339,7 @@ export class GLRenderer {
     const v = this.verts;
     const put = (x: number, y: number, u: number, vv: number) => {
       v[o] = x; v[o + 1] = y; v[o + 2] = u; v[o + 3] = vv;
-      v[o + 4] = r; v[o + 5] = g; v[o + 6] = b; v[o + 7] = a;
+      v[o + 4] = r; v[o + 5] = g; v[o + 6] = b; v[o + 7] = a; v[o + 8] = mode;
       o += FLOATS_PER_VERT;
     };
     put(dx, dy, u0, v0);

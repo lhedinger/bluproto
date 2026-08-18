@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, decayStage, headingCol, mindedFor, mindedMipFor,
+  corpseMipFor, decayStage, headingCol, mindedFor, mindedMipFor, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -474,11 +474,16 @@ export function render(
       t.col = cc;
       const { row: rr } = cell(p.dir, nowMs, e.id);
       g.imageSmoothingEnabled = false;
+      // The fetched atlas is colour-neutral (one per SHAPE); this path has no
+      // tint shader, so it stamps from a re-tinted copy baked once per
+      // (shape, colour) — see atlas.tintedFor.
+      const tinted = tintedFor(e.pheno, e.rgb, atlas);
+      const tk = e.pheno + ':' + e.rgb;
       if (box <= CELL / MIP) {
         // Far zoom: one stamp from the quarter-size mip — the minded variant has
         // its rim baked in, so the whole herd view costs one draw per creature.
         const c = CELL / MIP;
-        const src = (e.flags & F_MINDED) ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas);
+        const src = (e.flags & F_MINDED) ? mindedMipFor(tk, tinted) : atlasMipFor(tk, tinted);
         g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
         // Minded cohort: a violet rim hugging the body, so a creature driven by
@@ -486,7 +491,7 @@ export function render(
         // glance. Rim and body come pre-fused (see atlas.mindedFor) — one draw
         // per creature, not five, which is what a GPU canvas feels when a herd
         // of hundreds is on screen.
-        const src = (e.flags & F_MINDED) ? mindedFor(e.pheno, atlas) : atlas;
+        const src = (e.flags & F_MINDED) ? mindedFor(tk, tinted) : tinted;
         g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
@@ -788,8 +793,10 @@ export function renderGL(
         ? (minded ? mindedFor(e.pheno, atlas) : atlas)
         : (minded ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas));
       const key = c === CELL ? (minded ? 'minded:' : 'atlas:') : (minded ? 'mindedm:' : 'atlasm:');
+      // The atlas is colour-neutral (one per SHAPE); the creature's rgb rides
+      // the quad and the ramp shader re-tints it — see gl.ts mode 1.
       glr.sprite(key + e.pheno, src, 1,
-        cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
+        cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box, 1, e.rgb);
     }
 
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
