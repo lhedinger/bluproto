@@ -95,7 +95,18 @@ final class LayerBaker {
 		return img;
 	}
 
-	/** Encodes a sub-rectangle of {@code full} (a map chunk) to PNG bytes. */
+	/**
+	 * Encodes a sub-rectangle of {@code full} (a map chunk) to PNG bytes.
+	 *
+	 * <p>Why PNG stays the wire format (a decision, not an accident): the
+	 * payload is lossless flat-colour pixel art, which PNG's palette+filter
+	 * pipeline compresses to ~19 KB a chunk at art resolution; the browser
+	 * decodes it natively off the main thread and the client copies it into a
+	 * canvas ONCE, so no PNG is ever touched again at render time — GPU
+	 * textures upload from those canvases. Raw RGBA would be ~4x the bytes,
+	 * and WebP-lossless's ~25% would cost a Java-side encoder dependency for
+	 * a payload that is already far below the page's other traffic.
+	 */
 	static byte[] chunkPng(BufferedImage full, int x0, int y0, int w, int h) {
 		// Encode at ART resolution, not render resolution: the bake draws
 		// art-pixels as (tileSize/CHUNK_PX)-square blocks, so the full-res
