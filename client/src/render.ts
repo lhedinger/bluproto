@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, mindedFor, mindedMipFor,
+  corpseMipFor, decayStage, mindedFor, mindedMipFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -159,6 +159,7 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   deplSrc = veg;
   deplLevel = level;
   deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
+  if (full || patched.length > 0) deplRev++; // the GL pass re-uploads its texture
   return layer;
 }
 
@@ -201,6 +202,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   }
   groundLevel = level;
   groundRetryAt = nowMs + 1000; // chunks still streaming: try again shortly
+  groundRev++; // the GL pass re-uploads its texture
   return groundCv;
 }
 
@@ -545,6 +547,274 @@ export function render(
   }
 }
 
+// ---- the WebGL world pass -------------------------------------------------
+//
+// Canvas2D pays CPU per API call, which is the wall a large population hits
+// on real GPU browsers (the software rasteriser that runs our benchmarks pays
+// per PIXEL instead, which is why it never showed this). The GL pass renders
+// the whole WORLD — ground, depletion, entity sprites, canopy, lids — as
+// batched textured quads through gl.ts: the layers are one quad each, and a
+// thousand sorted creatures are a handful of draw calls. Everything vector —
+// doors, switches, rings, badges, tethers, the selection — is collected
+// during the same walk and drawn onto a thin 2D OVERLAY canvas afterwards,
+// where a few dozen calls cost nothing. Canvas2D `render()` above remains the
+// full fallback for browsers without WebGL2.
+//
+// One deliberate divergence: the overlay sits above the canopy, so rings,
+// badges and door slabs are never veiled by foliage. For the viewer's overlay
+// language that is arguably correct (a selection should not vanish into a
+// thicket); for doors and switches it is invisible in practice (none stand in
+// cover).
+
+/** A per-frame bump for each composited layer, so the GL pass re-uploads a
+ *  layer texture exactly when the canvas under it was repainted. */
+let groundRev = 0;
+let deplRev = 0;
+let canopyRev = 0;
+
+/** Bakes the nest stamp once at art resolution for the GL pass — painted by
+ *  the same drawNest the 2D path and the catalog run. */
+let nestStampCv: HTMLCanvasElement | null = null;
+function nestStamp(): HTMLCanvasElement {
+  if (!nestStampCv) {
+    nestStampCv = document.createElement('canvas');
+    nestStampCv.width = 11;
+    nestStampCv.height = 9;
+    drawNest(nestStampCv.getContext('2d')!, 5.5, 4.5, 12); // 1 px per art-pixel
+  }
+  return nestStampCv;
+}
+
+/** Item glyphs baked once per (kind, colour) — painted by the same drawItem
+ *  the 2D path runs, at a reference radius, then scaled by the GPU. */
+const ITEM_R = 24;
+const itemStamps = new Map<string, HTMLCanvasElement>();
+function itemStamp(kind: string, rgb: number): HTMLCanvasElement {
+  const key = kind + ':' + rgb;
+  let cv = itemStamps.get(key);
+  if (!cv) {
+    cv = document.createElement('canvas');
+    cv.width = 96;
+    cv.height = 96;
+    drawItem(cv.getContext('2d')!, kind, 48, 48, ITEM_R, '#' + rgb.toString(16).padStart(6, '0'));
+    itemStamps.set(key, cv);
+  }
+  return cv;
+}
+
+export function renderGL(
+  glr: import('./gl').GLRenderer,
+  og: CanvasRenderingContext2D,
+  cam: Camera,
+  state: WorldState,
+  meta: WorldMeta | null,
+  chunkTiles: number,
+  tilePx: number,
+  getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+  getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+  veg: Uint8Array | null,
+  cover: Uint8Array | null,
+  renderTime: number,
+  nowMs: number,
+  level = 0,
+  selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
+    { id: null, tile: null },
+): { drawCalls: number; quads: number } {
+  const cv = og.canvas;
+  const dotLod = adaptiveDotLod(nowMs);
+  glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
+  og.clearRect(0, 0, cv.width, cv.height);
+  if (!meta) return glr.end();
+
+  const o0 = cam.worldToScreen(0, 0);
+  const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
+
+  // Ground: the art-resolution layer, one quad at every zoom (MAG NEAREST
+  // keeps art-pixels crisp; mipmaps resolve far-zoom minification).
+  if (chunkTiles > 0 && tilePx > 0) {
+    const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
+    if (ground) {
+      glr.sprite('ground', ground, groundRev, 0, 0, ground.width, ground.height,
+        o0.x, o0.y, worldW, worldH);
+    }
+    if (veg) {
+      const depl = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
+      if (depl) {
+        glr.sprite('depl', depl, deplRev, 0, 0, depl.width, depl.height,
+          o0.x, o0.y, worldW, worldH);
+      }
+    }
+  }
+
+  // Vector work collected during the entity walk, drawn on the overlay after.
+  const ovDoors: EntityState[] = [];
+  const ovSwitches: Array<[EntityState, EntityState | undefined]> = [];
+  const ovLinks: Array<[number, number, number, number]> = [];
+  const ovGlyphs: Array<[number, number, number, number]> = [];
+  const ovRings: Array<['grabbed' | 'carrying' | 'follow' | 'selected', number, number, number]> = [];
+
+  const order = (t: Track): number =>
+    t.curr.kind === 'phero' ? 0
+      : t.curr.kind.startsWith('switch.') || t.curr.kind === 'nest' ? 1
+      : t.curr.kind.startsWith('door.') ? 2
+      : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
+  const tracks = [...state.tracks.values()]
+    .sort((a, b) => order(a) - order(b) || a.curr.pheno - b.curr.pheno);
+
+  for (const t of tracks) {
+    const e = t.curr;
+    if (Math.round(e.z) !== level) continue;
+    const p = state.sample(t, renderTime);
+    const s = cam.worldToScreen(p.x, p.y);
+
+    if (e.kind.startsWith('door.')) {
+      const m = (e.size + 1) * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      ovDoors.push(e);
+      continue;
+    }
+    if (e.kind.startsWith('switch.')) {
+      const m = 8 * cam.scale + 60;
+      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      ovSwitches.push([e, state.tracks.get(e.pheno)?.curr]);
+      continue;
+    }
+
+    if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
+
+    if (e.kind === 'phero') {
+      const r = Math.max(2, e.size * cam.scale);
+      const puff = pheroPuff();
+      glr.sprite('phero', puff, 1, 0, 0, puff.width, puff.height, s.x - r, s.y - r, r * 2, r * 2);
+      continue;
+    }
+
+    const r = Math.max(3.5, e.size * cam.scale);
+
+    const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
+    if (carrier) {
+      const cp = state.sample(carrier, renderTime);
+      const cs = cam.worldToScreen(cp.x, cp.y);
+      ovLinks.push([s.x, s.y, cs.x, cs.y]);
+    }
+
+    if (e.kind === 'nest') {
+      const stamp = nestStamp();
+      const px = cam.scale / 12;
+      glr.sprite('nest', stamp, 1, 0, 0, 11, 9,
+        s.x - 5.5 * px, s.y - 4.5 * px, 11 * px, 9 * px);
+      continue;
+    }
+
+    if (e.kind.startsWith('item.')) {
+      const stamp = itemStamp(e.kind, e.rgb);
+      const k = r / ITEM_R;
+      glr.sprite('item:' + e.kind + ':' + e.rgb, stamp, 1, 0, 0, 96, 96,
+        s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
+      continue;
+    }
+
+    const bodyPx = e.size * cam.scale * 2;
+    if (e.flags & F_DEAD) {
+      if (bodyPx < dotLod) {
+        const sq = Math.max(4, bodyPx);
+        glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, 0x5a / 255, 0x5f / 255, 0x66 / 255, 1);
+        continue;
+      }
+      const dead = atlasFor(e.pheno);
+      if (dead) {
+        const box = r * 2 * (CELL / (2 * ART_RADIUS));
+        const { col: dc } = cell(p.dir, 0); // frozen gait: the legs stop (see render())
+        const corpse = corpseFor(e.pheno, dead, e.aux);
+        glr.sprite('corpse:' + e.pheno + ':' + decayStage(e.aux), corpse, 1,
+          dc * CELL, 0, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+      } else {
+        glr.quad(s.x - r, s.y - r, r * 2, r * 2, 0x55 / 255, 0x5a / 255, 0x63 / 255, 1);
+      }
+      continue;
+    }
+
+    const atlas = atlasFor(e.pheno); // kicks the fetch even on the dot path
+    const minded = (e.flags & F_MINDED) !== 0;
+    if (bodyPx < dotLod || !atlas) {
+      // The dot LOD (and the pre-atlas placeholder, simplified to the same
+      // block while the sprite streams in): solid quads, batched together.
+      const sq = Math.max(4, bodyPx < dotLod ? bodyPx : r * 1.4);
+      if (minded) {
+        glr.quad(s.x - sq / 2 - 1, s.y - sq / 2 - 1, sq + 2, sq + 2,
+          0xc6 / 255, 0x60 / 255, 0xff / 255, 1);
+      }
+      const rgb = e.rgb;
+      glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq,
+        ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
+    } else {
+      const box = r * 2 * (CELL / (2 * ART_RADIUS));
+      const { col: cc, row: rr } = cell(p.dir, nowMs);
+      const src = minded ? mindedFor(e.pheno, atlas) : atlas;
+      glr.sprite((minded ? 'minded:' : 'atlas:') + e.pheno, src, 1,
+        cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+    }
+
+    if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
+      const act = actionOf(e.flags);
+      if (act) ovGlyphs.push([s.x, s.y - r * 2.0, r * 0.95, act]);
+    }
+    if (e.flags & F_GRABBED) ovRings.push(['grabbed', s.x, s.y, r]);
+    else if (e.flags & F_CARRYING) ovRings.push(['carrying', s.x, s.y, r]);
+    if (cam.followId === e.id) ovRings.push(['follow', s.x, s.y, r]);
+    if (selection.id === e.id) ovRings.push(['selected', s.x, s.y, r]);
+  }
+
+  // Concealment over the creatures, then lids over occupants (see render()).
+  if (cover && chunkTiles > 0 && tilePx > 0) {
+    const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
+    glr.sprite('canopy', canopy, canopyRev, 0, 0, canopy.width, canopy.height,
+      o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    const lids = new Set<number>();
+    for (const t of tracks) {
+      const e = t.curr;
+      if (e.kind === 'phero' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      const ex = Math.floor(e.x), ey = Math.floor(e.y);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const tx = ex + dx, ty = ey + dy;
+          if (tx < 0 || ty < 0 || tx >= meta.cols || ty >= meta.rows) continue;
+          if (cover[ty * meta.cols + tx] === 2) lids.add(ty * meta.cols + tx);
+        }
+      }
+    }
+    for (const key of lids) {
+      const tx = key % meta.cols, ty = Math.floor(key / meta.cols);
+      const o2 = cam.worldToScreen(tx, ty);
+      if (o2.x < -cam.scale || o2.y < -cam.scale || o2.x > cv.width || o2.y > cv.height) continue;
+      const vert = (ty > 0 && cover[(ty - 1) * meta.cols + tx] === 2)
+        || (ty < meta.rows - 1 && cover[(ty + 1) * meta.cols + tx] === 2);
+      const lid = ductLidTile(vert);
+      glr.sprite('lid:' + (vert ? 'v' : 'h'), lid, 1, 0, 0, 12, 12,
+        o2.x, o2.y, cam.scale, cam.scale, VEIL_ALPHA);
+    }
+  }
+
+  const stats = glr.end();
+
+  // The overlay: the viewer's vector language, cheap at a few dozen calls.
+  if (selection.tile && selection.tile.z === level) {
+    const o = cam.worldToScreen(selection.tile.x, selection.tile.y);
+    const w = cam.scale;
+    og.strokeStyle = 'rgba(255,214,64,0.95)';
+    og.lineWidth = Math.max(2, w * 0.06);
+    og.strokeRect(o.x + 1, o.y + 1, w - 2, w - 2);
+    og.fillStyle = 'rgba(255,214,64,0.12)';
+    og.fillRect(o.x + 1, o.y + 1, w - 2, w - 2);
+  }
+  for (const e of ovDoors) drawDoor(og, cam, e);
+  for (const [e, door] of ovSwitches) drawSwitch(og, cam, e, door);
+  for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
+  for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
+  for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, renderTime);
+  return stats;
+}
+
 /** Ported verbatim from GroundTextures.hash01 (32-bit int arithmetic via
  *  Math.imul) — the concealment gap mask must agree with the Java renderer's
  *  bit for bit, or /sprites shows the pipelines disagreeing. */
@@ -694,6 +964,7 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   canopySrc = cover;
   canopyLevel = level;
   canopyRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
+  canopyRev++; // the GL pass re-uploads its texture
   return canopyCv;
 }
 

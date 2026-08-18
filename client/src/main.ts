@@ -8,14 +8,50 @@ import { drawMinimap, minimapToWorld } from './minimap';
 import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
-import { render, type WorldMeta } from './render';
+import { GLRenderer } from './gl';
+import { render, renderGL, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
-// alpha:false — every frame starts with an opaque fill, so the canvas never
-// needs an alpha channel; declaring it lets the browser composite the canvas
-// into the page without per-frame blending.
-const g = cv.getContext('2d', { alpha: false })!;
+const fx = document.getElementById('fx') as HTMLCanvasElement;
+// The world draws through WebGL where available — Canvas2D pays CPU per API
+// call and walls out at herd scale on GPU browsers — with the vector overlay
+// (rings, doors, badges) on the #fx canvas above it. Browsers without WebGL2
+// fall back to the original Canvas2D path on #cv and never touch #fx.
+// (alpha:false — an opaque backbuffer composites into the page without
+// per-frame blending.)
+// ?gl=1 forces WebGL even on a software rasteriser (how headless tests
+// exercise this path); ?gl=0 forces the Canvas2D fallback. The probe runs on
+// a THROWAWAY canvas: once a canvas has vended a webgl2 context it can never
+// vend a 2d one, so testing on #cv would poison the fallback.
+const glPref = new URLSearchParams(location.search).get('gl');
+function glUsable(allowSoftware: boolean): boolean {
+  try {
+    const probe = document.createElement('canvas');
+    const gl = probe.getContext('webgl2');
+    if (!gl) return false;
+    if (!allowSoftware) {
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+      if (/swiftshader|llvmpipe|software|basic render/i.test(name)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+let glr: GLRenderer | null = null;
+if (glPref !== '0' && glUsable(glPref === '1')) {
+  try {
+    glr = new GLRenderer(cv, glPref === '1');
+  } catch {
+    glr = null; // constructor failure: #cv may be poisoned, but this is rare
+  }
+}
+const g = glr
+  ? fx.getContext('2d')! // the overlay: transparent above the GL world
+  : cv.getContext('2d', { alpha: false })!;
+if (!glr) fx.style.display = 'none';
 const statsEl = document.getElementById('stats')!;
 const pauseBtn = document.getElementById('pause') as HTMLButtonElement;
 const speedSel = document.getElementById('speed') as HTMLSelectElement;
@@ -139,6 +175,8 @@ function resize(): void {
   // are unaffected.
   cv.width = cv.clientWidth;
   cv.height = cv.clientHeight;
+  fx.width = cv.width;
+  fx.height = cv.height;
 }
 window.addEventListener('resize', resize);
 resize();
@@ -816,6 +854,41 @@ function toast(msg: string): void {
 // read live state and camera without any UI coupling.
 (window as unknown as Record<string, unknown>).__blu = { cam, state };
 
+// ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
+const hudEl = document.getElementById('hud') as HTMLElement;
+let hudOn = /[?&]hud\b/.test(location.search);
+let hudGl: { drawCalls: number; quads: number } = { drawCalls: 0, quads: 0 };
+let hudFrameEma = 16.7;
+let hudLastFrame = 0;
+let hudLastText = 0;
+let hudTick = ''; // sim load, polled while the HUD is open
+let hudTickAt = 0;
+window.addEventListener('keydown', (ev) => {
+  if (ev.key === 'h' && !(ev.target instanceof HTMLInputElement)) {
+    hudOn = !hudOn;
+    hudEl.style.display = hudOn ? 'block' : 'none';
+  }
+});
+if (hudOn) hudEl.style.display = 'block';
+
+function hudFrame(now: number): void {
+  if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
+  hudLastFrame = now;
+  if (!hudOn || now - hudLastText < 250) return;
+  hudLastText = now;
+  if (now - hudTickAt > 3000) {
+    hudTickAt = now;
+    fetch('/api/health').then(r => r.json()).then(h => {
+      hudTick = `tick ${h.tickMillis}/${h.tickBudgetMillis}ms` + (h.keepingUp ? '' : ' LAGGING');
+    }).catch(() => { hudTick = ''; });
+  }
+  hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'} · ${(1000 / hudFrameEma).toFixed(0)} fps`
+    + ` (${hudFrameEma.toFixed(1)} ms)`
+    + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads` : '')
+    + `\n${state.tracks.size} on level · ${worldTotal} world`
+    + (hudTick ? `\n${hudTick}` : '');
+}
+
 let lastStats = 0;
 let lastMini = 0;
 let miniCx = NaN, miniCy = NaN, miniScale = NaN;
@@ -835,9 +908,16 @@ function frame(now: number): void {
     }
   }
 
-  render(g, cam, state, meta, chunkTiles, hello ? (hello.chunkPx ?? hello.tileSize) : 0, getChunk, getBareChunk,
-    vegGrid, coverGrid, renderTime, now, currentLevel,
-    { id: selectedId, tile: selectedTile });
+  const chunkPx = hello ? (hello.chunkPx ?? hello.tileSize) : 0;
+  const sel = { id: selectedId, tile: selectedTile };
+  if (glr) {
+    hudGl = renderGL(glr, g, cam, state, meta, chunkTiles, chunkPx, getChunk, getBareChunk,
+      vegGrid, coverGrid, renderTime, now, currentLevel, sel);
+  } else {
+    render(g, cam, state, meta, chunkTiles, chunkPx, getChunk, getBareChunk,
+      vegGrid, coverGrid, renderTime, now, currentLevel, sel);
+  }
+  hudFrame(now);
   // The minimap is ambient, not mission-critical: entity drift redraws at
   // 4 Hz, but a camera move redraws at once so the viewport rectangle never
   // visibly lags a pan or zoom.
