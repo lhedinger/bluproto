@@ -91,6 +91,9 @@ let deplRetryAt = 0;
 // streamed in yet), which never equals a real bucket, so the retry pass
 // naturally picks exactly those up.
 let deplBuckets: Int16Array | null = null;
+// The tile rects the last depletion pass repainted (null = full rebuild), so
+// the GL path can patch its texture instead of re-uploading the whole layer.
+let deplPatchRects: Array<[number, number, number, number]> | null = null;
 const ART = 12;
 
 function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
@@ -159,7 +162,11 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   deplSrc = veg;
   deplLevel = level;
   deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
-  if (full || patched.length > 0) deplRev++; // the GL pass re-uploads its texture
+  if (full || patched.length > 0) {
+    deplRev++; // the GL pass reconciles its texture copy
+    deplPatchRects = full ? null
+      : patched.map(i => [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
+  }
   return layer;
 }
 
@@ -619,7 +626,7 @@ export function renderGL(
   level = 0,
   selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
     { id: null, tile: null },
-): { drawCalls: number; quads: number } {
+): { drawCalls: number; quads: number; uploadMs: number } {
   const cv = og.canvas;
   const dotLod = adaptiveDotLod(nowMs);
   glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
@@ -634,14 +641,12 @@ export function renderGL(
   if (chunkTiles > 0 && tilePx > 0) {
     const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
     if (ground) {
-      glr.sprite('ground', ground, groundRev, 0, 0, ground.width, ground.height,
-        o0.x, o0.y, worldW, worldH);
+      glr.layer('ground', ground, groundRev, null, o0.x, o0.y, worldW, worldH);
     }
     if (veg) {
       const depl = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
       if (depl) {
-        glr.sprite('depl', depl, deplRev, 0, 0, depl.width, depl.height,
-          o0.x, o0.y, worldW, worldH);
+        glr.layer('depl', depl, deplRev, deplPatchRects, o0.x, o0.y, worldW, worldH);
       }
     }
   }
@@ -768,8 +773,7 @@ export function renderGL(
   // Concealment over the creatures, then lids over occupants (see render()).
   if (cover && chunkTiles > 0 && tilePx > 0) {
     const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
-    glr.sprite('canopy', canopy, canopyRev, 0, 0, canopy.width, canopy.height,
-      o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    glr.layer('canopy', canopy, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
     const lids = new Set<number>();
     for (const t of tracks) {
       const e = t.curr;
