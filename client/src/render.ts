@@ -232,7 +232,13 @@ let frameEma = 16.7;
 let lastFrameAt = 0;
 let herdMode = false;
 
+// ?lod=0 freezes the adaptive threshold at its base value — the benchmark
+// harness (client/bench) uses it so a zoom band always exercises the draw
+// tier it targets instead of whatever the load feedback picked that run.
+const LOD_LOCKED = typeof location !== 'undefined' && /[?&]lod=0\b/.test(location.search);
+
 function adaptiveDotLod(nowMs: number): number {
+  if (LOD_LOCKED) return DOT_LOD_PX;
   if (lastFrameAt > 0) {
     const dt = Math.min(100, nowMs - lastFrameAt);
     frameEma += (dt - frameEma) * 0.1;
