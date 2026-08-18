@@ -8,6 +8,7 @@ import { drawMinimap, minimapToWorld } from './minimap';
 import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
+import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
 import { render, renderGL, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
@@ -857,7 +858,8 @@ function toast(msg: string): void {
 // ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
 const hudEl = document.getElementById('hud') as HTMLElement;
 let hudOn = /[?&]hud\b/.test(location.search);
-let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0 };
+let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0,
+  secLayers: 0, secEnts: 0, secTail: 0 };
 let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
 let hudFrameEma = 16.7;
 let hudLastFrame = 0;
@@ -885,9 +887,14 @@ function hudFrame(now: number): void {
       hudTick = `tick ${h.tickMillis}/${h.tickBudgetMillis}ms` + (h.keepingUp ? '' : ' LAGGING');
     }).catch(() => { hudTick = ''; });
   }
+  const net2 = Net.streamStats;
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'} · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms)`
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${hudUpMax.toFixed(1)}ms` : '')
+    + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
+      + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
+    + `\nstream ${net2.msgMs.toFixed(1)}ms/${net2.msgKb.toFixed(0)}kb`
+    + ` · tex ${hudGl.textures} · atlases ${atlasCount()}`
     + `\n${state.tracks.size} on level · ${worldTotal} world`
     + (hudTick ? `\n${hudTick}` : '');
 }
