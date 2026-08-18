@@ -10,6 +10,13 @@
                  font: 14px system-ui, sans-serif; overflow: hidden;
                  overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
     #app { position: fixed; inset: 0; }
+    /* The vector overlay the WebGL path draws rings/doors/badges onto; it
+       tracks #cv exactly and never takes pointer events. */
+    #fx { position: absolute; inset: 0; pointer-events: none; }
+    #hud { position: fixed; right: 8px; bottom: 8px; z-index: 5; display: none;
+           font: 11px/1.5 ui-monospace, monospace; color: #cfd6e4;
+           background: rgba(10,12,16,0.75); padding: 6px 8px; border-radius: 6px;
+           white-space: pre; pointer-events: none; }
     /* image-rendering: the world canvas renders at 1x CSS pixels (see resize()
        in main.ts) and the browser upscales it on hiDPI displays — pixelated
        keeps the fat art-pixels crisp instead of smearing them. */
@@ -118,7 +125,8 @@
   </style>
 </head>
 <body>
-  <div id="app"><canvas id="cv"></canvas></div>
+  <div id="app"><canvas id="cv"></canvas><canvas id="fx"></canvas></div>
+  <div id="hud"></div>
   <div id="bar">
     <button id="level" title="switch level" style="display:none"></button>
     <button id="pause">pause</button>
