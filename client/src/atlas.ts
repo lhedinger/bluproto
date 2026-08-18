@@ -42,6 +42,12 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
   return null;
 }
 
+/** Distinct atlases this session has seen — on a long-evolved world this is
+ *  the phenotype count, and each one is a 768px image in memory. */
+export function atlasCount(): number {
+  return cache.size;
+}
+
 /** Column (heading bucket) and row (animation frame) for the given pose. */
 export function cell(dir: number, timeMs: number): { col: number; row: number } {
   const col = ((Math.round(dir / (Math.PI * 2 / DIRS)) % DIRS) + DIRS) % DIRS;

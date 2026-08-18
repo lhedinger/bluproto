@@ -34,7 +34,7 @@ uniform sampler2D uTex;
 out vec4 outColor;
 void main() { outColor = texture(uTex, vUV) * vCol; }`;
 
-interface TexEntry { tex: WebGLTexture; rev: number; w: number; h: number; }
+interface TexEntry { tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number; }
 
 export class GLRenderer {
   private gl: WebGL2RenderingContext;
@@ -45,7 +45,14 @@ export class GLRenderer {
   private textures = new Map<string, TexEntry>();
   private white: WebGLTexture;
   private boundKey: string | null = null;
-  private stats = { drawCalls: 0, quads: 0, uploadMs: 0 };
+  private stats = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0 };
+  private frameNo = 0;
+  /** Sprite textures kept resident at most; a long-evolved world breeds a new
+   *  phenotype (= a new atlas) with nearly every lineage, so an uncapped
+   *  cache grows with world AGE — hundreds of mipmapped 768px textures will
+   *  eventually thrash any phone GPU. Only per-pheno sprites are evictable;
+   *  layers, stamps and the white pixel are permanent. */
+  private static readonly MAX_SPRITE_TEXTURES = 48;
   /** Scratch canvas for cross-browser texSubImage2D patches: a tile region is
    *  copied here and uploaded from (0,0) — UNPACK_SKIP_* on DOM sources is
    *  spottier across browsers than a 12x12 blit is expensive. */
@@ -126,12 +133,28 @@ export class GLRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.vertCount = 0;
     this.boundKey = null;
-    this.stats = { drawCalls: 0, quads: 0, uploadMs: 0 };
+    this.stats = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0 };
   }
 
   /** Flushes what remains and reports the frame's batching stats. */
-  end(): { drawCalls: number; quads: number; uploadMs: number } {
+  end(): { drawCalls: number; quads: number; uploadMs: number; textures: number } {
     this.flush();
+    this.frameNo++;
+    // LRU cap on the evictable (per-pheno) sprite textures.
+    let evictable = 0;
+    for (const key of this.textures.keys()) {
+      if (/^(atlas|minded|corpse):/.test(key)) evictable++;
+    }
+    if (evictable > GLRenderer.MAX_SPRITE_TEXTURES) {
+      const olds = [...this.textures.entries()]
+        .filter(([k]) => /^(atlas|minded|corpse):/.test(k))
+        .sort((a, b) => a[1].lastUse - b[1].lastUse);
+      for (let i = 0; i < evictable - GLRenderer.MAX_SPRITE_TEXTURES; i++) {
+        this.gl.deleteTexture(olds[i][1].tex);
+        this.textures.delete(olds[i][0]);
+      }
+    }
+    this.stats.textures = this.textures.size;
     return this.stats;
   }
 
@@ -148,9 +171,10 @@ export class GLRenderer {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
-      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0 };
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0 };
       this.textures.set(key, e);
     }
+    e.lastUse = this.frameNo;
     if (e.rev !== rev) {
       const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample
@@ -195,9 +219,10 @@ export class GLRenderer {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
-      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0 };
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0 };
       this.textures.set(key, e);
     }
+    e.lastUse = this.frameNo;
     if (e.rev !== rev) {
       const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample

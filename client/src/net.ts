@@ -40,13 +40,27 @@ export class Net {
       this.backoff = 500;
       this.setStatus('open');
     };
-    ws.onmessage = ev => this.onMsg(JSON.parse(ev.data) as ServerMsg, performance.now());
+    ws.onmessage = ev => {
+      // Instrumented: parsing + applying a herd-sized delta is main-thread
+      // work the frame loop never sees — the perf HUD reads these to tell
+      // "renderer slow" apart from "stream eating the thread".
+      const t0 = performance.now();
+      const msg = JSON.parse(ev.data) as ServerMsg;
+      this.onMsg(msg, t0);
+      const stats = Net.streamStats;
+      stats.msgMs += (performance.now() - t0 - stats.msgMs) * 0.2;
+      stats.msgKb += (ev.data.length / 1024 - stats.msgKb) * 0.2;
+      stats.count++;
+    };
     ws.onclose = () => {
       this.setStatus('closed');
       setTimeout(() => this.connect(), this.backoff);
       this.backoff = Math.min(5000, this.backoff * 2);
     };
   }
+
+  /** EMA cost/size of stream messages (parse + state apply), for the HUD. */
+  static streamStats = { msgMs: 0, msgKb: 0, count: 0 };
 
   send(cmd: Command): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;

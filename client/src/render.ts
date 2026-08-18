@@ -626,12 +626,16 @@ export function renderGL(
   level = 0,
   selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
     { id: null, tile: null },
-): { drawCalls: number; quads: number; uploadMs: number } {
+): { drawCalls: number; quads: number; uploadMs: number; textures: number;
+     secLayers: number; secEnts: number; secTail: number } {
+  let t0 = performance.now();
+  const sec = { secLayers: 0, secEnts: 0, secTail: 0 };
+  const lap = (k: keyof typeof sec) => { const n = performance.now(); sec[k] += n - t0; t0 = n; };
   const cv = og.canvas;
   const dotLod = adaptiveDotLod(nowMs);
   glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
   og.clearRect(0, 0, cv.width, cv.height);
-  if (!meta) return glr.end();
+  if (!meta) return { ...glr.end(), ...sec };
 
   const o0 = cam.worldToScreen(0, 0);
   const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
@@ -651,6 +655,7 @@ export function renderGL(
     }
   }
 
+  lap('secLayers');
   // Vector work collected during the entity walk, drawn on the overlay after.
   const ovDoors: EntityState[] = [];
   const ovSwitches: Array<[EntityState, EntityState | undefined]> = [];
@@ -770,6 +775,7 @@ export function renderGL(
     if (selection.id === e.id) ovRings.push(['selected', s.x, s.y, r]);
   }
 
+  lap('secEnts');
   // Concealment over the creatures, then lids over occupants (see render()).
   if (cover && chunkTiles > 0 && tilePx > 0) {
     const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
@@ -816,7 +822,8 @@ export function renderGL(
   for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
   for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
   for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, renderTime);
-  return stats;
+  lap('secTail');
+  return { ...stats, ...sec };
 }
 
 /** Ported verbatim from GroundTextures.hash01 (32-bit int arithmetic via
