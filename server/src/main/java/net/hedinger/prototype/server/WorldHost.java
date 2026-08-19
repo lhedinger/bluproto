@@ -143,6 +143,7 @@ final class WorldHost {
 		chunksX = cxN;
 		chunksY = cyN;
 		lastSent = r.snapshot();
+		vegFeeds.clear(); // a fresh world starts a fresh state history
 		r.start();
 	}
 
@@ -586,6 +587,21 @@ final class WorldHost {
 	 * dirt / rock / water — no overlay). Lets the client show grazing depletion
 	 * and regrowth on top of the static baked ground.
 	 */
+	/** Quantised 5-state vegetation with deltas (see {@link VegFeed}) — what
+	 *  the web client polls; the raw byte grid below stays for tooling. */
+	private final java.util.concurrent.ConcurrentHashMap<Integer, VegFeed> vegFeeds =
+			new java.util.concurrent.ConcurrentHashMap<>();
+
+	java.util.Map<String, Object> vegetationSince(int z, long since) {
+		byte[] raw = vegetation(z);
+		if (raw == null) {
+			return null;
+		}
+		var w = runner.world();
+		VegFeed f = vegFeeds.computeIfAbsent(z, k -> new VegFeed());
+		return f.respond(raw, since, System.currentTimeMillis(), w.getColums(), w.getRows());
+	}
+
 	byte[] vegetation(int z) {
 		var w = runner.world();
 		if (z < 0 || z >= w.getLevels()) {

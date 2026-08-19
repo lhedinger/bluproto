@@ -79,17 +79,11 @@ let deplLayer: HTMLCanvasElement | null = null;
 // smooth blit every frame is exactly the kind of work that melts a software
 // canvas (the desktop renderer keeps a downsized pyramid for the same reason).
 let deplLayerLow: HTMLCanvasElement | null = null;
-let deplSrc: Uint8Array | null = null; // the veg grid the layer was built from
+let deplSrcRev = -1; // the vegetation version the layer was scanned against
 let deplLevel = -1;
-let deplMissing = 0; // bare chunks still streaming when last built
-let deplRetryAt = 0;
-// The depletion bucket (0..16) each tile is CURRENTLY painted at, so a veg
-// update only repaints tiles whose bucket actually moved. Grazing shifts a
-// handful of tiles per poll; repainting all ~1000 depleted tiles on every
-// poll was a repeated whole-layer rebuild — a visible hitch every 1.5 s once
-// the herds grew. -1 marks a tile that still needs paint (its chunk was not
-// streamed in yet), which never equals a real bucket, so the retry pass
-// naturally picks exactly those up.
+// The depletion STATE each tile is currently painted at (0 lush .. 4 bare),
+// mirroring the server's 5-state quantisation, so a poll only repaints tiles
+// whose state actually moved.
 let deplBuckets: Int16Array | null = null;
 // The tile rects the last depletion pass repainted (null = full rebuild), so
 // the GL path can patch its texture instead of re-uploading the whole layer.
@@ -126,21 +120,49 @@ const DEPL_TILES_PER_FRAME = 96;
 const DEPL_TILES_RUSH = 256;
 const DEPL_RUSH_DEPTH = 8000;
 
-function bucketOf(lvl: number): number {
-  return (lvl >= 100 || lvl === 255) ? 0
-    : Math.max(0, Math.min(16, Math.round((100 - lvl) * 16 / 100)));
+/** The five depletion stages: 0 is untouched grass (nothing drawn), 1..4 are
+ *  quarter-steps toward bare dirt — stamped from these pre-baked 12px tiles
+ *  in the ground's Bayer-dither idiom instead of the old per-tile composite
+ *  against the bare chunk bake (3 canvas ops per repaint became 1, and the
+ *  bare-chunk downloads went away entirely). Three variants per stage, hash-
+ *  picked per tile, so a field doesn't read as a repeated block. */
+export const DEPL_STATES = 5;
+const DEPL_VARIANTS = 3;
+const DEPL_TONES = ['#4a3826', '#5a4630', '#6a5238'];
+const deplStamps = new Map<number, HTMLCanvasElement>();
+
+export function depletionStampFor(state: number, variant: number): HTMLCanvasElement {
+  const key = state * DEPL_VARIANTS + variant;
+  const hit = deplStamps.get(key);
+  if (hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = ART;
+  cv.height = ART;
+  const g = cv.getContext('2d')!;
+  for (let y = 0; y < ART; y++) {
+    for (let x = 0; x < ART; x++) {
+      // Coverage 4/8/12/16 of the 16 Bayer cells; the variant shifts the
+      // matrix phase so equal-state neighbours don't tile visibly.
+      const b = BAYER4[((y + variant * 2) % 4) * 4 + (x + variant) % 4];
+      if (b >= state * 4) continue;
+      g.fillStyle = DEPL_TONES[(x * 7 + y * 13 + variant * 5) % 3];
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  deplStamps.set(key, cv);
+  return cv;
 }
 
-function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
-    veg: Uint8Array, level: number, nowMs: number): HTMLCanvasElement | null {
+function depletionLayer(meta: WorldMeta,
+    veg: Uint8Array, vegRev: number, level: number, nowMs: number): HTMLCanvasElement | null {
   const full = !deplLayer || !deplBuckets || level !== deplLevel
     || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART;
   // An owed bulk upload whose rate-limit window just opened re-enters even if
   // the vegetation itself brought nothing new this frame.
   const bulkDue = deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS;
-  const scanDue = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt);
-  if (!scanDue && deplQHead >= deplQueue.length && !bulkDue) return deplLayer;
+  const shipDue = deplPending !== null && deplPending.length > 0; // slices left to ship
+  const scanDue = full || vegRev !== deplSrcRev;
+  if (!scanDue && deplQHead >= deplQueue.length && !bulkDue && !shipDue) return deplLayer;
   if (full) {
     if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
       deplLayer = document.createElement('canvas');
@@ -172,17 +194,16 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   lg.imageSmoothingEnabled = true;
   if (full) lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
   if (scanDue) {
-    // Cheap pass: FIND the moved buckets (integer compares over the grid);
-    // the expensive painting is what the queue meters out.
-    deplMissing = 0;
+    // Cheap pass: FIND the moved states (integer compares over the grid);
+    // the expensive painting is what the queue meters out. The grid itself
+    // arrives as server deltas, so `veg` already holds 0..4 states.
     for (let i = 0; i < deplBuckets!.length; i++) {
-      if (bucketOf(veg[i]) !== deplBuckets![i] && !deplQueued![i]) {
+      if (veg[i] !== deplBuckets![i] && !deplQueued![i]) {
         deplQueued![i] = 1;
         deplQueue.push(i);
       }
     }
-    deplSrc = veg;
-    deplRetryAt = nowMs + 1000; // if chunks were missing, look again shortly
+    deplSrcRev = vegRev;
   }
   const budget = deplQueue.length - deplQHead > DEPL_RUSH_DEPTH
     ? DEPL_TILES_RUSH : DEPL_TILES_PER_FRAME;
@@ -191,38 +212,45 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   while (work < budget && deplQHead < deplQueue.length) {
     const i = deplQueue[deplQHead++];
     deplQueued![i] = 0;
-    const bucket = bucketOf(veg[i]); // re-read: the field moved on since enqueue
-    if (bucket === deplBuckets![i]) continue;
+    const state = veg[i]; // re-read: the field moved on since enqueue
+    if (state === deplBuckets![i]) continue;
     const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
     ctx.clearRect(tx * ART, ty * ART, ART, ART);
-    if (bucket > 0) {
-      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-      const bare = getBareChunk(ccx, ccy);
-      if (!bare) { deplMissing++; deplBuckets![i] = -1; work++; continue; }
-      ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
-        tilePx, tx * ART, ty * ART, ART, ART, bucket);
+    if (state > 0) {
+      const variant = Math.floor(hash01(tx, ty, 7) * DEPL_VARIANTS);
+      ctx.drawImage(depletionStampFor(state, variant), tx * ART, ty * ART);
     }
-    deplBuckets![i] = bucket;
-    lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
-    lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+    deplBuckets![i] = state;
+    if (work < 128) { // heavy frames refresh the mirror wholesale below
+      lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
+      lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+    }
     patched.push(i);
     work++;
+  }
+  if (patched.length >= 128) {
+    // A rush frame: one smooth downscale beats hundreds of 3px cell blits.
+    lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
+    lg.drawImage(layer, 0, 0, deplLayerLow.width, deplLayerLow.height);
   }
   if (deplQHead >= deplQueue.length) {
     deplQueue = [];
     deplQHead = 0;
   }
-  if (patched.length > 0 || deplPending === null) {
+  if (patched.length > 0 || deplPending !== null) {
     if (deplPending !== null) {
       for (const i of patched) deplPending.push(i);
       if (deplPending.length > 256) deplPending = null; // overflow: a bulk is owed
     }
-    if (deplPending !== null) {
-      deplRev++; // small delta: ships as texSubImage2D patches
-      deplPatchRects = deplPending.map(i =>
+    if (deplPending !== null && deplPending.length > 0) {
+      // Ship a bounded slice per frame: hundreds of texSubImage2D calls in
+      // one frame is its own stall — the GPU copy may trail the canvas by a
+      // few frames, which the eye cannot see on this layer.
+      const ship = deplPending.splice(0, 32);
+      deplRev++;
+      deplPatchRects = ship.map(i =>
         [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
-      deplPending = [];
-    } else if (nowMs - deplBulkAt >= DEPL_BULK_MIN_MS) {
+    } else if (deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS) {
       deplRev++; // the owed whole-layer upload, at most once per window
       deplPatchRects = null;
       deplPending = [];
@@ -398,8 +426,8 @@ export function render(
   chunkTiles: number,
   tilePx: number,
   getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
-  getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
   veg: Uint8Array | null,
+  vegRev: number,
   cover: Uint8Array | null,
   renderTime: number,
   nowMs: number,
@@ -451,7 +479,7 @@ export function render(
   // when zoomed in; smoothing on the downscale resolves to coverage when the
   // whole map is in view.
   if (veg && chunkTiles > 0 && tilePx > 0) {
-    const layer = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
+    const layer = depletionLayer(meta, veg, vegRev, level, nowMs);
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       // Near zoom blits the art-pixel layer crisply; far zoom blits the small
@@ -762,8 +790,8 @@ export function renderGL(
   chunkTiles: number,
   tilePx: number,
   getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
-  getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
   veg: Uint8Array | null,
+  vegRev: number,
   cover: Uint8Array | null,
   renderTime: number,
   nowMs: number,
@@ -800,7 +828,7 @@ export function renderGL(
       }
     }
     if (veg) {
-      const depl = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
+      const depl = depletionLayer(meta, veg, vegRev, level, nowMs);
       if (depl) {
         if (lowZoom && deplLayerLow) {
           // The low mirror's patch rects are the full-res rects at 1/4 scale

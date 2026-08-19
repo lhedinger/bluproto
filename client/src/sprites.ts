@@ -26,7 +26,7 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  DOT_LOD_PX, VEIL_ALPHA, ditherTile, drawActionGlyph, drawCarryLink, drawDoor, drawDot,
+  DOT_LOD_PX, VEIL_ALPHA, depletionStampFor, drawActionGlyph, drawCarryLink, drawDoor, drawDot,
   drawItem, drawNest, drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
 } from './render';
 
@@ -219,30 +219,45 @@ const conceal = section('Concealment',
   + 'clustered canopy mask, stalk-exact reeds, the duct\'s ribbed lid — built by the '
   + 'same veilTile/ductLidTile code the live view runs, over the server\'s ground bake.');
 
-// ---- grazing depletion: the client's dither between the two bakes -------
+// ---- grazing depletion: the five stamped stages --------------------------
 
 const depl = section('Grazing depletion',
-  'The live dither: the fully-grazed bake admitted through the Bayer mask, per '
-  + 'art-pixel, sweeping lush to bare — the exact compositing the world view runs.');
-
+  'Grass wears one of five STATES (lush + four quarter-steps toward bare), each a '
+  + 'pre-baked 12px dirt stamp in the Bayer-dither idiom — one drawImage per changed '
+  + 'tile, exactly what the world view stamps. Three hash-picked variants per stage '
+  + 'keep a grazed field from tiling visibly.');
 
 (async () => {
   const lush = await loadCanvas('/sprites/depletion_lush.png');
-  const bare = await loadCanvas('/sprites/depletion_bare.png');
-  if (!lush || !bare) return;
-  const ts = lush.width / 4; // the staged strip is 4x4 tiles
-  const D = 224, T = D / 4;
-  pair(depl, 'grass, grazed bare', D, D, (g, t) => {
+  if (!lush) return;
+  const D = 224;
+  // The five stages over the lush bake, animated: the field cycles lush ->
+  // bare the way a grazed patch does, all three variants side by side.
+  pair(depl, 'grass through the five states', D, D, (g, t) => {
     g.imageSmoothingEnabled = false;
     g.drawImage(lush, 0, 0, D, D);
-    const depl16 = Math.min(16, Math.floor(((t % 6) / 6) * 17));
-    if (depl16 <= 0) return;
+    const state = Math.min(4, Math.floor(((t % 6) / 6) * 5));
+    if (state <= 0) return;
+    const T = D / 4;
     for (let ty = 0; ty < 4; ty++) {
       for (let tx = 0; tx < 4; tx++) {
-        ditherTile(g, bare, tx * ts, ty * ts, ts, tx * T, ty * T, T, T, depl16);
+        g.drawImage(depletionStampFor(state, (tx * 7 + ty * 5) % 3), tx * T, ty * T, T, T);
       }
     }
   });
+  // Every stage x variant as a flat reference strip.
+  const S = 44, PAD = 6;
+  figure(liveCanvas(4 * (S + PAD) + PAD, 3 * (S + PAD) + PAD, (g) => {
+    g.fillStyle = '#2a241c';
+    g.fillRect(0, 0, 4 * (S + PAD) + PAD, 3 * (S + PAD) + PAD);
+    g.imageSmoothingEnabled = false;
+    for (let v = 0; v < 3; v++) {
+      for (let st = 1; st <= 4; st++) {
+        g.drawImage(depletionStampFor(st, v),
+          PAD + (st - 1) * (S + PAD), PAD + v * (S + PAD), S, S);
+      }
+    }
+  }), '<b>stage stamps</b> (1..4 × three variants)', depl);
 })();
 
 // ---- web-only bakes: living body, corpse, minded rim --------------------
