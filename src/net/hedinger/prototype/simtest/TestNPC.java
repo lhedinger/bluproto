@@ -85,24 +85,18 @@ public class TestNPC extends NPC {
 	 */
 	private static final double MEAT_ENERGY = 2.5;
 	/**
-	 * Energy paid per unit of carcass mass at full freshness — the carrion
-	 * counterpart of {@link #MEAT_ENERGY}.
+	 * Energy in a carcass, per unit of its mass. Meat is meat: a body is worth the
+	 * same whether the eater killed it or found it, so this is {@link #MEAT_ENERGY}
+	 * rather than a number of its own.
 	 *
-	 * <p>Read the headline number with care: a bite is priced by the freshness the
-	 * body has LEFT, and eating is what rots it ({@link #scavenge}), so freshness
-	 * falls from 1 to 0 across a meal and a carcass eaten from perfectly fresh
-	 * realises half this — about 3 per unit mass against a hunter's 2.5, before the
-	 * carcass has aged at all. In practice a scavenger arrives at a body some
-	 * hundreds of ticks old and collects appreciably less than that.
-	 *
-	 * <p>It has to be a windfall, because the search is the job. A grazer stands in
-	 * its food; a scavenger measured on five seeds had a carcass within biting
-	 * distance on 0.87 per cent of its ticks and spent the rest walking between
-	 * bodies. One carcass must cover the thousands of ticks of upkeep spent finding
-	 * it, or the niche is a slow death — at the old 1.2 the whole cohort ran a
-	 * permanent energy deficit and was kept alive entirely by the warden's floor.
+	 * <p>What separates the two trophic levels is not the price of the meat. A
+	 * hunter pays for its meal in the chase and the risk of taking on something
+	 * that fights back; a scavenger pays in search — measured across five seeds it
+	 * had a carcass within biting distance on 0.87 per cent of its ticks and spent
+	 * the rest walking between bodies. Those are the real costs, and they are
+	 * already charged, in energy and in time, everywhere else in the loop.
 	 */
-	private static final double CARRION_ENERGY = 6.0;
+	private static final double CARRION_ENERGY = MEAT_ENERGY;
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
 	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
@@ -118,13 +112,12 @@ public class TestNPC extends NPC {
 	 *
 	 * <p>A grazer stands in its food: measured, one is in view on 98% of its ticks
 	 * and averages 1.6 tiles away. A scavenger's food is wherever something happened
-	 * to die, and at sight range it had a target on only 38% of ticks — the other 62%
-	 * it wandered at random, which is why it fed on 2.4% of ticks and earned a sixth
-	 * of what a grazer of the same mass did. Carrion detection is what a scavenger IS,
-	 * so it gets a sense to match the niche rather than a payout large enough to
-	 * excuse the searching.
+	 * to die, and at plain sight range it had a target on only 38% of ticks — the
+	 * other 62% it wandered at random. Smell is the sense the niche actually runs
+	 * on, so it is not gated on the eye: a body is found at this range whatever the
+	 * light and whichever way the scavenger happens to be facing.
 	 */
-	private static final double CARRION_SCENT_R = 40.0;
+	private static final double CARRION_SCENT_R = 10.0;
 	/**
 	 * How much faster a scavenger's top speed is than the body it was built from —
 	 * the ranging adaptation that pays for the scent.
@@ -2352,19 +2345,22 @@ public class TestNPC extends NPC {
 	 * "trigger" decomposition — feeding IS the decomposition, which is why this
 	 * needs no separate decay hook.
 	 *
-	 * <p>Freshness prices the meal. A body that has all but rotted away is worth
-	 * almost nothing, so a scavenger that reaches a carcass late is paid late-value
-	 * for it -- the incentive is to find bodies early, which is what a scavenger is
-	 * actually for.
+	 * <p>A bite is paid at full rate and freshness is not charged again on top of
+	 * it, because rot is already priced -- in how much carcass is LEFT. Eating
+	 * advances the same clock decay does, so a body found half rotted has half its
+	 * bites remaining and yields half as much; one found nearly gone yields nearly
+	 * nothing. Multiplying the per-bite rate by freshness as well discounted the
+	 * same rot twice and made a whole fresh carcass worth half a kill of the same
+	 * mass. The incentive to reach bodies early survives intact -- it just comes
+	 * from the size of what is left rather than from a second penalty.
 	 */
 	private double scavenge() {
 		NPC carrion = carrionInReach();
 		if (carrion == null) {
 			return 0;
 		}
-		double freshness = 1.0 - carrion.decayProgress();
 		double mass = carrion.bodyMass() * CARRION_BITE;
-		energy += mass * CARRION_ENERGY * freshness;
+		energy += mass * CARRION_ENERGY;
 		// Aged in ticks of its own remaining span: a bite takes the same FRACTION
 		// out of a mouse as out of an apex body, so a big carcass is genuinely more
 		// meals rather than merely a bigger number.
@@ -2605,6 +2601,29 @@ public class TestNPC extends NPC {
 		}
 	}
 
+	/**
+	 * Hands a newborn the body traits its parent carries that the genome does not.
+	 *
+	 * <p>Most of what a body is comes from the genome and is inherited by being
+	 * mutated and copied — size, speed, colour, senses, whether it flies. These are
+	 * the rest: flags set on the body after it was built, by the world that seeded
+	 * it or the warden that replaced it. They were being dropped, and silently,
+	 * because each factory branch remembered a different subset of them. A minded
+	 * child inherited none at all.
+	 *
+	 * <p>Diet is the one that mattered: a scavenger's child was born a grazer, so
+	 * the niche could not grow no matter how well its parents ate. Corpse lifespan
+	 * and predator-vigilance were dropped the same way for minded lineages. They
+	 * are copied together here so that adding a body trait means adding it in one
+	 * place rather than in four, and forgetting is not the default.
+	 */
+	private void passBodyTraitsTo(TestNPC child) {
+		child.diet = diet; // what a lineage eats, like what it fears, is not the genome's
+		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
+		child.alwaysInteract = alwaysInteract;
+		child.withDeathspan(deathspan); // the lineage shares how long its dead lie about
+	}
+
 	@Override
 	protected net.hedinger.prototype.entities.NPC spawnOffspring() {
 		if (genome == null) {
@@ -2617,13 +2636,11 @@ public class TestNPC extends NPC {
 		if (behavior == Behavior.MINDED) {
 			child = brainedBreeder(X, Y, Z, childG);
 		} else if (behavior == Behavior.PREDATOR) {
-			child = predator(X, Y, Z, childG).withDeathspan(deathspan); // lineage shares corpse lifespan
+			child = predator(X, Y, Z, childG);
 		} else {
 			child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
-			child.vigilant = vigilant; // a vigilant lineage stays predator-aware
-			child.withDeathspan(deathspan);
 		}
-		child.diet = diet; // what a lineage eats is inherited, like what it fears
+		passBodyTraitsTo(child);
 		return child.withGeneration(generation + 1);
 	}
 
@@ -2637,7 +2654,7 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
-		child.diet = diet; // a pair only breeds within its diet, so either parent's will do
+		passBodyTraitsTo(child); // a pair breeds within its diet, so either parent's will do
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {
