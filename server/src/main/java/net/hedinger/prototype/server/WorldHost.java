@@ -154,6 +154,26 @@ final class WorldHost {
 	private final java.util.concurrent.ConcurrentHashMap<WsContext, Integer> viewerLevel =
 			new java.util.concurrent.ConcurrentHashMap<>();
 
+	/** Viewers that connected with {@code ?bin=1}: their full/delta frames are
+	 *  {@link BinaryProtocol} bytes instead of JSON. The web client always opts
+	 *  in (it is served by this process, so the builds are in lockstep); plain
+	 *  JSON stays the default so scripts and tooling can read the stream. */
+	private final java.util.Set<WsContext> binViewers =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	private boolean isBin(WsContext ctx) {
+		return binViewers.contains(ctx);
+	}
+
+	private void sendFull(WsContext ctx, WorldSnapshot s, int z) {
+		if (isBin(ctx)) {
+			ctx.send(java.nio.ByteBuffer.wrap(
+					BinaryProtocol.full(s.tick(), onLevel(s, z), s.entities().size())));
+		} else {
+			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, z), s.entities().size())));
+		}
+	}
+
 	private int surfaceLevel() {
 		return runner.world().getLevels() - 1;
 	}
@@ -173,6 +193,9 @@ final class WorldHost {
 	/** New viewer: greet with world geometry, then its level's entity list. */
 	void onConnect(WsContext ctx) {
 		ctx.enableAutomaticPings(15, TimeUnit.SECONDS); // keep proxies from idling us out
+		if ("1".equals(ctx.queryParam("bin"))) {
+			binViewers.add(ctx);
+		}
 		synchronized (lock) {
 			WorldSnapshot s = runner.snapshot();
 			var w = runner.world();
@@ -181,8 +204,7 @@ final class WorldHost {
 					net.hedinger.prototype.engine.ResourceManager.tileSize, LayerBaker.CHUNK_PX,
 					s.tick(), runner.isPaused(), runner.getSpeed(),
 					java.util.List.of(), CHUNK_TILES, String.valueOf(startedAt))));
-			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, surfaceLevel()),
-					s.entities().size())));
+			sendFull(ctx, s, surfaceLevel());
 			sessions.add(ctx);
 		}
 	}
@@ -190,6 +212,7 @@ final class WorldHost {
 	void onClose(WsContext ctx) {
 		sessions.remove(ctx);
 		viewerLevel.remove(ctx);
+		binViewers.remove(ctx);
 	}
 
 	/** A viewer switched levels: refilter its stream and resync it with a full
@@ -199,9 +222,7 @@ final class WorldHost {
 		int clamped = Math.max(0, Math.min(w.getLevels() - 1, z));
 		viewerLevel.put(ctx, clamped);
 		synchronized (lock) {
-			WorldSnapshot s = runner.snapshot();
-			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, clamped),
-					s.entities().size())));
+			sendFull(ctx, runner.snapshot(), clamped);
 		}
 	}
 
@@ -210,27 +231,43 @@ final class WorldHost {
 	 *  per DISTINCT level in use, not per viewer. */
 	private void broadcast() {
 		try {
-			java.util.Map<Integer, String> byLevel = new java.util.HashMap<>();
+			// Encoded once per DISTINCT (level, format) in use, not per viewer.
+			java.util.Map<Integer, String> jsonByLevel = new java.util.HashMap<>();
+			java.util.Map<Integer, byte[]> binByLevel = new java.util.HashMap<>();
 			synchronized (lock) {
 				WorldSnapshot now = runner.snapshot();
 				if (now.tick() == lastSent.tick() && !forceFull) {
 					return; // paused (or stalled): nothing new to say
 				}
 				int total = now.entities().size();
-				java.util.Set<Integer> levels = new java.util.HashSet<>(viewerLevel.values());
+				java.util.Set<Integer> jsonLevels = new java.util.HashSet<>();
+				java.util.Set<Integer> binLevels = new java.util.HashSet<>();
+				for (WsContext ctx : sessions) {
+					int z = viewerLevel.getOrDefault(ctx, surfaceLevel());
+					(isBin(ctx) ? binLevels : jsonLevels).add(z);
+				}
+				java.util.Set<Integer> levels = new java.util.HashSet<>(jsonLevels);
+				levels.addAll(binLevels);
+				// Previous level per id, to turn a ramp crossing into a
+				// departure on the level left behind — and, for the binary
+				// stream, to mark bodies NEW to a level (they need a birth
+				// record, not just a pose).
+				java.util.Map<Integer, Integer> prevZ = new java.util.HashMap<>();
+				for (net.hedinger.prototype.sim.EntityState e : lastSent.entities()) {
+					prevZ.put(e.id(), (int) Math.round(e.z()));
+				}
 				if (forceFull) {
 					for (int z : levels) {
-						byLevel.put(z, Protocol.write(Protocol.Full.of(now.tick(), onLevel(now, z), total)));
+						if (jsonLevels.contains(z)) {
+							jsonByLevel.put(z, Protocol.write(Protocol.Full.of(now.tick(), onLevel(now, z), total)));
+						}
+						if (binLevels.contains(z)) {
+							binByLevel.put(z, BinaryProtocol.full(now.tick(), onLevel(now, z), total));
+						}
 					}
 					forceFull = false;
 				} else {
 					DeltaEncoder.Delta d = DeltaEncoder.diff(lastSent, now);
-					// Previous level per id, to turn a ramp crossing into a
-					// departure on the level left behind.
-					java.util.Map<Integer, Integer> prevZ = new java.util.HashMap<>();
-					for (net.hedinger.prototype.sim.EntityState e : lastSent.entities()) {
-						prevZ.put(e.id(), (int) Math.round(e.z()));
-					}
 					for (int z : levels) {
 						java.util.List<net.hedinger.prototype.sim.EntityState> up = new java.util.ArrayList<>();
 						// gone-if-unknown is a no-op client-side, so globally
@@ -247,14 +284,28 @@ final class WorldHost {
 								}
 							}
 						}
-						byLevel.put(z, Protocol.write(Protocol.Delta.of(now.tick(), up, gone, total)));
+						if (jsonLevels.contains(z)) {
+							jsonByLevel.put(z, Protocol.write(Protocol.Delta.of(now.tick(), up, gone, total)));
+						}
+						if (binLevels.contains(z)) {
+							binByLevel.put(z, BinaryProtocol.delta(now.tick(), up, gone, total, prevZ, z));
+						}
 					}
 				}
 				lastSent = now;
 			}
 			for (WsContext ctx : sessions) {
-				if (ctx.session.isOpen()) {
-					String msg = byLevel.get(viewerLevel.getOrDefault(ctx, surfaceLevel()));
+				if (!ctx.session.isOpen()) {
+					continue;
+				}
+				int z = viewerLevel.getOrDefault(ctx, surfaceLevel());
+				if (isBin(ctx)) {
+					byte[] msg = binByLevel.get(z);
+					if (msg != null) {
+						ctx.send(java.nio.ByteBuffer.wrap(msg)); // wrap: fresh position per send
+					}
+				} else {
+					String msg = jsonByLevel.get(z);
 					if (msg != null) {
 						ctx.send(msg);
 					}

@@ -24,6 +24,12 @@ public record EntityState(
 		double z,
 		double dir,
 		float size,
+		/** Adult body this creature is still growing toward at the fixed
+		 *  {@link NPC#GROWTH_RATE}, or 0 when it is not growing (fully grown,
+		 *  dead, or a kind that never grows). Growth is deterministic, so a
+		 *  viewer given (size, sizeMax, rate) at one tick can extrapolate the
+		 *  body itself — the binary stream ships size only on birth records. */
+		float sizeMax,
 		int rgb,
 		int flags,
 		int attachedTo,
@@ -151,8 +157,9 @@ public record EntityState(
 		// field stays zero so nothing in the sim mistakes a door for a body.
 		float size = e instanceof net.hedinger.prototype.entities.Door dr
 				? dr.getSpan() : e.getSize();
+		float sizeMax = !e.isDead() && e instanceof NPC np ? (float) np.getGrowthTarget() : 0;
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),
-				e.getDirection(), size, rgb, flags, attachedTo, aux, pheno);
+				e.getDirection(), size, sizeMax, rgb, flags, attachedTo, aux, pheno);
 	}
 
 	/** Order-sensitive bit-exact fold of every field, for determinism tests. */
@@ -164,6 +171,7 @@ public record EntityState(
 		h = h * 31 + Double.doubleToLongBits(z);
 		h = h * 31 + Double.doubleToLongBits(dir);
 		h = h * 31 + Float.floatToIntBits(size);
+		h = h * 31 + Float.floatToIntBits(sizeMax);
 		h = h * 31 + rgb;
 		h = h * 31 + flags;
 		h = h * 31 + attachedTo;

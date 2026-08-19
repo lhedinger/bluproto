@@ -161,7 +161,7 @@ public final class ServerTests {
 	}
 
 	private static EntityState probe(int id, double x) {
-		return new EntityState(id, "npc.testnpc", x, 2.0, 0, 0.5, 0.1f, 0xAABBCC, 0, -1, 1.0, 0);
+		return new EntityState(id, "npc.testnpc", x, 2.0, 0, 0.5, 0.1f, 0f, 0xAABBCC, 0, -1, 1.0, 0);
 	}
 
 	private static void check(String what, boolean ok) {
