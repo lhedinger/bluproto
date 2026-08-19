@@ -99,6 +99,14 @@ let deplPatchRects: Array<[number, number, number, number]> | null = null;
 let deplPending: number[] | null = [];
 let deplBulkAt = 0;
 const DEPL_BULK_MIN_MS = 3000;
+// GPU-reconciliation cadence: how often the depletion texture may be touched
+// at all (patch bursts) and how often the low mirror re-downscales during a
+// heavy drain. Mobile tile GPUs pay a whole-texture ghost copy per frame
+// that modifies a sampled texture, so updates are batched into bursts.
+const DEPL_SHIP_MIN_MS = 400;
+let deplShipAt = 0;
+let deplMirrorDirty = false;
+let deplMirrorAt = 0;
 const ART = 12;
 
 // The repaint QUEUE: tiles whose bucket moved, waiting for their ditherTile.
@@ -160,7 +168,7 @@ function depletionLayer(meta: WorldMeta,
   // An owed bulk upload whose rate-limit window just opened re-enters even if
   // the vegetation itself brought nothing new this frame.
   const bulkDue = deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS;
-  const shipDue = deplPending !== null && deplPending.length > 0; // slices left to ship
+  const shipDue = (deplPending !== null && deplPending.length > 0) || deplMirrorDirty;
   const scanDue = full || vegRev !== deplSrcRev;
   if (!scanDue && deplQHead >= deplQueue.length && !bulkDue && !shipDue) return deplLayer;
   if (full) {
@@ -221,17 +229,22 @@ function depletionLayer(meta: WorldMeta,
       ctx.drawImage(depletionStampFor(state, variant), tx * ART, ty * ART);
     }
     deplBuckets![i] = state;
-    if (work < 128) { // heavy frames refresh the mirror wholesale below
+    if (work < 128) { // heavy frames refresh the mirror wholesale, throttled below
       lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
       lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+    } else {
+      deplMirrorDirty = true;
     }
     patched.push(i);
     work++;
   }
-  if (patched.length >= 128) {
-    // A rush frame: one smooth downscale beats hundreds of 3px cell blits.
+  if (deplMirrorDirty && nowMs - deplMirrorAt >= DEPL_SHIP_MIN_MS) {
+    // Rush frames skip per-cell mirror blits and settle here: one smooth
+    // downscale, at most a few times a second, not one per rush frame.
     lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
     lg.drawImage(layer, 0, 0, deplLayerLow.width, deplLayerLow.height);
+    deplMirrorDirty = false;
+    deplMirrorAt = nowMs;
   }
   if (deplQHead >= deplQueue.length) {
     deplQueue = [];
@@ -242,21 +255,28 @@ function depletionLayer(meta: WorldMeta,
       for (const i of patched) deplPending.push(i);
       if (deplPending.length > 256) deplPending = null; // overflow: a bulk is owed
     }
-    if (deplPending !== null && deplPending.length > 0) {
-      // Ship a bounded slice per frame: hundreds of texSubImage2D calls in
-      // one frame is its own stall — the GPU copy may trail the canvas by a
-      // few frames, which the eye cannot see on this layer.
-      const ship = deplPending.splice(0, 32);
+    // The GPU copy reconciles a few times a second, NOT every frame: mobile
+    // tile GPUs cannot modify a texture still sampled by in-flight frames —
+    // the driver ghosts a copy of the WHOLE 30MB texture for every frame
+    // that touches it, which turned a steady drain into 200ms frames on a
+    // phone while the CPU sat idle (cb small, zero long tasks — the classic
+    // signature). Batching the texSubImage2D patches to one burst per window
+    // means at most a couple of ghost copies a second.
+    if (deplPending !== null && deplPending.length > 0
+        && nowMs - deplShipAt >= DEPL_SHIP_MIN_MS) {
+      const ship = deplPending.splice(0, 256);
       deplRev++;
       deplPatchRects = ship.map(i =>
         [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
+      deplShipAt = nowMs;
     } else if (deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS) {
       deplRev++; // the owed whole-layer upload, at most once per window
       deplPatchRects = null;
       deplPending = [];
       deplBulkAt = nowMs;
+      deplShipAt = nowMs;
     }
-    // else: hold — the GPU copy stays a beat stale until the window opens.
+    // else: hold — the GPU copy stays a beat stale until a window opens.
   }
   return layer;
 }
