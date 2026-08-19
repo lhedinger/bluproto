@@ -210,38 +210,90 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // actually holds, which is what made the fit-zoom ground the single most
 // expensive section on a software canvas.
 let groundCv: HTMLCanvasElement | null = null;
+// Quarter-res mirror (3 px/tile) the GL pass samples at far zoom: the full
+// layer has NO mipmaps (it gets patched), and a phone GPU minifying a
+// 7-megapixel mipless texture 4-8x every frame is bandwidth-bound — the
+// classic mobile fill cost a desktop GPU never shows.
+let groundLowCv: HTMLCanvasElement | null = null;
 let groundLevel = -1;
-let groundMissing = 0;
+// Chunks that had not streamed in when the layer was built. Retries fill
+// ONLY these holes and ship them as texture patches: the old path recomposed
+// the WHOLE layer and re-uploaded the whole texture once a second for as
+// long as anything was missing — with a permanently failed chunk fetch that
+// was a 60ms+ CPU stall every second for the life of the tab.
+let groundHoles: Array<[number, number]> = [];
 let groundRetryAt = 0;
+let groundPatchRects: Array<[number, number, number, number]> | null = null;
+const LAYER_LOW = 3; // px per tile of every low mirror
+
+function refreshGroundLow(meta: WorldMeta): void {
+  if (!groundLowCv || groundLowCv.width !== meta.cols * LAYER_LOW) {
+    groundLowCv = document.createElement('canvas');
+    groundLowCv.width = meta.cols * LAYER_LOW;
+    groundLowCv.height = meta.rows * LAYER_LOW;
+  }
+  const lg = groundLowCv.getContext('2d')!;
+  lg.imageSmoothingEnabled = true;
+  lg.clearRect(0, 0, groundLowCv.width, groundLowCv.height);
+  lg.drawImage(groundCv!, 0, 0, groundLowCv.width, groundLowCv.height);
+}
 
 function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
     level: number, nowMs: number): HTMLCanvasElement | null {
-  const stale = level !== groundLevel || !groundCv
-    || (groundMissing > 0 && nowMs >= groundRetryAt);
-  if (!stale) return groundCv;
-  if (!groundCv || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART) {
-    groundCv = document.createElement('canvas');
-    groundCv.width = meta.cols * ART;
-    groundCv.height = meta.rows * ART;
-  }
-  const ctx = groundCv.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-  groundMissing = 0;
-  const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
-  for (let cy = 0; cy < cyN; cy++) {
-    for (let cx = 0; cx < cxN; cx++) {
+  const fresh = level !== groundLevel || !groundCv
+    || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART;
+  if (!fresh && (groundHoles.length === 0 || nowMs < groundRetryAt)) return groundCv;
+  const chunkRect = (cx: number, cy: number): [number, number, number, number] => {
+    const wTiles = Math.min(chunkTiles, meta.cols - cx * chunkTiles);
+    const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
+    return [cx * chunkTiles * ART, cy * chunkTiles * ART, wTiles * ART, hTiles * ART];
+  };
+  if (fresh) {
+    if (!groundCv || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART) {
+      groundCv = document.createElement('canvas');
+      groundCv.width = meta.cols * ART;
+      groundCv.height = meta.rows * ART;
+    }
+    const ctx = groundCv.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, groundCv.width, groundCv.height);
+    groundHoles = [];
+    const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
+    for (let cy = 0; cy < cyN; cy++) {
+      for (let cx = 0; cx < cxN; cx++) {
+        const chunk = getChunk(cx, cy);
+        if (!chunk) { groundHoles.push([cx, cy]); continue; }
+        const [dx, dy, dw, dh] = chunkRect(cx, cy);
+        ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
+      }
+    }
+    groundLevel = level;
+    groundRev++; // whole layer: the GL pass re-uploads its texture
+    groundPatchRects = null;
+    refreshGroundLow(meta);
+  } else {
+    // Retry pass: blit only the holes whose chunks have arrived, and ship
+    // exactly those rects as texture patches. Nothing arrived = nothing
+    // repainted, no rev bump, no upload.
+    const ctx = groundCv!.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    const filled: Array<[number, number, number, number]> = [];
+    groundHoles = groundHoles.filter(([cx, cy]) => {
       const chunk = getChunk(cx, cy);
-      if (!chunk) { groundMissing++; continue; }
-      const wTiles = Math.min(chunkTiles, meta.cols - cx * chunkTiles);
-      const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
-      ctx.drawImage(chunk, 0, 0, wTiles * tilePx, hTiles * tilePx,
-        cx * chunkTiles * ART, cy * chunkTiles * ART, wTiles * ART, hTiles * ART);
+      if (!chunk) return true;
+      const [dx, dy, dw, dh] = chunkRect(cx, cy);
+      ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
+      filled.push([dx, dy, dw, dh]);
+      return false;
+    });
+    if (filled.length > 0) {
+      groundRev++;
+      groundPatchRects = filled;
+      refreshGroundLow(meta);
     }
   }
-  groundLevel = level;
-  groundRetryAt = nowMs + 1000; // chunks still streaming: try again shortly
-  groundRev++; // the GL pass re-uploads its texture
+  groundRetryAt = nowMs + 1000; // holes still open: look again shortly
   return groundCv;
 }
 
@@ -691,17 +743,35 @@ export function renderGL(
   const o0 = cam.worldToScreen(0, 0);
   const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
 
-  // Ground: the art-resolution layer, one quad at every zoom (MAG NEAREST
-  // keeps art-pixels crisp; mipmaps resolve far-zoom minification).
+  // Ground and depletion: the art-resolution layers, one quad each. Layer
+  // textures carry NO mipmaps (they get patched), so at far zoom — where the
+  // full 12px/tile texture would minify 4-8x and thrash a phone GPU's texture
+  // cache — the quad samples the quarter-res mirror instead, exactly as the
+  // Canvas2D path always has.
+  const lowZoom = cam.scale < ART;
   if (chunkTiles > 0 && tilePx > 0) {
     const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
     if (ground) {
-      glr.layer('ground', ground, groundRev, null, o0.x, o0.y, worldW, worldH);
+      if (lowZoom && groundLowCv) {
+        glr.layer('groundlo', groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
+      } else {
+        glr.layer('ground', ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
+      }
     }
     if (veg) {
       const depl = depletionLayer(meta, chunkTiles, tilePx, getBareChunk, veg, level, nowMs);
       if (depl) {
-        glr.layer('depl', depl, deplRev, deplPatchRects, o0.x, o0.y, worldW, worldH);
+        if (lowZoom && deplLayerLow) {
+          // The low mirror's patch rects are the full-res rects at 1/4 scale
+          // (ART=12 -> 3 px/tile), which divide exactly on tile boundaries.
+          const loRects = deplPatchRects
+            ? deplPatchRects.map(([x, y, w, h]) =>
+              [x / 4, y / 4, w / 4, h / 4] as [number, number, number, number])
+            : null;
+          glr.layer('depllo', deplLayerLow, deplRev, loRects, o0.x, o0.y, worldW, worldH);
+        } else {
+          glr.layer('depl', depl, deplRev, deplPatchRects, o0.x, o0.y, worldW, worldH);
+        }
       }
     }
   }
@@ -851,7 +921,11 @@ export function renderGL(
   // Concealment over the creatures, then lids over occupants (see render()).
   if (cover && chunkTiles > 0 && tilePx > 0) {
     const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
-    glr.layer('canopy', canopy, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    if (lowZoom && canopyLow) {
+      glr.layer('canopylo', canopyLow, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    } else {
+      glr.layer('canopy', canopy, canopyRev, canopyPatchRects, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    }
     const lids = new Set<number>();
     for (const t of tracks) {
       const e = t.curr;
@@ -1006,49 +1080,79 @@ let canopyCv: HTMLCanvasElement | null = null;
 let canopyLow: HTMLCanvasElement | null = null;
 let canopySrc: Uint8Array | null = null;
 let canopyLevel = -1;
-let canopyMissing = 0; // chunks still streaming when last built
+// Veil tiles whose chunk had not streamed in when the layer was built.
+// Retries stamp ONLY these and ship them as texture patches — the old path
+// re-stamped every cover tile in the world and re-uploaded the whole texture
+// once a second for as long as any chunk was missing (see groundLayer).
+let canopyHoles: number[] = [];
 let canopyRetryAt = 0;
+let canopyPatchRects: Array<[number, number, number, number]> | null = null;
 
-function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
-    cover: Uint8Array, level: number, nowMs: number): HTMLCanvasElement {
-  const stale = cover !== canopySrc || level !== canopyLevel
-    || (canopyMissing > 0 && nowMs >= canopyRetryAt);
-  if (!stale && canopyCv) return canopyCv;
-  if (!canopyCv || canopyCv.width !== meta.cols * ART || canopyCv.height !== meta.rows * ART) {
-    canopyCv = document.createElement('canvas');
-    canopyCv.width = meta.cols * ART;
-    canopyCv.height = meta.rows * ART;
-  }
-  const ctx = canopyCv.getContext('2d')!;
-  ctx.clearRect(0, 0, canopyCv.width, canopyCv.height);
-  canopyMissing = 0;
-  for (let ty = 0; ty < meta.rows; ty++) {
-    for (let tx = 0; tx < meta.cols; tx++) {
-      const v = cover[ty * meta.cols + tx];
-      if (v !== 1 && v !== 3) continue;
-      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-      const chunk = getChunk(ccx, ccy);
-      if (!chunk) { canopyMissing++; continue; }
-      veilTile(ctx, v, tx, ty, tx * ART, ty * ART, chunk,
-        (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx, tilePx);
-    }
-  }
-  const LOW = 3;
-  if (!canopyLow || canopyLow.width !== meta.cols * LOW) {
+function refreshCanopyLow(meta: WorldMeta): void {
+  if (!canopyLow || canopyLow.width !== meta.cols * LAYER_LOW) {
     canopyLow = document.createElement('canvas');
-    canopyLow.width = meta.cols * LOW;
-    canopyLow.height = meta.rows * LOW;
+    canopyLow.width = meta.cols * LAYER_LOW;
+    canopyLow.height = meta.rows * LAYER_LOW;
   }
   const lg = canopyLow.getContext('2d')!;
   lg.clearRect(0, 0, canopyLow.width, canopyLow.height);
   lg.imageSmoothingEnabled = true;
-  lg.drawImage(canopyCv, 0, 0, canopyLow.width, canopyLow.height);
-  canopySrc = cover;
-  canopyLevel = level;
-  canopyRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
-  canopyRev++; // the GL pass re-uploads its texture
-  return canopyCv;
+  lg.drawImage(canopyCv!, 0, 0, canopyLow.width, canopyLow.height);
+}
+
+function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
+    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    cover: Uint8Array, level: number, nowMs: number): HTMLCanvasElement {
+  const fresh = cover !== canopySrc || level !== canopyLevel || !canopyCv
+    || canopyCv.width !== meta.cols * ART;
+  if (!fresh && (canopyHoles.length === 0 || nowMs < canopyRetryAt)) return canopyCv!;
+  const stamp = (ctx: CanvasRenderingContext2D, i: number): boolean => {
+    const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
+    const v = cover[i];
+    const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+    const chunk = getChunk(ccx, ccy);
+    if (!chunk) return false;
+    veilTile(ctx, v, tx, ty, tx * ART, ty * ART, chunk,
+      (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx, tilePx);
+    return true;
+  };
+  if (fresh) {
+    if (!canopyCv || canopyCv.width !== meta.cols * ART || canopyCv.height !== meta.rows * ART) {
+      canopyCv = document.createElement('canvas');
+      canopyCv.width = meta.cols * ART;
+      canopyCv.height = meta.rows * ART;
+    }
+    const ctx = canopyCv.getContext('2d')!;
+    ctx.clearRect(0, 0, canopyCv.width, canopyCv.height);
+    canopyHoles = [];
+    for (let i = 0; i < cover.length; i++) {
+      const v = cover[i];
+      if (v !== 1 && v !== 3) continue;
+      if (!stamp(ctx, i)) canopyHoles.push(i);
+    }
+    canopySrc = cover;
+    canopyLevel = level;
+    canopyRev++; // whole layer: the GL pass re-uploads its texture
+    canopyPatchRects = null;
+    refreshCanopyLow(meta);
+  } else {
+    const ctx = canopyCv!.getContext('2d')!;
+    const filled: Array<[number, number, number, number]> = [];
+    canopyHoles = canopyHoles.filter((i) => {
+      if (!stamp(ctx, i)) return true;
+      filled.push([(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
+      return false;
+    });
+    if (filled.length > 0) {
+      canopyRev++;
+      // A whole chunk's worth of veil tiles beats per-rect patching: past a
+      // few hundred rects, ship the layer wholesale (same rule as depletion).
+      canopyPatchRects = filled.length > 256 ? null : filled;
+      refreshCanopyLow(meta);
+    }
+  }
+  canopyRetryAt = nowMs + 1000; // holes still open: look again shortly
+  return canopyCv!;
 }
 
 // The pheromone puff's soft radial falloff, baked once and blitted scaled: a

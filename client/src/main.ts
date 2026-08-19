@@ -106,8 +106,16 @@ function chunkImage(cx: number, cy: number, bare: boolean): HTMLCanvasElement | 
     copy.getContext('2d')!.drawImage(img, 0, 0);
     chunkCache.set(key, copy);
   };
-  // On error the entry stays null: the chunk simply never draws (same as the
-  // old broken-<img> behaviour) rather than refetching every frame.
+  // A failed fetch must not leave a permanent hole: on a phone one flaky
+  // radio moment used to freeze a black chunk into the world for the tab's
+  // whole life — AND kept the layer builders in their retry loops forever.
+  // Forget the in-flight marker after a pause so the next frame that wants
+  // this chunk simply refetches it.
+  img.onerror = () => {
+    setTimeout(() => {
+      if (chunkCache.get(key) === null) chunkCache.delete(key);
+    }, 8000);
+  };
   img.src = `/api/world/layers/${currentLevel}/${name}.png?v=${v}`;
   return null;
 }
