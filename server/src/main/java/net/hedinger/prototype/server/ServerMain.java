@@ -369,10 +369,24 @@ public final class ServerMain {
 
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
-		// Live per-tile grass level for the vegetation overlay (byte per tile,
-		// base64). Polled by the client so grazing depletion shows on the map.
+		// Live vegetation for the depletion overlay. With ?since=SEQ (the web
+		// client): quantised 5-state grid with sequence-numbered deltas — a
+		// handful of packed (tile<<3|state) ints per poll instead of the whole
+		// grid (see VegFeed). Without ?since: the legacy raw 0..100 byte grid,
+		// kept for tooling.
 		app.get("/api/world/vegetation/{z}", ctx -> {
-			byte[] v = host.vegetation(Integer.parseInt(ctx.pathParam("z")));
+			int z = Integer.parseInt(ctx.pathParam("z"));
+			String since = ctx.queryParam("since");
+			if (since != null) {
+				var resp = host.vegetationSince(z, Long.parseLong(since));
+				if (resp == null) {
+					ctx.status(404);
+					return;
+				}
+				ctx.json(resp);
+				return;
+			}
+			byte[] v = host.vegetation(z);
 			if (v == null) {
 				ctx.status(404);
 				return;

@@ -91,9 +91,9 @@ let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 // on software-rendered canvases), while a canvas source blits at memcpy speed.
 // One copy per chunk at decode time buys back every frame thereafter.
 const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
-function chunkImage(cx: number, cy: number, bare: boolean): HTMLCanvasElement | null {
+function chunkImage(cx: number, cy: number): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
-  const name = bare ? `${cx}_${cy}_bare` : `${cx}_${cy}`;
+  const name = `${cx}_${cy}`;
   const key = `${v}/${currentLevel}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;
@@ -120,12 +120,7 @@ function chunkImage(cx: number, cy: number, bare: boolean): HTMLCanvasElement | 
   return null;
 }
 function getChunk(cx: number, cy: number): HTMLCanvasElement | null {
-  return chunkImage(cx, cy, false);
-}
-// The fully-grazed twin bake: what this chunk looks like with all vegetation
-// stripped. The renderer dithers depleted tiles toward it.
-function getBareChunk(cx: number, cy: number): HTMLCanvasElement | null {
-  return chunkImage(cx, cy, true);
+  return chunkImage(cx, cy);
 }
 
 function levelName(z: number): string {
@@ -157,28 +152,44 @@ const MINIMAP_OFF = flagOff('minimap');
 // screenshot documents its own experiment.
 const perfOffStr = PERF_FLAGS.filter(([k]) => k !== 'gl' && flagOff(k)).map(([k]) => k).join(',');
 
-// Live grass levels (one byte per tile) polled from the server, so grazing
-// depletion and regrowth show as dirt over the static baked grass.
+// Live vegetation, polled as the server's QUANTISED 5-state grid (0 lush ..
+// 4 bare — see server/VegFeed) with sequence-numbered deltas: the client
+// sends the sequence it holds and receives only the tiles that moved, packed
+// as (tile<<3|state) ints — a handful of numbers per poll instead of a 70KB
+// base64 grid. States change ~4x less often than the old 17 dither buckets,
+// so the poll also relaxes to 4s. vegVersion bumps on every applied change so
+// the renderer can tell "same array, new content" without an identity swap.
 let vegGrid: Uint8Array | null = null;
+let vegSeq = -1;
+let vegVersion = 0;
 let vegTimer = 0;
 async function pollVeg(): Promise<void> {
   try {
-    const r = await fetch(`/api/world/vegetation/${currentLevel}`);
-    if (!r.ok) { vegGrid = null; return; }
+    const r = await fetch(`/api/world/vegetation/${currentLevel}?since=${vegSeq}`);
+    if (!r.ok) { vegGrid = null; vegSeq = -1; return; }
     const j = await r.json();
-    const bin = atob(j.data);
-    const a = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    vegGrid = a;
+    if (j.states !== undefined) {
+      const bin = atob(j.states);
+      const a = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      vegGrid = a;
+      vegSeq = j.seq;
+      vegVersion++;
+    } else if (j.changes !== undefined && vegGrid) {
+      for (const p of j.changes as number[]) vegGrid[p >> 3] = p & 7;
+      if (j.changes.length > 0) vegVersion++;
+      vegSeq = j.seq;
+    }
   } catch {
     /* transient; keep the last grid */
   }
 }
 function startVegPolling(): void {
+  vegSeq = -1; // per-level history: resync with a full grid
   if (VEG_OFF) return;
   clearInterval(vegTimer);
   pollVeg();
-  vegTimer = window.setInterval(pollVeg, 1500);
+  vegTimer = window.setInterval(pollVeg, 4000);
 }
 
 // Static cover mask (one byte per tile, 1 = thicket) fetched once per level, so
@@ -1048,11 +1059,11 @@ function frame(now: number): void {
   const chunkPx = hello ? (hello.chunkPx ?? hello.tileSize) : 0;
   const sel = { id: selectedId, tile: selectedTile };
   if (glr) {
-    hudGl = renderGL(glr, g, cam, state, meta, chunkTiles, chunkPx, getChunk, getBareChunk,
-      vegGrid, coverGrid, renderTime, now, currentLevel, sel);
+    hudGl = renderGL(glr, g, cam, state, meta, chunkTiles, chunkPx, getChunk,
+      vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
   } else {
-    render(g, cam, state, meta, chunkTiles, chunkPx, getChunk, getBareChunk,
-      vegGrid, coverGrid, renderTime, now, currentLevel, sel);
+    render(g, cam, state, meta, chunkTiles, chunkPx, getChunk,
+      vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
   }
   hudFrame(now);
   // The minimap is ambient, not mission-critical: entity drift redraws at
