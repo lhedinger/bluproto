@@ -297,6 +297,148 @@ public class SimTests {
 	}
 
 	/**
+	 * What a lineage eats is inherited. A scavenger's child is a scavenger, budded
+	 * or crossed — without which the niche cannot grow whatever else is true of it,
+	 * because every scavenger that ever managed to breed produced a grazer and the
+	 * cohort stayed exactly as large as the warden kept it.
+	 */
+	static class ScavengerYoungAreScavengers extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(14, 14);
+
+			// Asexual: buds alone, so one well-fed body is the whole experiment.
+			Genome bud = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			bud.markers = new double[] { 0.5, 0.5, 0.5 };
+			bud.sexuality = 0.0; // buds
+			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
+			TestNPC parent = TestNPC.minded(4.5, 4.5, 0, bud, breeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+			parent.withEnergy(parent.energyCapacity());
+			w.spawnEntity(parent);
+			w.think();
+			tick(w, 5);
+			assertGreater("the scavenger budded", w.getAliveCount(), 1);
+			assertEquals("and every one of its young is a scavenger too",
+					0, countRolesOtherThan(w, "scavenger"));
+
+			// Sexual: a compatible pair, both scavengers, crossing over.
+			World pair = room(14, 14);
+			Genome sx = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			sx.markers = new double[] { 0.5, 0.5, 0.5 };
+			sx.sexuality = 1.0; // courts
+			TestNPC a = TestNPC.minded(6.3, 6.5, 0, sx, breeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+			TestNPC b = TestNPC.minded(6.7, 6.5, 0, sx.copy(), breeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+			a.withEnergy(a.energyCapacity());
+			b.withEnergy(b.energyCapacity());
+			pair.spawnEntity(a);
+			pair.spawnEntity(b);
+			pair.think();
+			tick(pair, 220); // courtship holds station for MATING_TICKS before a birth
+			assertGreater("the pair bred", pair.getAliveCount(), 2);
+			assertEquals("and the crossover child is a scavenger",
+					0, countRolesOtherThan(pair, "scavenger"));
+		}
+	}
+
+	/** Counts live minded bodies whose {@code ecoRole} is not {@code role}. */
+	static int countRolesOtherThan(World w, String role) {
+		int n = 0;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+					&& !role.equals(t.ecoRole())) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * Diet is a reproductive barrier. A scavenger and a grazer that are otherwise
+	 * identical twins -- same markers, same body, both fertile and touching -- do
+	 * not breed, because they are not the same animal.
+	 *
+	 * <p>Left open, a scavenger's scarce fertile ticks are spent courting the far
+	 * more numerous herbivores around it, and the child is built by whichever parent
+	 * closes the exchange, so the pairing yields a grazer either way.
+	 */
+	static class ScavengersDoNotBreedWithGrazers extends Scenario {
+		@Override
+		public void run() {
+			seed(32);
+			World w = room(12, 12);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.sexuality = 1.0;
+
+			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
+			TestNPC scav = TestNPC.minded(6.3, 6.5, 0, g, breeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+			TestNPC grazer = TestNPC.minded(6.7, 6.5, 0, g.copy(), breeder).withMetabolic();
+			scav.withEnergy(scav.energyCapacity());
+			grazer.withEnergy(grazer.energyCapacity());
+			w.spawnEntity(scav);
+			w.spawnEntity(grazer);
+			w.think();
+
+			assertTrue("the two are genome-compatible on markers alone",
+					grazer.getGenome().similarityTo(scav.getGenome()) >= grazer.getGenome().mateThreshold);
+			assertTrue("but a scavenger will not pair with a grazer", !scav.canMateWith(grazer));
+			assertTrue("nor a grazer with a scavenger", !grazer.canMateWith(scav));
+			tick(w, 220);
+			assertEquals("so no child is born of the pair", 2, w.getAliveCount());
+		}
+	}
+
+	/**
+	 * A scavenger keeps walking to the carcass it chose. Carrion is scored by
+	 * {@code mass * freshness / (1 + dist)}, and with several bodies in scent range
+	 * those scores sit close together -- re-running the argmax every tick hands the
+	 * lead back and forth and the creature turns toward a new body every few steps
+	 * instead of reaching any of them. Measured before this held: a target in view
+	 * on 37% of ticks and one actually within biting distance on 0.87%.
+	 */
+	static class ScavengerHoldsTheCarcassItChose extends Scenario {
+		@Override
+		public void run() {
+			seed(33);
+			World w = room(30, 12);
+			Genome g = Genome.phenotype(9, 0.0, 5, 30, Math.PI * 2, 100000);
+
+			// One carcass east. The scavenger stands west of it and walks.
+			TestNPC near = TestNPC.breeder(14.5, 5.5, 0, g);
+			w.spawnEntity(near);
+			tick(w, 2);
+			near.damage(500);
+			tick(w, 1);
+			assertTrue("there is a carcass to walk to", near.isDead());
+
+			Mind still = (sensors, act) -> { };
+			TestNPC scav = TestNPC.minded(4.5, 5.5, 0, g, still)
+					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+			w.spawnEntity(scav);
+			tick(w, 2);
+			double chosen = scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
+			assertNear("it has fixed on the carcass ahead", 0, chosen, 0.1);
+
+			// Now a second, fatter carcass appears BEHIND it, close enough to win the
+			// score outright. A body already committed keeps walking to the first.
+			TestNPC fat = TestNPC.breeder(3.5, 5.5, 0, g);
+			w.spawnEntity(fat);
+			tick(w, 2);
+			fat.damage(500);
+			tick(w, 2);
+			assertTrue("and a fatter one has appeared behind it", fat.isDead());
+
+			assertNear("the scavenger holds the carcass it chose", 0,
+					scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING], 0.1);
+		}
+	}
+
+	/**
 	 * A body only forages toward food it could actually walk to. The seek intent
 	 * steers a straight bearing with no pathfinding anywhere in the loop, so a
 	 * patch chosen through a wall is not a meal -- it is a wall to press against.
@@ -4882,6 +5024,9 @@ public class SimTests {
 				new ForageIgnoresFoodBehindWalls(),
 				new ScavengerEatsCarrionAndHastensItsDecay(),
 				new ScavengerForagesTowardBodies(),
+				new ScavengerYoungAreScavengers(),
+				new ScavengersDoNotBreedWithGrazers(),
+				new ScavengerHoldsTheCarcassItChose(),
 				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
 				new HoleFallRespectsFlying(),

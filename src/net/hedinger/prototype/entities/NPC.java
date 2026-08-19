@@ -284,6 +284,16 @@ public abstract class NPC extends Entity {
 		return energy;
 	}
 
+	/**
+	 * Multiplier on the cost of covering ground, 1.0 for an ordinary body. The hook
+	 * exists so a lineage whose living is made by travelling can be cheap over
+	 * distance without being fast — the two are different adaptations and only the
+	 * first is affordable, since movement is priced on the square of speed.
+	 */
+	protected double travelEfficiency() {
+		return 1.0;
+	}
+
 	private double metabolismRate() {
 		// Resting burn scales with mass^0.75 (Kleiber). The genome's metabolism is
 		// a heritable efficiency multiplier normalised to META_REF, so an average
@@ -465,7 +475,7 @@ public abstract class NPC extends Entity {
 			// Charged on the ground actually covered -- a step cancelled by a
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
-			double travel = MOVE_ENERGY * (bodyMass() + carriedMass()) * lastStep * lastStep;
+			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + carriedMass()) * lastStep * lastStep;
 			energy -= base + grip + travel;
 			if (energy <= 0) {
 				energy = 0;

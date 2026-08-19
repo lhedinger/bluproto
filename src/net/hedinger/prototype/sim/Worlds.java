@@ -1517,13 +1517,26 @@ public final class Worlds {
 		// brains, but eating carrion instead of grass. A third trophic level rather
 		// than a third species -- nothing dies for them, they live on what the other
 		// two leave behind, and by eating it they are the world's decomposition.
-		// Few: they are paid less per kilo than a hunter and their supply is
-		// mortality itself, so a handful is a niche and a crowd is a famine.
-		int nScav = Math.max(3, sc(3, scale));
-		net.hedinger.prototype.entities.Genome[] scavengers = mindedSpecies(nScav);
-		for (int i = 0; i < nScav; i++) {
-			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, scavengers[i]));
+		// Their supply is mortality itself, which is finite and self-consuming, so
+		// the cohort is small by nature: a handful is a niche and a crowd is a famine.
+		// Seeded as TWO lineages of several individuals each, not one founder per
+		// species. Three founders of three species is not a population: with diet a
+		// reproductive barrier, a sexual scavenger among them has no compatible
+		// partner anywhere in the world and its line ends with it, whatever it eats.
+		// Kin it can actually breed with is the difference between a cohort and three
+		// animals that happen to share a diet.
+		int nScavLines = 2;
+		int nScavPerLine = Math.max(3, sc(3, scale));
+		net.hedinger.prototype.entities.Genome[] scavengers = mindedSpecies(nScavLines);
+		for (int line = 0; line < nScavLines; line++) {
+			for (int i = 0; i < nScavPerLine; i++) {
+				double[] p = openSpot(w);
+				// Siblings, not clones: enough drift for selection to have something to
+				// work on, well inside the genome's own similarity threshold.
+				net.hedinger.prototype.entities.Genome g =
+						net.hedinger.prototype.entities.Genome.child(scavengers[line], 0.03);
+				w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, g));
+			}
 		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
@@ -1566,7 +1579,13 @@ public final class Worlds {
 				// carrion supply, which is finite and self-limiting in a way grass is
 				// not: eating a body destroys it, so a scavenger bloom consumes its
 				// own larder and starves back without the steward touching it.
-				new int[] { Math.max(3, sc(3, scale)), Math.max(60, sc(60, scale)) }));
+				//
+				// The floor matches the seeded cohort rather than sitting under it. At
+				// three, a cohort held AT the floor was three animals scattered across
+				// the map, which with diet as a mate barrier is not a breeding
+				// population -- the warden was keeping the niche occupied and extinct
+				// at the same time.
+				new int[] { Math.max(6, sc(6, scale)), Math.max(60, sc(60, scale)) }));
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
