@@ -262,9 +262,9 @@ public class SimTests {
 			World w = room(16, 10);
 			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
 
-			// Five tiles east — inside the genome's losRange of 6. Placed beyond it,
-			// the scavenger correctly senses nothing, which is sight working rather
-			// than foraging failing.
+			// Five tiles east. Carrion is smelled at a flat CARRION_SCENT_R rather than
+			// seen at the genome's losRange, so this is well inside range; placed
+			// beyond it the scavenger correctly senses nothing.
 			TestNPC body = TestNPC.breeder(8.5, 5.5, 0, g);
 			w.spawnEntity(body);
 			tick(w, 2);
@@ -297,6 +297,52 @@ public class SimTests {
 	}
 
 	/**
+	 * A carcass is worth what a kill of the same mass is worth. Meat is meat: what
+	 * separates a hunter from a scavenger is the chase and the risk on one side and
+	 * the search on the other, not the price of the meal.
+	 *
+	 * <p>This also pins that rot is charged exactly once. Eating advances the same
+	 * clock decay does, so a half-rotted body has half its bites left and yields
+	 * half as much on its own; multiplying the per-bite rate by freshness as well
+	 * discounted the same rot twice and left a whole fresh carcass worth half a
+	 * kill.
+	 */
+	static class ACarcassIsWorthWhatAKillIsWorth extends Scenario {
+		@Override
+		public void run() {
+			seed(34);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+
+			// Strip one whole carcass, from perfectly fresh, and total the takings.
+			World w = room(12, 12);
+			TestNPC body = TestNPC.breeder(6.5, 6.5, 0, g);
+			w.spawnEntity(body);
+			tick(w, 2);
+			body.damage(500);
+			tick(w, 1);
+			assertTrue("there is a fresh carcass", body.isDead());
+			double bodyMass = body.bodyMass();
+
+			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder).withDiet(TestNPC.Diet.SCAVENGER);
+			w.spawnEntity(scav);
+			tick(w, 1);
+			double before = scav.getEnergy();
+			// Long enough to consume the body outright; a non-metabolic body spends
+			// nothing meanwhile, so the gain is the meal and nothing else.
+			tick(w, 400);
+			assertTrue("the carcass has been eaten away", body.isRemoved() || body.decayProgress() >= 1.0);
+			double fromCarrion = scav.getEnergy() - before;
+
+			// The same mass taken as prey: a predator consuming a whole body earns
+			// MEAT_ENERGY per unit of it.
+			double fromKill = 2.5 * bodyMass;
+			assertNear("a whole carcass pays what a whole kill pays",
+					fromKill, fromCarrion, fromKill * 0.05);
+		}
+	}
+
+	/**
 	 * What a lineage eats is inherited. A scavenger's child is a scavenger, budded
 	 * or crossed — without which the niche cannot grow whatever else is true of it,
 	 * because every scavenger that ever managed to breed produced a grazer and the
@@ -314,7 +360,7 @@ public class SimTests {
 			bud.sexuality = 0.0; // buds
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC parent = TestNPC.minded(4.5, 4.5, 0, bud, breeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic().withDeathspan(777);
 			parent.withEnergy(parent.energyCapacity());
 			w.spawnEntity(parent);
 			w.think();
@@ -322,6 +368,15 @@ public class SimTests {
 			assertGreater("the scavenger budded", w.getAliveCount(), 1);
 			assertEquals("and every one of its young is a scavenger too",
 					0, countRolesOtherThan(w, "scavenger"));
+			// Diet is not the only body trait the genome does not carry. A minded
+			// child used to inherit none of them -- only the plain-breeder branch
+			// remembered corpse lifespan, and nothing remembered diet.
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t != parent && !t.isRemoved()) {
+					assertEquals("a child keeps its lineage's corpse lifespan",
+							parent.getDeathspan(), t.getDeathspan());
+				}
+			}
 
 			// Sexual: a compatible pair, both scavengers, crossing over.
 			World pair = room(14, 14);
@@ -408,8 +463,8 @@ public class SimTests {
 			World w = room(30, 12);
 			Genome g = Genome.phenotype(9, 0.0, 5, 30, Math.PI * 2, 100000);
 
-			// One carcass east. The scavenger stands west of it and walks.
-			TestNPC near = TestNPC.breeder(14.5, 5.5, 0, g);
+			// One carcass east, comfortably inside scent range rather than on its edge.
+			TestNPC near = TestNPC.breeder(11.5, 5.5, 0, g);
 			w.spawnEntity(near);
 			tick(w, 2);
 			near.damage(500);
@@ -5024,6 +5079,7 @@ public class SimTests {
 				new ForageIgnoresFoodBehindWalls(),
 				new ScavengerEatsCarrionAndHastensItsDecay(),
 				new ScavengerForagesTowardBodies(),
+				new ACarcassIsWorthWhatAKillIsWorth(),
 				new ScavengerYoungAreScavengers(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),
