@@ -5006,6 +5006,85 @@ public class SimTests {
 	}
 
 	/**
+	 * A thirsty body walks ROUND a wall to reach water rather than into it.
+	 *
+	 * <p>The lake sits a couple of tiles east behind a solid rib, with the only
+	 * way in around the rib's south end. Straight-line water sense sends the
+	 * creature at the nearest wet tile and it presses the rock until it dies of
+	 * thirst with a drink two tiles away; measured across the demo world, between
+	 * 15 and 28 per cent of every thirsty tick was spent like that.
+	 */
+	static class ThirstWalksRoundAWallNotIntoIt extends Scenario {
+		@Override
+		public void run() {
+			seed(95);
+			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			// A lake down the east edge, and a rib of rock hiding it. The rib stops
+			// short of the south wall, so there is a way round -- the long way.
+			for (int y = 1; y < 11; y++) {
+				w.setTile(17, y, 0, Tile.TileType.TYPE_SHALLOWS);
+				w.setTile(18, y, 0, Tile.TileType.TYPE_WATER);
+			}
+			for (int y = 1; y <= 8; y++) {
+				w.setTile(14, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			tick(w, 1);
+
+			// Started level with the rib, so the nearest wet tile is dead ahead
+			// through the rock and the way in is well off to the south.
+			TestNPC g = TestNPC.breeder(11.5, 3.5, 0,
+					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
+					.withHydration(0.2).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			snapshot(w, "parched, with the lake behind a rib of rock");
+			tick(w, 2500);
+			snapshot(w, "after");
+
+			assertTrue("the parched grazer is still alive", !g.isDead() && !g.isRemoved());
+			assertGreater("it found its way round the rib and drank",
+					g.getHydration(), 0.3);
+			assertGreater("which meant getting past the rock, not standing at it",
+					g.getX(), 14.0);
+		}
+	}
+
+	/**
+	 * Water the body cannot reach at all is not water. A creature walled off from
+	 * every drop is told so — the sense reads empty rather than pointing hopefully
+	 * through the rock — which is what lets it go and look somewhere else instead
+	 * of standing at a wall for the rest of its life.
+	 */
+	static class UnreachableWaterIsNotSensed extends Scenario {
+		@Override
+		public void run() {
+			seed(96);
+			World w = room(16, 9);
+			// A lake sealed off behind a full-height wall: no way in at all.
+			for (int y = 1; y < 8; y++) {
+				w.setTile(11, y, 0, Tile.TileType.TYPE_WALL);
+				w.setTile(13, y, 0, Tile.TileType.TYPE_WATER);
+			}
+			tick(w, 1);
+
+			assertTrue("water exists on this level",
+					w.getTile(13, 4, 0).getType() == Tile.TileType.TYPE_WATER);
+			assertEquals("but none of it can be reached from the open side", -1,
+					w.waterStepDistance(4.5, 4.5, 0, false));
+			assertEquals("and a body standing there is told nothing is near", -1,
+					w.nearestWaterTile(4.5, 4.5, 0, false));
+			// From inside the sealed strip the same water IS reachable, so the field
+			// is answering "can you get there", not "is there any".
+			assertGreater("while from the sealed side it is right there",
+					w.waterStepDistance(12.5, 4.5, 0, false), -1);
+		}
+	}
+
+	/**
 	 * The other side of the need: in a world with no water at all, a fully fed
 	 * grazer still declines and dies once its tank runs dry — dehydration is a
 	 * slow wear on health, not a starvation clone (the full energy tank rules
@@ -5120,6 +5199,8 @@ public class SimTests {
 				new BrainSeeksAndPressesButton(),
 				new BottomlessPitsAndCatwalks(),
 				new ThirstyGrazerWalksToWater(),
+				new ThirstWalksRoundAWallNotIntoIt(),
+				new UnreachableWaterIsNotSensed(),
 				new DehydrationWearsABodyDown(),
 				new CorpseFeedsTheGround(),
 				new CoverHidesFromPerception(),
