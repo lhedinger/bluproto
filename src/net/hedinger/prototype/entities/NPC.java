@@ -73,7 +73,7 @@ public abstract class NPC extends Entity {
 	 * units, or ~1970 ticks — about one minute at 33 ticks/s, the longest
 	 * childhood the world can produce.
 	 */
-	protected static final double GROWTH_RATE = 0.0066;
+	public static final double GROWTH_RATE = 0.0066;
 
 	/** Adult body this creature is growing toward; 0 for a body that does not grow. */
 	protected double adultSize = 0;
@@ -106,6 +106,17 @@ public abstract class NPC extends Entity {
 	 */
 	public static int growthTicks(double adult) {
 		return (int) Math.round((1 - BIRTH_SIZE_FRACTION) * adult / GROWTH_RATE);
+	}
+
+	/** The adult body this creature is still growing toward, or 0 when it is
+	 *  not growing — in TILES, matching {@link #getSize()}'s wire convention
+	 *  (the raw fields are in pixels). Growth is deterministic
+	 *  ({@link #GROWTH_RATE} pixels per tick, clamped at the adult body), so
+	 *  the observation seam can hand a viewer the target and let it
+	 *  extrapolate the size itself. */
+	public double getGrowthTarget() {
+		return adultSize > 0 && grownSize < adultSize
+				? adultSize / ResourceManager.tileSize : 0;
 	}
 
 	/**

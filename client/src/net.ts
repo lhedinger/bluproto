@@ -2,6 +2,7 @@
 // command token (from the URL hash, /#t=SECRET) to outgoing commands, and
 // reconnects with backoff — a phone locking its screen mid-watch just resumes.
 
+import { decodeBin } from './binproto';
 import type { Command, ServerMsg } from './protocol';
 
 export type NetStatus = 'connecting' | 'open' | 'closed';
@@ -34,7 +35,12 @@ export class Net {
   connect(): void {
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     this.setStatus('connecting');
-    const ws = new WebSocket(proto + location.host + '/api/world/stream');
+    // ?bin=1 opts into the binary entity stream (server/BinaryProtocol.java):
+    // birth records once, 14-byte poses thereafter — ~10x smaller and parsed
+    // without the 10Hz JSON allocation storm. Control frames stay JSON text;
+    // tooling that connects without the flag still gets full JSON.
+    const ws = new WebSocket(proto + location.host + '/api/world/stream?bin=1');
+    ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onopen = () => {
       this.backoff = 500;
@@ -45,11 +51,13 @@ export class Net {
       // work the frame loop never sees — the perf HUD reads these to tell
       // "renderer slow" apart from "stream eating the thread".
       const t0 = performance.now();
-      const msg = JSON.parse(ev.data) as ServerMsg;
-      this.onMsg(msg, t0);
+      const bin = ev.data instanceof ArrayBuffer;
+      const msg = bin ? decodeBin(ev.data) : JSON.parse(ev.data) as ServerMsg;
+      if (msg) this.onMsg(msg, t0);
       const stats = Net.streamStats;
       stats.msgMs += (performance.now() - t0 - stats.msgMs) * 0.2;
-      stats.msgKb += (ev.data.length / 1024 - stats.msgKb) * 0.2;
+      const bytes = bin ? (ev.data as ArrayBuffer).byteLength : ev.data.length;
+      stats.msgKb += (bytes / 1024 - stats.msgKb) * 0.2;
       stats.count++;
     };
     ws.onclose = () => {
