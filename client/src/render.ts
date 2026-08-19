@@ -107,6 +107,30 @@ let deplBulkAt = 0;
 const DEPL_BULK_MIN_MS = 3000;
 const ART = 12;
 
+// The repaint QUEUE: tiles whose bucket moved, waiting for their ditherTile.
+// A herd's grazing plus world-wide REGROWTH can move thousands of buckets per
+// vegetation poll on an old world, and repainting them all in the poll's
+// frame was a 60-130ms main-thread stall — every 1.5s, surface only (caves
+// have no vegetation), which is exactly the "surface lags, underground is
+// fine" signature. Repaints now drain at a frame budget; the dither runs a
+// few frames behind the data, which on a field that changes over minutes is
+// invisible. The budget rises while the queue is deep (a fresh level's whole
+// depleted field) so the initial paint takes a moment, not a freeze.
+let deplQueue: number[] = [];
+let deplQHead = 0;
+let deplQueued: Uint8Array | null = null;
+const DEPL_TILES_PER_FRAME = 96;
+// A queue this deep is a whole level's backlog (fresh join, level switch),
+// not steady churn — drain faster so the field paints in a couple of
+// seconds. Kept modest: a rush frame must still fit a phone's budget.
+const DEPL_TILES_RUSH = 256;
+const DEPL_RUSH_DEPTH = 8000;
+
+function bucketOf(lvl: number): number {
+  return (lvl >= 100 || lvl === 255) ? 0
+    : Math.max(0, Math.min(16, Math.round((100 - lvl) * 16 / 100)));
+}
+
 function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     getBareChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
     veg: Uint8Array, level: number, nowMs: number): HTMLCanvasElement | null {
@@ -115,8 +139,8 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   // An owed bulk upload whose rate-limit window just opened re-enters even if
   // the vegetation itself brought nothing new this frame.
   const bulkDue = deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS;
-  const stale = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt) || bulkDue;
-  if (!stale) return deplLayer;
+  const scanDue = full || veg !== deplSrc || (deplMissing > 0 && nowMs >= deplRetryAt);
+  if (!scanDue && deplQHead >= deplQueue.length && !bulkDue) return deplLayer;
   if (full) {
     if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
       deplLayer = document.createElement('canvas');
@@ -125,6 +149,14 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     }
     deplLayer.getContext('2d')!.clearRect(0, 0, deplLayer.width, deplLayer.height);
     deplBuckets = new Int16Array(meta.cols * meta.rows); // all painted "lush"
+    deplQueue = [];
+    deplQHead = 0;
+    deplQueued = new Uint8Array(meta.cols * meta.rows);
+    deplLevel = level;
+    deplRev++; // ship the cleared layer NOW; the dither drains in behind it
+    deplPatchRects = null;
+    deplPending = [];
+    deplBulkAt = nowMs;
   }
   const layer = deplLayer!; // allocated above whenever it was missing or stale
   const ctx = layer.getContext('2d')!;
@@ -134,54 +166,53 @@ function depletionLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     deplLayerLow = document.createElement('canvas');
     deplLayerLow.width = meta.cols * LOW;
     deplLayerLow.height = meta.rows * LOW;
+    deplLayerLow.getContext('2d')!.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
   }
   const lg = deplLayerLow.getContext('2d')!;
   lg.imageSmoothingEnabled = true;
-  deplMissing = 0;
-  const patched: number[] = []; // tiles whose layer cell was repainted this pass
-  for (let ty = 0; ty < meta.rows; ty++) {
-    for (let tx = 0; tx < meta.cols; tx++) {
-      const i = ty * meta.cols + tx;
-      const lvl = veg[i];
-      const bucket = (lvl >= 100 || lvl === 255) ? 0
-        : Math.max(0, Math.min(16, Math.round((100 - lvl) * 16 / 100)));
-      if (deplBuckets![i] === bucket) continue;
-      ctx.clearRect(tx * ART, ty * ART, ART, ART);
-      if (bucket > 0) {
-        const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-        const bare = getBareChunk(ccx, ccy);
-        if (!bare) { deplMissing++; deplBuckets![i] = -1; continue; }
-        ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
-          tilePx, tx * ART, ty * ART, ART, ART, bucket);
+  if (full) lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
+  if (scanDue) {
+    // Cheap pass: FIND the moved buckets (integer compares over the grid);
+    // the expensive painting is what the queue meters out.
+    deplMissing = 0;
+    for (let i = 0; i < deplBuckets!.length; i++) {
+      if (bucketOf(veg[i]) !== deplBuckets![i] && !deplQueued![i]) {
+        deplQueued![i] = 1;
+        deplQueue.push(i);
       }
-      deplBuckets![i] = bucket;
-      patched.push(i);
     }
+    deplSrc = veg;
+    deplRetryAt = nowMs + 1000; // if chunks were missing, look again shortly
   }
-  // Mip maintenance is a trade of two per-call costs: patching each changed
-  // tile's 3x3 cell beats one whole-layer smooth downscale for the steady
-  // trickle a veg poll brings, but loses badly for bulk changes (a full
-  // rebuild patching every tile is seconds of per-call overhead). Cross-over
-  // is a few hundred tiles.
-  if (full || patched.length > 256) {
-    lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
-    lg.drawImage(layer, 0, 0, deplLayerLow.width, deplLayerLow.height);
-  } else {
-    for (const i of patched) {
-      const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
-      lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
-      lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+  const budget = deplQueue.length - deplQHead > DEPL_RUSH_DEPTH
+    ? DEPL_TILES_RUSH : DEPL_TILES_PER_FRAME;
+  const patched: number[] = []; // tiles repainted THIS frame
+  let work = 0;
+  while (work < budget && deplQHead < deplQueue.length) {
+    const i = deplQueue[deplQHead++];
+    deplQueued![i] = 0;
+    const bucket = bucketOf(veg[i]); // re-read: the field moved on since enqueue
+    if (bucket === deplBuckets![i]) continue;
+    const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
+    ctx.clearRect(tx * ART, ty * ART, ART, ART);
+    if (bucket > 0) {
+      const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
+      const bare = getBareChunk(ccx, ccy);
+      if (!bare) { deplMissing++; deplBuckets![i] = -1; work++; continue; }
+      ditherTile(ctx, bare, (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx,
+        tilePx, tx * ART, ty * ART, ART, ART, bucket);
     }
+    deplBuckets![i] = bucket;
+    lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
+    lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
+    patched.push(i);
+    work++;
   }
-  deplSrc = veg;
-  deplLevel = level;
-  deplRetryAt = nowMs + 1000; // if chunks were missing, try again shortly
-  if (full) {
-    deplRev++; // whole layer changed (level switch, first build): ship NOW
-    deplPatchRects = null;
-    deplPending = [];
-    deplBulkAt = nowMs;
-  } else if (patched.length > 0 || deplPending === null) {
+  if (deplQHead >= deplQueue.length) {
+    deplQueue = [];
+    deplQHead = 0;
+  }
+  if (patched.length > 0 || deplPending === null) {
     if (deplPending !== null) {
       for (const i of patched) deplPending.push(i);
       if (deplPending.length > 256) deplPending = null; // overflow: a bulk is owed
