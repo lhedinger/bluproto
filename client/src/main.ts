@@ -134,6 +134,29 @@ function levelName(z: number): string {
   return z === top ? 'surface' : z === 0 ? 'underground' : `level ${z}`;
 }
 
+// ---- perf experiment toggles ----------------------------------------------
+// Each visual subsystem can be switched off with `<flag>=0` in the URL, so
+// its cost can be isolated on a real device by A/B-ing two loads. The ⚙
+// button beside the perf HUD opens a dialog that flips these and reloads.
+// veg=0 additionally stops the vegetation polling itself (no grid → the
+// render paths skip the whole depletion machinery).
+const PERF_FLAGS: Array<[string, string]> = [
+  ['veg', 'vegetation & dither'],
+  ['phero', 'pheromone clouds'],
+  ['canopy', 'canopy veils & lids'],
+  ['sprites', 'creature sprites (off = dots)'],
+  ['overlay', 'badges, rings & links'],
+  ['minimap', 'minimap'],
+  ['lod', 'adaptive dot LOD'],
+  ['gl', 'webgl renderer (off = canvas2d)'],
+];
+const flagOff = (k: string): boolean => new RegExp('[?&]' + k + '=0\\b').test(location.search);
+const VEG_OFF = flagOff('veg');
+const MINIMAP_OFF = flagOff('minimap');
+// The HUD's one-line record of what this load has switched off, so every
+// screenshot documents its own experiment.
+const perfOffStr = PERF_FLAGS.filter(([k]) => k !== 'gl' && flagOff(k)).map(([k]) => k).join(',');
+
 // Live grass levels (one byte per tile) polled from the server, so grazing
 // depletion and regrowth show as dirt over the static baked grass.
 let vegGrid: Uint8Array | null = null;
@@ -152,6 +175,7 @@ async function pollVeg(): Promise<void> {
   }
 }
 function startVegPolling(): void {
+  if (VEG_OFF) return;
   clearInterval(vegTimer);
   pollVeg();
   vegTimer = window.setInterval(pollVeg, 1500);
@@ -898,9 +922,63 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'h' && !(ev.target instanceof HTMLInputElement)) {
     hudOn = !hudOn;
     hudEl.style.display = hudOn ? 'block' : 'none';
+    perfBtn.style.display = hudOn ? '' : 'none';
   }
 });
 if (hudOn) hudEl.style.display = 'block';
+
+// ---- the ⚙ perf-toggle dialog ---------------------------------------------
+// Rides with the HUD: checkboxes for the visual subsystems, applied by
+// reloading with the matching `<flag>=0` URL params (each flag is a
+// load-time constant, so a reload keeps the render paths branch-free).
+if (MINIMAP_OFF) mm.style.display = 'none';
+const perfBtn = document.createElement('button');
+perfBtn.textContent = '⚙';
+perfBtn.title = 'perf toggles (reloads with url flags)';
+perfBtn.style.display = hudOn ? '' : 'none';
+document.getElementById('bar')!.insertBefore(perfBtn, statsEl);
+perfBtn.onclick = () => {
+  const old = document.getElementById('perfdlg');
+  if (old) { old.remove(); return; }
+  const dlg = document.createElement('div');
+  dlg.id = 'perfdlg';
+  dlg.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);'
+    + 'background:#1d2026f2;border:1px solid #3a3f4a;border-radius:10px;'
+    + 'padding:12px 16px;z-index:20;backdrop-filter:blur(4px);min-width:250px;'
+    + 'font-size:13px';
+  const h = document.createElement('div');
+  h.textContent = 'visual subsystems';
+  h.style.cssText = 'font-weight:600;margin-bottom:8px';
+  dlg.append(h);
+  const boxes = new Map<string, HTMLInputElement>();
+  for (const [k, label] of PERF_FLAGS) {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !flagOff(k);
+    boxes.set(k, cb);
+    const span = document.createElement('span');
+    span.textContent = label;
+    row.append(cb, span);
+    dlg.append(row);
+  }
+  const apply = document.createElement('button');
+  apply.textContent = 'apply & reload';
+  apply.style.cssText = 'margin-top:10px;width:100%;padding:7px;background:#24404a80;'
+    + 'color:#a6d8ff;border:1px solid #2f6b7a;border-radius:6px;font:inherit';
+  apply.onclick = () => {
+    const sp = new URLSearchParams(location.search);
+    for (const [k] of PERF_FLAGS) {
+      if (boxes.get(k)!.checked) sp.delete(k); // default-on: absent = enabled
+      else sp.set(k, '0');
+    }
+    if (hudOn) sp.set('hud', '1'); // keep the HUD (and this button) after reload
+    location.search = sp.toString();
+  };
+  dlg.append(apply);
+  document.body.append(dlg);
+};
 
 function hudFrame(now: number): void {
   if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
@@ -934,7 +1012,8 @@ function hudFrame(now: number): void {
     }).catch(() => { hudTick = ''; });
   }
   const net2 = Net.streamStats;
-  hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'} · ${(1000 / hudFrameEma).toFixed(0)} fps`
+  hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'}${perfOffStr ? ` · OFF: ${perfOffStr}` : ''}`
+    + ` · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms · cb ${hudCbEma.toFixed(1)})`
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
@@ -979,7 +1058,7 @@ function frame(now: number): void {
   // The minimap is ambient, not mission-critical: entity drift redraws at
   // 4 Hz, but a camera move redraws at once so the viewport rectangle never
   // visibly lags a pan or zoom.
-  if (meta && (now - lastMini > 250
+  if (!MINIMAP_OFF && meta && (now - lastMini > 250
       || cam.cx !== miniCx || cam.cy !== miniCy || cam.scale !== miniScale)) {
     lastMini = now;
     miniCx = cam.cx; miniCy = cam.cy; miniScale = cam.scale;

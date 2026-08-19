@@ -351,6 +351,14 @@ let herdMode = false;
 // harness (client/bench) uses it so a zoom band always exercises the draw
 // tier it targets instead of whatever the load feedback picked that run.
 const LOD_LOCKED = typeof location !== 'undefined' && /[?&]lod=0\b/.test(location.search);
+// Perf experiment switches (the ⚙ dialog in main.ts writes these): each
+// disables one visual subsystem so its cost can be isolated on a device.
+const flagOff = (k: string): boolean =>
+  typeof location !== 'undefined' && new RegExp('[?&]' + k + '=0\\b').test(location.search);
+const SPRITES_OFF = flagOff('sprites'); // creatures as dots only
+const PHERO_OFF = flagOff('phero');     // pheromone clouds
+const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
+const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 
 function adaptiveDotLod(nowMs: number): number {
   if (LOD_LOCKED) return DOT_LOD_PX;
@@ -400,7 +408,7 @@ export function render(
     { id: null, tile: null },
 ): void {
   const cv = g.canvas;
-  const dotLod = adaptiveDotLod(nowMs);
+  const dotLod = SPRITES_OFF ? Infinity : adaptiveDotLod(nowMs);
   g.fillStyle = '#14161a';
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
@@ -509,6 +517,7 @@ export function render(
     if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
 
     if (e.kind === 'phero') {
+      if (PHERO_OFF) continue;
       const r = Math.max(2, e.size * cam.scale);
       g.imageSmoothingEnabled = true; // the haze's tint stays soft by design
       g.drawImage(pheroPuff(), s.x - r, s.y - r, r * 2, r * 2);
@@ -523,7 +532,7 @@ export function render(
     if (carrier) {
       const cp = state.sample(carrier, renderTime);
       const cs = cam.worldToScreen(cp.x, cp.y);
-      drawCarryLink(g, s.x, s.y, cs.x, cs.y, cam.scale);
+      if (!OVERLAY_OFF) drawCarryLink(g, s.x, s.y, cs.x, cs.y, cam.scale);
     }
 
     if (e.kind === 'nest') {
@@ -630,10 +639,11 @@ export function render(
     // zoomed-out map view. Badges therefore fade out as you pull back and appear
     // as you zoom in on what a creature is actually doing.
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
-      drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
+      if (!OVERLAY_OFF) drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
     }
 
-    if (e.flags & F_GRABBED) drawRing(g, 'grabbed', s.x, s.y, r);
+    if (OVERLAY_OFF) { /* badges, rings and links are the experiment's cost */ }
+    else if (e.flags & F_GRABBED) drawRing(g, 'grabbed', s.x, s.y, r);
     else if (e.flags & F_CARRYING) drawRing(g, 'carrying', s.x, s.y, r);
 
     // Follow highlight: a gentle pulsing ring around the tracked creature.
@@ -647,7 +657,7 @@ export function render(
   // sight-blocker is part-hidden, matching the fact that cover blocks line of
   // sight. Foliage veils (thicket, reeds) blit from the cached layer — crisp
   // art-pixels near, the smoothed mip far.
-  if (cover && chunkTiles > 0 && tilePx > 0) {
+  if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
     const layer = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
     const o = cam.worldToScreen(0, 0);
     const src = cam.scale < ART && canopyLow ? canopyLow : layer;
@@ -766,7 +776,7 @@ export function renderGL(
   const sec = { secLayers: 0, secEnts: 0, secTail: 0 };
   const lap = (k: keyof typeof sec) => { const n = performance.now(); sec[k] += n - t0; t0 = n; };
   const cv = og.canvas;
-  const dotLod = adaptiveDotLod(nowMs);
+  const dotLod = SPRITES_OFF ? Infinity : adaptiveDotLod(nowMs);
   glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
   og.clearRect(0, 0, cv.width, cv.height);
   if (!meta) return { ...glr.end(), ...sec };
@@ -845,6 +855,7 @@ export function renderGL(
     if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
 
     if (e.kind === 'phero') {
+      if (PHERO_OFF) continue;
       const r = Math.max(2, e.size * cam.scale);
       const puff = pheroPuff();
       glr.sprite('phero', puff, 1, 0, 0, puff.width, puff.height, s.x - r, s.y - r, r * 2, r * 2);
@@ -950,7 +961,7 @@ export function renderGL(
 
   lap('secEnts');
   // Concealment over the creatures, then lids over occupants (see render()).
-  if (cover && chunkTiles > 0 && tilePx > 0) {
+  if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
     const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
     if (lowZoom && canopyLow) {
       glr.layer('canopylo', canopyLow, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
@@ -996,9 +1007,11 @@ export function renderGL(
   }
   for (const e of ovDoors) drawDoor(og, cam, e);
   for (const [e, door] of ovSwitches) drawSwitch(og, cam, e, door);
-  for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
-  for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
-  for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, renderTime);
+  if (!OVERLAY_OFF) {
+    for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
+    for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
+    for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, renderTime);
+  }
   lap('secTail');
   return { ...stats, ...sec };
 }
