@@ -85,12 +85,24 @@ public class TestNPC extends NPC {
 	 */
 	private static final double MEAT_ENERGY = 2.5;
 	/**
-	 * Energy in a whole FRESH carcass to a scavenger, per unit of body mass — the
-	 * carrion counterpart of {@link #MEAT_ENERGY}. Lower than predation on purpose:
-	 * a scavenger is paid less per kilo than the hunter that took the risk, which is
-	 * what keeps hunting worth doing in a world now carpeted with corpses.
+	 * Energy paid per unit of carcass mass at full freshness — the carrion
+	 * counterpart of {@link #MEAT_ENERGY}.
+	 *
+	 * <p>Read the headline number with care: a bite is priced by the freshness the
+	 * body has LEFT, and eating is what rots it ({@link #scavenge}), so freshness
+	 * falls from 1 to 0 across a meal and a carcass eaten from perfectly fresh
+	 * realises half this — about 3 per unit mass against a hunter's 2.5, before the
+	 * carcass has aged at all. In practice a scavenger arrives at a body some
+	 * hundreds of ticks old and collects appreciably less than that.
+	 *
+	 * <p>It has to be a windfall, because the search is the job. A grazer stands in
+	 * its food; a scavenger measured on five seeds had a carcass within biting
+	 * distance on 0.87 per cent of its ticks and spent the rest walking between
+	 * bodies. One carcass must cover the thousands of ticks of upkeep spent finding
+	 * it, or the niche is a slow death — at the old 1.2 the whole cohort ran a
+	 * permanent energy deficit and was kept alive entirely by the warden's floor.
 	 */
-	private static final double CARRION_ENERGY = 1.2;
+	private static final double CARRION_ENERGY = 6.0;
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
 	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
@@ -100,6 +112,45 @@ public class TestNPC extends NPC {
 	private static final double CARRION_BITE = 0.015;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
 	private static final double CARRION_REACH = 0.6;
+	/**
+	 * How far a scavenger can locate a carcass — smell, not sight, so it reaches
+	 * well past {@code LOS_RANGE} and through the dark.
+	 *
+	 * <p>A grazer stands in its food: measured, one is in view on 98% of its ticks
+	 * and averages 1.6 tiles away. A scavenger's food is wherever something happened
+	 * to die, and at sight range it had a target on only 38% of ticks — the other 62%
+	 * it wandered at random, which is why it fed on 2.4% of ticks and earned a sixth
+	 * of what a grazer of the same mass did. Carrion detection is what a scavenger IS,
+	 * so it gets a sense to match the niche rather than a payout large enough to
+	 * excuse the searching.
+	 */
+	private static final double CARRION_SCENT_R = 40.0;
+	/**
+	 * How much faster a scavenger's top speed is than the body it was built from —
+	 * the ranging adaptation that pays for the scent.
+	 *
+	 * <p>Measured, this is the constraint the niche actually failed on. A carcass
+	 * lasts about as long as a child takes to grow (roughly 800-1600 ticks), and a
+	 * scavenger that smells one 20 tiles off closes at ~0.012 tiles per tick — it
+	 * arrives, when it arrives at all, to bare ground. On seed 11 the cohort had a
+	 * carcass in view on 58 per cent of its ticks and fed on 0.28 of them. Smelling
+	 * food you cannot reach in time is not a living, so the sense is worth nothing
+	 * without the legs.
+	 *
+	 * <p>Movement costs the square of speed, so this is a trade rather than a gift:
+	 * a scavenger burns more travel energy per carcass and eats the ones a slower
+	 * body never reaches at all.
+	 */
+	private static final double SCAVENGER_STRIDE = 2.5;
+	/**
+	 * What a scavenger pays to cover ground, as a share of an ordinary body's bill.
+	 * Ranging cheaply is the other half of the same adaptation — a vulture's living
+	 * is made by covering far more ground per calorie than the animals it eats, not
+	 * by sprinting — and it is what makes {@link #SCAVENGER_STRIDE} affordable at
+	 * all, since travel is billed on the square of speed. Together they come to
+	 * roughly 2.5x the distance for the energy an ordinary body spends.
+	 */
+	private static final double SCAVENGER_TRAVEL = 0.16;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
@@ -494,6 +545,7 @@ public class TestNPC extends NPC {
 	public static TestNPC mindedScavenger(double x, double y, double z, Genome g) {
 		TestNPC t = mindedForager(x, y, z, g);
 		t.diet = Diet.SCAVENGER;
+		t.speed *= SCAVENGER_STRIDE;
 		return t;
 	}
 
@@ -1425,26 +1477,71 @@ public class TestNPC extends NPC {
 		if (getWorld() == null) {
 			return;
 		}
-		double best = 0;
+		// Still walking to the body it already chose. A carcass does not move, so
+		// the only reasons to look again are that it is gone or that this body has
+		// arrived; short of those, the choice stands.
+		NPC held = heldCarrion();
+		if (held != null) {
+			forageCol = (int) held.getX();
+			forageRow = (int) held.getY();
+			return;
+		}
+		NPC best = null;
+		double bestScore = 0;
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
 			if (n == this || !n.isDead() || n.isRemoved()) {
 				continue;
 			}
 			double dist = distance(n.getX(), n.getY(), n.getZ());
-			if (dist > LOS_RANGE) {
+			if (dist > CARRION_SCENT_R) {
 				continue;
 			}
 			double score = n.bodyMass() * (1.0 - n.decayProgress()) / (1.0 + dist);
 			// Same reachability rule as the grazer's forage: a carcass on the far
 			// side of rock is not a meal, it is a wall to press against.
-			if (score > best && walkableLineTo((int) n.getX(), (int) n.getY())) {
-				best = score;
-				forageCol = (int) n.getX();
-				forageRow = (int) n.getY();
+			if (score > bestScore && walkableLineTo((int) n.getX(), (int) n.getY())) {
+				bestScore = score;
+				best = n;
 			}
 		}
+		carrionTarget = best;
+		if (best != null) {
+			forageCol = (int) best.getX();
+			forageRow = (int) best.getY();
+		}
 	}
+
+	/**
+	 * The carcass this body is already walking to, if that choice is still worth
+	 * keeping; null when it should look again.
+	 *
+	 * <p>Commitment is the whole of it. Scoring every carcass in scent range afresh
+	 * each tick sounds like keeping up to date, but with dozens of bodies in range
+	 * and scores as close as {@code mass * freshness / (1 + dist)} makes them, the
+	 * winner changes hands constantly and the creature turns toward a new one every
+	 * few steps. Measured, that left a scavenger with a target in view on 37% of
+	 * its ticks and actually within biting distance on 0.87% — it spent its life
+	 * walking between carcasses without reaching any. The grazer's forage has always
+	 * committed to a chosen patch for exactly this reason; the carrion path opted out
+	 * on the grounds that a body can be eaten out from under it, which is true and is
+	 * handled here by dropping a target that has gone rather than by re-deciding
+	 * every tick.
+	 */
+	private NPC heldCarrion() {
+		NPC t = carrionTarget;
+		if (t == null) {
+			return null;
+		}
+		if (t.isRemoved() || !t.isDead() || t.getLvl() != getLvl()) {
+			carrionTarget = null; // eaten, rotted away, or on the other level now
+			return null;
+		}
+		return t;
+	}
+
+	/** The carcass this body has committed to walking to; see {@link #heldCarrion}. */
+	private NPC carrionTarget = null;
 
 	/**
 	 * Whether this body could actually walk to the centre of tile
@@ -2276,6 +2373,30 @@ public class TestNPC extends NPC {
 		return mass;
 	}
 
+	/**
+	 * Diet is a reproductive barrier on top of the genome's own similarity test: a
+	 * grazer and a scavenger are not the same animal, whatever their markers say.
+	 *
+	 * <p>Without this a scavenger spends its scarce fertile ticks courting the far
+	 * more numerous herbivores around it, and because the child is built by whichever
+	 * parent closes the exchange, such a pairing yields a grazer either way --
+	 * measured on seed 7, the one fertile scavenger in 40k ticks held a 99-tick
+	 * courtship with a minded herbivore and produced nothing of its own kind. A
+	 * niche that cannot breed true is not a niche.
+	 */
+	@Override
+	protected double travelEfficiency() {
+		return diet == Diet.SCAVENGER ? SCAVENGER_TRAVEL : 1.0;
+	}
+
+	@Override
+	public boolean canMateWith(NPC other) {
+		if (other instanceof TestNPC t && t.diet != diet) {
+			return false;
+		}
+		return super.canMateWith(other);
+	}
+
 	/** The nearest carcass this body could bite right now, or null. Corpses only --
 	 *  a scavenger has no way to kill, so a living body is not food to it. */
 	private NPC carrionInReach() {
@@ -2502,6 +2623,7 @@ public class TestNPC extends NPC {
 			child.vigilant = vigilant; // a vigilant lineage stays predator-aware
 			child.withDeathspan(deathspan);
 		}
+		child.diet = diet; // what a lineage eats is inherited, like what it fears
 		return child.withGeneration(generation + 1);
 	}
 
@@ -2515,6 +2637,7 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
+		child.diet = diet; // a pair only breeds within its diet, so either parent's will do
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {
