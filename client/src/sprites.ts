@@ -18,7 +18,7 @@
 
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
-  mindedFor, mindedMipFor, tintedFor,
+  tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -26,8 +26,9 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  DOT_LOD_PX, VEIL_ALPHA, depletionStampFor, drawActionGlyph, drawCarryLink, drawDoor, drawDot,
-  drawItem, drawNest, drawPlaceholder, drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile,
+  DOT_LOD_PX, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA, depletionStampFor,
+  drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
+  drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
 
 const root = document.getElementById('root')!;
@@ -260,11 +261,57 @@ const depl = section('Grazing depletion',
   }), '<b>stage stamps</b> (1..4 × three variants)', depl);
 })();
 
-// ---- web-only bakes: living body, corpse, minded rim --------------------
+// ---- vegetation sprites ---------------------------------------------------
+
+const vegSec = section('Vegetation sprites',
+  'One-tile vegetation drawn OVER the floor: five growth stages per kind — stage 1 is '
+  + 'what depletion leaves (trampled remnants), stage 5 fully grown — four variants '
+  + 'each, transparent so the same sprite reads on any ground. Painted at art '
+  + 'resolution by the exported drawVegetationTile the world will stamp with.');
+
+for (const kind of VEG_KINDS) {
+  const S = 44, PAD = 6;
+  const W = VEG_STAGES * (S + PAD) + PAD, H = VEG_VARIANTS * (S + PAD) + PAD;
+  figure(liveCanvas(W, H, (g) => {
+    // Checkerboard under the sprites: transparency is the point.
+    for (let cy = 0; cy * 8 < H; cy++) {
+      for (let cx = 0; cx * 8 < W; cx++) {
+        g.fillStyle = (cx + cy) % 2 ? '#2e2a24' : '#3a352c';
+        g.fillRect(cx * 8, cy * 8, 8, 8);
+      }
+    }
+    g.imageSmoothingEnabled = false;
+    for (let v = 0; v < VEG_VARIANTS; v++) {
+      for (let st = 1; st <= VEG_STAGES; st++) {
+        g.drawImage(vegetationTileFor(kind, st, v),
+          PAD + (st - 1) * (S + PAD), PAD + v * (S + PAD), S, S);
+      }
+    }
+  }), `<b>${kind}</b> — stages 1..${VEG_STAGES} × ${VEG_VARIANTS} variants`, vegSec);
+  // The same sprites over two different grounds, cycling through growth:
+  // the transparency promise, demonstrated.
+  const D = 176, T = D / 4;
+  pair(vegSec, `${kind} growing on two grounds`, D * 2 + 12, D, (g, t) => {
+    const stage = 1 + Math.floor((t % 7.5) / 1.5);
+    for (const [gx, tone] of [[0, '#3f7a38'], [D + 12, '#584430']] as const) {
+      g.fillStyle = tone;
+      g.fillRect(gx, 0, D, D);
+      g.imageSmoothingEnabled = false;
+      for (let ty = 0; ty < 4; ty++) {
+        for (let tx = 0; tx < 4; tx++) {
+          g.drawImage(vegetationTileFor(kind, stage, (tx * 7 + ty * 5) % VEG_VARIANTS),
+            gx + tx * T, ty * T, T, T);
+        }
+      }
+    }
+  });
+}
+
+// ---- web-only bakes: living body, corpse ---------------------------------
 
 const bakes = section('Atlas bakes',
   'What the viewer itself makes of a creature\'s server-baked sprite atlas: the living '
-  + 'stamp, the drained corpse bake (colour stripped, body kept), and the minded rim. '
+  + 'stamp and the drained corpse bake (colour stripped, body kept). '
   + 'The atlas comes from a phenotype alive in this world right now.');
 
 /** The live sprite, once the stream and the atlas endpoint have produced one.
@@ -314,7 +361,7 @@ for (const [act, name, meaning] of EXPR) {
       g.drawImage(liveAtlas, anim * CELL, dir * CELL, CELL, CELL,
         bx - box / 2, by - box / 2, box, box);
     } else {
-      drawPlaceholder(g, bx, by, rb, (dir / 8) * Math.PI * 2, '#8b9bb4', false);
+      drawPlaceholder(g, bx, by, rb, (dir / 8) * Math.PI * 2, '#8b9bb4');
     }
     drawActionGlyph(g, bx, by - rb * 2.0, rb * 0.95, act);
   }), `<b>${name}</b> — ${meaning}`, expressions);
@@ -383,20 +430,8 @@ for (const [act, name, meaning] of EXPR) {
     figure(stamp(corpseFor(pheno, atlas, t)),
       `<b>rot ${i + 1}/${DECAY_STEPS}</b> (${Math.round(t * 100)}%)`, bakes);
   }
-  figure(liveCanvas(D, D, (g, t) => {
-    g.fillStyle = GRASS;
-    g.fillRect(0, 0, D, D);
-    const dir = Math.floor((t / 1.2) % 8);
-    const anim = Math.floor((t * 6) % 8);
-    g.imageSmoothingEnabled = false;
-    // The viewer's halo, pre-fused with the body (atlas.mindedFor) — the
-    // same single-draw stamp the live view uses at sprite zoom.
-    g.drawImage(mindedFor(tk, tinted), anim * CELL, dir * CELL, CELL, CELL, 0, 0, D, D);
-  }), '<b>minded rim</b> (violet halo, fused)', bakes);
-
   // The far-zoom mips: what the world view actually stamps when the whole map
-  // is in view — quarter-size cells, smoothed once at bake time, the minded
-  // variant with its rim fused in (one draw per creature).
+  // is in view — quarter-size cells, smoothed once at bake time.
   const M = CELL / MIP;
   const mipStamp = (src: HTMLCanvasElement) => liveCanvas(D, D, (g, t) => {
     g.fillStyle = GRASS;
@@ -407,7 +442,6 @@ for (const [act, name, meaning] of EXPR) {
     g.drawImage(src, anim * M, dir * M, M, M, 0, 0, D, D);
   });
   figure(mipStamp(atlasMipFor(tk, tinted)), '<b>far-zoom mip</b> (quarter cell)', bakes);
-  figure(mipStamp(mindedMipFor(tk, tinted)), '<b>minded mip</b> (rim fused)', bakes);
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
   } // end of the entries that need a live atlas
 
@@ -481,22 +515,22 @@ for (const [act, name, meaning] of EXPR) {
     g.fillRect(0, 0, 4 * S, S * 1.5);
     const y = S * 0.75;
     drawCarryLink(g, S, y, 3 * S, y, S);
-    drawPlaceholder(g, S, y, S * 0.2, t, '#5a8ab9', false);
-    drawPlaceholder(g, 3 * S, y, S * 0.2, -t, '#b95a8a', true);
-  }), 'pre-atlas placeholders (plain · minded) with a carry tether', overlay);
+    drawPlaceholder(g, S, y, S * 0.2, t, '#5a8ab9');
+    drawPlaceholder(g, 3 * S, y, S * 0.2, -t, '#b95a8a');
+  }), 'pre-atlas placeholders with a carry tether', overlay);
   figure(liveCanvas(6 * S, S * 1.5, (g) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 6 * S, S * 1.5);
     // Actual map-view size on the left, the same dots at 6x beside them.
     const y = S * 0.75, d = DOT_LOD_PX - 2;
-    drawDot(g, S * 0.5, y, d, '#5a8ab9', false, false);
-    drawDot(g, S * 0.85, y, d, '#b95a8a', true, false);
-    drawDot(g, S * 1.2, y, d, '', false, true);
-    drawDot(g, S * 2.6, y, d * 6, '#5a8ab9', false, false);
-    drawDot(g, S * 3.9, y, d * 6, '#b95a8a', true, false);
-    drawDot(g, S * 5.2, y, d * 6, '', false, true);
+    drawDot(g, S * 0.5, y, d, '#5a8ab9', false);
+    drawDot(g, S * 0.85, y, d, '#b95a8a', false);
+    drawDot(g, S * 1.2, y, d, '', true);
+    drawDot(g, S * 2.6, y, d * 6, '#5a8ab9', false);
+    drawDot(g, S * 3.9, y, d * 6, '#b95a8a', false);
+    drawDot(g, S * 5.2, y, d * 6, '', true);
   }), `map-view dots — bodies under ${DOT_LOD_PX} px draw as blocks `
-    + '(plain · minded · corpse; actual size, then 6×)', overlay);
+    + '(live · live · corpse; actual size, then 6×)', overlay);
 }
 
 // ---- what the server bakes, and where to see it --------------------------

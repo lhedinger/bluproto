@@ -56,8 +56,7 @@ colour now — pick one of the three.
 Interactive state gets its own reserved family: button/plate red
 (`0xE0455F`, dark `0x7c2434`, lit `0xF0788C`), indicator lamps (housing
 `0x14161f`, dim `0x6a7280`, lit `0xD0ECFF`), hazard striping
-(`0xd8b028` on `0x17171a`) for anything that drops or crushes. The minded rim
-violet (`#c660ff`) belongs to the viewer's overlay language, not to the world.
+(`0xd8b028` on `0x17171a`) for anything that drops or crushes.
 
 ## 3. Pattern grammars
 
