@@ -591,10 +591,17 @@ public class Grid {
 				boolean wallS = isWallish(x, y + 1);
 				boolean wallE = isWallish(x + 1, y);
 				boolean wallW = isWallish(x - 1, y);
-				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE);
-				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE);
-				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE);
-				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE);
+				// A pit rims every side it meets ground — except where a DOWN ramp
+				// pours in: the ramp's own bands fade to the pit's dark, so a lip
+				// between them would cut the descent with an earth line.
+				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE)
+						|| isType(x, y - 1, Tile.TileType.TYPE_RAMPDOWN);
+				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE)
+						|| isType(x, y + 1, Tile.TileType.TYPE_RAMPDOWN);
+				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE)
+						|| isType(x - 1, y, Tile.TileType.TYPE_RAMPDOWN);
+				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE)
+						|| isType(x + 1, y, Tile.TileType.TYPE_RAMPDOWN);
 				int sx = ox + x * ts, sy = oy + y * ts;
 				for (int aj = 0; aj < A; aj++) {
 					int by0 = aj * ts / A, by1 = (aj + 1) * ts / A;

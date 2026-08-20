@@ -157,57 +157,101 @@ public final class ProcTiles {
 		return img;
 	}
 
-	/** A ramp tile: an earthy slope, bright at the high end, with uphill chevrons. */
-	public static BufferedImage ramp(String code, boolean up) {
-		return CACHE.computeIfAbsent("ramp|" + code + "|" + up, k -> buildRamp(code, up));
+	/**
+	 * A ramp tile, oriented by the cardinal it descends toward (0 N, 1 E, 2 S,
+	 * 3 W) so a ramp can face any direction. A DOWN ramp steps its earth bands
+	 * into the pit's own dark — its low edge is pure {@link #HOLE_DARK}, so it
+	 * fades flush into the hole it pours into (whose lip is suppressed on that
+	 * side, see {@code Grid.renderGroundPixel}). An UP ramp climbs the other
+	 * way: earth at the foot brightening to a sunlit high end. Chevrons always
+	 * point uphill.
+	 */
+	public static BufferedImage ramp(String code, boolean up, int downhill) {
+		return CACHE.computeIfAbsent("ramp|" + code + "|" + up + "|" + downhill,
+				k -> buildRamp(code, up, downhill));
 	}
 
-	private static BufferedImage buildRamp(String code, boolean up) {
+	private static BufferedImage buildRamp(String code, boolean up, int downhill) {
 		BufferedImage img = new BufferedImage(SZ, SZ, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = img.createGraphics(); // no AA: hard-edged art pixels
 		// Pixel-art slope, matching the ground's 12x12 art-pixel grid: the
-		// LO->HI climb renders as three flat bands whose boundaries are
-		// Bayer-dithered, never a smooth gradient. up faces right (high on the
-		// right), down faces left.
+		// climb renders as four flat bands whose boundaries are Bayer-dithered,
+		// never a smooth gradient.
 		int A = 12, ap = TS / A + 1; // art-pixel size (rounded up to cover)
 		Color mid = new Color(
 				(RAMP_LO.getRed() + RAMP_HI.getRed()) / 2,
 				(RAMP_LO.getGreen() + RAMP_HI.getGreen()) / 2,
 				(RAMP_LO.getBlue() + RAMP_HI.getBlue()) / 2);
-		Color[] shades = { RAMP_LO, mid, RAMP_HI };
+		Color sun = new Color(
+				Math.min(255, RAMP_HI.getRed() + 45),
+				Math.min(255, RAMP_HI.getGreen() + 45),
+				Math.min(255, RAMP_HI.getBlue() + 45));
+		Color dusk = new Color(RAMP_LO.getRed() / 2, RAMP_LO.getGreen() / 2,
+				RAMP_LO.getBlue() / 2);
+		// Shade ladder indexed from the HIGH edge (0) to the LOW edge (3): the
+		// up ramp tops out in sunlight, the down ramp bottoms out in the void.
+		Color[] shades = up
+				? new Color[] { sun, RAMP_HI, mid, RAMP_LO }
+				: new Color[] { mid, RAMP_LO, dusk, HOLE_DARK };
+		// Which side edges the slope's cut channel shows on: an edge shared
+		// with another ramp tile (a two-wide run) stays flush — no dark seam
+		// down the middle of the run.
+		boolean horiz = downhill == 1 || downhill == 3; // slope axis east-west
+		boolean edge0 = !has(code, horiz ? '2' : '4'); // N (horiz) / W (vert)
+		boolean edge1 = !has(code, horiz ? '7' : '5'); // S (horiz) / E (vert)
 		for (int aj = 0; aj < A; aj++) {
 			for (int ai = 0; ai < A; ai++) {
-				double t = (up ? ai : A - 1 - ai) / (double) (A - 1) * 2; // 0..2
+				// (a, b): distance downhill from the high edge, and across.
+				int a = downhill == 1 ? ai : downhill == 3 ? A - 1 - ai
+						: downhill == 2 ? aj : A - 1 - aj;
+				int b = horiz ? aj : ai;
+				double t = a / (double) (A - 1) * 3; // 0..3 along the ladder
 				int lo = (int) t;
 				double frac = t - lo;
-				int idx = lo >= 2 ? 2
+				int idx = lo >= 3 ? 3
 						: (frac > GroundTextures.bayer(ai, aj) ? lo + 1 : lo);
-				// Dark channel edges: the top and bottom art-pixel rows step a
-				// shade down, so the ramp reads as a cut slope.
-				if ((aj == 0 || aj == A - 1) && idx > 0) {
-					idx--;
+				// Dark channel edges along the open sides, so the ramp reads
+				// as a cut slope.
+				if (((b == 0 && edge0) || (b == A - 1 && edge1)) && idx < 3) {
+					idx++;
 				}
 				g.setColor(shades[idx]);
 				g.fillRect(X0 + ai * TS / A, Y0 + aj * TS / A, ap, ap);
 			}
 		}
-		// Chevrons pointing uphill: blocky one-art-pixel diagonal steps, in the
-		// pale high-end tone (opaque -- no anti-aliased strokes).
-		g.setColor(new Color(
-				Math.min(255, RAMP_HI.getRed() + 40),
-				Math.min(255, RAMP_HI.getGreen() + 40),
-				Math.min(255, RAMP_HI.getBlue() + 40)));
+		// Chevrons pointing uphill: blocky one-art-pixel diagonal steps, apex
+		// toward the high edge. The up ramp's glow bright over its pale bands;
+		// the down ramp's a quieter earth-light, and only on its upper bands —
+		// none reach into the dark it fades through.
+		g.setColor(up ? new Color(
+				Math.min(255, RAMP_HI.getRed() + 70),
+				Math.min(255, RAMP_HI.getGreen() + 70),
+				Math.min(255, RAMP_HI.getBlue() + 70)) : RAMP_HI);
 		int s = TS / A; // one art pixel
+		int reach = up ? A - 1 : 7; // down: stop before the void bands
 		for (int k = 0; k < 3; k++) {
-			int bx = 2 + k * 3; // chevron apex column, in art pixels
-			for (int i = 0; i < 3; i++) {
-				int cxA = up ? bx + i : bx + (2 - i);
-				g.fillRect(X0 + cxA * s, Y0 + (4 + i) * s, s, s); // upper arm
-				g.fillRect(X0 + cxA * s, Y0 + (8 - i) * s, s, s); // lower arm
+			int a0 = 2 + k * 3; // chevron apex, in art pixels from the high edge
+			for (int i = 0; i <= 2; i++) {
+				int aa = a0 + i;
+				if (aa > reach) {
+					continue;
+				}
+				chev(g, downhill, aa, 6 - i, s, A);
+				if (i > 0) {
+					chev(g, downhill, aa, 6 + i, s, A);
+				}
 			}
 		}
 		g.dispose();
 		return img;
+	}
+
+	/** Plots one chevron art-pixel given slope coordinates: {@code a} downhill
+	 *  from the high edge, {@code b} across the ramp. */
+	private static void chev(Graphics2D g, int downhill, int a, int b, int s, int A) {
+		int ai = downhill == 1 ? a : downhill == 3 ? A - 1 - a : b;
+		int aj = downhill == 2 ? a : downhill == 0 ? A - 1 - a : b;
+		g.fillRect(X0 + ai * s, Y0 + aj * s, s, s);
 	}
 
 	// ---- geometry ----------------------------------------------------------

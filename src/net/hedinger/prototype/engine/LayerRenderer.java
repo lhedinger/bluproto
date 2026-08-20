@@ -27,7 +27,7 @@ public class LayerRenderer {
 
 			for (int x = 0; x < world.cols; x++) {
 				for (int y = 0; y < world.rows; y++) {
-					floorTiles[x][y] = getFloorTile(world, world.levels[z].getTile(x, y));
+					floorTiles[x][y] = getFloorTile(world, world.levels[z].getTile(x, y), x, y, z);
 					wallTiles[x][y] = getWallTile(world, world.levels[z].getTile(x, y));
 				}
 			}
@@ -67,14 +67,14 @@ public class LayerRenderer {
 			for (int x = 0; x < world.cols; x++) {
 				for (int y = 0; y < world.rows; y++) {
 					Tile t = world.levels[z].getTile(x, y);
-					mapLayers[z].floorTiles[x][y] = getFloorTile(world, t);
+					mapLayers[z].floorTiles[x][y] = getFloorTile(world, t, x, y, z);
 					mapLayers[z].wallTiles[x][y] = getWallTile(world, t);
 				}
 			}
 		}
 	}
 
-	private BufferedImage getFloorTile(World world, Tile tile) {
+	private BufferedImage getFloorTile(World world, Tile tile, int x, int y, int z) {
 		String tilecode = tile.getTileCode();
 		Tile.TileType type = tile.getType();
 
@@ -112,12 +112,39 @@ public class LayerRenderer {
 		// see-through cut-out, letting the level below show (and parallax) through.
 		// The pit shade and lip are drawn live by Grid.renderGroundPixel instead.
 		case TYPE_RAMPUP:
-			return ResourceManager.getRamptile(tilecode, true);
+			return ResourceManager.getRamptile(tilecode, true, rampDownhill(x, y, z, true));
 		case TYPE_RAMPDOWN:
-			return ResourceManager.getRamptile(tilecode, false);
+			return ResourceManager.getRamptile(tilecode, false, rampDownhill(x, y, z, false));
 		default:
 			return null;
 		}
+	}
+
+	/**
+	 * The cardinal a ramp descends toward (0 N, 1 E, 2 S, 3 W), read from the
+	 * layout so the slope art can face any direction: a DOWN ramp pours into
+	 * the pit beside it, so downhill is toward the adjacent {@code TYPE_HOLE};
+	 * an UP ramp climbs onto the rock its landing rests on, so downhill is
+	 * away from the adjacent solid mass. When no neighbour decides (nothing
+	 * built by the generators today), fall back to the movement convention —
+	 * ramps run east-high to west-low. Neighbour scan order is biased toward
+	 * that same convention so a ramp boxed in on several sides stays true to
+	 * how it actually walks.
+	 */
+	private int rampDownhill(int x, int y, int z, boolean up) {
+		int[] dx = { 0, 1, 0, -1 }, dy = { -1, 0, 1, 0 }; // N E S W
+		int[] order = up ? new int[] { 1, 3, 2, 0 } : new int[] { 3, 1, 0, 2 };
+		for (int d : order) {
+			int nx = x + dx[d], ny = y + dy[d];
+			if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+				continue;
+			}
+			Tile n = world.levels[z].getTile(nx, ny);
+			if (up ? n.isSolid() : n.getType() == Tile.TileType.TYPE_HOLE) {
+				return up ? (d + 2) % 4 : d; // up: high side found, low is opposite
+			}
+		}
+		return 3; // west-low, the engine's movement convention
 	}
 
 	private BufferedImage getWallTile(World world, Tile tile) {
