@@ -5160,6 +5160,53 @@ public class SimTests {
 	}
 
 	/**
+	 * A minded body ambling flat into a wall is shaken loose by the body's pin
+	 * reflex rather than shoving the rock forever. The reflex's "is it trying
+	 * to move" gate once sat at throttle &gt; 0.3 — above the 0.25 amble the
+	 * starter brain cruises at — which quietly disarmed it for the whole seeded
+	 * lineage: any wanderer that aimed at a wall stayed pressed there for good
+	 * (measured on the demo world, 4.2% of all thirsty minded ticks were spent
+	 * pinned like that, usually with water just beyond the rock). The gate now
+	 * matches the 0.02 threshold that engages movement at all; only a mind that
+	 * is deliberately still is exempt from the reflex.
+	 */
+	static class AmblingMindIsShakenOffAWall extends Scenario {
+		@Override
+		public void run() {
+			seed(97);
+			World w = room(16, 9);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 0.25; // the starter lineage's amble
+					a[AgentIO.A_SEEK] = 0;
+					a[AgentIO.A_TURN] = 0; // never steers: a degenerate straight line
+				}
+			};
+			TestNPC body = TestNPC.minded(8.5, 2.5, 0, g, ctrl).withSpeed(0.08)
+					.withHeading(-Math.PI / 2); // due north: one open tile, then wall
+			w.spawnEntity(body);
+			w.think();
+			// Path length is the discriminator: a body pinned at the wall stops
+			// accumulating any (the ~1.4-tile approach and nothing more), while
+			// the reflex keeps shaking it loose so it never stops walking. The
+			// endpoint is no use — the never-steering amble bounces wall to wall,
+			// so where it stands at any one tick says nothing.
+			double px = body.getX(), py = body.getY(), path = 0;
+			for (int i = 0; i < 600; i++) {
+				tick(w, 1);
+				path += Math.hypot(body.getX() - px, body.getY() - py);
+				px = body.getX();
+				py = body.getY();
+			}
+			assertGreater("the pin reflex kept the amble moving — never pressed for good",
+					path, 5.0);
+		}
+	}
+
+	/**
 	 * Water the body cannot reach at all is not water. A creature walled off from
 	 * every drop is told so — the sense reads empty rather than pointing hopefully
 	 * through the rock — which is what lets it go and look somewhere else instead
@@ -5308,6 +5355,7 @@ public class SimTests {
 				new BottomlessPitsAndCatwalks(),
 				new ThirstyGrazerWalksToWater(),
 				new ThirstWalksRoundAWallNotIntoIt(),
+				new AmblingMindIsShakenOffAWall(),
 				new UnreachableWaterIsNotSensed(),
 				new DehydrationWearsABodyDown(),
 				new CorpseFeedsTheGround(),
