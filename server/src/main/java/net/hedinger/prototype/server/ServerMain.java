@@ -116,6 +116,12 @@ public final class ServerMain {
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.
 		app.get("/api/metrics", ctx -> ctx.json(host.metrics()));
 
+		// The headcount by trophic role over time, for the population graph. Served
+		// from the server's own ring rather than accumulated in the browser, so a
+		// viewer who opens the page at tick nine million still sees the last few
+		// hours instead of starting from a blank chart.
+		app.get("/api/population", ctx -> ctx.json(host.population()));
+
 		// Prometheus text exposition of the same numbers, for scraping.
 		app.get("/metrics", ctx -> {
 			StringBuilder b = new StringBuilder();

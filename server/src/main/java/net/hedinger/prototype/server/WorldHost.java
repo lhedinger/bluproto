@@ -79,11 +79,16 @@ final class WorldHost {
 		// Durability: periodically dump the session's recording (seed + command
 		// log) so a crash or reboot never loses a viewer's spawns.
 		broadcaster.scheduleAtFixedRate(this::dumpRecording, 15, 15, TimeUnit.SECONDS);
+		// The headcount by role, for the population graph. Its own slow beat: a
+		// series is about the shape of an hour, not about this tick.
+		broadcaster.scheduleAtFixedRate(this::samplePopulation,
+				POP_SAMPLE_SEC, POP_SAMPLE_SEC, TimeUnit.SECONDS);
 	}
 
 	private void buildWorld(long newSeed) {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
+		popHistory = java.util.List.of(); // a new world starts its own series
 		boolean sized = worldCols > 0 && worldRows > 0;
 		SimulationRunner r = new SimulationRunner(
 				sized ? Worlds.demo(newSeed, worldCols, worldRows) : Worlds.demo(newSeed));
@@ -684,6 +689,101 @@ final class WorldHost {
 
 	/** Visitor counts for this uptime; addresses are hashed and never stored. */
 	final VisitorLog visitors = new VisitorLog();
+
+	// ---- population history ------------------------------------------------
+
+	/**
+	 * How often the headcount is sampled, in seconds, and how many samples are
+	 * kept. Twelve an hour for a little over eight hours: long enough to watch a
+	 * scavenger bloom eat its larder and starve back, short enough that the whole
+	 * series is a few kilobytes on the wire and a rounding error in a 512 MB heap.
+	 */
+	static final int POP_SAMPLE_SEC = 5;
+	static final int POP_SAMPLES = 6000;
+
+	/** One reading of the world's trophic makeup. */
+	record PopSample(long tick, int prey, int predator, int scavenger) { }
+
+	// Written only by the sampler task, read by request threads: an immutable
+	// list swapped in wholesale, so a reader either sees the old series or the
+	// new one and never a half-built ArrayDeque.
+	private volatile java.util.List<PopSample> popHistory = java.util.List.of();
+
+	/**
+	 * Takes one reading of the headcount by role.
+	 *
+	 * <p>Under the runner's lock, because this walks live entities while the sim
+	 * thread is free to add and remove them. The walk is over a few hundred bodies
+	 * and runs once every {@link #POP_SAMPLE_SEC} seconds, so the pause is far
+	 * below a tick and the sim never notices — worth paying to keep the series
+	 * exact rather than racily off by one.
+	 */
+	private void samplePopulation() {
+		PopSample s;
+		synchronized (runner) {
+			s = censusOf(runner.world(), runner.snapshot().tick());
+		}
+		append(s);
+	}
+
+	/**
+	 * Counts the living by trophic role. Pure — a world in, a reading out — so
+	 * what the graph is actually measuring can be tested without standing up a
+	 * server, a socket or a layer bake.
+	 */
+	static PopSample censusOf(net.hedinger.prototype.engine.World w, long tick) {
+		int prey = 0, pred = 0, scav = 0;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (!(e instanceof net.hedinger.prototype.simtest.TestNPC tn)
+					|| tn.isDead() || tn.isRemoved()) {
+				continue; // corpses are not population; nor are items or clouds
+			}
+			switch (tn.trophicRole()) {
+			case "predator":
+				pred++;
+				break;
+			case "scavenger":
+				scav++;
+				break;
+			default:
+				prey++;
+				break;
+			}
+		}
+		return new PopSample(tick, prey, pred, scav);
+	}
+
+	/** Adds a reading, dropping the oldest once the ring is full. */
+	private void append(PopSample sample) {
+		java.util.List<PopSample> prev = popHistory;
+		java.util.ArrayList<PopSample> next =
+				new java.util.ArrayList<PopSample>(Math.min(prev.size() + 1, POP_SAMPLES));
+		int drop = Math.max(0, prev.size() + 1 - POP_SAMPLES);
+		next.addAll(prev.subList(drop, prev.size()));
+		next.add(sample);
+		popHistory = java.util.List.copyOf(next);
+	}
+
+	/**
+	 * The population series for {@code /api/population}. Parallel arrays rather
+	 * than a list of objects: the client plots four columns and this is a third of
+	 * the bytes with none of the key repetition.
+	 */
+	java.util.Map<String, Object> population() {
+		java.util.List<PopSample> h = popHistory;
+		long[] ticks = new long[h.size()];
+		int[] prey = new int[h.size()], pred = new int[h.size()], scav = new int[h.size()];
+		for (int i = 0; i < h.size(); i++) {
+			PopSample p = h.get(i);
+			ticks[i] = p.tick();
+			prey[i] = p.prey();
+			pred[i] = p.predator();
+			scav[i] = p.scavenger();
+		}
+		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
+				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "prey", prey,
+				"predator", pred, "scavenger", scav);
+	}
 
 	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */
 	java.util.Map<String, Object> metrics() {

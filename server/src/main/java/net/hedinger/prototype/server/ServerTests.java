@@ -27,6 +27,7 @@ public final class ServerTests {
 		replayReconstructsLiveSessionExactly();
 		visitorLogCountsWithoutIdentifying();
 		visitorLogReadsTheClientThroughTheProxy();
+		populationCensusCountsEveryLivingRole();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -158,6 +159,48 @@ public final class ServerTests {
 		log.record(VisitorLog.clientAddress("10.0.0.1", "1.1.1.1, 10.0.0.1"));
 		log.record(VisitorLog.clientAddress("10.0.0.1", "2.2.2.2, 10.0.0.1"));
 		check("two clients behind one proxy are two visitors", log.distinct() == 2);
+	}
+
+	/**
+	 * The role census counts the living, splits them by trophic role, and
+	 * accounts for every one of them.
+	 *
+	 * <p>The last part is the one worth pinning: {@code trophicRole()} has three
+	 * answers today and the census switches on them, so a fourth added later
+	 * would silently land in the {@code default} arm and be counted as prey. Here
+	 * the three columns are checked against an independent headcount of the live
+	 * creatures, which fails the moment they stop adding up.
+	 */
+	static void populationCensusCountsEveryLivingRole() {
+		net.hedinger.prototype.engine.Utils.seed(7);
+		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
+		WorldHost.PopSample s = WorldHost.censusOf(w, 123);
+
+		int alive = 0;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
+					&& !t.isDead() && !t.isRemoved()) {
+				alive++;
+			}
+		}
+		check("the census finds creatures", alive > 0);
+		check("every living creature lands in exactly one role",
+				s.prey() + s.predator() + s.scavenger() == alive);
+		check("a seeded world has all three roles",
+				s.prey() > 0 && s.predator() > 0 && s.scavenger() > 0);
+		check("the reading is stamped with the tick it was taken at", s.tick() == 123);
+
+		// Corpses are not population: killing one must move the count down by one.
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
+					&& !t.isDead() && !t.isRemoved()) {
+				t.kill();
+				break;
+			}
+		}
+		WorldHost.PopSample after = WorldHost.censusOf(w, 124);
+		check("a corpse is not counted as population",
+				after.prey() + after.predator() + after.scavenger() == alive - 1);
 	}
 
 	private static EntityState probe(int id, double x) {

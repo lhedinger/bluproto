@@ -1091,3 +1091,203 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---- population graph ('p' key, the bar button, or ?pop=1) -----------------
+//
+// Headcount by trophic role over time. The series lives on the SERVER, in a
+// ring it fills every POP_SAMPLE_SEC seconds — so opening this panel on a world
+// that has been running for hours shows those hours, rather than starting a
+// fresh chart from whenever this browser happened to connect. All this end does
+// is fetch it and draw.
+
+const popEl = document.getElementById('pop') as HTMLElement;
+const popBtn = document.getElementById('popBtn') as HTMLButtonElement;
+const popCv = document.getElementById('popCv') as HTMLCanvasElement;
+const popKey = document.getElementById('popKey') as HTMLElement;
+const popWin = document.getElementById('popWin') as HTMLElement;
+
+/** Series colours: prey green, predator red, scavenger amber. Distinct in
+ *  luminance as well as hue, so the lines stay separable to a colour-blind
+ *  viewer and in a screenshot that has lost its colour. */
+const POP_SERIES = [
+  { key: 'prey' as const, label: 'prey', rgb: '#6fbf5e' },
+  { key: 'predator' as const, label: 'predators', rgb: '#e0574f' },
+  { key: 'scavenger' as const, label: 'scavengers', rgb: '#e2a63b' },
+];
+
+type PopData = {
+  sampleSec: number; tps: number; tick: number[];
+  prey: number[]; predator: number[]; scavenger: number[];
+};
+
+let popOn = /[?&]pop\b/.test(location.search);
+/** Which series are drawn. Prey outnumber predators and scavengers by an order
+ *  of magnitude, and on one shared axis — which is the honest way to show three
+ *  counts of the same kind — that squashes the two small ones onto the floor.
+ *  Rather than lie about the scale with a second axis, the legend lets a viewer
+ *  drop the big series and let the others have the height. */
+const popHidden = new Set<string>();
+let popData: PopData | null = null;
+let popFetching = false;
+let popLastFetch = 0;
+
+function popApply(): void {
+  popEl.style.display = popOn ? 'block' : 'none';
+  popBtn.classList.toggle('on', popOn);
+  if (popOn) {
+    popPoll(true);
+  }
+}
+
+/** Fetches the series, at most once per sample interval — polling faster than
+ *  the server samples would only re-draw the same numbers. */
+function popPoll(force = false): void {
+  const now = performance.now();
+  const everyMs = (popData ? popData.sampleSec : 5) * 1000;
+  if (popFetching || (!force && now - popLastFetch < everyMs)) return;
+  popFetching = true;
+  popLastFetch = now;
+  fetch('api/population')
+    .then(r => (r.ok ? r.json() : null))
+    .then((d: PopData | null) => {
+      if (d && Array.isArray(d.tick)) {
+        popData = d;
+        popDraw();
+      }
+    })
+    .catch(() => { /* a missing sample is not worth a toast */ })
+    .finally(() => { popFetching = false; });
+}
+
+function popDraw(): void {
+  const d = popData;
+  const ctx = popCv.getContext('2d');
+  if (!ctx || !d) return;
+  // Draw at device resolution and let CSS scale it back down, so hairlines and
+  // text stay crisp on a phone.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(popCv.clientWidth * dpr));
+  const h = Math.max(1, Math.round(popCv.clientHeight * dpr));
+  if (popCv.width !== w || popCv.height !== h) { popCv.width = w; popCv.height = h; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const n = d.tick.length;
+  const padL = 30 * dpr, padR = 4 * dpr, padT = 4 * dpr, padB = 12 * dpr;
+  const gw = w - padL - padR, gh = h - padT - padB;
+  if (n < 2 || gw <= 0 || gh <= 0) {
+    ctx.fillStyle = '#8b93a3';
+    ctx.font = `${11 * dpr}px ui-monospace, monospace`;
+    ctx.fillText('gathering…', padL, padT + gh / 2);
+    popKeyDraw();
+    return;
+  }
+
+  // One shared vertical scale: the three roles are the same kind of quantity,
+  // and separate axes would hide that predators are a tenth of the prey.
+  let max = 1;
+  for (const s of POP_SERIES) {
+    if (popHidden.has(s.key)) continue;
+    for (const v of d[s.key]) if (v > max) max = v;
+  }
+  max = niceCeil(max);
+  const xAt = (i: number) => padL + (gw * i) / (n - 1);
+  const yAt = (v: number) => padT + gh - (gh * v) / max;
+
+  // Axis: a floor and a ceiling is all a shape needs.
+  ctx.strokeStyle = '#ffffff1a';
+  ctx.lineWidth = 1 * dpr;
+  ctx.beginPath();
+  for (const v of [0, max]) {
+    ctx.moveTo(padL, Math.round(yAt(v)) + 0.5);
+    ctx.lineTo(padL + gw, Math.round(yAt(v)) + 0.5);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#8b93a3';
+  ctx.font = `${10 * dpr}px ui-monospace, monospace`;
+  ctx.textAlign = 'right';
+  ctx.fillText(String(max), padL - 4 * dpr, yAt(max) + 8 * dpr);
+  ctx.fillText('0', padL - 4 * dpr, yAt(0));
+  ctx.textAlign = 'left';
+
+  for (const s of POP_SERIES) {
+    if (popHidden.has(s.key)) continue;
+    const vals = d[s.key];
+    ctx.strokeStyle = s.rgb;
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = xAt(i), y = yAt(vals[i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // How much time the chart is showing, so the x axis needs no ticks of its own.
+  const spanSec = (n - 1) * d.sampleSec;
+  popWin.textContent = `${fmtSpan(spanSec)} · ${n} samples`;
+  popKeyDraw();
+}
+
+/** The legend doubles as the live readout — each role's latest count — and as
+ *  the control: tap one to drop it out of the chart and give the rest the axis. */
+function popKeyDraw(): void {
+  const d = popData;
+  popKey.innerHTML = '';
+  for (const s of POP_SERIES) {
+    const vals = d ? d[s.key] : [];
+    const last = vals.length ? vals[vals.length - 1] : 0;
+    const off = popHidden.has(s.key);
+    const el = document.createElement('span');
+    el.className = off ? 'off' : '';
+    el.title = off ? `show ${s.label}` : `hide ${s.label}`;
+    const dot = document.createElement('i');
+    dot.style.background = off ? 'transparent' : s.rgb;
+    dot.style.boxShadow = `inset 0 0 0 1px ${s.rgb}`;
+    el.appendChild(dot);
+    el.appendChild(document.createTextNode(`${s.label} ${last}`));
+    el.onclick = () => {
+      // Never hide the last one standing: an empty chart is not a view.
+      if (!off && popHidden.size >= POP_SERIES.length - 1) return;
+      if (off) popHidden.delete(s.key); else popHidden.add(s.key);
+      popDraw();
+    };
+    popKey.appendChild(el);
+  }
+}
+
+/** Rounds an axis top up to something a person would have chosen.
+ *
+ *  The ladder is deliberately fine. A coarse one (1, 2, 5, 10) sends a peak of
+ *  54 all the way to 100, which throws away half the chart's height — and the
+ *  half it throws away is exactly where predators and scavengers live, since
+ *  they share the axis with a prey count ten times theirs. */
+function niceCeil(v: number): number {
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.max(1, v))));
+  for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+    if (v <= m * mag) return m * mag;
+  }
+  return 10 * mag;
+}
+
+function fmtSpan(sec: number): string {
+  if (sec < 90) return `${Math.round(sec)}s`;
+  if (sec < 5400) return `${Math.round(sec / 60)}m`;
+  return `${(sec / 3600).toFixed(1)}h`;
+}
+
+popBtn.onclick = () => { popOn = !popOn; popApply(); };
+window.addEventListener('keydown', ev => {
+  const tag = (ev.target as HTMLElement).tagName;
+  if (ev.key !== 'p' && ev.key !== 'P') return;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  popOn = !popOn;
+  popApply();
+});
+// Redraw on resize so the chart tracks a rotated phone or a dragged window.
+window.addEventListener('resize', () => { if (popOn) popDraw(); });
+// The poll beat. Only runs while the panel is open — a closed graph costs the
+// server nothing.
+setInterval(() => { if (popOn) popPoll(); }, 1000);
+popApply();
