@@ -67,6 +67,7 @@ final class SpriteCatalog {
 		c.concealmentSection();
 		c.furnitureSection();
 		c.creatureSection();
+		c.bodyPlans();
 		System.out.println("sprite catalog: " + c.assets.size() + " assets in "
 				+ (System.currentTimeMillis() - t0) + " ms");
 		return c;
@@ -150,6 +151,33 @@ final class SpriteCatalog {
 		items();
 		nest();
 		pheromone();
+	}
+
+	/**
+	 * Every body plan the renderer can draw, whether or not anything in the world
+	 * wears it. Three of the six are unselected: the plan follows the genome's diet
+	 * and there are three trophic levels, so half the space sits idle. A reference
+	 * that only showed what happened to be in use would quietly stop being a
+	 * reference to the space and become a census of the population, and the plans
+	 * nobody wears are exactly the ones worth being able to look at before deciding
+	 * what to do with them.
+	 *
+	 * <p>Drawn from one genome with the trophic markings off, so what differs
+	 * between these is the outline and nothing else. The animals that actually
+	 * carry them — feelers, tail and all — are in Creatures above.
+	 */
+	private void bodyPlans() {
+		section("Body plans", "The six outlines inForm() can draw, from a single genome "
+				+ "with the role markings stripped off, so the only thing that varies is the "
+				+ "body. Diet picks one of three; the rest are drawn here and worn by nothing.");
+		String[] names = { "plan_0_grazer", "plan_1_radial_unworn", "plan_2_wedge_unworn",
+				"plan_3_scavenger", "plan_4_hunter", "plan_5_ragged_unworn" };
+		for (int f = 0; f < names.length; f++) {
+			Genome g = sample(11, 0.05, false, 0, new double[] { 0.5, 0.6, 0.4 });
+			ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
+			ph.form = f;
+			creature(names[f], ph, g.size);
+		}
 	}
 
 	private void creatureSection() {
@@ -379,8 +407,13 @@ final class SpriteCatalog {
 	/** One organism sample: a looping spin through all eight facings with the
 	 *  idle gait running — the whole body readable in one loop. */
 	private void creature(String name, Genome g) {
-		ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
-		int radius = (int) Math.max(20, Math.min(70, g.size * 5));
+		creature(name, ProcCreature.phenotype(g), g.size);
+	}
+
+	/** As above, from a phenotype built by hand — the only way to show a body plan
+	 *  the live mapping does not currently select. */
+	private void creature(String name, ProcCreature.Phenotype ph, double size) {
+		int radius = (int) Math.max(20, Math.min(70, size * 5));
 		int side = radius * 2 + 60;
 		List<BufferedImage> frames = new ArrayList<>();
 		int N = 48;
