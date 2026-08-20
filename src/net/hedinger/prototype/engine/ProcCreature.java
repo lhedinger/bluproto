@@ -231,11 +231,26 @@ public final class ProcCreature {
 		return buf;
 	}
 
+	/**
+	 * Bumped whenever the DRAWING changes for a phenotype that would otherwise key
+	 * the same — a form's outline redefined, an appendage moved, a mark restyled.
+	 *
+	 * <p>A key is a promise that two things wearing it render identically, and the
+	 * atlas endpoint cashes that promise in: it serves a baked sheet per key with a
+	 * day of hard caching on the grounds that a key is immutable. That holds within
+	 * a build and quietly stops holding across one. Redefining what form 4 draws,
+	 * without this, would have left every viewer who had seen a hunter that week
+	 * still looking at the old body — the shape fixed on the server and wrong in the
+	 * browser, which is the most confusing way for a fix to fail.
+	 */
+	private static final int RENDER_VERSION = 2;
+
 	/** Packs everything about a phenotype that affects the pixels into a key. Public
 	 *  so the web layer can name a phenotype's atlas by the same stable id the live
 	 *  sprite cache uses. Two genomes that render identically share a key. */
 	public static long phenoKey(Phenotype ph) {
 		long k = ph.color & 0xFFFFFFL;
+		k = (k << 4) | RENDER_VERSION;
 		k = (k << 3) | (ph.form & 7);
 		k = (k << 3) | (ph.legs & 7);
 		k = (k << 2) | (ph.core & 3);
@@ -259,7 +274,8 @@ public final class ProcCreature {
 	 * per creature at draw time.
 	 */
 	public static long shapeKey(Phenotype ph) {
-		long k = ph.form & 7;
+		long k = RENDER_VERSION;
+		k = (k << 3) | (ph.form & 7);
 		k = (k << 3) | (ph.legs & 7);
 		k = (k << 2) | (ph.core & 3);
 		k = (k << 2) | (ph.pattern & 3);
@@ -441,7 +457,14 @@ public final class ProcCreature {
 			return Math.min(sq(la - d) + sq(pe - o2),
 					Math.min(sq(la) + sq(pe - o1), sq(la + d) + sq(pe - o0))) <= r2 * r2;
 		case 4:
-			return la * la + pe * pe <= sq(r - 1) + (r - 1) * 0.5;
+			// The hunter: broad across the shoulders and tapering to the back, the
+			// mirror of the scavenger's forward-pointing wedge and nothing like the
+			// grazer's ellipse. It used to be a circle a shade smaller than form 0,
+			// which meant a predator and a grazer differed only in leg length and a
+			// one-pixel tail -- true at the size a sprite sheet is baked, invisible
+			// at the size a creature is actually watched. Outline is the only thing
+			// that survives being drawn small, so the roles differ in outline.
+			return la >= -r - 0.3 && la <= r + 0.3 && Math.abs(pe) <= (r + la) * 0.5 + 0.4;
 		case 5:
 			int q = (int) Math.floor((Math.atan2(pe, la) + Math.PI) / (2 * Math.PI) * 6);
 			double pr = r + 0.6 * (hash(q, seed, 4) - 0.5) * 2 + 0.5 * Math.sin(phase + q);
