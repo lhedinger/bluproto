@@ -26,7 +26,7 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  DOT_LOD_PX, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA, depletionStampFor,
+  DOT_LOD_PX, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
   drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
@@ -219,47 +219,6 @@ const conceal = section('Concealment',
   'A body in cover is part-hidden by the tile\'s own re-stamped bake pixels — the '
   + 'clustered canopy mask, stalk-exact reeds, the duct\'s ribbed lid — built by the '
   + 'same veilTile/ductLidTile code the live view runs, over the server\'s ground bake.');
-
-// ---- grazing depletion: the five stamped stages --------------------------
-
-const depl = section('Grazing depletion',
-  'Grass wears one of five STATES (lush + four quarter-steps toward bare), each a '
-  + 'pre-baked 12px dirt stamp in the Bayer-dither idiom — one drawImage per changed '
-  + 'tile, exactly what the world view stamps. Three hash-picked variants per stage '
-  + 'keep a grazed field from tiling visibly.');
-
-(async () => {
-  const lush = await loadCanvas('/sprites/depletion_lush.png');
-  if (!lush) return;
-  const D = 224;
-  // The five stages over the lush bake, animated: the field cycles lush ->
-  // bare the way a grazed patch does, all three variants side by side.
-  pair(depl, 'grass through the five states', D, D, (g, t) => {
-    g.imageSmoothingEnabled = false;
-    g.drawImage(lush, 0, 0, D, D);
-    const state = Math.min(4, Math.floor(((t % 6) / 6) * 5));
-    if (state <= 0) return;
-    const T = D / 4;
-    for (let ty = 0; ty < 4; ty++) {
-      for (let tx = 0; tx < 4; tx++) {
-        g.drawImage(depletionStampFor(state, (tx * 7 + ty * 5) % 3), tx * T, ty * T, T, T);
-      }
-    }
-  });
-  // Every stage x variant as a flat reference strip.
-  const S = 44, PAD = 6;
-  figure(liveCanvas(4 * (S + PAD) + PAD, 3 * (S + PAD) + PAD, (g) => {
-    g.fillStyle = '#2a241c';
-    g.fillRect(0, 0, 4 * (S + PAD) + PAD, 3 * (S + PAD) + PAD);
-    g.imageSmoothingEnabled = false;
-    for (let v = 0; v < 3; v++) {
-      for (let st = 1; st <= 4; st++) {
-        g.drawImage(depletionStampFor(st, v),
-          PAD + (st - 1) * (S + PAD), PAD + v * (S + PAD), S, S);
-      }
-    }
-  }), '<b>stage stamps</b> (1..4 × three variants)', depl);
-})();
 
 // ---- vegetation sprites ---------------------------------------------------
 
