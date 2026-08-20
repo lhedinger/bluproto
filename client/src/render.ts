@@ -222,29 +222,17 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   return groundCv;
 }
 
-/** True on-screen body diameter (px) below which a creature is drawn as a
- *  flat colour block instead of a sprite stamp. At that size the stamp reads
- *  as a couple of noisy pixels anyway, but still costs a drawImage — the
- *  block keeps the map view's herd colours readable for about a tenth of the
- *  cost. Bigger bodies keep their sprites slightly longer, so the megafauna
- *  stay recognisable on the map. */
-export const DOT_LOD_PX = 8;
+/** Camera zoom (px per tile) below which EVERY creature draws as a flat
+ *  colour block instead of a sprite stamp. One decision per frame, from the
+ *  zoom alone: keying the tier on each body's own on-screen size mixed
+ *  sprites and squares in the same view (adults as sprites, their young as
+ *  blocks beside them), and the old adaptive frame-time threshold sat in a
+ *  feedback loop on mid-range phones — degrading to dots made frames cheap
+ *  enough to restore sprites, which made them slow enough to degrade again,
+ *  so the whole herd blinked between the two tiers. Zoom is the one input
+ *  that is stable frame to frame and identical for every body. */
+export const DOT_LOD_SCALE = 8;
 
-// Adaptive degradation: when frames run long for a sustained stretch, the dot
-// threshold rises so more of the herd draws as blocks — trading sprite detail
-// the eye can barely use for the frame rate it definitely can. An EMA with
-// hysteresis keeps the mode from flapping; both bounds sit ABOVE the 16.7 ms
-// a locked-60 machine settles at (an exit bound below it would trap the mode
-// on forever — a machine holding exactly 60 fps could never leave), so a
-// machine that can hold 60 fps always recovers full detail.
-let frameEma = 16.7;
-let lastFrameAt = 0;
-let herdMode = false;
-
-// ?lod=0 freezes the adaptive threshold at its base value — the benchmark
-// harness (client/bench) uses it so a zoom band always exercises the draw
-// tier it targets instead of whatever the load feedback picked that run.
-const LOD_LOCKED = typeof location !== 'undefined' && /[?&]lod=0\b/.test(location.search);
 // Perf experiment switches (the ⚙ dialog in main.ts writes these): each
 // disables one visual subsystem so its cost can be isolated on a device.
 const flagOff = (k: string): boolean =>
@@ -253,18 +241,6 @@ const SPRITES_OFF = flagOff('sprites'); // creatures as dots only
 const PHERO_OFF = flagOff('phero');     // pheromone clouds
 const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
 const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
-
-function adaptiveDotLod(nowMs: number): number {
-  if (LOD_LOCKED) return DOT_LOD_PX;
-  if (lastFrameAt > 0) {
-    const dt = Math.min(100, nowMs - lastFrameAt);
-    frameEma += (dt - frameEma) * 0.1;
-    if (!herdMode && frameEma > 26) herdMode = true;
-    else if (herdMode && frameEma < 18.5) herdMode = false;
-  }
-  lastFrameAt = nowMs;
-  return herdMode ? DOT_LOD_PX * 2.5 : DOT_LOD_PX;
-}
 
 /** The map-view dot: a corpse is a spent grey block; a live body its colour. */
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
@@ -292,7 +268,7 @@ export function render(
     { id: null, tile: null },
 ): void {
   const cv = g.canvas;
-  const dotLod = SPRITES_OFF ? Infinity : adaptiveDotLod(nowMs);
+  const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
   g.fillStyle = '#14161a';
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
@@ -434,13 +410,12 @@ export function render(
       continue;
     }
 
-    // Creature. Dot-sized bodies (see DOT_LOD_PX; threshold rises under
-    // sustained frame pressure) skip the sprite pipeline:
-    // one or two fillRects instead of a drawImage, which is most of the frame
-    // at map zoom with a large population.
+    // Creature. At map zoom (see DOT_LOD_SCALE) every body skips the sprite
+    // pipeline: one or two fillRects instead of a drawImage, which is most of
+    // the frame at that zoom with a large population.
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
-      if (bodyPx < dotLod) {
+      if (dots) {
         drawDot(g, s.x, s.y, bodyPx, '', true);
         continue;
       }
@@ -480,8 +455,8 @@ export function render(
     // ever glimpsed is how an old world's 800+ atlases (~2MB of canvas each)
     // ended up resident at once — zooming in shows a dot for the beat the
     // fetch takes instead.
-    const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
-    if (bodyPx < dotLod) {
+    const atlas = dots ? null : atlasFor(e.pheno);
+    if (dots) {
       drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
     } else if (atlas) {
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
@@ -657,7 +632,7 @@ export function renderGL(
   const sec = { secLayers: 0, secEnts: 0, secTail: 0 };
   const lap = (k: keyof typeof sec) => { const n = performance.now(); sec[k] += n - t0; t0 = n; };
   const cv = og.canvas;
-  const dotLod = SPRITES_OFF ? Infinity : adaptiveDotLod(nowMs);
+  const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
   glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
   og.clearRect(0, 0, cv.width, cv.height);
   if (!meta) return { ...glr.end(), ...sec };
@@ -772,7 +747,7 @@ export function renderGL(
 
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
-      if (bodyPx < dotLod) {
+      if (dots) {
         const sq = Math.max(4, bodyPx);
         glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, 0x5a / 255, 0x5f / 255, 0x66 / 255, 1);
         continue;
@@ -798,11 +773,11 @@ export function renderGL(
 
     // No atlas fetch at dot size — see render() above for why prefetching
     // every glimpsed phenotype is a memory cliff on long-evolved worlds.
-    const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
-    if (bodyPx < dotLod || !atlas) {
+    const atlas = dots ? null : atlasFor(e.pheno);
+    if (dots || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
       // block while the sprite streams in): solid quads, batched together.
-      const sq = Math.max(4, bodyPx < dotLod ? bodyPx : r * 1.4);
+      const sq = Math.max(4, dots ? bodyPx : r * 1.4);
       const rgb = e.rgb;
       glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
