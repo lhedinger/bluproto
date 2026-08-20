@@ -163,7 +163,10 @@ public final class ProcTiles {
 	 * into the pit's own dark — its low edge is pure {@link #HOLE_DARK}, so it
 	 * fades flush into the hole it pours into (whose lip is suppressed on that
 	 * side, see {@code Grid.renderGroundPixel}). An UP ramp climbs the other
-	 * way: earth at the foot brightening to a sunlit high end. Chevrons always
+	 * way: earth at the foot brightening to a sunlit high end, its open flanks
+	 * retained by triangular stone side walls — wedges that rise from nothing
+	 * at the foot to full width against the rock at the top, so the climb
+	 * reads as a cut ascent rather than a painted stripe. Chevrons always
 	 * point uphill.
 	 */
 	public static BufferedImage ramp(String code, boolean up, int downhill) {
@@ -199,6 +202,14 @@ public final class ProcTiles {
 		boolean horiz = downhill == 1 || downhill == 3; // slope axis east-west
 		boolean edge0 = !has(code, horiz ? '2' : '4'); // N (horiz) / W (vert)
 		boolean edge1 = !has(code, horiz ? '7' : '5'); // S (horiz) / E (vert)
+		// The up ramp's side-wall stone, shaded like the walls it climbs to:
+		// a lit outer rim, a grainy body, and a dark inner face where the
+		// wedge drops onto the slope.
+		Color stone = WALL_BODY;
+		Color stoneDark = new Color((int) (stone.getRed() * 0.68),
+				(int) (stone.getGreen() * 0.68), (int) (stone.getBlue() * 0.68));
+		Color stoneLit = new Color(cl((int) (stone.getRed() * 1.22)),
+				cl((int) (stone.getGreen() * 1.22)), cl((int) (stone.getBlue() * 1.22)));
 		for (int aj = 0; aj < A; aj++) {
 			for (int ai = 0; ai < A; ai++) {
 				// (a, b): distance downhill from the high edge, and across.
@@ -210,12 +221,26 @@ public final class ProcTiles {
 				double frac = t - lo;
 				int idx = lo >= 3 ? 3
 						: (frac > GroundTextures.bayer(ai, aj) ? lo + 1 : lo);
-				// Dark channel edges along the open sides, so the ramp reads
-				// as a cut slope.
-				if (((b == 0 && edge0) || (b == A - 1 && edge1)) && idx < 3) {
-					idx++;
+				Color col = shades[idx];
+				if (up) {
+					// Triangular side walls on the open flanks: wedge width
+					// grows 0 -> 3 art-px from foot to top, tracking how far
+					// the walking surface has risen above the ground beside it.
+					int wedge = (int) Math.round((A - 1 - a) * 3.0 / (A - 1));
+					int d = b < A / 2 ? b : A - 1 - b; // dist into this flank
+					boolean open = b < A / 2 ? edge0 : edge1;
+					if (open && d < wedge) {
+						col = d == wedge - 1 ? stoneDark // inner face onto the slope
+								: d == 0 ? stoneLit // lit outer rim
+								: GroundTextures.hash01(ai, aj, 53) < 0.16
+										? stoneDark : stone; // grainy body
+					}
+				} else if (((b == 0 && edge0) || (b == A - 1 && edge1)) && idx < 3) {
+					// Dark channel edges along the down ramp's open sides, so
+					// the descent reads as a cut into the ground.
+					col = shades[idx + 1];
 				}
-				g.setColor(shades[idx]);
+				g.setColor(col);
 				g.fillRect(X0 + ai * TS / A, Y0 + aj * TS / A, ap, ap);
 			}
 		}
