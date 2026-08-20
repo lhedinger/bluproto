@@ -1481,27 +1481,22 @@ public class TestNPC extends NPC {
 		if (getWorld() == null) {
 			return;
 		}
-		// Still walking to the body it already chose. A carcass does not move, so
-		// the only reasons to look again are that it is gone or that this body has
-		// arrived; short of those, the choice stands.
+		// A body already chosen keeps the channel unless something is a great deal
+		// better -- the bar it must clear is the held body's own score times
+		// CARRION_SWITCH_GAIN. With nothing held the bar is zero and the best
+		// carcass in range simply wins, which is the same choice as before.
 		NPC held = heldCarrion();
-		if (held != null) {
-			forageCol = (int) held.getX();
-			forageRow = (int) held.getY();
-			return;
-		}
 		NPC best = null;
-		double bestScore = 0;
+		double bestScore = held == null ? 0 : carrionScore(held) * CARRION_SWITCH_GAIN;
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
 			if (n == this || !n.isDead() || n.isRemoved()) {
 				continue;
 			}
-			double dist = distance(n.getX(), n.getY(), n.getZ());
-			if (dist > CARRION_SCENT_R) {
+			if (distance(n.getX(), n.getY(), n.getZ()) > CARRION_SCENT_R) {
 				continue;
 			}
-			double score = n.bodyMass() * (1.0 - n.decayProgress()) / (1.0 + dist);
+			double score = carrionScore(n);
 			// Same reachability rule as the grazer's forage: a carcass on the far
 			// side of rock is not a meal, it is a wall to press against.
 			if (score > bestScore && walkableLineTo((int) n.getX(), (int) n.getY())) {
@@ -1509,12 +1504,46 @@ public class TestNPC extends NPC {
 				best = n;
 			}
 		}
-		carrionTarget = best;
 		if (best != null) {
-			forageCol = (int) best.getX();
-			forageRow = (int) best.getY();
+			carrionTarget = best; // nothing held, or something worth crossing to
+		}
+		NPC target = carrionTarget;
+		if (target != null) {
+			forageCol = (int) target.getX();
+			forageRow = (int) target.getY();
 		}
 	}
+
+	/**
+	 * What a carcass is worth from here: the energy still in it over the walk to
+	 * reach it. Since a bite is paid at full rate and rot is charged once, in how
+	 * much carcass is LEFT, {@code mass * freshness} is exactly the energy
+	 * remaining — so this really is expected payoff per unit of travel rather than
+	 * a stand-in for it.
+	 */
+	private double carrionScore(NPC n) {
+		return n.bodyMass() * (1.0 - n.decayProgress())
+				/ (1.0 + distance(n.getX(), n.getY(), n.getZ()));
+	}
+
+	/**
+	 * How much better a rival carcass must be before a committed scavenger will
+	 * cross to it.
+	 *
+	 * <p>Committing at all was the fix that made the niche viable: re-running the
+	 * argmax every tick handed the lead back and forth between bodies whose scores
+	 * sat within noise of each other, so the creature turned toward a new one every
+	 * few steps and reached none — a carcass within biting distance on 0.87 per cent
+	 * of its ticks. But committing outright is not free either: measured, a quarter
+	 * of held ticks had a body in range worth more than half again as much, and only
+	 * a third of commitments ended in a meal at all.
+	 *
+	 * <p>A wide band buys both. Near-ties cannot steal the target, so the thrashing
+	 * stays fixed; a body worth twice the walk can. It is also self-damping — the
+	 * score rises as the walk shortens, so whatever is being approached gets harder
+	 * to displace the closer it gets, and a switch cannot immediately switch back.
+	 */
+	private static final double CARRION_SWITCH_GAIN = 2.0;
 
 	/**
 	 * The carcass this body is already walking to, if that choice is still worth

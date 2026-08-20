@@ -449,13 +449,59 @@ public class SimTests {
 	}
 
 	/**
-	 * A scavenger keeps walking to the carcass it chose. Carrion is scored by
-	 * {@code mass * freshness / (1 + dist)}, and with several bodies in scent range
-	 * those scores sit close together -- re-running the argmax every tick hands the
-	 * lead back and forth and the creature turns toward a new body every few steps
-	 * instead of reaching any of them. Measured before this held: a target in view
-	 * on 37% of ticks and one actually within biting distance on 0.87%.
+	 * A scavenger keeps walking to the carcass it chose unless something is a great
+	 * deal better. Carrion is scored by {@code mass * freshness / (1 + dist)}, and
+	 * with several bodies in scent range those scores sit close together -- re-running
+	 * the argmax every tick hands the lead back and forth and the creature turns
+	 * toward a new body every few steps instead of reaching any of them. Measured
+	 * before anything held: a target in view on 37% of ticks and one actually within
+	 * biting distance on 0.87%. This pins the near-tie half of the rule; the
+	 * crossing half is {@link ScavengerCrossesToAMuchBetterCarcass}.
 	 */
+	/**
+	 * The other half of the rule: committing is not a vow. A body worth well over
+	 * the band -- here four times the held one's score, because it is a step away
+	 * rather than seven -- is worth crossing to.
+	 *
+	 * <p>Holding outright was measured to cost real food: a quarter of held ticks
+	 * had a carcass in range worth more than half again as much, and only a third
+	 * of commitments ever ended in a meal.
+	 */
+	static class ScavengerCrossesToAMuchBetterCarcass extends Scenario {
+		@Override
+		public void run() {
+			seed(37);
+			World w = room(30, 12);
+			Genome g = Genome.phenotype(9, 0.0, 5, 30, Math.PI * 2, 100000);
+
+			TestNPC far = TestNPC.breeder(15.5, 5.5, 0, g);
+			w.spawnEntity(far);
+			tick(w, 2);
+			far.damage(500);
+			tick(w, 1);
+
+			Mind still = (sensors, act) -> { };
+			TestNPC scav = TestNPC.minded(8.5, 5.5, 0, g, still)
+					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+			w.spawnEntity(scav);
+			tick(w, 2);
+			assertNear("it starts out fixed on the carcass ahead", 0,
+					scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING], 0.1);
+
+			// Practically underfoot, and behind: four times the score of the one it
+			// is walking to. Walking past that is not commitment, it is stubbornness.
+			TestNPC underfoot = TestNPC.breeder(7.5, 5.5, 0, g);
+			w.spawnEntity(underfoot);
+			tick(w, 2);
+			underfoot.damage(500);
+			tick(w, 2);
+			assertTrue("a far better carcass is a step behind it", underfoot.isDead());
+
+			assertNear("the scavenger crosses to it", 1.0,
+					Math.abs(scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING]), 0.1);
+		}
+	}
+
 	static class ScavengerHoldsTheCarcassItChose extends Scenario {
 		@Override
 		public void run() {
@@ -463,8 +509,8 @@ public class SimTests {
 			World w = room(30, 12);
 			Genome g = Genome.phenotype(9, 0.0, 5, 30, Math.PI * 2, 100000);
 
-			// One carcass east, comfortably inside scent range rather than on its edge.
-			TestNPC near = TestNPC.breeder(11.5, 5.5, 0, g);
+			// One carcass seven tiles east, comfortably inside scent range.
+			TestNPC near = TestNPC.breeder(15.5, 5.5, 0, g);
 			w.spawnEntity(near);
 			tick(w, 2);
 			near.damage(500);
@@ -472,23 +518,24 @@ public class SimTests {
 			assertTrue("there is a carcass to walk to", near.isDead());
 
 			Mind still = (sensors, act) -> { };
-			TestNPC scav = TestNPC.minded(4.5, 5.5, 0, g, still)
+			TestNPC scav = TestNPC.minded(8.5, 5.5, 0, g, still)
 					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
 			w.spawnEntity(scav);
 			tick(w, 2);
 			double chosen = scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
 			assertNear("it has fixed on the carcass ahead", 0, chosen, 0.1);
 
-			// Now a second, fatter carcass appears BEHIND it, close enough to win the
-			// score outright. A body already committed keeps walking to the first.
-			TestNPC fat = TestNPC.breeder(3.5, 5.5, 0, g);
-			w.spawnEntity(fat);
+			// A second carcass of the same mass appears BEHIND it, four tiles off:
+			// nearer, so worth more, but only about 1.6x more -- inside the band.
+			// Near-ties are exactly what used to hand the lead back and forth.
+			TestNPC rival = TestNPC.breeder(4.5, 5.5, 0, g);
+			w.spawnEntity(rival);
 			tick(w, 2);
-			fat.damage(500);
+			rival.damage(500);
 			tick(w, 2);
-			assertTrue("and a fatter one has appeared behind it", fat.isDead());
+			assertTrue("and a slightly better one has appeared behind it", rival.isDead());
 
-			assertNear("the scavenger holds the carcass it chose", 0,
+			assertNear("a near-tie does not steal the carcass it chose", 0,
 					scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING], 0.1);
 		}
 	}
@@ -5162,6 +5209,7 @@ public class SimTests {
 				new ScavengerYoungAreScavengers(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),
+				new ScavengerCrossesToAMuchBetterCarcass(),
 				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
 				new HoleFallRespectsFlying(),
