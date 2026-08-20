@@ -65,8 +65,10 @@ public class Grid {
 			}
 			renderGround(g2, ox, oy);
 			if (RenderFx.foliage) {
-				renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
-				renderShrubs(g2, ox, oy);    // decorative bushes on the lushest tiles
+				if (RenderFx.grassTufts) {
+					renderTallGrass(g2, ox, oy); // under the creatures, so they walk over it
+				}
+				renderShrubs(g2, ox, oy); // decorative bushes on the lushest tiles
 			}
 		} else {
 			if (lr.mapLayers[level].image_layer_downsized != null) {
@@ -558,8 +560,8 @@ public class Grid {
 	 * through an ordered (Bayer) dither -- shade transitions are checkerboard
 	 * mixes of adjacent ramp colours, never blends. The terrain lookup is
 	 * jittered by noise so class boundaries wander and dither across tile edges
-	 * instead of snapping to the grid. Open ground (grass, soil, water, mud,
-	 * cover) jitters hard for organic coastlines; water is a calm top-down
+	 * instead of snapping to the grid. Open ground (soil, water, mud, cover)
+	 * jitters hard for organic coastlines; water is a calm top-down
 	 * surface of shadow/base patches with sparse glints, dry soil is plated by
 	 * a dark Voronoi-ridge crack network (mud cracks finer, and turns into a
 	 * darker crack-free wet band beside water). Walls and holes jitter only
@@ -567,16 +569,19 @@ public class Grid {
 	 * onto open ground; a wall shows a calm cross-section top with a lit north
 	 * edge, a band of carved vertical face dashes where it fronts open ground
 	 * to the south, and a cast shadow on the ground below.
+	 *
+	 * <p>Every pixel here is a pure function of tile type and position — never
+	 * of live state like vegetation — so the ground can be baked once and two
+	 * tiles that mean the same thing always look the same.
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
-		long now = world.getTick();
 		int A = 12; // art-pixels per tile
 		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
 				Tile t = tiles[x][y];
-				int cls = GroundTextures.groundClass(t, now);
+				int cls = GroundTextures.groundClass(t);
 				if (cls < 0) {
 					continue; // ramps: baked layer shows through
 				}
@@ -606,7 +611,7 @@ public class Grid {
 								// open ground either way.
 								double jx = wx + (Utils.noise2(wx + 3.1, wy, 2.8) - 0.5) * 0.2;
 								double jy = wy + (Utils.noise2(wx, wy + 5.7, 2.8) - 0.5) * 0.2;
-								cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy), now);
+								cl = groundClassAt((int) Math.floor(jx), (int) Math.floor(jy));
 								if (cl < 0 || !(GroundTextures.isStructure(cl)
 										|| cl == GroundTextures.CLS_HOLE)) {
 									cl = cls;
@@ -617,7 +622,7 @@ public class Grid {
 							// shapes, not noise -- the higher-priority terrain laps
 							// into its lower neighbour with rounded corners and
 							// short hand-scallop runs (see resolveEdge).
-							cl = resolveEdge(x, y, ai, aj, cls, now);
+							cl = resolveEdge(x, y, ai, aj, cls);
 						}
 						int gx = x * A + ai, gy = y * A + aj; // world-absolute art-pixel
 						int col;
@@ -758,11 +763,10 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_PAVED) {
 								col = GroundTextures.paved(gx, gy);
 							} else if (cl == GroundTextures.CLS_FUNGUS) {
-								// Bioluminescent beds; clump size follows live vegetation,
-								// so grazing visibly eats the glow away.
-								double cap = t.vegetationCap();
-								double veg = cap > 0 ? t.getVegetation(now) / cap : 1;
-								col = GroundTextures.fungus(wx, wy, gx, gy, veg);
+								// Bioluminescent beds at their full ideal density: the
+								// ground shows what the tile IS; how much is left to
+								// graze is the vegetation sprite layer's job.
+								col = GroundTextures.fungus(wx, wy, gx, gy, 1);
 							} else if (cl == GroundTextures.CLS_CRYSTAL_BED) {
 								col = GroundTextures.crystalBed(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_CRYSTAL_SPARSE) {
@@ -773,11 +777,6 @@ public class Grid {
 								col = GroundTextures.sand(gx, gy);
 							} else if (cl == GroundTextures.CLS_REEDS) {
 								col = GroundTextures.reeds(gx, gy);
-							} else if (cl == GroundTextures.CLS_GRASS) {
-								// Lawn: calm patches plus stamped tufts whose density
-								// follows the live vegetation.
-								double veg = Math.min(1, t.getVegetation(now) / Tile.VEG_MAX);
-								col = GroundTextures.grass(wx, wy, gx, gy, veg);
 							} else if (cl == GroundTextures.CLS_COVER) {
 								// Thicket: a canopy of self-shaded leaf clumps whose
 								// character varies stand by stand.
@@ -869,11 +868,11 @@ public class Grid {
 		return (r << 16) | (g << 8) | b;
 	}
 
-	private int groundClassAt(int cx, int cy, long now) {
+	private int groundClassAt(int cx, int cy) {
 		if (cx < 0 || cy < 0 || cx >= world.cols || cy >= world.rows) {
 			return -1;
 		}
-		return GroundTextures.groundClass(tiles[cx][cy], now);
+		return GroundTextures.groundClass(tiles[cx][cy]);
 	}
 
 	/** Draw-order rank for open-ground autotiling: the higher terrain laps
@@ -894,7 +893,6 @@ public class Grid {
 		case GroundTextures.CLS_RUBBLE: return 9;
 		case GroundTextures.CLS_VENT: return 10;
 		case GroundTextures.CLS_FUNGUS: return 11;
-		case GroundTextures.CLS_GRASS: return 12;
 		case GroundTextures.CLS_REEDS: return 13;
 		case GroundTextures.CLS_COVER: return 14;
 		default: return -1; // structures, holes, paving: no lapping
@@ -917,7 +915,7 @@ public class Grid {
 	 * shapes with rounded corners, deterministic and tile-anchored, never
 	 * noise. Ties (equal rank) keep the straight tile edge.
 	 */
-	private int resolveEdge(int x, int y, int ai, int aj, int cls, long now) {
+	private int resolveEdge(int x, int y, int ai, int aj, int cls) {
 		int A = 12;
 		int own = edgeRank(cls);
 		if (own < 0) {
@@ -926,22 +924,22 @@ public class Grid {
 		int gx = x * A + ai, gy = y * A + aj;
 		// Cardinal laps, deepest wins so corner pockets fill naturally.
 		int best = cls, bestDepth = 0;
-		int n = lapClassAt(x, y - 1, own, now);
+		int n = lapClassAt(x, y - 1, own);
 		if (n >= 0 && aj < lapDepth(gx, n * 4 + 0)) {
 			int d = lapDepth(gx, n * 4 + 0) - aj;
 			if (d > bestDepth) { best = n; bestDepth = d; }
 		}
-		int s = lapClassAt(x, y + 1, own, now);
+		int s = lapClassAt(x, y + 1, own);
 		if (s >= 0 && aj >= A - lapDepth(gx, s * 4 + 1)) {
 			int d = aj - (A - lapDepth(gx, s * 4 + 1)) + 1;
 			if (d > bestDepth) { best = s; bestDepth = d; }
 		}
-		int w = lapClassAt(x - 1, y, own, now);
+		int w = lapClassAt(x - 1, y, own);
 		if (w >= 0 && ai < lapDepth(gy, w * 4 + 2)) {
 			int d = lapDepth(gy, w * 4 + 2) - ai;
 			if (d > bestDepth) { best = w; bestDepth = d; }
 		}
-		int e = lapClassAt(x + 1, y, own, now);
+		int e = lapClassAt(x + 1, y, own);
 		if (e >= 0 && ai >= A - lapDepth(gy, e * 4 + 3)) {
 			int d = ai - (A - lapDepth(gy, e * 4 + 3)) + 1;
 			if (d > bestDepth) { best = e; bestDepth = d; }
@@ -952,19 +950,19 @@ public class Grid {
 		// Rounded outer corners: where two cardinals share a higher diagonal
 		// neighbour, the diagonal's lap rounds the corner with a quarter-arc.
 		int R = 4; // corner radius, art-px
-		int nw = lapClassAt(x - 1, y - 1, own, now);
+		int nw = lapClassAt(x - 1, y - 1, own);
 		if (nw >= 0 && ai < R && aj < R && dist2(ai, aj, R, R) > R * R) {
 			return nw;
 		}
-		int ne = lapClassAt(x + 1, y - 1, own, now);
+		int ne = lapClassAt(x + 1, y - 1, own);
 		if (ne >= 0 && ai >= A - R && aj < R && dist2(ai, aj, A - 1 - R, R) > R * R) {
 			return ne;
 		}
-		int sw = lapClassAt(x - 1, y + 1, own, now);
+		int sw = lapClassAt(x - 1, y + 1, own);
 		if (sw >= 0 && ai < R && aj >= A - R && dist2(ai, aj, R, A - 1 - R) > R * R) {
 			return sw;
 		}
-		int se = lapClassAt(x + 1, y + 1, own, now);
+		int se = lapClassAt(x + 1, y + 1, own);
 		if (se >= 0 && ai >= A - R && aj >= A - R && dist2(ai, aj, A - 1 - R, A - 1 - R) > R * R) {
 			return se;
 		}
@@ -973,8 +971,8 @@ public class Grid {
 
 	/** The neighbour's class if it out-ranks {@code ownRank} (so it laps into
 	 *  this tile), else -1. */
-	private int lapClassAt(int cx, int cy, int ownRank, long now) {
-		int c = groundClassAt(cx, cy, now);
+	private int lapClassAt(int cx, int cy, int ownRank) {
+		int c = groundClassAt(cx, cy);
 		if (c < 0) {
 			return -1;
 		}

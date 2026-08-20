@@ -93,10 +93,10 @@ let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
 function chunkImage(cx: number, cy: number): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
-  // The VEGETATION-FREE bake: vegetation is no longer part of the ground at
-  // all — it renders as one-tile sprites stamped over these chunks by the
+  // The bake carries no vegetation (server ground classes are type-only) —
+  // vegetation renders as one-tile sprites stamped over these chunks by the
   // chunked vegetation layer (render.vegLayerUpdate).
-  const name = `${cx}_${cy}_bare`;
+  const name = `${cx}_${cy}`;
   const key = `${v}/${currentLevel}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;

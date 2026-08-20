@@ -14,14 +14,16 @@ import net.hedinger.prototype.engine.View;
 import net.hedinger.prototype.engine.World;
 
 /**
- * Bakes a world's <em>static</em> visuals — tiles, pixel ground, tall grass,
- * shrubs — into one PNG per level, using the existing Java renderer against an
+ * Bakes a world's <em>static</em> visuals — tiles, pixel ground, shrubs — into
+ * one PNG per level, using the existing Java renderer against an
  * entity-free terrain twin of the live world (see {@code Worlds.demoTerrain}).
  * This is the MODERNIZATION.md render split in action: the style-defining art
  * is never ported, it is served; the client only composites entities on top.
  *
- * <p>Baked once per world (grass density in the bake is the untouched ideal;
- * live grazing thinning is a Phase 4 refinement).
+ * <p>Baked once per world. The bake is a pure function of the terrain: ground
+ * classes are type-only and the live tall-grass tufts are disabled here (see
+ * {@link #loadResourcesOnce}), so nothing vegetation-dependent is frozen into
+ * the chunks — growth and depletion are the client's vegetation sprite layer.
  */
 final class LayerBaker {
 
@@ -32,16 +34,26 @@ final class LayerBaker {
 
 	private static boolean resourcesLoaded = false;
 
+	/** One-time render setup for every server-side bake: load the shared sprite
+	 *  resources, and disable the live tall-grass tufts — they follow the
+	 *  vegetation at render time, and a bake frozen at one arbitrary regrowth
+	 *  moment would contradict the sprite vegetation layer drawn on top. The
+	 *  server renders nothing but bakes, so the flag is simply left off. */
+	private static void loadResourcesOnce() {
+		synchronized (LayerBaker.class) {
+			if (!resourcesLoaded) {
+				ResourceManager.loadResources();
+				net.hedinger.prototype.engine.RenderFx.grassTufts = false;
+				resourcesLoaded = true;
+			}
+		}
+	}
+
 	/** Renders level {@code z} of the terrain world to one full-size image
 	 *  (1 tile = tileSize px). The caller slices it into chunks; the image is
 	 *  transient and freed once sliced. */
 	static BufferedImage renderLevelImage(World terrain, int z) {
-		synchronized (LayerBaker.class) {
-			if (!resourcesLoaded) {
-				ResourceManager.loadResources();
-				resourcesLoaded = true;
-			}
-		}
+		loadResourcesOnce();
 		terrain.alignTiles();
 		LayerRenderer lr = new LayerRenderer(terrain);
 		lr.build(terrain);
@@ -114,7 +126,7 @@ final class LayerBaker {
 		// chunks were ~18 MB of PNG, alone putting the first paint tens of
 		// seconds out on an ordinary connection. Nearest sampling keeps exactly
 		// one sample per art-pixel (lossless for everything on the art grid;
-		// the legacy tall-grass tufts get snapped onto it). The client
+		// the decorative shrubs get snapped onto it). The client
 		// upscales nearest-neighbour, so the screen shows the same art.
 		int ts = ResourceManager.tileSize;
 		int aw = w / ts * CHUNK_PX, ah = h / ts * CHUNK_PX;
@@ -136,12 +148,7 @@ final class LayerBaker {
 	/** Builds a chunked-bake renderer: per-tile base sprites only, no whole-level
 	 *  image. Built once and reused across every chunk of every level. */
 	static net.hedinger.prototype.engine.LayerRenderer chunkRenderer(World terrain) {
-		synchronized (LayerBaker.class) {
-			if (!resourcesLoaded) {
-				ResourceManager.loadResources();
-				resourcesLoaded = true;
-			}
-		}
+		loadResourcesOnce();
 		terrain.alignTiles();
 		net.hedinger.prototype.engine.LayerRenderer lr = new net.hedinger.prototype.engine.LayerRenderer(terrain);
 		lr.buildTilesOnly(terrain);
@@ -186,7 +193,7 @@ final class LayerBaker {
 		// level's chunks were ~18 MB of PNG, which alone put the first paint
 		// tens of seconds out on an ordinary connection. A nearest downscale
 		// keeps exactly one sample per art-pixel (lossless for everything on
-		// the art grid; the legacy tall-grass tufts get snapped onto it, which
+		// the art grid; the decorative shrubs get snapped onto it, which
 		// the design system counts as a feature). The client upscales
 		// nearest-neighbour, so what reaches the screen is the same art.
 		int aw = cw * CHUNK_PX, ah = ch * CHUNK_PX;

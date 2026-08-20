@@ -570,48 +570,58 @@ public class Tile {
 	}
 
 	public enum TileType {
-		TYPE_HOLE(0, true),
-		TYPE_FLOOR(1, true),
-		TYPE_WALL(2, false),
-		TYPE_RAMPUP(3, true),
-		TYPE_RAMPDOWN(4, true),
-		TYPE_WATER(5, true), // open (flyers pass) but not walkable
-		TYPE_MUD(6, true), // walkable, slows movement
-		TYPE_COVER(7, true), // walkable, blocks line of sight
-		TYPE_STONE(8, true), // walkable bare rock floor; grows no vegetation
-		TYPE_FUNGUS(9, true), // cave floor growing grazeable fungus
-		TYPE_RUBBLE(10, true), // broken rock; slows movement, sight passes
-		TYPE_SAND(11, true), // bare loose ground; grows no vegetation
-		TYPE_REEDS(12, true), // wetland stalks; slow AND sight-blocking
-		TYPE_SHALLOWS(13, true), // walkable water fringe; slows like a ford
-		TYPE_QUICKSAND(14, true), // treacherous sand; near-stops whatever enters
-		TYPE_CRYSTAL(15, false), // solid mineral cluster; blocks movement, not sight
-		TYPE_VENT(16, true), // geothermal vent mouth in cave stone
-		TYPE_WALL_BUILT(17, false), // man-made masonry wall
-		TYPE_PAVED(18, true), // man-made paved corridor floor
-		TYPE_PLATE(19, true), // facility steel deck floor
-		TYPE_CATWALK(20, true), // grated walkway; the void shows through
-		TYPE_SHAFT(21, true), // vertical shaft: open, drops like a hole
-		TYPE_PIPES(22, true), // floor pipe run; slow clambering ground
-		TYPE_AIRVENT(23, true), // louvered ventilation grille in the deck
-		TYPE_WALL_CONCRETE(24, false), // poured concrete facility wall
-		TYPE_WALL_STEEL(25, false), // riveted steel bulkhead wall
-		TYPE_DUCT(26, true), // crawlable air duct: small bodies only, concealed
-		TYPE_CRYSTAL_BED(27, true), // packed shard bed: walkable, but it slows
-		TYPE_CRYSTAL_SPARSE(28, true), // scattered shards on stone: ordinary ground
-		TYPE_SWITCH(29, true); // pressure-plate floor: a button a body stands on
+		TYPE_HOLE(0, true, "pit"),
+		TYPE_FLOOR(1, true, "grassland"), // living substrate: soil that grows grass
+		TYPE_WALL(2, false, "rock wall"),
+		TYPE_RAMPUP(3, true, "ramp up"),
+		TYPE_RAMPDOWN(4, true, "ramp down"),
+		TYPE_WATER(5, true, "deep water"), // open (flyers pass) but not walkable
+		TYPE_MUD(6, true, "mud"), // walkable, slows movement
+		TYPE_COVER(7, true, "thicket"), // walkable, blocks line of sight
+		TYPE_STONE(8, true, "stone floor"), // walkable bare rock floor; grows no vegetation
+		TYPE_FUNGUS(9, true, "fungus bed"), // cave floor growing grazeable fungus
+		TYPE_RUBBLE(10, true, "rubble"), // broken rock; slows movement, sight passes
+		TYPE_SAND(11, true, "sand"), // bare loose ground; grows no vegetation
+		TYPE_REEDS(12, true, "reed bed"), // wetland stalks; slow AND sight-blocking
+		TYPE_SHALLOWS(13, true, "shallows"), // walkable water fringe; slows like a ford
+		TYPE_QUICKSAND(14, true, "quicksand"), // treacherous sand; near-stops whatever enters
+		TYPE_CRYSTAL(15, false, "crystal cluster"), // solid mineral cluster; blocks movement, not sight
+		TYPE_VENT(16, true, "geothermal vent"), // geothermal vent mouth in cave stone
+		TYPE_WALL_BUILT(17, false, "masonry wall"), // man-made masonry wall
+		TYPE_PAVED(18, true, "paved corridor"), // man-made paved corridor floor
+		TYPE_PLATE(19, true, "deck plate"), // facility steel deck floor
+		TYPE_CATWALK(20, true, "catwalk"), // grated walkway; the void shows through
+		TYPE_SHAFT(21, true, "drop shaft"), // vertical shaft: open, drops like a hole
+		TYPE_PIPES(22, true, "pipe run"), // floor pipe run; slow clambering ground
+		TYPE_AIRVENT(23, true, "vent grille"), // louvered ventilation grille in the deck
+		TYPE_WALL_CONCRETE(24, false, "concrete wall"), // poured concrete facility wall
+		TYPE_WALL_STEEL(25, false, "steel bulkhead"), // riveted steel bulkhead wall
+		TYPE_DUCT(26, true, "crawl duct"), // crawlable air duct: small bodies only, concealed
+		TYPE_CRYSTAL_BED(27, true, "shard bed"), // packed shard bed: walkable, but it slows
+		TYPE_CRYSTAL_SPARSE(28, true, "scattered shards"), // scattered shards on stone: ordinary ground
+		TYPE_SWITCH(29, true, "pressure plate"); // pressure-plate floor: a button a body stands on
 
 		private int value;
 		private boolean open;
+		private final String label;
 		private static Map<Integer, TileType> map = new HashMap<>();
 
-		private TileType(int value, boolean open) {
+		private TileType(int value, boolean open, String label) {
 			this.value = value;
 			this.open = open;
+			this.label = label;
 		}
 
 		public boolean isOpen() {
 			return open;
+		}
+
+		/** Distinct human-readable name for inspectors and tooling. Unlike the
+		 *  enum constant ("floor", "vent"...), each label says what the tile IS
+		 *  in the world — "grassland", "geothermal vent", "steel bulkhead" —
+		 *  and stays tellable-apart as more tile types are added. */
+		public String label() {
+			return label;
 		}
 
 		static {
