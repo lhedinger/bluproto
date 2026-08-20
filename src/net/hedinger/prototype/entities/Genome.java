@@ -49,6 +49,33 @@ public class Genome {
 	// --- markers (neutral recognition barcode, each in [0,1]) ---
 	public double[] markers = new double[MARKER_DIMS];
 
+	// --- trophic level (what this lineage eats) ---
+	/** Grazes. */
+	public static final int DIET_HERBIVORE = 0;
+	/** Kills and eats what it kills. */
+	public static final int DIET_CARNIVORE = 1;
+	/** Eats what is already dead. */
+	public static final int DIET_SCAVENGER = 2;
+
+	/**
+	 * What this lineage eats, as a {@code DIET_*} code.
+	 *
+	 * <p>It lives in the genome because it is the most consequential thing about a
+	 * body and the least negotiable: it decides what the creature can digest, who
+	 * it will breed with, and — since it is what the phenotype reads — what it
+	 * looks like. It used to be a field on the creature that heredity had to
+	 * remember to copy by hand, which is exactly the kind of thing heredity forgets:
+	 * a scavenger's young were born grazers until that was fixed, and the body plan
+	 * could never see the trait at all.
+	 *
+	 * <p>Inherited but never mutated. A lineage does not drift across trophic levels
+	 * one jitter at a time; a grazer whose grandchildren eat carrion is not evolution
+	 * in this world, it is a bug that would quietly dissolve the food chain. Sexual
+	 * crossover takes it from either parent, which is unambiguous because diet is a
+	 * mate barrier — a pair always agrees.
+	 */
+	public int diet = DIET_HERBIVORE;
+
 	// --- dispositions (interpretable response weights, >= 0) ---
 	public double predatory = 0; // attack smaller & dissimilar
 	public double xenophobia = 0; // flee bigger & dissimilar
@@ -118,6 +145,7 @@ public class Genome {
 		g.maxAge = maxAge;
 		g.flying = flying;
 		g.markers = markers.clone();
+		g.diet = diet;
 		g.predatory = predatory;
 		g.xenophobia = xenophobia;
 		g.gregariousness = gregariousness;
@@ -158,6 +186,9 @@ public class Genome {
 		for (int i = 0; i < MARKER_DIMS; i++) {
 			g.markers[i] = pick(a.markers[i], b.markers[i]);
 		}
+		// No draw and no pick: a pair only breeds inside its own diet, so both
+		// parents carry the same one and there is nothing to choose between.
+		g.diet = a.diet;
 		g.predatory = pick(a.predatory, b.predatory);
 		g.xenophobia = pick(a.xenophobia, b.xenophobia);
 		g.gregariousness = pick(a.gregariousness, b.gregariousness);

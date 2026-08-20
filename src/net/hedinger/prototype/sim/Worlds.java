@@ -65,7 +65,19 @@ public final class Worlds {
 		// prey down is what costs it: movement is charged as mass * v^2, so a
 		// full-speed pursuit burns far harder than its patrol and a long fruitless
 		// chase still thins it.
-		return species(markers, sizes, 0.045, 0.055, 0.02);
+		net.hedinger.prototype.entities.Genome[] out = species(markers, sizes, 0.045, 0.055, 0.02);
+		for (net.hedinger.prototype.entities.Genome g : out) {
+			// Say so in the genome. These have always hunted -- thinkPredator does the
+			// work -- but the genome described a herbivore with no appetite for it,
+			// which meant nothing downstream could tell a hunter from a grazer. The
+			// body plan reads `diet`, and `predatory` is a disposition that ought to
+			// match the animal carrying it; leaving it at zero on the world's actual
+			// predators made the gene decorative. Behaviour is unaffected: a hunter
+			// runs thinkPredator, not the react() weights this feeds.
+			g.diet = net.hedinger.prototype.entities.Genome.DIET_CARNIVORE;
+			g.predatory = 0.9;
+		}
+		return out;
 	}
 
 	/** Minded "species": a small cohort whose behaviour comes from a fully-random

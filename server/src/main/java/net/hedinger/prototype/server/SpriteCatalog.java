@@ -134,12 +134,22 @@ final class SpriteCatalog {
 	private void creatureSection() {
 		section("Creatures", "Distinct samples of the procedural organism space — each spins "
 				+ "through its eight facings while the idle gait plays. Genomes are hand-picked "
-				+ "points, not live phenotypes: the space itself is the reference.");
+				+ "points, not live phenotypes: the space itself is the reference. The body plan "
+				+ "is read from the genome's diet and whether it flies, so a grazer, a scavenger "
+				+ "and a hunter are different animals rather than the same one in three colours: "
+				+ "a grazer walks on plain legs, a hunter strides on long ones and carries a "
+				+ "tail, a scavenger goes bare-limbed and wears the feelers it finds its food "
+				+ "with, and anything airborne keeps a single pair.");
 		creature("founder_grazer", sample(6, 0.05, false, 0, new double[] { 0.20, 0.50, 0.80 }));
 		creature("tiny_darter", sample(3, 0.09, false, 0, new double[] { 0.90, 0.10, 0.40 }));
 		creature("bulky_armored", sample(14, 0.02, false, 0, new double[] { 0.50, 0.90, 0.20 }));
-		creature("apex_predator", sample(11, 0.06, false, 1, new double[] { 0.05, 0.05, 0.90 }));
+		creature("apex_predator",
+				sample(11, 0.06, false, 0.9, Genome.DIET_CARNIVORE, new double[] { 0.05, 0.05, 0.90 }));
+		creature("carrion_eater",
+				sample(7, 0.06, false, 0, Genome.DIET_SCAVENGER, new double[] { 0.45, 0.25, 0.65 }));
 		creature("flier", sample(5, 0.07, true, 0, new double[] { 0.60, 0.30, 0.10 }));
+		creature("winged_hunter",
+				sample(9, 0.08, true, 0.9, Genome.DIET_CARNIVORE, new double[] { 0.15, 0.60, 0.35 }));
 		creature("herd_mother", sample(8, 0.04, false, 0, new double[] { 0.35, 0.70, 0.55 }));
 
 		section("Creature actions", "The action envelopes every phenotype shares — squash, "
@@ -350,9 +360,19 @@ final class SpriteCatalog {
 	/** A deterministic genome at a chosen point of the phenotype space. */
 	private static Genome sample(double size, double speed, boolean flying,
 			double predatory, double[] markers) {
+		return sample(size, speed, flying, predatory, Genome.DIET_HERBIVORE, markers);
+	}
+
+	/** As above, for a sample whose trophic level is the point of it. Diet is what
+	 *  the body plan is drawn from, so a predator sample has to say it is one --
+	 *  passing a high {@code predatory} never did, and the "apex_predator" entry was
+	 *  drawing a grazer under a hunter's name. */
+	private static Genome sample(double size, double speed, boolean flying,
+			double predatory, int diet, double[] markers) {
 		Genome g = Genome.phenotype(size, speed, 5, 6, Math.PI / 2, 100000);
 		g.flying = flying;
 		g.predatory = predatory;
+		g.diet = diet;
 		for (int i = 0; i < g.markers.length && i < markers.length; i++) {
 			g.markers[i] = markers[i];
 		}
