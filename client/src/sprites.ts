@@ -494,6 +494,72 @@ for (const [act, name, meaning] of EXPR) {
 
 // ---- what the server bakes, and where to see it --------------------------
 
+// ---- body plans -----------------------------------------------------------
+// Every outline the organism renderer can draw, turntabled on the server and
+// shown here whether or not anything in the world currently wears it. Half of
+// them are unworn: the plan follows the genome's diet and there are three
+// trophic levels, so three of six sit idle. A catalogue that showed only what
+// happened to be alive would be a census of the population rather than a
+// reference to the space, and the plans nobody wears are exactly the ones worth
+// being able to look at before deciding what to do with them.
+//
+// These are <img> rather than a live canvas because the server already bakes
+// them, and a GIF of the full spin says more about a body than one frozen
+// facing. Lazy, so a phone scrolling the top of the page does not pay for them.
+const PLANS: Array<[string, string]> = [
+  ['plan_0_grazer', 'plan 0 — <b>grazer</b>'],
+  ['plan_1_radial_unworn', 'plan 1 — radial <i>(unworn)</i>'],
+  ['plan_2_wedge_unworn', 'plan 2 — wedge <i>(unworn)</i>'],
+  ['plan_3_scavenger', 'plan 3 — <b>scavenger</b>'],
+  ['plan_4_hunter', 'plan 4 — <b>hunter</b>'],
+  ['plan_5_ragged_unworn', 'plan 5 — ragged <i>(unworn)</i>'],
+];
+const plans = section('Body plans',
+  'The six outlines the organism renderer can draw, each spinning through its facings '
+  + 'with the idle gait running. Drawn from one genome with the trophic markings '
+  + 'stripped off, so the only thing that differs between them is the body. A creature\'s '
+  + 'plan follows what its genome eats, and there are three trophic levels — so three of '
+  + 'these are worn by nothing, and are here because a reference to the space should show '
+  + 'the whole space.');
+for (const [file, label] of PLANS) {
+  const img = document.createElement('img');
+  img.src = `/sprites/${file}.gif`;
+  img.loading = 'lazy';
+  img.alt = label.replace(/<[^>]+>/g, '');
+  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
+  figure(img, label, plans);
+}
+
+// The named organism samples the server bakes: hand-picked points in the genome
+// space rather than live phenotypes, so the reference stays put while the world
+// evolves. They were baked and shown nowhere — the page had no creature section
+// at all, so every one of these turntables was being rendered on each boot and
+// dropped on the floor.
+const SAMPLES: Array<[string, string]> = [
+  ['founder_grazer', 'founder grazer'],
+  ['tiny_darter', 'tiny darter'],
+  ['bulky_armored', 'bulky armoured'],
+  ['herd_mother', 'herd mother'],
+  ['carrion_eater', 'carrion eater — <b>scavenger</b>'],
+  ['apex_predator', 'apex predator — <b>hunter</b>'],
+  ['flier', 'flier'],
+  ['winged_hunter', 'winged hunter — <b>hunter</b>'],
+];
+const samples = section('Creatures',
+  'Distinct samples of the procedural organism space, each spinning through its eight '
+  + 'facings while the idle gait plays. Genomes are hand-picked points rather than live '
+  + 'phenotypes, so this stays a reference to the space while the world evolves away from '
+  + 'it. Unlike the plans above these wear their trophic markings: the hunters carry a '
+  + 'tail, the scavenger its feelers, and anything airborne keeps a single pair of limbs.');
+for (const [file, label] of SAMPLES) {
+  const img = document.createElement('img');
+  img.src = `/sprites/${file}.gif`;
+  img.loading = 'lazy';
+  img.alt = label.replace(/<[^>]+>/g, '');
+  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
+  figure(img, label, samples);
+}
+
 const rest = section('Server-baked art',
   'Ground chunks and creature bodies are baked on the server for the web view too — '
   + 'chunk PNGs and ProcCreature atlases — so they have a single source of truth rather '
