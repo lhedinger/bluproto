@@ -77,7 +77,7 @@ public final class ProcCreature {
 		// rest go bare -- so the plans are chosen for what they draw. A grazer walks
 		// on plain legs, a hunter on the long-striding pair, a scavenger goes bare
 		// and wears its feelers instead.
-		p.form = eco == 0 ? 0 : eco == 1 ? 2 : 4;
+		p.form = eco == 0 ? 0 : eco == 1 ? 3 : 4;
 		// Flight shows in the limbs. A body that flies is not carrying a walking
 		// undercarriage, so it keeps a single pair; a ground body's count is the
 		// markers' business. Together with the lift and the flattened shadow the
@@ -426,9 +426,13 @@ public final class ProcCreature {
 			}
 		}
 		if (ph.antennae) {
-			stampMod(g, ox, oy, px, w0((r + 0.9) * sA, 0.9 * sP, ux, rx), w1((r + 0.9) * sA, 0.9 * sP, uy, ry),
+			// Just beyond the front of THIS body plan. Pinned to r + 0.9 they landed
+			// inside a long body and vanished — the scavenger's one unmistakable
+			// feature, swallowed by the shape meant to carry it.
+			double nose = (noseOf(ph.form, r) + 0.9) * sA;
+			stampMod(g, ox, oy, px, w0(nose, 0.9 * sP, ux, rx), w1(nose, 0.9 * sP, uy, ry),
 					shade(ph.color, 0.55), m, seed);
-			stampMod(g, ox, oy, px, w0((r + 0.9) * sA, -0.9 * sP, ux, rx), w1((r + 0.9) * sA, -0.9 * sP, uy, ry),
+			stampMod(g, ox, oy, px, w0(nose, -0.9 * sP, ux, rx), w1(nose, -0.9 * sP, uy, ry),
 					shade(ph.color, 0.55), m, seed);
 		}
 		if (ph.tail) {
@@ -445,6 +449,19 @@ public final class ProcCreature {
 
 	// ---- silhouette --------------------------------------------------------
 
+	/** How far forward a body plan reaches, for hanging things off its nose. */
+	private static double noseOf(int form, int r) {
+		switch (form) {
+		case 3:
+			return Math.max(1.2, r * 0.8) + Math.max(1, r - 1.2); // the leading segment's far edge
+		case 2:
+		case 4:
+			return r + 0.3;
+		default:
+			return r + 0.8;
+		}
+	}
+
 	private static boolean inForm(int form, double la, double pe, int r, int seed, double phase) {
 		switch (form) {
 		case 1:
@@ -452,7 +469,10 @@ public final class ProcCreature {
 		case 2:
 			return la <= r + 0.3 && la >= -r - 0.3 && Math.abs(pe) <= (r - la) * 0.5 + 0.4;
 		case 3:
-			double d = Math.max(1.2, r), r2 = Math.max(1, r - 0.6), amp = 0.8;
+			// Three segments that undulate on the gait clock. Drawn a little smaller
+			// than it was born: at full size it out-massed the grazer it stands next
+			// to, and a scavenger that dwarfs what it feeds on reads wrong.
+			double d = Math.max(1.2, r * 0.8), r2 = Math.max(1, r - 1.2), amp = 0.8;
 			double o0 = amp * Math.sin(phase + 1.3), o1 = amp * Math.sin(phase), o2 = amp * Math.sin(phase - 1.3);
 			return Math.min(sq(la - d) + sq(pe - o2),
 					Math.min(sq(la) + sq(pe - o1), sq(la + d) + sq(pe - o0))) <= r2 * r2;

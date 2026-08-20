@@ -385,6 +385,7 @@ public class SimTests {
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(hunter);
 			ProcCreature.Phenotype pg = ProcCreature.phenotype(grazer);
 			assertTrue("the scavenger wears the feelers it smells with", ps.antennae);
+			assertTrue("on the long segmented body, not the grazer's", ps.form != pg.form);
 			assertTrue("and the grazer does not", !pg.antennae);
 			assertTrue("the hunter carries a tail", ph.tail);
 			assertTrue("and the grazer does not", !pg.tail);
