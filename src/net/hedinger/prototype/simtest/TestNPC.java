@@ -1233,16 +1233,21 @@ public class TestNPC extends NPC {
 	/** The body/mind loop: sense the world into the vector, let the mind decide,
 	 * then apply the actuator vector as intent. The mind never sees the world.
 	 *
-	 * <p>Survival reflex first: if the body has been trying to move (a real throttle
-	 * last tick) but has made no headway, the body takes the wheel and drives to
+	 * <p>Survival reflex first: if the body has been trying to move (any throttle
+	 * that engages movement at all — the same 0.02 threshold {@code actFrom}
+	 * moves by) but has made no headway, the body takes the wheel and drives to
 	 * open ground for a spell, skipping the mind -- so a degenerate policy that
-	 * steers flat into a wall can't pin the creature forever. A mind that is
-	 * deliberately still (low throttle) is left alone, never force-marched. */
+	 * steers flat into a wall can't pin the creature forever. Only a mind that is
+	 * deliberately still (throttle at zero) is left alone, never force-marched.
+	 * This gate once sat at 0.3, which quietly disarmed the reflex for the whole
+	 * starter lineage: its amble throttle is 0.25, so every wanderer that aimed
+	 * at a wall shoved it for good — measured on seed 42, 4.2% of all thirsty
+	 * minded ticks were spent pinned like that, walls with water just beyond. */
 	private void thinkMinded() {
 		if (mind == null) {
 			return;
 		}
-		if (unstickIfPinned(speed * PRED_CRUISE, lastThrottle > 0.3, true)) {
+		if (unstickIfPinned(speed * PRED_CRUISE, lastThrottle > 0.02, true)) {
 			return; // body override: shaking loose, the mind sits this tick out
 		}
 		senseInto(sensors);
