@@ -148,6 +148,17 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['lod', 'adaptive dot LOD'],
   ['gl', 'webgl renderer (off = canvas2d)'],
 ];
+/**
+ * The other kind of flag. Perf flags are default-ON and switched off with
+ * `<flag>=0`; a panel is default-OFF and switched on with `<flag>=1`, because
+ * nobody wants a chart over the world until they ask for one. Both live in the
+ * same dialog — from the viewer's side "what is switched on" is one question,
+ * not two — and the apply step knows which sense each family reads in.
+ */
+const VIEW_FLAGS: Array<[string, string]> = [
+  ['pop', 'population graph'],
+  ['hud', 'performance HUD'],
+];
 const flagOff = (k: string): boolean => new RegExp('[?&]' + k + '=0\\b').test(location.search);
 const VEG_OFF = flagOff('veg');
 const MINIMAP_OFF = flagOff('minimap');
@@ -936,20 +947,32 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'h' && !(ev.target instanceof HTMLInputElement)) {
     hudOn = !hudOn;
     hudEl.style.display = hudOn ? 'block' : 'none';
-    perfBtn.style.display = hudOn ? '' : 'none';
   }
 });
 if (hudOn) hudEl.style.display = 'block';
 
-// ---- the ⚙ perf-toggle dialog ---------------------------------------------
-// Rides with the HUD: checkboxes for the visual subsystems, applied by
-// reloading with the matching `<flag>=0` URL params (each flag is a
-// load-time constant, so a reload keeps the render paths branch-free).
+// ---- the ⚙ settings dialog -------------------------------------------------
+// Checkboxes for the visual subsystems and the optional panels, applied by
+// reloading with the matching URL params (each perf flag is a load-time
+// constant, so a reload keeps the render paths branch-free).
+//
+// Always in the bar. It used to appear only once the perf HUD was open, which
+// made every setting in here reachable only by someone who already knew to
+// press 'h' or to hand-edit the query string — including the two toggles that
+// are not about performance at all. A settings button you have to know a
+// keystroke to find is not a settings button.
 if (MINIMAP_OFF) mm.style.display = 'none';
+/** Whether a panel is showing right now. Live state, since both can be toggled
+ *  by key; falls back to the query string for anything not wired to a variable. */
+function viewFlagOn(k: string): boolean {
+  if (k === 'pop') return popOn;
+  if (k === 'hud') return hudOn;
+  return new RegExp('[?&]' + k + '\\b').test(location.search);
+}
+
 const perfBtn = document.createElement('button');
 perfBtn.textContent = '⚙';
-perfBtn.title = 'perf toggles (reloads with url flags)';
-perfBtn.style.display = hudOn ? '' : 'none';
+perfBtn.title = 'settings (reloads with url flags)';
 document.getElementById('bar')!.insertBefore(perfBtn, statsEl);
 perfBtn.onclick = () => {
   const old = document.getElementById('perfdlg');
@@ -977,6 +1000,26 @@ perfBtn.onclick = () => {
     row.append(cb, span);
     dlg.append(row);
   }
+  const h2 = document.createElement('div');
+  h2.textContent = 'panels';
+  h2.style.cssText = 'font-weight:600;margin:10px 0 6px;padding-top:8px;'
+    + 'border-top:1px solid #ffffff14';
+  dlg.append(h2);
+  for (const [k, label] of VIEW_FLAGS) {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    // From LIVE state, not the URL: both panels can be toggled by key without a
+    // reload, so reading the query string here would show a stale box and then
+    // silently undo the toggle on apply.
+    cb.checked = viewFlagOn(k);
+    boxes.set(k, cb);
+    const span = document.createElement('span');
+    span.textContent = label;
+    row.append(cb, span);
+    dlg.append(row);
+  }
   const apply = document.createElement('button');
   apply.textContent = 'apply & reload';
   apply.style.cssText = 'margin-top:10px;width:100%;padding:7px;background:#24404a80;'
@@ -987,7 +1030,10 @@ perfBtn.onclick = () => {
       if (boxes.get(k)!.checked) sp.delete(k); // default-on: absent = enabled
       else sp.set(k, '0');
     }
-    if (hudOn) sp.set('hud', '1'); // keep the HUD (and this button) after reload
+    for (const [k] of VIEW_FLAGS) {
+      if (boxes.get(k)!.checked) sp.set(k, '1'); // default-off: present = enabled
+      else sp.delete(k);
+    }
     location.search = sp.toString();
   };
   dlg.append(apply);
