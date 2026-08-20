@@ -26,7 +26,7 @@ import {
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
-  DOT_LOD_PX, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
+  DOT_LOD_SCALE, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
   drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
@@ -481,15 +481,15 @@ for (const [act, name, meaning] of EXPR) {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, 6 * S, S * 1.5);
     // Actual map-view size on the left, the same dots at 6x beside them.
-    const y = S * 0.75, d = DOT_LOD_PX - 2;
+    const y = S * 0.75, d = 6;
     drawDot(g, S * 0.5, y, d, '#5a8ab9', false);
     drawDot(g, S * 0.85, y, d, '#b95a8a', false);
     drawDot(g, S * 1.2, y, d, '', true);
     drawDot(g, S * 2.6, y, d * 6, '#5a8ab9', false);
     drawDot(g, S * 3.9, y, d * 6, '#b95a8a', false);
     drawDot(g, S * 5.2, y, d * 6, '', true);
-  }), `map-view dots — bodies under ${DOT_LOD_PX} px draw as blocks `
-    + '(live · live · corpse; actual size, then 6×)', overlay);
+  }), `map-view dots — below ${DOT_LOD_SCALE} px/tile zoom every body draws as `
+    + 'a block (live · live · corpse; actual size, then 6×)', overlay);
 }
 
 // ---- what the server bakes, and where to see it --------------------------

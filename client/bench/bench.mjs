@@ -29,14 +29,14 @@ const SAMPLE_MS = 5000;    // measurement window per scenario
 const SAMPLE_EVERY = 250;
 
 // The zoom ladder, by TARGET BODY SIZE in on-screen px — each band pins one
-// draw tier (thresholds in render.ts: dots below 8, quarter-res mip sprites
-// to ~24, full-res atlas cells above). The camera is parked over the densest
-// creature cluster first, so every band actually draws a crowd instead of
-// whatever terrain happens to sit at the screen centre.
-// Body px maps to a draw box via the atlas cell's padding factor
-// (CELL / (2*ART_RADIUS) ≈ 2.27): dots below 8 body px, the quarter-res mip
-// while the box stays ≤ 24 (body ≤ ~10.5), full-res above. The page is loaded
-// with ?lod=0 so the adaptive dot threshold never reassigns a band mid-run.
+// draw tier. Tiers are zoom-keyed (render.ts): every body is a dot below
+// DOT_LOD_SCALE = 8 px/tile of camera zoom, a sprite above; sprite stamps use
+// the quarter-res mip while the draw box stays ≤ 24 px (body ≤ ~10.5 via the
+// atlas cell's padding factor CELL / (2*ART_RADIUS) ≈ 2.27), full-res above.
+// With a ~0.5-tile median adult, bodyPx 6 parks the camera at ~6 px/tile
+// (dots), 9 at ~9 px/tile (mip sprites), 40 well into full-res. The camera is
+// parked over the densest creature cluster first, so every band actually
+// draws a crowd instead of whatever terrain sits at the screen centre.
 const SCENARIOS = [
   { name: 'fit', bodyPx: 0 },   // the whole-map view exactly as it loads
   { name: 'dots', bodyPx: 6 },
@@ -90,7 +90,7 @@ async function runPath(browser, glParam) {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.message)));
   const navStart = Date.now();
-  await page.goto(`${BASE}/?hud=1&lod=0&gl=${glParam}`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/?hud=1&gl=${glParam}`, { waitUntil: 'load' });
 
   // Startup: how long until the first world snapshot has landed.
   await page.waitForFunction(() => {

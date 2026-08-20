@@ -145,7 +145,6 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['sprites', 'creature sprites (off = dots)'],
   ['overlay', 'badges, rings & links'],
   ['minimap', 'minimap'],
-  ['lod', 'adaptive dot LOD'],
   ['gl', 'webgl renderer (off = canvas2d)'],
 ];
 /**
