@@ -61,12 +61,35 @@ public final class ProcCreature {
 		Phenotype p = new Phenotype();
 		p.color = snap(g.toColor().getRGB()); // 5 bits/channel: palette-ish, bounds the cache
 		double m0 = clamp01(g.markers[0]), m1 = clamp01(g.markers[1]), m2 = clamp01(g.markers[2]);
-		p.form = (int) (m0 * 5.999);
-		p.legs = 2 + (int) (m1 * 3);
-		p.core = (int) (m2 * 3);
-		p.pattern = (int) (((m0 + m1) * 0.5) * 2.999);
-		p.antennae = m1 > 0.45;
-		p.tail = m2 > 0.5;
+		// What a creature EATS, and whether it flies, decide the body plan; the
+		// markers only choose which variant of that plan it wears. Before this the
+		// whole silhouette came from the markers, which are the mate-recognition
+		// barcode -- so shape said which lineage a creature descended from and
+		// nothing whatever about what it was. A hunter, a grazer and a scavenger
+		// were drawn from one shape space: measured on a settled world, 349
+		// creatures wore 95 shapes with no systematic difference between the roles.
+		// You could not tell what you were looking at, which for an ecology being
+		// watched is most of the point.
+		int eco = g.diet == Genome.DIET_SCAVENGER ? 1
+				: g.diet == Genome.DIET_CARNIVORE ? 2 : 0;
+		// One body plan per trophic level, and these three specifically: `form` is
+		// not a free index -- 0 and 4 grow bilateral legs, 1 grows radial cilia, the
+		// rest go bare -- so the plans are chosen for what they draw. A grazer walks
+		// on plain legs, a hunter on the long-striding pair, a scavenger goes bare
+		// and wears its feelers instead.
+		p.form = eco == 0 ? 0 : eco == 1 ? 2 : 4;
+		// Flight shows in the limbs. A body that flies is not carrying a walking
+		// undercarriage, so it keeps a single pair; a ground body's count is the
+		// markers' business. Together with the lift and the flattened shadow the
+		// draw already gives a flier, that is a silhouette rather than a hover.
+		p.legs = g.flying ? 1 : 2 + (int) (m1 * 3);
+		p.core = eco; // repeated in the core mark: still legible when the body is small
+		p.pattern = (int) (m0 * 2.999);
+		// The two features that read fastest at a distance, spent on the two roles
+		// that are not the default. Feelers for the scavenger, which finds its food
+		// by smell rather than by looking at it; a tail for the hunter.
+		p.antennae = eco == 1;
+		p.tail = eco == 2;
 		p.flying = g.flying;
 		p.r = clamp((int) Math.round(g.size / 3.0), 2, 4);
 		return p;

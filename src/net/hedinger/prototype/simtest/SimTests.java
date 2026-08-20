@@ -1,6 +1,7 @@
 package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
+import net.hedinger.prototype.engine.ProcCreature;
 import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.AgentIO;
@@ -275,9 +276,11 @@ public class SimTests {
 			// frame, so a creature free to turn would make "dead ahead" a statement
 			// about what its brain did rather than about where its food is.
 			Mind still = (sensors, act) -> { };
-			TestNPC scav = TestNPC.minded(3.5, 5.5, 0, g, still)
+			// A genome each: diet lives in the genome now, so two bodies sharing one
+			// instance would be the same animal wearing two positions.
+			TestNPC scav = TestNPC.minded(3.5, 5.5, 0, g.copy(), still)
 					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
-			TestNPC grazer = TestNPC.minded(3.5, 7.5, 0, g, still).withHeading(0);
+			TestNPC grazer = TestNPC.minded(3.5, 7.5, 0, g.copy(), still).withHeading(0);
 			w.spawnEntity(scav);
 			w.spawnEntity(grazer);
 			tick(w, 1);
@@ -339,6 +342,61 @@ public class SimTests {
 			double fromKill = 2.5 * bodyMass;
 			assertNear("a whole carcass pays what a whole kill pays",
 					fromKill, fromCarrion, fromKill * 0.05);
+		}
+	}
+
+	/**
+	 * A creature is drawn as what it is. The body plan reads the genome's diet and
+	 * whether it flies, so a grazer, a scavenger and a hunter of identical descent
+	 * are three different animals rather than one animal in three colours.
+	 *
+	 * <p>It used to read the markers alone — the mate-recognition barcode — so the
+	 * silhouette said which lineage a creature came from and nothing about what it
+	 * was. Measured on a settled world, 349 creatures wore 95 shapes with no
+	 * systematic difference between the roles; you could not tell a hunter from a
+	 * grazer by looking, which for an ecology built to be watched is most of it.
+	 */
+	static class ABodyIsShapedByWhatItEats extends Scenario {
+		@Override
+		public void run() {
+			seed(38);
+			// One lineage, one set of markers, one size: everything the old body plan
+			// looked at is held identical, so any difference is the diet.
+			Genome grazer = Genome.phenotype(9, 0.05, 5, 6, Math.PI / 2, 100000);
+			grazer.markers = new double[] { 0.4, 0.6, 0.5 };
+			Genome scav = grazer.copy();
+			scav.diet = Genome.DIET_SCAVENGER;
+			Genome hunter = grazer.copy();
+			hunter.diet = Genome.DIET_CARNIVORE;
+			Genome flier = grazer.copy();
+			flier.flying = true;
+
+			long kg = ProcCreature.shapeKey(ProcCreature.phenotype(grazer));
+			long ks = ProcCreature.shapeKey(ProcCreature.phenotype(scav));
+			long kh = ProcCreature.shapeKey(ProcCreature.phenotype(hunter));
+			long kf = ProcCreature.shapeKey(ProcCreature.phenotype(flier));
+			assertTrue("a scavenger is not shaped like a grazer", ks != kg);
+			assertTrue("a hunter is not shaped like a grazer", kh != kg);
+			assertTrue("a hunter is not shaped like a scavenger", kh != ks);
+			assertTrue("a flier is not shaped like a walker", kf != kg);
+
+			// And the features are the ones a viewer can name at a glance.
+			ProcCreature.Phenotype ps = ProcCreature.phenotype(scav);
+			ProcCreature.Phenotype ph = ProcCreature.phenotype(hunter);
+			ProcCreature.Phenotype pg = ProcCreature.phenotype(grazer);
+			assertTrue("the scavenger wears the feelers it smells with", ps.antennae);
+			assertTrue("and the grazer does not", !pg.antennae);
+			assertTrue("the hunter carries a tail", ph.tail);
+			assertTrue("and the grazer does not", !pg.tail);
+			assertTrue("a flier keeps one pair of limbs",
+					ProcCreature.phenotype(flier).legs == 1);
+
+			// Diet rides in the genome, so heredity carries it without being asked.
+			Genome kid = Genome.child(scav, 0.1);
+			assertEquals("a scavenger's young inherit the diet",
+					Genome.DIET_SCAVENGER, kid.diet);
+			assertEquals("and so are drawn as scavengers too", ks,
+					ProcCreature.shapeKey(ProcCreature.phenotype(kid)));
 		}
 	}
 
@@ -430,7 +488,7 @@ public class SimTests {
 			g.sexuality = 1.0;
 
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
-			TestNPC scav = TestNPC.minded(6.3, 6.5, 0, g, breeder)
+			TestNPC scav = TestNPC.minded(6.3, 6.5, 0, g.copy(), breeder)
 					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
 			TestNPC grazer = TestNPC.minded(6.7, 6.5, 0, g.copy(), breeder).withMetabolic();
 			scav.withEnergy(scav.energyCapacity());
@@ -5206,6 +5264,7 @@ public class SimTests {
 				new ScavengerEatsCarrionAndHastensItsDecay(),
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsWorthWhatAKillIsWorth(),
+				new ABodyIsShapedByWhatItEats(),
 				new ScavengerYoungAreScavengers(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),

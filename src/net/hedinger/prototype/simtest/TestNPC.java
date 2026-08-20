@@ -490,6 +490,7 @@ public class TestNPC extends NPC {
 	public static TestNPC minded(double x, double y, double z, Genome g, Mind mind) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
 		t.genome = g;
+		adoptDiet(t, g);
 		t.size = (int) Math.round(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
@@ -536,8 +537,12 @@ public class TestNPC extends NPC {
 	 * same bargain the rest of the minded cohort is on.
 	 */
 	public static TestNPC mindedScavenger(double x, double y, double z, Genome g) {
-		TestNPC t = mindedForager(x, y, z, g);
-		t.diet = Diet.SCAVENGER;
+		// Own the genome before writing a diet into it. Founder pools are shared
+		// arrays and callers hand the same instance to several bodies, so mutating
+		// what was passed in would quietly re-flavour creatures nobody was building.
+		// Copied BEFORE the mind is bound, so the two never point at different ones.
+		TestNPC t = mindedForager(x, y, z, g.copy());
+		t.withDiet(Diet.SCAVENGER); // writes through to the genome the body is drawn from
 		t.speed *= SCAVENGER_STRIDE;
 		return t;
 	}
@@ -587,6 +592,7 @@ public class TestNPC extends NPC {
 
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
+		adoptDiet(t, g); // heredity carries diet in the genome; the body follows it
 		// Born a juvenile and grow into the genome's body (see NPC.beginGrowth).
 		t.beginGrowth(g.size);
 		// A body takes as long to rot away as it took to build: the corpse span IS
@@ -620,6 +626,7 @@ public class TestNPC extends NPC {
 	public static TestNPC genomeDriven(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.GENOME);
 		t.genome = g;
+		adoptDiet(t, g);
 		t.size = (int) Math.round(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
@@ -662,7 +669,20 @@ public class TestNPC extends NPC {
 	/** Sets what this body can turn into energy — see {@link Diet}. */
 	public TestNPC withDiet(Diet d) {
 		diet = d;
+		if (genome != null) {
+			genome.diet = d == Diet.SCAVENGER ? net.hedinger.prototype.entities.Genome.DIET_SCAVENGER
+					: d == Diet.CARNIVORE ? net.hedinger.prototype.entities.Genome.DIET_CARNIVORE
+							: net.hedinger.prototype.entities.Genome.DIET_HERBIVORE;
+		}
 		return this;
+	}
+
+	/** Reads the diet the genome carries onto the body. The genome is the source:
+	 *  it is what heredity copies and what the body plan is drawn from. */
+	private static void adoptDiet(TestNPC t, net.hedinger.prototype.entities.Genome g) {
+		t.diet = g.diet == net.hedinger.prototype.entities.Genome.DIET_SCAVENGER ? Diet.SCAVENGER
+				: g.diet == net.hedinger.prototype.entities.Genome.DIET_CARNIVORE ? Diet.CARNIVORE
+						: Diet.HERBIVORE;
 	}
 
 	/** Sets the body radius; gates grabbing and the carry offset. */
@@ -2658,7 +2678,9 @@ public class TestNPC extends NPC {
 	 * place rather than in four, and forgetting is not the default.
 	 */
 	private void passBodyTraitsTo(TestNPC child) {
-		child.diet = diet; // what a lineage eats, like what it fears, is not the genome's
+		// Diet is NOT copied here: it rides in the genome now, so the child was born
+		// with it. Copying it a second time would be a second source of truth, and
+		// the one that silently wins whenever the two disagree.
 		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
 		child.alwaysInteract = alwaysInteract;
 		child.withDeathspan(deathspan); // the lineage shares how long its dead lie about
