@@ -159,8 +159,9 @@ final class SpriteCatalog {
 				+ "is read from the genome's diet and whether it flies, so a grazer, a scavenger "
 				+ "and a hunter are different animals rather than the same one in three colours: "
 				+ "a grazer walks on plain legs, a hunter strides on long ones and carries a "
-				+ "tail, a scavenger goes bare-limbed and wears the feelers it finds its food "
-				+ "with, and anything airborne keeps a single pair.");
+				+ "tail, a scavenger is the long segmented body, bare-limbed and wearing the "
+				+ "feelers it finds its food with, and anything airborne keeps a single "
+				+ "pair.");
 		creature("founder_grazer", sample(6, 0.05, false, 0, new double[] { 0.20, 0.50, 0.80 }));
 		creature("tiny_darter", sample(3, 0.09, false, 0, new double[] { 0.90, 0.10, 0.40 }));
 		creature("bulky_armored", sample(14, 0.02, false, 0, new double[] { 0.50, 0.90, 0.20 }));
