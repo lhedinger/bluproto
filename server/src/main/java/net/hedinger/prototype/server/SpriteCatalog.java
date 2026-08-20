@@ -115,6 +115,27 @@ final class SpriteCatalog {
 		ground("air_vent", Tile.TileType.TYPE_AIRVENT);
 		ground("duct", Tile.TileType.TYPE_DUCT);
 		ground("switch_seat", Tile.TileType.TYPE_SWITCH);
+		ramps();
+	}
+
+	/** The level links, staged with the context that orients them: a DOWN ramp
+	 *  fading into the pit it pours into (its dark bands meet the void with no
+	 *  lip between), and an UP ramp brightening to a sunlit high end against
+	 *  the rock its landing rests on. The slope art reads its direction from
+	 *  these neighbours, so a ramp can face any way its world places it. */
+	private void ramps() {
+		World w = stage(8, 8);
+		for (int y = 3; y <= 4; y++) {
+			w.setTile(2, y, 0, Tile.TileType.TYPE_HOLE);
+			w.setTile(3, y, 0, Tile.TileType.TYPE_RAMPDOWN);
+			w.setTile(5, y, 0, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(6, y, 0, Tile.TileType.TYPE_WALL);
+		}
+		w.alignTiles();
+		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
+		int ts = ResourceManager.tileSize;
+		add("ground_ramps.png", png(img.getSubimage(ts, 2 * ts, 6 * ts, 4 * ts)),
+				"ramps: down into the pit, up into the light", 192);
 	}
 
 	private void furnitureSection() {

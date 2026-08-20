@@ -81,8 +81,8 @@ public class ResourceManager {
 		return ProcTiles.floor();
 	}
 
-	public static BufferedImage getRamptile(String tilecode, boolean up) {
-		return ProcTiles.ramp(tilecode, up);
+	public static BufferedImage getRamptile(String tilecode, boolean up, int downhill) {
+		return ProcTiles.ramp(tilecode, up, downhill);
 	}
 
 	public static BufferedImage getEffects(int index) {
