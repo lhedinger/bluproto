@@ -4,13 +4,13 @@
 // nearest-neighbour scaling of the layer.
 
 import {
-  ART_RADIUS, BAYER4, CELL, MIP, RIM_COLOUR, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, decayStage, headingCol, mindedFor, mindedMipFor, tintedFor,
+  ART_RADIUS, BAYER4, CELL, MIP, atlasFor, atlasMipFor, cell, corpseFor,
+  corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
-  ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED, F_MINDED,
+  ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED,
 } from './protocol';
 import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
@@ -420,21 +420,11 @@ function adaptiveDotLod(nowMs: number): number {
   return herdMode ? DOT_LOD_PX * 2.5 : DOT_LOD_PX;
 }
 
-/** The map-view dot: a corpse is a spent grey block; a minded body wears its
- *  rim violet as an underlying block, one pixel proud on every side. */
+/** The map-view dot: a corpse is a spent grey block; a live body its colour. */
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
-    bodyPx: number, col: string, minded: boolean, dead: boolean): void {
+    bodyPx: number, col: string, dead: boolean): void {
   const s = Math.max(4, bodyPx);
-  if (dead) {
-    g.fillStyle = '#5a5f66';
-    g.fillRect(x - s / 2, y - s / 2, s, s);
-    return;
-  }
-  if (minded) {
-    g.fillStyle = RIM_COLOUR;
-    g.fillRect(x - s / 2 - 1, y - s / 2 - 1, s + 2, s + 2);
-  }
-  g.fillStyle = col;
+  g.fillStyle = dead ? '#5a5f66' : col;
   g.fillRect(x - s / 2, y - s / 2, s, s);
 }
 
@@ -600,7 +590,7 @@ export function render(
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
       if (bodyPx < dotLod) {
-        drawDot(g, s.x, s.y, bodyPx, '', false, true);
+        drawDot(g, s.x, s.y, bodyPx, '', true);
         continue;
       }
       // A corpse keeps its body and loses its colour. It is not decoration: it
@@ -641,8 +631,7 @@ export function render(
     // fetch takes instead.
     const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
     if (bodyPx < dotLod) {
-      drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'),
-        (e.flags & F_MINDED) !== 0, false);
+      drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
     } else if (atlas) {
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
       // Sticky heading bucket (see atlas.headingCol): neighbouring columns are
@@ -658,25 +647,19 @@ export function render(
       const tinted = tintedFor(e.pheno, e.rgb, atlas);
       const tk = e.pheno + ':' + e.rgb;
       if (box <= CELL / MIP) {
-        // Far zoom: one stamp from the quarter-size mip — the minded variant has
-        // its rim baked in, so the whole herd view costs one draw per creature.
+        // Far zoom: one stamp from the quarter-size mip.
         const c = CELL / MIP;
-        const src = (e.flags & F_MINDED) ? mindedMipFor(tk, tinted) : atlasMipFor(tk, tinted);
+        const src = atlasMipFor(tk, tinted);
         g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
-        // Minded cohort: a violet rim hugging the body, so a creature driven by
-        // an evolvable mind can be picked out of the scripted species at a
-        // glance. Rim and body come pre-fused (see atlas.mindedFor) — one draw
-        // per creature, not five, which is what a GPU canvas feels when a herd
-        // of hundreds is on screen.
-        const src = (e.flags & F_MINDED) ? mindedFor(tk, tinted) : tinted;
+        const src = tinted;
         g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
       // The colour string is built only here: the atlas path never needs it,
       // and building one per creature per frame is measurable at herd scale.
       drawPlaceholder(g, s.x, s.y, r, p.dir,
-        '#' + e.rgb.toString(16).padStart(6, '0'), (e.flags & F_MINDED) !== 0);
+        '#' + e.rgb.toString(16).padStart(6, '0'));
     }
 
     // What it is doing, as a small badge hovering over the body. Only notable
@@ -964,15 +947,10 @@ export function renderGL(
     // No atlas fetch at dot size — see render() above for why prefetching
     // every glimpsed phenotype is a memory cliff on long-evolved worlds.
     const atlas = bodyPx < dotLod ? null : atlasFor(e.pheno);
-    const minded = (e.flags & F_MINDED) !== 0;
     if (bodyPx < dotLod || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
       // block while the sprite streams in): solid quads, batched together.
       const sq = Math.max(4, bodyPx < dotLod ? bodyPx : r * 1.4);
-      if (minded) {
-        glr.quad(s.x - sq / 2 - 1, s.y - sq / 2 - 1, sq + 2, sq + 2,
-          0xc6 / 255, 0x60 / 255, 0xff / 255, 1);
-      }
       const rgb = e.rgb;
       glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
@@ -987,10 +965,8 @@ export function renderGL(
       // is not just fewer pixels — the herd view is where EVERY phenotype is on
       // screen at once, and only the small mip textures can all stay resident.
       const c = box <= CELL / MIP ? CELL / MIP : CELL;
-      const src = c === CELL
-        ? (minded ? mindedFor(e.pheno, atlas) : atlas)
-        : (minded ? mindedMipFor(e.pheno, atlas) : atlasMipFor(e.pheno, atlas));
-      const key = c === CELL ? (minded ? 'minded:' : 'atlas:') : (minded ? 'mindedm:' : 'atlasm:');
+      const src = c === CELL ? atlas : atlasMipFor(e.pheno, atlas);
+      const key = c === CELL ? 'atlas:' : 'atlasm:';
       // The atlas is colour-neutral (one per SHAPE); the creature's rgb rides
       // the quad and the ramp shader re-tints it — see gl.ts mode 1.
       glr.sprite(key + e.pheno, src, 1,
@@ -1160,6 +1136,121 @@ export function ductLidTile(vertical: boolean): HTMLCanvasElement {
     }
   }
   lidTiles[vertical ? 1 : 0] = cv;
+  return cv;
+}
+
+// ---- vegetation sprites ----------------------------------------------------
+//
+// One-tile vegetation, drawn as transparent sprites OVER the floor: each kind
+// grows through five stages — 1 is what depletion leaves behind (trampled
+// remnants), 5 is fully grown — with four variants per stage so a field
+// doesn't tile visibly. Painted at art resolution (12px/tile) with
+// transparent ground, so the same sprite reads on any floor tile. The world
+// integration (drawing these over the baked ground per tile, replacing the
+// baked-in grass) comes later; the sprites and this painter are the record.
+
+export type VegKind = 'grass' | 'mushroom';
+export const VEG_KINDS: VegKind[] = ['grass', 'mushroom'];
+export const VEG_STAGES = 5;
+export const VEG_VARIANTS = 4;
+
+// Palettes in the ground bake's key: greens for living grass, dry olives for
+// trampled remains; mushroom caps in the fungus family, pale stems.
+const GRASS_BLADE = ['#2f5c2a', '#3f7a38', '#57944a'];
+const GRASS_TIP = '#8fc46f';
+const GRASS_DRY = ['#8a8a52', '#6f6b3f'];
+const SHROOM_CAP = ['#8f4a3c', '#6e352b'];
+const SHROOM_SPOT = '#e6dccb';
+const SHROOM_STEM = '#cfc4b0';
+const SHROOM_BUD = '#b9a98e';
+const SHROOM_DEAD = '#7a6a55';
+
+/**
+ * Paints one vegetation tile at (x, y) with `px` screen pixels per art pixel.
+ * Deterministic per (kind, stage, variant): the same triple always paints the
+ * same sprite, so the world and the catalog can never drift apart.
+ */
+export function drawVegetationTile(g: CanvasRenderingContext2D, kind: VegKind,
+    stage: number, variant: number, x: number, y: number, px = 1): void {
+  const rnd = (n: number) => hash01(variant * 31 + n * 7 + stage * 13, n * 5 + variant,
+    kind === 'grass' ? 41 : 43);
+  const p = (ax: number, ay: number, col: string) => {
+    if (ax < 0 || ay < 0 || ax > 11 || ay > 11) return;
+    g.fillStyle = col;
+    g.fillRect(x + ax * px, y + ay * px, px, px);
+  };
+  if (kind === 'grass') {
+    if (stage <= 1) {
+      // Trampled leftovers: flattened dry strokes lying sideways, a few crumbs.
+      for (let i = 0; i < 4; i++) {
+        const sx = 1 + Math.floor(rnd(i) * 8), sy = 2 + Math.floor(rnd(i + 10) * 8);
+        const col = GRASS_DRY[i % 2];
+        p(sx, sy, col); p(sx + 1, sy, col);
+        if (rnd(i + 20) > 0.5) p(sx + 2, sy, col);
+      }
+      for (let i = 0; i < 3; i++) {
+        p(1 + Math.floor(rnd(i + 30) * 10), 1 + Math.floor(rnd(i + 40) * 10), GRASS_DRY[1]);
+      }
+      return;
+    }
+    // Growing: upright tufts — more and taller with each stage.
+    const tufts = [0, 0, 3, 4, 6, 7][stage];
+    const maxH = [0, 0, 1, 2, 3, 3][stage];
+    for (let i = 0; i < tufts; i++) {
+      const bx = 1 + Math.floor(rnd(i) * 10);
+      const by = 3 + Math.floor(rnd(i + 10) * 8);
+      const h = 1 + Math.floor(rnd(i + 20) * maxH);
+      const blade = GRASS_BLADE[Math.floor(rnd(i + 30) * 3)];
+      for (let k = 0; k < h; k++) p(bx, by - k, blade);
+      if (h >= 2 && stage >= 4) p(bx, by - h, GRASS_TIP); // lit tip on tall blades
+      if (stage >= 3 && rnd(i + 40) > 0.55) p(bx + 1, by, GRASS_BLADE[0]); // base spread
+    }
+  } else {
+    if (stage <= 1) {
+      // Kicked-over remains: a toppled stem and a scatter of spores.
+      const sx = 3 + Math.floor(rnd(0) * 5), sy = 5 + Math.floor(rnd(1) * 4);
+      p(sx, sy, SHROOM_DEAD); p(sx + 1, sy, SHROOM_DEAD);
+      for (let i = 0; i < 3; i++) {
+        p(1 + Math.floor(rnd(i + 10) * 10), 2 + Math.floor(rnd(i + 20) * 9), SHROOM_DEAD);
+      }
+      return;
+    }
+    const shroom = (cx: number, cy: number, big: boolean) => {
+      const cap = SHROOM_CAP[Math.floor(rnd(cx + cy) * 2)];
+      if (big) {
+        p(cx - 1, cy - 2, cap); p(cx, cy - 2, cap); p(cx + 1, cy - 2, cap);
+        p(cx - 2, cy - 1, cap); p(cx - 1, cy - 1, cap); p(cx, cy - 1, cap);
+        p(cx + 1, cy - 1, cap); p(cx + 2, cy - 1, cap);
+        p(cx + (rnd(cx) > 0.5 ? 1 : -1), cy - 2, SHROOM_SPOT);
+        p(cx, cy, SHROOM_STEM); p(cx, cy + 1, SHROOM_STEM);
+      } else {
+        p(cx - 1, cy - 1, cap); p(cx, cy - 1, cap); p(cx + 1, cy - 1, cap);
+        p(cx, cy, SHROOM_STEM);
+      }
+    };
+    const bud = (cx: number, cy: number) => { p(cx, cy, SHROOM_BUD); p(cx + 1, cy, SHROOM_BUD); };
+    const bx = 3 + Math.floor(rnd(50) * 4), by = 4 + Math.floor(rnd(51) * 4);
+    const ox = 2 + Math.floor(rnd(52) * 7), oy = 2 + Math.floor(rnd(53) * 8);
+    if (stage === 2) { bud(bx, by); if (rnd(54) > 0.4) bud(ox, oy); return; }
+    if (stage === 3) { shroom(bx, by, false); if (rnd(54) > 0.5) bud(ox, oy); return; }
+    if (stage === 4) { shroom(bx, by, true); if (rnd(54) > 0.5) bud(ox, oy); return; }
+    shroom(bx, by, true);
+    shroom(Math.min(10, ox + 1), Math.min(10, oy + 1), false);
+    if (rnd(55) > 0.4) bud((bx + ox) % 10 + 1, 9);
+  }
+}
+
+/** The baked one-tile sprite for (kind, stage, variant) — 12px, transparent. */
+const vegTileCache = new Map<string, HTMLCanvasElement>();
+export function vegetationTileFor(kind: VegKind, stage: number, variant: number): HTMLCanvasElement {
+  const key = `${kind}:${stage}:${variant}`;
+  const hit = vegTileCache.get(key);
+  if (hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = ART;
+  cv.height = ART;
+  drawVegetationTile(cv.getContext('2d')!, kind, stage, variant, 0, 0, 1);
+  vegTileCache.set(key, cv);
   return cv;
 }
 
@@ -1547,14 +1638,13 @@ export function drawCarryLink(g: CanvasRenderingContext2D,
 }
 
 /** The pre-atlas placeholder: a coloured dot with a heading wedge, worn while
- *  a creature's sprite atlas is still in flight. A minded creature wears the
- *  rim violet as its edge, since there is no sprite to hug yet. */
+ *  a creature's sprite atlas is still in flight. */
 export function drawPlaceholder(g: CanvasRenderingContext2D, x: number, y: number,
-    r: number, dir: number, col: string, minded: boolean): void {
+    r: number, dir: number, col: string): void {
   g.fillStyle = col;
   g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-  g.strokeStyle = minded ? RIM_COLOUR : 'rgba(0,0,0,0.45)';
-  g.lineWidth = minded ? 2 : 1;
+  g.strokeStyle = 'rgba(0,0,0,0.45)';
+  g.lineWidth = 1;
   g.stroke();
   g.fillStyle = 'rgba(255,255,255,0.85)';
   g.beginPath();

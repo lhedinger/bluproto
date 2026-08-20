@@ -23,7 +23,7 @@ const cache = new Map<number, HTMLCanvasElement | null>(); // null = loading
 // Per-phenotype LRU over EVERY CPU-side variant cache below. A long-evolved
 // world breeds a new phenotype with nearly every lineage; each one resident
 // costs ~2.4MB for the atlas canvas alone (768px RGBA) and several times that
-// once rim/minded/corpse variants bake. Left uncapped this grew to gigabytes
+// once tinted/corpse variants bake. Left uncapped this grew to gigabytes
 // of canvases on old worlds and the browser spent the frame budget in GC and
 // paging stalls, not rendering. Eviction is by idle time with a floor, never
 // touching a phenotype drawn in the last few seconds — the on-screen set must
@@ -44,7 +44,7 @@ function dropPheno(p: number): void {
   // Variant caches key by shape id or by 'shape:rgb' for the 2D path's
   // tinted copies — sweep both forms of this shape's keys.
   const prefix = p + ':';
-  for (const m of [mipCache, mindedCache, mindedMipCache, tintCache]) {
+  for (const m of [mipCache, tintCache]) {
     m.delete(p);
     for (const k of m.keys()) {
       if (typeof k === 'string' && k.startsWith(prefix)) m.delete(k);
@@ -96,8 +96,7 @@ export function atlasCount(): number {
  * Re-tints a colour-neutral shape atlas for one creature colour — the 2D
  * fallback's version of the GL ramp shader (see gl.ts FS mode 1): greys at or
  * below the mid-grey pivot invert the bake's shade(), greys above invert
- * mixWhite(), saturated pixels (nothing in a raw bake, the violet rim in a
- * fused one) pass through. Baked once per (shape, colour) actually drawn at
+ * mixWhite(), saturated pixels pass through untouched. Baked once per (shape, colour) actually drawn at
  * sprite size by a non-GL browser; the LRU sweep drops them with their shape.
  */
 const tintCache = new Map<number | string, HTMLCanvasElement>();
@@ -165,31 +164,6 @@ export function headingCol(dir: number, prev: number): number {
 }
 
 /**
- * A violet silhouette of an atlas — the SHAPE of the sprite in one flat
- * colour, via `source-in` over a filled rectangle. Drawing it at one-pixel
- * offsets behind the real sprite gives a rim that hugs the body's actual
- * outline — the standard pixel-art dilation. Built transiently: its only
- * consumer is the fused minded bake below, so caching it was 2.4MB per
- * minded phenotype held for nothing.
- */
-function rimOf(img: HTMLCanvasElement): HTMLCanvasElement {
-  const cv = document.createElement('canvas');
-  cv.width = img.width;
-  cv.height = img.height;
-  const g = cv.getContext('2d')!;
-  g.imageSmoothingEnabled = false;
-  g.drawImage(img, 0, 0);
-  g.globalCompositeOperation = 'source-in'; // keep the sprite's alpha, replace its colour
-  g.fillStyle = RIM_COLOUR;
-  g.fillRect(0, 0, cv.width, cv.height);
-  return cv;
-}
-
-/** The minded rim's colour — the same violet the ring used, so nothing else in the
- *  palette has to move. */
-export const RIM_COLOUR = '#c660ff';
-
-/**
  * Far-zoom mips: quarter-size copies of the atlas variants, smoothed ONCE at
  * bake time (like the depletion layer's mip). When the whole map is in view a
  * creature is ~a dozen pixels tall; nearest-sampling that out of a 96-px cell
@@ -227,70 +201,6 @@ export function corpseMipFor(pheno: number, atlas: HTMLCanvasElement, decay = 0)
   const key = pheno * DECAY_STEPS + decayStage(decay);
   let m = corpseMipCache.get(key);
   if (!m) { m = downscale(corpseFor(pheno, atlas, decay)); corpseMipCache.set(key, m); }
-  return m;
-}
-
-/**
- * The far-zoom minded variant: rim and body FUSED into one sprite, so a minded
- * creature at fit zoom costs one drawImage instead of five. Baked at mip
- * resolution — the rim is one mip-pixel wide, which at map-overview sizes is
- * exactly what the live four-offset path resolves to anyway. Near zoom keeps
- * the live path: there the rim must hug the body at one SCREEN pixel, which no
- * baked asset can promise at every scale.
- */
-const mindedMipCache = new Map<number | string, HTMLCanvasElement>();
-
-export function mindedMipFor(pheno: number | string, atlas: HTMLCanvasElement): HTMLCanvasElement {
-  let m = mindedMipCache.get(pheno);
-  if (m) return m;
-  const body = atlasMipFor(pheno, atlas);
-  const rim = document.createElement('canvas');
-  rim.width = body.width;
-  rim.height = body.height;
-  const rg = rim.getContext('2d')!;
-  rg.drawImage(body, 0, 0);
-  rg.globalCompositeOperation = 'source-in'; // the mip's silhouette in rim violet
-  rg.fillStyle = RIM_COLOUR;
-  rg.fillRect(0, 0, rim.width, rim.height);
-  m = document.createElement('canvas');
-  m.width = body.width;
-  m.height = body.height;
-  const g = m.getContext('2d')!;
-  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-    g.drawImage(rim, dx, dy);
-  }
-  g.drawImage(body, 0, 0);
-  mindedMipCache.set(pheno, m);
-  return m;
-}
-
-/**
- * The full-resolution minded variant: rim and body FUSED into one sprite, so
- * a minded creature costs one drawImage at sprite zoom instead of five (four
- * rim offsets plus the body). The live four-offset path drew the rim at one
- * SCREEN pixel; a baked rim is one ATLAS pixel, which nearest-downsamples to
- * dots below half scale — so the baked rim is dilated to TWO atlas pixels,
- * surviving down to the mip handoff (box = CELL/MIP) while reading at most a
- * couple of pixels thick near 1:1. Baked once per phenotype.
- */
-const mindedCache = new Map<number | string, HTMLCanvasElement>();
-
-export function mindedFor(pheno: number | string, atlas: HTMLCanvasElement): HTMLCanvasElement {
-  let m = mindedCache.get(pheno);
-  if (m) return m;
-  const rim = rimOf(atlas);
-  m = document.createElement('canvas');
-  m.width = atlas.width;
-  m.height = atlas.height;
-  const g = m.getContext('2d')!;
-  for (const [dx, dy] of [
-    [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1],
-    [-2, 0], [2, 0], [0, -2], [0, 2],
-  ] as const) {
-    g.drawImage(rim, dx, dy);
-  }
-  g.drawImage(atlas, 0, 0);
-  mindedCache.set(pheno, m);
   return m;
 }
 

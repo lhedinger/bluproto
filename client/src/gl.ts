@@ -34,9 +34,9 @@ void main() {
 // server-side), and the quad's colour is the creature's rgb. Greys at or below
 // the pivot invert the bake's shade() (tint scaled toward black); greys above
 // invert mixWhite() (tint mixed toward white) — so one atlas per SHAPE serves
-// every colour a lineage drifts through. Saturated texels (the fused minded
-// rim's violet) pass through untinted, with a soft gate so downscaled edge
-// pixels blend instead of fringing.
+// every colour a lineage drifts through. Saturated texels pass through
+// untinted, with a soft gate so downscaled edge pixels blend instead of
+// fringing.
 const FS = `#version 300 es
 precision mediump float;
 in vec2 vUV; in vec4 vCol; in float vMode;
@@ -173,8 +173,8 @@ export class GLRenderer {
   /** Flushes what remains and reports the frame's batching stats. */
   end(): { drawCalls: number; quads: number; uploadMs: number; textures: number } {
     this.flush();
-    this.evictPool(/^(atlas|minded|corpse):/, GLRenderer.MAX_FULL_SPRITES);
-    this.evictPool(/^(atlasm|mindedm|corpsem):/, GLRenderer.MAX_MIP_SPRITES);
+    this.evictPool(/^(atlas|corpse):/, GLRenderer.MAX_FULL_SPRITES);
+    this.evictPool(/^(atlasm|corpsem):/, GLRenderer.MAX_MIP_SPRITES);
     this.frameNo++;
     this.stats.textures = this.textures.size;
     return this.stats;
