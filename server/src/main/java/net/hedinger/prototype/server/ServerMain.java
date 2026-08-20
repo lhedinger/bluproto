@@ -21,7 +21,6 @@ import net.hedinger.prototype.sim.SpawnItemCommand;
  *   GET  /api/world             world info (seed, geometry, tick, viewers)
  *   POST /api/world/reset       fresh world from {"seed": n}
  *   GET  /api/world/layers/{z}/{cx}_{cy}.png  baked ground chunk (level z)
- *   GET  /api/world/layers/{z}/{cx}_{cy}_bare.png  same chunk, fully grazed
  *   WS   /api/world/stream      hello+full on connect, ~10 Hz deltas after;
  *                               accepts {"cmd": ...} messages (see below)
  * </pre>
@@ -420,16 +419,14 @@ public final class ServerMain {
 			ctx.json(d);
 		});
 
-		// {chunk} is "cx_cy" for the lush bake, "cx_cy_bare" for its fully-grazed
-		// twin (the client dithers between the two to show live depletion).
+		// {chunk} is "cx_cy". The bake carries no vegetation (ground classes are
+		// type-only); the client stamps its vegetation sprite layer on top.
 		app.get("/api/world/layers/{z}/{chunk}.png", ctx -> {
 			int z = Integer.parseInt(ctx.pathParam("z").replace(".png", ""));
 			String[] p = ctx.pathParam("chunk").replace(".png", "").split("_");
 			byte[] png = p.length == 2
 					? host.chunk(z, Integer.parseInt(p[0]), Integer.parseInt(p[1]))
-					: p.length == 3 && "bare".equals(p[2])
-							? host.bareChunk(z, Integer.parseInt(p[0]), Integer.parseInt(p[1]))
-							: null;
+					: null;
 			if (png == null) {
 				ctx.status(404);
 				return;

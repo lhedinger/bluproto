@@ -103,8 +103,12 @@ public final class GroundTextures {
 				|| cls == CLS_CONCRETE || cls == CLS_STEELWALL;
 	}
 
-	/** Terrain colour class for a tile: ground, structure, or -1 (ramp). */
-	public static int groundClass(Tile t, long now) {
+	/** Terrain colour class for a tile: ground, structure, or -1 (ramp).
+	 *  Purely type-driven: a tile type has ONE look, so two tiles that mean the
+	 *  same thing always render the same. Vegetation is no longer part of the
+	 *  ground's identity — it lives in the sprite layer stamped on top (see the
+	 *  web client's vegetation layer / server VegFeed). */
+	public static int groundClass(Tile t) {
 		switch (t.getType()) {
 		case TYPE_WATER:
 			return CLS_WATER;
@@ -161,7 +165,7 @@ public final class GroundTextures {
 		case TYPE_DUCT:
 			return CLS_DUCT;
 		case TYPE_FLOOR:
-			return t.getVegetation(now) / Tile.VEG_MAX < 0.28 ? CLS_SOIL : CLS_GRASS;
+			return CLS_SOIL; // the living substrate is earth; grass is sprites
 		default:
 			return -1;
 		}
@@ -225,74 +229,6 @@ public final class GroundTextures {
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
 		return ditherRamp(cls, p, px, py);
-	}
-
-	/**
-	 * Grass as hand-drawn lawns are textured: a calm base broken into coarse
-	 * light/shadow patches, scattered with stamped plant motifs. Most cells
-	 * grow a simple tuft (2-px lit tip over a shadow root); some grow a wide
-	 * three-tip clump; lush ground occasionally sprouts a darker broadleaf
-	 * rosette (borrowing the thicket ramp, so it reads as a different plant)
-	 * or a tiny wildflower in the shrub-accent colours. Motif density follows
-	 * the live vegetation, so a grazed lawn goes quiet before it goes bare,
-	 * and the grass highlight shade appears only on blade tips.
-	 */
-	public static int grass(double wx, double wy, int px, int py, double veg) {
-		int C = 3; // motif lattice pitch, art-px
-		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
-		for (int oy = -1; oy <= 1; oy++) {
-			for (int ox = -1; ox <= 1; ox++) {
-				int cx = cx0 + ox, cy = cy0 + oy;
-				if (hash01(cx, cy, 40) > 0.10 + 0.38 * veg) {
-					continue; // nothing grows in this cell
-				}
-				int tx = cx * C + (int) (hash01(cx, cy, 41) * C);
-				int ty = cy * C + (int) (hash01(cx, cy, 42) * C);
-				int dx = px - tx, dy = py - ty;
-				double kind = hash01(cx, cy, 48);
-				if (kind < 0.05 && veg > 0.5) {
-					// Wildflower: a 2-px blossom over a leaf shadow.
-					if (dy == 0 && (dx == 0 || dx == 1)) {
-						return hash01(cx, cy, 49) < 0.7 ? BLOOM_RED : BLOOM_CREAM;
-					}
-					if (dx == 0 && dy == 1) {
-						return RAMP[CLS_GRASS][0];
-					}
-				} else if (kind < 0.11 && veg > 0.55) {
-					// Broadleaf rosette: a darker plus-shaped plant.
-					if (dx == 0 && dy == 0) {
-						return RAMP[CLS_COVER][2];
-					}
-					if (Math.abs(dx) + Math.abs(dy) == 1) {
-						return RAMP[CLS_COVER][1];
-					}
-				} else if (kind < 0.30) {
-					// Wide clump: three fanned lit tips over a shadow root.
-					if ((dy == 0 && Math.abs(dx) == 1) || (dx == 0 && dy == -1)) {
-						return RAMP[CLS_GRASS][2];
-					}
-					if (dx == 0 && dy == 0) {
-						return RAMP[CLS_GRASS][1];
-					}
-					if (dx == 0 && dy == 1) {
-						return RAMP[CLS_GRASS][0];
-					}
-				} else {
-					// Simple tuft: 2-px lit tip over a shadow root.
-					if (dx == 0 && (dy == 0 || dy == -1)) {
-						return RAMP[CLS_GRASS][2];
-					}
-					if (dx == 0 && dy == 1) {
-						return RAMP[CLS_GRASS][0];
-					}
-				}
-			}
-		}
-		double sh = Utils.noise2(wx, wy, 0.8);
-		double p = (sh - 0.30) / 0.42;
-		p = p < 0 ? 0 : (p > 1 ? 1 : p);
-		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
-		return ditherRamp(CLS_GRASS, p, px, py); // calm shadow/base patches
 	}
 
 	/**

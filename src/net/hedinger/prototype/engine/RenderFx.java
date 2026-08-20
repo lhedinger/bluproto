@@ -18,6 +18,12 @@ public final class RenderFx {
 	/** Draw the decorative tall grass and shrubs on fertile tiles. Off for
 	 *  behaviour-test rendering, where they would only clutter the subject. */
 	public static boolean foliage = true;
+	/** Draw the live tall-grass tufts (the blades that part around walkers).
+	 *  The desktop view keeps them; the server's chunk bake turns them off,
+	 *  because they read live vegetation — the web client shows growth and
+	 *  depletion through its vegetation sprite layer instead, and a bake must
+	 *  be a pure function of the terrain. */
+	public static boolean grassTufts = true;
 	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
 	public static boolean cacheSprites = true;
 	/** Re-stamp foliage over creatures standing in walkable sight-blockers

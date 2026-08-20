@@ -85,8 +85,9 @@ final class SpriteCatalog {
 
 	private void groundSection() {
 		section("Ground", "One swatch per tile class, straight from the layer bake. "
-				+ "Grass and fungus regrow what grazing eats; the depletion strip below shows the dither.");
-		ground("grass", Tile.TileType.TYPE_FLOOR);
+				+ "Each tile type has ONE look — vegetation (and its depletion) is the "
+				+ "sprite layer stamped on top, not part of the ground.");
+		ground("grassland_soil", Tile.TileType.TYPE_FLOOR);
 		ground("tall_grass_cover", Tile.TileType.TYPE_COVER);
 		ground("water", Tile.TileType.TYPE_WATER);
 		ground("shallows", Tile.TileType.TYPE_SHALLOWS);
@@ -114,7 +115,6 @@ final class SpriteCatalog {
 		ground("air_vent", Tile.TileType.TYPE_AIRVENT);
 		ground("duct", Tile.TileType.TYPE_DUCT);
 		ground("switch_seat", Tile.TileType.TYPE_SWITCH);
-		grassDepletion();
 	}
 
 	private void furnitureSection() {
@@ -207,31 +207,6 @@ final class SpriteCatalog {
 		settle(w);
 		BufferedImage veiled = frame(w, lr).getSubimage(ts, ts, 5 * ts, 5 * ts);
 		add(name + ".png", png(veiled), "a body veiled in " + name, 160);
-	}
-
-	/** Lush grass grazed down to bare soil, one bite per frame — the live
-	 *  depletion dither stepping through its art-pixel stages. */
-	private void grassDepletion() {
-		World w = stage(8, 8);
-		w.alignTiles();
-		LayerRenderer lr = LayerBaker.chunkRenderer(w);
-		int ts = ResourceManager.tileSize;
-		List<BufferedImage> frames = new ArrayList<>();
-		for (int f = 0; f < 14; f++) {
-			frames.add(frame(w, lr).getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts));
-			for (int x = 1; x < 7; x++) {
-				for (int y = 1; y < 7; y++) {
-					Tile t = w.getTile(x, y, 0);
-					t.graze(w.getTick(), t.vegetationCap() * 0.09);
-				}
-			}
-		}
-		add("ground_grass_depletion.gif", gif(frames, 25), "grass, grazed bare", 128);
-		// The lush and fully-grazed endpoints as silent assets (no catalog
-		// figure of their own): the web catalog fetches them and runs the
-		// client's OWN dither compositing between the two, beside this gif.
-		assets.put("depletion_lush.png", png(frames.get(0)));
-		assets.put("depletion_bare.png", png(frames.get(frames.size() - 1)));
 	}
 
 	// ---- furniture ---------------------------------------------------------

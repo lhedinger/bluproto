@@ -40,7 +40,6 @@ final class WorldHost {
 	private long seed;
 	private SimulationRunner runner;
 	private java.util.Map<String, byte[]> chunks; // key "z/cx_cy" -> PNG
-	private java.util.Map<String, byte[]> bareChunks; // same chunks, fully grazed
 	private int chunksX, chunksY; // chunk grid dimensions
 	private WorldSnapshot lastSent;
 	private boolean forceFull = false;
@@ -112,34 +111,13 @@ final class WorldHost {
 			}
 			level = null; // free this level's image before baking the next
 		}
-		// Phase 4 of the render split (MODERNIZATION.md): bake the same twin a
-		// second time with every tile grazed bare. The client dithers between
-		// the two bakes per art-pixel, so live depletion erases grass (and
-		// fungus glow) down to the ground's true bare look — the Java renderer
-		// stays the single source of the art, served, never ported.
-		for (int z = 0; z < terrain.getLevels(); z++) {
-			for (int y = 0; y < rows; y++) {
-				for (int x = 0; x < cols; x++) {
-					terrain.getTile(x, y, z).graze(0, net.hedinger.prototype.engine.Tile.VEG_MAX);
-				}
-			}
-		}
-		java.util.Map<String, byte[]> bareBaked = new java.util.HashMap<String, byte[]>();
-		for (int z = 0; z < r.world().getLevels(); z++) {
-			java.awt.image.BufferedImage level = LayerBaker.bakeLevelImage(terrain, lr, z);
-			for (int cy = 0; cy < cyN; cy++) {
-				for (int cx = 0; cx < cxN; cx++) {
-					int x0 = cx * CHUNK_TILES * ts, y0 = cy * CHUNK_TILES * ts;
-					int cw = Math.min(CHUNK_TILES * ts, cols * ts - x0);
-					int ch = Math.min(CHUNK_TILES * ts, rows * ts - y0);
-					bareBaked.put(z + "/" + cx + "_" + cy, LayerBaker.chunkPng(level, x0, y0, cw, ch));
-				}
-			}
-			level = null; // free this level's image before baking the next
-		}
+		// The bake is vegetation-free by construction — ground classes are
+		// type-only and the bake path draws no live tufts (LayerBaker) — so a
+		// single bake serves as the ground under the client's vegetation
+		// sprite layer. (The old design baked a second, force-grazed twin and
+		// dithered between the two; five sprite states replaced all of that.)
 		runner = r;
 		chunks = baked;
-		bareChunks = bareBaked;
 		chunksX = cxN;
 		chunksY = cyN;
 		lastSent = r.snapshot();
@@ -462,7 +440,10 @@ final class WorldHost {
 		d.put("x", x);
 		d.put("y", y);
 		d.put("z", z);
-		d.put("type", t.getType().name().toLowerCase().replace("type_", ""));
+		// The human-readable label ("grassland", "steel bulkhead"), not the enum
+		// constant: tile types multiply, and "floor"-grade names stop telling
+		// them apart in the inspector.
+		d.put("type", t.getType().label());
 		d.put("walkable", t.isWalkable());
 		d.put("water", t.isWater());
 		d.put("open", t.getType().isOpen());
@@ -756,12 +737,6 @@ final class WorldHost {
 	/** A baked ground chunk PNG at (level z, chunk cx, cy), or null if none. */
 	byte[] chunk(int z, int cx, int cy) {
 		return chunks.get(z + "/" + cx + "_" + cy);
-	}
-
-	/** The fully-grazed twin of {@link #chunk}: the same chunk with every tile's
-	 *  vegetation stripped, for the client's live-depletion dither. */
-	byte[] bareChunk(int z, int cx, int cy) {
-		return bareChunks.get(z + "/" + cx + "_" + cy);
 	}
 
 	int viewers() {

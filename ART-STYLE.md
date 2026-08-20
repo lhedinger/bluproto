@@ -66,15 +66,15 @@ inventing new ones.
 - **Ordered dither (Bayer 4×4)** — for *coverage and gradients*: the classic
   threshold matrix indexed by world-absolute art-pixel (`bayer(px, py)`).
   Period 4 divides the 12-px tile, so every tile is in phase. Used for shade
-  ramps, depletion, shore deepening, rim dropouts.
+  ramps, shore deepening, rim dropouts.
 - **Hash scatter** — for *organic placement*: `hash01(x, y, salt)` gates
   grains, sparks, tufts. Grains come in 2-px clusters, **never lone pixels**
   (`quietGround`). A smell uses hash stipple, not Bayer — the ordered matrix
   reads as mechanical, wrong for organic haze.
-- **Motif lattice** — for *stamped plants*: a coarse cell grid (grass uses
-  3-px pitch) where each cell hash-decides whether it grows a motif (tuft,
-  clump, rosette, wildflower) and jitters its anchor. Motif **density** is the
-  live-scalar hook (grazed lawns go quiet before they go bare).
+- **Motif lattice** — for *stamped plants*: a coarse cell grid where each
+  cell hash-decides whether it grows a motif (tuft, clump, sprout, cap) and
+  jitters its anchor. The vegetation sprites are built this way: per-tile,
+  hash-scattered motifs whose count and reach step with the growth stage.
 - **Autotiled edges** — boundaries are *drawn shapes, not noise*: the
   higher-ranked terrain laps 1–3 px into its neighbour in scalloped runs with
   quarter-round corners (`resolveEdge`), deterministic and tile-anchored.
@@ -138,11 +138,12 @@ layers and creature atlases the web serves, and draws scenario captures.
 The web client repaints what it must live (furniture glyphs, overlays,
 corpse/rim bakes) in a deliberately simpler idiom — but that idiom follows
 the same rules where it counts: art-pixel blocks over smooth curves, ramp
-colours over invented ones, dither over alpha washes. Where the client
-overlays state onto the bake — grazing, concealment — it does not paint its
-own idea of the state: it **re-composites the bake's own pixels** (the bare
-twin through the dither mask; the cover tile's pixels through the ported gap
-mask), so every pixel shown is one the Java renderer authored.
+colours over invented ones, dither over alpha washes. The ground bake is a
+pure function of tile type — one look per meaning, no live state frozen in —
+and live state rides above it in the client's own layers: vegetation as the
+five-stage sprite stamps, concealment by **re-compositing the bake's own
+pixels** (the cover tile's pixels through the ported gap mask), so every
+ground pixel shown is one the Java renderer authored.
 
 **`/sprites` is the catalog of record for the web view.** Everything the
 client draws into the world must have an entry there, rendered by the *same
@@ -159,10 +160,12 @@ The precedents, so nobody pays twice:
 - **The depletion wash** — grazing depletion was first drawn as a translucent
   brown alpha wash in 3×3-art-pixel blocks, Bayer-indexed per tile. Three
   violations in one: invented in-between colours, cells coarser than the art
-  grid, and a dither out of phase with the bake's own. The lasting lesson went
-  further than fixing the overlay: *a state is another bake, not a tint* — the
-  server now bakes a fully-grazed twin and the client dithers between the two
-  bakes per art-pixel, so every pixel shown is one the renderer authored.
+  grid, and a dither out of phase with the bake's own. The lasting lesson:
+  *a state is drawn art, not a tint* — the fix baked a fully-grazed twin and
+  dithered between the two bakes per art-pixel; today the same principle is
+  served by the five-stage vegetation sprites stamped over a ground bake that
+  carries no vegetation at all. Either way, every pixel shown is one a
+  renderer authored, never a wash.
 - **The corpse grey square** — the client's corpse bake filled the whole atlas
   cell with grey in `'saturation'` mode, assuming the blend would clip to the
   sprite. Blend modes composite source-over: everywhere the cell was
