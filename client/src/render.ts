@@ -4,7 +4,7 @@
 // nearest-neighbour scaling of the layer.
 
 import {
-  ART_RADIUS, BAYER4, CELL, MIP, atlasFor, atlasMipFor, cell, corpseFor,
+  ART_RADIUS, CELL, MIP, atlasFor, atlasMipFor, cell, corpseFor,
   corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
@@ -17,269 +17,115 @@ import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
 
-/** Dither masks for the 16 depletion coverage levels: opaque where the Bayer
- *  threshold admits the bare bake, transparent where lush ground survives.
- *  Art-pixel resolution — a tile is 12 art-px a side and the pattern period
- *  is 4, so one 12x12 mask tiles every world tile in phase with the bake's
- *  own dithers. Built lazily, cached forever. */
-const MASKS: HTMLCanvasElement[] = [];
-function ditherMask(coverage16: number): HTMLCanvasElement {
-  let m = MASKS[coverage16];
-  if (!m) {
-    m = document.createElement('canvas');
-    m.width = 12;
-    m.height = 12;
-    const mg = m.getContext('2d')!;
-    mg.fillStyle = '#fff';
-    for (let y = 0; y < 12; y++) {
-      for (let x = 0; x < 12; x++) {
-        if (BAYER4[(y & 3) * 4 + (x & 3)] < coverage16) mg.fillRect(x, y, 1, 1);
-      }
-    }
-    MASKS[coverage16] = m;
-  }
-  return m;
-}
-
-/** Scratch tile for compositing one bare-bake tile under a dither mask. */
-const SCRATCH = document.createElement('canvas');
-
-/**
- * Composite one tile of the bare (fully-grazed) bake through the depletion
- * dither mask into `ctx` — the ONE way grazing is allowed to show (a state is
- * another bake, dithered per art-pixel; ART-STYLE.md case law). Exported so
- * /sprites runs the identical compositing beside the Java depletion strip.
- */
-export function ditherTile(ctx: CanvasRenderingContext2D, src: CanvasImageSource,
-    sx: number, sy: number, tilePx: number,
-    dx: number, dy: number, dw: number, dh: number, depl16: number): void {
-  if (SCRATCH.width !== tilePx) { SCRATCH.width = tilePx; SCRATCH.height = tilePx; }
-  const sg = SCRATCH.getContext('2d')!;
-  sg.clearRect(0, 0, tilePx, tilePx);
-  sg.drawImage(src, sx, sy, tilePx, tilePx, 0, 0, tilePx, tilePx);
-  sg.globalCompositeOperation = 'destination-in';
-  sg.imageSmoothingEnabled = false;
-  sg.drawImage(ditherMask(depl16), 0, 0, tilePx, tilePx);
-  sg.globalCompositeOperation = 'source-over';
-  ctx.drawImage(SCRATCH, 0, 0, tilePx, tilePx, dx, dy, dw, dh);
-}
-
-// The depletion layer: the whole level's grazing overlay composited ONCE per
-// vegetation update (the grid polls every ~1.5 s) into an offscreen canvas at
-// art-pixel resolution (12 px per tile), then blitted in a single drawImage
-// per frame. The naive per-frame path drew one scaled drawImage per depleted
-// tile — with a thriving ecosystem keeping ~1000 tiles grazed, that was
-// ~60k image draws a second and the fit view ran at one frame per second.
-// At 12 px/tile, one layer pixel is exactly one art-pixel: upscaled crisply
-// it matches the per-tile dither, downscaled with smoothing it resolves to
-// the same coverage the old far-zoom alpha path approximated.
-let deplLayer: HTMLCanvasElement | null = null;
-// Far-zoom mip of the layer (3 px per tile), rebuilt with it: one smooth
-// downscale per vegetation update instead of one per frame — a full-layer
-// smooth blit every frame is exactly the kind of work that melts a software
-// canvas (the desktop renderer keeps a downsized pyramid for the same reason).
-let deplLayerLow: HTMLCanvasElement | null = null;
-let deplSrcRev = -1; // the vegetation version the layer was scanned against
-let deplLevel = -1;
-// The depletion STATE each tile is currently painted at (0 lush .. 4 bare),
-// mirroring the server's 5-state quantisation, so a poll only repaints tiles
-// whose state actually moved.
-let deplBuckets: Int16Array | null = null;
-// The tile rects the last depletion pass repainted (null = full rebuild), so
-// the GL path can patch its texture instead of re-uploading the whole layer.
-let deplPatchRects: Array<[number, number, number, number]> | null = null;
-// Tiles repainted since the GPU copy last reconciled. Normally each poll's
-// handful ships as texSubImage2D patches, but a big herd can graze more tiles
-// per poll than patching beats (>256), which forces a whole-layer re-upload —
-// multi-millisecond on weak GPUs. Those bulk uploads are rate-limited: while
-// the window is closed the repaints accumulate here (null = overflowed, a
-// bulk is owed) and the GPU copy runs up to BULK_MIN_MS stale, which on a
-// slow-moving vegetation field nobody can see. Level switches bypass this —
-// they take the `full` path, which always ships immediately.
-let deplPending: number[] | null = [];
-let deplBulkAt = 0;
-const DEPL_BULK_MIN_MS = 3000;
-// GPU-reconciliation cadence: how often the depletion texture may be touched
-// at all (patch bursts) and how often the low mirror re-downscales during a
-// heavy drain. Mobile tile GPUs pay a whole-texture ghost copy per frame
-// that modifies a sampled texture, so updates are batched into bursts.
-const DEPL_SHIP_MIN_MS = 400;
-let deplShipAt = 0;
-let deplMirrorDirty = false;
-let deplMirrorAt = 0;
+// ---- the vegetation layer, chunked ----------------------------------------
+//
+// Vegetation renders as one-tile sprites stamped OVER the vegetation-free
+// ground bake, held in PER-CHUNK canvases and textures (the ground's own
+// chunk grid). Chunk granularity is what a mobile GPU wants: a repaint
+// re-uploads one ~144px texture wholesale instead of patching a 7-megapixel
+// monolith, whose per-frame mutation made tile drivers ghost-copy the whole
+// thing. Updates are EVENTUALLY CONSISTENT by design: a vegetation poll only
+// marks chunks dirty, and at most VEG_CHUNKS_PER_FRAME repaint per frame —
+// the drawn field trails the sim by a few seconds, invisible on something
+// that changes over minutes, and the frame never pays a burst.
+let vegPainted: Uint8Array | null = null; // last state painted, per tile
+let vegChunkRevs = new Map<number, number>();
+let vegChunkCvs = new Map<number, HTMLCanvasElement>();
+let vegDirty: number[] = []; // chunk keys owed a repaint, in discovery order
+let vegDirtySet = new Set<number>();
+let vegSrcRev = -1;
+let vegLayerLevel = -1;
+let vegLow: HTMLCanvasElement | null = null; // 3px/tile world mirror, far zoom
+let vegLowRev = 0;
+let vegLowDirty = false;
+let vegLowAt = 0;
+const VEG_CHUNKS_PER_FRAME = 2;
+const VEG_LOW_MIN_MS = 1500;
 const ART = 12;
 
-// The repaint QUEUE: tiles whose bucket moved, waiting for their ditherTile.
-// A herd's grazing plus world-wide REGROWTH can move thousands of buckets per
-// vegetation poll on an old world, and repainting them all in the poll's
-// frame was a 60-130ms main-thread stall — every 1.5s, surface only (caves
-// have no vegetation), which is exactly the "surface lags, underground is
-// fine" signature. Repaints now drain at a frame budget; the dither runs a
-// few frames behind the data, which on a field that changes over minutes is
-// invisible. The budget rises while the queue is deep (a fresh level's whole
-// depleted field) so the initial paint takes a moment, not a freeze.
-let deplQueue: number[] = [];
-let deplQHead = 0;
-let deplQueued: Uint8Array | null = null;
-const DEPL_TILES_PER_FRAME = 96;
-// A queue this deep is a whole level's backlog (fresh join, level switch),
-// not steady churn — drain faster so the field paints in a couple of
-// seconds. Kept modest: a rush frame must still fit a phone's budget.
-const DEPL_TILES_RUSH = 256;
-const DEPL_RUSH_DEPTH = 8000;
-
-/** The five depletion stages: 0 is untouched grass (nothing drawn), 1..4 are
- *  quarter-steps toward bare dirt — stamped from these pre-baked 12px tiles
- *  in the ground's Bayer-dither idiom instead of the old per-tile composite
- *  against the bare chunk bake (3 canvas ops per repaint became 1, and the
- *  bare-chunk downloads went away entirely). Three variants per stage, hash-
- *  picked per tile, so a field doesn't read as a repeated block. */
-export const DEPL_STATES = 5;
-const DEPL_VARIANTS = 3;
-const DEPL_TONES = ['#4a3826', '#5a4630', '#6a5238'];
-const deplStamps = new Map<number, HTMLCanvasElement>();
-
-export function depletionStampFor(state: number, variant: number): HTMLCanvasElement {
-  const key = state * DEPL_VARIANTS + variant;
-  const hit = deplStamps.get(key);
-  if (hit) return hit;
-  const cv = document.createElement('canvas');
-  cv.width = ART;
-  cv.height = ART;
-  const g = cv.getContext('2d')!;
-  for (let y = 0; y < ART; y++) {
-    for (let x = 0; x < ART; x++) {
-      // Coverage 4/8/12/16 of the 16 Bayer cells; the variant shifts the
-      // matrix phase so equal-state neighbours don't tile visibly.
-      const b = BAYER4[((y + variant * 2) % 4) * 4 + (x + variant) % 4];
-      if (b >= state * 4) continue;
-      g.fillStyle = DEPL_TONES[(x * 7 + y * 13 + variant * 5) % 3];
-      g.fillRect(x, y, 1, 1);
-    }
-  }
-  deplStamps.set(key, cv);
-  return cv;
+function vegVariant(tx: number, ty: number): number {
+  return Math.floor(hash01(tx, ty, 11) * VEG_VARIANTS);
 }
 
-function depletionLayer(meta: WorldMeta,
-    veg: Uint8Array, vegRev: number, level: number, nowMs: number): HTMLCanvasElement | null {
-  const full = !deplLayer || !deplBuckets || level !== deplLevel
-    || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART;
-  // An owed bulk upload whose rate-limit window just opened re-enters even if
-  // the vegetation itself brought nothing new this frame.
-  const bulkDue = deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS;
-  const shipDue = (deplPending !== null && deplPending.length > 0) || deplMirrorDirty;
-  const scanDue = full || vegRev !== deplSrcRev;
-  if (!scanDue && deplQHead >= deplQueue.length && !bulkDue && !shipDue) return deplLayer;
-  if (full) {
-    if (!deplLayer || deplLayer.width !== meta.cols * ART || deplLayer.height !== meta.rows * ART) {
-      deplLayer = document.createElement('canvas');
-      deplLayer.width = meta.cols * ART;
-      deplLayer.height = meta.rows * ART;
+/** Scans for moved states, repaints its budget of dirty chunks, and keeps the
+ *  far-zoom mirror fresh; the draw passes read vegChunkCvs/vegLow directly. */
+function vegLayerUpdate(meta: WorldMeta, chunkTiles: number,
+    veg: Uint8Array, vegRev: number, level: number, nowMs: number): void {
+  const cxN = Math.ceil(meta.cols / chunkTiles);
+  if (level !== vegLayerLevel || !vegPainted || vegPainted.length !== meta.cols * meta.rows) {
+    vegPainted = new Uint8Array(meta.cols * meta.rows);
+    vegChunkRevs = new Map();
+    vegChunkCvs = new Map();
+    vegDirty = [];
+    vegDirtySet = new Set();
+    vegLayerLevel = level;
+    vegSrcRev = -1;
+    if (!vegLow || vegLow.width !== meta.cols * LAYER_LOW) {
+      vegLow = document.createElement('canvas');
+      vegLow.width = meta.cols * LAYER_LOW;
+      vegLow.height = meta.rows * LAYER_LOW;
     }
-    deplLayer.getContext('2d')!.clearRect(0, 0, deplLayer.width, deplLayer.height);
-    deplBuckets = new Int16Array(meta.cols * meta.rows); // all painted "lush"
-    deplQueue = [];
-    deplQHead = 0;
-    deplQueued = new Uint8Array(meta.cols * meta.rows);
-    deplLevel = level;
-    deplRev++; // ship the cleared layer NOW; the dither drains in behind it
-    deplPatchRects = null;
-    deplPending = [];
-    deplBulkAt = nowMs;
+    vegLow.getContext('2d')!.clearRect(0, 0, vegLow.width, vegLow.height);
+    vegLowRev++;
   }
-  const layer = deplLayer!; // allocated above whenever it was missing or stale
-  const ctx = layer.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-  const LOW = 3;
-  if (!deplLayerLow || deplLayerLow.width !== meta.cols * LOW) {
-    deplLayerLow = document.createElement('canvas');
-    deplLayerLow.width = meta.cols * LOW;
-    deplLayerLow.height = meta.rows * LOW;
-    deplLayerLow.getContext('2d')!.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
-  }
-  const lg = deplLayerLow.getContext('2d')!;
-  lg.imageSmoothingEnabled = true;
-  if (full) lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
-  if (scanDue) {
-    // Cheap pass: FIND the moved states (integer compares over the grid);
-    // the expensive painting is what the queue meters out. The grid itself
-    // arrives as server deltas, so `veg` already holds 0..4 states.
-    for (let i = 0; i < deplBuckets!.length; i++) {
-      if (veg[i] !== deplBuckets![i] && !deplQueued![i]) {
-        deplQueued![i] = 1;
-        deplQueue.push(i);
+  if (vegRev !== vegSrcRev) {
+    // Cheap pass: integer compares over the grid; painting is metered below.
+    for (let i = 0; i < vegPainted.length; i++) {
+      if (veg[i] !== vegPainted[i]) {
+        const key = Math.floor((i % meta.cols) / chunkTiles)
+          + Math.floor(i / meta.cols / chunkTiles) * cxN;
+        if (!vegDirtySet.has(key)) {
+          vegDirtySet.add(key);
+          vegDirty.push(key);
+        }
       }
     }
-    deplSrcRev = vegRev;
+    vegSrcRev = vegRev;
   }
-  const budget = deplQueue.length - deplQHead > DEPL_RUSH_DEPTH
-    ? DEPL_TILES_RUSH : DEPL_TILES_PER_FRAME;
-  const patched: number[] = []; // tiles repainted THIS frame
-  let work = 0;
-  while (work < budget && deplQHead < deplQueue.length) {
-    const i = deplQueue[deplQHead++];
-    deplQueued![i] = 0;
-    const state = veg[i]; // re-read: the field moved on since enqueue
-    if (state === deplBuckets![i]) continue;
-    const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
-    ctx.clearRect(tx * ART, ty * ART, ART, ART);
-    if (state > 0) {
-      const variant = Math.floor(hash01(tx, ty, 7) * DEPL_VARIANTS);
-      ctx.drawImage(depletionStampFor(state, variant), tx * ART, ty * ART);
+  for (let n = 0; n < VEG_CHUNKS_PER_FRAME && vegDirty.length > 0; n++) {
+    const key = vegDirty.shift()!; // ≤ ~100 entries: shift is nothing
+    vegDirtySet.delete(key);
+    const cx = key % cxN, cy = Math.floor(key / cxN);
+    const wTiles = Math.min(chunkTiles, meta.cols - cx * chunkTiles);
+    const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
+    let cvc = vegChunkCvs.get(key);
+    if (!cvc) {
+      cvc = document.createElement('canvas');
+      cvc.width = chunkTiles * ART;
+      cvc.height = chunkTiles * ART;
+      vegChunkCvs.set(key, cvc);
     }
-    deplBuckets![i] = state;
-    if (work < 128) { // heavy frames refresh the mirror wholesale, throttled below
-      lg.clearRect(tx * LOW, ty * LOW, LOW, LOW);
-      lg.drawImage(layer, tx * ART, ty * ART, ART, ART, tx * LOW, ty * LOW, LOW, LOW);
-    } else {
-      deplMirrorDirty = true;
+    const cg = cvc.getContext('2d')!;
+    cg.clearRect(0, 0, cvc.width, cvc.height);
+    cg.imageSmoothingEnabled = false;
+    for (let ty = 0; ty < hTiles; ty++) {
+      for (let tx = 0; tx < wTiles; tx++) {
+        const gx = cx * chunkTiles + tx, gy = cy * chunkTiles + ty;
+        const i = gy * meta.cols + gx;
+        const s = veg[i];
+        vegPainted[i] = s;
+        if (s > 0) {
+          cg.drawImage(vegetationTileFor('grass', s, vegVariant(gx, gy)), tx * ART, ty * ART);
+        }
+      }
     }
-    patched.push(i);
-    work++;
+    vegChunkRevs.set(key, (vegChunkRevs.get(key) ?? 0) + 1);
+    const lg = vegLow!.getContext('2d')!;
+    lg.imageSmoothingEnabled = true;
+    lg.clearRect(cx * chunkTiles * LAYER_LOW, cy * chunkTiles * LAYER_LOW,
+      wTiles * LAYER_LOW, hTiles * LAYER_LOW);
+    lg.drawImage(cvc, 0, 0, wTiles * ART, hTiles * ART,
+      cx * chunkTiles * LAYER_LOW, cy * chunkTiles * LAYER_LOW,
+      wTiles * LAYER_LOW, hTiles * LAYER_LOW);
+    vegLowDirty = true;
   }
-  if (deplMirrorDirty && nowMs - deplMirrorAt >= DEPL_SHIP_MIN_MS) {
-    // Rush frames skip per-cell mirror blits and settle here: one smooth
-    // downscale, at most a few times a second, not one per rush frame.
-    lg.clearRect(0, 0, deplLayerLow.width, deplLayerLow.height);
-    lg.drawImage(layer, 0, 0, deplLayerLow.width, deplLayerLow.height);
-    deplMirrorDirty = false;
-    deplMirrorAt = nowMs;
+  if (vegLowDirty && nowMs - vegLowAt >= VEG_LOW_MIN_MS) {
+    vegLowRev++; // one small upload for the far-zoom texture, throttled
+    vegLowDirty = false;
+    vegLowAt = nowMs;
   }
-  if (deplQHead >= deplQueue.length) {
-    deplQueue = [];
-    deplQHead = 0;
-  }
-  if (patched.length > 0 || deplPending !== null) {
-    if (deplPending !== null) {
-      for (const i of patched) deplPending.push(i);
-      if (deplPending.length > 256) deplPending = null; // overflow: a bulk is owed
-    }
-    // The GPU copy reconciles a few times a second, NOT every frame: mobile
-    // tile GPUs cannot modify a texture still sampled by in-flight frames —
-    // the driver ghosts a copy of the WHOLE 30MB texture for every frame
-    // that touches it, which turned a steady drain into 200ms frames on a
-    // phone while the CPU sat idle (cb small, zero long tasks — the classic
-    // signature). Batching the texSubImage2D patches to one burst per window
-    // means at most a couple of ghost copies a second.
-    if (deplPending !== null && deplPending.length > 0
-        && nowMs - deplShipAt >= DEPL_SHIP_MIN_MS) {
-      const ship = deplPending.splice(0, 256);
-      deplRev++;
-      deplPatchRects = ship.map(i =>
-        [(i % meta.cols) * ART, Math.floor(i / meta.cols) * ART, ART, ART]);
-      deplShipAt = nowMs;
-    } else if (deplPending === null && nowMs - deplBulkAt >= DEPL_BULK_MIN_MS) {
-      deplRev++; // the owed whole-layer upload, at most once per window
-      deplPatchRects = null;
-      deplPending = [];
-      deplBulkAt = nowMs;
-      deplShipAt = nowMs;
-    }
-    // else: hold — the GPU copy stays a beat stale until a window opens.
-  }
-  return layer;
 }
+
 
 // The whole ground at art-pixel resolution (12 px/tile), assembled once per
 // level from the chunk bakes with a nearest 4:1 downscale — the bake draws
@@ -484,21 +330,26 @@ export function render(
     }
   }
 
-  // Live grazing: the pre-composited depletion layer (see depletionLayer) —
-  // one drawImage per frame, whatever the herds have eaten. Crisp art-pixels
-  // when zoomed in; smoothing on the downscale resolves to coverage when the
-  // whole map is in view.
-  if (veg && chunkTiles > 0 && tilePx > 0) {
-    const layer = depletionLayer(meta, veg, vegRev, level, nowMs);
-    if (layer) {
-      const o = cam.worldToScreen(0, 0);
-      // Near zoom blits the art-pixel layer crisply; far zoom blits the small
-      // mip (already smoothed once at build time), so no frame ever pays for
-      // a full-resolution smooth downscale.
-      const src2 = cam.scale < ART && deplLayerLow ? deplLayerLow : layer;
-      g.imageSmoothingEnabled = cam.scale < ART;
-      g.drawImage(src2, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+  // Vegetation: one-tile sprites over the bare ground, chunk-cached (see
+  // vegLayerUpdate). Far zoom blits the small pre-smoothed mirror; near zoom
+  // blits the visible chunks crisply.
+  if (veg && chunkTiles > 0) {
+    vegLayerUpdate(meta, chunkTiles, veg, vegRev, level, nowMs);
+    const o = cam.worldToScreen(0, 0);
+    if (cam.scale < ART && vegLow) {
+      g.imageSmoothingEnabled = true;
+      g.drawImage(vegLow, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
       g.imageSmoothingEnabled = false;
+    } else {
+      const cxN = Math.ceil(meta.cols / chunkTiles);
+      g.imageSmoothingEnabled = false;
+      for (const [key, cvc] of vegChunkCvs) {
+        const wx = (key % cxN) * chunkTiles, wy = Math.floor(key / cxN) * chunkTiles;
+        const oc = cam.worldToScreen(wx, wy);
+        const wpx = chunkTiles * cam.scale;
+        if (oc.x > cv.width || oc.y > cv.height || oc.x + wpx < 0 || oc.y + wpx < 0) continue;
+        g.drawImage(cvc, oc.x, oc.y, wpx, wpx);
+      }
     }
   }
 
@@ -734,7 +585,7 @@ export function render(
 // Canvas2D pays CPU per API call, which is the wall a large population hits
 // on real GPU browsers (the software rasteriser that runs our benchmarks pays
 // per PIXEL instead, which is why it never showed this). The GL pass renders
-// the whole WORLD — ground, depletion, entity sprites, canopy, lids — as
+// the whole WORLD — ground, vegetation, entity sprites, canopy, lids — as
 // batched textured quads through gl.ts: the layers are one quad each, and a
 // thousand sorted creatures are a handful of draw calls. Everything vector —
 // doors, switches, rings, badges, tethers, the selection — is collected
@@ -751,7 +602,6 @@ export function render(
 /** A per-frame bump for each composited layer, so the GL pass re-uploads a
  *  layer texture exactly when the canvas under it was repainted. */
 let groundRev = 0;
-let deplRev = 0;
 let canopyRev = 0;
 
 /** Bakes the nest stamp once at art resolution for the GL pass — painted by
@@ -815,7 +665,7 @@ export function renderGL(
   const o0 = cam.worldToScreen(0, 0);
   const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
 
-  // Ground and depletion: the art-resolution layers, one quad each. Layer
+  // Ground and vegetation: art-resolution layers. Layer
   // textures carry NO mipmaps (they get patched), so at far zoom — where the
   // full 12px/tile texture would minify 4-8x and thrash a phone GPU's texture
   // cache — the quad samples the quarter-res mirror instead, exactly as the
@@ -831,18 +681,20 @@ export function renderGL(
       }
     }
     if (veg) {
-      const depl = depletionLayer(meta, veg, vegRev, level, nowMs);
-      if (depl) {
-        if (lowZoom && deplLayerLow) {
-          // The low mirror's patch rects are the full-res rects at 1/4 scale
-          // (ART=12 -> 3 px/tile), which divide exactly on tile boundaries.
-          const loRects = deplPatchRects
-            ? deplPatchRects.map(([x, y, w, h]) =>
-              [x / 4, y / 4, w / 4, h / 4] as [number, number, number, number])
-            : null;
-          glr.layer('depllo', deplLayerLow, deplRev, loRects, o0.x, o0.y, worldW, worldH);
-        } else {
-          glr.layer('depl', depl, deplRev, deplPatchRects, o0.x, o0.y, worldW, worldH);
+      vegLayerUpdate(meta, chunkTiles, veg, vegRev, level, nowMs);
+      if (lowZoom && vegLow) {
+        glr.layer('veglo', vegLow, vegLowRev, null, o0.x, o0.y, worldW, worldH);
+      } else {
+        // Visible chunks only: a handful of small quads/textures near zoom,
+        // and a repainted chunk re-uploads its own ~80KB texture wholesale —
+        // no giant-texture mutation for a mobile driver to ghost.
+        const cxN = Math.ceil(meta.cols / chunkTiles);
+        for (const [key, cvc] of vegChunkCvs) {
+          const wx = (key % cxN) * chunkTiles, wy = Math.floor(key / cxN) * chunkTiles;
+          const oc = cam.worldToScreen(wx, wy);
+          const wpx = chunkTiles * cam.scale;
+          if (oc.x > cv.width || oc.y > cv.height || oc.x + wpx < 0 || oc.y + wpx < 0) continue;
+          glr.layer('veg:' + key, cvc, vegChunkRevs.get(key) ?? 0, null, oc.x, oc.y, wpx, wpx);
         }
       }
     }
@@ -1329,7 +1181,7 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     if (filled.length > 0) {
       canopyRev++;
       // A whole chunk's worth of veil tiles beats per-rect patching: past a
-      // few hundred rects, ship the layer wholesale (same rule as depletion).
+      // few hundred rects, ship the layer wholesale.
       canopyPatchRects = filled.length > 256 ? null : filled;
       refreshCanopyLow(meta);
     }

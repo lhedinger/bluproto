@@ -7,13 +7,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The quantised vegetation feed for one level: grass is served as one of five
- * STATES per tile (0 lush/none .. 4 bare) with sequence-numbered deltas, not
- * as a continuous 0..100 field.
+ * The quantised vegetation feed for one level: each tile is served as one of
+ * six STATES (0 = never grows anything; 1..5 = sprite growth stage, trampled
+ * remnants to fully grown) with sequence-numbered deltas, not as a continuous
+ * 0..100 field. The viewer stamps a one-tile vegetation sprite per state over
+ * the vegetation-free ground bake.
  *
  * <p>The continuous field was the web client's single biggest cost: with 17
  * dither buckets, world-wide regrowth moved thousands of buckets per poll on
- * an old world and every one meant a repaint. Five states cut the transition
+ * an old world and every one meant a repaint. A handful of stages cuts the transition
  * rate ~4x, and the deltas cut the transfer from a whole base64 grid every
  * poll to a handful of (tile, state) pairs — a client sends the sequence
  * number it holds and receives only what moved since.
@@ -37,14 +39,18 @@ final class VegFeed {
 	private long refreshedAt = 0;
 	private final ArrayDeque<Batch> journal = new ArrayDeque<>();
 
-	/** One raw 0..100/255 grass level quantised to a stage: 0 = lush grass or
-	 *  no grass at all (nothing to draw), 1..4 = quarters of depletion. */
+	/** One raw 0..100/255 grass level quantised to a stage the viewer can
+	 *  STAMP: 0 = this tile never grows anything (rock, water, bare dirt —
+	 *  nothing to draw), 1..5 = growth stage of the vegetation sprite, 1 being
+	 *  the trampled remnants a fully grazed tile keeps and 5 fully grown. The
+	 *  ground bake carries no vegetation, so the distinction between "no grass
+	 *  ever" and "lush grass" is load-bearing — conflating them would sprout
+	 *  grass sprites on rock. */
 	static int stateOf(int lvl) {
-		if (lvl >= 100 || lvl == 255) {
+		if (lvl == 255) {
 			return 0;
 		}
-		int d = 100 - lvl; // 1..100
-		return 1 + (d - 1) * 4 / 100;
+		return Math.min(5, 1 + (int) Math.round(lvl * 4 / 100.0));
 	}
 
 	/** Builds the JSON response for a client holding {@code since} (-1 = none),
