@@ -56,6 +56,8 @@ public class Genome {
 	public static final int DIET_CARNIVORE = 1;
 	/** Eats what is already dead. */
 	public static final int DIET_SCAVENGER = 2;
+	/** Rides a bigger living body and eats it slowly, from on top of it. */
+	public static final int DIET_PARASITE = 3;
 
 	/**
 	 * What this lineage eats, as a {@code DIET_*} code.

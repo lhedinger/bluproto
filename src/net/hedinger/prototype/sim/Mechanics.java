@@ -205,12 +205,18 @@ public final class Mechanics {
 	private static Map<String, Object> food() {
 		double refBody = TestNPC.MEAT_ENERGY;
 		Map<String, Object> s = section("food", "What food is worth",
-				"Three ways to make a living, priced very differently. Grass is abundant, "
+				"Four ways to make a living, priced very differently. Grass is abundant, "
 				+ "everywhere, and poor. Meat is concentrated and scarce, and a carcass is worth "
 				+ "exactly what the living body was worth — a scavenger that finds a corpse gets "
 				+ "the same energy from it a hunter would have got from the kill, because the "
 				+ "meal is the same meal; only the way of getting it differs, and the world "
-				+ "should not quietly tax one strategy for being patient rather than violent.\n\n"
+				+ "should not quietly tax one strategy for being patient rather than violent. "
+				+ "The parasite eats that same meat without a kill OR a corpse: it rides a "
+				+ "bigger living body and drains it a point of health at a time, each point "
+				+ "worth its share of the host's mass — the slowest way to eat an animal, and "
+				+ "the only one that works on animals far too big to bring down. Its mouth "
+				+ "works on nothing else (it cannot graze), predators ignore it, and its checks "
+				+ "are the host bucking it off or dying under it.\n\n"
 				+ "A meal's worth scales with the eaten body's mass, not the eater's, so a big "
 				+ "carcass is a big meal for whoever finds it. Corpses are eaten in bites over "
 				+ "many ticks rather than swallowed whole, which is what makes a carcass a place "
@@ -228,6 +234,12 @@ public final class Mechanics {
 						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip it clean."),
 				row("Scent range for corpses", num(TestNPC.CARRION_SCENT_R), "tiles",
 						"Smelled, not seen — it reaches through walls that sight does not."),
+				row("A parasite's bite", num(TestNPC.PARA_BITE) + " health per "
+						+ num(TestNPC.PARA_BITE_PERIOD) + " ticks", "while riding, hungry",
+						"Worth " + pct(TestNPC.PARA_BITE / 100.0) + " of the host's carcass "
+						+ "value per bite; the host mends, bucks, or is bled."),
+				row("A parasite smells hosts", num(TestNPC.HOST_SENSE_R), "tiles",
+						"Warm bodies bigger than itself; it must be the smaller one to latch."),
 				row("Hunt given up after", num(TestNPC.HUNT_GIVEUP_TICKS), "ticks",
 						"A chase that is going nowhere is abandoned."));
 		List<List<String>> t = new ArrayList<>();
@@ -454,7 +466,9 @@ public final class Mechanics {
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
 								+ "underfoot this is a PLACE, so it is a gradient to climb "
-								+ "rather than a wall to walk into."),
+								+ "rather than a wall to walk into. Diet re-aims the channel: "
+								+ "for a scavenger it is the best carcass, for a parasite the "
+								+ "nearest living body big enough to ride."),
 						sense(AgentIO.S_FORAGE_BEARING, "Which way that patch lies."),
 						sense(AgentIO.S_WATER_PROX, "The nearest drinkable shore. Terrain rather "
 								+ "than an entity: the body reads the map, the mind reads this."),

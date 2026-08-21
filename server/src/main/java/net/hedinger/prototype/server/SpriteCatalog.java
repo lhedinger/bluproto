@@ -357,13 +357,13 @@ final class SpriteCatalog {
 	 * are registered so an atlas is servable for each, and the page draws them the
 	 * way the live world does.
 	 *
-	 * <p>Every plan appears, including the three no diet selects: a reference that
+	 * <p>Every plan appears, including the two no diet selects: a reference that
 	 * shows only what happens to be alive is a census, not a reference.
 	 */
 	static java.util.List<java.util.Map<String, Object>> referenceBodies() {
 		java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
-		String[] planNames = { "grazer", "radial", "wedge", "scavenger", "hunter", "ragged" };
-		boolean[] worn = { true, false, false, true, true, false };
+		String[] planNames = { "grazer", "parasite", "wedge", "scavenger", "hunter", "ragged" };
+		boolean[] worn = { true, true, false, true, true, false };
 		for (int f = 0; f < planNames.length; f++) {
 			Genome g = sample(11, 0.05, false, 0, new double[] { 0.5, 0.6, 0.4 });
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
@@ -380,6 +380,8 @@ final class SpriteCatalog {
 				new double[] { 0.35, 0.70, 0.55 }, 0x54C0A0);
 		addSample(out, "carrion eater", 7, false, Genome.DIET_SCAVENGER,
 				new double[] { 0.45, 0.25, 0.65 }, 0xA070D0);
+		addSample(out, "parasite", 4, false, Genome.DIET_PARASITE,
+				new double[] { 0.70, 0.15, 0.30 }, 0xB07FE0);
 		addSample(out, "apex predator", 11, false, Genome.DIET_CARNIVORE,
 				new double[] { 0.05, 0.05, 0.90 }, 0x4050E0);
 		addSample(out, "flier", 5, true, Genome.DIET_HERBIVORE,

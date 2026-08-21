@@ -37,6 +37,11 @@ public final class WorldSteward extends Entity {
 	 *  produced by every death in the world, so a scavenger population is coupled to
 	 *  total mortality and not to grass. Held together they would mask each other. */
 	private final int[] scavBounds;
+	/** Bounds for the parasite cohort — again its own guardrails: parasites
+	 *  feed on the standing herd (living mass, not carrion or grass), so their
+	 *  population couples to host abundance and to nothing the other floors
+	 *  and ceilings watch. */
+	private final int[] paraBounds;
 	private final Genome[] preySpecies, predSpecies;
 	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
 	private final int cols, rows;
@@ -57,12 +62,13 @@ public final class WorldSteward extends Entity {
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
 		this(w, preySpecies, predSpecies, surfaceZ, caveZ, preyBounds, predBounds,
-				mindedFloor, mindedMax, new int[] { 0, Integer.MAX_VALUE });
+				mindedFloor, mindedMax, new int[] { 0, Integer.MAX_VALUE },
+				new int[] { 0, Integer.MAX_VALUE });
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax,
-			int[] scavBounds) {
+			int[] scavBounds, int[] paraBounds) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
 		this.rows = w.getRows();
@@ -75,6 +81,7 @@ public final class WorldSteward extends Entity {
 		this.mindedFloor = mindedFloor;
 		this.mindedMax = mindedMax;
 		this.scavBounds = scavBounds;
+		this.paraBounds = paraBounds;
 	}
 
 	@Override
@@ -84,7 +91,7 @@ public final class WorldSteward extends Entity {
 		int predMin = predBounds[0];
 		int predMax = predBounds[1];
 
-		int prey = 0, pred = 0, minded = 0, scav = 0;
+		int prey = 0, pred = 0, minded = 0, scav = 0, para = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
 				// Scavengers are minded too, but they are counted apart: folded into
@@ -93,6 +100,8 @@ public final class WorldSteward extends Entity {
 				// crowding they had no part in.
 				if (t.ecoRole().equals("scavenger")) {
 					scav++;
+				} else if (t.ecoRole().equals("parasite")) {
+					para++; // its own supply (the standing herd), its own count
 				} else if (t.isMinded()) {
 					minded++; // the hybrid cohort is its own category (role emerges)
 				} else {
@@ -149,6 +158,48 @@ public final class WorldSteward extends Entity {
 		if (scav > scavBounds[1]) {
 			trim("scavenger", Math.min(3, scav - scavBounds[1]));
 		}
+
+		// The parasite cohort. Its floor is conditional on there being a body
+		// worth riding — a parasite reseeded into an empty world starves on its
+		// feet — and its ceiling is deliberately low: the supply is the standing
+		// herd, and enough parasites bleed it faster than it breeds.
+		if (para < paraBounds[0] && hostPresent()) {
+			seedParasite();
+		}
+		if (para > paraBounds[1]) {
+			trim("parasite", Math.min(3, para - paraBounds[1]));
+		}
+	}
+
+	/** Whether any body big enough to host a parasite is alive — the
+	 *  precondition for the niche existing at all. */
+	private boolean hostPresent() {
+		for (Entity e : getWorld().getEntities()) {
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+					&& t.getSize() > TestNPC.PARASITE_MAX_SIZE
+					&& !t.ecoRole().equals("parasite")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Spawns one minded parasite, under the same survivor-seeding as the rest
+	 *  of the cohort, on the surface where the herds are. */
+	private void seedParasite() {
+		Genome g = Worlds.mindedReseedGenome(getWorld());
+		double x = cols / 2.0, y = rows / 2.0;
+		for (int tries = 0; tries < 40; tries++) {
+			double px = 3 + Utils.random() * (cols - 6);
+			double py = 3 + Utils.random() * (rows - 6);
+			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
+				x = px;
+				y = py;
+				break;
+			}
+		}
+		getWorld().spawnEntity(
+				TestNPC.mindedParasite(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Whether any carcass is lying about — the precondition for a scavenger

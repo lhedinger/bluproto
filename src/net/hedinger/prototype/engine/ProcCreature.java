@@ -71,13 +71,15 @@ public final class ProcCreature {
 		// You could not tell what you were looking at, which for an ecology being
 		// watched is most of the point.
 		int eco = g.diet == Genome.DIET_SCAVENGER ? 1
-				: g.diet == Genome.DIET_CARNIVORE ? 2 : 0;
-		// One body plan per trophic level, and these three specifically: `form` is
+				: g.diet == Genome.DIET_CARNIVORE ? 2
+						: g.diet == Genome.DIET_PARASITE ? 3 : 0;
+		// One body plan per trophic level, and these specifically: `form` is
 		// not a free index -- 0 and 4 grow bilateral legs, 1 grows radial cilia, the
 		// rest go bare -- so the plans are chosen for what they draw. A grazer walks
 		// on plain legs, a hunter on the long-striding pair, a scavenger goes bare
-		// and wears its feelers instead.
-		p.form = eco == 0 ? 0 : eco == 1 ? 3 : 4;
+		// and wears its feelers instead — and the parasite takes the radial-cilia
+		// plan, the round clinging body of a thing that rides rather than walks.
+		p.form = eco == 0 ? 0 : eco == 1 ? 3 : eco == 3 ? 1 : 4;
 		// Flight shows in the limbs. A body that flies is not carrying a walking
 		// undercarriage, so it keeps a single pair; a ground body's count is the
 		// markers' business. Together with the lift and the flattened shadow the

@@ -508,13 +508,14 @@ interface RefBody { group: string; label: string; pheno: number; worn: boolean; 
 const plans = section('Body plans',
   'Every outline the organism renderer can express, drawn from one genome with the '
   + 'trophic markings stripped off, so the only thing differing between them is the '
-  + 'body. A creature\'s plan follows what its genome eats and there are three trophic '
-  + 'levels, so three of these are worn by nothing — they are here because a reference '
+  + 'body. A creature\'s plan follows what its genome eats and there are four trophic '
+  + 'levels, so two of these are worn by nothing — they are here because a reference '
   + 'to the space should show the whole space, not a census of what happens to be alive.');
 const samples = section('Creatures',
   'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
   + 'strides on the long pair and carries a tail, a scavenger is the segmented body with '
-  + 'the feelers it finds its food by, anything airborne keeps a single pair of limbs. '
+  + 'the feelers it finds its food by, a parasite is the round ciliate that rides a '
+  + 'bigger body and eats it slowly, anything airborne keeps a single pair of limbs. '
   + 'Fixed points rather than live phenotypes, so this stays a reference while the world '
   + 'evolves away from it.');
 

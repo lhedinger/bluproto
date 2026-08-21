@@ -5627,6 +5627,110 @@ public class SimTests {
 	}
 
 	/**
+	 * The parasite's living, end to end: a hungry parasite smells the much
+	 * bigger host, walks to it on the forage intent, latches on with the shared
+	 * attach machinery, and drains it — the host bleeds health with
+	 * "parasites" as the harm while the parasite's stomach fills — and no
+	 * grass anywhere is touched, because a parasite's mouth works on nothing
+	 * but the body it rides.
+	 */
+	static class ParasiteLatchesAndDrainsItsHost extends Scenario {
+		@Override
+		public void run() {
+			seed(83);
+			World w = room(16, 10);
+			Genome hostG = new Genome();
+			hostG.size = 14;
+			hostG.speed = 0; // a parked mountain of meat
+			TestNPC host = TestNPC.breeder(8.5, 5.5, 0, hostG).withReproCooldown(100_000_000);
+			Genome paraG = new Genome();
+			paraG.size = 4;
+			paraG.speed = 0.06;
+			Mind ride = (sn, a) -> {
+				a[AgentIO.A_SEEK] = 0.1; // forage: for a parasite, the nearest host
+				a[AgentIO.A_THROTTLE] = 0.6;
+				a[AgentIO.A_ATTACH] = 1; // latch the moment something bigger is in reach
+			};
+			TestNPC para = TestNPC.minded(4.5, 5.5, 0, paraG, ride)
+					.withDiet(TestNPC.Diet.PARASITE).withHunger(1.0);
+			w.spawnEntity(host);
+			w.spawnEntity(para);
+			w.think();
+			int hp0 = host.getHealth();
+			tick(w, 900);
+			assertTrue("the parasite is riding its host", para.getAttachTarget() == host);
+			assertLess("and the host is being eaten away", host.getHealth(), hp0);
+			assertGreater("what the host lost, the parasite swallowed",
+					para.totalSwallowed(), 0.0);
+			assertNear("nothing was grazed on the way", 0.0, para.totalIntake(), 1e-9);
+		}
+	}
+
+	/**
+	 * Predators ignore parasites outright — too small and too foul to be worth
+	 * a bite. A hungry hunter with a parasite at its feet and real prey down
+	 * the room walks past the parasite and takes the prey; the parasite is
+	 * never so much as scratched, at any hunger.
+	 */
+	static class PredatorsIgnoreParasites extends Scenario {
+		@Override
+		public void run() {
+			seed(84);
+			World w = room(18, 9);
+			Genome pg = new Genome();
+			pg.size = 16;
+			pg.speed = 0.06;
+			TestNPC hunter = TestNPC.predator(5.5, 4.5, 0, pg)
+					.withHunger(0.8).withReproCooldown(100_000_000);
+			Genome paraG = new Genome();
+			paraG.size = 5;
+			Mind still = (sn, a) -> {
+			};
+			TestNPC para = TestNPC.minded(6.2, 4.5, 0, paraG, still)
+					.withDiet(TestNPC.Diet.PARASITE); // in reach, smaller: free lunch, refused
+			Genome preyG = new Genome();
+			preyG.size = 7;
+			preyG.speed = 0;
+			TestNPC prey = TestNPC.breeder(12.5, 4.5, 0, preyG); // the real meal, further off
+			w.spawnEntity(hunter);
+			w.spawnEntity(para);
+			w.spawnEntity(prey);
+			w.think();
+			tick(w, 600);
+			assertTrue("the hungry hunter went for the real prey",
+					prey.isDead() || prey.getHealth() < 100);
+			assertTrue("the parasite at its feet was never touched",
+					!para.isDead() && para.getHealth() == 100);
+		}
+	}
+
+	/**
+	 * A parasite's mouth works on nothing but the body it rides: standing on
+	 * lush grass with the eat actuator held high, it swallows nothing and the
+	 * ground under it keeps every blade.
+	 */
+	static class AParasiteCannotGraze extends Scenario {
+		@Override
+		public void run() {
+			seed(85);
+			World w = room(10, 10);
+			Genome g = new Genome();
+			g.size = 4;
+			Mind eat = (sn, a) -> a[AgentIO.A_EAT] = 1;
+			TestNPC para = TestNPC.minded(5.5, 5.5, 0, g, eat)
+					.withDiet(TestNPC.Diet.PARASITE).withHunger(1.0);
+			w.spawnEntity(para);
+			w.think();
+			double veg0 = w.getTile(5, 5, 0).getVegetation(w.getTick());
+			tick(w, 300);
+			assertNear("it grazed nothing", 0.0, para.totalIntake(), 1e-9);
+			assertNear("and swallowed nothing", 0.0, para.totalSwallowed(), 1e-9);
+			assertTrue("the grass under it kept every blade",
+					w.getTile(5, 5, 0).getVegetation(w.getTick()) >= veg0 - 1e-9);
+		}
+	}
+
+	/**
 	 * Water the body cannot reach at all is not water. A creature walled off from
 	 * every drop is told so — the sense reads empty rather than pointing hopefully
 	 * through the rock — which is what lets it go and look somewhere else instead
@@ -5785,6 +5889,9 @@ public class SimTests {
 				new CollapseIsNotDeath(),
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new HealthGatesEnergyRegeneration(),
+				new ParasiteLatchesAndDrainsItsHost(),
+				new PredatorsIgnoreParasites(),
+				new AParasiteCannotGraze(),
 				new CorpseFeedsTheGround(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),
