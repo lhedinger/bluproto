@@ -502,6 +502,16 @@ function renderInspectSimple(d: Record<string, any>): void {
   if (d.diedOf) rows.push(row('died of', d.diedOf));
   if (d.action) rows.push(row('doing', d.action));
   if (d.state) rows.push(row('state', d.state));
+  // Who has hold of whom. The server has always sent this and the panel has
+  // never shown it, so a creature slung over another's back read as a creature
+  // standing still. `attachedTo` alone does not say which way round it is —
+  // `grabbed` is what separates a captive from a passenger.
+  if (d.attachedTo >= 0) {
+    rows.push(d.grabbed ? row('held by', `#${d.attachedTo}`)
+      : row('riding', `#${d.attachedTo}`));
+  }
+  if ('hauling' in d) rows.push(row('carrying', `#${d.hauling}`));
+  if (d.carrying) rows.push(row('hauling', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
   if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));

@@ -357,6 +357,13 @@ public abstract class NPC extends Entity {
 
 	protected Entity grabbing = null;
 
+	/** The creature this one has hold of, or null. The captive's own view of the
+	 *  same fact is {@code isGrabbed()} plus {@code getAttachTarget()}; this is the
+	 *  captor's, which nothing outside the engine could see before. */
+	public Entity getGrabbing() {
+		return grabbing;
+	}
+
 	protected boolean flying = false;
 
 	protected TreeMap<Double, NPC> targets = new TreeMap<Double, NPC>();

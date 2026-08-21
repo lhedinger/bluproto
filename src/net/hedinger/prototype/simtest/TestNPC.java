@@ -2816,8 +2816,15 @@ public class TestNPC extends NPC {
 		if (isDead()) {
 			return null;
 		}
-		if (grabbing != null || (getAttachTarget() != null && !isGrabbed())) {
-			return "grab"; // carrying a captive, or riding a host
+		// Two opposite things used to share one badge, and the comment saying so sat
+		// right here: hauling a captive and being carried are not the same act, and
+		// the one that tells you what you are looking at is which end of it a
+		// creature is on.
+		if (grabbing != null) {
+			return "carry"; // this body is doing the carrying
+		}
+		if (getAttachTarget() != null && !isGrabbed()) {
+			return "ride"; // aboard a host by its own choice, paying no fare
 		}
 		switch (behavior) {
 		case GENOME:

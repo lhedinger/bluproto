@@ -252,8 +252,10 @@ final class SnapshotRenderer {
 			return new Color(70, 200, 90);
 		case "nest":
 			return new Color(220, 60, 200);
-		case "grab":
+		case "carry":
 			return new Color(240, 150, 50);
+		case "ride":
+			return new Color(150, 190, 255);
 		case "hunt":
 			return new Color(255, 120, 40);
 		default:
@@ -302,9 +304,14 @@ final class SnapshotRenderer {
 			g.drawPolygon(new int[] { cx - u / 2, cx + u / 2, cx },
 					new int[] { cy - u / 8, cy - u / 8, cy - u / 2 }, 3);
 			break;
-		case "grab": // hook
+		case "carry": // hook: something is hanging off this body
 			g.drawOval(cx - u / 2, cy - u / 2, u, u);
 			g.drawLine(cx, cy, cx + u / 2, cy + u / 2);
+			break;
+		case "ride": // a chevron riding above a rail: carried, not carrying
+			g.drawLine(cx - u / 2, cy + u / 3, cx + u / 2, cy + u / 3);
+			g.drawPolyline(new int[] { cx - u / 3, cx, cx + u / 3 },
+					new int[] { cy, cy - u / 2, cy }, 3);
 			break;
 		default:
 			break;
