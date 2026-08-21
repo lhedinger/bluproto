@@ -576,8 +576,11 @@ const rest = section('Server-baked art',
 
 interface MechRow { label: string; value: string; unit: string; note: string; }
 interface MechTable { caption: string; headers: string[]; rows: string[][]; }
+interface MechItem { name: string; detail: string; idx?: string; }
+interface MechGroup { title: string; items: MechItem[]; }
 interface MechSection {
-  id: string; title: string; intro: string; rows: MechRow[]; table?: MechTable;
+  id: string; title: string; intro: string; rows: MechRow[];
+  table?: MechTable; groups?: MechGroup[];
 }
 
 /** Text into a fresh element, escaped by the DOM rather than by us. */
@@ -614,6 +617,22 @@ function mechSection(m: MechSection, into: HTMLElement): void {
   into.append(wide(t));
 
   if (m.table) into.append(worked(m.table));
+  if (m.groups) for (const g of m.groups) into.append(channels(g));
+}
+
+/** A named group of channels — a sensor bank, a set of acts. These describe a
+ *  SURFACE rather than a quantity, so they read as a list of names with what
+ *  each one means, not as a table of figures. The name is the engine's own wire
+ *  name for the channel, which is what makes the list checkable. */
+function channels(g: MechGroup): HTMLElement {
+  const box = el('div', undefined, 'chan');
+  box.append(el('h3', g.title));
+  const dl = el('dl');
+  for (const i of g.items) {
+    dl.append(el('dt', i.name), el('dd', i.detail));
+  }
+  box.append(dl);
+  return box;
 }
 
 /** A worked table: the constants above, applied across the range of bodies or

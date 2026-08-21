@@ -5,6 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.hedinger.prototype.engine.PheromoneCloud;
+import net.hedinger.prototype.entities.AgentIO;
+import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.simtest.TestNPC;
@@ -59,6 +62,11 @@ public final class Mechanics {
 		out.add(breeding());
 		out.add(thirst());
 		out.add(carrying());
+		out.add(senses());
+		out.add(acts());
+		out.add(intents());
+		out.add(pheromones());
+		out.add(minds());
 		return out;
 	}
 
@@ -333,6 +341,334 @@ public final class Mechanics {
 		return s;
 	}
 
+	// --- what a creature can perceive and do ----------------------------------
+	// These sections describe a LIST rather than a quantity, so they are kept
+	// honest differently: the names come out of AgentIO's own arrays, and a test
+	// demands every channel appear exactly once. Add a sensor without writing it
+	// up and the page stops building a complete picture -- so the build stops too.
+
+	private static Map<String, Object> senses() {
+		Map<String, Object> s = section("senses", "What a creature can sense",
+				"A mind never touches the world. Between the two sits a fixed contract: the "
+				+ "body fills a vector of numbers from what it can perceive, the mind reads "
+				+ "that and writes back a vector of intent, and nothing else passes between "
+				+ "them. That seam is why any decision method at all — an evolved program, a "
+				+ "neural net, a hand-written controller — is interchangeable, and why a policy "
+				+ "that works in one body works in another.\n\n"
+				+ "Every channel is egocentric and bounded. Bearings are relative to the way "
+				+ "the creature is facing, distances arrive as proximity (1 when you are on top "
+				+ "of it, falling toward 0 as it recedes) rather than raw tiles, and magnitudes "
+				+ "are squashed into roughly −1..1. A mind therefore reads \"something big, "
+				+ "slightly to my left, close\" in exactly the same numbers whether it is a "
+				+ "sprat or a leviathan — which is what lets one evolved policy survive a "
+				+ "lineage growing.");
+		rows(s,
+				row("Channels", num(AgentIO.NUM_SENSORS), "", "All filled every tick."),
+				row("Sight range", num(new Genome().losRange), "tiles",
+						"A gene; it mutates, so lineages evolve keener or dimmer eyes."),
+				row("Field of view", round(Math.toDegrees(new Genome().losFov), 0) + "°", "",
+						"Also a gene. Sight is facing-gated; smell is not."),
+				row("Kin recognition", num(Genome.MARKER_DIMS) + " heritable markers", "",
+						"Similarity, not species: 1 is identical, 0 maximally distant."),
+				row("Bearings", "−1..1", "of π",
+						"Relative to the heading, so 0 is dead ahead."),
+				row("Distances", "1 ÷ (1 + tiles)", "",
+						"Proximity, not range: near things are loud, far ones fade."));
+		groups(s,
+				group("Its own condition",
+						sense(AgentIO.S_ENERGY, "How full the tank is, against THIS body's own "
+								+ "capacity — so \"I am hungry\" means the same thing in a small "
+								+ "body and a large one."),
+						sense(AgentIO.S_HEALTH, "How hurt it is. A wounded creature can behave "
+								+ "differently from a whole one."),
+						sense(AgentIO.S_THIRST, "How dry it is, 0 sated to 1 parched."),
+						sense(AgentIO.S_CARRIED, "+1 held captive, −1 riding willingly, 0 free."),
+						sense(AgentIO.S_CLOCK, "A slow oscillator from tick and identity. The "
+								+ "world is deterministic and a mind draws no dice, so this is "
+								+ "where rhythm and wandering have to come from."),
+						sense(AgentIO.S_BIAS, "A constant 1.0, so a policy can build its own "
+								+ "thresholds out of arithmetic.")),
+				group("The ground underfoot",
+						sense(AgentIO.S_FOOD, "Vegetation on the tile it is standing on."),
+						sense(AgentIO.S_PHERO, "Pheromone concentration where it stands — see "
+								+ "the section below."),
+						sense(AgentIO.S_BLOCKED, "Whether the tile straight ahead is solid."),
+						sense(AgentIO.S_WHISKER_L, "Whether the tile 45° to the left is solid."),
+						sense(AgentIO.S_WHISKER_R, "The same to the right. The pair is what lets "
+								+ "a mind tell which way AROUND an obstacle is clear, rather "
+								+ "than merely that it is stuck."),
+						sense(AgentIO.S_HAZARD_AHEAD, "Whether stepping forward means drowning "
+								+ "or falling — for anything that cannot fly.")),
+				group("Other creatures",
+						sense(AgentIO.S_NEAR_PROX, "How close the nearest perceived neighbour "
+								+ "is."),
+						sense(AgentIO.S_NEAR_BEARING, "Which way that neighbour lies."),
+						sense(AgentIO.S_NEAR_SIM, "How like itself that neighbour is — kin or "
+								+ "stranger."),
+						sense(AgentIO.S_NEAR_SIZEADV, "Whether it outweighs that neighbour, and "
+								+ "by how much."),
+						sense(AgentIO.S_PREY_PROX, "The nearest SMALLER creature, at full sight "
+								+ "range rather than the short facing-gated neighbour set — a "
+								+ "hunter has to be able to lock on from far enough off to run "
+								+ "its quarry down."),
+						sense(AgentIO.S_PREY_BEARING, "Which way that quarry lies."),
+						sense(AgentIO.S_THREAT_PROX, "The nearest LARGER creature, likewise at "
+								+ "full range. The flee channel."),
+						sense(AgentIO.S_THREAT_BEARING, "Which way the threat lies."),
+						sense(AgentIO.S_KIN_PROX, "How close the weighted centre of nearby kin "
+								+ "is — the difference between \"my kind are off that way\" and "
+								+ "\"I am in the middle of them\"."),
+						sense(AgentIO.S_KIN_BEARING, "Which way that centre lies. Herding, "
+								+ "flocking and packing all emerge from this one gradient rather "
+								+ "than from any rule about groups.")),
+				group("Places worth going",
+						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
+								+ "by how rich it is against how far off. Unlike the tile "
+								+ "underfoot this is a PLACE, so it is a gradient to climb "
+								+ "rather than a wall to walk into."),
+						sense(AgentIO.S_FORAGE_BEARING, "Which way that patch lies."),
+						sense(AgentIO.S_WATER_PROX, "The nearest drinkable shore. Terrain rather "
+								+ "than an entity: the body reads the map, the mind reads this."),
+						sense(AgentIO.S_WATER_BEARING, "Which way the shore lies."),
+						sense(AgentIO.S_WAYPOINT_PROX, "How far off the one remembered place "
+								+ "is."),
+						sense(AgentIO.S_WAYPOINT_BEARING, "Which way it lies. This pair plus one "
+								+ "act is the whole of spatial memory."),
+						sense(AgentIO.S_ITEM_PROX, "The nearest inanimate object — a separate "
+								+ "sense from the living-neighbour channels."),
+						sense(AgentIO.S_ITEM_BEARING, "Which way that object lies."),
+						sense(AgentIO.S_ITEM_KIND, "What it is: +1 edible, −1 dangerous, 0 "
+								+ "neither."),
+						sense(AgentIO.S_FIXTURE_PROX, "The nearest thing that can be operated — "
+								+ "a button on its pedestal. Furniture never enters the creature "
+								+ "channels, so this is its one window into a mind."),
+						sense(AgentIO.S_FIXTURE_BEARING, "Which way the fixture lies.")),
+				group("Whether it is working",
+						sense(AgentIO.S_INTENT, "How the standing intent is going: idle, "
+								+ "impossible, under way, or a pulse the tick the act actually "
+								+ "landed. The only channel that tells a mind whether what it "
+								+ "wanted happened — without it, a creature can infer success "
+								+ "only from its tank drifting upward, several thoughts too "
+								+ "late.")));
+		return s;
+	}
+
+	private static Map<String, Object> acts() {
+		Map<String, Object> s = section("acts", "What a creature can do",
+				"The other half of the contract, and much the shorter half. Everything a "
+				+ "creature does in the world it does by writing one of these numbers.\n\n"
+				+ "They are <em>intent</em>, not commands: the body still has final say. Asking "
+				+ "to walk into a wall moves nothing, and asking to bite something out of reach "
+				+ "bites nothing. Most of them are gates rather than dials — anything above 0.5 "
+				+ "means yes — which keeps them reachable by a mutation that merely nudges a "
+				+ "number.\n\n"
+				+ "Two slots are retired and inert, and deliberately not deleted. A mind stores "
+				+ "raw slot numbers, so removing one would renumber the rest and silently change "
+				+ "the meaning of every genome ever saved. One of the two was quietly given a "
+				+ "second job instead.");
+		rows(s,
+				row("Slots", num(AgentIO.NUM_ACT), "", "Read back every tick."),
+				row("Gates", "anything above 0.5", "",
+						"Eat, attack, mate, grab, ride, mark, interact."),
+				row("Dials", "−1..1 or 0..1", "", "Turn and throttle."),
+				row("Retired", "2", "slots",
+						"Kept so old genomes keep meaning what they meant."));
+		groups(s,
+				group("Moving",
+						act(AgentIO.A_TURN, "Steer, as a fraction of this body's turn rate."),
+						act(AgentIO.A_THROTTLE, "How hard to push, as a fraction of top speed. "
+								+ "Movement costs the square of pace, so this one slot is where "
+								+ "a lineage spends or saves its living."),
+						act(AgentIO.A_SEEK, "Name a KIND OF THING to head for and the body "
+								+ "steers there by itself — see the next section."),
+						act(AgentIO.A_TILE, "Name a PROPERTY of ground to look for: edible, "
+								+ "hiding, slow going, water, solid, dangerous. Which of those "
+								+ "is worth wanting is left for selection to discover.")),
+				group("Feeding",
+						act(AgentIO.A_EAT, "Graze the tile underfoot. Meat is not taken this "
+								+ "way — a carcass is bitten, over many ticks.")),
+				group("Fighting, and hanging on",
+						act(AgentIO.A_ATTACK, "Bite the nearest neighbour."),
+						act(AgentIO.A_GRAB, "Seize a smaller neighbour and haul it. Holding "
+								+ "costs energy every tick, so a captor must eventually eat its "
+								+ "captive or let go."),
+						act(AgentIO.A_ATTACH, "Latch onto a LARGER neighbour and ride it — "
+								+ "voluntary, and cheaper than walking."),
+						act(AgentIO.A_STRUGGLE, "Resist. Which resistance depends on which end "
+								+ "you are: a captive makes itself costlier to carry, a carrier "
+								+ "tries to buck its riders off.")),
+				group("Breeding and signalling",
+						act(AgentIO.A_MATE, "Pair with a compatible neighbour."),
+						act(AgentIO.A_DEPOSIT, "Lay pheromone where it stands — the world's one "
+								+ "form of writing, and the only thing one creature leaves "
+								+ "behind for another to read.")),
+				group("Memory, and things",
+						act(AgentIO.A_MARK, "Remember this spot, or forget it. One waypoint, "
+								+ "held in the body — a mind could not do arithmetic on a "
+								+ "coordinate anyway, having neither divide nor atan2."),
+						act(AgentIO.A_INTERACT, "Operate whatever fixture it is standing at. "
+								+ "Standing on a button does nothing by itself; pressing it is a "
+								+ "choice, which is the entire point.")),
+				group("Retired, and inert",
+						act(AgentIO.A_VERTICAL, "There is no vertical intent to express: a ramp "
+								+ "is floor that spans two levels, so you change level by "
+								+ "walking, and a hole is gravity rather than a route.")));
+		return s;
+	}
+
+	private static Map<String, Object> intents() {
+		Map<String, Object> s = section("intents", "Wanting things",
+				"A mind gets one instruction per tick, so steering to something by hand — read "
+				+ "the bearing, compare, turn, repeat — costs more thought than a creature has. "
+				+ "An intent collapses that into a single write: name a kind of thing, and while "
+				+ "it is in sight the body steers there itself. The sign flips it, so fleeing "
+				+ "and chasing cost exactly the same one instruction.\n\n"
+				+ "Where arriving has one obvious thing to do, the body does it: heading for a "
+				+ "patch grazes, heading for prey bites what comes into reach, heading for an "
+				+ "object takes it. Goals with no unambiguous act — kin, a threat, a remembered "
+				+ "place — stay pure steering, and running away never attacks: fleeing something "
+				+ "is not a reason to bite it.\n\n"
+				+ "Naming something the body cannot currently find does not leave it planted; it "
+				+ "starts searching. Wanting what you cannot see is a reason to go looking. And "
+				+ "the body supplies a direction, never a route — walls remain the mind's "
+				+ "problem, which is what the whiskers are for.");
+		rows(s,
+				row("Cost of an intent", "1", "instruction",
+						"Against a budget of one per tick."),
+				row("Sign", "toward, or directly away", "",
+						"One slot buys both the chase and the flight."),
+				row("Speed", "still the mind's to choose", "",
+						"An intent says where, never how hard."),
+				row("Bands", "centred on the constant pool", "",
+						"So a mutation that nudges a value usually keeps the same want."));
+		// Derived by asking the real decoder what each value a mind can actually
+		// emit would mean. A table that merely restated the thresholds could drift
+		// from them; this one cannot, because it IS them.
+		List<List<String>> t = new ArrayList<>();
+		for (double v : new double[] {0, 0.1, 0.25, 0.5, 1, 2, 4, 6, 9}) {
+			t.add(List.of(num(v), SEEK_NAMES[AgentIO.seekTarget(v)],
+					TILE_NAMES[AgentIO.tileWanted(v)],
+					ARRIVAL[AgentIO.seekTarget(v)]));
+		}
+		table(s, "What each value a mind can emit actually means, asked of the decoder itself. "
+				+ "The two columns read the same number differently — one names what to head "
+				+ "for, the other what ground to look for — and the rarest want sits past every "
+				+ "value in the pool, so naming it costs an extra step of arithmetic.",
+				List.of("Value", "Head for", "Ground wanted", "On arrival"), t);
+		groups(s,
+				group("How it is going (the feedback channel)",
+						item("idle", "No intent set; the mind is steering by hand."),
+						item("impossible", "The guards failed — nothing of that kind is in "
+								+ "reach of the senses."),
+						item("under way", "In sight, and closing."),
+						item("landed", "The act fired THIS tick. A pulse, not a "
+								+ "completion flag: grazing succeeds on every tick spent on "
+								+ "grass. \"The bite landed\" is reportable; \"the kill "
+								+ "finished\" is not.")));
+		return s;
+	}
+
+	/** Names for the seek targets, indexed by {@link AgentIO#seekTarget}'s return. */
+	private static final String[] SEEK_NAMES = {
+		"nothing", "a forage patch", "kin", "prey", "a threat", "an object",
+		"the waypoint", "a fixture", "water",
+	};
+	/** What the body does on arriving, in the same order. */
+	private static final String[] ARRIVAL = {
+		"—", "grazes", "—", "bites", "— (never attacks)", "takes it",
+		"—", "presses it", "— (drinking is adjacency)",
+	};
+	/** Names for the tile properties, indexed by {@link AgentIO#tileWanted}. */
+	private static final String[] TILE_NAMES = {
+		"edible", "blocks sight", "slow going", "water", "solid", "hazardous",
+	};
+
+	private static Map<String, Object> pheromones() {
+		double halfLife = Math.log(0.5) / Math.log(PheromoneCloud.DECAY);
+		double nestLife = Math.log(PheromoneCloud.MIN_STRENGTH / TestNPC.NEST_DEPOSIT)
+				/ Math.log(PheromoneCloud.DECAY);
+		double trailLife = Math.log(PheromoneCloud.MIN_STRENGTH / (TestNPC.NEST_DEPOSIT * 0.25))
+				/ Math.log(PheromoneCloud.DECAY);
+		Map<String, Object> s = section("pheromones", "Pheromones",
+				"The world's one form of writing. A creature can lay a smell where it stands, "
+				+ "and any creature standing there later can read how strong it is — that is "
+				+ "the whole channel. It carries no message and names no author, so anything it "
+				+ "comes to mean is a convention a population arrives at rather than a protocol "
+				+ "anyone designed.\n\n"
+				+ "A deposit is a soft cloud with a centre, not a marked tile: strength falls "
+				+ "off smoothly to nothing at the edge, and the radius grows with the "
+				+ "logarithm of strength, so piling more on a spot makes the smell sharper "
+				+ "faster than it makes it wider. A deposit near an existing cloud reinforces "
+				+ "it instead of starting a rival, which is what keeps a well-used nest one "
+				+ "coherent smell rather than a scattered ring of them.\n\n"
+				+ "It evaporates a fixed fraction every tick. That is the important part: a "
+				+ "trail nobody walks fades, so what persists is only what is still being "
+				+ "used. Memory the world keeps for you, on the condition that you keep paying "
+				+ "for it.");
+		rows(s,
+				row("Kept per tick", pct(PheromoneCloud.DECAY), "",
+						"Half gone in " + num(Math.round(halfLife)) + " ticks ("
+						+ round(halfLife / TPS, 1) + " s)."),
+				row("Gone below", num(PheromoneCloud.MIN_STRENGTH), "strength",
+						"The cloud is removed entirely."),
+				row("Merges within", num(PheromoneCloud.MERGE_RADIUS), "tiles",
+						"Nearby deposits reinforce rather than multiply."),
+				row("Radius", num(PheromoneCloud.BASE_RADIUS) + " → "
+						+ num(PheromoneCloud.MAX_RADIUS), "tiles",
+						"Grows with log strength, then stops."),
+				row("A mind's deposit", num(TestNPC.NEST_DEPOSIT * 0.25), "strength",
+						"Lasts ~" + num(Math.round(trailLife)) + " ticks ("
+						+ round(trailLife / TPS, 1) + " s) unrefreshed."),
+				row("A birth at the nest", num(TestNPC.NEST_DEPOSIT), "strength",
+						"Lasts ~" + num(Math.round(nestLife)) + " ticks ("
+						+ round(nestLife / TPS, 1) + " s) — a landmark, not a trail."),
+				row("Smelled from", num(TestNPC.NEST_SENSE_R), "tiles",
+						"When a nester homes to breed. Smell ignores facing."));
+		return s;
+	}
+
+	private static Map<String, Object> minds() {
+		Map<String, Object> s = section("minds", "Minds",
+				"Behind the sensor and actuator vectors sits whatever decides. In this world "
+				+ "that is usually a tiny evolved program: a list of instructions the genome "
+				+ "carries, inherited and mutated exactly like body size.\n\n"
+				+ "It has no invalid programs. Every operand is masked into range as it "
+				+ "executes, so a mutation can rewrite any field of any instruction and the "
+				+ "result still runs — which is what keeps the search landscape smooth enough "
+				+ "for evolution to climb at all. A language that could crash would spend most "
+				+ "of its mutations producing corpses.\n\n"
+				+ "The budget is one instruction per tick. Thinking is therefore genuinely "
+				+ "scarce, and a longer program is a slower thought rather than a cleverer "
+				+ "one — which is the pressure that makes a single-instruction intent worth "
+				+ "having, and the reason a reflex beats a deliberation. Registers persist "
+				+ "between ticks, so they are the creature's memory; a newborn starts with an "
+				+ "empty bank, so siblings with identical code still diverge as soon as their "
+				+ "histories do.");
+		rows(s,
+				row("Program", "up to " + num(Brain.MAX_LEN), "instructions",
+						"Heritable, and mutable in length as well as content."),
+				row("Executed", num(Brain.DEFAULT_STEPS_PER_TICK), "instruction/tick",
+						"Program length is thinking TIME, not thinking power."),
+				row("Registers", num(Brain.NUM_REG), "",
+						"Persist across ticks; this is the memory."),
+				row("Opcodes", num(Brain.NUM_OPS), "", String.join(", ", Brain.OP_NAMES)),
+				row("Constant pool", num(Brain.CONST.length), "values", pool()),
+				row("Invalid programs", "none", "",
+						"Operands are masked at execution, so every mutation runs."),
+				row("Randomness", "none", "",
+						"A mind draws no dice: the world is deterministic, and a seed plus a "
+						+ "command log replays it exactly."));
+		return s;
+	}
+
+	private static String pool() {
+		StringBuilder b = new StringBuilder();
+		for (double c : Brain.CONST) {
+			b.append(b.length() == 0 ? "" : ", ").append(num(c));
+		}
+		return b.toString();
+	}
+
 	// --- shaping helpers ------------------------------------------------------
 
 	private static Map<String, Object> section(String id, String title, String intro) {
@@ -351,6 +687,54 @@ public final class Mechanics {
 		for (Map<String, String> r : rs) {
 			list.add(r);
 		}
+	}
+
+	/** A named list of channels, for the sections that describe a surface rather
+	 *  than a quantity. Each group carries its items in reading order. */
+	@SafeVarargs
+	private static void groups(Map<String, Object> section, Map<String, Object>... gs) {
+		List<Map<String, Object>> list = new ArrayList<>();
+		for (Map<String, Object> g : gs) {
+			list.add(g);
+		}
+		section.put("groups", list);
+	}
+
+	@SafeVarargs
+	private static Map<String, Object> group(String title, Map<String, String>... items) {
+		Map<String, Object> g = new LinkedHashMap<>();
+		g.put("title", title);
+		List<Map<String, String>> list = new ArrayList<>();
+		for (Map<String, String> i : items) {
+			list.add(i);
+		}
+		g.put("items", list);
+		return g;
+	}
+
+	private static Map<String, String> item(String name, String detail) {
+		Map<String, String> i = new LinkedHashMap<>();
+		i.put("name", name);
+		i.put("detail", detail);
+		return i;
+	}
+
+	/** One sensor, named by the wire name the engine itself uses. Taking the name
+	 *  from {@link AgentIO#SENSOR_NAMES} rather than typing it means a channel
+	 *  renamed in the contract is renamed here, and a channel documented under a
+	 *  name that no longer exists cannot happen. The index is also what lets a test
+	 *  demand that every channel is covered exactly once. */
+	private static Map<String, String> sense(int idx, String detail) {
+		Map<String, String> i = item(AgentIO.SENSOR_NAMES[idx], detail);
+		i.put("idx", String.valueOf(idx));
+		return i;
+	}
+
+	/** One actuator, likewise named by {@link AgentIO#ACT_NAMES}. */
+	private static Map<String, String> act(int idx, String detail) {
+		Map<String, String> i = item(AgentIO.ACT_NAMES[idx], detail);
+		i.put("idx", String.valueOf(idx));
+		return i;
 	}
 
 	private static Map<String, String> row(String label, String value, String unit, String note) {

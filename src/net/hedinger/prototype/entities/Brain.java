@@ -32,13 +32,14 @@ public final class Brain {
 			MIN = 6, MAX = 7, NEG = 8, TANH = 9, GT = 10, SKIPZ = 11, SKIPNZ = 12,
 			SENSE = 13, WRITE = 14;
 	public static final int NUM_OPS = 15;
-	private static final String[] OPNAME = { "NOP", "SET", "MOV", "ADD", "SUB", "MUL",
+	/** Opcode mnemonics, indexed by opcode. */
+	public static final String[] OP_NAMES = { "NOP", "SET", "MOV", "ADD", "SUB", "MUL",
 			"MIN", "MAX", "NEG", "TANH", "GT", "SKIPZ", "SKIPNZ", "SENSE", "WRITE" };
 
 	/** General-purpose registers; persist across ticks (this is the memory). */
 	public static final int NUM_REG = 12;
 	/** Small constant pool the SET opcode draws immediates from. */
-	private static final double[] CONST = { -2, -1, -0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5, 1, 2, 4 };
+	public static final double[] CONST = { -2, -1, -0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5, 1, 2, 4 };
 	/** Registers are clamped to this magnitude so arithmetic can't run away to
 	 * NaN/Infinity, but the range is wide enough for counters and timers (memory),
 	 * not just the small values reactive logic on normalized sensors produces. */

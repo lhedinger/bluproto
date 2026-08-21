@@ -213,9 +213,9 @@ public class TestNPC extends NPC {
 	private static final double HERD_R = 7.0;
 	/** Pheromone laid at the nest at each birth; >> per-tick evaporation, so a
 	 *  repeatedly-marked nest cloud builds a strong persistent peak. */
-	private static final double NEST_DEPOSIT = 12.0;
+	public static final double NEST_DEPOSIT = 12.0;
 	/** How far a nester can smell its nest when homing to breed. */
-	private static final int NEST_SENSE_R = 8;
+	public static final int NEST_SENSE_R = 8;
 	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */
 	private static final double MATE_REACH = 0.5;
 

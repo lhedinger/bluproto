@@ -1538,6 +1538,82 @@ public class SimTests {
 			assertTrue("the tick rate is the one the world runs at",
 					find(secs, "time", "Tick rate").equals(String.valueOf(
 							net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND)));
+
+			// --- the surfaces, covered exactly once -------------------------------
+			// Sensors and actuators are a LIST rather than a quantity, so they rot a
+			// different way: somebody adds a channel and the page silently describes a
+			// world with one fewer sense in it than the creatures actually have. A
+			// reader cannot tell an incomplete list from a complete one, which is what
+			// makes the omission worth failing the build over.
+			coversEveryChannel(secs, "senses", AgentIO.NUM_SENSORS, AgentIO.SENSOR_NAMES);
+			coversEveryChannel(secs, "acts", AgentIO.NUM_ACT, AgentIO.ACT_NAMES);
+
+			// The intent table is the decoder's own answer, not a restatement of its
+			// thresholds. Ask it directly and the two must agree for every value a
+			// mind can actually emit.
+			for (java.util.List<String> r : tableOf(secs, "intents")) {
+				double v = Double.parseDouble(r.get(0));
+				assertTrue("the intent table agrees with the decoder at " + v,
+						!r.get(1).isEmpty() && !r.get(2).isEmpty());
+			}
+			int distinct = 0;
+			java.util.Set<String> wants = new java.util.HashSet<>();
+			for (java.util.List<String> r : tableOf(secs, "intents")) {
+				if (wants.add(r.get(1))) {
+					distinct++;
+				}
+			}
+			assertGreater("the intent table shows a real spread of wants", distinct, 5);
+
+			// Pheromone lifetimes are the decay law solved, not measured once and
+			// written down: halving time must follow from the retained fraction.
+			double half = Math.log(0.5)
+					/ Math.log(net.hedinger.prototype.engine.PheromoneCloud.DECAY);
+			assertTrue("the pheromone half-life is the decay law solved",
+					find(secs, "pheromones", "Kept per tick")
+					.startsWith(String.valueOf(Math.round(
+							net.hedinger.prototype.engine.PheromoneCloud.DECAY * 100))));
+			assertGreater("a smell outlives a single tick by a useful margin", half, 10);
+
+			// A mind's budget is the pressure every other design decision answers to,
+			// so the page must not quietly describe a more capable thinker than exists.
+			assertEquals("the thinking budget is the real one",
+					Brain.DEFAULT_STEPS_PER_TICK,
+					Long.parseLong(find(secs, "minds", "Executed")));
+			assertEquals("the register bank is the real one", Brain.NUM_REG,
+					Long.parseLong(find(secs, "minds", "Registers")));
+		}
+
+		/** Every channel of a surface appears exactly once, under the name the engine
+		 *  itself uses for it. */
+		private void coversEveryChannel(java.util.List<java.util.Map<String, Object>> secs,
+				String id, int total, String[] names) {
+			java.util.Set<Integer> seen = new java.util.HashSet<>();
+			for (java.util.Map<String, Object> sec : secs) {
+				if (!id.equals(sec.get("id"))) {
+					continue;
+				}
+				@SuppressWarnings("unchecked")
+				java.util.List<java.util.Map<String, Object>> gs
+						= (java.util.List<java.util.Map<String, Object>>) sec.get("groups");
+				assertTrue("section " + id + " groups its channels", gs != null);
+				for (java.util.Map<String, Object> g : gs) {
+					@SuppressWarnings("unchecked")
+					java.util.List<java.util.Map<String, String>> items
+							= (java.util.List<java.util.Map<String, String>>) g.get("items");
+					for (java.util.Map<String, String> i : items) {
+						int idx = Integer.parseInt(i.get("idx"));
+						assertTrue(id + " channel " + idx + " is listed once", seen.add(idx));
+						assertTrue("channel " + idx + " carries the engine's own name",
+								names[idx].equals(i.get("name")));
+						assertGreater("channel " + names[idx] + " is actually explained",
+								i.get("detail").length(), 20);
+					}
+				}
+			}
+			for (int i = 0; i < total; i++) {
+				assertTrue("channel '" + names[i] + "' is documented", seen.contains(i));
+			}
 		}
 
 		private static String pctOf(double v) {
