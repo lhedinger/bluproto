@@ -514,7 +514,15 @@ function renderInspectSimple(d: Record<string, any>): void {
   if (d.carrying) rows.push(row('hauling', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
+  // The four books (VITALS.md), for anyone following a creature — not a debug
+  // detail: health is whether it lives, energy what it can do, hunger and
+  // thirst why it is doing what it is doing.
+  if ('health' in d && d.role) {
+    rows.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
+  }
   if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  if ('hunger' in d) rows.push(bar('hunger', Number(d.hunger).toFixed(2), Math.max(0, Math.min(1, d.hunger))));
+  if ('thirst' in d) rows.push(bar('thirst', Number(d.thirst).toFixed(2), Math.max(0, Math.min(1, d.thirst))));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
