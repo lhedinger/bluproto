@@ -515,14 +515,16 @@ function renderInspectSimple(d: Record<string, any>): void {
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
   // The four books (VITALS.md), for anyone following a creature — not a debug
-  // detail: health is whether it lives, energy what it can do, hunger and
-  // thirst why it is doing what it is doing.
+  // detail: health is whether it lives, energy what it can do, fed and watered
+  // why it is doing what it is doing. All four count the SAME way up — see
+  // sated() — so a creature in trouble is four draining bars rather than two
+  // full ones and two empty, which is what the needs read as when shown raw.
   if ('health' in d && d.role) {
     rows.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   }
   if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
-  if ('hunger' in d) rows.push(bar('hunger', Number(d.hunger).toFixed(2), Math.max(0, Math.min(1, d.hunger))));
-  if ('thirst' in d) rows.push(bar('thirst', Number(d.thirst).toFixed(2), Math.max(0, Math.min(1, d.thirst))));
+  if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
+  if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
@@ -547,10 +549,12 @@ function renderInspectDebug(d: Record<string, any>): void {
   status.push(row('age', d.age));
   // The four books (VITALS.md): health the life gate, energy the action
   // budget, hunger and thirst the needs that rise between meals and drinks.
+  // Inverted into satisfactions the same way the entity card does it, so the two
+  // panels never disagree about which way is up.
   status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
-  if ('hunger' in d) status.push(bar('hunger', Number(d.hunger).toFixed(2), Math.max(0, Math.min(1, d.hunger))));
-  if ('thirst' in d) status.push(bar('thirst', Number(d.thirst).toFixed(2), Math.max(0, Math.min(1, d.thirst))));
+  if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
+  if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
@@ -600,6 +604,23 @@ function group(title: string, rows: string[]): string {
   const body = rows.filter(Boolean).join('');
   return body ? `<div class="grp">${title}</div><table>${body}</table>` : '';
 }
+/**
+ * A need (0 sated .. 1 desperate) as the satisfaction it leaves.
+ *
+ * <p>The engine stores hunger and thirst as needs, which is the right way round
+ * for the simulation and the wrong way round for a progress bar: a bar is read
+ * before it is understood, and a full one reads as "good" whatever the label
+ * above it says. Shown raw, a starving creature had two brimming bars and a
+ * well-fed one had two empty — the opposite of the truth, at a glance.
+ *
+ * <p>Returns the printed figure and the fill together, so the number and the bar
+ * cannot drift into disagreeing about which way they count.
+ */
+function sated(need: unknown): [string, number] {
+  const left = Math.max(0, Math.min(1, 1 - Number(need)));
+  return [left.toFixed(2), left];
+}
+
 function bar(k: string, v: unknown, pct: number): string {
   return row(k, v) +
     `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`;
