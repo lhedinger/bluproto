@@ -133,7 +133,7 @@ public final class ServerMain {
 			ctx.contentType("text/plain; version=0.0.4").result(b.toString());
 		});
 
-		// The sprite catalog: ONE page, at /sprites, drawn by the viewer's own code.
+		// The help page: ONE page, at /help, drawn by the viewer's own code.
 		// That is the question worth answering -- what does the art look like to
 		// someone who opens the world -- and there is exactly one answer to it.
 		//
@@ -143,10 +143,10 @@ public final class ServerMain {
 		// catalog" was not a feature: it is what let this route serve the java page
 		// on every deploy for weeks without anyone being able to tell, because the
 		// wrong answer looked like a real catalog. The java bakes are still served
-		// as ASSETS under /sprites/*.png -- the client page composites several of
+		// as ASSETS under /help/*.png -- the client page composites several of
 		// them -- they simply no longer have a page of their own.
-		java.io.File clientSprites = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
-				"sprites.html");
+		java.io.File clientHelp = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
+				"help.html");
 		// What this running build is, for cache validation. deployedAt is the
 		// process start time, so this changes on every deploy AND every local
 		// restart -- which is what a catalog needs: the art it shows is rebuilt
@@ -167,12 +167,12 @@ public final class ServerMain {
 			// stage copies just the server install and res/. Asking only the
 			// filesystem is what made this route serve something else entirely on
 			// every deploy for weeks.
-			if (clientSprites.isFile()) {
-				ctx.result(java.nio.file.Files.readAllBytes(clientSprites.toPath()));
+			if (clientHelp.isFile()) {
+				ctx.result(java.nio.file.Files.readAllBytes(clientHelp.toPath()));
 				return;
 			}
 			try (java.io.InputStream in =
-					ServerMain.class.getResourceAsStream("/public/sprites.html")) {
+					ServerMain.class.getResourceAsStream("/public/help.html")) {
 				if (in != null) {
 					ctx.result(in.readAllBytes());
 					return;
@@ -182,15 +182,25 @@ public final class ServerMain {
 			// page. Serving a plausible-looking stand-in is precisely how the missing
 			// catalog stayed invisible -- a 503 that names the cause is worth more
 			// than a page that answers a question nobody asked.
-			ctx.status(503).result("<h1>sprite catalog unavailable</h1><p>No web client "
-					+ "build was found — neither <code>client/dist/sprites.html</code> nor "
-					+ "<code>public/sprites.html</code> in the server jar. Run "
+			ctx.status(503).result("<h1>help unavailable</h1><p>No web client "
+					+ "build was found — neither <code>client/dist/help.html</code> nor "
+					+ "<code>public/help.html</code> in the server jar. Run "
 					+ "<code>npm run build</code> in <code>client/</code>, or build the "
 					+ "server with <code>./gradlew :server:installDist</code>, which folds "
 					+ "the client in.</p>");
 		};
-		app.get("/sprites", clientCatalog); // the one catalog: what a viewer sees
-		app.get("/sprites/{file}", ctx -> {
+		app.get("/help", clientCatalog); // the one page: what a viewer sees
+		// It was /sprites while it was only a sprite catalog. It is growing into the
+		// place the world explains itself -- what a badge means, and in time what
+		// metabolism costs and where energy comes from -- and a URL that says
+		// "sprites" would be describing one shelf of it. The old path still resolves:
+		// links to it are out in the world and a rename is no reason to break them.
+		app.get("/sprites", ctx -> ctx.redirect("/help"));
+		// The reference bodies the help page draws, as shape keys. Not pictures: the
+		// page stamps these through the same atlas path the live view uses, so what
+		// it shows is what a viewer sees rather than a second rendering of it.
+		app.get("/help/bodies.json", ctx -> ctx.json(SpriteCatalog.referenceBodies()));
+		app.get("/help/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
 			if (bytes == null) {

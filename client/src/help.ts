@@ -1,20 +1,12 @@
-// The sprite catalog (/sprites): every entry here is drawn by the SAME
-// functions the live viewer uses — drawDoor/drawSwitch/drawItem, the veil and
-// dither compositors, the overlay language from render.ts, the corpse/rim/mip
-// bakes from atlas.ts — driven by scripted state instead of the world stream.
-// It shows what a viewer actually sees, because it is painted by the code that
-// paints the world.
+// The help page (/help). One rule holds the whole thing together: every entry
+// is drawn by the SAME code the live viewer draws with, reading the same
+// server-baked atlases. The web rendering is the source of truth, because it is
+// the rendering anyone actually looks at — a picture produced down a second path
+// is a picture of what the art ought to be, and the two drift silently.
 //
-// One page. There used to be three (/sprites, /sprites/web, /sprites/java),
-// which meant two of them could be wrong without anyone noticing — and one
-// silently was, for weeks. Java bakes are still fetched as source images where
-// the client composites over them, but they no longer have a catalog of their
-// own to be confused with this one.
-//
-// The catalog is NORMATIVE for the web view (ART-STYLE.md §6): everything the
-// client draws into the world must have an entry on this page rendered by the
-// same code path. A visual with no catalog entry is a review failure; a
-// reimplementation that merely imitates one is a bug waiting to drift.
+// This began as a sprite catalog and is growing into the place the world
+// explains itself; /sprites still redirects here. Sections that document
+// mechanics rather than art belong here too.
 
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
@@ -415,7 +407,7 @@ for (const [act, name, meaning] of EXPR) {
   // identical ground.
   for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2]] as const) {
     if (!atlas) break; // the whole point is a body under the veil
-    const ground = await loadCanvas(`/sprites/${name}_ground.png`);
+    const ground = await loadCanvas(`/help/${name}_ground.png`);
     if (!ground) continue;
     const ts = ground.width / 5;
     const veil = document.createElement('canvas');
@@ -496,71 +488,60 @@ for (const [act, name, meaning] of EXPR) {
 
 // ---- what the server bakes, and where to see it --------------------------
 
-// ---- body plans -----------------------------------------------------------
-// Every outline the organism renderer can draw, turntabled on the server and
-// shown here whether or not anything in the world currently wears it. Half of
-// them are unworn: the plan follows the genome's diet and there are three
-// trophic levels, so three of six sit idle. A catalogue that showed only what
-// happened to be alive would be a census of the population rather than a
-// reference to the space, and the plans nobody wears are exactly the ones worth
-// being able to look at before deciding what to do with them.
-//
-// These are <img> rather than a live canvas because the server already bakes
-// them, and a GIF of the full spin says more about a body than one frozen
-// facing. Lazy, so a phone scrolling the top of the page does not pay for them.
-const PLANS: Array<[string, string]> = [
-  ['plan_0_grazer', 'plan 0 — <b>grazer</b>'],
-  ['plan_1_radial_unworn', 'plan 1 — radial <i>(unworn)</i>'],
-  ['plan_2_wedge_unworn', 'plan 2 — wedge <i>(unworn)</i>'],
-  ['plan_3_scavenger', 'plan 3 — <b>scavenger</b>'],
-  ['plan_4_hunter', 'plan 4 — <b>hunter</b>'],
-  ['plan_5_ragged_unworn', 'plan 5 — ragged <i>(unworn)</i>'],
-];
+// ---- the bodies, drawn the way the world draws them --------------------------
+// Every plan the organism renderer can express, and the named samples. The
+// server hands over shape KEYS; the atlas comes down the same endpoint the live
+// view uses and is stamped by the same code, so what is on this page is what a
+// viewer sees rather than a second rendering that merely resembles it. These
+// used to be baked GIFs, which is a picture of what the art ought to be.
+interface RefBody { group: string; label: string; pheno: number; worn: boolean; rgb: number; }
+
 const plans = section('Body plans',
-  'The six outlines the organism renderer can draw, each spinning through its facings '
-  + 'with the idle gait running. Drawn from one genome with the trophic markings '
-  + 'stripped off, so the only thing that differs between them is the body. A creature\'s '
-  + 'plan follows what its genome eats, and there are three trophic levels — so three of '
-  + 'these are worn by nothing, and are here because a reference to the space should show '
-  + 'the whole space.');
-for (const [file, label] of PLANS) {
-  const img = document.createElement('img');
-  img.src = `/sprites/${file}.gif`;
-  img.loading = 'lazy';
-  img.alt = label.replace(/<[^>]+>/g, '');
-  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
-  figure(img, label, plans);
+  'Every outline the organism renderer can express, drawn from one genome with the '
+  + 'trophic markings stripped off, so the only thing differing between them is the '
+  + 'body. A creature\'s plan follows what its genome eats and there are three trophic '
+  + 'levels, so three of these are worn by nothing — they are here because a reference '
+  + 'to the space should show the whole space, not a census of what happens to be alive.');
+const samples = section('Creatures',
+  'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
+  + 'strides on the long pair and carries a tail, a scavenger is the segmented body with '
+  + 'the feelers it finds its food by, anything airborne keeps a single pair of limbs. '
+  + 'Fixed points rather than live phenotypes, so this stays a reference while the world '
+  + 'evolves away from it.');
+
+/** One body, spun through its facings with the idle gait — the live view's own
+ *  stamp, waiting on the same atlas fetch the world waits on. */
+function refBody(b: RefBody, into: HTMLElement): void {
+  const W = 150, H = 150, box = W * 0.72;
+  figure(liveCanvas(W, H, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, W, H);
+    const dir = Math.floor((t / 1.2) % 8);
+    const anim = Math.floor((t * 6) % 8);
+    g.imageSmoothingEnabled = false;
+    const sheet = atlasFor(b.pheno);
+    const tint = sheet ? tintedFor(b.pheno, b.rgb, sheet) : null;
+    if (tint) {
+      g.drawImage(tint, anim * CELL, dir * CELL, CELL, CELL,
+        (W - box) / 2, (H - box) / 2, box, box);
+    } else {
+      // The same placeholder the live viewer shows while an atlas is in flight.
+      drawPlaceholder(g, W / 2, H / 2, (W * 0.72) * (ART_RADIUS / CELL),
+        (dir / 8) * Math.PI * 2, '#8b9bb4');
+    }
+  }), b.worn ? `<b>${b.label}</b>` : `${b.label} <i>(unworn)</i>`, into);
 }
 
-// The named organism samples the server bakes: hand-picked points in the genome
-// space rather than live phenotypes, so the reference stays put while the world
-// evolves. They were baked and shown nowhere — the page had no creature section
-// at all, so every one of these turntables was being rendered on each boot and
-// dropped on the floor.
-const SAMPLES: Array<[string, string]> = [
-  ['founder_grazer', 'founder grazer'],
-  ['tiny_darter', 'tiny darter'],
-  ['bulky_armored', 'bulky armoured'],
-  ['herd_mother', 'herd mother'],
-  ['carrion_eater', 'carrion eater — <b>scavenger</b>'],
-  ['apex_predator', 'apex predator — <b>hunter</b>'],
-  ['flier', 'flier'],
-  ['winged_hunter', 'winged hunter — <b>hunter</b>'],
-];
-const samples = section('Creatures',
-  'Distinct samples of the procedural organism space, each spinning through its eight '
-  + 'facings while the idle gait plays. Genomes are hand-picked points rather than live '
-  + 'phenotypes, so this stays a reference to the space while the world evolves away from '
-  + 'it. Unlike the plans above these wear their trophic markings: the hunters carry a '
-  + 'tail, the scavenger its feelers, and anything airborne keeps a single pair of limbs.');
-for (const [file, label] of SAMPLES) {
-  const img = document.createElement('img');
-  img.src = `/sprites/${file}.gif`;
-  img.loading = 'lazy';
-  img.alt = label.replace(/<[^>]+>/g, '');
-  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
-  figure(img, label, samples);
-}
+void (async () => {
+  let bodies: RefBody[] = [];
+  try {
+    const r = await fetch('/help/bodies.json');
+    if (r.ok) bodies = await r.json();
+  } catch {
+    /* offline: the sections below simply stay empty rather than lying */
+  }
+  for (const b of bodies) refBody(b, b.group === 'plan' ? plans : samples);
+})();
 
 const rest = section('Server-baked art',
   'Ground chunks and creature bodies are baked on the server for the web view too — '
@@ -569,7 +550,7 @@ const rest = section('Server-baked art',
 {
   const p = document.createElement('p');
   p.className = 'note';
-  p.innerHTML = 'The full set of ground swatches is served under <code>/sprites/'
+  p.innerHTML = 'The full set of ground swatches is served under <code>/help/'
     + 'ground_*.png</code>; the creature atlases under <code>/api/world/atlas/&lt;pheno&gt;'
     + '.png</code>. Both are fetched straight into the entries above.';
   rest.append(p);

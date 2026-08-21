@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>bluproto — sprite catalog</title>
+  <title>bluproto — help</title>
   <style>
     body { background: #0f1115; color: #cdd3de; font: 14px/1.5 system-ui, sans-serif;
            margin: 2rem auto; max-width: 1200px; padding: 0 1rem; }
@@ -22,12 +22,13 @@
   </style>
 </head>
 <body>
-  <h1>sprite catalog</h1>
-  <p class="note" id="intro">The art system rendered by <b>both</b> pipelines, side by side:
-  the Java renderer that bakes the world server-side, and the web client's own drawing code —
-  the pixels this very browser puts on the live viewer. Where the two families sit next to
-  each other, they should agree; where they drift, that drift is a finding.</p>
+  <h1>help</h1>
+  <p class="note" id="intro">How the world looks and, in time, how it works. Everything drawn
+  here is drawn by the <b>web client's own code</b> — the same drawing this browser puts on
+  the live viewer, reading the same server-baked atlases — so what is on this page is what a
+  viewer actually sees rather than a second rendering that resembles it. A picture baked down
+  some other path would only be a picture of what the art ought to be.</p>
   <div id="root"></div>
-  <script type="module" src="/src/sprites.ts"></script>
+  <script type="module" src="/src/help.ts"></script>
 </body>
 </html>
