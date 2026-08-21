@@ -30,6 +30,20 @@ public final class PhenoRegistry {
 		return key;
 	}
 
+	/**
+	 * Records a phenotype built by hand and returns its shape key.
+	 *
+	 * <p>The genome overload cannot reach every body: the plan follows the genome's
+	 * diet, so the forms no diet selects are unreachable through it. The reference
+	 * page still needs an atlas for those, and an atlas is only servable for a key
+	 * the registry has seen.
+	 */
+	public static long register(ProcCreature.Phenotype ph) {
+		long key = ProcCreature.shapeKey(ph);
+		BY_KEY.putIfAbsent(key, ph);
+		return key;
+	}
+
 	/** The phenotype for a key, or null if nothing with that key has been seen. */
 	public static ProcCreature.Phenotype get(long key) {
 		return BY_KEY.get(key);
