@@ -8,6 +8,7 @@ import io.javalin.Javalin;
 import io.javalin.http.ContentType;
 import io.javalin.http.staticfiles.Location;
 
+import net.hedinger.prototype.sim.Mechanics;
 import net.hedinger.prototype.sim.SimCommand;
 import net.hedinger.prototype.sim.SpawnItemCommand;
 
@@ -200,6 +201,11 @@ public final class ServerMain {
 		// page stamps these through the same atlas path the live view uses, so what
 		// it shows is what a viewer sees rather than a second rendering of it.
 		app.get("/help/bodies.json", ctx -> ctx.json(SpriteCatalog.referenceBodies()));
+		// The world's rules, read off the running constants rather than transcribed:
+		// every figure is either a live constant or computed from live constants by
+		// the arithmetic the sim itself uses, so the documentation cannot say one
+		// thing while the simulation does another.
+		app.get("/help/mechanics.json", ctx -> ctx.json(Mechanics.sections()));
 		app.get("/help/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;

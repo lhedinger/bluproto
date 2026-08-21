@@ -10,6 +10,7 @@ import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Item;
 import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
+import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
 
 /**
@@ -1418,6 +1419,167 @@ public class SimTests {
 			assertTrue("the body did finish growing", !baby.isJuvenile());
 			assertEquals("the energy tank is the same before and after growing up",
 					Math.round(juvenileCap * 1000), Math.round(baby.energyCapacity() * 1000));
+		}
+	}
+
+	/**
+	 * The mechanics reference is READ OFF the world, not typed out beside it.
+	 *
+	 * <p>Documentation rots in a particular, quiet way: somebody tunes a constant,
+	 * every test still passes, and the page goes on confidently stating last
+	 * month's number. The only defence is to make the page incapable of holding an
+	 * independent opinion — so every figure it publishes is either a live constant
+	 * or computed from live constants by the arithmetic the simulation uses.
+	 *
+	 * <p>This pins that property rather than the numbers themselves: it recomputes
+	 * the published tables straight from {@link NPC} and {@link TestNPC} and
+	 * demands they agree. Replace any of those computations with a literal — the
+	 * exact regression this exists to catch — and the recomputation and the literal
+	 * part company the moment the constant behind it moves.
+	 */
+	static class MechanicsAreReadOffTheWorld extends Scenario {
+		@Override
+		public void run() {
+			java.util.List<java.util.Map<String, Object>> secs
+					= net.hedinger.prototype.sim.Mechanics.sections();
+			assertGreater("the reference documents a useful number of rules", secs.size(), 5);
+
+			java.util.Set<String> ids = new java.util.HashSet<>();
+			for (java.util.Map<String, Object> sec : secs) {
+				String id = (String) sec.get("id");
+				assertTrue("every section has an anchor id", id != null && !id.isEmpty());
+				assertTrue("section ids are unique (" + id + ")", ids.add(id));
+				assertTrue("section " + id + " has a title",
+						!((String) sec.get("title")).isEmpty());
+				// Prose explains WHY a rule is shaped as it is; a table of bare
+				// constants with nothing around it is a config dump, not a reference.
+				assertGreater("section " + id + " explains itself",
+						((String) sec.get("intro")).length(), 120);
+				assertGreater("section " + id + " publishes facts", rowsOf(sec).size(), 2);
+				for (java.util.Map<String, String> r : rowsOf(sec)) {
+					String v = r.get("value");
+					assertTrue("row '" + r.get("label") + "' has a value",
+							v != null && !v.isEmpty());
+					// Float noise ("0.30000000000000004") and NaN both mean a figure
+					// reached the page without going through the formatter.
+					assertTrue("value '" + v + "' is printed, not dumped",
+							!v.contains("0000000") && !v.contains("NaN")
+							&& !v.contains("Infinity") && !v.contains("E-"));
+				}
+			}
+
+			// --- the worked tables, recomputed ------------------------------------
+			// Resting metabolism: tank over burn is how long a motionless creature
+			// lasts. Kleiber's 0.75 exponent is the whole point of the section, so a
+			// page that quietly used mass^1.0 would read plausibly and be wrong.
+			for (java.util.List<String> r : tableOf(secs, "metabolism")) {
+				double size = Double.parseDouble(r.get(0));
+				double mass = size / NPC.REF_SIZE;
+				double cap = NPC.BASE_CAPACITY * mass;
+				double burn = NPC.BASE_METABOLISM * Math.pow(mass, 0.75);
+				assertNear("mass at size " + size, mass, Double.parseDouble(r.get(1)), 0.005);
+				assertNear("tank at size " + size, cap, Double.parseDouble(r.get(2)), 0.005);
+				assertNear("burn at size " + size, burn, Double.parseDouble(r.get(3)),
+						burn * 0.01);
+				assertNear("ticks unfed at size " + size, cap / burn,
+						Double.parseDouble(r.get(4)), 1.0);
+			}
+			// A bigger body's tank grows linearly while its burn grows with mass^0.75,
+			// so the fasting window MUST widen with size. If this ever reverses, the
+			// prose above it has become a lie about its own table.
+			java.util.List<java.util.List<String>> meta = tableOf(secs, "metabolism");
+			assertGreater("big bodies fast longer than small ones",
+					Double.parseDouble(meta.get(meta.size() - 1).get(4)),
+					Double.parseDouble(meta.get(0).get(4)));
+
+			// Movement is priced on the SQUARE of the step: doubling pace must
+			// quadruple the bill, which is the claim the section actually makes.
+			java.util.List<java.util.List<String>> move = tableOf(secs, "movement");
+			for (java.util.List<String> r : move) {
+				double v = Double.parseDouble(r.get(0));
+				assertNear("move cost at " + v, NPC.MOVE_ENERGY * v * v,
+						Double.parseDouble(r.get(2)), NPC.MOVE_ENERGY * v * v * 0.01 + 1e-9);
+			}
+			double slow = Double.parseDouble(move.get(0).get(2));
+			double fast = Double.parseDouble(move.get(move.size() - 1).get(2));
+			double ratio = (Double.parseDouble(move.get(move.size() - 1).get(0))
+					/ Double.parseDouble(move.get(0).get(0)));
+			assertNear("cost rises with the square of speed", ratio * ratio, fast / slow,
+					ratio * ratio * 0.02);
+
+			// A carcass is worth the dead body's mass, and rots over exactly the time
+			// that body took to build -- one constant behind both, by construction.
+			for (java.util.List<String> r : tableOf(secs, "food")) {
+				double size = Double.parseDouble(r.get(0));
+				assertNear("carcass at size " + size,
+						TestNPC.MEAT_ENERGY * (size / NPC.REF_SIZE),
+						Double.parseDouble(r.get(2)), 0.005);
+				assertEquals("rot time at size " + size, NPC.growthTicks(size),
+						Long.parseLong(r.get(4)));
+			}
+			for (java.util.List<String> r : tableOf(secs, "growth")) {
+				double size = Double.parseDouble(r.get(0));
+				assertEquals("childhood at size " + size, NPC.growthTicks(size),
+						Long.parseLong(r.get(2)));
+			}
+			// Rot and childhood are the same figure; the page says so, so it had
+			// better still be true of what the page prints.
+			java.util.List<java.util.List<String>> food = tableOf(secs, "food");
+			java.util.List<java.util.List<String>> grow = tableOf(secs, "growth");
+			assertEquals("the tables agree on how long a body takes",
+					Long.parseLong(food.get(0).get(4)), Long.parseLong(grow.get(0).get(2)));
+
+			// Percentages come from the fractions the founder setup actually applies.
+			assertTrue("the breeding threshold is the one the world uses",
+					find(secs, "breeding", "Breeds above")
+					.startsWith(pctOf(TestNPC.REPRO_FRACTION)));
+			assertTrue("the born-at fraction is the one the world uses",
+					find(secs, "tank", "Born holding").startsWith(pctOf(TestNPC.BORN_FRACTION)));
+			assertTrue("the tick rate is the one the world runs at",
+					find(secs, "time", "Tick rate").equals(String.valueOf(
+							net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND)));
+		}
+
+		private static String pctOf(double v) {
+			String s = String.valueOf(Math.round(v * 100));
+			return s;
+		}
+
+		@SuppressWarnings("unchecked")
+		private static java.util.List<java.util.Map<String, String>> rowsOf(
+				java.util.Map<String, Object> sec) {
+			return (java.util.List<java.util.Map<String, String>>) sec.get("rows");
+		}
+
+		@SuppressWarnings("unchecked")
+		private java.util.List<java.util.List<String>> tableOf(
+				java.util.List<java.util.Map<String, Object>> secs, String id) {
+			for (java.util.Map<String, Object> sec : secs) {
+				if (id.equals(sec.get("id"))) {
+					java.util.Map<String, Object> t
+							= (java.util.Map<String, Object>) sec.get("table");
+					assertTrue("section " + id + " carries a worked table", t != null);
+					return (java.util.List<java.util.List<String>>) t.get("rows");
+				}
+			}
+			assertTrue("section " + id + " exists", false);
+			return java.util.List.of();
+		}
+
+		private String find(java.util.List<java.util.Map<String, Object>> secs,
+				String id, String label) {
+			for (java.util.Map<String, Object> sec : secs) {
+				if (!id.equals(sec.get("id"))) {
+					continue;
+				}
+				for (java.util.Map<String, String> r : rowsOf(sec)) {
+					if (label.equals(r.get("label"))) {
+						return r.get("value");
+					}
+				}
+			}
+			assertTrue("row '" + label + "' exists in section " + id, false);
+			return "";
 		}
 	}
 
@@ -5401,6 +5563,7 @@ public class SimTests {
 				new HoldingACaptiveCostsEnergy(),
 				new CreaturesGrowToAdultSize(),
 				new ActionGlyphsRideTheWire(),
+				new MechanicsAreReadOffTheWorld(),
 				new HitchhikerBrainClimbsAboard(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
