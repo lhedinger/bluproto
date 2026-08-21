@@ -378,8 +378,13 @@ final class WorldHost {
 			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
 				d.put("subtype", n.getNpcTypeName().toLowerCase());
+				// The four books (VITALS.md): the needs, the action budget, and the
+				// life gate — each its own number, so the inspector shows why a
+				// creature is doing what it is doing.
 				d.put("energy", round(n.getEnergy()));
-				d.put("hydration", round(n.getHydration()));
+				d.put("hunger", round(n.getHunger()));
+				d.put("thirst", round(n.getThirst()));
+				d.put("health", n.getHealth());
 				d.put("carrying", n.getCarriedLoad() > 0); // hauling an ITEM (a crate)
 				d.put("grabbed", n.isGrabbed());
 				// Who has hold of whom. `attachedTo` above says which entity this one

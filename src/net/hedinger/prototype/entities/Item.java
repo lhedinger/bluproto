@@ -155,7 +155,7 @@ public class Item extends NPC {
 		}
 		switch (kind) {
 		case FOOD:
-			eater.addEnergy(foodEnergy);
+			eater.feed(foodEnergy); // into the stomach; satiation powers the body
 			remove();
 			return true;
 		case HAZARD:

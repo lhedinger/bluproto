@@ -1,10 +1,12 @@
 # VITALS — the body's account books
 
-**Status: design for review.** Nothing in here is implemented yet. This document
+**Status: implemented** (hard rollout, both cohorts at once). This document
 rebalances the timing and energy parameters around eating, drinking and
-reproduction into one coherent model, so the relationships can be agreed on
-before any code moves. The [migration table](#what-changes-against-today) names
-every mechanical change against the current engine.
+reproduction into one coherent model; the [migration table](#what-changes-against-today)
+names every mechanical change against the previous engine. The five §9
+questions were resolved as proposed: worse-need satiation gate, a crawl
+reserve at collapse, the linear mass proxy, hunger-as-level, and the single
+hard rollout.
 
 The premises, fixed up front:
 
@@ -196,21 +198,22 @@ stay warm) and slows mending; darkness slows intake for sighted foragers.
 None of them need new vitals — they modulate the periods in §5, which is why
 the periods are named constants rather than folded into magic drain values.
 
-## 9. Open questions for the review
+## 9. Open questions — resolved
 
-1. **Satiation gate**: `1 − max(hunger, thirst)` (worse need governs, proposed)
-   or the product of the two (needs compound)?
-2. **Collapse**: at energy 0, full immobility, or a crawl reserve (say 5% of
-   the tank that only funds walking) so a collapsed body can still reach food
-   two tiles away? Proposed: crawl reserve — starving-in-sight-of-grass is
-   frustrating to watch and evolutionarily uninteresting.
-3. **Mass**: keep the current linear `bodyMass()` (radius-normalised), or go
-   volumetric (`size³`)? Volumetric widens the big/small contrast sharply;
-   every balance number above assumes the current linear proxy.
-4. **Stomach as buffer**: is hunger-as-level enough (proposed), or should
-   eaten food sit in a digestion queue that absorbs over time? The queue is
-   more physical but adds a fifth book; the satiation gate already delivers
-   the "food takes time to become energy" behaviour.
-5. **Rollout**: minded cohort first with the scripted eco species following
-   (their thirst override and graze demand already fit the shape), or both at
-   once? Both at once keeps one economy but is the bigger, riskier diff.
+All five went as proposed, and are now what the code does:
+
+1. **Satiation gate**: `1 − max(hunger, thirst)` — the worse need governs.
+2. **Collapse**: a crawl reserve (5% of the tank, `CRAWL_RESERVE`): below it
+   the body can only crawl at a quarter of its top speed — it cannot bite,
+   grab, breed, or keep a grip (a collapsed captor's captive walks free) —
+   but it can still reach food two tiles away and recover.
+3. **Mass**: the linear radius-normalised `bodyMass()` stays.
+4. **Stomach**: hunger-as-level, with a lifetime `swallowed` ledger for
+   probes and the scenario suite; no digestion queue.
+5. **Rollout**: both cohorts at once. Measured on seed 42 over 40k ticks: the
+   ecology settles with every death cause live (starvation, thirst,
+   predation, combat), a visible struggling minority (tens collapsed or
+   deprived at any instant), scavengers contracting to their carrion-limited
+   floor as designed — and the minded cohort now reaching its steward
+   ceiling, since deprivation kills slower than the old energy-zero switch;
+   whether to raise that ceiling is a question for the deployed world.

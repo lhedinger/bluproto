@@ -537,9 +537,12 @@ function renderInspectDebug(d: Record<string, any>): void {
   if (d.action) status.push(row('action', d.action));
   if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
-  status.push(row('health', d.health));
+  // The four books (VITALS.md): health the life gate, energy the action
+  // budget, hunger and thirst the needs that rise between meals and drinks.
+  status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
-  if ('hydration' in d) status.push(bar('water', Number(d.hydration).toFixed(2), Math.max(0, Math.min(1, d.hydration))));
+  if ('hunger' in d) status.push(bar('hunger', Number(d.hunger).toFixed(2), Math.max(0, Math.min(1, d.hunger))));
+  if ('thirst' in d) status.push(bar('thirst', Number(d.thirst).toFixed(2), Math.max(0, Math.min(1, d.thirst))));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');

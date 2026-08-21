@@ -464,18 +464,28 @@ public abstract class NPC extends Entity {
 			size = (int) Math.round(grownSize);
 		}
 
-		// Energy economy: metabolic entities burn energy each tick and starve
-		// at zero. run_extended() runs before the age/think cycle, so a starved
-		// entity is dead before it thinks this tick.
+		// The four books (VITALS.md): hunger and thirst rise with time, both gate
+		// energy regeneration through satiation and erode health when pegged;
+		// energy is spent by the acts and regenerated from satiation scaled by
+		// vigor; health alone decides life and death (Entity.run reaps at 0).
 		if (metabolic && age >= 0) {
 			if (reproCooldown > 0) {
 				reproCooldown--;
 			}
-			// A full body can't over-fill: cap the tank at its mass-scaled ceiling,
-			// so a well-fed creature is "fully fed" and extra grazing is wasted.
 			double cap = energyCapacity();
-			if (energy > cap) {
-				energy = cap;
+			double eff = metaEfficiency();
+			// Need clocks: capacity grows with m, the burn only with m^0.75, so a
+			// big body's needs rise slower per unit of reserve (Kleiber's fast).
+			// Thirst runs at twice hunger's rate — the rhythm anchor: a sated
+			// body's appetite returns in twice the time its thirst does.
+			double pace = Math.pow(bodyMass(), -0.25) * eff;
+			hunger = Math.min(1.0, hunger + pace / HUNGER_PERIOD);
+			thirst = Math.min(1.0, thirst + pace / THIRST_PERIOD);
+			// Drinking: a rate held over ticks, never a refill — a body beside
+			// water sips as it goes about its business, and walking off mid-drink
+			// keeps whatever partial refill had accrued.
+			if (thirst > 0 && nearWater()) {
+				thirst = Math.max(0, thirst - 1.0 / DRINK_TICKS);
 			}
 			double base = metabolismRate();
 			// Rider bonus: a creature voluntarily riding a host spends less energy
@@ -494,44 +504,139 @@ public abstract class NPC extends Entity {
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
 			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + carriedMass()) * lastStep * lastStep;
-			energy -= base + grip + travel;
-			if (energy <= 0) {
-				energy = 0;
-				recordDeath("starvation");
-				kill();
+			// Regeneration: the body converts satiation into energy over time —
+			// food never becomes energy directly (feed() fills the stomach). The
+			// worse need governs, and vigor makes health compound with the rest:
+			// an unhealthy body is also a listless one.
+			double satiation = 1.0 - Math.max(hunger, thirst);
+			double vigor = Math.max(0, health) / 100.0;
+			double regen = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * satiation * vigor;
+			energy = Math.min(cap, energy + regen - (base + grip + travel));
+			if (energy < 0) {
+				energy = 0; // collapse, never death — health is the only gate
 			}
-
-			// Water economy (WORLDGEN-RESEARCH.md: water as a need). Hydration
-			// drains slower than the energy tank, refills by simply being at
-			// water — a body adjacent to any water or shallows sips as it goes
-			// about its business, no dedicated act required — and an empty tank
-			// wears health down instead of killing outright, so a parched
-			// creature has a real (but closing) window to reach a shore.
-			hydration -= HYDRATION_DRAIN;
-			if (hydration < 1.0 && nearWater()) {
-				hydration = Math.min(1.0, hydration + DRINK_RATE);
+			// A collapsed captor cannot hold: restraint is exertion, and below the
+			// crawl reserve there is none to spend — the grip opens and the captive
+			// walks free of a captor that is still alive.
+			if (!canExert() && grabbing != null) {
+				drop();
 			}
-			if (hydration <= 0) {
-				hydration = 0;
-				if (age % 8 == 0) {
-					damage(1, "thirst"); // dehydration: a slow decline, not a switch
-				}
+			// Health: pegged needs erode it with their cause attached, so the
+			// corpse still says what killed it; mending happens only under low
+			// needs, at the pace-of-life rate (fast burners heal faster and pay
+			// for it in appetite). Wounds themselves come from combat, as ever.
+			if (hunger >= DEPRIVED && age % DEPRIVATION_PERIOD == 0) {
+				damage(1, "starvation");
+			}
+			if (thirst >= DEPRIVED && age % DEPRIVATION_PERIOD == DEPRIVATION_PERIOD / 2) {
+				damage(1, "thirst"); // offset phase: two pegged needs erode faster
+			}
+			if (health < 100 && hunger < NEED_LOW && thirst < NEED_LOW
+					&& age % Math.max(1, (int) Math.round(MEND_PERIOD / eff)) == 0) {
+				health++;
 			}
 		}
 	}
 
-	// --- thirst -------------------------------------------------------------
-	/** Ticks a full hydration tank lasts unaided (~4.5 min at 33 t/s) — longer
-	 *  than the energy tank, so water is a rhythm, not a treadmill. */
-	protected static final double HYDRATION_DRAIN = 1.0 / 9000;
-	/** Refill per tick while at water: a short stop at a shore tops up. */
-	protected static final double DRINK_RATE = 0.01;
+	// --- the four books (VITALS.md) ------------------------------------------
+	/** Ticks for thirst to rise slaked -> parched at the reference body
+	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
+	protected static final double THIRST_PERIOD = 9000;
+	/** Ticks for hunger to rise sated -> starving at the reference body: twice
+	 *  {@link #THIRST_PERIOD}, so appetite returns in twice the time thirst
+	 *  does — the design's one rhythm anchor. */
+	protected static final double HUNGER_PERIOD = 18000;
+	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
+	 *  with a duration, interruptible by simply walking away. */
+	protected static final double DRINK_TICKS = 132;
+	/** Stomach of a reference body, in vegetation-energy units: eating
+	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
+	 *  to sated. */
+	protected static final double STOMACH = 3.0;
+	/** Energy regenerated per tick by a fed, watered, healthy reference body —
+	 *  before the resting burn nets it down. Anchored so an idle ideal body
+	 *  refills an empty tank in roughly a minute and a half. */
+	protected static final double REGEN_RATE = 0.002;
+	/** Fraction of the tank kept as a crawl reserve: below it the body is
+	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
+	 *  recoverable; death is health's decision alone. */
+	protected static final double CRAWL_RESERVE = 0.05;
+	/** Fraction of the genome's top speed a collapsed body can still make. */
+	protected static final double CRAWL_SPEED = 0.25;
+	/** A need at or above this is pegged, and starts eroding health. */
+	protected static final double DEPRIVED = 0.95;
+	/** Needs below this count as low: mending and breeding both require it. */
+	protected static final double NEED_LOW = 0.5;
+	/** Ticks between deprivation damage points: a pegged need kills through
+	 *  health in ~2.5 min, slow enough that rescue by a meal or a shore is a
+	 *  real possibility. */
+	protected static final int DEPRIVATION_PERIOD = 50;
+	/** Ticks per mended health point (divided by metabolic efficiency): a bad
+	 *  wound takes minutes of fed, watered living to close. */
+	protected static final int MEND_PERIOD = 160;
+	/** Ticks a budding (asexual) birth must be held for before it completes —
+	 *  ~5 s of sustained commitment; breaking off resets the act. */
+	protected static final int BREED_HOLD_TICKS = 165;
 
-	/** Water reserve, 0..1. Only metabolic creatures track it. */
-	protected double hydration = 1.0;
+	/** The hunger need, 0 (sated) .. 1 (starving). Metabolic bodies only. */
+	protected double hunger = 0;
+	/** The thirst need, 0 (slaked) .. 1 (parched). Metabolic bodies only. */
+	protected double thirst = 0;
 
+	public double getHunger() {
+		return hunger;
+	}
+
+	public double getThirst() {
+		return thirst;
+	}
+
+	/** The genome's pace-of-life multiplier, 1.0 for an average burner (or a
+	 *  body without a genome). Scales every rate: need rise, regeneration,
+	 *  mending — and the resting burn via {@link #metabolismRate}. */
+	protected double metaEfficiency() {
+		return genome != null ? genome.metabolism / META_REF : 1.0;
+	}
+
+	/**
+	 * Digests food worth {@code amount} (vegetation-energy units): lowers
+	 * hunger by its share of the mass-scaled stomach. Deliberately never
+	 * touches energy — satiation regenerates energy over time (VITALS.md), so
+	 * a meal's power arrives gradually and an interrupted meal keeps exactly
+	 * what was eaten.
+	 */
+	public void feed(double amount) {
+		if (amount > 0) {
+			double stomach = STOMACH * adultMass();
+			swallowed += Math.min(amount, hunger * stomach); // only what fit counts
+			hunger = Math.max(0, hunger - amount / stomach);
+		}
+	}
+
+	/** Food units this body has digested over its lifetime — what actually fit
+	 *  in the stomach, not what was merely bitten. The measurable end of
+	 *  {@link #feed}, for probes and the scenario suite. */
+	private double swallowed = 0;
+
+	public double totalSwallowed() {
+		return swallowed;
+	}
+
+	/** Room left in the stomach, in the same vegetation-energy units
+	 *  {@link #feed} consumes — what a sated body can still swallow (0). */
+	protected double stomachRoom() {
+		return hunger * STOMACH * adultMass();
+	}
+
+	/** Whether the body has the reserve to act (bite, grab, breed, press):
+	 *  below the crawl reserve it is collapsed and can only crawl. */
+	public boolean canExert() {
+		return !metabolic || energy > CRAWL_RESERVE * energyCapacity();
+	}
+
+	/** Legacy read: hydration is the complement of the thirst need. */
 	public double getHydration() {
-		return hydration;
+		return 1.0 - thirst;
 	}
 
 	/** Whether this body is standing at (or right beside) drinkable water:
@@ -677,6 +782,7 @@ public abstract class NPC extends Entity {
 
 	@Override
 	public void kill() {
+		recordDeath("unknown"); // fallback tag: real causes were recorded first
 		age = -1;
 	}
 
@@ -1051,6 +1157,13 @@ public abstract class NPC extends Entity {
 		}
 		if (D < 0) {
 			D += 2 * Math.PI;
+		}
+
+		// Collapse (VITALS.md): a body below its crawl reserve can still crawl —
+		// slowly, toward food two tiles away — but nothing more. Clamping at the
+		// one movement choke point covers every behaviour and mind alike.
+		if (!canExert()) {
+			speed = Math.min(speed, this.speed * CRAWL_SPEED);
 		}
 
 		dX = speed * Math.cos(D);
@@ -1662,11 +1775,14 @@ public abstract class NPC extends Entity {
 	 */
 	protected double graze(double demand) {
 		World w = getWorld();
-		if (w == null) {
+		if (w == null || demand <= 0) {
 			return 0;
 		}
-		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), demand);
-		energy += eaten * GRASS_ENERGY; // grass -> energy, at grass's poor rate
+		// A sated body does not strip ground it cannot digest: the bite is
+		// bounded by the stomach room left (converted back to grass units).
+		double room = stomachRoom() / GRASS_ENERGY;
+		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, room));
+		feed(eaten * GRASS_ENERGY); // grass -> stomach, at grass's poor rate
 		return eaten;
 	}
 
@@ -1706,31 +1822,72 @@ public abstract class NPC extends Entity {
 		return null;
 	}
 
+	/** Tick of {@code age} the current budding hold began, or -1 when idle. */
+	private long breedHoldStart = -1;
+	/** The last {@code age} at which budding was attempted, to detect breaks. */
+	private long breedLastTry = -1;
+
 	/**
-	 * Buds an offspring when well-fed and off cooldown: spawns the child, pays
-	 * {@code reproCost}, and starts a cooldown. Returns true if it reproduced.
+	 * Buds an offspring: reproduction is a <b>held act</b> (VITALS.md §4) — the
+	 * caller must keep asking, tick after tick, for {@link #BREED_HOLD_TICKS}
+	 * before the child arrives; breaking off (fleeing, doing anything else)
+	 * resets the hold, and the energy cost is paid on completion, not intent.
+	 * Gated on genuine surplus: energy above the threshold AND both needs low
+	 * AND health sound — a parched, starving or wounded body does not bud.
+	 * Returns true only on the tick a child is actually born.
 	 */
 	protected boolean tryReproduce() {
-		if (!metabolic || reproCooldown > 0 || energy < reproThreshold) {
+		if (!surplusForBreeding()) {
+			breedHoldStart = -1;
 			return false;
+		}
+		if (breedHoldStart < 0 || age - breedLastTry > 1) {
+			breedHoldStart = age; // a fresh commitment (or a broken one, restarted)
+		}
+		breedLastTry = age;
+		if (age - breedHoldStart < BREED_HOLD_TICKS) {
+			return false; // still committing
 		}
 		NPC child = spawnOffspring();
 		if (child == null) {
 			return false;
 		}
 		energy -= reproCost;
-		reproCooldown = REPRO_COOLDOWN;
+		reproCooldown = reproCooldownTicks();
+		breedHoldStart = -1;
 		getWorld().spawnEntity(child);
 		return true;
 	}
 
 	/**
-	 * Ready to take part in reproduction this tick: a fed, off-cooldown metabolic
-	 * entity that carries a genome. The gate both budding and mating share.
+	 * The surplus gate every path to reproduction shares: metabolic, alive, off
+	 * cooldown, energy banked past the threshold, both needs low, and health
+	 * sound. Breeding is a surplus signal across all four books, not an energy
+	 * checkout (VITALS.md §6).
+	 */
+	protected boolean surplusForBreeding() {
+		return metabolic && !isDead() && reproCooldown == 0
+				&& energy >= reproThreshold
+				&& hunger < NEED_LOW && thirst < NEED_LOW && health >= 60;
+	}
+
+	/**
+	 * Ticks between births, scaled with the body: half the childhood the
+	 * offspring itself will spend growing, so big slow-growing bodies are also
+	 * slow breeders and the whole life cycle stays in proportion — derived from
+	 * the same two growth constants rather than a third magic number.
+	 */
+	protected int reproCooldownTicks() {
+		double adult = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
+		return Math.max(REPRO_COOLDOWN, growthTicks(adult) / 2);
+	}
+
+	/**
+	 * Ready to take part in reproduction this tick: a genomed body passing the
+	 * shared surplus gate. What budding and mating both require.
 	 */
 	protected boolean fertile() {
-		return metabolic && !isDead() && reproCooldown == 0
-				&& energy >= reproThreshold && genome != null;
+		return surplusForBreeding() && genome != null;
 	}
 
 	/**
@@ -1766,8 +1923,8 @@ public abstract class NPC extends Entity {
 		}
 		energy -= reproCost;
 		partner.energy -= partner.reproCost;
-		reproCooldown = REPRO_COOLDOWN;
-		partner.reproCooldown = REPRO_COOLDOWN;
+		reproCooldown = reproCooldownTicks();
+		partner.reproCooldown = partner.reproCooldownTicks();
 		getWorld().spawnEntity(child);
 		return true;
 	}
