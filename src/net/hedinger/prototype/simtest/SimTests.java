@@ -235,16 +235,17 @@ public class SimTests {
 			// Driven by a scripted mind that simply holds "eat": this pins the BODY's
 			// scavenging, not whatever a starter brain happens to have evolved into.
 			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
-			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder).withDiet(TestNPC.Diet.SCAVENGER);
+			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withHunger(1.0);
 			w.spawnEntity(scav);
 			tick(w, 1);
 			tick(w2, 1);
 			assertTrue("a scavenger is its own trophic level", "scavenger".equals(scav.ecoRole()));
 
-			double fed = scav.getEnergy();
+			double fed = scav.totalSwallowed();
 			tick(w, 60);
 			tick(w2, 60);
-			assertGreater("carrion feeds the scavenger", scav.getEnergy() - fed, 0);
+			assertGreater("carrion feeds the scavenger", scav.totalSwallowed() - fed, 0);
 			// Both corpses have now been dead for exactly the same number of ticks,
 			// so every bit of this gap is the eating.
 			assertGreater("an eaten body decays far faster than one left alone",
@@ -328,15 +329,16 @@ public class SimTests {
 			assertTrue("there is a fresh carcass", body.isDead());
 			double bodyMass = body.bodyMass();
 
-			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder).withDiet(TestNPC.Diet.SCAVENGER);
+			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
+					.withDiet(TestNPC.Diet.SCAVENGER).withHunger(1.0);
 			w.spawnEntity(scav);
 			tick(w, 1);
-			double before = scav.getEnergy();
-			// Long enough to consume the body outright; a non-metabolic body spends
-			// nothing meanwhile, so the gain is the meal and nothing else.
+			double before = scav.totalSwallowed();
+			// Long enough to consume the body outright; the swallowed ledger counts
+			// only what fit the stomach, so the gain is the meal and nothing else.
 			tick(w, 400);
 			assertTrue("the carcass has been eaten away", body.isRemoved() || body.decayProgress() >= 1.0);
-			double fromCarrion = scav.getEnergy() - before;
+			double fromCarrion = scav.totalSwallowed() - before;
 
 			// The same mass taken as prey: a predator consuming a whole body earns
 			// MEAT_ENERGY per unit of it.
@@ -424,7 +426,7 @@ public class SimTests {
 			parent.withEnergy(parent.energyCapacity());
 			w.spawnEntity(parent);
 			w.think();
-			tick(w, 5);
+			tick(w, 200); // budding is a held act: ~165 ticks of commitment first
 			assertGreater("the scavenger budded", w.getAliveCount(), 1);
 			assertEquals("and every one of its young is a scavenger too",
 					0, countRolesOtherThan(w, "scavenger"));
@@ -1207,7 +1209,7 @@ public class SimTests {
 			victimG.size = 10;
 			victimG.speed = 0; // parked: isolate bite rate from the chase
 
-			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG);
+			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG).withHunger(0.8);
 			TestNPC victim = TestNPC.breeder(5.4, 5.0, 0, victimG); // adjacent, in reach
 			w.spawnEntity(hunter);
 			w.spawnEntity(victim);
@@ -1794,7 +1796,7 @@ public class SimTests {
 		public void run() {
 			seed(4);
 			World w = room(11, 11);
-			TestNPC g = TestNPC.grazer(5.5, 5.5, 0);
+			TestNPC g = TestNPC.grazer(5.5, 5.5, 0).withHunger(1.0); // an empty stomach eats
 			w.spawnEntity(g);
 			w.think(); // register the spawn
 			snapshot(w, "before (full grass)");
@@ -2373,14 +2375,15 @@ public class SimTests {
 					w.getTile(x, y, 0).setFertility(0); // barren: no grass to eat
 				}
 			}
-			// Start with only a sliver of reserve so it burns down within the test
-			// window (the size-scaled model otherwise gives minutes of endurance).
-			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome()).withEnergy(0.02);
+			// Start already starving: with nothing to eat the pegged need erodes
+			// health a point at a time (VITALS.md) — energy zero is collapse, and
+			// only health decides death, so the decline runs through the health gate.
+			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome())
+					.withHunger(1.0).withEnergy(0.02);
 			w.spawnEntity(breeder);
 			w.think();
 			snapshot(w, "before (barren ground)");
-			assertGreater("starts with energy", breeder.getEnergy(), 0.0);
-			tick(w, 90);
+			tick(w, 5300);
 			snapshot(w, "after (starved)");
 			assertTrue("breeder starved with no food", breeder.isDead());
 		}
@@ -2976,7 +2979,7 @@ public class SimTests {
 	}
 
 	static class AFullHunterDoesNotKill extends Scenario {
-		private int preyHealthAfter(double tankFraction) {
+		private int preyHealthAfter(double hungerLevel) {
 			seed(103);
 			World w = room(12, 9);
 			Genome pg = new Genome();
@@ -2988,7 +2991,7 @@ public class SimTests {
 			w.spawnEntity(prey);
 			w.think();
 			for (int i = 0; i < 40; i++) {
-				hunter.withEnergy(tankFraction * hunter.energyCapacity()); // hold it there
+				hunter.withHunger(hungerLevel); // hold the appetite there
 				tick(w, 1);
 			}
 			return prey.getHealth();
@@ -2996,8 +2999,8 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			assertEquals("a full hunter leaves prey in reach alone", 100, preyHealthAfter(1.0));
-			assertLess("a hungry hunter beside the same prey still kills", preyHealthAfter(0.3), 100);
+			assertEquals("a full hunter leaves prey in reach alone", 100, preyHealthAfter(0.0));
+			assertLess("a hungry hunter beside the same prey still kills", preyHealthAfter(0.7), 100);
 		}
 	}
 
@@ -3011,7 +3014,7 @@ public class SimTests {
 			}
 			Genome pg = new Genome();
 			pg.size = 20;
-			TestNPC hunter = TestNPC.predator(3.5, 4.5, 0, pg).withMetabolic();
+			TestNPC hunter = TestNPC.predator(3.5, 4.5, 0, pg).withMetabolic().withHunger(0.8);
 			TestNPC inCover = TestNPC.inert(11.5, 4.5, 0).withSize(6);
 			TestNPC inOpen = TestNPC.inert(7.5, 7.5, 0).withSize(6);
 			w.spawnEntity(hunter);
@@ -3125,7 +3128,7 @@ public class SimTests {
 			TestNPC body = TestNPC.minded(8.5, 8.5, 0, g, (sn, a) -> {
 				a[AgentIO.A_SEEK] = 0.1; // forage
 				a[AgentIO.A_THROTTLE] = 0.3;
-			});
+			}).withHunger(0.5); // an appetite, so arriving on grass actually eats
 			w.spawnEntity(body);
 			tick(w, ticks);
 			return body.intentStatus();
@@ -3254,7 +3257,7 @@ public class SimTests {
 	 * — and without that check "seek" could quietly feed a creature that was fleeing.
 	 */
 	static class OneIntentIsAWholeBehaviour extends Scenario {
-		/** {@code {energy gained, distance to the patch}} after walking on this intent. */
+		/** {@code {food swallowed, distance to the patch}} after walking on this intent. */
 		private double[] run(double seek) {
 			seed(93);
 			World w = room(40, 14);
@@ -3280,13 +3283,13 @@ public class SimTests {
 				}
 			};
 			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withMetabolic()
+					.withHunger(1.0) // an empty stomach, so grazing shows up
 					.withReproCooldown(1000000).withHeading(Math.PI * 0.9); // facing away
 			w.spawnEntity(body);
 			w.think();
-			body.withEnergy(0.5); // room in the tank so grazing shows up
-			double e0 = body.getEnergy();
+			double s0 = body.totalSwallowed();
 			tick(w, 900);
-			return new double[] { body.getEnergy() - e0,
+			return new double[] { body.totalSwallowed() - s0,
 					Math.hypot(body.getX() - 26.5, body.getY() - 7.5) };
 		}
 
@@ -3809,7 +3812,9 @@ public class SimTests {
 				g.markers = new double[] { 0.5, 0.5, 0.5 };
 				g.brain = brains[i];
 				double x = 2.5 + (i % 10) * 2.0, y = 2.5 + (i / 10) * 2.4;
-				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET));
+				// Hungry throughout: appetite is what grazes now, and the empty
+				// stomach holds more grass than the best champion ever crops.
+				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET)).withHunger(1.0);
 				w.spawnEntity(ag[i]);
 			}
 			w.think();
@@ -3924,7 +3929,11 @@ public class SimTests {
 			// the peak population and whether a recombinant mind ever appeared.
 			int peak = start;
 			boolean recombinant = false;
-			for (int step = 0; step < 45; step++) {
+			// 120 rounds, not 45: courtship still takes MATING_TICKS, but the
+			// cooldown between births is now mass-scaled (half the offspring's
+			// childhood — VITALS.md §6), so fewer matings fit a window and the
+			// crossover the test watches for needs a couple of rounds to appear.
+			for (int step = 0; step < 120; step++) {
 				tick(w, 10);
 				peak = Math.max(peak, w.getAliveCount());
 				recombinant |= hasRecombinantMind(w);
@@ -4086,11 +4095,11 @@ public class SimTests {
 			Genome captiveG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			captiveG.brain = new Brain(deepCopy(graze));
 			TestNPC carrier = TestNPC.minded(4.0, 6.0, 0, carrierG);
-			TestNPC captive = TestNPC.minded(4.05, 6.0, 0, captiveG);
+			TestNPC captive = TestNPC.minded(4.05, 6.0, 0, captiveG).withHunger(1.0);
 			// Pair 2 (far away): a grazer rider on a bigger, stationary host.
 			Genome riderG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			riderG.brain = new Brain(deepCopy(rideGraze));
-			TestNPC rider = TestNPC.minded(15.05, 6.0, 0, riderG);
+			TestNPC rider = TestNPC.minded(15.05, 6.0, 0, riderG).withHunger(1.0);
 			TestNPC host = TestNPC.roamer(15.0, 6.0, 0).withSize(16).withSpeed(0.0);
 			w.spawnEntity(carrier);
 			w.spawnEntity(captive);
@@ -4121,9 +4130,13 @@ public class SimTests {
 			Genome ctrlG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			ctrlG.metabolism = 0.02;
 			ctrlG.brain = new Brain(deepCopy(idle));
-			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withEnergy(6.0);
+			// Both starving: satiation zero switches regeneration off, so the only
+			// thing moving either tank is the burn being compared.
+			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG)
+					.withEnergy(6.0).withHunger(1.0);
 			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
-			TestNPC control = TestNPC.brainedBreeder(10.0, 6.0, 0, ctrlG).withEnergy(6.0);
+			TestNPC control = TestNPC.brainedBreeder(10.0, 6.0, 0, ctrlG)
+					.withEnergy(6.0).withHunger(1.0);
 			w.spawnEntity(rider);
 			w.spawnEntity(host);
 			w.spawnEntity(control);
@@ -4222,25 +4235,32 @@ public class SimTests {
 			World w = room(12, 12);
 			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
 			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
-			// A captor that will starve shortly after grabbing (little energy, fast
-			// metabolism), holding a smaller captive.
+			// A captor holding little reserve and burning fast: under VITALS an
+			// empty tank no longer kills — it collapses, and a collapsed captor
+			// cannot hold. The grip must open while the captor still lives; a
+			// wound then kills it, and death releases nothing it still held.
 			Genome capG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			capG.metabolism = 0.05;
 			capG.brain = new Brain(deepCopy(hold));
 			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicG.brain = new Brain(deepCopy(limp));
-			TestNPC captor = TestNPC.brainedBreeder(6.0, 6.0, 0, capG).withEnergy(0.6);
+			TestNPC captor = TestNPC.brainedBreeder(6.0, 6.0, 0, capG)
+					.withEnergy(0.6).withHunger(1.0); // starving: no regeneration
 			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG);
 			w.spawnEntity(captor);
 			w.spawnEntity(captive);
 			tick(w, 4);
 			assertTrue("the captive is grabbed while the captor lives", captive.isGrabbed());
 			assertTrue("the captor still lives at this point", !captor.isDead());
-			tick(w, 90); // the captor starves (slower now: a held body is weight, not
-			             // a per-tick toll, so a motionless captor pays only the grip)
-			assertTrue("the captor died", captor.isDead());
-			assertTrue("the captive was released from the dead captor", captive.getAttachTarget() == null);
-			assertTrue("the captive is no longer marked grabbed", !captive.isGrabbed());
+			tick(w, 200); // the grip drains the tank to the crawl reserve
+			assertTrue("the drained captor still lives — collapse is not death", !captor.isDead());
+			assertTrue("but a collapsed captor cannot hold: the captive walks free",
+					captive.getAttachTarget() == null && !captive.isGrabbed());
+			// Death still releases: re-grab is impossible collapsed, and a wound
+			// that kills the captor leaves no load on the corpse.
+			captor.damage(1000, "misadventure");
+			tick(w, 2);
+			assertTrue("the wounded captor died", captor.isDead());
 			assertNear("the corpse carries no load", 0.0, captor.getCarriedLoad(), 1e-9);
 		}
 	}
@@ -4415,9 +4435,11 @@ public class SimTests {
 			World w = room(12, 12);
 			int[][] eat = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
 			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
-			// Non-metabolic minded body: energy only changes from what it eats.
-			TestNPC eater = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(eat)), 2));
-			Item food = Item.food(6.1, 6.0, 0).withFoodEnergy(5.0);
+			// Hungry, non-metabolic minded body: the swallowed ledger only moves
+			// with what it eats, and the meal (2.0) fits its mass-scaled stomach.
+			TestNPC eater = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(eat)), 2))
+					.withHunger(1.0);
+			Item food = Item.food(6.1, 6.0, 0).withFoodEnergy(2.0);
 			w.spawnEntity(eater);
 			w.spawnEntity(food);
 			w.think();
@@ -4426,15 +4448,15 @@ public class SimTests {
 			// tick so a stray graze from the ground can't inflate the reading.
 			double delta = 0;
 			for (int i = 0; i < 40 && !food.isRemoved(); i++) {
-				double before = eater.getEnergy();
+				double before = eater.totalSwallowed();
 				tick(w, 1);
 				if (food.isRemoved()) {
-					delta = eater.getEnergy() - before;
+					delta = eater.totalSwallowed() - before;
 				}
 			}
-			snapshot(w, "after (food eaten, energy up)");
+			snapshot(w, "after (food eaten, stomach filled)");
 			assertTrue("the food item was eaten (removed)", food.isRemoved());
-			assertNear("eating the food yielded its foodEnergy", 5.0, delta, 0.1);
+			assertNear("eating the food yielded its foodEnergy", 2.0, delta, 0.1);
 		}
 	}
 
@@ -4985,7 +5007,7 @@ public class SimTests {
 	 * were already too full to make any use of.
 	 */
 	static class SatedPredatorSparesPrey extends Scenario {
-		private int kills(double energyFraction, int reproCooldown) {
+		private int kills(double hungerLevel, int reproCooldown) {
 			seed(11);
 			World w = room(20, 9);
 			Genome predG = new Genome();
@@ -4993,7 +5015,7 @@ public class SimTests {
 			predG.speed = 0.06;
 			TestNPC pred = TestNPC.predator(5.5, 4.5, 0, predG)
 					.withReproCooldown(reproCooldown); // don't let it breed the surplus off
-			pred.withEnergy(energyFraction * pred.energyCapacity());
+			pred.withHunger(hungerLevel); // appetite is the hunting drive (VITALS.md)
 			Genome preyG = new Genome();
 			preyG.size = 7;
 			preyG.speed = 0.0; // a fixed lure in plain sight, four tiles off
@@ -5015,8 +5037,8 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			int hungry = kills(0.4, 0); // below the breeding threshold: hunts in earnest
-			int sated = kills(1.0, 100000); // full, and kept from breeding it away
+			int hungry = kills(0.7, 0); // past the appetite line: hunts in earnest
+			int sated = kills(0.0, 100000); // sated: no appetite, no kill
 			assertGreater("a hungry predator runs the prey down", hungry, 0);
 			assertEquals("a sated predator leaves prey it doesn't need alone", 0, sated);
 		}
@@ -5030,14 +5052,14 @@ public class SimTests {
 	 * lifts the taboo on eating one's own kind.
 	 */
 	static class StarvationDrivesCannibalism extends Scenario {
-		private int damageToRival(double energyFraction, int reproCooldown) {
+		private int damageToRival(double hungerLevel, int reproCooldown) {
 			seed(12);
 			World w = room(16, 9);
 			Genome bigG = new Genome();
 			bigG.size = 16;
 			bigG.speed = 0.06;
 			TestNPC big = TestNPC.predator(6.5, 4.5, 0, bigG).withReproCooldown(reproCooldown);
-			big.withEnergy(energyFraction * big.energyCapacity());
+			big.withHunger(hungerLevel); // hunger is the drive; >= 0.9 is starving
 			Genome smallG = new Genome();
 			smallG.size = 9;
 			smallG.speed = 0.0; // a smaller, stationary rival predator two tiles off
@@ -5053,8 +5075,8 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			int wellFed = damageToRival(0.8, 100000); // sated: leaves its own kind be
-			int starving = damageToRival(0.1, 0); // desperate: turns cannibal
+			int wellFed = damageToRival(0.2, 100000); // fed: leaves its own kind be
+			int starving = damageToRival(0.95, 0); // desperate: turns cannibal
 			assertEquals("a well-fed predator spares a smaller rival predator", 0, wellFed);
 			assertGreater("a starving predator turns on its own kind", starving, 0);
 		}
@@ -5127,7 +5149,8 @@ public class SimTests {
 			hunterG.markers = new double[] { 0.9, 0.2, 0.2 };
 			hunterG.size = 14;
 			hunterG.speed = 0.05; // faster: a committed pursuit closes the gap
-			TestNPC pred = TestNPC.predator(3.5, 6.5, 0, hunterG);
+			// Hungry on arrival: appetite, not tank headroom, is what hunts (VITALS.md).
+			TestNPC pred = TestNPC.predator(3.5, 6.5, 0, hunterG).withHunger(0.7);
 			TestNPC prey = TestNPC.breeder(11.5, 6.5, 0, preyG).withHerding(); // vigilant: it flees
 			w.spawnEntity(pred);
 			w.spawnEntity(prey);
@@ -5509,6 +5532,101 @@ public class SimTests {
 	}
 
 	/**
+	 * The VITALS core: an empty tank is collapse, never death. A starving body
+	 * that runs its energy dry lies where it is, still alive — and once fed
+	 * again, satiation regenerates the tank and it gets back up. What kills is
+	 * health, and health takes minutes of pegged need to erode.
+	 */
+	static class CollapseIsNotDeath extends Scenario {
+		@Override
+		public void run() {
+			seed(97);
+			World w = room(8, 8);
+			for (int x = 1; x < 7; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren: nothing to eat
+				}
+			}
+			// Starving (no regeneration) with a sliver of reserve: the resting burn
+			// drains it to zero within the window.
+			TestNPC g = TestNPC.breeder(4.5, 4.5, 0, new Genome())
+					.withHunger(1.0).withEnergy(0.05).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			w.think();
+			tick(w, 400);
+			assertNear("the tank ran dry", 0.0, g.getEnergy(), 1e-9);
+			assertTrue("and the collapsed body is still alive", !g.isDead());
+			// A meal arrives: satiation switches regeneration back on and the body
+			// recovers — collapse was a state, not a sentence.
+			g.feed(10.0);
+			tick(w, 400);
+			assertGreater("fed again, the body regenerated energy", g.getEnergy(), 0.05);
+			assertTrue("and lives on", !g.isDead());
+		}
+	}
+
+	/**
+	 * The rhythm anchor (VITALS.md §5): thirst runs at twice hunger's rate, so
+	 * a body sated and slaked at the same instant wants water in half the time
+	 * it takes to want food. Measured by when each need crosses the seek line.
+	 */
+	static class AppetiteReturnsAtHalfThirstsPace extends Scenario {
+		@Override
+		public void run() {
+			seed(98);
+			World w = room(8, 8);
+			for (int x = 1; x < 7; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.getTile(x, y, 0).setFertility(0); // nothing to eat or drink
+				}
+			}
+			TestNPC g = TestNPC.breeder(4.5, 4.5, 0, new Genome())
+					.withEnergy(4.0).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			w.think();
+			int thirstAt = -1, hungerAt = -1;
+			for (int t = 1; t <= 12000 && hungerAt < 0; t++) {
+				tick(w, 1);
+				if (thirstAt < 0 && g.getThirst() >= 0.5) {
+					thirstAt = t;
+				}
+				if (hungerAt < 0 && g.getHunger() >= 0.5) {
+					hungerAt = t;
+				}
+			}
+			assertGreater("thirst crossed the seek line", thirstAt, 0);
+			assertGreater("hunger crossed it too", hungerAt, 0);
+			assertNear("appetite returned in twice the time thirst did",
+					2.0, hungerAt / (double) thirstAt, 0.1);
+		}
+	}
+
+	/**
+	 * Vigor: health scales energy regeneration, so a wounded body is also a
+	 * listless one — wounds and hunger compound instead of being independent
+	 * ledgers. Two identical fed bodies, one badly hurt; the healthy one
+	 * refills its tank decisively faster.
+	 */
+	static class HealthGatesEnergyRegeneration extends Scenario {
+		@Override
+		public void run() {
+			seed(99);
+			World w = room(10, 10);
+			TestNPC whole = TestNPC.breeder(3.5, 3.5, 0, new Genome())
+					.withEnergy(0.5).withReproCooldown(100_000_000);
+			TestNPC hurt = TestNPC.breeder(6.5, 6.5, 0, new Genome())
+					.withEnergy(0.5).withReproCooldown(100_000_000);
+			w.spawnEntity(whole);
+			w.spawnEntity(hurt);
+			w.think();
+			hurt.damage(80, "misadventure"); // health 20: vigor a fifth of whole
+			tick(w, 400);
+			assertGreater("the healthy body regenerated more energy than the wounded one",
+					whole.getEnergy() - 0.5, (hurt.getEnergy() - 0.5) * 2);
+		}
+	}
+
+	/**
 	 * Water the body cannot reach at all is not water. A creature walled off from
 	 * every drop is told so — the sense reads empty rather than pointing hopefully
 	 * through the rock — which is what lets it go and look somewhere else instead
@@ -5560,7 +5678,9 @@ public class SimTests {
 					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
 					.withHydration(0.01).withEnergy(6.0).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
-			tick(w, 2500);
+			// Deprivation erodes health a point every DEPRIVATION_PERIOD ticks, so a
+			// pegged need takes ~5000 ticks to kill — slow enough that rescue is real.
+			tick(w, 6000);
 			assertTrue("with no water anywhere, dehydration wears the fed grazer down",
 					g.isDead() || g.isRemoved());
 		}
@@ -5662,6 +5782,9 @@ public class SimTests {
 				new AmblingMindIsShakenOffAWall(),
 				new UnreachableWaterIsNotSensed(),
 				new DehydrationWearsABodyDown(),
+				new CollapseIsNotDeath(),
+				new AppetiteReturnsAtHalfThirstsPace(),
+				new HealthGatesEnergyRegeneration(),
 				new CorpseFeedsTheGround(),
 				new CoverHidesFromPerception(),
 				new StarvesWithoutFood(),

@@ -147,10 +147,17 @@ public class TestNPC extends NPC {
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
-	/** A predator holding less than this fraction of its (size-scaled) tank is
-	 *  starving — desperate enough to break the taboo and hunt its own kind. Born
-	 *  at 0.6 and breeding at 0.75, a hunter only drops this low when it has been
-	 *  failing to feed, so cannibalism stays a genuine last resort. */
+	/** Hunger at which a hunter starts hunting in earnest (VITALS.md: appetite,
+	 *  not tank headroom, is what sends a predator after prey). Sits at the
+	 *  NEED_LOW seek line, so appetite returns in twice the time thirst does. */
+	public static final double PRED_HUNT_HUNGER = 0.5;
+	/** Hunger at or above which a predator is starving — desperate enough to
+	 *  break the taboo and hunt its own kind. A hunter only pegs this high when
+	 *  it has been failing to feed, so cannibalism stays a last resort. */
+	public static final double STARVE_HUNGER = 0.9;
+	/** Below this hunger a hunter stops killing altogether: the meal would not
+	 *  fit its stomach, so the prey would die for nothing. */
+	public static final double PRED_FULL_HUNGER = 0.05;
 	/** Fraction of its (adult-sized) tank a creature is born holding. Comfortably
 	 *  fed, but below the breeding line, so a new body has to make its own living
 	 *  before it can make another one. */
@@ -163,13 +170,6 @@ public class TestNPC extends NPC {
 	 *  {@link #REPRO_FRACTION}, so breeding leaves a parent alive and fed rather
 	 *  than emptied. */
 	public static final double REPRO_COST_FRACTION = 0.5;
-
-	public static final double STARVE_FRACTION = 0.2;
-	/** At or above this share of its tank a hunter stops killing altogether: the meal
-	 *  would overflow the cap and be discarded, so the prey would die for nothing.
-	 *  Below the cap rather than at it, because metabolism means a body is never
-	 *  exactly full when it comes to decide. */
-	public static final double PRED_FULL_FRACTION = 0.95;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -203,9 +203,11 @@ public class TestNPC extends NPC {
 	private static final double GRAZE_DEMAND = 0.003;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
-	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). */
+	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). A
+	 *  sated body has no appetite at all — graze() additionally bounds every
+	 *  bite by the stomach room left, so nothing strips ground it can't digest. */
 	private double grazeDemand() {
-		return GRAZE_DEMAND * bodyMass();
+		return hunger <= 0 ? 0 : GRAZE_DEMAND * bodyMass();
 	}
 	/** Eco herbivore: flees any predator within this radius (tiles). */
 	private static final double THREAT_R = 6.0;
@@ -716,13 +718,20 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
-	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
-	/** Starts this body at the given hydration (tests: make it thirsty). */
+	/** Starts this body at the given hydration — the complement of the thirst
+	 *  need (tests: make it thirsty). */
 	public TestNPC withHydration(double h) {
-		hydration = h;
+		thirst = 1.0 - Math.max(0, Math.min(1, h));
 		return this;
 	}
 
+	/** Starts this body at the given hunger, 0 sated .. 1 starving (tests). */
+	public TestNPC withHunger(double h) {
+		hunger = Math.max(0, Math.min(1, h));
+		return this;
+	}
+
+	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
 	public TestNPC withEnergy(double e) {
 		energy = e;
 		return this;
@@ -899,22 +908,23 @@ public class TestNPC extends NPC {
 		}
 	}
 
-	/** How dry an eco creature gets before finding water outranks everything. */
-	private static final double THIRST_THRESHOLD = 0.35;
+	/** Thirst at which finding water outranks everything for an eco creature. */
+	private static final double THIRST_DRIVE = 0.65;
 	/** How far (tiles) a creature can know about a shore. Deliberately wider
 	 *  than sight: animals remember water, they don't have to see it. */
 	private static final int WATER_SENSE_R = 20;
 
 	/**
-	 * The scripted species' water drive: when hydration runs low, walking to the
+	 * The scripted species' water drive: when thirst runs high, walking to the
 	 * nearest shore in sense range outranks grazing, breeding and hunting — a
 	 * genuinely parched body has no other business. At the water it simply
-	 * stands and sips (the body drinks by adjacency); the override releases as
-	 * soon as the tank is comfortably refilled. Out of sense range of any water
-	 * it roams, which doubles as searching. Returns true when it ran this tick.
+	 * stands and sips (drinking is a timed act by adjacency — see NPC's drink
+	 * rate); the override releases once thirst falls back under the drive
+	 * line. Out of sense range of any water it roams, which doubles as
+	 * searching. Returns true when it ran this tick.
 	 */
 	private boolean thirstOverride() {
-		if (!metabolic || hydration >= THIRST_THRESHOLD) {
+		if (!metabolic || thirst < THIRST_DRIVE) {
 			return false;
 		}
 		setAction("thirst", false);
@@ -979,29 +989,23 @@ public class TestNPC extends NPC {
 			return;
 		}
 
-		// Hunger dictates the hunt. A well-fed hunter (at/above its breeding
-		// threshold) has no reason to chase: it patrols and takes only prey that
-		// blunders into reach — less restrained than a grazer, which quits its
-		// patch outright, but no longer the wanton killer that slaughtered prey it
-		// couldn't use. Below that it hunts in earnest. Only genuine starvation
-		// lifts the taboo on eating its own kind, so cannibalism is a last resort,
-		// not routine.
-		boolean sated = energy >= reproThreshold;
-		boolean starving = energy < STARVE_FRACTION * energyCapacity();
+		// Appetite dictates the hunt (VITALS.md): hunger is the need for food,
+		// distinct from the energy budget, so a hunter chases when its stomach
+		// asks — not when its tank has headroom. A sated hunter patrols and
+		// takes only prey that blunders into reach; hungry it hunts in earnest;
+		// only genuine starvation lifts the taboo on eating its own kind.
+		boolean sated = hunger < PRED_HUNT_HUNGER;
+		boolean starving = hunger >= STARVE_HUNGER;
 		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
 		double reach = prey == null ? 0
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-		// Near enough to full that a kill would be thrown away. NOT `>= capacity`:
-		// run_extended caps the tank and then burns metabolism, both before think(),
-		// so a metabolic body is never exactly at its cap by the time it decides
-		// anything -- an equality here is a test that can never fire, which is what
-		// this was before and why full predators went on killing.
-		boolean full = energy >= PRED_FULL_FRACTION * energyCapacity();
+		// So nearly sated a kill would be thrown away: the stomach has no room.
+		boolean full = hunger <= PRED_FULL_HUNGER;
 		if (prey != null && !full && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
 			setAction("attacking", true); // in reach: bite at any hunger short of full
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
-			energy += biteFeeds(prey);
+			feed(biteFeeds(prey));
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
 			setAction(starving ? "starving" : "hunting", false);
@@ -1326,11 +1330,12 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_FIXTURE_BEARING] = 0;
 		}
 
-		// The water channel: thirst level, and the nearest drinkable shore. The
-		// body reads the tile map (water is terrain, not an entity); the mind
-		// reads these three numbers -- "when dry, steer to water" is then a
+		// The needs (VITALS.md): hunger and thirst as the mind's own hollow
+		// feelings, distinct from S_ENERGY (what the body can DO). With the
+		// water channel below, "when dry, steer to water" stays a
 		// two-instruction reflex away.
-		s[AgentIO.S_THIRST] = 1.0 - hydration;
+		s[AgentIO.S_HUNGER] = hunger;
+		s[AgentIO.S_THIRST] = thirst;
 		double wDir = waterDirection(WATER_SENSE_R);
 		if (!Double.isNaN(wDir)) {
 			s[AgentIO.S_WATER_PROX] = 1.0 / (1.0 + waterDistance(WATER_SENSE_R));
@@ -2242,8 +2247,8 @@ public class TestNPC extends NPC {
 
 	/** Grabs the nearest perceived smaller neighbour in reach (predatory seize). */
 	private void grabNearestSmaller() {
-		if (grabbing != null || getAttachTarget() != null) {
-			return; // already carrying one, or being carried (can't do both)
+		if (grabbing != null || getAttachTarget() != null || !canExert()) {
+			return; // already engaged either way — or collapsed (VITALS.md)
 		}
 		for (NPC n : targets.values()) { // nearest-first (keyed by distance)
 			if (n == this || n.isDead() || n.isRemoved()) {
@@ -2302,15 +2307,15 @@ public class TestNPC extends NPC {
 	 * Returns true if a bite actually landed. */
 	private boolean attackNearest() {
 		NPC near = nearestPerceived();
-		if (near == null || near == this || near.isDead()) {
-			return false;
+		if (near == null || near == this || near.isDead() || !canExert()) {
+			return false; // a collapsed body can crawl, not fight (VITALS.md)
 		}
 		double reach = (getSize() + near.getSize()) / 2.0 + ATTACK_REACH;
 		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
 			return false;
 		}
 		near.damage(ATTACK_DAMAGE, "combat");
-		energy += BITE_ENERGY; // predation feeds the attacker
+		feed(BITE_ENERGY); // predation feeds the attacker — into the stomach
 		return true;
 	}
 
@@ -2438,7 +2443,7 @@ public class TestNPC extends NPC {
 			return 0;
 		}
 		double mass = carrion.bodyMass() * CARRION_BITE;
-		energy += mass * CARRION_ENERGY;
+		feed(mass * CARRION_ENERGY); // meat -> stomach; satiation powers the body
 		// Aged in ticks of its own remaining span: a bite takes the same FRACTION
 		// out of a mouse as out of an apex body, so a big carcass is genuinely more
 		// meals rather than merely a bigger number.

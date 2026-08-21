@@ -127,9 +127,9 @@ public final class AgentIO {
 	public static final int S_FIXTURE_PROX = 29;
 	/** Relative bearing to that fixture in the heading frame, -1..1 (of PI). */
 	public static final int S_FIXTURE_BEARING = 30;
-	/** How dry this body is, 0 (sated) .. 1 (parched): 1 - hydration. Paired
-	 * with the water channel below, "when dry, go to water" becomes a two-
-	 * instruction reflex a mind can evolve. */
+	/** How dry this body is, 0 (slaked) .. 1 (parched) — the thirst need
+	 * (VITALS.md). Paired with the water channel below, "when dry, go to
+	 * water" becomes a two-instruction reflex a mind can evolve. */
 	public static final int S_THIRST = 31;
 	/** Proximity of the nearest drinkable shore (water or shallows tile),
 	 * 1/(1+dist), 0 if none in scan range. Terrain, not an entity: the body
@@ -137,7 +137,13 @@ public final class AgentIO {
 	public static final int S_WATER_PROX = 32;
 	/** Relative bearing to that shore in the heading frame, -1..1 (of PI). */
 	public static final int S_WATER_BEARING = 33;
-	public static final int NUM_SENSORS = 34;
+	/** How empty this body is, 0 (sated) .. 1 (starving) — the hunger need
+	 * (VITALS.md), sibling of {@link #S_THIRST} and distinct from
+	 * {@link #S_ENERGY}: hunger is the need for food, energy is what the body
+	 * can currently DO. Appended last so evolved programs indexed against the
+	 * old vector keep their meaning. */
+	public static final int S_HUNGER = 34;
+	public static final int NUM_SENSORS = 35;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -146,7 +152,7 @@ public final class AgentIO {
 			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead",
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
 			"intent", "fixture_prox", "fixture_bearing",
-			"thirst", "water_prox", "water_bearing" };
+			"thirst", "water_prox", "water_bearing", "hunger" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

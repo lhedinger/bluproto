@@ -107,21 +107,29 @@ public final class Mechanics {
 
 	private static Map<String, Object> tank() {
 		Map<String, Object> s = section("tank", "The energy tank",
-				"A creature holds energy up to a ceiling that grows in proportion to its mass, "
-				+ "so a big body banks more and can go longer between meals — but needs bigger "
-				+ "meals to fill up, and grazing past full is simply wasted. The ceiling is "
-				+ "anchored on the body a creature is growing INTO, not the body it currently "
-				+ "has, so a juvenile is not economically punished for being young: growth is a "
-				+ "physical change, not a demotion.");
+				"Energy is the ACTION budget — what a body can currently do, not how hungry it "
+				+ "is (hunger is its own book; see the needs). The tank's ceiling grows in "
+				+ "proportion to mass, anchored on the body a creature is growing INTO, so a "
+				+ "juvenile is not economically punished for being young. Food never fills the "
+				+ "tank directly: eating fills the stomach, and the body converts satiation "
+				+ "into energy over time, scaled by how healthy it is — an unhealthy body is "
+				+ "also a listless one. An empty tank is COLLAPSE, never death: below the crawl "
+				+ "reserve a body can only crawl — no biting, grabbing, breeding, or holding a "
+				+ "captive — and it recovers the moment food and water let regeneration run. "
+				+ "Only health decides death.");
 		rows(s,
 				row("Full tank", num(NPC.BASE_CAPACITY) + " × mass", "energy",
 						"Reference body: " + round(NPC.BASE_CAPACITY, 2)),
 				row("Born holding", pct(TestNPC.BORN_FRACTION), "of the tank",
 						"Fed, but under the breeding line."),
-				row("Hunter counts as full at", pct(TestNPC.PRED_FULL_FRACTION), "of the tank",
-						"A sated hunter stops hunting."),
-				row("Counts as starving under", pct(TestNPC.STARVE_FRACTION), "of the tank",
-						"Below this a creature takes risks it otherwise would not."));
+				row("Regenerates", num(NPC.REGEN_RATE)
+						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
+						"satiation = 1 − the worse of hunger and thirst; vigor = health/100."),
+				row("Crawl reserve", pct(NPC.CRAWL_RESERVE), "of the tank",
+						"Below it: collapse. A crawl at " + pct(NPC.CRAWL_SPEED)
+						+ " of top speed, and nothing else."),
+				row("Empty tank", "collapse, not death", "",
+						"Recoverable; health is the only gate to dying."));
 		return s;
 	}
 
@@ -265,53 +273,72 @@ public final class Mechanics {
 
 	private static Map<String, Object> breeding() {
 		Map<String, Object> s = section("breeding", "Breeding",
-				"Reproduction is gated on the tank, and the tank scales with mass, so a big "
-				+ "creature must eat MORE than a small one before it can breed — not merely as "
-				+ "much. The cost sits below the threshold, so breeding leaves a parent alive "
-				+ "and fed rather than emptied, and a cooldown stops a well-fed body from "
-				+ "spending its whole surplus in one tick. Sexual reproduction spends both "
-				+ "parents and takes a stretch of ticks during which neither is doing anything "
-				+ "else, which is the real cost of it.");
+				"Reproduction is a surplus signal across all four books, not an energy "
+				+ "checkout. It needs energy banked past a threshold that scales with mass — a "
+				+ "big creature must eat MORE than a small one before it can breed — AND both "
+				+ "needs low AND sound health: a parched, starving or badly wounded body does "
+				+ "not court. Budding is a held act: the commitment must be sustained for "
+				+ "seconds before the child arrives, and breaking off (fleeing, doing anything "
+				+ "else) resets it — the cost is paid on completion, not intent. The cooldown "
+				+ "scales with the childhood the offspring itself will spend growing, so big "
+				+ "slow-growing bodies are also slow breeders.");
 		rows(s,
 				row("Breeds above", pct(TestNPC.REPRO_FRACTION), "of the tank",
 						"Reference body: " + round(TestNPC.REPRO_FRACTION * NPC.BASE_CAPACITY, 2)),
+				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
+						+ ", health at 60+", "", "Surplus across all four books."),
 				row("Costs", pct(TestNPC.REPRO_COST_FRACTION), "of the tank, each parent",
 						"Reference body: "
 						+ round(TestNPC.REPRO_COST_FRACTION * NPC.BASE_CAPACITY, 2)),
 				row("Offspring starts at", pct(TestNPC.BORN_FRACTION), "of ITS OWN tank",
 						"Sized on the body it will grow into."),
-				row("Cooldown", num(NPC.REPRO_COOLDOWN), "ticks",
-						round(NPC.REPRO_COOLDOWN / TPS, 1) + " s between offspring."),
+				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
+						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
+				row("Cooldown", "half the offspring's childhood, at least "
+						+ num(NPC.REPRO_COOLDOWN) + " ticks", "",
+						"Reference body: ~" + num(NPC.growthTicks(NPC.REF_SIZE) / 2) + " ticks ("
+						+ round(NPC.growthTicks(NPC.REF_SIZE) / 2 / TPS, 1) + " s)."),
 				row("Mating takes", num(TestNPC.MATING_TICKS), "ticks",
 						round(TestNPC.MATING_TICKS / TPS, 1) + " s, both parents occupied."));
 		return s;
 	}
 
 	private static Map<String, Object> thirst() {
-		double dryTicks = 1 / NPC.HYDRATION_DRAIN;
-		double fillTicks = 1 / NPC.DRINK_RATE;
-		Map<String, Object> s = section("thirst", "Thirst",
-				"Water is a second, slower clock. A full hydration tank lasts noticeably longer "
-				+ "than a full energy tank, so drinking is a rhythm a creature fits around its "
-				+ "living rather than a treadmill it runs on. Running dry does not kill "
-				+ "outright — it wears health down — so a parched creature has a real, closing "
-				+ "window to reach a shore. Topping up needs no dedicated act: a body standing "
-				+ "at or beside water sips as it goes about its business.\n\n"
-				+ "Creatures route to water through passable ground, following a flood that only "
-				+ "spreads through tiles they could actually walk (or fly) across, so a shore "
-				+ "on the far side of a wall is correctly understood as far away rather than as "
-				+ "ten tiles through solid rock.");
+		Map<String, Object> s = section("needs", "The needs: hunger and thirst",
+				"Two clocks that rise on their own and fall only by acting. Thirst runs at "
+				+ "twice hunger's pace — the one rhythm anchor — so a body sated and slaked at "
+				+ "the same instant wants water in half the time it takes to want food, and a "
+				+ "sated hunter's appetite returns in twice the time its thirst does. Both "
+				+ "clocks stretch with mass^0.25 (big bodies cycle slower, Kleiber again) and "
+				+ "run faster for hot metabolisms.\n\n"
+				+ "Eating and drinking are rates held over ticks, never instant refills: a "
+				+ "drink is seconds of standing at a shore, a meal is longer, and walking away "
+				+ "mid-act keeps exactly the partial refill so far. The needs are what drive "
+				+ "behaviour — a predator hunts by appetite, not tank headroom — and what feed "
+				+ "the other books: satiation powers energy regeneration, and a need pegged "
+				+ "near its ceiling erodes health with its cause attached, so the corpse still "
+				+ "says what killed it. Creatures route to water through passable ground (a "
+				+ "flood that only spreads where they could walk), so a shore behind a wall is "
+				+ "correctly understood as far away.");
 		rows(s,
-				row("Drains", sci(NPC.HYDRATION_DRAIN), "of the tank/tick",
-						num(Math.round(dryTicks)) + " ticks — "
-						+ round(dryTicks / TPS / 60, 1) + " min — from full to dry."),
-				row("Refills", pct(NPC.DRINK_RATE), "of the tank/tick",
-						num(Math.round(fillTicks)) + " ticks ("
-						+ round(fillTicks / TPS, 1) + " s) for a full drink."),
-				row("Drinkable", "any water or shallows in the 3×3 underfoot", "",
-						"No dedicated act; a body sips while doing something else."),
-				row("Running dry", "wears health down", "",
-						"A window to reach a shore, not an instant death."));
+				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
+						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
+				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
+						"Twice thirst's period — the rhythm anchor."),
+				row("A full drink", num((long) NPC.DRINK_TICKS), "ticks at water",
+						round(NPC.DRINK_TICKS / TPS, 1) + " s; any water/shallows in the 3×3."),
+				row("The stomach", num(NPC.STOMACH) + " × mass", "food units",
+						"A meal is what fits; a sated body strips no ground."),
+				row("Hunter hunts above", num(TestNPC.PRED_HUNT_HUNGER), "hunger",
+						"Appetite, not tank headroom, starts the chase."),
+				row("Cannibalism above", num(TestNPC.STARVE_HUNGER), "hunger",
+						"Desperation lifts the taboo, and only desperation."),
+				row("A pegged need (" + pct(NPC.DEPRIVED) + "+)", "erodes health", "",
+						"1 point per " + num(NPC.DEPRIVATION_PERIOD) + " ticks — minutes to "
+						+ "kill, so rescue by a meal or a shore stays possible."),
+				row("Both needs under " + pct(NPC.NEED_LOW), "mend health", "",
+						"1 point per ~" + num(NPC.MEND_PERIOD) + " ticks at average "
+						+ "metabolism; wounds close over minutes of fed, watered living."));
 		return s;
 	}
 
@@ -376,12 +403,14 @@ public final class Mechanics {
 						"Proximity, not range: near things are loud, far ones fade."));
 		groups(s,
 				group("Its own condition",
-						sense(AgentIO.S_ENERGY, "How full the tank is, against THIS body's own "
-								+ "capacity — so \"I am hungry\" means the same thing in a small "
-								+ "body and a large one."),
+						sense(AgentIO.S_ENERGY, "How full the action budget is, against THIS "
+								+ "body's own capacity — what it can currently DO, which is a "
+								+ "different fact from how hungry it is."),
 						sense(AgentIO.S_HEALTH, "How hurt it is. A wounded creature can behave "
 								+ "differently from a whole one."),
-						sense(AgentIO.S_THIRST, "How dry it is, 0 sated to 1 parched."),
+						sense(AgentIO.S_HUNGER, "How empty it is, 0 sated to 1 starving — the "
+								+ "need for food, sibling of thirst and distinct from energy."),
+						sense(AgentIO.S_THIRST, "How dry it is, 0 slaked to 1 parched."),
 						sense(AgentIO.S_CARRIED, "+1 held captive, −1 riding willingly, 0 free."),
 						sense(AgentIO.S_CLOCK, "A slow oscillator from tick and identity. The "
 								+ "world is deterministic and a mind draws no dice, so this is "
