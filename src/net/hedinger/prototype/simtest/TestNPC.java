@@ -117,6 +117,35 @@ public class TestNPC extends NPC {
 	 * on, so it is not gated on the eye: a body is found at this range whatever the
 	 * light and whichever way the scavenger happens to be facing.
 	 */
+	/**
+	 * How long a sound stays audible after it arrives, in ticks.
+	 *
+	 * <p>A sound is an event, not a place: nothing keeps making it, so the channel
+	 * has to fall silent by itself or a creature would steer forever toward a
+	 * scream from five minutes ago. Short enough that acting on it is acting on
+	 * news, long enough that a body has time to turn and commit. Recency is NOT
+	 * folded into the proximity — that would conflate "close" with "just now" and
+	 * leave a mind unable to tell a distant shriek from an old one — so the
+	 * channel reads at full strength for this long and then goes to zero.
+	 */
+	public static final int EARSHOT_MEMORY = 33;
+	/**
+	 * How far a kill can be heard, in tiles, per unit of the dying body's mass.
+	 *
+	 * <p>Scaled by the victim rather than the killer, because what makes the noise
+	 * is the thing being killed. A big animal going down is heard across a
+	 * neighbourhood; something small is barely a rustle. That is what makes the
+	 * channel worth reading: the loudest events are also the ones worth walking
+	 * toward, since a big kill leaves a big carcass.
+	 */
+	public static final double KILL_LOUDNESS = 6.0;
+
+	/** The most recent sound to reach this body, and when — the sensed half of
+	 *  {@link AgentIO#S_SOUND_PROX}. Held here rather than on Entity because only
+	 *  a body with a mind has anything to do with it. */
+	private double heardX, heardY;
+	private long heardAt = Long.MIN_VALUE;
+
 	public static final double CARRION_SCENT_R = 10.0;
 	/**
 	 * How much faster a scavenger's top speed is than the body it was built from —
@@ -1031,6 +1060,34 @@ public class TestNPC extends NPC {
 	 * the same energy each means a bigger animal is a bigger meal overall, which is
 	 * what makes the slow kill worth starting.
 	 */
+	/**
+	 * A sound arrives. Keeps where it came from and when, for the two hearing
+	 * channels to report until {@link #EARSHOT_MEMORY} runs out.
+	 *
+	 * <p>Last one wins rather than loudest: the sound has already been filtered by
+	 * earshot on the way here — anything that reached this body was loud enough to
+	 * matter — and "the most recent thing that happened" is both the more useful
+	 * fact and the one a creature could actually have.
+	 */
+	@Override
+	public void hear(net.hedinger.prototype.entities.Sound sound) {
+		super.hear(sound);
+		if (sound == null) {
+			return;
+		}
+		heardX = sound.getX();
+		heardY = sound.getY();
+		heardAt = getWorld() == null ? 0 : getWorld().getTick();
+	}
+
+	/** Whether a sound is still ringing, for the hearing channels and for tests. */
+	public boolean hearsSomething() {
+		if (heardAt == Long.MIN_VALUE || getWorld() == null) {
+			return false;
+		}
+		return getWorld().getTick() - heardAt < EARSHOT_MEMORY;
+	}
+
 	private int biteDamage(NPC prey) {
 		double ratio = getSize() / Math.max(1e-6, prey.getSize());
 		double scale = Math.min(1.0, ratio);
@@ -1051,6 +1108,16 @@ public class TestNPC extends NPC {
 		int bite = biteDamage(prey);
 		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
 		prey.damage(bite, "predation");
+		// Violence is audible. The scream comes from the quarry, not the hunter,
+		// and carries in proportion to how big the quarry is -- so a hunt tells the
+		// neighbourhood something is happening here, and roughly how big a
+		// something. This is the only event in the eco simulation that makes a
+		// noise, which is what gives the hearing channels anything to hear.
+		if (getWorld() != null) {
+			getWorld().spawnEntity(new net.hedinger.prototype.entities.Sound(
+					prey.getX(), prey.getY(), prey.getLvl(),
+					KILL_LOUDNESS * prey.bodyMass()));
+		}
 		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
 	}
 
@@ -1274,7 +1341,9 @@ public class TestNPC extends NPC {
 	}
 
 	/** Fills the egocentric, normalized {@link AgentIO} sensor vector. */
-	private void senseInto(double[] s) {
+	/** Package-visible so the suite can read the bank a mind actually sees,
+	 *  rather than testing the bookkeeping behind it. */
+	void senseInto(double[] s) {
 		long now = getWorld().getTick();
 		s[AgentIO.S_BIAS] = 1.0;
 		double cap = energyCapacity();
@@ -1296,6 +1365,17 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_NEAR_BEARING] = 0;
 			s[AgentIO.S_NEAR_SIM] = 0;
 			s[AgentIO.S_NEAR_SIZEADV] = 0;
+		}
+		// Hearing: neither facing-gated nor stopped by terrain, and it reports an
+		// event rather than a thing -- so unlike every other distance channel it
+		// falls silent on its own once the sound stops ringing.
+		if (hearsSomething()) {
+			double hdx = heardX - X, hdy = heardY - Y;
+			s[AgentIO.S_SOUND_PROX] = 1.0 / (1.0 + Math.hypot(hdx, hdy));
+			s[AgentIO.S_SOUND_BEARING] = wrap(Math.atan2(hdy, hdx) - D) / Math.PI;
+		} else {
+			s[AgentIO.S_SOUND_PROX] = 0;
+			s[AgentIO.S_SOUND_BEARING] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);

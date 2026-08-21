@@ -438,6 +438,48 @@ public class World {
 		return result;
 	}
 
+	/**
+	 * Everything within a Euclidean radius, <b>ignoring line of sight</b> and
+	 * facing — the query a sound needs.
+	 *
+	 * <p>{@link #searchEntity} is a <i>sight</i> query: it runs every candidate
+	 * through {@link #hasLOS}, so a wall between the searcher and the target hides
+	 * it. That is right for eyes and wrong for ears. Hearing that stopped at walls
+	 * would be nothing but short-range omnidirectional sight, and the one thing
+	 * that makes the channel worth its slot — that a scream reaches you from
+	 * somewhere you cannot see — would silently not happen.
+	 *
+	 * <p>Same tile-box gather as the sighted search, so it stays O(k) in local
+	 * density rather than scanning the world.
+	 */
+	public TreeMap<Double, Entity> entitiesWithin(double x, double y, double z, double range, int ID) {
+		TreeMap<Double, Entity> result = new TreeMap<Double, Entity>();
+		if (!isValid(x, y, z) || range < 0) {
+			return result;
+		}
+		int r = (int) Math.floor(range) + 1;
+		for (int dx = -r; dx <= r; dx++) {
+			for (int dy = -r; dy <= r; dy++) {
+				Tile t = getTile(x + dx, y + dy, z);
+				if (t == null) {
+					continue;
+				}
+				int n = t.getEntityCount();
+				for (int i = 0; i < n; i++) {
+					Entity e = entities.get(t.getEntityId(i));
+					if (e == null || e.getLvl() != (int) z || e.isDead() || e.getID() == ID) {
+						continue;
+					}
+					double d = distance(x, y, z, e.getX(), e.getY(), e.getZ());
+					if (d <= range) {
+						result.put(d, e);
+					}
+				}
+			}
+		}
+		return result;
+	}
+
 	// Shared per-candidate test for searchEntity's two gather paths, so both
 	// produce identical results.
 	private void considerEntity(int i, double x, double y, double z, double dir, double range, double fov,
