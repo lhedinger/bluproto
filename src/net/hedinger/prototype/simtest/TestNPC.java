@@ -83,7 +83,7 @@ public class TestNPC extends NPC {
 	 * hunter — the one corner of the economy where mass did not appear, while
 	 * metabolism, movement and tank capacity all scale with it.
 	 */
-	private static final double MEAT_ENERGY = 2.5;
+	public static final double MEAT_ENERGY = 2.5;
 	/**
 	 * Energy in a carcass, per unit of its mass. Meat is meat: a body is worth the
 	 * same whether the eater killed it or found it, so this is {@link #MEAT_ENERGY}
@@ -96,14 +96,14 @@ public class TestNPC extends NPC {
 	 * the rest walking between bodies. Those are the real costs, and they are
 	 * already charged, in energy and in time, everywhere else in the loop.
 	 */
-	private static final double CARRION_ENERGY = MEAT_ENERGY;
+	public static final double CARRION_ENERGY = MEAT_ENERGY;
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
 	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
 	 * rate a body takes ~2 seconds to strip, long enough that two scavengers on one
 	 * corpse genuinely compete and short enough that it does not pin them in place.
 	 */
-	private static final double CARRION_BITE = 0.015;
+	public static final double CARRION_BITE = 0.015;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
 	private static final double CARRION_REACH = 0.6;
 	/**
@@ -117,7 +117,7 @@ public class TestNPC extends NPC {
 	 * on, so it is not gated on the eye: a body is found at this range whatever the
 	 * light and whichever way the scavenger happens to be facing.
 	 */
-	private static final double CARRION_SCENT_R = 10.0;
+	public static final double CARRION_SCENT_R = 10.0;
 	/**
 	 * How much faster a scavenger's top speed is than the body it was built from —
 	 * the ranging adaptation that pays for the scent.
@@ -134,7 +134,7 @@ public class TestNPC extends NPC {
 	 * a scavenger burns more travel energy per carcass and eats the ones a slower
 	 * body never reaches at all.
 	 */
-	private static final double SCAVENGER_STRIDE = 2.5;
+	public static final double SCAVENGER_STRIDE = 2.5;
 	/**
 	 * What a scavenger pays to cover ground, as a share of an ordinary body's bill.
 	 * Ranging cheaply is the other half of the same adaptation — a vulture's living
@@ -143,21 +143,33 @@ public class TestNPC extends NPC {
 	 * all, since travel is billed on the square of speed. Together they come to
 	 * roughly 2.5x the distance for the energy an ordinary body spends.
 	 */
-	private static final double SCAVENGER_TRAVEL = 0.16;
+	public static final double SCAVENGER_TRAVEL = 0.16;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
 	/** Hunger at which a hunter starts hunting in earnest (VITALS.md: appetite,
 	 *  not tank headroom, is what sends a predator after prey). Sits at the
 	 *  NEED_LOW seek line, so appetite returns in twice the time thirst does. */
-	private static final double PRED_HUNT_HUNGER = 0.5;
+	public static final double PRED_HUNT_HUNGER = 0.5;
 	/** Hunger at or above which a predator is starving — desperate enough to
 	 *  break the taboo and hunt its own kind. A hunter only pegs this high when
 	 *  it has been failing to feed, so cannibalism stays a last resort. */
-	private static final double STARVE_HUNGER = 0.9;
+	public static final double STARVE_HUNGER = 0.9;
 	/** Below this hunger a hunter stops killing altogether: the meal would not
 	 *  fit its stomach, so the prey would die for nothing. */
-	private static final double PRED_FULL_HUNGER = 0.05;
+	public static final double PRED_FULL_HUNGER = 0.05;
+	/** Fraction of its (adult-sized) tank a creature is born holding. Comfortably
+	 *  fed, but below the breeding line, so a new body has to make its own living
+	 *  before it can make another one. */
+	public static final double BORN_FRACTION = 0.6;
+	/** Fraction of the tank that has to be full before a creature will breed. A
+	 *  big body's tank is bigger, so a big creature must eat more, not merely as
+	 *  much, before it reproduces. */
+	public static final double REPRO_FRACTION = 0.75;
+	/** Fraction of the tank each parent spends on an offspring. Below
+	 *  {@link #REPRO_FRACTION}, so breeding leaves a parent alive and fed rather
+	 *  than emptied. */
+	public static final double REPRO_COST_FRACTION = 0.5;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -171,7 +183,7 @@ public class TestNPC extends NPC {
 	private static final double PIN_MIN_MOVE = 0.1;
 	/** After a pin, drive straight off clear ground for this many ticks (ignoring
 	 *  prey) to break free. */
-	private static final int HUNT_GIVEUP_TICKS = 45;
+	public static final int HUNT_GIVEUP_TICKS = 45;
 
 	/**
 	 * Vegetation cropped per tick by a reference-size grazer, still well above the
@@ -203,9 +215,9 @@ public class TestNPC extends NPC {
 	private static final double HERD_R = 7.0;
 	/** Pheromone laid at the nest at each birth; >> per-tick evaporation, so a
 	 *  repeatedly-marked nest cloud builds a strong persistent peak. */
-	private static final double NEST_DEPOSIT = 12.0;
+	public static final double NEST_DEPOSIT = 12.0;
 	/** How far a nester can smell its nest when homing to breed. */
-	private static final int NEST_SENSE_R = 8;
+	public static final int NEST_SENSE_R = 8;
 	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */
 	private static final double MATE_REACH = 0.5;
 
@@ -285,7 +297,7 @@ public class TestNPC extends NPC {
 	 * happens. That is what makes breeding a decision with a price rather than a
 	 * collision, and it gives the pending state something real to describe.
 	 */
-	private static final int MATING_TICKS = 100;
+	public static final int MATING_TICKS = 100;
 	/** The partner this body is currently exchanging with; null when not mating. */
 	private NPC matingWith = null;
 	/** Ticks spent in the current exchange. */
@@ -614,9 +626,9 @@ public class TestNPC extends NPC {
 		// the (size-scaled) tank so a bigger creature must eat more before it breeds.
 		// energyCapacity() is anchored on the adult body, so these are unchanged by
 		// the creature being born a juvenile — growth is physical, not economic.
-		t.energy = 0.6 * t.energyCapacity();
-		t.reproThreshold = 0.75 * t.energyCapacity();
-		t.reproCost = 0.5 * t.energyCapacity();
+		t.energy = BORN_FRACTION * t.energyCapacity();
+		t.reproThreshold = REPRO_FRACTION * t.energyCapacity();
+		t.reproCost = REPRO_COST_FRACTION * t.energyCapacity();
 		t.col = g.toColor();
 	}
 
@@ -1574,7 +1586,7 @@ public class TestNPC extends NPC {
 	 * score rises as the walk shortens, so whatever is being approached gets harder
 	 * to displace the closer it gets, and a switch cannot immediately switch back.
 	 */
-	private static final double CARRION_SWITCH_GAIN = 2.0;
+	public static final double CARRION_SWITCH_GAIN = 2.0;
 
 	/**
 	 * The carcass this body is already walking to, if that choice is still worth

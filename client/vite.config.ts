@@ -19,7 +19,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
-        sprites: 'sprites.html', // the client half of the /sprites catalog
+        help: 'help.html', // the client half of /help
       },
     },
   },

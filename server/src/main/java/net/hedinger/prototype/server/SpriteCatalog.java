@@ -67,7 +67,6 @@ final class SpriteCatalog {
 		c.concealmentSection();
 		c.furnitureSection();
 		c.creatureSection();
-		c.bodyPlans();
 		System.out.println("sprite catalog: " + c.assets.size() + " assets in "
 				+ (System.currentTimeMillis() - t0) + " ms");
 		return c;
@@ -166,42 +165,7 @@ final class SpriteCatalog {
 	 * between these is the outline and nothing else. The animals that actually
 	 * carry them — feelers, tail and all — are in Creatures above.
 	 */
-	private void bodyPlans() {
-		section("Body plans", "The six outlines inForm() can draw, from a single genome "
-				+ "with the role markings stripped off, so the only thing that varies is the "
-				+ "body. Diet picks one of three; the rest are drawn here and worn by nothing.");
-		String[] names = { "plan_0_grazer", "plan_1_radial_unworn", "plan_2_wedge_unworn",
-				"plan_3_scavenger", "plan_4_hunter", "plan_5_ragged_unworn" };
-		for (int f = 0; f < names.length; f++) {
-			Genome g = sample(11, 0.05, false, 0, new double[] { 0.5, 0.6, 0.4 });
-			ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
-			ph.form = f;
-			creature(names[f], ph, g.size);
-		}
-	}
-
 	private void creatureSection() {
-		section("Creatures", "Distinct samples of the procedural organism space — each spins "
-				+ "through its eight facings while the idle gait plays. Genomes are hand-picked "
-				+ "points, not live phenotypes: the space itself is the reference. The body plan "
-				+ "is read from the genome's diet and whether it flies, so a grazer, a scavenger "
-				+ "and a hunter are different animals rather than the same one in three colours: "
-				+ "a grazer walks on plain legs, a hunter strides on long ones and carries a "
-				+ "tail, a scavenger is the long segmented body, bare-limbed and wearing the "
-				+ "feelers it finds its food with, and anything airborne keeps a single "
-				+ "pair.");
-		creature("founder_grazer", sample(6, 0.05, false, 0, new double[] { 0.20, 0.50, 0.80 }));
-		creature("tiny_darter", sample(3, 0.09, false, 0, new double[] { 0.90, 0.10, 0.40 }));
-		creature("bulky_armored", sample(14, 0.02, false, 0, new double[] { 0.50, 0.90, 0.20 }));
-		creature("apex_predator",
-				sample(11, 0.06, false, 0.9, Genome.DIET_CARNIVORE, new double[] { 0.05, 0.05, 0.90 }));
-		creature("carrion_eater",
-				sample(7, 0.06, false, 0, Genome.DIET_SCAVENGER, new double[] { 0.45, 0.25, 0.65 }));
-		creature("flier", sample(5, 0.07, true, 0, new double[] { 0.60, 0.30, 0.10 }));
-		creature("winged_hunter",
-				sample(9, 0.08, true, 0.9, Genome.DIET_CARNIVORE, new double[] { 0.15, 0.60, 0.35 }));
-		creature("herd_mother", sample(8, 0.04, false, 0, new double[] { 0.35, 0.70, 0.55 }));
-
 		section("Creature actions", "The action envelopes every phenotype shares — squash, "
 				+ "stretch, offset, tint, dissolve — swept 0 → 1 on the founder-grazer body.");
 		Genome g = sample(6, 0.05, false, 0, new double[] { 0.20, 0.50, 0.80 });
@@ -383,6 +347,66 @@ final class SpriteCatalog {
 	// ---- creatures ---------------------------------------------------------
 
 	/** A deterministic genome at a chosen point of the phenotype space. */
+	/**
+	 * The bodies the help page shows, as SHAPE KEYS rather than pictures.
+	 *
+	 * <p>The page used to be handed baked GIFs of these. It is the viewer's own
+	 * renderer that decides what a creature looks like — it stamps the server's
+	 * colour-neutral atlas and tints it — so a GIF baked down a second path was a
+	 * picture of what the art ought to be rather than of what anyone sees. These
+	 * are registered so an atlas is servable for each, and the page draws them the
+	 * way the live world does.
+	 *
+	 * <p>Every plan appears, including the three no diet selects: a reference that
+	 * shows only what happens to be alive is a census, not a reference.
+	 */
+	static java.util.List<java.util.Map<String, Object>> referenceBodies() {
+		java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+		String[] planNames = { "grazer", "radial", "wedge", "scavenger", "hunter", "ragged" };
+		boolean[] worn = { true, false, false, true, true, false };
+		for (int f = 0; f < planNames.length; f++) {
+			Genome g = sample(11, 0.05, false, 0, new double[] { 0.5, 0.6, 0.4 });
+			ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
+			ph.form = f; // reach the plans the diet mapping cannot express
+			out.add(body("plan", "plan " + f + " — " + planNames[f], ph, worn[f], 0x9BB8A0));
+		}
+		addSample(out, "founder grazer", 6, false, Genome.DIET_HERBIVORE,
+				new double[] { 0.20, 0.50, 0.80 }, 0x5A9BD8);
+		addSample(out, "tiny darter", 3, false, Genome.DIET_HERBIVORE,
+				new double[] { 0.90, 0.10, 0.40 }, 0xE0507A);
+		addSample(out, "bulky armoured", 14, false, Genome.DIET_HERBIVORE,
+				new double[] { 0.50, 0.90, 0.20 }, 0x8FD046);
+		addSample(out, "herd mother", 8, false, Genome.DIET_HERBIVORE,
+				new double[] { 0.35, 0.70, 0.55 }, 0x54C0A0);
+		addSample(out, "carrion eater", 7, false, Genome.DIET_SCAVENGER,
+				new double[] { 0.45, 0.25, 0.65 }, 0xA070D0);
+		addSample(out, "apex predator", 11, false, Genome.DIET_CARNIVORE,
+				new double[] { 0.05, 0.05, 0.90 }, 0x4050E0);
+		addSample(out, "flier", 5, true, Genome.DIET_HERBIVORE,
+				new double[] { 0.60, 0.30, 0.10 }, 0xC07830);
+		addSample(out, "winged hunter", 9, true, Genome.DIET_CARNIVORE,
+				new double[] { 0.15, 0.60, 0.35 }, 0x30C060);
+		return out;
+	}
+
+	private static void addSample(java.util.List<java.util.Map<String, Object>> out,
+			String label, double size, boolean flying, int diet, double[] markers, int rgb) {
+		Genome g = sample(size, 0.06, flying, diet == Genome.DIET_CARNIVORE ? 0.9 : 0,
+				diet, markers);
+		out.add(body("creature", label, ProcCreature.phenotype(g), true, rgb));
+	}
+
+	private static java.util.Map<String, Object> body(String group, String label,
+			ProcCreature.Phenotype ph, boolean worn, int rgb) {
+		java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+		m.put("group", group);
+		m.put("label", label);
+		m.put("pheno", net.hedinger.prototype.sim.PhenoRegistry.register(ph));
+		m.put("worn", worn);
+		m.put("rgb", rgb);
+		return m;
+	}
+
 	private static Genome sample(double size, double speed, boolean flying,
 			double predatory, double[] markers) {
 		return sample(size, speed, flying, predatory, Genome.DIET_HERBIVORE, markers);
@@ -406,31 +430,6 @@ final class SpriteCatalog {
 
 	/** One organism sample: a looping spin through all eight facings with the
 	 *  idle gait running — the whole body readable in one loop. */
-	private void creature(String name, Genome g) {
-		creature(name, ProcCreature.phenotype(g), g.size);
-	}
-
-	/** As above, from a phenotype built by hand — the only way to show a body plan
-	 *  the live mapping does not currently select. */
-	private void creature(String name, ProcCreature.Phenotype ph, double size) {
-		int radius = (int) Math.max(20, Math.min(70, size * 5));
-		int side = radius * 2 + 60;
-		List<BufferedImage> frames = new ArrayList<>();
-		int N = 48;
-		for (int f = 0; f < N; f++) {
-			BufferedImage img = canvas(side);
-			Graphics2D g2 = img.createGraphics();
-			double heading = Math.PI * 2 * f / N;
-			double phase = Math.PI * 2 * 6.0 * f / N; // six gait cycles per revolution
-			ProcCreature.draw(g2, side / 2, side / 2 + (ph.flying ? 12 : 0), radius, ph,
-					heading, phase);
-			g2.dispose();
-			frames.add(img);
-		}
-		add(name + ".gif", gif(frames, 8), name.replace('_', ' '), side);
-	}
-
-	/** One action envelope swept start-to-finish on a fixed body. */
 	private void action(String name, Genome g, int act) {
 		ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
 		int radius = 36, side = radius * 2 + 60;

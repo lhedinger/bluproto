@@ -27,8 +27,8 @@ public class PheromoneCloud extends Entity {
 	 *  radius wide), not a scattered ring of them. */
 	public static final double MERGE_RADIUS = 2.5;
 
-	private static final double BASE_RADIUS = 1.4; // tiles, at negligible strength
-	private static final double MAX_RADIUS = 4.0;  // tiles
+	public static final double BASE_RADIUS = 1.4; // tiles, at negligible strength
+	public static final double MAX_RADIUS = 4.0;  // tiles
 
 	private double strength;
 

@@ -1,20 +1,12 @@
-// The sprite catalog (/sprites): every entry here is drawn by the SAME
-// functions the live viewer uses — drawDoor/drawSwitch/drawItem, the veil and
-// dither compositors, the overlay language from render.ts, the corpse/rim/mip
-// bakes from atlas.ts — driven by scripted state instead of the world stream.
-// It shows what a viewer actually sees, because it is painted by the code that
-// paints the world.
+// The help page (/help). One rule holds the whole thing together: every entry
+// is drawn by the SAME code the live viewer draws with, reading the same
+// server-baked atlases. The web rendering is the source of truth, because it is
+// the rendering anyone actually looks at — a picture produced down a second path
+// is a picture of what the art ought to be, and the two drift silently.
 //
-// One page. There used to be three (/sprites, /sprites/web, /sprites/java),
-// which meant two of them could be wrong without anyone noticing — and one
-// silently was, for weeks. Java bakes are still fetched as source images where
-// the client composites over them, but they no longer have a catalog of their
-// own to be confused with this one.
-//
-// The catalog is NORMATIVE for the web view (ART-STYLE.md §6): everything the
-// client draws into the world must have an entry on this page rendered by the
-// same code path. A visual with no catalog entry is a review failure; a
-// reimplementation that merely imitates one is a bug waiting to drift.
+// This began as a sprite catalog and is growing into the place the world
+// explains itself; /sprites still redirects here. Sections that document
+// mechanics rather than art belong here too.
 
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
@@ -33,6 +25,15 @@ import {
 } from './render';
 
 const root = document.getElementById('root')!;
+// The page has two halves. Mechanics come first — a viewer who wants to know why
+// a creature just starved is better served by the energy model than by a sprite
+// sheet — so its host div is parked in the DOM before any art section appends
+// itself to `root`, and filled in once the server has answered.
+const mechRoot = document.createElement('div');
+root.append(mechRoot);
+const artRoot = document.createElement('div');
+root.append(artRoot);
+
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 
 {
@@ -67,7 +68,7 @@ function section(title: string, note: string): HTMLDivElement {
   p.textContent = note;
   const grid = document.createElement('div');
   grid.className = 'grid';
-  root.append(h, p, grid);
+  artRoot.append(h, p, grid);
   return grid;
 }
 
@@ -415,7 +416,7 @@ for (const [act, name, meaning] of EXPR) {
   // identical ground.
   for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2]] as const) {
     if (!atlas) break; // the whole point is a body under the veil
-    const ground = await loadCanvas(`/sprites/${name}_ground.png`);
+    const ground = await loadCanvas(`/help/${name}_ground.png`);
     if (!ground) continue;
     const ts = ground.width / 5;
     const veil = document.createElement('canvas');
@@ -496,71 +497,60 @@ for (const [act, name, meaning] of EXPR) {
 
 // ---- what the server bakes, and where to see it --------------------------
 
-// ---- body plans -----------------------------------------------------------
-// Every outline the organism renderer can draw, turntabled on the server and
-// shown here whether or not anything in the world currently wears it. Half of
-// them are unworn: the plan follows the genome's diet and there are three
-// trophic levels, so three of six sit idle. A catalogue that showed only what
-// happened to be alive would be a census of the population rather than a
-// reference to the space, and the plans nobody wears are exactly the ones worth
-// being able to look at before deciding what to do with them.
-//
-// These are <img> rather than a live canvas because the server already bakes
-// them, and a GIF of the full spin says more about a body than one frozen
-// facing. Lazy, so a phone scrolling the top of the page does not pay for them.
-const PLANS: Array<[string, string]> = [
-  ['plan_0_grazer', 'plan 0 — <b>grazer</b>'],
-  ['plan_1_radial_unworn', 'plan 1 — radial <i>(unworn)</i>'],
-  ['plan_2_wedge_unworn', 'plan 2 — wedge <i>(unworn)</i>'],
-  ['plan_3_scavenger', 'plan 3 — <b>scavenger</b>'],
-  ['plan_4_hunter', 'plan 4 — <b>hunter</b>'],
-  ['plan_5_ragged_unworn', 'plan 5 — ragged <i>(unworn)</i>'],
-];
+// ---- the bodies, drawn the way the world draws them --------------------------
+// Every plan the organism renderer can express, and the named samples. The
+// server hands over shape KEYS; the atlas comes down the same endpoint the live
+// view uses and is stamped by the same code, so what is on this page is what a
+// viewer sees rather than a second rendering that merely resembles it. These
+// used to be baked GIFs, which is a picture of what the art ought to be.
+interface RefBody { group: string; label: string; pheno: number; worn: boolean; rgb: number; }
+
 const plans = section('Body plans',
-  'The six outlines the organism renderer can draw, each spinning through its facings '
-  + 'with the idle gait running. Drawn from one genome with the trophic markings '
-  + 'stripped off, so the only thing that differs between them is the body. A creature\'s '
-  + 'plan follows what its genome eats, and there are three trophic levels — so three of '
-  + 'these are worn by nothing, and are here because a reference to the space should show '
-  + 'the whole space.');
-for (const [file, label] of PLANS) {
-  const img = document.createElement('img');
-  img.src = `/sprites/${file}.gif`;
-  img.loading = 'lazy';
-  img.alt = label.replace(/<[^>]+>/g, '');
-  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
-  figure(img, label, plans);
+  'Every outline the organism renderer can express, drawn from one genome with the '
+  + 'trophic markings stripped off, so the only thing differing between them is the '
+  + 'body. A creature\'s plan follows what its genome eats and there are three trophic '
+  + 'levels, so three of these are worn by nothing — they are here because a reference '
+  + 'to the space should show the whole space, not a census of what happens to be alive.');
+const samples = section('Creatures',
+  'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
+  + 'strides on the long pair and carries a tail, a scavenger is the segmented body with '
+  + 'the feelers it finds its food by, anything airborne keeps a single pair of limbs. '
+  + 'Fixed points rather than live phenotypes, so this stays a reference while the world '
+  + 'evolves away from it.');
+
+/** One body, spun through its facings with the idle gait — the live view's own
+ *  stamp, waiting on the same atlas fetch the world waits on. */
+function refBody(b: RefBody, into: HTMLElement): void {
+  const W = 150, H = 150, box = W * 0.72;
+  figure(liveCanvas(W, H, (g, t) => {
+    g.fillStyle = GRASS;
+    g.fillRect(0, 0, W, H);
+    const dir = Math.floor((t / 1.2) % 8);
+    const anim = Math.floor((t * 6) % 8);
+    g.imageSmoothingEnabled = false;
+    const sheet = atlasFor(b.pheno);
+    const tint = sheet ? tintedFor(b.pheno, b.rgb, sheet) : null;
+    if (tint) {
+      g.drawImage(tint, anim * CELL, dir * CELL, CELL, CELL,
+        (W - box) / 2, (H - box) / 2, box, box);
+    } else {
+      // The same placeholder the live viewer shows while an atlas is in flight.
+      drawPlaceholder(g, W / 2, H / 2, (W * 0.72) * (ART_RADIUS / CELL),
+        (dir / 8) * Math.PI * 2, '#8b9bb4');
+    }
+  }), b.worn ? `<b>${b.label}</b>` : `${b.label} <i>(unworn)</i>`, into);
 }
 
-// The named organism samples the server bakes: hand-picked points in the genome
-// space rather than live phenotypes, so the reference stays put while the world
-// evolves. They were baked and shown nowhere — the page had no creature section
-// at all, so every one of these turntables was being rendered on each boot and
-// dropped on the floor.
-const SAMPLES: Array<[string, string]> = [
-  ['founder_grazer', 'founder grazer'],
-  ['tiny_darter', 'tiny darter'],
-  ['bulky_armored', 'bulky armoured'],
-  ['herd_mother', 'herd mother'],
-  ['carrion_eater', 'carrion eater — <b>scavenger</b>'],
-  ['apex_predator', 'apex predator — <b>hunter</b>'],
-  ['flier', 'flier'],
-  ['winged_hunter', 'winged hunter — <b>hunter</b>'],
-];
-const samples = section('Creatures',
-  'Distinct samples of the procedural organism space, each spinning through its eight '
-  + 'facings while the idle gait plays. Genomes are hand-picked points rather than live '
-  + 'phenotypes, so this stays a reference to the space while the world evolves away from '
-  + 'it. Unlike the plans above these wear their trophic markings: the hunters carry a '
-  + 'tail, the scavenger its feelers, and anything airborne keeps a single pair of limbs.');
-for (const [file, label] of SAMPLES) {
-  const img = document.createElement('img');
-  img.src = `/sprites/${file}.gif`;
-  img.loading = 'lazy';
-  img.alt = label.replace(/<[^>]+>/g, '');
-  img.style.cssText = 'image-rendering:pixelated;max-width:100%';
-  figure(img, label, samples);
-}
+void (async () => {
+  let bodies: RefBody[] = [];
+  try {
+    const r = await fetch('/help/bodies.json');
+    if (r.ok) bodies = await r.json();
+  } catch {
+    /* offline: the sections below simply stay empty rather than lying */
+  }
+  for (const b of bodies) refBody(b, b.group === 'plan' ? plans : samples);
+})();
 
 const rest = section('Server-baked art',
   'Ground chunks and creature bodies are baked on the server for the web view too — '
@@ -569,8 +559,141 @@ const rest = section('Server-baked art',
 {
   const p = document.createElement('p');
   p.className = 'note';
-  p.innerHTML = 'The full set of ground swatches is served under <code>/sprites/'
+  p.innerHTML = 'The full set of ground swatches is served under <code>/help/'
     + 'ground_*.png</code>; the creature atlases under <code>/api/world/atlas/&lt;pheno&gt;'
     + '.png</code>. Both are fetched straight into the entries above.';
   rest.append(p);
 }
+
+// ---- how the world works -------------------------------------------------
+// The other half of the page, and the reason it stopped being called a sprite
+// catalog. Same principle as the art above, applied to the rules: none of these
+// numbers are written here. The server reads them off the running constants —
+// or computes them with the arithmetic the simulation itself uses — and hands
+// them over, so a tuning change moves this page with it instead of quietly
+// leaving it behind. Only the prose is authored, and it is deliberately written
+// about relationships rather than values for exactly that reason.
+
+interface MechRow { label: string; value: string; unit: string; note: string; }
+interface MechTable { caption: string; headers: string[]; rows: string[][]; }
+interface MechItem { name: string; detail: string; idx?: string; }
+interface MechGroup { title: string; items: MechItem[]; }
+interface MechSection {
+  id: string; title: string; intro: string; rows: MechRow[];
+  table?: MechTable; groups?: MechGroup[];
+}
+
+/** Text into a fresh element, escaped by the DOM rather than by us. */
+function el<K extends keyof HTMLElementTagNameMap>(
+    tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function mechSection(m: MechSection, into: HTMLElement): void {
+  const h = el('h2', m.title);
+  h.id = m.id;
+  into.append(h);
+  // Blank-line-separated paragraphs, so the server can write more than one
+  // without smuggling markup through the wire.
+  for (const para of m.intro.split('\n\n')) into.append(el('p', para, 'note'));
+
+  const t = el('table', undefined, 'facts');
+  const tb = el('tbody');
+  for (const r of m.rows) {
+    const tr = el('tr');
+    tr.append(el('th', r.label));
+    const v = el('td', r.value, 'v');
+    if (r.unit) {
+      v.append(document.createTextNode(' '));
+      v.append(el('span', r.unit, 'unit'));
+    }
+    tr.append(v, el('td', r.note, 'why'));
+    tb.append(tr);
+  }
+  t.append(tb);
+  into.append(wide(t));
+
+  if (m.table) into.append(worked(m.table));
+  if (m.groups) for (const g of m.groups) into.append(channels(g));
+}
+
+/** A named group of channels — a sensor bank, a set of acts. These describe a
+ *  SURFACE rather than a quantity, so they read as a list of names with what
+ *  each one means, not as a table of figures. The name is the engine's own wire
+ *  name for the channel, which is what makes the list checkable. */
+function channels(g: MechGroup): HTMLElement {
+  const box = el('div', undefined, 'chan');
+  box.append(el('h3', g.title));
+  const dl = el('dl');
+  for (const i of g.items) {
+    dl.append(el('dt', i.name), el('dd', i.detail));
+  }
+  box.append(dl);
+  return box;
+}
+
+/** A worked table: the constants above, applied across the range of bodies or
+ *  paces the world can actually produce. This is where the model stops being a
+ *  formula and starts being a claim about what living here is like. */
+function worked(w: MechTable): HTMLElement {
+  const t = el('table', undefined, 'worked');
+  const head = el('tr');
+  for (const h of w.headers) head.append(el('th', h));
+  const th = el('thead');
+  th.append(head);
+  const tb = el('tbody');
+  for (const row of w.rows) {
+    const tr = el('tr');
+    for (const cell of row) tr.append(el('td', cell));
+    tb.append(tr);
+  }
+  t.append(th, tb);
+  const cap = el('figcaption', w.caption, 'tcap');
+  const box = el('div', undefined, 'tblock');
+  box.append(wide(t), cap);
+  return box;
+}
+
+/** Wraps a table so a narrow phone scrolls the TABLE sideways rather than the
+ *  page — the site is watched on a phone more often than not. */
+function wide(t: HTMLElement): HTMLElement {
+  const d = el('div', undefined, 'scroll');
+  d.append(t);
+  return d;
+}
+
+void (async () => {
+  let secs: MechSection[] = [];
+  try {
+    const r = await fetch('/help/mechanics.json');
+    if (r.ok) secs = await r.json();
+  } catch {
+    /* offline: better a page with no rules on it than a page of stale ones */
+  }
+  if (!secs.length) return;
+
+  mechRoot.append(el('h2', 'How the world works', 'part'));
+  const lead = el('p', undefined, 'note');
+  lead.innerHTML = 'Every figure below is read off the <b>running simulation\'s own '
+    + 'constants</b>, or worked out from them by the same arithmetic the simulation '
+    + 'uses — nothing on this page is transcribed. A page that divides the tank by '
+    + 'the burn rate cannot be wrong about how long a creature lasts; a page that '
+    + 'states the answer can, and would never say so.';
+  mechRoot.append(lead);
+
+  const nav = el('p', undefined, 'nav');
+  for (const m of secs) {
+    const a = el('a', m.title);
+    a.href = `#${m.id}`;
+    nav.append(a);
+  }
+  mechRoot.append(nav);
+  for (const m of secs) mechSection(m, mechRoot);
+
+  // The art half gets its own banner, now that it is no longer the whole page.
+  const banner = el('h2', 'How the world looks', 'part');
+  artRoot.prepend(banner);
+})();

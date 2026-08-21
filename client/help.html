@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bluproto — help</title>
+  <style>
+    body { background: #0f1115; color: #cdd3de; font: 14px/1.5 system-ui, sans-serif;
+           margin: 2rem auto; max-width: 1200px; padding: 0 1rem; }
+    h1 { font-size: 1.4rem; }
+    h2 { margin-top: 2.2rem; border-bottom: 1px solid #262b36; padding-bottom: .3rem; }
+    .note { color: #8b93a3; max-width: 70ch; }
+    .grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+    figure { margin: 0; text-align: center; }
+    img, canvas { image-rendering: pixelated; background: #14161a; border: 1px solid #262b36;
+                  border-radius: 4px; display: block; margin: 0 auto; }
+    figcaption { color: #8b93a3; font-size: 12px; margin-top: 4px; }
+    figcaption b { color: #b9c2d0; font-weight: 600; }
+    /* A phone is the common case, so nothing may push the PAGE sideways: wide art
+       shrinks to fit and wide tables scroll inside their own box (see .scroll). */
+    .pair { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 8px;
+            border: 1px solid #1c212b; border-radius: 6px; box-sizing: border-box;
+            max-width: 100%; }
+    figure { max-width: 100%; }
+    img, canvas { max-width: 100%; height: auto; }
+    a { color: #7aa2f7; }
+    h2.part { font-size: 1.15rem; color: #e6ebf2; border-bottom: 2px solid #3a4560;
+              margin-top: 3rem; letter-spacing: .02em; }
+    .nav { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .4rem 0 0; }
+    .nav a { text-decoration: none; font-size: 13px; }
+    .nav a:hover { text-decoration: underline; }
+    .scroll { overflow-x: auto; max-width: 100%; }
+    table { border-collapse: collapse; font-size: 13px; margin: .8rem 0 0; }
+    table.facts th { text-align: left; font-weight: 600; color: #b9c2d0; white-space: nowrap;
+                     padding: .3rem .9rem .3rem 0; vertical-align: top; }
+    table.facts td { padding: .3rem .9rem .3rem 0; vertical-align: top; }
+    table.facts td.v { color: #d6b16a; font-family: ui-monospace, monospace; white-space: nowrap; }
+    table.facts .unit { color: #8b93a3; font-family: system-ui, sans-serif; }
+    table.facts td.why { color: #8b93a3; }
+    table.facts tr + tr th, table.facts tr + tr td { border-top: 1px solid #1c212b; }
+    .tblock { margin-top: 1rem; }
+    table.worked th { text-align: right; color: #b9c2d0; font-weight: 600; white-space: nowrap;
+                      padding: .3rem .8rem; border-bottom: 1px solid #333c4d; }
+    table.worked td { text-align: right; padding: .28rem .8rem; font-family: ui-monospace, monospace;
+                      color: #cdd3de; white-space: nowrap; }
+    table.worked th:first-child, table.worked td:first-child { text-align: left; }
+    table.worked tbody tr:nth-child(even) { background: #14161a; }
+    .tcap { color: #8b93a3; font-size: 12px; margin-top: .45rem; max-width: 70ch; text-align: left; }
+    .chan { margin-top: 1.1rem; }
+    .chan h3 { font-size: .95rem; color: #b9c2d0; margin: 0 0 .4rem; font-weight: 600; }
+    .chan dl { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .9rem;
+               margin: 0; align-items: baseline; }
+    .chan dt { color: #d6b16a; font-family: ui-monospace, monospace; font-size: 12.5px;
+               white-space: nowrap; }
+    .chan dd { margin: 0; color: #8b93a3; max-width: 68ch; }
+    @media (max-width: 560px) {
+      /* Two columns stop being two columns worth having on a phone. */
+      .chan dl { grid-template-columns: 1fr; gap: 0; }
+      .chan dd { margin: 0 0 .55rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>help</h1>
+  <p class="note" id="intro">How the world looks and, in time, how it works. Everything drawn
+  here is drawn by the <b>web client's own code</b> — the same drawing this browser puts on
+  the live viewer, reading the same server-baked atlases — so what is on this page is what a
+  viewer actually sees rather than a second rendering that resembles it. A picture baked down
+  some other path would only be a picture of what the art ought to be.</p>
+  <div id="root"></div>
+  <script type="module" src="/src/help.ts"></script>
+</body>
+</html>
