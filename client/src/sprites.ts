@@ -22,7 +22,8 @@ import {
 } from './atlas';
 import type { Camera } from './camera';
 import {
-  ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE, ACT_NEST,
+  ACT_AFFILIATE, ACT_ATTACK, ACT_CARRY, ACT_FLEE, ACT_GRAZE, ACT_HUNT, ACT_MATE, ACT_NEST,
+  ACT_RIDE,
 } from './protocol';
 import type { EntityState } from './protocol';
 import {
@@ -303,7 +304,8 @@ const EXPR: Array<[number, string, string]> = [
   [ACT_GRAZE, 'graze', 'foraging vegetation'],
   [ACT_MATE, 'mate', 'courting a partner'],
   [ACT_AFFILIATE, 'affiliate', 'bonding with a packmate'],
-  [ACT_GRAB, 'grab', 'carrying a captive, or riding a host'],
+  [ACT_CARRY, 'carry', 'hauling another creature — a captive, or cargo'],
+  [ACT_RIDE, 'ride', 'aboard a host by its own choice: carried, not carrying'],
   [ACT_NEST, 'nest', 'homing to its nest'],
 ];
 for (const [act, name, meaning] of EXPR) {

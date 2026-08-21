@@ -9,8 +9,8 @@ import {
 } from './atlas';
 import type { Camera } from './camera';
 import {
-  ACT_AFFILIATE, ACT_ATTACK, ACT_FLEE, ACT_GRAB, ACT_GRAZE, ACT_HUNT, ACT_MATE,
-  ACT_NEST, actionOf, F_CARRYING, F_DEAD, F_GRABBED,
+  ACT_AFFILIATE, ACT_ATTACK, ACT_CARRY, ACT_FLEE, ACT_GRAZE, ACT_HUNT, ACT_MATE,
+  ACT_NEST, ACT_RIDE, actionOf, F_CARRYING, F_DEAD, F_GRABBED,
 } from './protocol';
 import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
@@ -1495,7 +1495,10 @@ const ACTION_COLOUR: Record<number, string> = {
   [ACT_AFFILIATE]: '#46C8DC',
   [ACT_GRAZE]: '#46C85A',
   [ACT_NEST]: '#DC3CC8',
-  [ACT_GRAB]: '#F09632',
+  [ACT_CARRY]: '#F09632',
+  // Cool against the carrier's warm orange: at a glance the pair reads as two
+  // ends of one act rather than two creatures doing the same thing.
+  [ACT_RIDE]: '#96BEFF',
   [ACT_HUNT]: '#FF7828',
 };
 
@@ -1560,9 +1563,16 @@ export function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: num
       g.moveTo(cx + u * 0.4, cy); g.lineTo(cx + u * 0.65, cy);
       g.stroke();
       return;
-    case ACT_GRAB: // hook
+    case ACT_CARRY: // hook: something is hanging off this body
       g.arc(cx, cy, u * 0.45, 0, 7);
       g.moveTo(cx, cy); g.lineTo(cx + u * 0.55, cy + u * 0.55);
+      g.stroke();
+      return;
+    case ACT_RIDE: // a chevron riding above a rail: carried, not carrying
+      g.moveTo(cx - u * 0.55, cy + u * 0.4); g.lineTo(cx + u * 0.55, cy + u * 0.4);
+      g.moveTo(cx - u * 0.4, cy + u * 0.05);
+      g.lineTo(cx, cy - u * 0.5);
+      g.lineTo(cx + u * 0.4, cy + u * 0.05);
       g.stroke();
       return;
     case ACT_NEST: // house

@@ -52,7 +52,13 @@ public record EntityState(
 	public static final int ACTION_SHIFT = 5;
 	public static final int ACTION_MASK = 0xF << ACTION_SHIFT;
 	public static final int ACT_NONE = 0, ACT_ATTACK = 1, ACT_MATE = 2, ACT_FLEE = 3,
-			ACT_GRAZE = 4, ACT_HUNT = 5, ACT_GRAB = 6, ACT_NEST = 7, ACT_AFFILIATE = 8;
+			ACT_GRAZE = 4, ACT_HUNT = 5, ACT_CARRY = 6, ACT_NEST = 7, ACT_AFFILIATE = 8,
+			ACT_RIDE = 9;
+	/** The highest defined action code. A viewer has a glyph for every code up to
+	 *  this and nothing beyond it, so it is what "is this drawable" is checked
+	 *  against — naming the last constant instead meant the check had to be edited
+	 *  every time an act was added, which is the moment it is least likely to be. */
+	public static final int ACT_MAX = ACT_RIDE;
 
 	/** Wire code for a glyph key from {@code TestNPC.actionKey()}. */
 	private static int actionCode(String key) {
@@ -70,8 +76,10 @@ public record EntityState(
 			return ACT_GRAZE;
 		case "hunt":
 			return ACT_HUNT;
-		case "grab":
-			return ACT_GRAB;
+		case "carry":
+			return ACT_CARRY;
+		case "ride":
+			return ACT_RIDE;
 		case "nest":
 			return ACT_NEST;
 		case "affiliate":

@@ -802,6 +802,70 @@ public class SimTests {
 	 * NO wall or bounds checks -- Entity.run() kills anything placed outside
 	 * the world, so keep grab scenarios away from the border.
 	 */
+	/**
+	 * Carrying and being carried are different acts and wear different badges.
+	 *
+	 * <p>They used to share one — the comment in {@code actionKey} said as much,
+	 * "carrying a captive, or riding a host" — so the hook hovering over a creature
+	 * left you to guess which end of the arrangement you were looking at. Which end
+	 * is precisely the interesting part: one of them chose this.
+	 */
+	static class CarryingAndRidingWearDifferentBadges extends Scenario {
+		@Override
+		public void run() {
+			seed(96);
+
+			// A captor with a captive: this body is doing the holding.
+			World grab = room(12, 12);
+			TestNPC captor = TestNPC.roamer(5.5, 5.5, 0).withSize(6);
+			TestNPC captive = TestNPC.inert(5.55, 5.5, 0).withSize(4);
+			grab.spawnEntity(captor);
+			grab.spawnEntity(captive);
+			grab.think();
+			assertTrue("the captor takes hold", captor.grab(captive));
+			grab.think();
+			assertTrue("the one doing the carrying says so", "carry".equals(captor.actionKey()));
+			assertTrue("and its captive is held, not riding", captive.isGrabbed());
+
+			// A rider aboard a host by its own choice.
+			World ride = room(14, 12);
+			int[][] cling = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 },
+					{ Brain.WRITE, AgentIO.A_ATTACH, 0, 0 } };
+			Genome riderG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			riderG.metabolism = 0.02;
+			riderG.brain = new Brain(deepCopy(cling));
+			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withEnergy(6.0);
+			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
+			ride.spawnEntity(rider);
+			ride.spawnEntity(host);
+			tick(ride, 6);
+			assertTrue("the rider is aboard of its own accord",
+					rider.getAttachTarget() == host && !rider.isGrabbed());
+			assertTrue("a passenger says it is riding", "ride".equals(rider.actionKey()));
+
+			// And the two reach the viewer as different glyphs.
+			int carryCode = actionCodeOf(grab, captor.getID());
+			int rideCode = actionCodeOf(ride, rider.getID());
+			assertEquals("the captor's badge is the carry glyph",
+					net.hedinger.prototype.sim.EntityState.ACT_CARRY, carryCode);
+			assertEquals("the passenger's is the ride glyph",
+					net.hedinger.prototype.sim.EntityState.ACT_RIDE, rideCode);
+			assertTrue("which are not the same badge", carryCode != rideCode);
+		}
+	}
+
+	/** The action code the wire carries for one entity. */
+	static int actionCodeOf(World w, int id) {
+		for (net.hedinger.prototype.sim.EntityState e
+				: net.hedinger.prototype.sim.WorldSnapshot.of(w).entities()) {
+			if (e.id() == id) {
+				return (e.flags() & net.hedinger.prototype.sim.EntityState.ACTION_MASK)
+						>> net.hedinger.prototype.sim.EntityState.ACTION_SHIFT;
+			}
+		}
+		return -1;
+	}
+
 	static class GrabCarriesSmallerEntity extends Scenario {
 		@Override
 		public void run() {
@@ -1382,7 +1446,7 @@ public class SimTests {
 				int code = (e.flags() & net.hedinger.prototype.sim.EntityState.ACTION_MASK)
 						>> net.hedinger.prototype.sim.EntityState.ACTION_SHIFT;
 				assertTrue("action code is a known glyph (" + code + ")",
-						code >= 0 && code <= net.hedinger.prototype.sim.EntityState.ACT_AFFILIATE);
+						code >= 0 && code <= net.hedinger.prototype.sim.EntityState.ACT_MAX);
 				if (code != net.hedinger.prototype.sim.EntityState.ACT_NONE) {
 					withAction++;
 				}
@@ -5320,6 +5384,7 @@ public class SimTests {
 				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
 				new HoleFallRespectsFlying(),
+				new CarryingAndRidingWearDifferentBadges(),
 				new GrabCarriesSmallerEntity(),
 				new GrabRespectsSizeAndReach(),
 				new DoorBlocksAndAdmits(),

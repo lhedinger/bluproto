@@ -380,8 +380,16 @@ final class WorldHost {
 				d.put("subtype", n.getNpcTypeName().toLowerCase());
 				d.put("energy", round(n.getEnergy()));
 				d.put("hydration", round(n.getHydration()));
-				d.put("carrying", n.getCarriedLoad() > 0);
+				d.put("carrying", n.getCarriedLoad() > 0); // hauling an ITEM (a crate)
 				d.put("grabbed", n.isGrabbed());
+				// Who has hold of whom. `attachedTo` above says which entity this one
+				// is attached to but not which way round it is, so on its own a viewer
+				// cannot tell a passenger from a captive: `grabbed` decides that, and
+				// this names the creature on the other end when this body is the one
+				// doing the holding.
+				if (n.getGrabbing() != null) {
+					d.put("hauling", n.getGrabbing().getID());
+				}
 				// Growth: a juvenile is still climbing toward its genome's body, so a
 				// creature that looks too small for its species is simply young.
 				if (n.isJuvenile()) {
