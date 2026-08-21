@@ -9,6 +9,7 @@ import net.hedinger.prototype.engine.PheromoneCloud;
 import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
+import net.hedinger.prototype.entities.Sound;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.simtest.TestNPC;
 
@@ -65,6 +66,7 @@ public final class Mechanics {
 		out.add(senses());
 		out.add(acts());
 		out.add(intents());
+		out.add(hearing());
 		out.add(pheromones());
 		out.add(minds());
 		return out;
@@ -449,7 +451,16 @@ public final class Mechanics {
 								+ "\"I am in the middle of them\"."),
 						sense(AgentIO.S_KIN_BEARING, "Which way that centre lies. Herding, "
 								+ "flocking and packing all emerge from this one gradient rather "
-								+ "than from any rule about groups.")),
+								+ "than from any rule about groups."),
+						sense(AgentIO.S_SOUND_PROX, "How close the last thing it HEARD was. "
+								+ "Hearing is neither facing-gated nor stopped by terrain, so a "
+								+ "scream from behind a wall arrives exactly as one from open "
+								+ "ground — which is the whole reason it is worth having "
+								+ "alongside sight."),
+						sense(AgentIO.S_SOUND_BEARING, "Which way that sound came from. Both "
+								+ "channels report an EVENT rather than a thing, and fall silent "
+								+ "on their own once it stops ringing — nothing keeps making the "
+								+ "noise, so a mind that means to act on it has to act now.")),
 				group("Places worth going",
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
@@ -653,6 +664,43 @@ public final class Mechanics {
 						+ round(nestLife / TPS, 1) + " s) — a landmark, not a trail."),
 				row("Smelled from", num(TestNPC.NEST_SENSE_R), "tiles",
 						"When a nester homes to breed. Smell ignores facing."));
+		return s;
+	}
+
+	private static Map<String, Object> hearing() {
+		Map<String, Object> s = section("hearing", "Hearing",
+				"Sight is stopped by walls and gated by which way a creature faces. Smell "
+				+ "hangs where it was left and says nothing about when. Hearing is the third "
+				+ "thing: it reaches through terrain, ignores facing entirely, and carries a "
+				+ "moment — it tells a creature that something happened, roughly where, and "
+				+ "that it happened just now.\n\n"
+				+ "Exactly one thing in the world makes a noise: a bite landing. The scream "
+				+ "comes from the quarry rather than the hunter and carries in proportion to "
+				+ "how big the quarry is, so violence announces itself, and the loudest events "
+				+ "are the ones most worth walking toward — a big kill leaves a big carcass. "
+				+ "What any lineage does with that is not decided here. The same channel is a "
+				+ "warning to whatever else is prey and a dinner bell to whatever eats the "
+				+ "dead, and which of those a population becomes is for selection to settle.\n\n"
+				+ "A sound is broadcast once and is then gone. It is not a field that lingers "
+				+ "like a smell, and the channel falls silent by itself — otherwise a creature "
+				+ "would steer forever toward a shriek from five minutes ago. Recency is "
+				+ "deliberately NOT folded into the loudness: that would conflate \"close\" "
+				+ "with \"just now\" and leave a mind unable to tell a distant scream from a "
+				+ "stale one.");
+		rows(s,
+				row("Made by", "a bite landing", "",
+						"The only sound in the eco simulation."),
+				row("Earshot of a kill", num(TestNPC.KILL_LOUDNESS) + " × the quarry's mass",
+						"tiles", "A reference-mass body: " + round(TestNPC.KILL_LOUDNESS, 1)
+						+ " tiles."),
+				row("Travel time", num(Sound.TRAVEL_TICKS), "ticks",
+						round(Sound.TRAVEL_TICKS / TPS, 2) + " s between the event and hearing "
+						+ "it."),
+				row("Stays audible", num(TestNPC.EARSHOT_MEMORY), "ticks",
+						round(TestNPC.EARSHOT_MEMORY / TPS, 1) + " s, then silence."),
+				row("Blocked by walls", "no", "",
+						"The one distance sense terrain does not stop."),
+				row("Gated by facing", "no", "", "You hear behind you."));
 		return s;
 	}
 

@@ -1425,6 +1425,134 @@ public class SimTests {
 	}
 
 	/**
+	 * Every sensor is reachable by an evolved mind.
+	 *
+	 * <p>Brain operands are masked into range at execution, so an operand pool
+	 * narrower than the sensor bank does not fail — it silently makes the channels
+	 * above it unreadable. That is the worst shape a bug can take: the sim runs,
+	 * every test passes, the sensors are computed every tick, and evolution simply
+	 * never sees them. Eighteen of thirty-four were invisible this way, including
+	 * the entire forage, waypoint, thirst and intent suite.
+	 *
+	 * <p>Checked by actually mutating a population and reading back what the
+	 * programs reference, rather than by comparing two constants — the constants
+	 * are one implementation of the property, and it is the property that matters.
+	 */
+	static class EverySensorIsReachable extends Scenario {
+		@Override
+		public void run() {
+			seed(11);
+			java.util.Set<Integer> sensed = new java.util.HashSet<>();
+			java.util.Set<Integer> written = new java.util.HashSet<>();
+			java.util.List<Brain> pop = new java.util.ArrayList<>();
+			for (int i = 0; i < 60; i++) {
+				pop.add(Brain.random(24));
+			}
+			for (int gen = 0; gen < 60; gen++) {
+				java.util.List<Brain> next = new java.util.ArrayList<>();
+				for (Brain b : pop) {
+					Brain c = b.copy();
+					c.mutate(0.35);
+					next.add(c);
+					for (String line : c.disassemble(AgentIO.SENSOR_NAMES, AgentIO.ACT_NAMES)) {
+						int at = line.indexOf("sense ");
+						if (at >= 0) {
+							note(sensed, AgentIO.SENSOR_NAMES, line.substring(at + 6).trim());
+							continue;
+						}
+						at = line.indexOf("act ");
+						if (at >= 0 && line.indexOf(" =", at) > at) {
+							note(written, AgentIO.ACT_NAMES,
+									line.substring(at + 4, line.indexOf(" =", at)).trim());
+						}
+					}
+				}
+				pop = next;
+			}
+			for (int i = 0; i < AgentIO.NUM_SENSORS; i++) {
+				assertTrue("sensor '" + AgentIO.SENSOR_NAMES[i] + "' (" + i
+						+ ") can be reached by an evolved mind", sensed.contains(i));
+			}
+			for (int i = 0; i < AgentIO.NUM_ACT; i++) {
+				assertTrue("actuator '" + AgentIO.ACT_NAMES[i] + "' (" + i
+						+ ") can be reached by an evolved mind", written.contains(i));
+			}
+		}
+
+		private static void note(java.util.Set<Integer> into, String[] names, String name) {
+			for (int i = 0; i < names.length; i++) {
+				if (names[i].equals(name)) {
+					into.add(i);
+					return;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Hearing works end to end: violence makes a noise, the noise crosses a wall,
+	 * a body on the far side reads it on the sensor bank, and it then goes quiet.
+	 *
+	 * <p>The wall is the point. Sight is blocked and smell hangs where it was left;
+	 * hearing is the only channel that carries an event through terrain, so a test
+	 * that put both creatures in one open room would pass on a hearing
+	 * implementation that was really just short-range sight.
+	 */
+	static class ViolenceIsAudibleThroughWalls extends Scenario {
+		@Override
+		public void run() {
+			seed(12);
+			World w = room(15, 7);
+			for (int y = 1; y < 6; y++) {
+				w.setTile(6, y, 0, Tile.TileType.TYPE_WALL); // a solid partition
+			}
+			// A big hunter and a quarry on one side; a listener sealed off on the
+			// other, close enough to be within earshot of the kill but with no line
+			// of sight to it at all.
+			Genome big = new Genome();
+			big.size = 14;
+			// Hungry on purpose: a sated hunter merely patrols (VITALS.md), and this
+			// scenario is about the noise a kill makes, not about what starts one.
+			TestNPC hunter = TestNPC.predator(3.5, 3.5, 0, big)
+					.withHunger(TestNPC.STARVE_HUNGER);
+			TestNPC quarry = TestNPC.grazer(4.3, 3.5, 0);
+			TestNPC listener = TestNPC.mindedForager(8.5, 3.5, 0, new Genome());
+			w.spawnEntity(hunter);
+			w.spawnEntity(quarry);
+			w.spawnEntity(listener);
+
+			assertTrue("nothing has been heard before any violence", !listener.hearsSomething());
+			assertTrue("the wall really does block sight between the two sides",
+					!w.isConnectedSpace(3.5, 3.5, 0, 8.5, 3.5, 0));
+
+			// Anything the listener registers therefore got there by ear.
+			boolean heard = false;
+			for (int i = 0; i < 600 && !heard; i++) {
+				tick(w, 1);
+				heard = listener.hearsSomething();
+			}
+			assertTrue("a kill on the far side of a wall was heard", heard);
+
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			listener.senseInto(s);
+			assertGreater("the sound reaches the mind's proximity channel",
+					s[AgentIO.S_SOUND_PROX], 0);
+
+			// ...and then stops. A channel that never fell silent would leave a
+			// creature steering toward a scream from minutes ago.
+			boolean quiet = false;
+			for (int i = 0; i < 900 && !quiet; i++) {
+				tick(w, 1);
+				quiet = !listener.hearsSomething();
+			}
+			assertTrue("the sound eventually stops ringing", quiet);
+			listener.senseInto(s);
+			assertEquals("a silent world reads zero on the hearing channels", 0,
+					Math.round(s[AgentIO.S_SOUND_PROX] * 1000));
+		}
+	}
+
+	/**
 	 * The mechanics reference is READ OFF the world, not typed out beside it.
 	 *
 	 * <p>Documentation rots in a particular, quiet way: somebody tunes a constant,
@@ -3791,10 +3919,17 @@ public class SimTests {
 			// (GRAZE_DEMAND 0.05 -> 0.003). They are calibrated against measurement
 			// rather than scaled by that ratio, because the relationship is not linear:
 			// a patch runs out, so a slower crop does not reduce a good forager's haul
-			// in proportion. Measured here: random founders 0.000, champion 0.675, mean
-			// 0.533 -- so the gap the test exists to detect is if anything sharper than
-			// before, and each bar keeps well over half its headroom.
-			assertLess("random founder brains forage almost nothing", initialMean, 0.012);
+			// in proportion.
+			//
+			// The founder bar moved once the brain's operand pool was widened to cover
+			// the whole sensor bank. Widening it also made the constant pool draw
+			// uniformly, and one of those constants is the forage intent -- so random
+			// code now stumbles into "seek food" appreciably more often than it did.
+			// That is the fix working, not the test rotting: measured here, random
+			// founders 0.024, champion 0.675 (unchanged), late mean 0.492. The gap this
+			// test exists to detect is 0.469 against a bar of 0.2, and a random founder
+			// still crops under four per cent of what a champion does.
+			assertLess("random founder brains forage almost nothing", initialMean, 0.05);
 			assertGreater("evolution found a strong forager (a champion gathered real food)",
 					bestEver, 0.4);
 			assertGreater("mean foraging rose far above the random start under selection",
@@ -5760,6 +5895,8 @@ public class SimTests {
 				new CreaturesGrowToAdultSize(),
 				new ActionGlyphsRideTheWire(),
 				new MechanicsAreReadOffTheWorld(),
+				new EverySensorIsReachable(),
+				new ViolenceIsAudibleThroughWalls(),
 				new HitchhikerBrainClimbsAboard(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),

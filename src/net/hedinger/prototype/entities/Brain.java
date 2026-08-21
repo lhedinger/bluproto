@@ -44,8 +44,26 @@ public final class Brain {
 	 * NaN/Infinity, but the range is wide enough for counters and timers (memory),
 	 * not just the small values reactive logic on normalized sensors produces. */
 	private static final double REG_CLAMP = 1.0e4;
-	/** Range random operand fields are drawn from (masked per use at exec). */
-	private static final int FIELD = 16;
+	/**
+	 * Range random operand fields are drawn from (masked per use at exec).
+	 *
+	 * <p><b>This must be at least as large as the widest thing an operand can
+	 * name.</b> Operands are masked into range at execution, so a value below the
+	 * sensor count does not fail — it silently makes the channels above it
+	 * unreachable, because no mutation can ever produce an index that high. At 16,
+	 * with 34 sensors, eighteen of them were invisible to every evolved mind: the
+	 * whole forage, waypoint, thirst and intent suite existed, was filled every
+	 * tick, and could not be read. Nothing failed; the sim simply evolved without
+	 * them.
+	 *
+	 * <p>{@code EverySensorIsReachable} pins this against
+	 * {@link AgentIO#NUM_SENSORS} so adding a channel cannot quietly reintroduce
+	 * the same silence. Kept a multiple of {@link #NUM_REG} and of the constant
+	 * pool (both 12) so register and immediate operands stay uniformly
+	 * distributed, and with headroom above the sensor count so the next channel
+	 * added does not have to touch this.
+	 */
+	private static final int FIELD = 48;
 
 	public static final int MAX_LEN = 64;
 	/** Instructions executed per tick unless the caller overrides it; with a

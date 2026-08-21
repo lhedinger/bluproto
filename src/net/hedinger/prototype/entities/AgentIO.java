@@ -143,7 +143,25 @@ public final class AgentIO {
 	 * can currently DO. Appended last so evolved programs indexed against the
 	 * old vector keep their meaning. */
 	public static final int S_HUNGER = 34;
-	public static final int NUM_SENSORS = 35;
+	/**
+	 * Proximity of the loudest thing recently <b>heard</b>, 1/(1+dist), 0 when the
+	 * world has been quiet. Hearing is the one distance sense that is neither
+	 * facing-gated nor stopped by terrain: a scream from behind a wall arrives
+	 * exactly as a scream from open ground does, which is the whole reason it is
+	 * worth having alongside sight.
+	 *
+	 * <p>It reports an <i>event</i> rather than a thing. Sight and smell answer
+	 * "what is there"; this answers "what just happened", and only for a short
+	 * while afterwards — see {@link #S_SOUND_BEARING}. Nothing keeps making the
+	 * noise, so a mind that wants to act on it has to act promptly.
+	 */
+	public static final int S_SOUND_PROX = 35;
+	/** Relative bearing to that sound in the heading frame, -1..1 (of PI). Holds
+	 *  for as long as the sound is still ringing and then falls silent with the
+	 *  proximity, so "which way was that" stays answerable for exactly as long as
+	 *  "was there anything". */
+	public static final int S_SOUND_BEARING = 36;
+	public static final int NUM_SENSORS = 37;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -152,7 +170,8 @@ public final class AgentIO {
 			"health", "carried", "whisker_l", "whisker_r", "hazard_ahead",
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
 			"intent", "fixture_prox", "fixture_bearing",
-			"thirst", "water_prox", "water_bearing", "hunger" };
+			"thirst", "water_prox", "water_bearing", "hunger",
+			"sound_prox", "sound_bearing" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
