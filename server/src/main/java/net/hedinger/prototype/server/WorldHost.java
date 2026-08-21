@@ -696,7 +696,7 @@ final class WorldHost {
 	static final int POP_SAMPLES = 6000;
 
 	/** One reading of the world's trophic makeup. */
-	record PopSample(long tick, int prey, int predator, int scavenger) { }
+	record PopSample(long tick, int prey, int predator, int scavenger, int parasite) { }
 
 	// Written only by the sampler task, read by request threads: an immutable
 	// list swapped in wholesale, so a reader either sees the old series or the
@@ -726,7 +726,7 @@ final class WorldHost {
 	 * server, a socket or a layer bake.
 	 */
 	static PopSample censusOf(net.hedinger.prototype.engine.World w, long tick) {
-		int prey = 0, pred = 0, scav = 0;
+		int prey = 0, pred = 0, scav = 0, para = 0;
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (!(e instanceof net.hedinger.prototype.simtest.TestNPC tn)
 					|| tn.isDead() || tn.isRemoved()) {
@@ -739,12 +739,15 @@ final class WorldHost {
 			case "scavenger":
 				scav++;
 				break;
+			case "parasite":
+				para++;
+				break;
 			default:
 				prey++;
 				break;
 			}
 		}
-		return new PopSample(tick, prey, pred, scav);
+		return new PopSample(tick, prey, pred, scav, para);
 	}
 
 	/** Adds a reading, dropping the oldest once the ring is full. */
@@ -767,16 +770,18 @@ final class WorldHost {
 		java.util.List<PopSample> h = popHistory;
 		long[] ticks = new long[h.size()];
 		int[] prey = new int[h.size()], pred = new int[h.size()], scav = new int[h.size()];
+		int[] para = new int[h.size()];
 		for (int i = 0; i < h.size(); i++) {
 			PopSample p = h.get(i);
 			ticks[i] = p.tick();
 			prey[i] = p.prey();
 			pred[i] = p.predator();
 			scav[i] = p.scavenger();
+			para[i] = p.parasite();
 		}
 		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
 				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "prey", prey,
-				"predator", pred, "scavenger", scav);
+				"predator", pred, "scavenger", scav, "parasite", para);
 	}
 
 	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */

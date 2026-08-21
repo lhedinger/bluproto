@@ -1551,6 +1551,26 @@ public final class Worlds {
 			}
 		}
 
+		// Founder parasites: the fourth trophic level, and the strangest living —
+		// they eat the herd without hunting it, a bite at a time from on top of
+		// it. Small by nature (a parasite must be smaller than its host to latch,
+		// and small is what clings too tight to buck off), ignored by predators,
+		// unable to graze: their supply is the standing crop of big warm bodies,
+		// which is abundant but fights back one buck at a time. Seeded as two
+		// lineages of siblings for the same reason the scavengers are — diet is a
+		// mate barrier, and a lone founder of a sexual line dies single.
+		int nParaLines = 2;
+		int nParaPerLine = Math.max(3, sc(3, scale));
+		net.hedinger.prototype.entities.Genome[] parasites = mindedSpecies(nParaLines);
+		for (int line = 0; line < nParaLines; line++) {
+			for (int i = 0; i < nParaPerLine; i++) {
+				double[] p = openSpot(w);
+				net.hedinger.prototype.entities.Genome g =
+						net.hedinger.prototype.entities.Genome.child(parasites[line], 0.03);
+				w.spawnEntity(TestNPC.mindedParasite(p[0], p[1], SURFACE_Z, g));
+			}
+		}
+
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < sc(10, scale); i++) {
 			double[] p = openSpot(w);
@@ -1597,7 +1617,12 @@ public final class Worlds {
 				// the map, which with diet as a mate barrier is not a breeding
 				// population -- the warden was keeping the niche occupied and extinct
 				// at the same time.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(60, sc(60, scale)) }));
+				new int[] { Math.max(6, sc(6, scale)), Math.max(60, sc(60, scale)) },
+				// Parasites. A floor so the niche survives its own learning curve
+				// (a mindless parasite that never latches starves), and a low
+				// ceiling: their supply is the standing herd, and a parasite bloom
+				// bleeding every big body at once is a plague, not an ecosystem.
+				new int[] { Math.max(6, sc(6, scale)), Math.max(30, sc(30, scale)) }));
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;

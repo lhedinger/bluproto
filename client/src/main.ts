@@ -1172,18 +1172,19 @@ const popCv = document.getElementById('popCv') as HTMLCanvasElement;
 const popKey = document.getElementById('popKey') as HTMLElement;
 const popWin = document.getElementById('popWin') as HTMLElement;
 
-/** Series colours: prey green, predator red, scavenger amber. Distinct in
- *  luminance as well as hue, so the lines stay separable to a colour-blind
- *  viewer and in a screenshot that has lost its colour. */
+/** Series colours: prey green, predator red, scavenger amber, parasite
+ *  violet. Distinct in luminance as well as hue, so the lines stay separable
+ *  to a colour-blind viewer and in a screenshot that has lost its colour. */
 const POP_SERIES = [
   { key: 'prey' as const, label: 'prey', rgb: '#6fbf5e' },
   { key: 'predator' as const, label: 'predators', rgb: '#e0574f' },
   { key: 'scavenger' as const, label: 'scavengers', rgb: '#e2a63b' },
+  { key: 'parasite' as const, label: 'parasites', rgb: '#b07fe0' },
 ];
 
 type PopData = {
   sampleSec: number; tps: number; tick: number[];
-  prey: number[]; predator: number[]; scavenger: number[];
+  prey: number[]; predator: number[]; scavenger: number[]; parasite: number[];
 };
 
 let popOn = /[?&]pop\b/.test(location.search);

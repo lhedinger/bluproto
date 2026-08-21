@@ -165,10 +165,10 @@ public final class ServerTests {
 	 * The role census counts the living, splits them by trophic role, and
 	 * accounts for every one of them.
 	 *
-	 * <p>The last part is the one worth pinning: {@code trophicRole()} has three
-	 * answers today and the census switches on them, so a fourth added later
+	 * <p>The last part is the one worth pinning: {@code trophicRole()} has four
+	 * answers today and the census switches on them, so a fifth added later
 	 * would silently land in the {@code default} arm and be counted as prey. Here
-	 * the three columns are checked against an independent headcount of the live
+	 * the columns are checked against an independent headcount of the live
 	 * creatures, which fails the moment they stop adding up.
 	 */
 	static void populationCensusCountsEveryLivingRole() {
@@ -185,9 +185,9 @@ public final class ServerTests {
 		}
 		check("the census finds creatures", alive > 0);
 		check("every living creature lands in exactly one role",
-				s.prey() + s.predator() + s.scavenger() == alive);
-		check("a seeded world has all three roles",
-				s.prey() > 0 && s.predator() > 0 && s.scavenger() > 0);
+				s.prey() + s.predator() + s.scavenger() + s.parasite() == alive);
+		check("a seeded world has all four roles",
+				s.prey() > 0 && s.predator() > 0 && s.scavenger() > 0 && s.parasite() > 0);
 		check("the reading is stamped with the tick it was taken at", s.tick() == 123);
 
 		// Corpses are not population: killing one must move the count down by one.
@@ -200,7 +200,8 @@ public final class ServerTests {
 		}
 		WorldHost.PopSample after = WorldHost.censusOf(w, 124);
 		check("a corpse is not counted as population",
-				after.prey() + after.predator() + after.scavenger() == alive - 1);
+				after.prey() + after.predator() + after.scavenger() + after.parasite()
+						== alive - 1);
 	}
 
 	private static EntityState probe(int id, double x) {

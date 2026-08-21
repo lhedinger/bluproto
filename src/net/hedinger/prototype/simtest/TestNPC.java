@@ -54,6 +54,13 @@ public class TestNPC extends NPC {
 		 *  return to the world -- {@link net.hedinger.prototype.entities.NPC#eat}
 		 *  ages a dead body toward removal, so a fed scavenger IS decomposition. */
 		SCAVENGER,
+		/** A bigger living body, eaten slowly from on top of it. A parasite
+		 *  latches onto a host it could never bring down in a fight and drains
+		 *  it bite by bite while it rides; its mouth works on nothing else — it
+		 *  cannot graze — and predators leave it alone (too small and too foul
+		 *  to be worth a bite), so its checks are the host's bucking, the
+		 *  drained host dying under it, and its own four books. */
+		PARASITE,
 	}
 
 	private Diet diet = Diet.HERBIVORE;
@@ -591,6 +598,64 @@ public class TestNPC extends NPC {
 		return t;
 	}
 
+	/**
+	 * A minded parasite: the same brains and forage intent as the rest of the
+	 * cohort, with a diet that makes a bigger living body its food. Its forage
+	 * channel points at the nearest host, the shared attach machinery latches it
+	 * on when it arrives (the starter mind holds {@code A_ATTACH} through the
+	 * forage walk), and the drain itself is a body reflex — riding while hungry
+	 * IS eating. Kept small: a parasite must be smaller than its host to latch
+	 * at all, and small is what lets it cling too tight to buck off easily.
+	 */
+	public static TestNPC mindedParasite(double x, double y, double z, Genome g) {
+		Genome own = g.copy();
+		own.size = Math.min(own.size, PARASITE_MAX_SIZE); // small by nature
+		TestNPC t = mindedForager(x, y, z, own);
+		t.withDiet(Diet.PARASITE); // writes through to the genome the body is drawn from
+		return t;
+	}
+
+	/** The biggest body a parasite lineage can grow: staying well under every
+	 *  plausible host is what makes the latch (host must be bigger) and the
+	 *  tight grip (smaller rider clings harder) reliably true of the niche. */
+	public static final double PARASITE_MAX_SIZE = 5;
+
+	@Override
+	protected void run_extended() {
+		super.run_extended(); // the four books first (needs, regen, health)
+		if (diet == Diet.PARASITE && !isDead()) {
+			parasiteFeed();
+		}
+	}
+
+	/**
+	 * The parasite's living, as a body reflex rather than a decision: riding a
+	 * host while hungry IS eating. Every {@link #PARA_BITE_PERIOD} ticks it
+	 * takes {@link #PARA_BITE} health off the host and digests the share of the
+	 * body that health represented — the same meat arithmetic as a hunter's
+	 * bite, so a bigger host is a richer ride. The drain stops on its own when
+	 * the stomach is full or the body is collapsed, and a host that dies under
+	 * it is let go of: a parasite drinks lives, not corpses (the carrion niche
+	 * is the scavenger's).
+	 */
+	private void parasiteFeed() {
+		net.hedinger.prototype.engine.Entity mount = getAttachTarget();
+		if (!(mount instanceof NPC h) || isGrabbed()) {
+			return; // not riding (or held captive, which is not riding)
+		}
+		if (h.isDead() || h.isRemoved()) {
+			detach();
+			return;
+		}
+		if (hunger <= 0 || !canExert() || age % PARA_BITE_PERIOD != 0) {
+			return;
+		}
+		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
+		h.damage(PARA_BITE, "parasites");
+		feed(MEAT_ENERGY * h.bodyMass() * (consumed / (double) FULL_BODY_HEALTH));
+		setAction("eating", true);
+	}
+
 	public static TestNPC mindedForager(double x, double y, double z, Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
 		configureGenomeBody(t, g); // size-scaled reserve, burn and repro thresholds
@@ -711,12 +776,25 @@ public class TestNPC extends NPC {
 	}
 
 	/** Sets what this body can turn into energy — see {@link Diet}. */
+	// --- parasitism ---------------------------------------------------------
+	/** Ticks between a riding parasite's bites of its host. */
+	public static final int PARA_BITE_PERIOD = 30;
+	/** Health a parasite's bite takes off the host — a slow drain, not an
+	 *  attack: minutes to matter, so the host has every chance to buck it off
+	 *  or simply outlive it. The meal is the same meat arithmetic as a
+	 *  hunter's bite, so a bigger host is a richer ride. */
+	public static final int PARA_BITE = 1;
+	/** How far (tiles) a parasite senses warm bodies to ride — scent-like,
+	 *  through cover, the way carrion is smelled rather than seen. */
+	public static final double HOST_SENSE_R = 12.0;
+
 	public TestNPC withDiet(Diet d) {
 		diet = d;
 		if (genome != null) {
 			genome.diet = d == Diet.SCAVENGER ? net.hedinger.prototype.entities.Genome.DIET_SCAVENGER
 					: d == Diet.CARNIVORE ? net.hedinger.prototype.entities.Genome.DIET_CARNIVORE
-							: net.hedinger.prototype.entities.Genome.DIET_HERBIVORE;
+							: d == Diet.PARASITE ? net.hedinger.prototype.entities.Genome.DIET_PARASITE
+									: net.hedinger.prototype.entities.Genome.DIET_HERBIVORE;
 		}
 		return this;
 	}
@@ -726,7 +804,8 @@ public class TestNPC extends NPC {
 	private static void adoptDiet(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.diet = g.diet == net.hedinger.prototype.entities.Genome.DIET_SCAVENGER ? Diet.SCAVENGER
 				: g.diet == net.hedinger.prototype.entities.Genome.DIET_CARNIVORE ? Diet.CARNIVORE
-						: Diet.HERBIVORE;
+						: g.diet == net.hedinger.prototype.entities.Genome.DIET_PARASITE ? Diet.PARASITE
+								: Diet.HERBIVORE;
 	}
 
 	/** Sets the body radius; gates grabbing and the carry offset. */
@@ -1219,6 +1298,31 @@ public class TestNPC extends NPC {
 	 *  close on fleeing prey — it would lose sight of them the instant they bolted.
 	 *  Sensing prey out to its full sight range (which out-ranges the flee radius)
 	 *  lets a faster hunter actually run prey down, mirroring {@link #nearestThreat}. */
+	/** The nearest body a parasite could ride: bigger than itself, alive, and
+	 *  not itself a parasite (they do not stack), within {@link #HOST_SENSE_R}.
+	 *  The host it is already riding counts — and is trivially nearest — so the
+	 *  forage channel keeps reading "here" for as long as the meal lasts. */
+	private NPC nearestHost() {
+		net.hedinger.prototype.engine.Entity mount = getAttachTarget();
+		if (mount instanceof NPC h && !h.isDead() && !h.isRemoved()) {
+			return h;
+		}
+		NPC best = null;
+		double bestD = HOST_SENSE_R;
+		for (NPC n : getWorld().census().creatures(getLvl())) {
+			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
+					|| (n instanceof TestNPC tn && tn.diet == Diet.PARASITE)) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < bestD) {
+				bestD = d;
+				best = n;
+			}
+		}
+		return best;
+	}
+
 	private NPC nearestPrey(double radius, boolean cannibal) {
 		NPC best = null;
 		double bestD = radius;
@@ -1244,6 +1348,12 @@ public class TestNPC extends NPC {
 			// Leave rival predators alone unless desperate: eating one's own kind is
 			// a starvation measure, not everyday hunting.
 			if (!cannibal && n instanceof TestNPC tn && tn.ecoRole().equals("predator")) {
+				continue;
+			}
+			// Parasites are ignored outright, at any hunger: too small and too
+			// foul to be worth a bite. Nothing preys on them — their checks are
+			// the host's bucking and their own four books.
+			if (n instanceof TestNPC tp && tp.diet == Diet.PARASITE) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
@@ -1452,7 +1562,11 @@ public class TestNPC extends NPC {
 			if (dist > LOS_RANGE) {
 				continue;
 			}
-			if (n.getSize() < getSize() && dist < preyD) {
+			// Parasites never enter the prey channel: predators ignore them (see
+			// nearestPrey), and the minded hunt sense agrees so evolution cannot
+			// quietly relearn a taste the scripted hunters are denied.
+			if (n.getSize() < getSize() && dist < preyD
+					&& !(n instanceof TestNPC tp && tp.diet == Diet.PARASITE)) {
 				preyD = dist;
 				preyDx = dx;
 				preyDy = dy;
@@ -1541,6 +1655,23 @@ public class TestNPC extends NPC {
 			double cdx = forageCol + 0.5 - X, cdy = forageRow + 0.5 - Y;
 			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(cdx, cdy));
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
+			return;
+		}
+		// A parasite's food is a bigger living body, so its forage channel points
+		// at the nearest host — sensed like scent (through cover, no facing),
+		// the way a scavenger smells carrion. Riding one, the channel reads "you
+		// are on it", so the forage intent holds it in place instead of marching
+		// it off its own meal.
+		if (diet == Diet.PARASITE) {
+			NPC host = nearestHost();
+			if (host == null) {
+				s[AgentIO.S_FORAGE_PROX] = 0;
+				s[AgentIO.S_FORAGE_BEARING] = 0;
+				return;
+			}
+			double hdx = host.getX() - X, hdy = host.getY() - Y;
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(hdx, hdy));
+			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(hdy, hdx) - D) / Math.PI;
 			return;
 		}
 		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
@@ -2207,7 +2338,11 @@ public class TestNPC extends NPC {
 			// Routing both through the same intent is what lets a scavenger inherit
 			// the forage behaviour every starter brain already has, instead of
 			// needing a sensor and a policy of its own.
-			eaten = diet == Diet.SCAVENGER ? scavenge() : graze(grazeDemand());
+			// A parasite's mouth works on nothing here: it cannot graze and it
+			// does not scavenge — its whole living is the host drain reflex
+			// (parasiteFeed), which runs while it rides, hungry.
+			eaten = diet == Diet.SCAVENGER ? scavenge()
+					: diet == Diet.PARASITE ? 0 : graze(grazeDemand());
 			totalIntake += eaten;
 		}
 		boolean ateItem = false;
@@ -2289,6 +2424,14 @@ public class TestNPC extends NPC {
 		// the captor's call, via drop()).
 		if (a[AgentIO.A_ATTACH] > 0.5) {
 			attachToLarger();
+		} else if (chasing && seekClass == AgentIO.SEEK_FORAGE && diet == Diet.PARASITE) {
+			// A parasite that reaches the host its forage intent names latches on:
+			// arriving IS the act, exactly as pressing is for a fixture, so the
+			// starter mind that merely forages can make this living at all. The
+			// grip holds for as long as the intent does — a mind that switches to
+			// water or to flight climbs off, which is how a riding parasite still
+			// gets to a shore before its own thirst kills it.
+			attachToLarger();
 		} else if (getAttachTarget() != null && !isGrabbed()) {
 			detach();
 		}
@@ -2347,6 +2490,11 @@ public class TestNPC extends NPC {
 		}
 		for (NPC n : targets.values()) { // nearest-first
 			if (n == this || n.isDead() || n.isRemoved()) {
+				continue;
+			}
+			// Parasites do not stack: a parasite never rides another parasite
+			// (a chain of drains would bleed the bottom host through the pile).
+			if (diet == Diet.PARASITE && n instanceof TestNPC tn && tn.diet == Diet.PARASITE) {
 				continue;
 			}
 			if (n.getSize() > getSize() && attachTo(n)) {
@@ -2992,6 +3140,9 @@ public class TestNPC extends NPC {
 		if (diet == Diet.SCAVENGER) {
 			return "scavenger";
 		}
+		if (diet == Diet.PARASITE) {
+			return "parasite";
+		}
 		if (diet == Diet.CARNIVORE || behavior == Behavior.PREDATOR) {
 			return "predator";
 		}
@@ -3004,6 +3155,9 @@ public class TestNPC extends NPC {
 		// level rather than folding it in with the herbivores it is sized like.
 		if (diet == Diet.SCAVENGER) {
 			return "scavenger";
+		}
+		if (diet == Diet.PARASITE) {
+			return "parasite"; // its own census bucket, like the scavengers
 		}
 		if (behavior == Behavior.PREDATOR) {
 			return "predator";

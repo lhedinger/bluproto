@@ -24,7 +24,7 @@ public final class VitalsProbe {
 		World w = Worlds.demo(seed);
 		Map<String, Integer> deaths = new HashMap<>();
 		Set<Integer> counted = new HashSet<>();
-		System.out.println("tick | prey pred scav minded | collapsed starving parched | births(gen>0)");
+		System.out.println("tick | prey pred scav para minded | collapsed starving parched | births(gen>0)");
 		for (int t = 0; t <= ticks; t++) {
 			w.think();
 			for (Entity e : w.getEntities()) {
@@ -41,7 +41,8 @@ public final class VitalsProbe {
 			if (t % 4000 != 0) {
 				continue;
 			}
-			int prey = 0, pred = 0, scav = 0, minded = 0, collapsed = 0, starv = 0, parch = 0, born = 0;
+			int prey = 0, pred = 0, scav = 0, para = 0, minded = 0, collapsed = 0, starv = 0,
+					parch = 0, born = 0;
 			for (Entity e : w.getEntities()) {
 				if (!(e instanceof TestNPC n) || n.isDead() || n.isRemoved()) {
 					continue;
@@ -49,6 +50,8 @@ public final class VitalsProbe {
 				String r = n.ecoRole();
 				if ("scavenger".equals(r)) {
 					scav++;
+				} else if ("parasite".equals(r)) {
+					para++;
 				} else if (n.isMinded()) {
 					minded++;
 				} else if ("prey".equals(r)) {
@@ -69,8 +72,8 @@ public final class VitalsProbe {
 					born++;
 				}
 			}
-			System.out.printf("%6d | %4d %4d %4d %6d | %9d %8d %7d | %d%n",
-					t, prey, pred, scav, minded, collapsed, starv, parch, born);
+			System.out.printf("%6d | %4d %4d %4d %4d %6d | %9d %8d %7d | %d%n",
+					t, prey, pred, scav, para, minded, collapsed, starv, parch, born);
 		}
 		System.out.println("deaths by cause: " + deaths);
 	}
