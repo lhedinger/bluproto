@@ -51,20 +51,20 @@ public abstract class NPC extends Entity {
 	// — yet still need bigger meals to top up. Anchored so a reference creature
 	// lasts a few minutes on a full tank.
 	/** Body size the energy model is anchored on (size factor 1.0 here). */
-	protected static final double REF_SIZE = 8.0;
+	public static final double REF_SIZE = 8.0;
 	/** Full energy reserve of a reference-size creature ("fully fed"). */
-	protected static final double BASE_CAPACITY = 6.0;
+	public static final double BASE_CAPACITY = 6.0;
 	/** Resting energy/tick a reference-size creature burns. At 33 t/s a full
 	 *  reference tank (6.0 / 0.0005 = 12000 ticks) lasts ~6 minutes unfed, so even
 	 *  a half-empty creature has a few minutes of reserve before it starves. */
-	protected static final double BASE_METABOLISM = 0.0005;
+	public static final double BASE_METABOLISM = 0.0005;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
-	protected static final double META_REF = 0.02;
+	public static final double META_REF = 0.02;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
-	protected static final double BIRTH_SIZE_FRACTION = 0.35;
+	public static final double BIRTH_SIZE_FRACTION = 0.35;
 	/**
 	 * Growth in body radius per tick. A FIXED rate, so the distance to travel —
 	 * and therefore the length of childhood — scales with how big the adult body
@@ -160,7 +160,7 @@ public abstract class NPC extends Entity {
 	 * break-even the earlier flat model had — while a genuinely fast one now pays
 	 * several times over rather than merely proportionally.
 	 */
-	protected static final double MOVE_ENERGY = 0.2;
+	public static final double MOVE_ENERGY = 0.2;
 
 	/** This creature's ecological guild ("prey", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick
@@ -227,7 +227,7 @@ public abstract class NPC extends Entity {
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
-	protected static final int REPRO_COOLDOWN = 100;
+	public static final int REPRO_COOLDOWN = 100;
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
 	 * <em>grabbed</em> captive — the cost of restraint itself, separate from the
@@ -242,22 +242,22 @@ public abstract class NPC extends Entity {
 	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
 	 * still costs its captor more than one hanging limp.
 	 */
-	protected static final double GRIP_ENERGY = 0.10;
+	public static final double GRIP_ENERGY = 0.10;
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
-	protected static final double RIDER_METABOLISM = 0.5;
+	public static final double RIDER_METABOLISM = 0.5;
 	/** How far beyond touching a creature can reach to climb aboard a host, in
 	 *  tiles — the same margin biting, mating and grabbing already allow. */
 	protected static final double ATTACH_REACH = 0.5;
 	/** Extra energy a captor burns per tick per unit of (weight x struggle) -- the
 	 *  surcharge for hauling an unwilling captive over a consenting passenger. */
-	protected static final double STRUGGLE_CARRIER_COST = 0.35;
+	public static final double STRUGGLE_CARRIER_COST = 0.35;
 	/** Energy a struggling captive burns itself per tick per unit of struggle --
 	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
 	protected static final double STRUGGLE_SELF_COST = 0.02;
 	/** How much heavier a load counts while the carrier is flying: holding a body
 	 *  up through the air is far harder work than dragging it over the ground. */
-	protected static final double FLIER_CARRY_MULTIPLIER = 5.0;
+	public static final double FLIER_CARRY_MULTIPLIER = 5.0;
 	/** Energy a carrier burns per tick per unit of buck effort (shaking riders
 	 *  off is exhausting, just like a captive's struggle). */
 	protected static final double BUCK_SELF_COST = 0.02;
@@ -523,9 +523,9 @@ public abstract class NPC extends Entity {
 	// --- thirst -------------------------------------------------------------
 	/** Ticks a full hydration tank lasts unaided (~4.5 min at 33 t/s) — longer
 	 *  than the energy tank, so water is a rhythm, not a treadmill. */
-	protected static final double HYDRATION_DRAIN = 1.0 / 9000;
+	public static final double HYDRATION_DRAIN = 1.0 / 9000;
 	/** Refill per tick while at water: a short stop at a shore tops up. */
-	protected static final double DRINK_RATE = 0.01;
+	public static final double DRINK_RATE = 0.01;
 
 	/** Water reserve, 0..1. Only metabolic creatures track it. */
 	protected double hydration = 1.0;
@@ -1648,7 +1648,7 @@ public abstract class NPC extends Entity {
 	 * tanks, and at 0.25 the herd itself stops breeding and only the steward's floor
 	 * keeps it alive. This is the poorest grass the food chain will carry.
 	 */
-	protected static final double GRASS_ENERGY = 0.75;
+	public static final double GRASS_ENERGY = 0.75;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from

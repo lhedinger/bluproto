@@ -25,6 +25,15 @@ import {
 } from './render';
 
 const root = document.getElementById('root')!;
+// The page has two halves. Mechanics come first — a viewer who wants to know why
+// a creature just starved is better served by the energy model than by a sprite
+// sheet — so its host div is parked in the DOM before any art section appends
+// itself to `root`, and filled in once the server has answered.
+const mechRoot = document.createElement('div');
+root.append(mechRoot);
+const artRoot = document.createElement('div');
+root.append(artRoot);
+
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 
 {
@@ -59,7 +68,7 @@ function section(title: string, note: string): HTMLDivElement {
   p.textContent = note;
   const grid = document.createElement('div');
   grid.className = 'grid';
-  root.append(h, p, grid);
+  artRoot.append(h, p, grid);
   return grid;
 }
 
@@ -555,3 +564,136 @@ const rest = section('Server-baked art',
     + '.png</code>. Both are fetched straight into the entries above.';
   rest.append(p);
 }
+
+// ---- how the world works -------------------------------------------------
+// The other half of the page, and the reason it stopped being called a sprite
+// catalog. Same principle as the art above, applied to the rules: none of these
+// numbers are written here. The server reads them off the running constants —
+// or computes them with the arithmetic the simulation itself uses — and hands
+// them over, so a tuning change moves this page with it instead of quietly
+// leaving it behind. Only the prose is authored, and it is deliberately written
+// about relationships rather than values for exactly that reason.
+
+interface MechRow { label: string; value: string; unit: string; note: string; }
+interface MechTable { caption: string; headers: string[]; rows: string[][]; }
+interface MechItem { name: string; detail: string; idx?: string; }
+interface MechGroup { title: string; items: MechItem[]; }
+interface MechSection {
+  id: string; title: string; intro: string; rows: MechRow[];
+  table?: MechTable; groups?: MechGroup[];
+}
+
+/** Text into a fresh element, escaped by the DOM rather than by us. */
+function el<K extends keyof HTMLElementTagNameMap>(
+    tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function mechSection(m: MechSection, into: HTMLElement): void {
+  const h = el('h2', m.title);
+  h.id = m.id;
+  into.append(h);
+  // Blank-line-separated paragraphs, so the server can write more than one
+  // without smuggling markup through the wire.
+  for (const para of m.intro.split('\n\n')) into.append(el('p', para, 'note'));
+
+  const t = el('table', undefined, 'facts');
+  const tb = el('tbody');
+  for (const r of m.rows) {
+    const tr = el('tr');
+    tr.append(el('th', r.label));
+    const v = el('td', r.value, 'v');
+    if (r.unit) {
+      v.append(document.createTextNode(' '));
+      v.append(el('span', r.unit, 'unit'));
+    }
+    tr.append(v, el('td', r.note, 'why'));
+    tb.append(tr);
+  }
+  t.append(tb);
+  into.append(wide(t));
+
+  if (m.table) into.append(worked(m.table));
+  if (m.groups) for (const g of m.groups) into.append(channels(g));
+}
+
+/** A named group of channels — a sensor bank, a set of acts. These describe a
+ *  SURFACE rather than a quantity, so they read as a list of names with what
+ *  each one means, not as a table of figures. The name is the engine's own wire
+ *  name for the channel, which is what makes the list checkable. */
+function channels(g: MechGroup): HTMLElement {
+  const box = el('div', undefined, 'chan');
+  box.append(el('h3', g.title));
+  const dl = el('dl');
+  for (const i of g.items) {
+    dl.append(el('dt', i.name), el('dd', i.detail));
+  }
+  box.append(dl);
+  return box;
+}
+
+/** A worked table: the constants above, applied across the range of bodies or
+ *  paces the world can actually produce. This is where the model stops being a
+ *  formula and starts being a claim about what living here is like. */
+function worked(w: MechTable): HTMLElement {
+  const t = el('table', undefined, 'worked');
+  const head = el('tr');
+  for (const h of w.headers) head.append(el('th', h));
+  const th = el('thead');
+  th.append(head);
+  const tb = el('tbody');
+  for (const row of w.rows) {
+    const tr = el('tr');
+    for (const cell of row) tr.append(el('td', cell));
+    tb.append(tr);
+  }
+  t.append(th, tb);
+  const cap = el('figcaption', w.caption, 'tcap');
+  const box = el('div', undefined, 'tblock');
+  box.append(wide(t), cap);
+  return box;
+}
+
+/** Wraps a table so a narrow phone scrolls the TABLE sideways rather than the
+ *  page — the site is watched on a phone more often than not. */
+function wide(t: HTMLElement): HTMLElement {
+  const d = el('div', undefined, 'scroll');
+  d.append(t);
+  return d;
+}
+
+void (async () => {
+  let secs: MechSection[] = [];
+  try {
+    const r = await fetch('/help/mechanics.json');
+    if (r.ok) secs = await r.json();
+  } catch {
+    /* offline: better a page with no rules on it than a page of stale ones */
+  }
+  if (!secs.length) return;
+
+  mechRoot.append(el('h2', 'How the world works', 'part'));
+  const lead = el('p', undefined, 'note');
+  lead.innerHTML = 'Every figure below is read off the <b>running simulation\'s own '
+    + 'constants</b>, or worked out from them by the same arithmetic the simulation '
+    + 'uses — nothing on this page is transcribed. A page that divides the tank by '
+    + 'the burn rate cannot be wrong about how long a creature lasts; a page that '
+    + 'states the answer can, and would never say so.';
+  mechRoot.append(lead);
+
+  const nav = el('p', undefined, 'nav');
+  for (const m of secs) {
+    const a = el('a', m.title);
+    a.href = `#${m.id}`;
+    nav.append(a);
+  }
+  mechRoot.append(nav);
+  for (const m of secs) mechSection(m, mechRoot);
+
+  // The art half gets its own banner, now that it is no longer the whole page.
+  const banner = el('h2', 'How the world looks', 'part');
+  artRoot.prepend(banner);
+})();
