@@ -172,11 +172,17 @@ public final class WorldSteward extends Entity {
 	}
 
 	/** Whether any body big enough to host a parasite is alive — the
-	 *  precondition for the niche existing at all. */
+	 *  precondition for the niche existing at all.
+	 *
+	 *  <p>Compared in PIXELS ({@link TestNPC#getPixelSize()}), the unit the
+	 *  parasite size cap is written in. Asking {@code getSize()} instead
+	 *  compares tiles against a pixel constant — every body in the world is
+	 *  under a third of a tile across, so the test answered "no host anywhere"
+	 *  forever and this floor never once fired. */
 	private boolean hostPresent() {
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
-					&& t.getSize() > TestNPC.PARASITE_MAX_SIZE
+					&& t.getPixelSize() > TestNPC.PARASITE_MAX_SIZE_PX
 					&& !t.ecoRole().equals("parasite")) {
 				return true;
 			}
