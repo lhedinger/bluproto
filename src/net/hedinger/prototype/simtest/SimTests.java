@@ -1425,6 +1425,92 @@ public class SimTests {
 	}
 
 	/**
+	 * A creature's role is decided by what it EATS, never by what steers it.
+	 *
+	 * <p>The steward's bounds are keyed on role, so anything the role fails to
+	 * describe is something the world cannot govern. Mindedness used to leak into
+	 * it: a herbivore with an evolved brain reported no role at all and was held by
+	 * a separate "minded" cohort with its own guardrails — the same animal governed
+	 * one way with a brain and another way without, and missing from the prey count
+	 * that is supposed to describe the herd.
+	 *
+	 * <p>Pinned in both directions: bodies differing only in what drives them must
+	 * report the SAME role, and bodies differing only in diet must report different
+	 * ones.
+	 */
+	static class RoleFollowsDietNotMind extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(14, 14);
+			Genome g = new Genome();
+
+			// Same diet, three different things driving the body.
+			TestNPC scripted = TestNPC.breeder(2.5, 2.5, 0, g.copy());
+			TestNPC brained = TestNPC.brainedBreeder(3.5, 2.5, 0, g.copy());
+			TestNPC evolved = TestNPC.mindedForager(4.5, 2.5, 0, g.copy());
+			for (TestNPC t : new TestNPC[] { scripted, brained, evolved }) {
+				w.spawnEntity(t);
+			}
+			assertTrue("a scripted herbivore is prey", "prey".equals(scripted.ecoRole()));
+			assertTrue("a brained herbivore is prey too", "prey".equals(brained.ecoRole()));
+			assertTrue("an evolved herbivore is STILL prey", "prey".equals(evolved.ecoRole()));
+			assertTrue("mindedness is not what decides the role",
+					evolved.isMinded() && evolved.ecoRole().equals(scripted.ecoRole()));
+
+			// Same driver, one per trophic level.
+			TestNPC mh = TestNPC.mindedForager(6.5, 6.5, 0, dieted(Genome.DIET_HERBIVORE));
+			TestNPC mc = TestNPC.mindedForager(7.5, 6.5, 0, dieted(Genome.DIET_CARNIVORE));
+			TestNPC ms = TestNPC.mindedForager(8.5, 6.5, 0, dieted(Genome.DIET_SCAVENGER));
+			TestNPC mp = TestNPC.mindedForager(9.5, 6.5, 0, dieted(Genome.DIET_PARASITE));
+			for (TestNPC t : new TestNPC[] { mh, mc, ms, mp }) {
+				w.spawnEntity(t);
+			}
+			assertTrue("diet decides: herbivore -> prey", "prey".equals(mh.ecoRole()));
+			assertTrue("diet decides: carnivore -> predator", "predator".equals(mc.ecoRole()));
+			assertTrue("diet decides: scavenger -> scavenger", "scavenger".equals(ms.ecoRole()));
+			assertTrue("diet decides: parasite -> parasite", "parasite".equals(mp.ecoRole()));
+
+			// Bodies outside the ecosystem stay outside it: no genome, no role, so
+			// the warden never counts or trims them.
+			assertTrue("a bare roamer has no role",
+					TestNPC.roamer(1.5, 1.5, 0).ecoRole().isEmpty());
+			assertTrue("an inert fixture has no role",
+					TestNPC.inert(1.5, 2.5, 0).ecoRole().isEmpty());
+
+			// Spawns are queued until the next step and the steward's census runs over
+			// live entities, so tick once before counting -- otherwise this measures
+			// an empty world and passes for the wrong reason.
+			tick(w, 1);
+
+			// Every creature with a genome must land in exactly one bucket. One with
+			// none would be ungovernable: invisible to its floor, immune to its ceiling.
+			int roleless = 0;
+			java.util.Map<String, Integer> byRole = new java.util.TreeMap<>();
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.getGenome() != null && !t.isDead()) {
+					if (t.ecoRole().isEmpty()) {
+						roleless++;
+					} else {
+						byRole.merge(t.ecoRole(), 1, Integer::sum);
+					}
+				}
+			}
+			assertEquals("every creature with a genome has a role", 0, roleless);
+			assertEquals("four herbivores counted as prey", 4, (long) byRole.getOrDefault("prey", 0));
+			assertEquals("one predator", 1, (long) byRole.getOrDefault("predator", 0));
+			assertEquals("one scavenger", 1, (long) byRole.getOrDefault("scavenger", 0));
+			assertEquals("one parasite", 1, (long) byRole.getOrDefault("parasite", 0));
+		}
+
+		private static Genome dieted(int diet) {
+			Genome g = new Genome();
+			g.diet = diet;
+			return g;
+		}
+	}
+
+	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
 	 * <p>Brain operands are masked into range at execution, so an operand pool
@@ -6590,6 +6676,7 @@ public class SimTests {
 				new CreaturesGrowToAdultSize(),
 				new ActionGlyphsRideTheWire(),
 				new MechanicsAreReadOffTheWorld(),
+				new RoleFollowsDietNotMind(),
 				new EverySensorIsReachable(),
 				new ViolenceIsAudibleThroughWalls(),
 				new HitchhikerBrainClimbsAboard(),
