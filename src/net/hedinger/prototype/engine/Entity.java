@@ -590,6 +590,33 @@ public abstract class Entity {
 		age = -1;
 	}
 
+	/**
+	 * Ages this corpse forward to {@code progress} of the way through its
+	 * decay (0 just died .. 1 gone), so a body can arrive already mostly
+	 * rotted instead of having to lie there and get there.
+	 *
+	 * <p>The one caller is the steward drone's zap, which does not so much
+	 * kill a creature as take most of it away: what is left on the deck is a
+	 * remnant, not a carcass. Expressing that as decay rather than as a
+	 * special kind of death means every system downstream already handles it
+	 * — a scavenger's carrion score discounts by exactly this number, the
+	 * corpse clears on the ordinary schedule, and what little mass is left
+	 * still feeds the ground when it goes.
+	 *
+	 * <p>Ignored on a living body: decay is a fact about corpses, and aging a
+	 * live one backwards would be a way to kill it by side effect.
+	 */
+	public void decayTo(double progress) {
+		if (age >= 0 || deathspan <= 0) {
+			return;
+		}
+		double p = progress < 0 ? 0 : progress > 1 ? 1 : progress;
+		int aged = -(int) Math.round(p * deathspan);
+		if (aged < age) {
+			age = aged; // only ever forward: nothing un-rots
+		}
+	}
+
 	public void remove() {
 		age = -1;
 		markRemoved();

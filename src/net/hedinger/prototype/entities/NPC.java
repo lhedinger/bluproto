@@ -169,6 +169,23 @@ public abstract class NPC extends Entity {
 		return "";
 	}
 
+	/**
+	 * Whether this body is made of meat — the one question every appetite in
+	 * the world is really asking. Living things answer yes; a machine answers
+	 * no, and by answering no drops out of the prey channel, the host search,
+	 * the carrion scan and the mating test all at once.
+	 *
+	 * <p>Asked as a property of the body rather than tested with an
+	 * {@code instanceof} at each appetite, because "is that food?" is a fact
+	 * about the thing being looked at, not about the looker: a machine has to
+	 * be inedible to every appetite there is, including the ones a future diet
+	 * invents. A hunter that could learn to bite the drone is a hunter that
+	 * starves chewing on steel.
+	 */
+	public boolean isOrganic() {
+		return true;
+	}
+
 	/** Body-size factor, 1.0 at {@link #REF_SIZE}; drives every energy scale.
 	 *  Falls back to the reference when no size is set.
 	 *
@@ -1178,7 +1195,14 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////
 
 	protected void generatePath(double x, double y, double z) {
-		path = getWorld().findPath(X, Y, Z, x, y, z);
+		generatePath(x, y, z, false);
+	}
+
+	/** As above, with {@code throughDoors} planning the route as though every
+	 *  door on the way were open — for a body that opens them, see
+	 *  {@link net.hedinger.prototype.engine.Tile#calcConnected(net.hedinger.prototype.engine.World, boolean, boolean)}. */
+	protected void generatePath(double x, double y, double z, boolean throughDoors) {
+		path = getWorld().findPath(X, Y, Z, x, y, z, throughDoors, getPixelSize());
 		if (path.size() == 0) {
 			path = null;
 		}
@@ -1900,6 +1924,9 @@ public abstract class NPC extends Entity {
 	public boolean canMateWith(NPC other) {
 		if (other == null || other == this || !fertile() || !other.fertile()) {
 			return false;
+		}
+		if (!isOrganic() || !other.isOrganic()) {
+			return false; // machinery does not breed, and nothing breeds with it
 		}
 		double sim = genome.similarityTo(other.genome);
 		return sim >= genome.mateThreshold && sim >= other.genome.mateThreshold;

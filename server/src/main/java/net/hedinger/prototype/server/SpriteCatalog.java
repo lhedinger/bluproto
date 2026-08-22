@@ -115,6 +115,7 @@ final class SpriteCatalog {
 		ground("air_vent", Tile.TileType.TYPE_AIRVENT);
 		ground("duct", Tile.TileType.TYPE_DUCT);
 		ground("switch_seat", Tile.TileType.TYPE_SWITCH);
+		ground("charge_dock", Tile.TileType.TYPE_DOCK);
 		ramps();
 	}
 

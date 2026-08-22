@@ -44,7 +44,7 @@ public final class GroundTextures {
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
-			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28;
+			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -75,6 +75,7 @@ public final class GroundTextures {
 			{ 0x1f2637, 0x38466e, 0x5f74a4 }, // crystal bed (grounded, a step darker)
 			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
 			{ 0x353a42, 0x515862, 0x707885 }, // switch plate (deck steel family)
+			{ 0x2a2f38, 0x424a57, 0x5d6675 }, // charge dock (deck steel, a shade colder)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -144,6 +145,8 @@ public final class GroundTextures {
 			return CLS_CRYSTAL_SPARSE;
 		case TYPE_SWITCH:
 			return CLS_SWITCH;
+		case TYPE_DOCK:
+			return CLS_DOCK;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -1047,6 +1050,44 @@ public final class GroundTextures {
 			return RAMP[CLS_SWITCH][0]; // the dark seam between base and seat
 		}
 		return darken(RAMP[CLS_SWITCH][0], 0.8); // the recessed seat
+	}
+
+	/**
+	 * The steward drone's charge dock: a recessed berth sunk into the deck,
+	 * hazard-striped on its two open sides and lit by a ring of contacts the
+	 * drone settles onto. Baked, so nothing here animates -- the berth reads
+	 * as occupied or empty from the drone parked over it, not from the pad.
+	 *
+	 * <p>Drawn on the same 12-per-tile art-pixel grid as the switch seat and
+	 * the same deck-steel family, so a dock reads as facility furniture
+	 * rather than as a new material: the eye should place it beside the vent
+	 * grille and the pressure plate, not beside the crystal.
+	 */
+	public static int chargeDock(int ai, int aj, int px, int py) {
+		// The hazard border: the outermost art-pixel ring, striped on the
+		// diagonal like every other "machinery works here" marking in the
+		// facility, so the berth is legible as a keep-clear square.
+		if (ai == 0 || aj == 0 || ai == 11 || aj == 11) {
+			return ((ai + aj) & 3) < 2 ? HAZARD : HAZARD_DARK;
+		}
+		double dx = ai - 5.5, dy = aj - 5.5;
+		double d2 = dx * dx + dy * dy;
+		if (d2 > 20) {
+			return plate(px, py); // ordinary deck showing inside the stripes
+		}
+		if (d2 > 12) {
+			// The contact ring, shaded to the world's one light source: lit on
+			// the north arc, in shadow on the south, mid on the flanks.
+			return dy < -Math.abs(dx) * 0.5 ? lighten2(RAMP[CLS_DOCK][2], 1.2)
+					: dy > Math.abs(dx) * 0.5 ? RAMP[CLS_DOCK][0]
+					: RAMP[CLS_DOCK][2];
+		}
+		if (d2 > 8) {
+			return RAMP[CLS_DOCK][0]; // the seam around the sunken berth
+		}
+		// The berth floor, with the charge coil's faint glow at dead centre --
+		// the one warm pixel on the pad, so a dock is findable at a glance.
+		return d2 < 2 ? HAZARD : darken(RAMP[CLS_DOCK][0], 0.75);
 	}
 
 	private static int lighten2(int rgb, double f) {

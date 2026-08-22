@@ -283,17 +283,88 @@ public class Tile {
 	}
 
 	public HashSet<Integer> calcConnected(World w, boolean diagonal) {
+		return calcConnected(w, diagonal, false);
+	}
+
+	/**
+	 * Every tile a body could step to from this one, as world hashes — the
+	 * pathfinder's edge set.
+	 *
+	 * <p>Includes the two <b>ramp edges</b>, which the same-level scan below
+	 * cannot see. A ramp is floor that spans two levels, so walking east off a
+	 * {@code RAMPUP}'s top comes out one level up and west off a
+	 * {@code RAMPDOWN}'s foot one level down — the rule {@link
+	 * net.hedinger.prototype.engine.Entity}'s movement resolution already
+	 * enforces, and the one the world generator's connectivity flood already
+	 * follows. Without them here the search graph was one disconnected
+	 * component per level, so {@code findPath} silently answered "no route"
+	 * for any goal off the caller's own floor even though a body could
+	 * plainly walk there. Nothing was wrong with the levels; the map the
+	 * pathfinder was reading simply stopped at the ceiling.
+	 *
+	 * <p>{@code throughDoors} plans as though every door on the way were open.
+	 * A shut door is not a wall — it is a wall to whoever cannot open it — so
+	 * whether it belongs in the graph depends on who is asking. Bodies get the
+	 * honest map (the default): a shut door is impassable and a route is found
+	 * around it or not at all. The steward drone, which opens doors by coming
+	 * near them, gets the other one, and simply flies at each door until it
+	 * parts.
+	 */
+	public HashSet<Integer> calcConnected(World w, boolean diagonal, boolean throughDoors) {
+		return calcConnected(w, diagonal, throughDoors, 0);
+	}
+
+	/** As above, refusing any edge into ground too tight for a body of
+	 *  {@code clearance} pixels — 0 asks for the clearance-blind graph. */
+	public HashSet<Integer> calcConnected(World w, boolean diagonal, boolean throughDoors,
+			int clearance) {
 		HashSet<Integer> connected = new HashSet<Integer>();
 		for (int x = -1; x <= 1; x++) {
 			for (int y = -1; y <= 1; y++) {
-				if (!(x == 0 && y == 0)) {
-					if (isConnected(w, col + x, row + y, lvl, diagonal, false)) {
-						connected.add(w.hashCode(col + x, row + y, lvl));
-					}
+				if (!(x == 0 && y == 0) && fits(w, col + x, row + y, lvl, clearance)
+						&& isConnected(w, col + x, row + y, lvl, diagonal, false, throughDoors)) {
+					connected.add(w.hashCode(col + x, row + y, lvl));
 				}
 			}
 		}
+		if (type == TYPE_RAMPUP && w.isValid(col + 1, row, lvl + 1)
+				&& !w.getTile(col + 1, row, lvl + 1).isSolid()
+				&& fits(w, col + 1, row, lvl + 1, clearance)) {
+			connected.add(w.hashCode(col + 1, row, lvl + 1)); // off the top, going east
+		}
+		if (type == TYPE_RAMPDOWN && w.isValid(col - 1, row, lvl - 1)
+				&& !w.getTile(col - 1, row, lvl - 1).isSolid()
+				&& fits(w, col - 1, row, lvl - 1, clearance)) {
+			connected.add(w.hashCode(col - 1, row, lvl - 1)); // off the foot, going west
+		}
 		return connected;
+	}
+
+	/**
+	 * Whether a body of {@code clearance} pixels could get into the tile at
+	 * {@code (c, r, l)} — the same two gates {@code Entity.isColliding}
+	 * enforces when the step is actually taken: a crawl duct admits only small
+	 * frames, and a shard bed only bodies that fit between the shards.
+	 *
+	 * <p>The pathfinder had no notion of how big the traveller was, which cost
+	 * nothing while the only things that used it were small. It costs a great
+	 * deal for a machine the size of the steward's drone: a route laid through
+	 * the base's ventilation ducting is a route the engine then refuses one
+	 * step at a time, and the drone presses against the grille until something
+	 * else re-plans for it. A route a body cannot fly is not a route.
+	 */
+	private static boolean fits(World w, int c, int r, int l, int clearance) {
+		if (clearance <= 0 || !w.isValid(c, r, l)) {
+			return true; // clearance-blind, or out of bounds for isConnected to refuse
+		}
+		TileType t = w.getTile(c, r, l).getType();
+		if (t == TileType.TYPE_DUCT) {
+			return clearance <= DUCT_CLEARANCE;
+		}
+		if (t == TileType.TYPE_CRYSTAL_BED) {
+			return clearance <= CRYSTAL_CLEARANCE;
+		}
+		return true;
 	}
 
 	public boolean isConnectedStatic(World w, int x, int y, int z) {
@@ -326,6 +397,14 @@ public class Tile {
 	}
 
 	public boolean isConnected(World w, double x, double y, double z, boolean diagonal, boolean floorsOnly) {
+		return isConnected(w, x, y, z, diagonal, floorsOnly, false);
+	}
+
+	/** As above, but {@code throughDoors} ignores every door flag on the way —
+	 *  the map as it looks to a body that doors open for. See
+	 *  {@link #calcConnected(World, boolean, boolean)}. */
+	public boolean isConnected(World w, double x, double y, double z, boolean diagonal,
+			boolean floorsOnly, boolean throughDoors) {
 		Tile temp = w.getTile(World.toCol(x), World.toRow(y), World.toLvl(z));
 
 		if (z < 0) {
@@ -374,29 +453,31 @@ public class Tile {
 				return false;
 			}
 
-			if (dy > 0 && door_N) {
-				return false;
-			}
-			if (dx < 0 && door_E) {
-				return false;
-			}
-			if (dy < 0 && door_S) {
-				return false;
-			}
-			if (dx > 0 && door_W) {
-				return false;
-			}
-			if (dy > 0 && temp.door_S) {
-				return false;
-			}
-			if (dx < 0 && temp.door_W) {
-				return false;
-			}
-			if (dy < 0 && temp.door_N) {
-				return false;
-			}
-			if (dx > 0 && temp.door_E) {
-				return false;
+			if (!throughDoors) {
+				if (dy > 0 && door_N) {
+					return false;
+				}
+				if (dx < 0 && door_E) {
+					return false;
+				}
+				if (dy < 0 && door_S) {
+					return false;
+				}
+				if (dx > 0 && door_W) {
+					return false;
+				}
+				if (dy > 0 && temp.door_S) {
+					return false;
+				}
+				if (dx < 0 && temp.door_W) {
+					return false;
+				}
+				if (dy < 0 && temp.door_N) {
+					return false;
+				}
+				if (dx > 0 && temp.door_E) {
+					return false;
+				}
 			}
 
 			if (Math.abs(dx) * Math.abs(dy) == 1) // diagonal
@@ -404,8 +485,8 @@ public class Tile {
 				if (!isWalkable() && diagonal) {
 					return true;
 				}
-				if (!isConnected(w, col - dx, row, lvl, false, floorsOnly)
-						|| !isConnected(w, col, row - dy, lvl, false, floorsOnly)) {
+				if (!isConnected(w, col - dx, row, lvl, false, floorsOnly, throughDoors)
+						|| !isConnected(w, col, row - dy, lvl, false, floorsOnly, throughDoors)) {
 					return false;
 				}
 			}
@@ -599,7 +680,8 @@ public class Tile {
 		TYPE_DUCT(26, true, "crawl duct"), // crawlable air duct: small bodies only, concealed
 		TYPE_CRYSTAL_BED(27, true, "shard bed"), // packed shard bed: walkable, but it slows
 		TYPE_CRYSTAL_SPARSE(28, true, "scattered shards"), // scattered shards on stone: ordinary ground
-		TYPE_SWITCH(29, true, "pressure plate"); // pressure-plate floor: a button a body stands on
+		TYPE_SWITCH(29, true, "pressure plate"), // pressure-plate floor: a button a body stands on
+		TYPE_DOCK(30, true, "charge dock"); // the steward drone's berth: a powered pad it parks on
 
 		private int value;
 		private boolean open;

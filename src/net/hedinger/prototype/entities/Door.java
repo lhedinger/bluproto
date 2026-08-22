@@ -102,10 +102,14 @@ public class Door extends Entity {
 	}
 
 	/**
-	 * A wired switch's per-tick request: keep (or get) this door open. Every
-	 * press refreshes the same hold timer, so several plates wired to one
-	 * door compose naturally -- it closes only when all have been quiet for
-	 * the linger.
+	 * A per-tick request to keep (or get) this door open. Every press
+	 * refreshes the same hold timer, so several askers compose naturally --
+	 * the door closes only when all of them have been quiet for the linger.
+	 *
+	 * <p>Two things ask. A wired switch, while a body stands on its plate or
+	 * works its button; and the steward drone, for any door it comes within
+	 * transponder range of -- which is how the machine gets through a base
+	 * whose plates are weight-driven and cannot feel a flyer.
 	 */
 	public void holdOpen() {
 		holdTimer = HOLD;
@@ -129,15 +133,20 @@ public class Door extends Entity {
 	protected void think() {
 		int r = (int) (this.D % (Math.PI / 2));
 
-		if (wired) {
-			// Machinery: open while any switch holds it, close after the
-			// linger runs out. Draws no RNG at all.
-			if (holdTimer > 0) {
-				holdTimer--;
-				if (status == DOOR_CLOSED && delay_counter == 0) {
-					triggered = true;
-				}
-			} else if (status == DOOR_OPEN && delay_counter == 0) {
+		if (holdTimer > 0) {
+			// Something is holding this door open -- a switch pressed, or the
+			// steward drone's transponder in range. Held outranks everything
+			// else a door might be doing, wired or not: an unwired door left
+			// to its own random cycling would otherwise shut in the face of
+			// the machine that was asking it not to. Draws no RNG at all.
+			holdTimer--;
+			if (status == DOOR_CLOSED && delay_counter == 0) {
+				triggered = true;
+			}
+		} else if (wired) {
+			// Machinery with nothing holding it: close after the linger runs
+			// out and stay shut until asked again.
+			if (status == DOOR_OPEN && delay_counter == 0) {
 				triggered = true;
 			}
 		} else if (Utils.random() * 600 < 1) {
