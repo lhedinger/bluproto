@@ -1322,6 +1322,7 @@ public class TestNPC extends NPC {
 		double bestD = HOST_SENSE_R;
 		for (NPC n : getWorld().census().creatures(getLvl())) {
 			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
+					|| !n.isOrganic() // no blood in a machine: nothing to ride and nothing to drink
 					|| (n instanceof TestNPC tn && tn.diet == Diet.PARASITE)) {
 				continue;
 			}
@@ -1365,6 +1366,14 @@ public class TestNPC extends NPC {
 			// foul to be worth a bite. Nothing preys on them — their checks are
 			// the host's bucking and their own four books.
 			if (n instanceof TestNPC tp && tp.diet == Diet.PARASITE) {
+				continue;
+			}
+			// Nor is a machine ever quarry. The steward's drone is the size of a
+			// grown animal and moves like one, so without this a hungry hunter
+			// would spend its life closing on a body it cannot bite and cannot
+			// digest. Inedibility is a property of the drone (isOrganic), not a
+			// rule about drones, so anything mechanical added later is covered.
+			if (!n.isOrganic()) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
@@ -1576,7 +1585,7 @@ public class TestNPC extends NPC {
 			// Parasites never enter the prey channel: predators ignore them (see
 			// nearestPrey), and the minded hunt sense agrees so evolution cannot
 			// quietly relearn a taste the scripted hunters are denied.
-			if (n.getSize() < getSize() && dist < preyD
+			if (n.getSize() < getSize() && dist < preyD && n.isOrganic()
 					&& !(n instanceof TestNPC tp && tp.diet == Diet.PARASITE)) {
 				preyD = dist;
 				preyDx = dx;

@@ -852,6 +852,18 @@ public class World {
 	}
 
 	public HashSet<Integer> getNeighbors(int hash) {
+		return getNeighbors(hash, false);
+	}
+
+	/** As above, planning as though every door on the way were open — see
+	 *  {@link Tile#calcConnected(World, boolean, boolean)}. */
+	public HashSet<Integer> getNeighbors(int hash, boolean throughDoors) {
+		return getNeighbors(hash, throughDoors, 0);
+	}
+
+	/** As above, for a body of {@code clearance} pixels — 0 asks for the
+	 *  clearance-blind graph. */
+	public HashSet<Integer> getNeighbors(int hash, boolean throughDoors, int clearance) {
 		int c = hashCol(hash);
 		int r = hashRow(hash);
 		int l = hashLvl(hash);
@@ -859,10 +871,34 @@ public class World {
 		if (t == null) {
 			return new HashSet<Integer>();
 		}
-		return t.calcConnected(this, false);
+		return t.calcConnected(this, false, throughDoors, clearance);
 	}
 
 	public Stack<Integer> findPath(double x, double y, double z, double tx, double ty, double tz) {
+		return findPath(x, y, z, tx, ty, tz, false);
+	}
+
+	/**
+	 * A* over the tile graph, from one world point to another. Crosses levels
+	 * where a ramp joins them (see {@link Tile#calcConnected(World, boolean,
+	 * boolean)}), so a goal on another floor is reachable if a body could walk
+	 * there.
+	 *
+	 * <p>{@code throughDoors} plans as though the doors on the way were open —
+	 * the map as it looks to something that opens them by arriving. Everything
+	 * else gets the default: a shut door is impassable and the route goes
+	 * round it or nowhere.
+	 */
+	public Stack<Integer> findPath(double x, double y, double z, double tx, double ty, double tz,
+			boolean throughDoors) {
+		return findPath(x, y, z, tx, ty, tz, throughDoors, 0);
+	}
+
+	/** As above, for a body of {@code clearance} pixels: ground too tight for
+	 *  it (a crawl duct, a shard bed) is left out of the graph, so the route
+	 *  returned is one this body can actually fly. 0 is clearance-blind. */
+	public Stack<Integer> findPath(double x, double y, double z, double tx, double ty, double tz,
+			boolean throughDoors, int clearance) {
 		if (!isValid(x, y, z) || !isValid(tx, ty, tz)) {
 			return new Stack<Integer>();
 		}
@@ -902,7 +938,7 @@ public class World {
 			}
 			openset.remove(hash);
 			closedset.add(hash);
-			for (Integer i : getNeighbors(hash)) {
+			for (Integer i : getNeighbors(hash, throughDoors, clearance)) {
 				if (!closedset.contains(i)) {
 					double tempdist = gdist.get(hash) + distance(hash, i);
 					boolean tempisbetter = false;
