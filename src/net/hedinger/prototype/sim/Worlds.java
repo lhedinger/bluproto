@@ -1593,24 +1593,31 @@ public final class Worlds {
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
 		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
-				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
-				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
-				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
-				// long stretches, which meant the warden -- not grass, not predators --
-				// was setting the population, and a ceiling that binds is a governor
-				// rather than the backstop this is meant to be. 250 is well clear of
-				// anything the ecosystem reaches unaided, so what the headcount settles
-				// at is now a fact about the world instead of about this constant.
-				// The real limit is the deploy's heap and the 10 Hz broadcast, neither
-				// of which is measured yet; /api/health now reports tick cost so it can
-				// be watched. (Sim CPU is not the binding constraint: the world audit
-				// measures thousands of ticks/s against a 33 t/s requirement.)
-				Math.max(6, sc(6, scale)), Math.max(250, sc(250, scale)), // minded
-				// Scavengers. A floor so the niche is never simply empty, and a
-				// ceiling well above it -- the binding control is meant to be the
-				// carrion supply, which is finite and self-limiting in a way grass is
-				// not: eating a body destroys it, so a scavenger bloom consumes its
-				// own larder and starves back without the steward touching it.
+				// Bounds are keyed on ROLE, and only on role. What a creature eats is
+				// the whole of what it is ecologically; whether a hardcoded loop or an
+				// evolved program steers it is an implementation detail with no
+				// business setting population policy. There used to be a separate
+				// "minded" cohort with guardrails of its own, which meant a herbivore
+				// was governed one way with a brain and another way without -- and
+				// left every minded herbivore missing from the prey count.
+				//
+				// PREY: every herbivore, scripted or minded. The ceiling is the sum of
+				// the two it replaces (160 plain + 250 minded), measured at the
+				// settled world, so the merge changes WHO is counted rather than how
+				// many the world carries. Within it the mix is now settled by
+				// competition instead of by two separate caps.
+				new int[] { sc(25, scale), sc(410, scale) }, // prey  [floor, ceiling]
+				// PREDATORS: everything with a carnivore diet.
+				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) },
+				// The emergent-mind lineage floor. NOT a population bound: it keeps
+				// the A/B seam from going extinct, and has no ceiling because minded
+				// creatures are capped by the role they belong to like anything else.
+				Math.max(6, sc(6, scale)),
+				// Scavengers. The binding control is meant to be the carrion supply,
+				// which is finite and self-limiting in a way grass is not: eating a
+				// body destroys it, so a scavenger bloom consumes its own larder and
+				// starves back without the steward touching it. Measured, this is the
+				// one cohort that overshoots its ceiling and then drifts down unaided.
 				//
 				// The floor matches the seeded cohort rather than sitting under it. At
 				// three, a cohort held AT the floor was three animals scattered across
@@ -1618,10 +1625,10 @@ public final class Worlds {
 				// population -- the warden was keeping the niche occupied and extinct
 				// at the same time.
 				new int[] { Math.max(6, sc(6, scale)), Math.max(60, sc(60, scale)) },
-				// Parasites. A floor so the niche survives its own learning curve
-				// (a mindless parasite that never latches starves), and a low
-				// ceiling: their supply is the standing herd, and a parasite bloom
-				// bleeding every big body at once is a plague, not an ecosystem.
+				// Parasites. A floor so the niche survives its own learning curve (a
+				// mindless parasite that never latches starves), and a low ceiling:
+				// their supply is the standing herd, and a parasite bloom bleeds it
+				// faster than it breeds.
 				new int[] { Math.max(6, sc(6, scale)), Math.max(30, sc(30, scale)) }));
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world

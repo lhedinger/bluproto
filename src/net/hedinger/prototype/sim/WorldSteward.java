@@ -43,7 +43,10 @@ public final class WorldSteward extends Entity {
 	 *  and ceilings watch. */
 	private final int[] paraBounds;
 	private final Genome[] preySpecies, predSpecies;
-	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
+	/** Floor for the emergent-mind lineage. NOT a population bound -- see think().
+	 *  There is deliberately no matching ceiling: how many minded creatures the
+	 *  world carries is decided by the role bounds they are counted under. */
+	private final int mindedFloor;
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private final int caveZ; // the underground level, or -1 for a one-level world
@@ -54,20 +57,19 @@ public final class WorldSteward extends Entity {
 	private static final int ECO_DEATHSPAN = 90;
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
-		this(w, preySpecies, predSpecies, surfaceZ, -1, preyBounds, predBounds,
-				mindedFloor, mindedMax);
+			int[] preyBounds, int[] predBounds, int mindedFloor) {
+		this(w, preySpecies, predSpecies, surfaceZ, -1, preyBounds, predBounds, mindedFloor);
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor) {
 		this(w, preySpecies, predSpecies, surfaceZ, caveZ, preyBounds, predBounds,
-				mindedFloor, mindedMax, new int[] { 0, Integer.MAX_VALUE },
+				mindedFloor, new int[] { 0, Integer.MAX_VALUE },
 				new int[] { 0, Integer.MAX_VALUE });
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax,
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor,
 			int[] scavBounds, int[] paraBounds) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
@@ -79,7 +81,6 @@ public final class WorldSteward extends Entity {
 		this.preyBounds = preyBounds;
 		this.predBounds = predBounds;
 		this.mindedFloor = mindedFloor;
-		this.mindedMax = mindedMax;
 		this.scavBounds = scavBounds;
 		this.paraBounds = paraBounds;
 	}
@@ -91,26 +92,28 @@ public final class WorldSteward extends Entity {
 		int predMin = predBounds[0];
 		int predMax = predBounds[1];
 
-		int prey = 0, pred = 0, minded = 0, scav = 0, para = 0;
+		// One census, keyed on ROLE alone -- one bucket per trophic level, and every
+		// creature in exactly one of them. Whether a body is steered by a hardcoded
+		// loop or an evolved program is not an ecological fact about it and does not
+		// belong in a population bound: a herbivore with a brain competes for the
+		// same grass, is hunted by the same predators, and leaves the same carcass
+		// as one without. Counting the minded apart made them a cohort with their
+		// own guardrails, which meant the same animal was governed differently
+		// depending on what was driving it -- and left every minded herbivore
+		// missing from the prey count that is supposed to describe the herd.
+		int prey = 0, pred = 0, scav = 0, para = 0, minded = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
-				// Scavengers are minded too, but they are counted apart: folded into
-				// the minded cohort they would satisfy its floor while eating from a
-				// different supply entirely, and its ceiling would cull them for a
-				// crowding they had no part in.
-				if (t.ecoRole().equals("scavenger")) {
-					scav++;
-				} else if (t.ecoRole().equals("parasite")) {
-					para++; // its own supply (the standing herd), its own count
-				} else if (t.isMinded()) {
-					minded++; // the hybrid cohort is its own category (role emerges)
-				} else {
-					String r = t.ecoRole();
-					if (r.equals("prey")) {
-						prey++;
-					} else if (r.equals("predator")) {
-						pred++;
-					}
+				switch (t.ecoRole()) {
+					case "prey" -> prey++;
+					case "predator" -> pred++;
+					case "scavenger" -> scav++;
+					case "parasite" -> para++;
+					default -> { } // roleless: outside the ecosystem, ungoverned
+				}
+				// Tallied, but NOT a population bound -- see the lineage guard below.
+				if (t.isMinded()) {
+					minded++;
 				}
 			}
 		}
@@ -124,22 +127,20 @@ public final class WorldSteward extends Entity {
 		if (pred < predMin && prey > predMin * 4) {
 			seed(predSpecies, false);
 		}
-		// Keep the small minded cohort from vanishing: a fully-random mind rarely
-		// feeds itself, so the lineage would otherwise die out and the A/B seam with
-		// it. Reseed one fresh random-brained creature per tick until the floor is
-		// restored (fresh random, not inherited: pure emergence, per the design).
+		// The one rule here that is NOT a population bound. Mindedness is a control
+		// method, not a trophic level, so it has no cohort of its own in the census
+		// above -- a minded herbivore is governed as prey, because that is what it
+		// is. But the emergent lineage can still go extinct through ordinary
+		// ecology, and if it does nothing brings it back: the prey floor reseeds
+		// hardcoded breeders, so the world would quietly become an all-scripted one
+		// with no test failing.
+		//
+		// This is therefore a LINEAGE guard, not a headcount, and deliberately has
+		// no matching ceiling: how many minded creatures the world carries is
+		// settled by the role bounds they are counted under, like any other animal.
 		if (minded < mindedFloor) {
 			seedMinded();
 		}
-		// Ceiling on the minded cohort: a last-resort backstop, not the primary
-		// control. Predators hunt minded creatures like anything else their size or
-		// smaller, so predation and starvation are what actually hold this cohort in
-		// check; the cap sits far above the population those forces settle at and
-		// should almost never fire.
-		if (minded > mindedMax) {
-			trimMinded(Math.min(3, minded - mindedMax));
-		}
-
 		// Ceiling: trim a small, fixed number of the excess per tick, so the herd
 		// is thinned gradually rather than culled in one blow.
 		if (prey > preyMax) {
@@ -277,37 +278,26 @@ public final class WorldSteward extends Entity {
 		getWorld().spawnEntity(TestNPC.mindedForager(x, y, z, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Removes up to {@code count} minded creatures (iteration order) -- the ceiling
-	 *  for the hybrid cohort, which the role-keyed {@link #trim} does not cover.
+	/**
+	 * Removes up to {@code count} of the given role (iteration order).
 	 *
-	 *  <p>Hand-placed creatures (a genome someone injected from the viewer) are
-	 *  never culled: deleting what a person deliberately dropped -- healthy, and
-	 *  with no corpse to show for it -- reads as the world eating your creature.
-	 *  An injection therefore displaces one of the steward's own, and the cohort
-	 *  stays just as bounded (the founder still counts toward the ceiling, and its
-	 *  offspring are ordinary cullable citizens). */
-	private void trimMinded(int count) {
-		int removed = 0;
-		for (Entity e : getWorld().getEntities()) {
-			if (removed >= count) {
-				break;
-			}
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()
-					&& !t.isHandPlaced()) {
-				t.remove();
-				removed++;
-			}
-		}
-	}
-
-	/** Removes up to {@code count} of the given role (iteration order). */
+	 * <p>Hand-placed creatures (a genome someone injected from the viewer) are
+	 * never culled: deleting what a person deliberately dropped -- healthy, and
+	 * with no corpse to show for it -- reads as the world eating your creature. An
+	 * injection therefore displaces one of the steward's own, and the role stays
+	 * just as bounded (the founder still counts toward the ceiling, and its
+	 * offspring are ordinary cullable citizens). This protection used to live only
+	 * in the minded cohort's own trim; now that every creature is trimmed by role
+	 * it belongs here, or injecting a plain grazer would make it culler-bait.
+	 */
 	private void trim(String role, int count) {
 		int removed = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (removed >= count) {
 				break;
 			}
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.ecoRole().equals(role)) {
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+					&& t.ecoRole().equals(role) && !t.isHandPlaced()) {
 				t.remove();
 				removed++;
 			}
