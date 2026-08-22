@@ -363,8 +363,22 @@ public final class Worlds {
 					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.0; // dry badlands: bare dirt, no grass, no food
 				} else {
+					// Meadow, and its richness is the story the ground tells:
+					// fertility runs the whole band from thin scrub on the dry
+					// margins to prime pasture in the damp hollows, following
+					// the same moisture that decides where water and thicket
+					// go — so a walk toward the lakes is a walk into greener
+					// ground. The band starts at the art's bare threshold
+					// (GroundTextures.SWARD_BARE), so the poorest living
+					// pasture is exactly where the baked sward begins to close
+					// over the earth, and a little detail noise breaks the
+					// gradient up so richness reads as patches, not as bands.
+					// Kept mean-neutral against the old narrow band, so the
+					// world holds as much food as before — just spread far more
+					// unevenly, which is what makes a habitat worth choosing.
 					t = Tile.TileType.TYPE_FLOOR;
-					fert = 0.55 + 0.45 * moist; // meadow, lush where moist
+					fert = 0.15 + 1.25 * moist + 0.08 * (detail - 0.5);
+					fert = fert < 0 ? 0 : (fert > 1 ? 1 : fert);
 				}
 				w.setTile(x, y, SURFACE_Z, t);
 				w.getTile(x, y, SURFACE_Z).setFertility(fert);

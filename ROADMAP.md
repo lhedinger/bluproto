@@ -46,7 +46,11 @@ small, deterministic, test-backed slices.
 - *Living substrate:* per-tile regrowing vegetation (lazy closed-form off a new
   `World.getTick()` clock); `NPC.graze()`; grazer fixture.
 - *Fertility field:* `Tile.fertility` gates the grass cap;
-  `World.generateFertility()` paints coherent patchy habitats.
+  `World.generateFertility()` paints coherent patchy habitats. In the demo
+  terrain fertility follows moisture across the full band, so pasture runs
+  from thin scrub to prime meadow — and it is visible: the ground bake draws
+  a sward at the tile's potential and the vegetation sprite's stage is capped
+  by it, so poor ground never wears the tall tufts.
 
 **Evolvable minds** — `entities/Brain.java`, `entities/AgentIO.java`
 - Linear genetic program with persistent registers; 28 sensors in, 13 actuator
