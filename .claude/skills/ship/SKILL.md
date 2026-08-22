@@ -86,13 +86,56 @@ Two things that look like test failures but aren't:
 - **A scenario that only fails with `-Dsimtest.shots`.** The snapshot renderer
   is not on the gate; a failure there is a rendering bug, not a sim bug.
 
-### 3 · Commit as work worth keeping
+### 3 · Commit one concern at a time
 
 Trunk is merged by rebase, so the commits on the branch are the commits that
-land on master, under new SHAs but with their boundaries intact. That is the
-reason to split by idea rather than dumping one commit at the end: each commit
-should build and pass on its own, because each one becomes a point in trunk's
-history that someone may later bisect to.
+land on master — under new SHAs, but with their boundaries intact. Those
+boundaries are the whole point. Trunk has no merge commits and is never
+rewritten, so **the commit is the unit of revert**, and there is no rollback in
+the deploy either: when something ships wrong, `git revert <sha>` and a push is
+the fix. What you can undo is decided entirely by how you split the work, and
+you decide that before anyone knows which part was wrong.
+
+So the test to apply to every commit is: **could this be reverted on its own,
+months from now, by someone who wasn't here — and would that revert mean
+something?** A commit that fails it is doing two jobs.
+
+**Split by concern, not by file or by session.** Each of these is its own
+commit, even when one branch produces all of them:
+
+- **Tuning and configuration separately from behaviour.** A population bound, a
+  ceiling, a rate constant, a threshold — these are the things most likely to
+  be wrong in production and most likely to need reverting alone. Changing the
+  steward's ceilings is one commit; it does not ride along with whatever
+  motivated the change.
+- **Groundwork before the thing that uses it.** A new engine capability lands
+  first and stands alone; the feature built on it follows. Revert in reverse
+  order and each step still holds.
+- **Refactors separately from behaviour changes.** A rename mixed into a fix
+  makes the diff unreadable and the revert impossible — you cannot take back
+  the fix without taking back the rename.
+- **Presentation separately from simulation.** How a thing is drawn and what it
+  does are different concerns with different failure modes.
+- **Unrelated work does not ride along.** If it would need its own sentence in
+  the PR description, it wants its own branch.
+
+Two things that belong *together*, so the split doesn't go too far:
+
+- **Tests go with the behaviour they pin.** Reverting a change should take its
+  scenarios with it, or the suite fails on a world that no longer has the
+  feature.
+- **Whatever it takes to build.** Each commit must compile and pass
+  `./gradlew check` on its own, because each one is a point someone may bisect
+  to. A commit too small to stand alone is as broken as one too large to
+  revert; "single concern" is bounded below by "still works".
+
+The anti-pattern to recognise, because it is the natural shape of a session
+rather than a mistake anyone makes deliberately: you build a feature, tune a
+constant while testing it, add a glyph so you can see it, and commit the lot
+because it all happened in one sitting. It passes CI and reads fine in review.
+The cost arrives later, when the constant turns out wrong and reverting it
+means reverting the feature. Split before committing, while you still remember
+which change was which.
 
 Match the repo's commit voice — a short declarative title that says what the
 world can now do ("The fourth trophic level: parasites ride the herd and drink
@@ -185,6 +228,9 @@ failure:
 
 ## What not to do
 
+- Don't bundle concerns into one commit because they happened in one sitting.
+  The commit is the unit of revert, and trunk is never rewritten — a boundary
+  you skip is an undo someone loses.
 - Don't open a PR, merge, or push to master unless the user asked. Merging here
   publishes to a URL anyone can open.
 - Don't merge red, and don't merge with a stale base — CI would have tested
