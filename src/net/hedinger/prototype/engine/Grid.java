@@ -570,9 +570,12 @@ public class Grid {
 	 * edge, a band of carved vertical face dashes where it fronts open ground
 	 * to the south, and a cast shadow on the ground below.
 	 *
-	 * <p>Every pixel here is a pure function of tile type and position — never
-	 * of live state like vegetation — so the ground can be baked once and two
-	 * tiles that mean the same thing always look the same.
+	 * <p>Every pixel here is a pure function of tile type, position and the
+	 * tile's static fertility potential — never of live state like standing
+	 * vegetation — so the ground can be baked once: grassland shows how green
+	 * it CAN be, and how much crop is actually on it stays the sprite layer's
+	 * story. (Nutrient closure drifts fertility up over a world's life; a bake
+	 * snapshots genesis, which is the potential the world was born with.)
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
@@ -788,17 +791,18 @@ public class Grid {
 								// Thicket: a canopy of self-shaded leaf clumps whose
 								// character varies stand by stand.
 								col = GroundTextures.canopy(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_SOIL) {
+								// Grassland: the sward drawn at the tile's fertility
+								// potential — dry cracked clay where nothing can grow,
+								// closed green where the ground is rich. Sampled
+								// bilinearly so rich and poor blend mid-tile instead
+								// of stepping at the grid.
+								col = GroundTextures.sward(fertAt(wx, wy), wx, wy, gx, gy);
 							} else {
-								// Mineral ground (soil, mud, stone): quiet plate interiors
+								// Mineral ground (mud, stone): quiet plate interiors
 								// under the crack-network seams.
 								col = GroundTextures.quietGround(cl, wx, wy, gx, gy);
-								if (cl == GroundTextures.CLS_SOIL
-										&& GroundTextures.crack(wx, wy, 0.38, 0.05)) {
-									// Dry badlands: sun-baked clay plates. Seams stay inside
-									// the ramp (plain shadow shade), so the network reads as
-									// soft creases rather than hard black lines.
-									col = GroundTextures.rampColor(cl, 0);
-								} else if (cl == GroundTextures.CLS_STONE
+								if (cl == GroundTextures.CLS_STONE
 										&& GroundTextures.crack(wx, wy, 0.8, 0.06)) {
 									// Stone floor: fitted flagstone slabs, shadow-shade joints.
 									col = GroundTextures.rampColor(cl, 0);
@@ -880,6 +884,27 @@ public class Grid {
 			return -1;
 		}
 		return GroundTextures.groundClass(tiles[cx][cy]);
+	}
+
+	/** Fertility potential at a world position: bilinear over tile centres, so
+	 *  the sward's richness glides across tile edges instead of stepping at
+	 *  the grid. Every tile carries a fertility (world-gen zeroes rock and
+	 *  water), so the field is defined everywhere — the ground class decides
+	 *  what actually shows, this only decides how green a sward pixel is. */
+	private double fertAt(double wx, double wy) {
+		double fx = wx - 0.5, fy = wy - 0.5;
+		int x0 = (int) Math.floor(fx), y0 = (int) Math.floor(fy);
+		double tx = fx - x0, ty = fy - y0;
+		double f00 = fertTile(x0, y0), f10 = fertTile(x0 + 1, y0);
+		double f01 = fertTile(x0, y0 + 1), f11 = fertTile(x0 + 1, y0 + 1);
+		return (f00 * (1 - tx) + f10 * tx) * (1 - ty)
+				+ (f01 * (1 - tx) + f11 * tx) * ty;
+	}
+
+	private double fertTile(int x, int y) {
+		x = x < 0 ? 0 : (x >= world.cols ? world.cols - 1 : x);
+		y = y < 0 ? 0 : (y >= world.rows ? world.rows - 1 : y);
+		return tiles[x][y].getFertility();
 	}
 
 	/** Draw-order rank for open-ground autotiling: the higher terrain laps

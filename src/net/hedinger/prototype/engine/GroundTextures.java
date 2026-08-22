@@ -104,10 +104,12 @@ public final class GroundTextures {
 	}
 
 	/** Terrain colour class for a tile: ground, structure, or -1 (ramp).
-	 *  Purely type-driven: a tile type has ONE look, so two tiles that mean the
-	 *  same thing always render the same. Vegetation is no longer part of the
-	 *  ground's identity — it lives in the sprite layer stamped on top (see the
-	 *  web client's vegetation layer / server VegFeed). */
+	 *  Type-driven: a tile type has ONE class, so autotiling and edge laps
+	 *  never depend on live state. Live vegetation is not part of the ground's
+	 *  identity — it lives in the sprite layer stamped on top (see the web
+	 *  client's vegetation layer / server VegFeed). The one static scalar the
+	 *  pixel pass adds is grassland's fertility potential (see {@link #sward}),
+	 *  fixed at world-gen and therefore bakeable. */
 	public static int groundClass(Tile t) {
 		switch (t.getType()) {
 		case TYPE_WATER:
@@ -165,7 +167,11 @@ public final class GroundTextures {
 		case TYPE_DUCT:
 			return CLS_DUCT;
 		case TYPE_FLOOR:
-			return CLS_SOIL; // the living substrate is earth; grass is sprites
+			// The living substrate. Its class is earth (for autotiling rank);
+			// the pixel pass paints it as sward(fertility) — green where the
+			// ground CAN be lush, dirt where it cannot. The standing crop is
+			// still the sprite layer's story.
+			return CLS_SOIL;
 		default:
 			return -1;
 		}
@@ -229,6 +235,71 @@ public final class GroundTextures {
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
 		return ditherRamp(cls, p, px, py);
+	}
+
+	// ---- grassland sward ---------------------------------------------------
+
+	/** Fertility below which grassland bakes as bare dry earth: the badlands'
+	 *  zero-fertility dirt keeps its sun-cracked clay look. */
+	public static final double SWARD_BARE = 0.15;
+	/** Fertility at which the baked sward closes into unbroken green — the
+	 *  richest meadows read fully lush, poorer ground grades down from there. */
+	public static final double SWARD_FULL = 0.75;
+
+	/**
+	 * Grassland ground at its POTENTIAL: the baked sward's green coverage is
+	 * the tile's fertility — the cap on what can grow there — not the standing
+	 * crop, which stays the live vegetation sprite layer stamped on top.
+	 * Below {@link #SWARD_BARE} the substrate reads as the dry cracked clay it
+	 * is; across the window the sward closes from scattered flecks through
+	 * clumped patches to unbroken green at {@link #SWARD_FULL}, so a rich
+	 * meadow looks rich before a single blade of its crop is drawn. Fertility
+	 * is a world-gen field (nutrient closure drifts it up slowly; a bake
+	 * snapshots genesis), so the ground stays bakeable: type + fertility in,
+	 * one deterministic picture out.
+	 */
+	public static int sward(double fert, double wx, double wy, int px, int py) {
+		double cover = (fert - SWARD_BARE) / (SWARD_FULL - SWARD_BARE);
+		cover = cover < 0 ? 0 : (cover > 1 ? 1 : cover);
+		if (cover > 0) {
+			// Clumped, not sprinkled: a fine world-space field gathers the
+			// grass into patches whose share grows with coverage, and Bayer
+			// dithers each patch border — the mix never leaves the two ramps.
+			double clump = Utils.noise2(wx + 57, wy + 91, 1.6);
+			double local = cover * 1.5 + (clump - 0.5) * 0.7 - 0.25;
+			if (local > bayer(px, py)) {
+				return grassPixel(fert, wx, wy, px, py);
+			}
+		}
+		// The earth between the grass: the quiet soil interior, sun-cracked
+		// into clay plates only where the ground is genuinely dry — a closed
+		// sward's rare soil pockets are moist shadow, not badlands.
+		if (cover < 0.35 && crack(wx, wy, 0.38, 0.05)) {
+			return RAMP[CLS_SOIL][0];
+		}
+		return quietGround(CLS_SOIL, wx, wy, px, py);
+	}
+
+	/** One pixel of living sward: grass-ramp mottle self-shaded by a coarse
+	 *  world-space light field, sparse 2-px blade-tip glints, and on the
+	 *  richest ground the odd meadow blossom — the same red/cream accents the
+	 *  shrubs and thickets wear, so all the flora reads as one family. */
+	private static int grassPixel(double fert, double wx, double wy, int px, int py) {
+		if (fert > 0.8 && hash01(px, py, 93) > 0.9965) {
+			return hash01(px, py, 94) > 0.45 ? BLOOM_RED : BLOOM_CREAM;
+		}
+		double g = hash01(px >> 1, py, 47); // 2-px grain clusters, quietGround's grammar
+		if (g < 0.045) {
+			return RAMP[CLS_GRASS][0];
+		}
+		if (g > 0.97) {
+			return RAMP[CLS_GRASS][2];
+		}
+		double sh = Utils.noise2(wx + 23, wy + 47, 1.1);
+		double p = (sh - 0.30) / 0.42;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_GRASS, p, px, py);
 	}
 
 	/**
