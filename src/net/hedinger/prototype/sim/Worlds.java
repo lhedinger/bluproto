@@ -1625,7 +1625,11 @@ public final class Worlds {
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
 		WorldSteward steward = new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
-				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
+				// Every herbivore, scripted or minded, under one bound. The ceiling is
+				// the sum of the two it replaces (160 plain + 250 minded), measured at
+				// the settled world, so the merge changes WHO is counted rather than
+				// how many the world carries.
+				new int[] { sc(25, scale), sc(410, scale) }, // prey  [floor, ceiling]
 				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
 				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
 				// long stretches, which meant the warden -- not grass, not predators --
@@ -1637,7 +1641,7 @@ public final class Worlds {
 				// of which is measured yet; /api/health now reports tick cost so it can
 				// be watched. (Sim CPU is not the binding constraint: the world audit
 				// measures thousands of ticks/s against a 33 t/s requirement.)
-				Math.max(6, sc(6, scale)), Math.max(250, sc(250, scale)), // minded
+				Math.max(6, sc(6, scale)), // the minded LINEAGE floor -- not a population bound
 				// Scavengers. A floor so the niche is never simply empty, and a
 				// ceiling well above it -- the binding control is meant to be the
 				// carrion supply, which is finite and self-limiting in a way grass is

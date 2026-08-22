@@ -3170,23 +3170,46 @@ public class TestNPC extends NPC {
 	}
 
 	public String ecoRole() {
-		// Diet decides this before behaviour does: a scavenger is a scavenger
-		// whatever loop drives it, and the census has to see it as its own trophic
-		// level rather than folding it in with the herbivores it is sized like.
+		// DIET decides this, and nothing else does. What a creature eats is the
+		// whole of what it is ecologically: it fixes what it competes with, what it
+		// is food for, and which supply its numbers are coupled to. How the body is
+		// steered -- a hardcoded loop, an evolved program, a hand-written
+		// controller -- is an implementation detail the census has no business
+		// seeing, because it changes none of those things.
+		//
+		// This used to fall through to "" for anything minded, which made the
+		// emergent cohort roleless: a herbivore with a brain was not counted as a
+		// herbivore anywhere, and the steward held it in a separate "minded" cohort
+		// with guardrails of its own. The same animal was governed one way with a
+		// brain and another way without. Diet is inherited and hardwired to the
+		// body, so keying on it gives every creature exactly one role for life.
+		//
+		// A genome is what makes a body part of the ecosystem: it can breed, it
+		// carries a diet, and it is subject to selection. The suite's bare fixtures
+		// -- a roamer, an inert block, a chaser -- have none, do not eat, and must
+		// stay roleless so the steward never counts or trims them. Deliberately not
+		// gated on `metabolic`: a scripted scavenger built for a test is still a
+		// scavenger, and asking whether it burns energy answers a different question.
+		if (genome == null) {
+			return "";
+		}
 		if (diet == Diet.SCAVENGER) {
 			return "scavenger";
 		}
 		if (diet == Diet.PARASITE) {
-			return "parasite"; // its own census bucket, like the scavengers
+			return "parasite"; // its own supply: the standing herd it rides
 		}
-		if (behavior == Behavior.PREDATOR) {
+		// Behaviour is honoured as a fallback so the hardcoded hunting loop can
+		// never disagree with the role it is counted under, whatever its genome says.
+		if (diet == Diet.CARNIVORE || behavior == Behavior.PREDATOR) {
 			return "predator";
 		}
-		// Nesters are prey like any other herbivore: hunted by predators,
-		// counted and trimmed by the steward. Leaving them roleless made them
-		// invisible to every population check — an unhunted, uncapped lineage
-		// that exploded exponentially the moment the demo seeded some.
-		return behavior == Behavior.BREEDER || behavior == Behavior.NEST ? "prey" : "";
+		// Everything else eats plants -- breeders, nesters and minded foragers
+		// alike. Nesters were once roleless here and that made them invisible to
+		// every population check: an unhunted, uncapped lineage that exploded
+		// exponentially the moment the demo seeded some. The same trap, one level
+		// up, is what keying on diet closes for the minded cohort.
+		return "prey";
 	}
 
 	@Override

@@ -52,7 +52,10 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  and ceilings watch. */
 	private final int[] paraBounds;
 	private final Genome[] preySpecies, predSpecies;
-	private final int mindedFloor, mindedMax; // hold the minded cohort within [floor, max]
+	/** Floor for the emergent-mind lineage. NOT a population bound: it keeps the
+	 *  A/B seam from going extinct, and has no matching ceiling because minded
+	 *  creatures are capped by the role they belong to like any other animal. */
+	private final int mindedFloor;
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private final int caveZ; // the underground level, or -1 for a one-level world
@@ -118,7 +121,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 
 	/**
 	 * Which of the steward's cohorts a creature belongs to — "prey",
-	 * "predator", "minded", "scavenger", "parasite", or "" for a body outside
+	 * "predator", "scavenger", "parasite", or "" for a body outside
 	 * the bookkeeping entirely.
 	 *
 	 * <p>One definition, three readers: the per-tick count, the backstop trim,
@@ -138,14 +141,15 @@ public final class WorldSteward extends Entity implements CullOrders {
 		if (t == null || t.isDead() || t.isRemoved()) {
 			return "";
 		}
-		String role = t.ecoRole();
-		if (role.equals("scavenger") || role.equals("parasite")) {
-			return role;
-		}
-		if (t.isMinded()) {
-			return "minded"; // the hybrid cohort is its own category (role emerges)
-		}
-		return role.equals("prey") || role.equals("predator") ? role : "";
+		// The role, and only the role. Whether a hardcoded loop or an evolved
+		// program is steering is not an ecological fact about a creature and does
+		// not belong in a population bound: a herbivore with a brain competes for
+		// the same grass, is hunted by the same predators, and leaves the same
+		// carcass as one without. Counting the minded apart made them a cohort with
+		// guardrails of their own, so the same animal was governed one way with a
+		// brain and another way without -- and every minded herbivore was missing
+		// from the count that is supposed to describe the herd.
+		return t.ecoRole();
 	}
 
 	/**
@@ -168,20 +172,19 @@ public final class WorldSteward extends Entity implements CullOrders {
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
-		this(w, preySpecies, predSpecies, surfaceZ, -1, preyBounds, predBounds,
-				mindedFloor, mindedMax);
+			int[] preyBounds, int[] predBounds, int mindedFloor) {
+		this(w, preySpecies, predSpecies, surfaceZ, -1, preyBounds, predBounds, mindedFloor);
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor) {
 		this(w, preySpecies, predSpecies, surfaceZ, caveZ, preyBounds, predBounds,
-				mindedFloor, mindedMax, new int[] { 0, Integer.MAX_VALUE },
+				mindedFloor, new int[] { 0, Integer.MAX_VALUE },
 				new int[] { 0, Integer.MAX_VALUE });
 	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
-			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax,
+			int caveZ, int[] preyBounds, int[] predBounds, int mindedFloor,
 			int[] scavBounds, int[] paraBounds) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
 		this.cols = w.getColums();
@@ -193,7 +196,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 		this.preyBounds = preyBounds;
 		this.predBounds = predBounds;
 		this.mindedFloor = mindedFloor;
-		this.mindedMax = mindedMax;
 		this.scavBounds = scavBounds;
 		this.paraBounds = paraBounds;
 	}
@@ -203,13 +205,17 @@ public final class WorldSteward extends Entity implements CullOrders {
 		int preyMin = preyBounds[0];
 		int predMin = predBounds[0];
 
-		int prey = 0, pred = 0, minded = 0, scav = 0, para = 0;
+		int prey = 0, pred = 0, scav = 0, para = 0, minded = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t) {
+				// Tallied alongside the cohorts, but NOT one of them: see the
+				// lineage guard below.
+				if (!t.isDead() && !t.isRemoved() && t.isMinded()) {
+					minded++;
+				}
 				switch (cohortOf(t)) {
 				case "prey" -> prey++;
 				case "predator" -> pred++;
-				case "minded" -> minded++;
 				case "scavenger" -> scav++;
 				case "parasite" -> para++;
 				default -> {
@@ -250,16 +256,14 @@ public final class WorldSteward extends Entity implements CullOrders {
 			seedParasite();
 		}
 
-		ceilings(new int[] { prey, pred, minded, scav, para },
-				new int[] { preyBounds[1], predBounds[1], mindedMax, scavBounds[1],
-						paraBounds[1] });
+		ceilings(new int[] { prey, pred, scav, para },
+				new int[] { preyBounds[1], predBounds[1], scavBounds[1], paraBounds[1] });
 	}
 
 	/** The cohort keys, in the fixed order the ceilings are checked — so which
 	 *  cohort the drone is sent after when two overshoot at once is a fact
 	 *  about the world and not about iteration order. */
-	private static final String[] COHORTS = { "prey", "predator", "minded", "scavenger",
-			"parasite" };
+	private static final String[] COHORTS = { "prey", "predator", "scavenger", "parasite" };
 
 	/**
 	 * Every cohort's ceiling, from this tick's fresh counts: republishes the
