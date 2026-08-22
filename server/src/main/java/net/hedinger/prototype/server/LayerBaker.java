@@ -21,8 +21,9 @@ import net.hedinger.prototype.engine.World;
  * is never ported, it is served; the client only composites entities on top.
  *
  * <p>Baked once per world. The bake is a pure function of the terrain: ground
- * classes are type-only and the live tall-grass tufts are disabled here (see
- * {@link #loadResourcesOnce}), so nothing vegetation-dependent is frozen into
+ * pixels read tile type plus the static fertility potential (grassland's
+ * sward), and the live tall-grass tufts are disabled here (see
+ * {@link #loadResourcesOnce}), so nothing state-dependent is frozen into
  * the chunks — growth and depletion are the client's vegetation sprite layer.
  */
 final class LayerBaker {

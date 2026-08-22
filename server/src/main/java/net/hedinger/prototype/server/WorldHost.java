@@ -116,8 +116,9 @@ final class WorldHost {
 			}
 			level = null; // free this level's image before baking the next
 		}
-		// The bake is vegetation-free by construction — ground classes are
-		// type-only and the bake path draws no live tufts (LayerBaker) — so a
+		// The bake is free of LIVE state by construction — ground pixels read
+		// only tile type and the static fertility potential (grassland's
+		// sward), and the bake path draws no live tufts (LayerBaker) — so a
 		// single bake serves as the ground under the client's vegetation
 		// sprite layer. (The old design baked a second, force-grazed twin and
 		// dithered between the two; five sprite states replaced all of that.)
