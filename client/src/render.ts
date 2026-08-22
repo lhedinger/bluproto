@@ -410,6 +410,15 @@ export function render(
       continue;
     }
 
+    // The steward's drone: machinery, drawn rather than grown. It has no
+    // phenotype to build an atlas from, so without this it falls through to
+    // the no-atlas dot and the one thing in the world that is not alive looks
+    // exactly like everything that is.
+    if (e.kind === 'npc.stewarddrone') {
+      drawDrone(g, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'));
+      continue;
+    }
+
     // Creature. At map zoom (see DOT_LOD_SCALE) every body skips the sprite
     // pipeline: one or two fillRects instead of a drawImage, which is most of
     // the frame at that zoom with a large population.
@@ -609,6 +618,22 @@ function itemStamp(kind: string, rgb: number): HTMLCanvasElement {
   return cv;
 }
 
+/** The drone glyph baked once per colour — same painter as the 2D path, at a
+ *  reference radius, then scaled by the GPU. Radially symmetric, so unlike a
+ *  creature it needs no per-heading column. */
+const droneStamps = new Map<number, HTMLCanvasElement>();
+function droneStamp(rgb: number): HTMLCanvasElement {
+  let cv = droneStamps.get(rgb);
+  if (!cv) {
+    cv = document.createElement('canvas');
+    cv.width = 96;
+    cv.height = 96;
+    drawDrone(cv.getContext('2d')!, 48, 48, ITEM_R, '#' + rgb.toString(16).padStart(6, '0'));
+    droneStamps.set(rgb, cv);
+  }
+  return cv;
+}
+
 export function renderGL(
   glr: import('./gl').GLRenderer,
   og: CanvasRenderingContext2D,
@@ -741,6 +766,14 @@ export function renderGL(
       const stamp = itemStamp(e.kind, e.rgb);
       const k = r / ITEM_R;
       glr.sprite('item:' + e.kind + ':' + e.rgb, stamp, 1, 0, 0, 96, 96,
+        s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
+      continue;
+    }
+
+    if (e.kind === 'npc.stewarddrone') {
+      const stamp = droneStamp(e.rgb);
+      const k = r / ITEM_R;
+      glr.sprite('drone:' + e.rgb, stamp, 1, 0, 0, 96, 96,
         s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
       continue;
     }
@@ -1385,6 +1418,54 @@ export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: 
       g.fillRect(rx, ry, Math.round(x0 + (col + 1) * p) - rx,
         Math.round(y0 + (row + 1) * p) - ry);
     }
+  }
+}
+
+/**
+ * The steward's drone: a quadrotor seen from above — a plated hexagonal
+ * chassis, four rotor discs on their arms, and the emitter lit amber at the
+ * centre.
+ *
+ * <p>Radially symmetric on purpose. Every other body in this world is drawn
+ * from a phenotype atlas with a column per heading, because a creature's
+ * silhouette says which way it is facing; a quadrotor's does not, and pretending
+ * otherwise would cost eight baked headings to draw the same shape eight times.
+ * What it needs to say is "machine, and above the ground" — hard straight edges
+ * where everything organic is round, the facility's steel where everything alive
+ * is warm, and rotors nothing in the biosphere has.
+ */
+export function drawDrone(g: CanvasRenderingContext2D, x: number, y: number, r: number,
+    col: string): void {
+  const arm = r * 0.78;
+  // Rotor discs first, so the chassis plates sit over their hubs.
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const cx = x + Math.cos(a) * arm, cy = y + Math.sin(a) * arm;
+    g.strokeStyle = 'rgba(160,172,188,0.55)'; // the blur of a turning rotor
+    g.lineWidth = Math.max(1, r * 0.14);
+    g.beginPath(); g.arc(cx, cy, r * 0.42, 0, 7); g.stroke();
+    g.fillStyle = '#2a2f38';
+    g.beginPath(); g.arc(cx, cy, Math.max(1, r * 0.16), 0, 7); g.fill(); // the hub
+  }
+  // The chassis: a flat-topped hexagon, plated and rimmed.
+  g.fillStyle = col;
+  g.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    const px = x + Math.cos(a) * r * 0.72, py = y + Math.sin(a) * r * 0.72;
+    if (i === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.closePath();
+  g.fill();
+  g.strokeStyle = '#1a1e26';
+  g.lineWidth = Math.max(1, r * 0.13);
+  g.stroke();
+  // The emitter, hazard amber — the one warm colour on it, and the same one
+  // the charge dock's coil is painted in, so machine and berth are a pair.
+  if (r > 3) {
+    g.fillStyle = '#d8b028';
+    g.beginPath(); g.arc(x, y, Math.max(1, r * 0.26), 0, 7); g.fill();
   }
 }
 
