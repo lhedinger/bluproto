@@ -5802,6 +5802,83 @@ public class SimTests {
 	}
 
 	/**
+	 * The steward puts parasites back. Wipe the cohort out of a living world and
+	 * it returns, because a herd of ordinary bodies is a herd of hosts.
+	 *
+	 * <p>This pins the precondition, which is where the niche actually died: the
+	 * floor is conditional on {@code hostPresent()}, and that test compared a
+	 * body's size in TILES against the parasite cap written in PIXELS. No body is
+	 * a third of a tile across, so it answered "no host anywhere" in every world
+	 * forever, the floor never fired once, and the cohort bled quietly to zero
+	 * and stayed there — with every other parasite mechanism working perfectly.
+	 * A silent precondition is the worst kind: nothing errors, the feature simply
+	 * never happens.
+	 */
+	static class TheStewardPutsParasitesBack extends Scenario {
+		@Override
+		public void run() {
+			seed(29);
+			World w = net.hedinger.prototype.sim.Worlds.demo(29);
+			tick(w, 400); // let the herds grow into adult bodies
+
+			int wiped = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.ecoRole().equals("parasite")) {
+					t.kill();
+					wiped++;
+				}
+			}
+			assertGreater("the world had parasites to wipe out", wiped, 0);
+			assertEquals("the cohort is empty", 0, countParasites(w));
+
+			tick(w, 400);
+			assertGreater("the steward seeded parasites back into the herd",
+					countParasites(w), 0);
+		}
+
+		private static int countParasites(World w) {
+			int n = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.ecoRole().equals("parasite")) {
+					n++;
+				}
+			}
+			return n;
+		}
+	}
+
+	/**
+	 * An ordinary grown body is big enough to ride, and a parasite is not. The
+	 * units are the whole point: sizes come off the genome in PIXELS, and
+	 * {@code getSize()} reports the same radius in TILES — a 48th of the number.
+	 * Anything gating the niche on a size threshold has to say which it means.
+	 */
+	static class AGrownBodyIsBigEnoughToRide extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(12, 8);
+			Genome g = new Genome();
+			g.size = 12; // an ordinary adult grazer
+			TestNPC host = TestNPC.breeder(4.5, 4.5, 0, g);
+			TestNPC para = TestNPC.mindedParasite(6.5, 4.5, 0, new Genome());
+			w.spawnEntity(host);
+			w.spawnEntity(para);
+			tick(w, TestNPC.growthTicks(g.size) + 50); // bodies grow into adult size
+
+			assertGreater("a grown body clears the parasite cap, in pixels",
+					host.getPixelSize(), TestNPC.PARASITE_MAX_SIZE_PX);
+			assertTrue("a parasite does not — it is capped there by birth",
+					para.getPixelSize() <= TestNPC.PARASITE_MAX_SIZE_PX);
+			assertTrue("and in tiles that same body is under a third of one, so a "
+					+ "tile-unit comparison against the cap would never be true",
+					host.getSize() < 1.0);
+		}
+	}
+
+	/**
 	 * Predators ignore parasites outright — too small and too foul to be worth
 	 * a bite. A hungry hunter with a parasite at its feet and real prey down
 	 * the room walks past the parasite and takes the prey; the parasite is
@@ -6027,6 +6104,8 @@ public class SimTests {
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
+				new TheStewardPutsParasitesBack(),
+				new AGrownBodyIsBigEnoughToRide(),
 				new PredatorsIgnoreParasites(),
 				new AParasiteCannotGraze(),
 				new CorpseFeedsTheGround(),

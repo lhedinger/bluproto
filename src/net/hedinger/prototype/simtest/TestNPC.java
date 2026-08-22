@@ -609,16 +609,27 @@ public class TestNPC extends NPC {
 	 */
 	public static TestNPC mindedParasite(double x, double y, double z, Genome g) {
 		Genome own = g.copy();
-		own.size = Math.min(own.size, PARASITE_MAX_SIZE); // small by nature
+		own.size = Math.min(own.size, PARASITE_MAX_SIZE_PX); // small by nature
 		TestNPC t = mindedForager(x, y, z, own);
 		t.withDiet(Diet.PARASITE); // writes through to the genome the body is drawn from
 		return t;
 	}
 
-	/** The biggest body a parasite lineage can grow: staying well under every
-	 *  plausible host is what makes the latch (host must be bigger) and the
-	 *  tight grip (smaller rider clings harder) reliably true of the niche. */
-	public static final double PARASITE_MAX_SIZE = 5;
+	/**
+	 * The biggest body a parasite lineage can grow, <em>in pixels</em> — the
+	 * unit of the genome's size and of {@link #getPixelSize()}, NOT of
+	 * {@link #getSize()}, which is that radius in tiles (a 48th of it). Staying
+	 * well under every plausible host is what makes the latch (host must be
+	 * bigger) and the tight grip (smaller rider clings harder) reliably true of
+	 * the niche.
+	 *
+	 * <p>The name says PIXELS because the two units are a genuine trap: read as
+	 * tiles, this constant is larger than any body in the world, and everything
+	 * gated on it silently answers "no" forever. That is exactly how the
+	 * steward's reseeding floor died — see
+	 * {@code WorldSteward.hostPresent()}.
+	 */
+	public static final int PARASITE_MAX_SIZE_PX = 5;
 
 	@Override
 	protected void run_extended() {
