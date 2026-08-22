@@ -28,6 +28,7 @@ public final class ServerTests {
 		visitorLogCountsWithoutIdentifying();
 		visitorLogReadsTheClientThroughTheProxy();
 		populationCensusCountsEveryLivingRole();
+		fertilityCapsTheGrassSpriteStage();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -202,6 +203,53 @@ public final class ServerTests {
 		check("a corpse is not counted as population",
 				after.prey() + after.predator() + after.scavenger() + after.parasite()
 						== alive - 1);
+	}
+
+	/**
+	 * A tile's fertility is the ceiling on the grass sprite it can ever show:
+	 * poor ground, however long it regrows, never reaches the tall-tuft stage
+	 * a rich meadow wears.
+	 *
+	 * <p>Worth pinning because the obvious implementation is the wrong one.
+	 * Reporting each tile as a fraction of ITS OWN capacity makes every fully
+	 * grown tile read 100 — half-fertile ground grows the same lush sprite as
+	 * the richest meadow, and fertility vanishes from the picture entirely.
+	 * The scale has to be absolute for the ceiling to mean anything.
+	 */
+	static void fertilityCapsTheGrassSpriteStage() {
+		long t = 10_000_000; // long enough that every tile has regrown to its cap
+		check("dead ground draws no grass at all",
+				VegFeed.stateOf(WorldHost.grassLevel(grassland(0.0), t)) == 0);
+		check("rich ground grows the full meadow",
+				VegFeed.stateOf(WorldHost.grassLevel(grassland(1.0), t)) == 5);
+		int half = VegFeed.stateOf(WorldHost.grassLevel(grassland(0.5), t));
+		check("half-fertile ground never reaches the full meadow", half < 5);
+		check("half-fertile ground still grows real grass", half > 1);
+		check("poor ground keeps to the sparsest growth",
+				VegFeed.stateOf(WorldHost.grassLevel(grassland(0.15), t)) <= 2);
+
+		// The ceiling rises with fertility, so richness stays readable as a
+		// gradient rather than collapsing into two buckets.
+		int prev = -1;
+		for (double f : new double[] { 0.15, 0.35, 0.55, 0.75, 1.0 }) {
+			int stage = VegFeed.stateOf(WorldHost.grassLevel(grassland(f), t));
+			check("fertility " + f + " does not grow less than poorer ground", stage >= prev);
+			prev = stage;
+		}
+
+		// Grazing still reads on top of the ceiling: the overlay must show
+		// depletion, not just potential.
+		net.hedinger.prototype.engine.Tile grazed = grassland(1.0);
+		grazed.graze(t, 1.0);
+		check("a stripped tile falls to the trampled remnants",
+				VegFeed.stateOf(WorldHost.grassLevel(grazed, t)) == 1);
+	}
+
+	private static net.hedinger.prototype.engine.Tile grassland(double fertility) {
+		var t = new net.hedinger.prototype.engine.Tile(0, 0, 0,
+				net.hedinger.prototype.engine.Tile.TileType.TYPE_FLOOR);
+		t.setFertility(fertility);
+		return t;
 	}
 
 	private static EntityState probe(int id, double x) {

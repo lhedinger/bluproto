@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 import io.javalin.websocket.WsContext;
 
+import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.sim.SimulationRunner;
 import net.hedinger.prototype.sim.Worlds;
 import net.hedinger.prototype.sim.WorldSnapshot;
@@ -582,10 +583,18 @@ final class WorldHost {
 
 	/**
 	 * Per-tile grass level for the live vegetation overlay: one byte per tile of
-	 * level z — 0..100 = fraction of this grass tile's current capacity that has
-	 * vegetation (100 lush, 0 grazed bare), or 255 for a non-grass tile (bare
-	 * dirt / rock / water — no overlay). Lets the client show grazing depletion
-	 * and regrowth on top of the static baked ground.
+	 * level z — 0..100 = how much vegetation stands there on an ABSOLUTE scale
+	 * (100 = the richest ground a world can hold, 0 = grazed bare), or 255 for a
+	 * tile that grows nothing (rock / water / dead dirt — no overlay). Lets the
+	 * client show grazing depletion and regrowth on top of the static baked
+	 * ground.
+	 *
+	 * <p>Absolute, not per-tile: measured against its own capacity, half-fertile
+	 * ground read "100 = full" and grew the same lush sprite as the richest
+	 * meadow, which made fertility invisible in the overlay exactly as it once
+	 * was in the bake. Against the world's maximum, a tile's ceiling IS its
+	 * fertility — 0.5 fertility tops out mid-stage and never reaches the tall
+	 * tufts — so the sprites agree with the sward baked underneath them.
 	 */
 	/** Quantised 5-state vegetation with deltas (see {@link VegFeed}) — what
 	 *  the web client polls; the raw byte grid below stays for tooling. */
@@ -602,6 +611,18 @@ final class WorldHost {
 		return f.respond(raw, since, System.currentTimeMillis(), w.getColums(), w.getRows());
 	}
 
+	/** One tile's grass level on the absolute scale (see {@link #vegetation}):
+	 *  255 where nothing ever grows, else 0..100 of the world's maximum. */
+	static int grassLevel(Tile t, long tick) {
+		if (!t.growsVegetation() || t.vegetationCap() <= 1e-9) {
+			return 255; // grows nothing: no overlay
+		}
+		// Against the world's maximum, so the tile's fertility is its ceiling:
+		// poor ground can never report a full meadow.
+		long frac = Math.round(t.getVegetation(tick) / Tile.VEG_MAX * 100);
+		return (int) Math.max(0, Math.min(100, frac));
+	}
+
 	byte[] vegetation(int z) {
 		var w = runner.world();
 		if (z < 0 || z >= w.getLevels()) {
@@ -612,14 +633,7 @@ final class WorldHost {
 		byte[] v = new byte[cols * rows];
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
-				var t = w.getTile(x, y, z);
-				double cap = t.vegetationCap();
-				if (!t.growsVegetation() || cap <= 1e-9) {
-					v[y * cols + x] = (byte) 255; // non-grass: no overlay
-				} else {
-					long frac = Math.round(t.getVegetation(tick) / cap * 100);
-					v[y * cols + x] = (byte) Math.max(0, Math.min(100, frac));
-				}
+				v[y * cols + x] = (byte) grassLevel(w.getTile(x, y, z), tick);
 			}
 		}
 		return v;

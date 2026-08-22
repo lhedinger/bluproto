@@ -228,7 +228,10 @@ const vegSec = section('Vegetation sprites',
   'One-tile vegetation drawn OVER the floor: five growth stages per kind — stage 1 is '
   + 'what depletion leaves (trampled remnants), stage 5 fully grown — four variants '
   + 'each, transparent so the same sprite reads on any ground. Painted at art '
-  + 'resolution by the exported drawVegetationTile the world will stamp with.');
+  + 'resolution by the exported drawVegetationTile the world will stamp with. '
+  + 'The stage is measured on an absolute scale, so a tile’s fertility is a '
+  + 'ceiling on it: half-fertile ground fully regrown stops around stage 3 and '
+  + 'never wears the tall tufts, matching the sward baked underneath it.');
 
 for (const kind of VEG_KINDS) {
   const S = 44, PAD = 6;
