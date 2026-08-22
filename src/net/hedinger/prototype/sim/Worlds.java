@@ -575,6 +575,11 @@ public final class Worlds {
 		}
 		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		// The drone's berth, in the machine wing among the plant it belongs
+		// to -- clear of the pipe run along row 1 and of both vents, and one
+		// tile in from the partition doorway at x0+11 so the pad is not the
+		// threshold anything else has to cross.
+		setBare(w, x0 + 13, y0 + 2, CAVE_Z, Tile.TileType.TYPE_DOCK);
 
 		// Storage wing (west half): a vertical pipe drop and its own vents.
 		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
@@ -669,6 +674,10 @@ public final class Worlds {
 		}
 		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		// The drone's berth: the annex has one room, so the pad goes against
+		// the north deck under the pipe run, out of the walk from the mouth
+		// to the vault.
+		setBare(w, x0 + 2, y0 + 2, CAVE_Z, Tile.TileType.TYPE_DOCK);
 		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
 		for (int x = vx; x < vx + vw; x++) {
 			for (int y = vy; y < vy + vh; y++) {
@@ -1606,7 +1615,7 @@ public final class Worlds {
 		// minded cap in particular is generous — predators hunt minded creatures
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
-		w.spawnEntity(new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
+		WorldSteward steward = new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
 				new int[] { sc(25, scale), sc(160, scale) }, // prey  [floor, ceiling]
 				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
 				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
@@ -1636,10 +1645,44 @@ public final class Worlds {
 				// (a mindless parasite that never latches starves), and a low
 				// ceiling: their supply is the standing herd, and a parasite bloom
 				// bleeding every big body at once is a plague, not an ecosystem.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(30, sc(30, scale)) }));
+				new int[] { Math.max(6, sc(6, scale)), Math.max(30, sc(30, scale)) });
+		w.spawnEntity(steward);
+
+		// The warden's one machine, berthed in the buried base. It takes its
+		// orders from the steward and does the killing the steward used to do
+		// by deletion -- so a world with no base carved into it (a map too
+		// small for either plan) simply has no drone, and the steward's own
+		// backstop keeps the ceilings on its own, exactly as before.
+		int[] dock = findDock(w);
+		if (dock != null) {
+			w.spawnEntity(new StewardDrone(dock[0] + 0.5, dock[1] + 0.5, CAVE_Z, steward));
+		}
 
 		w.think(); // admit every spawn: tick 1 is a fully populated world
 		return w;
+	}
+
+	/**
+	 * The charge dock the world generator laid into the buried base, as
+	 * {@code {col, row}} on the cave level, or null if this map got no base.
+	 *
+	 * <p>Found by looking rather than remembered, because the two base plans
+	 * put their berth in different places and a coordinate threaded back out
+	 * through {@code buryInstallation} would be one more thing for the plans
+	 * to keep in step with each other. The dock tile is the record: it is on
+	 * the map, there is exactly one, and anything that needs to know where the
+	 * drone lives can ask the same question this does. One pass over one level
+	 * at world creation.
+	 */
+	static int[] findDock(World w) {
+		for (int y = 0; y < w.getRows(); y++) {
+			for (int x = 0; x < w.getColums(); x++) {
+				if (w.getTile(x, y, CAVE_Z).getType() == Tile.TileType.TYPE_DOCK) {
+					return new int[] { x, y };
+				}
+			}
+		}
+		return null;
 	}
 
 	/** Scale a base count by the map's area ratio, never below 1. */

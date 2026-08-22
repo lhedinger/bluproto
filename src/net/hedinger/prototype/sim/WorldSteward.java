@@ -21,12 +21,21 @@ import net.hedinger.prototype.simtest.TestNPC;
  *       predation/starvation control, so it rarely actually fires.</li>
  * </ul>
  *
+ * <p>The ceiling is no longer enforced by deletion. When a cohort overshoots,
+ * the steward publishes a {@link CullOrders cull order} — a cohort and the
+ * headcount to leave standing — and the {@link StewardDrone} flies out of the
+ * buried base and does the killing. The steward keeps counting either way, and
+ * drops the order the moment the target is met. Deletion survives only as the
+ * {@link #BACKSTOP} below: a population that has run far past its ceiling, or
+ * one in a world with no drone to send, is still trimmed outright, because a
+ * grounded drone must not become a way for the world to swarm.
+ *
  * It is deterministic (all placement via the seeded {@link Utils#random}) and
  * runs inside {@code world.think()}, so a snapshot stream stays reproducible.
  * It perceives nothing, collides with nothing, and is filtered out of snapshots
  * — the viewer never sees it.
  */
-public final class WorldSteward extends Entity {
+public final class WorldSteward extends Entity implements CullOrders {
 
 	// Population bounds {min, max}. Fixed, not seasonal: the world's headcount is
 	// left to grass, predation and starvation, and these are only the guardrails
@@ -52,6 +61,111 @@ public final class WorldSteward extends Entity {
 
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
 	private static final int ECO_DEATHSPAN = 90;
+
+	/**
+	 * Where a cull stops: the drone thins a cohort to this fraction of its
+	 * ceiling, not to the ceiling itself.
+	 *
+	 * <p>Culling to the line exactly would put the population back one animal
+	 * over it within a few ticks of breeding, and the drone would live in the
+	 * air — permanently out, permanently killing, and the world would read as
+	 * policed rather than as governed. Leaving a margin buys the world room to
+	 * breed back into and buys the drone a long spell docked between sorties,
+	 * which is the whole difference between machinery you notice and machinery
+	 * that is always there.
+	 */
+	public static final double CULL_TO = 0.7;
+
+	/**
+	 * How far past its ceiling a cohort must run before the steward stops
+	 * waiting for the drone and deletes the excess itself.
+	 *
+	 * <p>The drone is the visible mechanism, not the guarantee. It can be
+	 * across the map, walled off behind rock, or simply absent from a world
+	 * nobody built a base into — and none of those may be allowed to become a
+	 * way for a population to run away, because the ceiling is the promise this
+	 * whole class exists to keep. So the old deletion stays, moved just far
+	 * enough up to leave the drone room to act first.
+	 *
+	 * <p>Only just far enough, and the number is measured rather than chosen.
+	 * At 1.5 the seeded world was run 20k ticks and the band plainly did not
+	 * work: one drone kills at roughly 0.08 bodies a tick even in a dense herd,
+	 * a herd near its carrying capacity breeds faster than that, and so prey sat
+	 * pinned at 240 against a ceiling of 160 and the minded cohort at 375
+	 * against 250 — every standing population half again as large as its ceiling
+	 * said, for as long as the world ran. A backstop the drone cannot beat is
+	 * not a backstop, it is a new and higher ceiling. At 1.1 the ceilings mean
+	 * what they meant before the drone existed, and what the drone owns is the
+	 * margin below them.
+	 */
+	private static final double BACKSTOP = 1.1;
+
+	// The standing order, republished (or cleared) every tick from the fresh
+	// counts. One at a time: there is one drone, and an order it cannot get to
+	// the end of is not an order.
+	private String cullRole = null;
+	private int cullTarget = 0;
+
+	@Override
+	public String cullRole() {
+		return cullRole;
+	}
+
+	@Override
+	public int cullTarget() {
+		return cullTarget;
+	}
+
+	/**
+	 * Which of the steward's cohorts a creature belongs to — "prey",
+	 * "predator", "minded", "scavenger", "parasite", or "" for a body outside
+	 * the bookkeeping entirely.
+	 *
+	 * <p>One definition, three readers: the per-tick count, the backstop trim,
+	 * and the drone's choice of target. They were separate before the drone
+	 * existed and could afford to be, since the counter and the trimmer sat ten
+	 * lines apart in the same file. With the killing moved into another entity
+	 * they cannot: a drone that disagreed with the steward about what counts as
+	 * a scavenger would fly out and kill until the count it was not looking at
+	 * came down, which is to say until the world ran out of scavengers.
+	 *
+	 * <p>The order of the tests is the meaning. Scavengers and parasites are
+	 * minded too, and are named first precisely so they are counted apart: each
+	 * eats from a supply of its own (carrion; the standing herd) that the
+	 * minded cohort's floor and ceiling know nothing about.
+	 */
+	public static String cohortOf(TestNPC t) {
+		if (t == null || t.isDead() || t.isRemoved()) {
+			return "";
+		}
+		String role = t.ecoRole();
+		if (role.equals("scavenger") || role.equals("parasite")) {
+			return role;
+		}
+		if (t.isMinded()) {
+			return "minded"; // the hybrid cohort is its own category (role emerges)
+		}
+		return role.equals("prey") || role.equals("predator") ? role : "";
+	}
+
+	/**
+	 * Whether the drone may kill this body — the cull's one exemption, and the
+	 * same one the trim has always honoured for the minded cohort, now applied
+	 * to every cohort alike.
+	 *
+	 * <p>Deleting what a person deliberately dropped into the world — healthy,
+	 * and with no corpse to show for it — reads as the world eating your
+	 * creature. An injection therefore displaces one of the steward's own and
+	 * the cohort stays just as bounded: the founder still counts toward the
+	 * ceiling, and its offspring are ordinary cullable citizens.
+	 *
+	 * <p>It matters more now than it did. A silent deletion was at least
+	 * ambiguous; a machine flying across the map to shoot the animal someone
+	 * placed by hand is not.
+	 */
+	public static boolean isCullable(TestNPC t, String role) {
+		return t != null && !t.isHandPlaced() && cohortOf(t).equals(role);
+	}
 
 	WorldSteward(World w, Genome[] preySpecies, Genome[] predSpecies, int surfaceZ,
 			int[] preyBounds, int[] predBounds, int mindedFloor, int mindedMax) {
@@ -87,30 +201,21 @@ public final class WorldSteward extends Entity {
 	@Override
 	protected void think() {
 		int preyMin = preyBounds[0];
-		int preyMax = preyBounds[1];
 		int predMin = predBounds[0];
-		int predMax = predBounds[1];
 
 		int prey = 0, pred = 0, minded = 0, scav = 0, para = 0;
 		for (Entity e : getWorld().getEntities()) {
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()) {
-				// Scavengers are minded too, but they are counted apart: folded into
-				// the minded cohort they would satisfy its floor while eating from a
-				// different supply entirely, and its ceiling would cull them for a
-				// crowding they had no part in.
-				if (t.ecoRole().equals("scavenger")) {
-					scav++;
-				} else if (t.ecoRole().equals("parasite")) {
-					para++; // its own supply (the standing herd), its own count
-				} else if (t.isMinded()) {
-					minded++; // the hybrid cohort is its own category (role emerges)
-				} else {
-					String r = t.ecoRole();
-					if (r.equals("prey")) {
-						prey++;
-					} else if (r.equals("predator")) {
-						pred++;
-					}
+			if (e instanceof TestNPC t) {
+				switch (cohortOf(t)) {
+				case "prey" -> prey++;
+				case "predator" -> pred++;
+				case "minded" -> minded++;
+				case "scavenger" -> scav++;
+				case "parasite" -> para++;
+				default -> {
+					// outside the bookkeeping: the drone, hand-placed oddities,
+					// anything whose role has not settled into a guild
+				}
 				}
 			}
 		}
@@ -131,34 +236,12 @@ public final class WorldSteward extends Entity {
 		if (minded < mindedFloor) {
 			seedMinded();
 		}
-		// Ceiling on the minded cohort: a last-resort backstop, not the primary
-		// control. Predators hunt minded creatures like anything else their size or
-		// smaller, so predation and starvation are what actually hold this cohort in
-		// check; the cap sits far above the population those forces settle at and
-		// should almost never fire.
-		if (minded > mindedMax) {
-			trimMinded(Math.min(3, minded - mindedMax));
-		}
-
-		// Ceiling: trim a small, fixed number of the excess per tick, so the herd
-		// is thinned gradually rather than culled in one blow.
-		if (prey > preyMax) {
-			trim("prey", Math.min(3, prey - preyMax));
-		}
-		if (pred > predMax) {
-			trim("predator", Math.min(2, pred - predMax));
-		}
-
 		// The scavenger cohort. Its floor is conditional on there being anything to
 		// scavenge: reseeding one into a world with no bodies is spawning it to
 		// starve, and the corpse layer is the whole of its living.
 		if (scav < scavBounds[0] && carrionPresent()) {
 			seedScavenger();
 		}
-		if (scav > scavBounds[1]) {
-			trim("scavenger", Math.min(3, scav - scavBounds[1]));
-		}
-
 		// The parasite cohort. Its floor is conditional on there being a body
 		// worth riding — a parasite reseeded into an empty world starves on its
 		// feet — and its ceiling is deliberately low: the supply is the standing
@@ -166,8 +249,61 @@ public final class WorldSteward extends Entity {
 		if (para < paraBounds[0] && hostPresent()) {
 			seedParasite();
 		}
-		if (para > paraBounds[1]) {
-			trim("parasite", Math.min(3, para - paraBounds[1]));
+
+		ceilings(new int[] { prey, pred, minded, scav, para },
+				new int[] { preyBounds[1], predBounds[1], mindedMax, scavBounds[1],
+						paraBounds[1] });
+	}
+
+	/** The cohort keys, in the fixed order the ceilings are checked — so which
+	 *  cohort the drone is sent after when two overshoot at once is a fact
+	 *  about the world and not about iteration order. */
+	private static final String[] COHORTS = { "prey", "predator", "minded", "scavenger",
+			"parasite" };
+
+	/**
+	 * Every cohort's ceiling, from this tick's fresh counts: republishes the
+	 * order the drone flies on, and deletes outright anything that has run past
+	 * {@link #BACKSTOP}.
+	 *
+	 * <p>Two lines, not one. An order is <b>raised</b> when a cohort crosses its
+	 * ceiling and <b>cleared</b> only once it is back down to {@link #CULL_TO}
+	 * of it — the band that turns a boundary into a job of work. Culling to the
+	 * ceiling exactly would put the population one animal over it again within
+	 * a few ticks of breeding, and the drone would never get home; the margin is
+	 * what buys the world room to breed back into and the drone a long spell
+	 * docked between sorties.
+	 *
+	 * <p>A running order keeps its place ahead of a fresh overshoot elsewhere.
+	 * Abandoning a half-finished cull to start another is a trip across the map
+	 * for nothing, and with the counts moving under it the drone could be handed
+	 * back and forth between two cohorts without finishing either.
+	 *
+	 * <p>Everything is re-derived from the counts rather than remembered, so an
+	 * order clears itself the moment the population is back under target —
+	 * including when what brought it down was starvation or a predator rather
+	 * than the drone. Nothing has to remember to cancel it.
+	 */
+	private void ceilings(int[] counts, int[] maxes) {
+		String running = cullRole;
+		cullRole = null;
+		for (int i = 0; i < COHORTS.length; i++) {
+			int max = maxes[i];
+			if (max <= 0 || max == Integer.MAX_VALUE) {
+				continue; // no ceiling worth the name (the unbounded default)
+			}
+			int target = (int) Math.round(max * CULL_TO);
+			boolean keep = COHORTS[i].equals(running) && counts[i] > target;
+			if (keep || (counts[i] > max && cullRole == null)) {
+				cullRole = COHORTS[i];
+				cullTarget = target;
+			}
+			if (counts[i] > max * BACKSTOP) {
+				// Far past the line: stop waiting for a machine that may never
+				// arrive and take the excess off by hand, a few at a time,
+				// exactly as the steward always did.
+				trim(COHORTS[i], Math.min(3, counts[i] - max));
+			}
 		}
 	}
 
@@ -283,37 +419,23 @@ public final class WorldSteward extends Entity {
 		getWorld().spawnEntity(TestNPC.mindedForager(x, y, z, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Removes up to {@code count} minded creatures (iteration order) -- the ceiling
-	 *  for the hybrid cohort, which the role-keyed {@link #trim} does not cover.
+	/**
+	 * Removes up to {@code count} of the given cohort outright (iteration
+	 * order) — the backstop, and the last thing in the class that still kills
+	 * by deletion.
 	 *
-	 *  <p>Hand-placed creatures (a genome someone injected from the viewer) are
-	 *  never culled: deleting what a person deliberately dropped -- healthy, and
-	 *  with no corpse to show for it -- reads as the world eating your creature.
-	 *  An injection therefore displaces one of the steward's own, and the cohort
-	 *  stays just as bounded (the founder still counts toward the ceiling, and its
-	 *  offspring are ordinary cullable citizens). */
-	private void trimMinded(int count) {
-		int removed = 0;
-		for (Entity e : getWorld().getEntities()) {
-			if (removed >= count) {
-				break;
-			}
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.isMinded()
-					&& !t.isHandPlaced()) {
-				t.remove();
-				removed++;
-			}
-		}
-	}
-
-	/** Removes up to {@code count} of the given role (iteration order). */
+	 * <p>Honours the same hand-placed exemption the drone does, via the shared
+	 * {@link #isCullable} test: the two of them are enforcing one ceiling
+	 * between them, and a body the drone is forbidden to shoot must not be one
+	 * the steward quietly deletes instead.
+	 */
 	private void trim(String role, int count) {
 		int removed = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (removed >= count) {
 				break;
 			}
-			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.ecoRole().equals(role)) {
+			if (e instanceof TestNPC t && isCullable(t, role)) {
 				t.remove();
 				removed++;
 			}

@@ -125,5 +125,14 @@ mirror the layers:
   sits next to the model it queries.
 - Doors are domain entities that write *back* into the engine's tile passability;
   they are the one actor that mutates the physical model.
+- The steward's drone is the one body that *navigates* rather than steers. Every
+  creature walks a bearing and lets the engine refuse what it cannot do; the
+  drone asks the engine's `findPath` for a route and flies it. That is a
+  deliberate asymmetry — a mind has to earn its way around an obstacle, a
+  machine is allowed to know the way — and it is why the pathfinder grew the
+  three things a real route needs: ramp edges (so a route can change level),
+  body clearance (so it is not laid through ducting the traveller does not fit),
+  and an option to plan through doors (the map as it looks to something doors
+  open for).
 - Some render logic lives inside engine classes rather than purely in the
   presentation layer, so the engine/presentation boundary is not airtight.

@@ -82,6 +82,16 @@ small, deterministic, test-backed slices.
 - `WorldSteward` holds each population inside fixed floors and ceilings — a
   backstop, not the control: predation and starvation do the work. Creatures a
   person placed by hand are exempt from the cull.
+- The ceiling has a body. Instead of deleting the surplus where it stands, the
+  steward publishes a **cull order** (a cohort, and the headcount to leave) and
+  a `StewardDrone` — one flying machine, berthed on a charge dock in the buried
+  base — flies out and does the killing, thinning the cohort to 70% of its
+  ceiling before returning to standby. It is mechanical, so nothing preys on it,
+  parasites it or breeds with it (`NPC.isOrganic()`), and doors open for it as
+  it comes. A zapped body dies at once and lands 90% decomposed: a cull leaves a
+  remnant, not a carcass. Deletion survives only as the runaway guard, 10% above
+  each ceiling — measured, one drone cannot outbreed a herd at carrying
+  capacity, and a backstop it cannot beat would just be a higher ceiling.
 - Seasons were tried and removed: a global fertility cycle drove the whole world
   in lockstep, which read as noise rather than as habitat.
 

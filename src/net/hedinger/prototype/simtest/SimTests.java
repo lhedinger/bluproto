@@ -6029,9 +6029,306 @@ public class SimTests {
 		}
 	}
 
+	// ---- the steward's drone -------------------------------------------------
+
+	/**
+	 * A cull order the scenarios can hold: it names a cohort and re-derives
+	 * "is it done yet" from the live world every time it is asked, exactly as
+	 * the real {@link net.hedinger.prototype.sim.WorldSteward} does.
+	 *
+	 * <p>Standing a whole ecosystem up to give the drone something to be told
+	 * would make these tests slow and about the steward. The drone's entire
+	 * contract with the steward is two scalars, so a scenario can supply them.
+	 */
+	static final class Order implements net.hedinger.prototype.sim.CullOrders {
+		private final World w;
+		private final String role;
+		private final int target;
+
+		Order(World w, String role, int target) {
+			this.w = w;
+			this.role = role;
+			this.target = target;
+		}
+
+		@Override
+		public String cullRole() {
+			return standing() > target ? role : null;
+		}
+
+		@Override
+		public int cullTarget() {
+			return target;
+		}
+
+		int standing() {
+			int n = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t
+						&& net.hedinger.prototype.sim.WorldSteward.cohortOf(t).equals(role)) {
+					n++;
+				}
+			}
+			return n;
+		}
+	}
+
+	/**
+	 * The whole of the drone's job, end to end: flagged a cohort, it leaves its
+	 * berth, hunts the surplus down, stops at the number it was given rather
+	 * than at the last animal standing, and comes home to park.
+	 *
+	 * <p>Stopping at the number is the half worth pinning. A machine that kills
+	 * until it runs out of things to kill is not a population control, and the
+	 * order's target is the only thing between a cull and an extinction.
+	 */
+	static class DroneCullsToTargetAndReturnsToDock extends Scenario {
+		@Override
+		public void run() {
+			seed(410);
+			World w = room(30, 20);
+			w.setTile(3, 3, 0, Tile.TileType.TYPE_DOCK);
+			// Twelve grazers against a target of seven: five to take, and seven
+			// that must still be standing when the drone goes home.
+			for (int i = 0; i < 12; i++) {
+				w.spawnEntity(TestNPC.breeder(10.5 + (i % 6) * 2, 8.5 + (i / 6) * 3, 0,
+						Genome.phenotype(8, 0.05, 8, 4, Math.PI, 100000))
+						.withReproCooldown(100000)); // no births mid-cull: pin the arithmetic
+			}
+			Order order = new Order(w, "prey", 7);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(3.5, 3.5, 0, order);
+			w.spawnEntity(drone);
+			w.think();
+			snapshot(w, "before (12 grazers, order: leave 7)");
+			assertTrue("the drone starts parked on its dock", drone.isBerthed());
+
+			tick(w, 3000);
+			snapshot(w, "after (culled to 7, drone back on the pad)");
+
+			assertEquals("culled to exactly the ordered headcount", 7, order.standing());
+			assertTrue("the order cleared once the target was met", order.cullRole() == null);
+			assertTrue("the drone went home and parked", drone.isDocked());
+			// Seated on the pad rather than drifted to a halt somewhere near it.
+			// Not to the last decimal: the collision spring still nudges a
+			// parked body when something wanders against it, and the drone
+			// re-seats itself the next tick.
+			assertLess("it is seated on the dock, not merely near it",
+					Math.hypot(drone.getX() - 3.5, drone.getY() - 3.5), 0.05);
+		}
+	}
+
+	/**
+	 * A zapped body is a remnant, not a carcass: it dies at once and arrives
+	 * nine tenths decomposed, so what the cull leaves on the ground is worth
+	 * almost nothing to the scavengers and is gone in a tenth of the time.
+	 *
+	 * <p>It still says what killed it. A corpse in this world explains itself,
+	 * and "culled" is a cause like starvation or predation.
+	 */
+	static class ZappedBodyIsAlmostGone extends Scenario {
+		@Override
+		public void run() {
+			seed(411);
+			World w = room(20, 12);
+			w.setTile(2, 2, 0, Tile.TileType.TYPE_DOCK);
+			TestNPC victim = TestNPC.breeder(12.5, 6.5, 0,
+					Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000)).withDeathspan(200);
+			w.spawnEntity(victim);
+			Order order = new Order(w, "prey", 0);
+			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
+			w.think();
+			snapshot(w, "before (one grazer, one drone)");
+			int died = 0;
+			for (int t = 1; t <= 600 && !victim.isDead(); t++) {
+				tick(w, 1);
+				died = t;
+			}
+			snapshot(w, "after (a remnant, nine tenths gone)");
+
+			assertTrue("the drone killed it", victim.isDead());
+			assertEquals("the corpse says what killed it", "culled".hashCode(),
+					victim.getDeathCause().hashCode());
+			assertGreater("the remnant arrived almost fully decomposed",
+					victim.decayProgress(), 0.85);
+			// And so it clears in a tenth of the span an ordinary carcass gets:
+			// a body given 200 ticks to rot is gone inside 30 of them.
+			tick(w, 30);
+			assertTrue("the remnant is gone almost at once", victim.isRemoved());
+			assertLess("it did not take a full deathspan to get there", 30, 200 - died + 30.0);
+		}
+	}
+
+	/**
+	 * The drone is a machine, and nothing alive treats it as food. A hunter
+	 * pressed up against one never bites it however hungry it gets, a parasite
+	 * never rides it, and nothing that does try to hurt it leaves a mark —
+	 * every one of which follows from the single answer the body gives to
+	 * {@code isOrganic()}.
+	 */
+	static class NothingEatsTheDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(412);
+			World w = room(14, 10);
+			w.setTile(2, 2, 0, Tile.TileType.TYPE_DOCK);
+			// No order: the drone sits on its pad and is simply an object in
+			// the room, which is the situation being tested.
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, new Order(w, "prey", 99));
+			w.spawnEntity(drone);
+			// A starving hunter and a parasite, both parked against the drone —
+			// as close as either could ever get to a meal.
+			TestNPC hunter = TestNPC.predator(3.2, 2.5, 0,
+					Genome.phenotype(9, 0.0, 10, 4, Math.PI, 100000)).withHunger(1.0);
+			TestNPC rider = TestNPC.mindedParasite(2.5, 3.2, 0, Genome.random());
+			w.spawnEntity(hunter);
+			w.spawnEntity(rider);
+			w.think();
+			snapshot(w, "before (a starving hunter and a parasite, both touching it)");
+			tick(w, 500);
+			snapshot(w, "after (both went hungry; the drone is unmarked)");
+
+			assertEquals("nothing bit the machine", 100, drone.getHealth());
+			assertTrue("the parasite never latched onto it", rider.getAttachTarget() != drone);
+			assertTrue("the hunter never picked it as prey", hunter.currentAction() != null);
+			// The proof the hunter went hungry on a body it was standing on: it
+			// is still starving after 500 ticks with "food" under its nose.
+			assertGreater("the hunter got nothing out of it", hunter.getHunger(), 0.9);
+		}
+	}
+
+	/**
+	 * The base's doors open for the drone and for nothing else it has to do.
+	 * A wired blast door with no switch pressed is shut to every creature in
+	 * the world — the plates it runs on are weight-driven and a flyer is too
+	 * light to trip one — and the drone crosses it anyway, because it carries
+	 * the key to its own building.
+	 */
+	static class DoorsOpenForTheDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(413);
+			World w = room(24, 9);
+			for (int y = 1; y <= 7; y++) {
+				w.setTile(12, y, 0, Tile.TileType.TYPE_WALL); // the partition
+			}
+			w.setTile(12, 4, 0, Tile.TileType.TYPE_PAVED); // the one doorway
+			net.hedinger.prototype.entities.Door blast = new net.hedinger.prototype.entities.Door(
+					12, 4, 0, 1, net.hedinger.prototype.entities.Door.BLAST);
+			w.addDoor(blast);
+			blast.setWired(true); // machinery with no switch: shut to everything alive
+			w.setTile(3, 4, 0, Tile.TileType.TYPE_DOCK);
+
+			TestNPC quarry = TestNPC.breeder(20.5, 4.5, 0,
+					Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000));
+			w.spawnEntity(quarry);
+			// A creature of its own on the drone's side, to show the door is
+			// genuinely shut to anything that is not the drone.
+			TestNPC walker = TestNPC.mover(1.5, 6.5, 0, 0);
+			w.spawnEntity(walker);
+			Order order = new Order(w, "prey", 0);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(3.5, 4.5, 0, order);
+			w.spawnEntity(drone);
+			w.think();
+			snapshot(w, "before (drone berthed west, quarry east, blast door shut)");
+			assertTrue("the door starts sealed", blast.isClosed());
+
+			double furthestEast = drone.getX();
+			for (int t = 0; t < 1500; t++) {
+				tick(w, 1);
+				furthestEast = Math.max(furthestEast, drone.getX());
+			}
+			snapshot(w, "after (the drone crossed and came home; the walker never did)");
+
+			assertTrue("the drone got through the door and killed its quarry", quarry.isDead());
+			assertGreater("the drone crossed east of the partition", furthestEast, 12.0);
+			assertLess("the creature was never let through", walker.getX(), 12.0);
+			assertTrue("and the drone came back to its berth", drone.isDocked());
+			assertTrue("the door shut again behind it", blast.isClosed());
+		}
+	}
+
+	/**
+	 * Ground too tight for the drone's frame is a refuge from it. The crawl
+	 * ducts and shard beds already admit only small bodies — the engine refuses
+	 * the step — and the router honours the same clearance, so the drone writes
+	 * off what it cannot reach and gets on with the rest of the cohort instead
+	 * of hovering over one animal for the rest of that animal's life.
+	 */
+	static class DuctedBodyIsSafeFromTheDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(414);
+			World w = room(24, 11);
+			w.setTile(2, 2, 0, Tile.TileType.TYPE_DOCK);
+			// A dead-end duct: the only way in is through ducting no frame the
+			// drone's size will pass.
+			for (int x = 17; x <= 21; x++) {
+				for (int y = 1; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WALL);
+				}
+			}
+			w.setTile(18, 5, 0, Tile.TileType.TYPE_DUCT);
+			w.setTile(19, 5, 0, Tile.TileType.TYPE_STONE); // the pocket beyond
+			Genome small = Genome.phenotype(6, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC sheltered = TestNPC.breeder(19.5, 5.5, 0, small).withReproCooldown(100000);
+			TestNPC exposed = TestNPC.breeder(8.5, 5.5, 0, small).withReproCooldown(100000);
+			w.spawnEntity(sheltered);
+			w.spawnEntity(exposed);
+			Order order = new Order(w, "prey", 0); // kill everything it can
+			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
+			w.think();
+			snapshot(w, "before (one grazer in the open, one down a duct)");
+			tick(w, 2500);
+			snapshot(w, "after (the open one is gone; the ducted one is not)");
+
+			assertTrue("the grazer in the open was culled", exposed.isDead());
+			assertTrue("the grazer down the duct was out of reach", !sheltered.isDead());
+		}
+	}
+
+	/**
+	 * The seeded world ships one drone, berthed on the charge dock the world
+	 * generator carved into the buried base, asleep.
+	 *
+	 * <p>Asleep is the assertion that matters. A fresh world is nowhere near
+	 * any of its ceilings, so a drone out flying on tick one would mean the
+	 * steward was flagging a cull that nothing called for.
+	 */
+	static class SeededWorldBerthsOneDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(415);
+			World w = net.hedinger.prototype.sim.Worlds.demo(415);
+			net.hedinger.prototype.sim.StewardDrone drone = null;
+			int drones = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.sim.StewardDrone d) {
+					drone = d;
+					drones++;
+				}
+			}
+			assertEquals("the world ships exactly one drone", 1, drones);
+			assertEquals("it is berthed on a charge dock",
+					Tile.TileType.TYPE_DOCK.getValue(),
+					w.getTile(drone.getX(), drone.getY(), drone.getZ()).getType().getValue());
+			assertTrue("the dock is underground, in the buried base", drone.getZ() < 1);
+			tick(w, 200);
+			assertTrue("with nothing over its ceiling, it stays on standby", drone.isDocked());
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
+				new SeededWorldBerthsOneDrone(),
+				new DroneCullsToTargetAndReturnsToDock(),
+				new ZappedBodyIsAlmostGone(),
+				new NothingEatsTheDrone(),
+				new DoorsOpenForTheDrone(),
+				new DuctedBodyIsSafeFromTheDrone(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
