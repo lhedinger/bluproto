@@ -29,7 +29,7 @@ public final class Worlds {
 
 	/** Herbivore "species": small, grazing prey — distinct marker barcodes drive
 	 *  distinct procedural bodies/colours; all metabolic breeders (they evolve). */
-	private static net.hedinger.prototype.entities.Genome[] preySpecies() {
+	private static net.hedinger.prototype.entities.Genome[] herbivoreSpecies() {
 		// Warm/cool hues, deliberately NOT green — herbivores should read clearly
 		// against the green meadow, not camouflage into it.
 		double[][] markers = {
@@ -74,7 +74,7 @@ public final class Worlds {
 			// match the animal carrying it; leaving it at zero on the world's actual
 			// predators made the gene decorative. Behaviour is unaffected: a hunter
 			// runs thinkPredator, not the react() weights this feeds.
-			g.diet = net.hedinger.prototype.entities.Genome.DIET_CARNIVORE;
+			g.clade = net.hedinger.prototype.entities.Genome.Clade.PREDATOR;
 			g.predatory = 0.9;
 		}
 		return out;
@@ -1554,7 +1554,7 @@ public final class Worlds {
 	public static World demo(long seed, int cols, int rows) {
 		World w = demoTerrain(seed, cols, rows);
 		double scale = cols * (double) rows / (COLS * (double) ROWS);
-		net.hedinger.prototype.entities.Genome[] prey = preySpecies();
+		net.hedinger.prototype.entities.Genome[] herb = herbivoreSpecies();
 		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 
 		// Founder herbivores: metabolic grazers that breed and evolve, scattered
@@ -1571,7 +1571,7 @@ public final class Worlds {
 		// and stay covered by the scenario suite.
 		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, prey[i % prey.length])
+			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, herb[i % herb.length])
 					.withHerding()); // corpse span comes from its body -- see configureGenomeBody
 		}
 		// Founder predators (few: predation should track the prey, not cap it).
@@ -1667,7 +1667,7 @@ public final class Worlds {
 		// minded cap in particular is generous — predators hunt minded creatures
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
-		WorldSteward steward = new WorldSteward(w, prey, pred, SURFACE_Z, CAVE_Z,
+		WorldSteward steward = new WorldSteward(w, herb, pred, SURFACE_Z, CAVE_Z,
 				// Every herbivore, scripted or minded, under one bound. The ceiling is
 				// the sum of the two it replaces (160 plain + 250 minded), measured at
 				// the settled world, so the merge changes WHO is counted rather than

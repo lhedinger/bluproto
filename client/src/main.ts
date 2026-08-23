@@ -496,7 +496,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const rows: string[] = [];
   // Where it sits in the food chain, and whether a mind is driving it. The
-  // header shows the role as its title, but that alone cannot say "prey, and
+  // header shows the role as its title, but that alone cannot say "herbivore, and
   // evolvable" — which for the hybrid cohort is most of what you want to know.
   if (d.role) rows.push(row('role', d.minded ? `${d.role} · minded` : d.role));
   if (d.diedOf) rows.push(row('died of', d.diedOf));
@@ -510,6 +510,7 @@ function renderInspectSimple(d: Record<string, any>): void {
     rows.push(d.grabbed ? row('held by', `#${d.attachedTo}`)
       : row('riding', `#${d.attachedTo}`));
   }
+  if (d.species) rows.push(row('species', d.species));
   if ('hauling' in d) rows.push(row('carrying', `#${d.hauling}`));
   if (d.carrying) rows.push(row('hauling', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
@@ -1193,11 +1194,11 @@ const popCv = document.getElementById('popCv') as HTMLCanvasElement;
 const popKey = document.getElementById('popKey') as HTMLElement;
 const popWin = document.getElementById('popWin') as HTMLElement;
 
-/** Series colours: prey green, predator red, scavenger amber, parasite
+/** Series colours: herbivore green, predator red, scavenger amber, parasite
  *  violet. Distinct in luminance as well as hue, so the lines stay separable
  *  to a colour-blind viewer and in a screenshot that has lost its colour. */
 const POP_SERIES = [
-  { key: 'prey' as const, label: 'prey', rgb: '#6fbf5e' },
+  { key: 'herbivore' as const, label: 'herbivore', rgb: '#6fbf5e' },
   { key: 'predator' as const, label: 'predators', rgb: '#e0574f' },
   { key: 'scavenger' as const, label: 'scavengers', rgb: '#e2a63b' },
   { key: 'parasite' as const, label: 'parasites', rgb: '#b07fe0' },
@@ -1205,7 +1206,7 @@ const POP_SERIES = [
 
 type PopData = {
   sampleSec: number; tps: number; tick: number[];
-  prey: number[]; predator: number[]; scavenger: number[]; parasite: number[];
+  herbivore: number[]; predator: number[]; scavenger: number[]; parasite: number[];
 };
 
 let popOn = /[?&]pop\b/.test(location.search);
@@ -1272,7 +1273,7 @@ function popDraw(): void {
   }
 
   // One shared vertical scale: the three roles are the same kind of quantity,
-  // and separate axes would hide that predators are a tenth of the prey.
+  // and separate axes would hide that predators are a tenth of the herbivores.
   let max = 1;
   for (const s of POP_SERIES) {
     if (popHidden.has(s.key)) continue;
@@ -1350,7 +1351,7 @@ function popKeyDraw(): void {
  *  The ladder is deliberately fine. A coarse one (1, 2, 5, 10) sends a peak of
  *  54 all the way to 100, which throws away half the chart's height — and the
  *  half it throws away is exactly where predators and scavengers live, since
- *  they share the axis with a prey count ten times theirs. */
+ *  they share the axis with a herbivore count ten times theirs. */
 function niceCeil(v: number): number {
   const mag = Math.pow(10, Math.floor(Math.log10(Math.max(1, v))));
   for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {

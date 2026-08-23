@@ -21,7 +21,7 @@ package net.hedinger.prototype.sim;
  */
 public interface CullOrders {
 
-	/** The cohort to thin — one of the steward's own keys ("prey",
+	/** The cohort to thin — one of the steward's own keys ("herbivore",
 	 *  "predator", "minded", "scavenger", "parasite") — or null when nothing
 	 *  is flagged and the drone should be on standby. */
 	String cullRole();

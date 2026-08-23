@@ -127,7 +127,7 @@ public class World {
 				String role = n.ecoRole();
 				if ("predator".equals(role)) {
 					c.predators.get(z).add(n);
-				} else if ("prey".equals(role)) {
+				} else if ("herbivore".equals(role)) {
 					c.prey.get(z).add(n);
 				}
 			}

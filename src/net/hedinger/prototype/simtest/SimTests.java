@@ -12,6 +12,7 @@ import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
+import net.hedinger.prototype.entities.Species;
 
 /**
  * Runner for simulation scenario tests: deterministic mini-worlds with
@@ -236,7 +237,7 @@ public class SimTests {
 			// scavenging, not whatever a starter brain happens to have evolved into.
 			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
 			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withHunger(1.0);
+					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
 			w.spawnEntity(scav);
 			tick(w, 1);
 			tick(w2, 1);
@@ -278,10 +279,10 @@ public class SimTests {
 			// frame, so a creature free to turn would make "dead ahead" a statement
 			// about what its brain did rather than about where its food is.
 			Mind still = (sensors, act) -> { };
-			// A genome each: diet lives in the genome now, so two bodies sharing one
+			// A genome each: clade lives in the genome now, so two bodies sharing one
 			// instance would be the same animal wearing two positions.
 			TestNPC scav = TestNPC.minded(3.5, 5.5, 0, g.copy(), still)
-					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+					.withClade(Genome.Clade.SCAVENGER).withHeading(0);
 			TestNPC grazer = TestNPC.minded(3.5, 7.5, 0, g.copy(), still).withHeading(0);
 			w.spawnEntity(scav);
 			w.spawnEntity(grazer);
@@ -330,7 +331,7 @@ public class SimTests {
 			double bodyMass = body.bodyMass();
 
 			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withHunger(1.0);
+					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
 			w.spawnEntity(scav);
 			tick(w, 1);
 			double before = scav.totalSwallowed();
@@ -349,7 +350,7 @@ public class SimTests {
 	}
 
 	/**
-	 * A creature is drawn as what it is. The body plan reads the genome's diet and
+	 * A creature is drawn as what it is. The body plan reads the genome's clade and
 	 * whether it flies, so a grazer, a scavenger and a hunter of identical descent
 	 * are three different animals rather than one animal in three colours.
 	 *
@@ -364,13 +365,13 @@ public class SimTests {
 		public void run() {
 			seed(38);
 			// One lineage, one set of markers, one size: everything the old body plan
-			// looked at is held identical, so any difference is the diet.
+			// looked at is held identical, so any difference is the clade.
 			Genome grazer = Genome.phenotype(9, 0.05, 5, 6, Math.PI / 2, 100000);
 			grazer.markers = new double[] { 0.4, 0.6, 0.5 };
 			Genome scav = grazer.copy();
-			scav.diet = Genome.DIET_SCAVENGER;
+			scav.clade = Genome.Clade.SCAVENGER;
 			Genome hunter = grazer.copy();
-			hunter.diet = Genome.DIET_CARNIVORE;
+			hunter.clade = Genome.Clade.PREDATOR;
 			Genome flier = grazer.copy();
 			flier.flying = true;
 
@@ -395,10 +396,10 @@ public class SimTests {
 			assertTrue("a flier keeps one pair of limbs",
 					ProcCreature.phenotype(flier).legs == 1);
 
-			// Diet rides in the genome, so heredity carries it without being asked.
+			// The clade rides in the genome, so heredity carries it without being asked.
 			Genome kid = Genome.child(scav, 0.1);
-			assertEquals("a scavenger's young inherit the diet",
-					Genome.DIET_SCAVENGER, kid.diet);
+			assertTrue("a scavenger's young inherit the clade",
+					Genome.Clade.SCAVENGER == kid.clade);
 			assertEquals("and so are drawn as scavengers too", ks,
 					ProcCreature.shapeKey(ProcCreature.phenotype(kid)));
 		}
@@ -422,7 +423,7 @@ public class SimTests {
 			bud.sexuality = 0.0; // buds
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC parent = TestNPC.minded(4.5, 4.5, 0, bud, breeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic().withDeathspan(777);
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic().withDeathspan(777);
 			parent.withEnergy(parent.energyCapacity());
 			w.spawnEntity(parent);
 			w.think();
@@ -432,7 +433,7 @@ public class SimTests {
 					0, countRolesOtherThan(w, "scavenger"));
 			// Diet is not the only body trait the genome does not carry. A minded
 			// child used to inherit none of them -- only the plain-breeder branch
-			// remembered corpse lifespan, and nothing remembered diet.
+			// remembered corpse lifespan, and nothing remembered clade.
 			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && t != parent && !t.isRemoved()) {
 					assertEquals("a child keeps its lineage's corpse lifespan",
@@ -446,9 +447,9 @@ public class SimTests {
 			sx.markers = new double[] { 0.5, 0.5, 0.5 };
 			sx.sexuality = 1.0; // courts
 			TestNPC a = TestNPC.minded(6.3, 6.5, 0, sx, breeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			TestNPC b = TestNPC.minded(6.7, 6.5, 0, sx.copy(), breeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			a.withEnergy(a.energyCapacity());
 			b.withEnergy(b.energyCapacity());
 			pair.spawnEntity(a);
@@ -493,7 +494,7 @@ public class SimTests {
 
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC scav = TestNPC.minded(6.3, 6.5, 0, g.copy(), breeder)
-					.withDiet(TestNPC.Diet.SCAVENGER).withMetabolic();
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			TestNPC grazer = TestNPC.minded(6.7, 6.5, 0, g.copy(), breeder).withMetabolic();
 			scav.withEnergy(scav.energyCapacity());
 			grazer.withEnergy(grazer.energyCapacity());
@@ -544,7 +545,7 @@ public class SimTests {
 
 			Mind still = (sensors, act) -> { };
 			TestNPC scav = TestNPC.minded(8.5, 5.5, 0, g, still)
-					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+					.withClade(Genome.Clade.SCAVENGER).withHeading(0);
 			w.spawnEntity(scav);
 			tick(w, 2);
 			assertNear("it starts out fixed on the carcass ahead", 0,
@@ -581,7 +582,7 @@ public class SimTests {
 
 			Mind still = (sensors, act) -> { };
 			TestNPC scav = TestNPC.minded(8.5, 5.5, 0, g, still)
-					.withDiet(TestNPC.Diet.SCAVENGER).withHeading(0);
+					.withClade(Genome.Clade.SCAVENGER).withHeading(0);
 			w.spawnEntity(scav);
 			tick(w, 2);
 			double chosen = scav.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
@@ -1425,6 +1426,184 @@ public class SimTests {
 	}
 
 	/**
+	 * The clade is the one spelling of a creature's class, and the wire codes it
+	 * serialises to are frozen.
+	 *
+	 * <p>Saved {@code .genome} files carry the clade as an integer and a viewer can
+	 * re-inject one, so those numbers are a wire format. They are declared
+	 * explicitly rather than taken from {@code ordinal()} precisely so that
+	 * reordering the enum cannot silently reinterpret every genome anyone saved —
+	 * this pins that, because nothing else would notice.
+	 */
+	static class CladeIsOneConceptWithFrozenCodes extends Scenario {
+		@Override
+		public void run() {
+			assertEquals("herbivore is code 0", 0, Genome.Clade.HERBIVORE.code());
+			assertEquals("predator is code 1", 1, Genome.Clade.PREDATOR.code());
+			assertEquals("scavenger is code 2", 2, Genome.Clade.SCAVENGER.code());
+			assertEquals("parasite is code 3", 3, Genome.Clade.PARASITE.code());
+
+			for (Genome.Clade c : Genome.Clade.values()) {
+				assertTrue("code round-trips for " + c,
+						Genome.Clade.ofCode(c.code()) == c);
+				// One spelling: the enum name IS the wire name, so they cannot drift.
+				assertTrue("the wire name is the enum name for " + c,
+						c.wireName().equals(c.name().toLowerCase(java.util.Locale.ROOT)));
+				// And a full round-trip through the codec, which is what a saved
+				// genome actually goes through.
+				Genome g = new Genome();
+				g.clade = c;
+				Genome back = net.hedinger.prototype.entities.GenomeCodec.decode(
+						net.hedinger.prototype.entities.GenomeCodec.encode(g));
+				assertTrue("a saved genome reloads as the same clade (" + c + ")",
+						back.clade == c);
+			}
+			// An unrecognised code loads as a grazer rather than throwing: the safe
+			// direction to be wrong in for a file someone saved months ago.
+			assertTrue("an unknown code degrades to herbivore",
+					Genome.Clade.ofCode(99) == Genome.Clade.HERBIVORE);
+
+			// Every clade wears its own body plan -- that is what makes it
+			// recognisable on sight, and the plan is a property OF the clade.
+			java.util.Set<Integer> plans = new java.util.HashSet<>();
+			for (Genome.Clade c : Genome.Clade.values()) {
+				assertTrue("clade " + c + " has its own body plan", plans.add(c.bodyPlan()));
+			}
+		}
+	}
+
+	/**
+	 * Species are emergent and labelled lazily; clades are authored and absolute.
+	 *
+	 * <p>The two axes must stay independent: markers separate species WITHIN a
+	 * clade and must never move a creature between clades, and the clade must never
+	 * decide the species. Pinned because the whole model rests on the two being
+	 * orthogonal.
+	 */
+	static class SpeciesLabelIsDerivedNotStored extends Scenario {
+		@Override
+		public void run() {
+			// A pure function of (clade, markers): same input, same label, always.
+			Genome a = new Genome();
+			a.markers = new double[] { 0.85, 0.2, 0.2 };
+			Genome b = new Genome();
+			b.markers = new double[] { 0.85, 0.2, 0.2 };
+			assertTrue("the same markers give the same species",
+					Species.of(a).equals(Species.of(b)));
+			assertTrue("and the same tint", Species.of(a).rgb() == Species.of(b).rgb());
+
+			// Markers move the species; the clade does not.
+			Genome far = new Genome();
+			far.markers = new double[] { 0.2, 0.85, 0.25 };
+			assertTrue("different markers give a different species",
+					!Species.of(a).equals(Species.of(far)));
+
+			// Clade moves the clade; it does not move the species index.
+			Genome hunter = new Genome();
+			hunter.markers = new double[] { 0.85, 0.2, 0.2 };
+			hunter.clade = Genome.Clade.PREDATOR;
+			assertEquals("the same markers give the same species index in any clade",
+					Species.of(a).index(), Species.of(hunter).index());
+			assertTrue("but a different species, because the clade differs",
+					!Species.of(a).equals(Species.of(hunter)));
+			assertTrue("and a distinct key", !Species.of(a).key().equals(Species.of(hunter).key()));
+
+			// Every clade can express every species, so the label space is the full
+			// grid rather than whatever the population happens to occupy.
+			java.util.Set<String> keys = new java.util.HashSet<>();
+			for (Genome.Clade c : Genome.Clade.values()) {
+				for (double[] m : new double[][] { { 0.15, 0.15, 0.15 }, { 0.85, 0.2, 0.2 },
+						{ 0.2, 0.85, 0.25 }, { 0.25, 0.3, 0.85 }, { 0.8, 0.8, 0.35 },
+						{ 0.5, 0.55, 0.6 } }) {
+					Genome g = new Genome();
+					g.clade = c;
+					g.markers = m.clone();
+					keys.add(Species.of(g).key());
+				}
+			}
+			assertEquals("every clade names every species distinctly",
+					Genome.Clade.values().length * Species.PER_CLADE, keys.size());
+
+			// Nothing in the genome stores it: speciation stays a fact about where a
+			// lineage has drifted to, not a tag something assigned it.
+			Genome child = Genome.child(a, 0.0);
+			assertTrue("an unmutated child keeps its parent's species",
+					Species.of(child).equals(Species.of(a)));
+		}
+	}
+
+	/**
+	 * Clade is recognised, and it is not the similarity axis.
+	 *
+	 * <p>Markers say how closely related two creatures are within a clade; clade
+	 * says whether they are the same sort of animal at all. Two creatures with
+	 * IDENTICAL markers in different clades must not read as kin — which is exactly
+	 * the case that used to slip through, because recognition saw only similarity.
+	 */
+	static class CladesRecogniseEachOtherAsOther extends Scenario {
+		@Override
+		public void run() {
+			seed(41);
+			Genome grazer = new Genome();
+			grazer.markers = new double[] { 0.5, 0.5, 0.5 };
+			grazer.gregariousness = 1.0;
+			grazer.mateThreshold = 0.1;
+
+			Genome twin = grazer.copy();          // identical in every way
+			Genome hunter = grazer.copy();        // identical EXCEPT the clade
+			hunter.clade = Genome.Clade.PREDATOR;
+
+			Genome.Relation toTwin = grazer.react(twin, 1.0);
+			Genome.Relation toHunter = grazer.react(hunter, 1.0);
+
+			assertGreater("its own clade is worth affiliating with", toTwin.affiliate, 0);
+			assertEquals("another clade is not, however alike the markers",
+					0, (long) (toHunter.affiliate * 1000));
+			assertGreater("its own clade is worth courting", toTwin.mate, 0);
+			assertEquals("another clade is never worth courting",
+					0, (long) (toHunter.mate * 1000));
+
+			// The hostile drives are deliberately NOT clade-gated: a hunter that
+			// only chased its own kind would never eat, and prey that only feared
+			// its own would never run. Attack scales with DISSIMILARITY, so the
+			// quarry needs different markers for the drive to exist at all -- the
+			// point here is that it survives the clade difference, not that clade
+			// creates it.
+			Genome bold = grazer.copy();
+			bold.predatory = 1.0;
+			Genome quarrySame = grazer.copy();
+			quarrySame.markers = new double[] { 0.1, 0.9, 0.1 };
+			Genome quarryOther = quarrySame.copy();
+			quarryOther.clade = Genome.Clade.PARASITE;
+			assertGreater("a dissimilar creature of its own clade is attackable",
+					bold.react(quarrySame, 2.0).attack, 0);
+			assertEquals("and the clade makes no difference to that drive",
+					(long) (bold.react(quarrySame, 2.0).attack * 1000),
+					(long) (bold.react(quarryOther, 2.0).attack * 1000));
+			Genome timid = grazer.copy();
+			timid.xenophobia = 1.0; // the drives default to 0; give it one to measure
+			assertGreater("flight likewise crosses clades",
+					timid.react(quarryOther, 0.4).flee, 0);
+
+			// And the body barrier agrees with the recognition: identical markers,
+			// different clades, still cannot breed.
+			World w = room(8, 8);
+			// Fed past the breeding threshold: a newborn starts at 0.6 of its tank
+			// and breeds at 0.75, so an unfed pair is infertile and would pass the
+			// negative assertion for entirely the wrong reason.
+			TestNPC g1 = TestNPC.breeder(2.5, 2.5, 0, grazer.copy()).withEnergy(99);
+			TestNPC g2 = TestNPC.breeder(3.5, 2.5, 0, twin.copy()).withEnergy(99);
+			TestNPC p1 = TestNPC.breeder(4.5, 2.5, 0, hunter.copy()).withEnergy(99);
+			for (TestNPC t : new TestNPC[] { g1, g2, p1 }) {
+				w.spawnEntity(t);
+			}
+			tick(w, 1);
+			assertTrue("same clade, compatible", g1.canMateWith(g2));
+			assertTrue("different clade, incompatible", !g1.canMateWith(p1));
+		}
+	}
+
+	/**
 	 * A creature's role is decided by what it EATS, never by what steers it.
 	 *
 	 * <p>The steward's bounds are keyed on role, so anything the role fails to
@@ -1435,7 +1614,7 @@ public class SimTests {
 	 * that is supposed to describe the herd.
 	 *
 	 * <p>Pinned in both directions: bodies differing only in what drives them must
-	 * report the SAME role, and bodies differing only in diet must report different
+	 * report the SAME role, and bodies differing only in clade must report different
 	 * ones.
 	 */
 	static class RoleFollowsDietNotMind extends Scenario {
@@ -1445,31 +1624,34 @@ public class SimTests {
 			World w = room(14, 14);
 			Genome g = new Genome();
 
-			// Same diet, three different things driving the body.
+			// Same clade, three different things driving the body.
 			TestNPC scripted = TestNPC.breeder(2.5, 2.5, 0, g.copy());
 			TestNPC brained = TestNPC.brainedBreeder(3.5, 2.5, 0, g.copy());
 			TestNPC evolved = TestNPC.mindedForager(4.5, 2.5, 0, g.copy());
 			for (TestNPC t : new TestNPC[] { scripted, brained, evolved }) {
 				w.spawnEntity(t);
 			}
-			assertTrue("a scripted herbivore is prey", "prey".equals(scripted.ecoRole()));
-			assertTrue("a brained herbivore is prey too", "prey".equals(brained.ecoRole()));
-			assertTrue("an evolved herbivore is STILL prey", "prey".equals(evolved.ecoRole()));
+			assertTrue("a scripted herbivore is a herbivore",
+					"herbivore".equals(scripted.ecoRole()));
+			assertTrue("a brained herbivore is one too",
+					"herbivore".equals(brained.ecoRole()));
+			assertTrue("an evolved herbivore STILL is",
+					"herbivore".equals(evolved.ecoRole()));
 			assertTrue("mindedness is not what decides the role",
 					evolved.isMinded() && evolved.ecoRole().equals(scripted.ecoRole()));
 
 			// Same driver, one per trophic level.
-			TestNPC mh = TestNPC.mindedForager(6.5, 6.5, 0, dieted(Genome.DIET_HERBIVORE));
-			TestNPC mc = TestNPC.mindedForager(7.5, 6.5, 0, dieted(Genome.DIET_CARNIVORE));
-			TestNPC ms = TestNPC.mindedForager(8.5, 6.5, 0, dieted(Genome.DIET_SCAVENGER));
-			TestNPC mp = TestNPC.mindedForager(9.5, 6.5, 0, dieted(Genome.DIET_PARASITE));
+			TestNPC mh = TestNPC.mindedForager(6.5, 6.5, 0, of(Genome.Clade.HERBIVORE));
+			TestNPC mc = TestNPC.mindedForager(7.5, 6.5, 0, of(Genome.Clade.PREDATOR));
+			TestNPC ms = TestNPC.mindedForager(8.5, 6.5, 0, of(Genome.Clade.SCAVENGER));
+			TestNPC mp = TestNPC.mindedForager(9.5, 6.5, 0, of(Genome.Clade.PARASITE));
 			for (TestNPC t : new TestNPC[] { mh, mc, ms, mp }) {
 				w.spawnEntity(t);
 			}
-			assertTrue("diet decides: herbivore -> prey", "prey".equals(mh.ecoRole()));
-			assertTrue("diet decides: carnivore -> predator", "predator".equals(mc.ecoRole()));
-			assertTrue("diet decides: scavenger -> scavenger", "scavenger".equals(ms.ecoRole()));
-			assertTrue("diet decides: parasite -> parasite", "parasite".equals(mp.ecoRole()));
+			assertTrue("clade decides: herbivore", "herbivore".equals(mh.ecoRole()));
+			assertTrue("clade decides: carnivore -> predator", "predator".equals(mc.ecoRole()));
+			assertTrue("clade decides: scavenger -> scavenger", "scavenger".equals(ms.ecoRole()));
+			assertTrue("clade decides: parasite -> parasite", "parasite".equals(mp.ecoRole()));
 
 			// Bodies outside the ecosystem stay outside it: no genome, no role, so
 			// the warden never counts or trims them.
@@ -1497,15 +1679,16 @@ public class SimTests {
 				}
 			}
 			assertEquals("every creature with a genome has a role", 0, roleless);
-			assertEquals("four herbivores counted as prey", 4, (long) byRole.getOrDefault("prey", 0));
+			assertEquals("four herbivores counted as such", 4,
+					(long) byRole.getOrDefault("herbivore", 0));
 			assertEquals("one predator", 1, (long) byRole.getOrDefault("predator", 0));
 			assertEquals("one scavenger", 1, (long) byRole.getOrDefault("scavenger", 0));
 			assertEquals("one parasite", 1, (long) byRole.getOrDefault("parasite", 0));
 		}
 
-		private static Genome dieted(int diet) {
+		private static Genome of(Genome.Clade clade) {
 			Genome g = new Genome();
-			g.diet = diet;
+			g.clade = clade;
 			return g;
 		}
 	}
@@ -3768,8 +3951,8 @@ public class SimTests {
 			// Long enough for the random-brained founders to starve and be reseeded.
 			tick(w, 8000);
 			assertGreater("the steward keeps the minded cohort from dying out", countMinded(w), 0);
-			assertGreater("the scripted prey persist alongside the minded cohort",
-					countRole(w, "prey"), 0);
+			assertGreater("the scripted herbivores persist alongside the minded cohort",
+					countRole(w, "herbivore"), 0);
 		}
 	}
 
@@ -5873,7 +6056,7 @@ public class SimTests {
 				a[AgentIO.A_ATTACH] = 1; // latch the moment something bigger is in reach
 			};
 			TestNPC para = TestNPC.minded(4.5, 5.5, 0, paraG, ride)
-					.withDiet(TestNPC.Diet.PARASITE).withHunger(1.0);
+					.withClade(Genome.Clade.PARASITE).withHunger(1.0);
 			w.spawnEntity(host);
 			w.spawnEntity(para);
 			w.think();
@@ -6027,7 +6210,7 @@ public class SimTests {
 			Mind still = (sn, a) -> {
 			};
 			TestNPC para = TestNPC.minded(6.2, 4.5, 0, paraG, still)
-					.withDiet(TestNPC.Diet.PARASITE); // in reach, smaller: free lunch, refused
+					.withClade(Genome.Clade.PARASITE); // in reach, smaller: free lunch, refused
 			Genome preyG = new Genome();
 			preyG.size = 7;
 			preyG.speed = 0;
@@ -6058,7 +6241,7 @@ public class SimTests {
 			g.size = 4;
 			Mind eat = (sn, a) -> a[AgentIO.A_EAT] = 1;
 			TestNPC para = TestNPC.minded(5.5, 5.5, 0, g, eat)
-					.withDiet(TestNPC.Diet.PARASITE).withHunger(1.0);
+					.withClade(Genome.Clade.PARASITE).withHunger(1.0);
 			w.spawnEntity(para);
 			w.think();
 			double veg0 = w.getTile(5, 5, 0).getVegetation(w.getTick());
@@ -6223,7 +6406,7 @@ public class SimTests {
 						Genome.phenotype(8, 0.05, 8, 4, Math.PI, 100000))
 						.withReproCooldown(100000)); // no births mid-cull: pin the arithmetic
 			}
-			Order order = new Order(w, "prey", 7);
+			Order order = new Order(w, "herbivore", 7);
 			net.hedinger.prototype.sim.StewardDrone drone =
 					new net.hedinger.prototype.sim.StewardDrone(3.5, 3.5, 0, order);
 			w.spawnEntity(drone);
@@ -6263,7 +6446,7 @@ public class SimTests {
 			TestNPC victim = TestNPC.breeder(12.5, 6.5, 0,
 					Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000)).withDeathspan(200);
 			w.spawnEntity(victim);
-			Order order = new Order(w, "prey", 0);
+			Order order = new Order(w, "herbivore", 0);
 			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
 			w.think();
 			snapshot(w, "before (one grazer, one drone)");
@@ -6303,7 +6486,7 @@ public class SimTests {
 			// No order: the drone sits on its pad and is simply an object in
 			// the room, which is the situation being tested.
 			net.hedinger.prototype.sim.StewardDrone drone =
-					new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, new Order(w, "prey", 99));
+					new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, new Order(w, "herbivore", 99));
 			w.spawnEntity(drone);
 			// A starving hunter and a parasite, both parked against the drone —
 			// as close as either could ever get to a meal.
@@ -6355,7 +6538,7 @@ public class SimTests {
 			// genuinely shut to anything that is not the drone.
 			TestNPC walker = TestNPC.mover(1.5, 6.5, 0, 0);
 			w.spawnEntity(walker);
-			Order order = new Order(w, "prey", 0);
+			Order order = new Order(w, "herbivore", 0);
 			net.hedinger.prototype.sim.StewardDrone drone =
 					new net.hedinger.prototype.sim.StewardDrone(3.5, 4.5, 0, order);
 			w.spawnEntity(drone);
@@ -6405,7 +6588,7 @@ public class SimTests {
 			TestNPC exposed = TestNPC.breeder(8.5, 5.5, 0, small).withReproCooldown(100000);
 			w.spawnEntity(sheltered);
 			w.spawnEntity(exposed);
-			Order order = new Order(w, "prey", 0); // kill everything it can
+			Order order = new Order(w, "herbivore", 0); // kill everything it can
 			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
 			w.think();
 			snapshot(w, "before (one grazer in the open, one down a duct)");
@@ -6677,6 +6860,9 @@ public class SimTests {
 				new ActionGlyphsRideTheWire(),
 				new MechanicsAreReadOffTheWorld(),
 				new RoleFollowsDietNotMind(),
+				new CladeIsOneConceptWithFrozenCodes(),
+				new SpeciesLabelIsDerivedNotStored(),
+				new CladesRecogniseEachOtherAsOther(),
 				new EverySensorIsReachable(),
 				new ViolenceIsAudibleThroughWalls(),
 				new HitchhikerBrainClimbsAboard(),

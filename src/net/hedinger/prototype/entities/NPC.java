@@ -162,7 +162,7 @@ public abstract class NPC extends Entity {
 	 */
 	public static final double MOVE_ENERGY = 0.2;
 
-	/** This creature's ecological guild ("prey", "predator", ...), or "" for
+	/** This creature's clade ("herbivore", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick
 	 *  census can bucket bodies without knowing their concrete classes. */
 	public String ecoRole() {

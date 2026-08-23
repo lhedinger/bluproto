@@ -49,34 +49,94 @@ public class Genome {
 	// --- markers (neutral recognition barcode, each in [0,1]) ---
 	public double[] markers = new double[MARKER_DIMS];
 
-	// --- trophic level (what this lineage eats) ---
-	/** Grazes. */
-	public static final int DIET_HERBIVORE = 0;
-	/** Kills and eats what it kills. */
-	public static final int DIET_CARNIVORE = 1;
-	/** Eats what is already dead. */
-	public static final int DIET_SCAVENGER = 2;
-	/** Rides a bigger living body and eats it slowly, from on top of it. */
-	public static final int DIET_PARASITE = 3;
+	// --- clade (the class of creature this is) ---
+	/**
+	 * The class of creature this is — one of four, and the most consequential
+	 * thing about a body.
+	 *
+	 * <p>A clade fixes three separate things at once, which is why it is a concept
+	 * rather than a loose collection of flags. It decides <b>what a creature can
+	 * digest</b>, so it fixes which supply its numbers are coupled to; it is a
+	 * <b>hard mate barrier</b>, so clades cannot interbreed and each is a closed
+	 * lineage; and it is <b>what the phenotype reads</b>, so each clade wears its
+	 * own body plan and is recognisable on sight.
+	 *
+	 * <p>This used to be spelled five different ways — an int here, a parallel enum
+	 * on the creature, a role String, a body-plan index in yet another order, and a
+	 * duplicate role accessor — with nothing checking they agreed. Adding a clade
+	 * meant editing five places in three orders. Now the enum owns all of it and
+	 * everything else is derived.
+	 *
+	 * <p><b>The codes are frozen.</b> Saved {@code .genome} files carry this as an
+	 * integer, and a viewer can re-inject one, so the numbers are a wire format and
+	 * not an implementation detail. They are declared explicitly rather than taken
+	 * from {@code ordinal()} so that reordering this enum can never silently
+	 * reinterpret every genome anyone has saved.
+	 */
+	public enum Clade {
+		/** Grazes the living substrate. */
+		HERBIVORE(0, 0),
+		/** Kills and eats what it kills. */
+		PREDATOR(1, 2),
+		/** Eats what is already dead. */
+		SCAVENGER(2, 1),
+		/** Rides a bigger living body and eats it slowly, from on top of it. */
+		PARASITE(3, 3);
+
+		private final int code;
+		private final int bodyPlan;
+
+		Clade(int code, int bodyPlan) {
+			this.code = code;
+			this.bodyPlan = bodyPlan;
+		}
+
+		/** The frozen wire code, as written into saved genomes. */
+		public int code() {
+			return code;
+		}
+
+		/** The name this clade goes by everywhere outside the engine: the entity
+		 *  JSON, the population graph, the inspector. Lower-cased enum name, so the
+		 *  two can never drift apart. */
+		public String wireName() {
+			return name().toLowerCase(java.util.Locale.ROOT);
+		}
+
+		/** Index of this clade's body plan, for the organism renderer. Owned here so
+		 *  a clade's silhouette is a property OF the clade rather than a switch
+		 *  somewhere else that has to be remembered. */
+		public int bodyPlan() {
+			return bodyPlan;
+		}
+
+		/** The clade with this wire code, or {@link #HERBIVORE} for anything
+		 *  unrecognised — an old or damaged genome loads as a grazer rather than
+		 *  failing, which is the safe direction to be wrong in. */
+		public static Clade ofCode(int code) {
+			for (Clade c : values()) {
+				if (c.code == code) {
+					return c;
+				}
+			}
+			return HERBIVORE;
+		}
+	}
 
 	/**
-	 * What this lineage eats, as a {@code DIET_*} code.
+	 * What this lineage is.
 	 *
-	 * <p>It lives in the genome because it is the most consequential thing about a
-	 * body and the least negotiable: it decides what the creature can digest, who
-	 * it will breed with, and — since it is what the phenotype reads — what it
-	 * looks like. It used to be a field on the creature that heredity had to
-	 * remember to copy by hand, which is exactly the kind of thing heredity forgets:
-	 * a scavenger's young were born grazers until that was fixed, and the body plan
-	 * could never see the trait at all.
-	 *
-	 * <p>Inherited but never mutated. A lineage does not drift across trophic levels
-	 * one jitter at a time; a grazer whose grandchildren eat carrion is not evolution
+	 * <p>Inherited but never mutated. A lineage does not drift across clades one
+	 * jitter at a time; a grazer whose grandchildren eat carrion is not evolution
 	 * in this world, it is a bug that would quietly dissolve the food chain. Sexual
-	 * crossover takes it from either parent, which is unambiguous because diet is a
-	 * mate barrier — a pair always agrees.
+	 * crossover takes it from either parent, which is unambiguous because the clade
+	 * is a mate barrier — a pair always agrees.
+	 *
+	 * <p>So clades are authored and species are emergent: nothing in the world can
+	 * create a new clade, while marker drift under {@link #mateThreshold} produces
+	 * real reproductive isolation within one.
 	 */
-	public int diet = DIET_HERBIVORE;
+	public Clade clade = Genome.Clade.HERBIVORE;
 
 	// --- dispositions (interpretable response weights, >= 0) ---
 	public double predatory = 0; // attack smaller & dissimilar
@@ -147,7 +207,7 @@ public class Genome {
 		g.maxAge = maxAge;
 		g.flying = flying;
 		g.markers = markers.clone();
-		g.diet = diet;
+		g.clade = clade;
 		g.predatory = predatory;
 		g.xenophobia = xenophobia;
 		g.gregariousness = gregariousness;
@@ -188,9 +248,9 @@ public class Genome {
 		for (int i = 0; i < MARKER_DIMS; i++) {
 			g.markers[i] = pick(a.markers[i], b.markers[i]);
 		}
-		// No draw and no pick: a pair only breeds inside its own diet, so both
+		// No draw and no pick: a pair only breeds inside its own clade, so both
 		// parents carry the same one and there is nothing to choose between.
-		g.diet = a.diet;
+		g.clade = a.clade;
 		g.predatory = pick(a.predatory, b.predatory);
 		g.xenophobia = pick(a.xenophobia, b.xenophobia);
 		g.gregariousness = pick(a.gregariousness, b.gregariousness);
@@ -321,11 +381,28 @@ public class Genome {
 		double s = similarityTo(other);
 		double dissim = 1 - s;
 
+		// Clade is recognised, and it is not the same axis as similarity. Markers
+		// say how closely related two creatures are WITHIN a clade -- that is the
+		// species axis, and it is continuous. Clade is categorical and absolute: a
+		// grazer and a hunter that happen to share markers are not kin, and reading
+		// them as kin is what let a predator drift into a herd and be flocked with.
+		//
+		// So the two sociable drives are gated on clade outright. Mating is already
+		// impossible across clades (see NPC.canMateWith); wanting to is just wasted
+		// courtship. Affiliation is blocked for the same reason it exists -- a herd
+		// is a group of one's own kind, and a mixed one is not a herd.
+		//
+		// The two hostile drives are deliberately NOT gated. Predation and flight
+		// are about size and disposition, not kinship: a hunter that would only
+		// chase its own clade would never eat, and prey that only feared its own
+		// would never run.
+		boolean sameClade = other != null && other.clade == clade;
+
 		Relation r = new Relation();
 		r.attack = predatory * dissim * Math.max(0, sizeAdv - 1);
 		r.flee = Math.max(0, xenophobia * dissim * Math.max(0, (1 / Math.max(1e-6, sizeAdv)) - 1) - boldness);
-		r.affiliate = gregariousness * s;
-		r.mate = s >= mateThreshold ? s : 0;
+		r.affiliate = sameClade ? gregariousness * s : 0;
+		r.mate = sameClade && s >= mateThreshold ? s : 0;
 
 		// Dominant drive, survival-first on ties.
 		double best = 1e-4; // ignore threshold
