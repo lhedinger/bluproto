@@ -53,11 +53,39 @@ public final class StewardDrone extends NPC {
 	 *  fight is a better picture than one ignoring it. */
 	private static final int CHASSIS = 16;
 
-	/** Cruise speed in tiles/tick. Above the fastest a genome may express
-	 *  ({@code Genome.SPEED_MAX} is 0.3, and no evolved body sustains it), so a
-	 *  cull ends: a drone that could be outrun by its quarry would fly forever
-	 *  and the ceiling would never come down. */
-	private static final double CRUISE = 0.32;
+	/**
+	 * Cruise speed in tiles/tick — a patrol pace, not a pursuit one.
+	 *
+	 * <p>Below {@code Genome.SPEED_MAX} (0.3), so a fast body can outrun the
+	 * drone in a straight line. That is a real concession and worth naming: the
+	 * machine no longer wins every chase on speed. What keeps a cull finishing
+	 * anyway is that it does not need to. Sustaining a sprint costs energy as
+	 * {@code mass · v²} and no creature holds top speed for long, the drone
+	 * never tires, it navigates while its quarry only steers, and it picks the
+	 * nearest cullable body rather than committing to one — so an animal that
+	 * outruns it has escaped this approach, not the cull.
+	 *
+	 * <p>Halved from 0.32, where the drone crossed the map in fourteen seconds
+	 * and read as something teleporting between kills. Travel is most of the
+	 * time a cull takes, so this is the knob that decides whether the
+	 * intervention is a thing you watch happen or a thing you notice afterwards.
+	 *
+	 * <p>The price is paid by the largest cohort, and it is worth knowing before
+	 * anyone changes this number back. Measured over 16k ticks of the seeded
+	 * world, halving the speed cut the cull rate from about 0.05 bodies a tick
+	 * to 0.017 — and at that rate the drone can no longer finish a prey cull.
+	 * Prey settles at 167-174 against a ceiling of 160, which is to say against
+	 * the {@code BACKSTOP} rather than against the drone, and the prey order
+	 * never clears. So for the big cohort the visible machine is now
+	 * accompanying the control rather than being it; the small cohorts
+	 * (predators, parasites) it still services to the full 70% target.
+	 *
+	 * <p>That is a deliberate trade of throughput for legibility, not an
+	 * oversight. If the throughput is wanted back without giving up the pace,
+	 * the knob to reach for is {@code CHARGE_TICKS} or {@code BACKSTOP} — not
+	 * this one, which is what makes the drone watchable.
+	 */
+	private static final double CRUISE = 0.16;
 
 	/** Steering divisor for {@link #steer} — lower turns harder. A machine
 	 *  pivots about its own axis, so it out-turns anything with legs. */
