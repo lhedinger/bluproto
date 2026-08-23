@@ -104,8 +104,14 @@ function vegLayerUpdate(meta: WorldMeta, chunkTiles: number,
         const i = gy * meta.cols + gx;
         const s = veg[i];
         vegPainted[i] = s;
-        if (s > 0) {
-          cg.drawImage(vegetationTileFor('grass', s, vegVariant(gx, gy)), tx * ART, ty * ART);
+        // The high bit says which vegetation this tile grows; the low bits are
+        // the growth stage. This used to be hardcoded to grass, so the cave's
+        // fungus beds were drawn as meadow and the mushroom sprite — baked all
+        // along, and visible in the catalog — never reached the world.
+        const stage = s & VEG_STAGE_MASK;
+        if (stage > 0) {
+          const kind: VegKind = (s & VEG_KIND_MASK) !== 0 ? 'mushroom' : 'grass';
+          cg.drawImage(vegetationTileFor(kind, stage, vegVariant(gx, gy)), tx * ART, ty * ART);
         }
       }
     }
@@ -1009,6 +1015,12 @@ export function ductLidTile(vertical: boolean): HTMLCanvasElement {
 // integration (drawing these over the baked ground per tile, replacing the
 // baked-in grass) comes later; the sprites and this painter are the record.
 
+/** High bit of a vegetation byte: this tile grows fungus rather than grass.
+ *  Set by the server in the full grid only (VegFeed.KIND_FUNGUS); deltas carry
+ *  density alone, because terrain never changes underfoot. */
+export const VEG_KIND_MASK = 0x80;
+/** The low bits: growth stage, 0 = nothing grows here, 1..5 = trampled to lush. */
+export const VEG_STAGE_MASK = 0x07;
 export type VegKind = 'grass' | 'mushroom';
 export const VEG_KINDS: VegKind[] = ['grass', 'mushroom'];
 export const VEG_STAGES = 5;
