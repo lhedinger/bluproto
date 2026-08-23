@@ -522,6 +522,14 @@ async function refreshDetail(): Promise<void> {
     const r = await fetch(`/api/world/entity/${selectedId}`);
     if (!r.ok) { deselect(); return; }
     const d = await r.json();
+    // Follow it downstairs. The entity stream is filtered to the watched level,
+    // so a creature that changes level simply stops arriving — from the stream
+    // alone it is indistinguishable from one that died. This endpoint is not
+    // level-filtered and carries the creature's z, which makes it the only thing
+    // that can tell those two apart, so the follow is steered from here.
+    if (cam.followId === selectedId && typeof d.z === 'number') {
+      goToLevel(d.z);
+    }
     // Two contexts: a compact card when just watching, the full dump in debug.
     if (debugOn) renderInspectDebug(d); else renderInspectSimple(d);
   } catch {
@@ -963,9 +971,19 @@ mm.addEventListener('click', ev => {
 
 pauseBtn.onclick = () => net.send({ cmd: paused ? 'resume' : 'pause' });
 speedSel.onchange = () => net.send({ cmd: 'speed', value: parseFloat(speedSel.value) });
-levelBtn.onclick = () => {
-  if (!hello || hello.levels <= 1) return;
-  currentLevel = (currentLevel + 1) % hello.levels; // cycle surface -> underground -> …
+/**
+ * Moves the viewer to a level: relabels, drops the per-level grids and asks the
+ * server to stream that floor instead.
+ *
+ * <p>Its own function because two things move the viewer now — the button, and a
+ * followed creature walking downstairs. Half a switch is worse than none: skip
+ * the `level` command and the client draws one floor while the server streams
+ * another; skip the epoch bump and a grid still in flight lands on the wrong
+ * one.
+ */
+function goToLevel(z: number): void {
+  if (!hello || z < 0 || z >= hello.levels || z === currentLevel) return;
+  currentLevel = z;
   levelEpoch++; // any grid still in flight for the old level is now stale
   levelBtn.textContent = levelName(currentLevel);
   vegGrid = null;
@@ -974,6 +992,19 @@ levelBtn.onclick = () => {
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.
   net.send({ cmd: 'level', z: currentLevel });
+}
+
+levelBtn.onclick = () => {
+  if (!hello || hello.levels <= 1) return;
+  // Changing level by hand ends the follow. Otherwise the two fight: the button
+  // moves the viewer, the followed creature's next poll drags it straight back,
+  // and the button looks broken. Asking for a floor outranks being glued to
+  // something on a different one. The selection stays — only the camera lets go.
+  if (cam.followId !== null) {
+    cam.followId = null;
+    reflect();
+  }
+  goToLevel((currentLevel + 1) % hello.levels); // cycle surface -> underground -> …
 };
 function reflect(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
@@ -1217,10 +1248,16 @@ function frame(now: number): void {
       const p = state.sample(t, renderTime);
       cam.cx = p.x;
       cam.cy = p.y;
-    } else {
-      cam.followId = null; // it died away or despawned
+    } else if (cam.followId !== selectedId) {
+      // Nothing is polling this one, so there is no way to learn where it went.
+      cam.followId = null;
       reflect();
     }
+    // Otherwise hold the camera and keep following. A track can vanish because
+    // the creature died OR because it walked to another level and fell out of a
+    // stream filtered to this one; this loop cannot tell which, and it used to
+    // guess "died" and drop the follow. The detail poll knows, and answers
+    // within a second — it either takes us to the new level or deselects.
   }
 
   const chunkPx = hello ? (hello.chunkPx ?? hello.tileSize) : 0;
