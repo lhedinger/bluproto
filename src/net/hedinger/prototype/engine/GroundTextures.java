@@ -1251,37 +1251,131 @@ public final class GroundTextures {
 		return ditherRamp(CLS_SLUDGE, p, px, py);
 	}
 
+	/** Rail-neighbour bits for {@link #rail}: which sides of this tile the run
+	 *  continues into. */
+	public static final int RAIL_N = 1, RAIL_E = 2, RAIL_S = 4, RAIL_W = 8;
+
+	/** The two rail lines, in art-pixels across the 12-px tile. Everything the
+	 *  track draws hangs off this pair. */
+	private static final int RAIL_A = 3, RAIL_B = 8;
+
 	/**
 	 * A tram run: two polished rails on creosoted sleepers, laid on a ballast
-	 * bed. Drawn along the axis its own neighbours imply, exactly as the pipe
-	 * runs and duct channels are, so a line of track reads as one continuous
-	 * road rather than a row of stamps.
+	 * bed, autotiled from the sides the track continues into.
+	 *
+	 * <p>{@code mask} is the four neighbour bits, and the shape follows from how
+	 * many are set: one arm is a stub closed by a buffer stop, two opposite are
+	 * a straight, two adjacent a curve, three a set of points, four a crossing.
+	 * Six shapes out of one number, which is what autotiling buys — the world
+	 * generator lays tiles and the track works out its own geometry.
+	 *
+	 * <p>Before this the orientation was a single boolean ("is there rail north
+	 * or south?"), which is exactly enough for the one straight run the base
+	 * happens to contain and wrong for everything else. A corner drew as two
+	 * perpendicular stubs meeting at a seam; a crossing drew as a vertical tile
+	 * with the east-west run dead-ending into it. Nothing showed it because
+	 * nothing had yet asked the track to turn.
+	 *
+	 * <p>A curve at this size is an L with its corner cut, not an arc. Twelve
+	 * art-pixels is too few for a radius to read as anything but lumpy, and
+	 * ART-STYLE is explicit that discrete shapes are authored rather than
+	 * rasterised — so each rail is drawn as two straight runs meeting where it
+	 * turns into the perpendicular one. The inner rail turns tight against the
+	 * corner the curve hugs and the outer sweeps wide, which is the whole of
+	 * what makes a bend read as a bend.
 	 *
 	 * <p>The rail heads are the one place ordinary ground is allowed to be
 	 * near-white: a rail in use is polished by the wheels to a shine nothing
-	 * else underground has, and that shine is the whole silhouette. Everything
-	 * else here is deliberately drab so the two bright lines carry it.
-	 *
-	 * <p>{@code along} is the coordinate running down the track and
-	 * {@code across} the one running over it, so one painter serves both
-	 * orientations.
+	 * else underground has, and that shine is the entire silhouette. Everything
+	 * else here is deliberately drab so the bright lines carry it.
 	 */
-	public static int rail(int along, int across, int px, int py) {
-		// Sleepers: a 4-px pitch of dark timber under everything, with the
-		// ballast showing in the gaps between them.
-		boolean sleeper = Math.floorMod(along, 4) < 2;
-		// The two rail heads, inset from the tile edges.
-		if (across == 3 || across == 8) {
+	public static int rail(int mask, int ai, int aj, int px, int py) {
+		if (railHead(mask, ai, aj)) {
 			return RAMP[CLS_STEELWALL][2]; // polished steel, the run's signature
 		}
-		if (across == 4 || across == 9) {
-			return RAMP[CLS_RAIL][0]; // the web's shadow, just south of each head
+		// The web's shadow: one pixel east of a rail running north-south, one
+		// south of a rail running east-west -- the same light the whole world
+		// is lit by, applied to a very small raised thing.
+		if (railHead(mask, ai - 1, aj) || railHead(mask, ai, aj - 1)) {
+			return RAMP[CLS_RAIL][0];
 		}
+		// Sleepers lie across the run, so a straight north-south track has them
+		// horizontal and an east-west one vertical. A junction has no single
+		// run to lie across; it gets the east-west bed, and the rails crossing
+		// over it are what the eye reads anyway.
+		boolean vertical = (mask & (RAIL_N | RAIL_S)) != 0 && (mask & (RAIL_E | RAIL_W)) == 0;
+		boolean sleeper = Math.floorMod(vertical ? aj : ai, 4) < 2;
 		if (sleeper) {
 			return hash01(px >> 1, py, 76) < 0.25 ? RAMP[CLS_RAIL][0] : RAMP[CLS_RAIL][1];
 		}
 		double g = hash01(px, py >> 1, 77); // ballast: coarse, quiet grit
 		return g < 0.14 ? RAMP[CLS_RAIL][0] : (g > 0.9 ? RAMP[CLS_RAIL][2] : RAMP[CLS_RAIL][1]);
+	}
+
+	/**
+	 * Whether the art-pixel at {@code (ai, aj)} is rail head, for a tile whose
+	 * run continues into the sides named by {@code mask}. Out-of-tile
+	 * coordinates answer false, which is what makes the web-shadow lookup above
+	 * safe at the tile's north and west edges.
+	 */
+	private static boolean railHead(int mask, int ai, int aj) {
+		if (ai < 0 || aj < 0 || ai > 11 || aj > 11) {
+			return false;
+		}
+		boolean n = (mask & RAIL_N) != 0, e = (mask & RAIL_E) != 0;
+		boolean s = (mask & RAIL_S) != 0, w = (mask & RAIL_W) != 0;
+		int arms = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+		boolean onV = ai == RAIL_A || ai == RAIL_B; // on a north-south rail line
+		boolean onH = aj == RAIL_A || aj == RAIL_B; // on an east-west rail line
+
+		if (arms == 2 && !(n && s) && !(e && w)) {
+			// A curve. The inner rail is the one on the side the track leaves
+			// by: it turns tight against that corner, and the outer sweeps
+			// wide. Each rail stops where it meets the perpendicular rail it
+			// becomes, which is what joins the two arms into one bend.
+			int innerV = e ? RAIL_B : RAIL_A; // vertical rail nearer the exit
+			int outerV = e ? RAIL_A : RAIL_B;
+			int innerH = n ? RAIL_A : RAIL_B; // horizontal rail nearer the exit
+			int outerH = n ? RAIL_B : RAIL_A;
+			boolean vertArm = n
+					? (aj <= (ai == innerV ? innerH : outerH))
+					: (aj >= (ai == innerV ? innerH : outerH));
+			boolean horzArm = e
+					? (ai >= (aj == innerH ? innerV : outerV))
+					: (ai <= (aj == innerH ? innerV : outerV));
+			return (onV && vertArm) || (onH && horzArm);
+		}
+		if (arms == 1) {
+			// A stub: the rails run in from their edge and stop at a buffer,
+			// drawn as a bar laid across both of them. Track has to end
+			// somewhere, and ending in mid-ballast reads as unfinished art.
+			int stop = 8;
+			if (n) {
+				return (onV && aj <= stop) || (aj == stop && ai >= RAIL_A && ai <= RAIL_B);
+			}
+			if (s) {
+				return (onV && aj >= 11 - stop) || (aj == 11 - stop && ai >= RAIL_A && ai <= RAIL_B);
+			}
+			if (e) {
+				return (onH && ai >= 11 - stop) || (ai == 11 - stop && aj >= RAIL_A && aj <= RAIL_B);
+			}
+			return (onH && ai <= stop) || (ai == stop && aj >= RAIL_A && aj <= RAIL_B);
+		}
+		// Straights, points and crossings: every arm present runs the full
+		// width of the tile, and where they meet they simply cross. A frog and
+		// check rails would be the real thing, and at twelve pixels they would
+		// be three grey specks -- the crossing rails already say "junction".
+		boolean any = false;
+		if ((n || s) && onV) {
+			any = true;
+		}
+		if ((e || w) && onH) {
+			any = true;
+		}
+		if (arms == 0) {
+			any = onH; // a lone tile: draw it as a scrap of east-west track
+		}
+		return any;
 	}
 
 	/**

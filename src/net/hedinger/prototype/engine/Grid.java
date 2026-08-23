@@ -779,13 +779,17 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_SLUDGE) {
 								col = GroundTextures.sludge(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_RAIL) {
-								// The run follows its own connectivity, like the pipes:
-								// track beside track sets the axis, so a line of rail
-								// reads as one road instead of a row of stamps.
-								boolean vertRail = isType(x, y - 1, Tile.TileType.TYPE_RAIL)
-										|| isType(x, y + 1, Tile.TileType.TYPE_RAIL);
-								col = vertRail ? GroundTextures.rail(aj, ai, gx, gy)
-										: GroundTextures.rail(ai, aj, gx, gy);
+								// Autotiled from the sides the run continues into, so
+								// the track works out its own geometry: straights,
+								// curves, points and crossings all fall out of the
+								// same four bits. The generator lays tiles; the shape
+								// is the track's business.
+								int railMask =
+										(isType(x, y - 1, Tile.TileType.TYPE_RAIL) ? GroundTextures.RAIL_N : 0)
+										| (isType(x + 1, y, Tile.TileType.TYPE_RAIL) ? GroundTextures.RAIL_E : 0)
+										| (isType(x, y + 1, Tile.TileType.TYPE_RAIL) ? GroundTextures.RAIL_S : 0)
+										| (isType(x - 1, y, Tile.TileType.TYPE_RAIL) ? GroundTextures.RAIL_W : 0);
+								col = GroundTextures.rail(railMask, ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
