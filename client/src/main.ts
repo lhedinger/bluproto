@@ -428,6 +428,23 @@ cam.attach(tap => {
   } else {
     deselect(); // tap on empty ground clears the selection
   }
+}, hold => {
+  // Long press inspects the ground, in any mode. Tile inspection used to be
+  // reachable only with debug on, which put the one thing that explains WHY a
+  // patch is bare — its fertility, its regrowth, what is standing on it —
+  // behind a flag most people watching the world never turn on.
+  //
+  // Always the tile, never the creature standing on it: a tap already selects
+  // creatures, and a gesture that returned one thing or the other depending on
+  // what happened to be underfoot would be a gesture nobody could aim.
+  if (!meta) {
+    return;
+  }
+  const tx = Math.floor(hold.x), ty = Math.floor(hold.y);
+  if (tx < 0 || ty < 0 || tx >= meta.cols || ty >= meta.rows) {
+    return;
+  }
+  selectTile(tx, ty, currentLevel);
 });
 
 // ---- selection + inspect ---------------------------------------------------
@@ -950,7 +967,8 @@ function applyDebug(): void {
 function setDebug(on: boolean): void {
   if (debugOn === on) return;
   debugOn = on;
-  if (!debugOn && selectedTile) deselect(); // tile inspection is a debug-only tool
+  // Tile inspection is no longer debug-only — a long press reaches it in any
+  // mode — so leaving debug must not tear down a selection the user made.
   applyDebug();
   toast(`debug mode ${debugOn ? 'on' : 'off'}`);
 }
