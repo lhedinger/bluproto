@@ -339,49 +339,55 @@ public final class GroundTextures {
 		// so the outline breaks into straight runs and corners the way split
 		// rock does. A smooth ellipse here reads as a pebble, and a field of
 		// identical pebbles reads as procedural; broken edges read as bedrock.
-		int C = 14; // slab lattice pitch, art-px — a plate to the tile, not cobbles
+		// Pitch and radius are set so a stone is a FRACTION of a body, not a
+		// match for one: the ground should read as stony, and a rock drawn at
+		// creature scale stops being ground and starts being an obstacle the
+		// eye expects to walk around.
+		int C = 8; // stone lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
 		double bestD = 1e9, bestDy = 0, bestR = 0;
 		boolean bestPale = false;
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
-				if (hash01(cx, cy, 96) < 0.52) {
+				if (hash01(cx, cy, 96) < 0.48) {
 					continue; // open grit between the stones: most of the ground
 				}
 				double jx = cx * C + 1 + hash01(cx, cy, 97) * (C - 2);
 				double jy = cy * C + 1 + hash01(cx, cy, 98) * (C - 2);
-				double r = 2.8 + hash01(cx, cy, 99) * 4.2;
-				// Each plate lies its own way: some squat, some long.
-				double squash = 0.62 + hash01(cx, cy, 93) * 0.5;
-				double dx = (px + 0.5 - jx) * squash, dy = (py + 0.5 - jy) * 1.35;
+				double r = 1.3 + hash01(cx, cy, 99) * 2.1;
+				// Each stone lies its own way: some squat, some long.
+				double squash = 0.66 + hash01(cx, cy, 93) * 0.5;
+				double dx = (px + 0.5 - jx) * squash, dy = (py + 0.5 - jy) * 1.3;
 				double d = Math.sqrt(dx * dx + dy * dy);
-				int sector = (int) ((Math.atan2(dy, dx) + Math.PI) * (7 / (2 * Math.PI)));
-				double rr = r * (0.76 + 0.46 * hash01(cx * 7 + sector, cy, 94));
+				int sector = (int) ((Math.atan2(dy, dx) + Math.PI) * (5 / (2 * Math.PI)));
+				double rr = r * (0.78 + 0.42 * hash01(cx * 5 + sector, cy, 94));
 				if (d - rr < bestD - bestR) {
 					bestD = d;
 					bestDy = py + 0.5 - jy;
 					bestR = rr;
-					// Plates weather differently: some sit pale in the light,
+					// Stones weather differently: some sit pale in the light,
 					// others stay dark. Without this a rock field is one colour.
 					bestPale = hash01(cx, cy, 95) > 0.42;
 				}
 			}
 		}
 		if (bestD < bestR) {
-			int body = bestPale ? 2 : 1, band = bestPale ? 1 : 0;
-			if (bestDy < -0.45 * bestR) {
+			// At three or four pixels across a stone is a SHAPE, not a surface:
+			// a lit crown, a body, and the shadow below. Texture inside it —
+			// the foliation banding a tile-wide slab could carry — would only
+			// read as speckle at this size, so only the rare big one gets it.
+			if (bestDy < -0.4 * bestR) {
 				return RAMP[CLS_STONE][2]; // the crown catches the light
 			}
-			// Foliation: the noise is sampled far more finely across the plate
-			// than along it, so the darker rock runs in bands rather than
-			// blotches — the layered schist the photograph is bedded in.
-			return Utils.noise2(wx * 3.4 + 61, wy * 0.8 + 17, 2.2) > 0.62
-					? RAMP[CLS_STONE][band]
-					: RAMP[CLS_STONE][body];
+			int body = bestPale ? 2 : 1;
+			if (bestR > 2.6 && Utils.noise2(wx * 3.4 + 61, wy * 0.8 + 17, 2.2) > 0.62) {
+				return RAMP[CLS_STONE][bestPale ? 1 : 0]; // layering, on the big ones only
+			}
+			return RAMP[CLS_STONE][body];
 		}
-		if (bestD < bestR + 1.0 && bestDy > 0) {
-			return RAMP[CLS_ROCKY][0]; // contact shadow grounding the slab's south edge
+		if (bestD < bestR + 0.8 && bestDy > 0) {
+			return RAMP[CLS_ROCKY][0]; // contact shadow grounding the stone's south edge
 		}
 		// Off the stone: what the thin ground can grow, then the grit itself.
 		double cover = (fert - SWARD_BARE) / (SWARD_FULL - SWARD_BARE);
