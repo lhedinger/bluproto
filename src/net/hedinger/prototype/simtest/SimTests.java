@@ -5802,6 +5802,48 @@ public class SimTests {
 	}
 
 	/**
+	 * Rocky grassland is grazing country, just poor grazing country. It grows a
+	 * real sward on the same regrowth model as the meadow — so a grazer can make
+	 * a living on it — but its fertility caps that sward far below what pasture
+	 * holds, and it is walkable, so the rocky skirt around the highlands is a
+	 * frontier rather than a wall.
+	 */
+	static class RockyGroundFeedsAGrazerPoorly extends Scenario {
+		@Override
+		public void run() {
+			seed(37);
+			World w = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_ROCKY);
+					w.getTile(x, y, 0).setFertility(0.25);
+				}
+			}
+			Tile rocky = w.getTile(4, 4, 0);
+			assertTrue("rocky ground can be walked", rocky.isWalkable());
+			assertTrue("rocky ground grows vegetation", rocky.growsVegetation());
+			assertEquals("and the inspector can tell it from pasture",
+					1, rocky.getType().label().equals("rocky grassland") ? 1 : 0);
+
+			// A meadow tile of the same age, for the comparison that matters.
+			World lush = room(10, 8);
+			lush.getTile(4, 4, 0).setFertility(0.95);
+			long t = 200_000;
+			assertGreater("there is something growing on the rock",
+					rocky.getVegetation(t), 0.0);
+			assertLess("but far less than pasture holds",
+					rocky.getVegetation(t), lush.getTile(4, 4, 0).getVegetation(t) * 0.5);
+
+			// And a grazer standing on it actually eats: poor ground, not dead ground.
+			TestNPC grazer = TestNPC.breeder(4.5, 4.5, 0, new Genome()).withHunger(1.0);
+			w.spawnEntity(grazer);
+			tick(w, 400);
+			assertGreater("a grazer can make a living up here",
+					grazer.totalIntake(), 0.0);
+		}
+	}
+
+	/**
 	 * The steward puts parasites back. Wipe the cohort out of a living world and
 	 * it returns, because a herd of ordinary bodies is a herd of hosts.
 	 *
@@ -6401,6 +6443,7 @@ public class SimTests {
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
+				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
 				new AGrownBodyIsBigEnoughToRide(),
 				new PredatorsIgnoreParasites(),

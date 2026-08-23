@@ -97,10 +97,13 @@ public class Tile {
 		return VEG_MAX * fertility;
 	}
 
-	/** True where vegetation can grow: grassy floor, or cave fungus beds --
-	 *  both feed grazers through the same logistic regrowth model. */
+	/** True where vegetation can grow: grassy floor, the thin sward rocky
+	 *  ground keeps, or cave fungus beds -- all three feed grazers through the
+	 *  same logistic regrowth model, and differ only in how much they can hold
+	 *  (their fertility). */
 	public boolean growsVegetation() {
-		return type == TileType.TYPE_FLOOR || type == TileType.TYPE_FUNGUS;
+		return type == TileType.TYPE_FLOOR || type == TileType.TYPE_ROCKY
+				|| type == TileType.TYPE_FUNGUS;
 	}
 
 	/** Current vegetation density [0, cap], regrown lazily to {@code now} along a
@@ -681,7 +684,8 @@ public class Tile {
 		TYPE_CRYSTAL_BED(27, true, "shard bed"), // packed shard bed: walkable, but it slows
 		TYPE_CRYSTAL_SPARSE(28, true, "scattered shards"), // scattered shards on stone: ordinary ground
 		TYPE_SWITCH(29, true, "pressure plate"), // pressure-plate floor: a button a body stands on
-		TYPE_DOCK(30, true, "charge dock"); // the steward drone's berth: a powered pad it parks on
+		TYPE_DOCK(30, true, "charge dock"), // the steward drone's berth: a powered pad it parks on
+		TYPE_ROCKY(31, true, "rocky grassland"); // stony ground that keeps a thin sward
 
 		private int value;
 		private boolean open;

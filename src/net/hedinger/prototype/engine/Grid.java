@@ -793,6 +793,11 @@ public class Grid {
 								// Thicket: a canopy of self-shaded leaf clumps whose
 								// character varies stand by stand.
 								col = GroundTextures.canopy(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_ROCKY) {
+								// Rocky grassland: stone slabs bedded in grit, with
+								// what sward the thin ground can keep. Reads the same
+								// fertility potential the meadow does.
+								col = GroundTextures.rockyGround(fertAt(wx, wy), wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_SOIL) {
 								// Grassland: the sward drawn at the tile's fertility
 								// potential — dry cracked clay where nothing can grow,
@@ -921,12 +926,15 @@ public class Grid {
 		case GroundTextures.CLS_QUICKSAND: return 3;
 		case GroundTextures.CLS_SAND: return 4;
 		case GroundTextures.CLS_SOIL: return 5;
-		case GroundTextures.CLS_STONE: return 6;
-		case GroundTextures.CLS_CRYSTAL_SPARSE: return 7;
-		case GroundTextures.CLS_CRYSTAL_BED: return 8;
-		case GroundTextures.CLS_RUBBLE: return 9;
-		case GroundTextures.CLS_VENT: return 10;
-		case GroundTextures.CLS_FUNGUS: return 11;
+		// Rocky ground laps over meadow and bare rock laps over rocky, so the
+		// slope from pasture to outcrop always reads in that order.
+		case GroundTextures.CLS_ROCKY: return 6;
+		case GroundTextures.CLS_STONE: return 7;
+		case GroundTextures.CLS_CRYSTAL_SPARSE: return 8;
+		case GroundTextures.CLS_CRYSTAL_BED: return 9;
+		case GroundTextures.CLS_RUBBLE: return 10;
+		case GroundTextures.CLS_VENT: return 11;
+		case GroundTextures.CLS_FUNGUS: return 12;
 		case GroundTextures.CLS_REEDS: return 13;
 		case GroundTextures.CLS_COVER: return 14;
 		default: return -1; // structures, holes, paving: no lapping

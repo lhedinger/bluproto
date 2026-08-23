@@ -36,6 +36,14 @@ Every terrain class owns a **ramp of exactly three colours** —
 from ramp entries; materials elsewhere (door timber, switch steel) borrow
 existing ramp families so built things sit in the same world as grown things.
 
+A terrain that is a **meeting of two others** borrows both rather than
+inventing a third look: rocky grassland draws its slabs from the stone ramp
+and its grass from the grass ramp, so a slab there is the same rock as the
+rock floor and a blade there is the same blade as the meadow. Only the grit
+between them gets a ramp of its own, and that one is built to sit *between*
+its two neighbours in hue and value. A transitional terrain with a wholly new
+palette reads as a third biome; one built this way reads as a frontier.
+
 ### No in-between colours
 Gradients render as **ordered-dither mixes of the same three ramp colours,
 never as new in-between colours** (`ditherRamp`). Alpha-blending a wash over

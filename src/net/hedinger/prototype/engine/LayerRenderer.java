@@ -88,6 +88,7 @@ public class LayerRenderer {
 		case TYPE_FUNGUS:
 		case TYPE_RUBBLE:
 		case TYPE_SAND:
+		case TYPE_ROCKY:
 		case TYPE_REEDS:
 		case TYPE_SHALLOWS:
 		case TYPE_QUICKSAND:
