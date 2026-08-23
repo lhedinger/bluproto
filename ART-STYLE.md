@@ -131,6 +131,14 @@ One sun, straight overhead-north. The grammar:
 - **Sunken things** (pits, shafts): a lit, *crumbling* north lip — a broken
   run of dashes with per-column depth, not a solid band — and thin dim edges
   with dithered dropouts elsewhere.
+- **A pit shows what it drops onto.** Inside the lip, a hole with a level
+  under it scatters that floor's own texture — its ramp, its hue — across
+  `1 - RenderFx.holeDepth` of the art-pixels, over the void shade
+  (`Grid.pitFloor`). At the default 0.7 a pit is 30% see-through: enough to
+  read stone from fungus from water, not enough to stop reading as a hole.
+  A pit with nothing under it — the lowest level's — is that void shade all
+  the way, and reads bottomless because it is. Grate gaps and drop-shafts are
+  small pits and take the identical treatment.
 - **Drop shadows**: one art-pixel south of the body, translucent black
   (~`alpha 110`), art-pixel-aligned blocks. Entities that stand (doors,
   shrubs, creatures) sit ON the ground because of this; nothing floats.
@@ -361,6 +369,23 @@ The precedents, so nobody pays twice:
   be capable of failing, and both of the drone's shape scenarios were confirmed
   by reverting the stamp and watching them go red on the right number.
 
+- **The pits that were holes in the picture** — pit interiors were drawn by
+  *skipping* the see-through art-pixels: leave them unpainted and the level
+  below, composited underneath, shows through with its parallax. True in the
+  desktop renderer. False in the one thing anyone looks at — the served chunks
+  are **one opaque level each**, so every skipped pixel stayed the black the
+  image was cleared to. Measured on the surface bake: 55% of every pit, plus a
+  third of every catwalk grate, was pure `#000000`, a colour that is in no
+  ramp. Two rules: *(a)* **a render trick that depends on what is underneath
+  is a bet on the compositor**, and there are two compositors here (§6) — the
+  bake can only draw what it can look up itself, so a pit reads the tile one
+  level down and paints it; and *(b)* when the fix was first written as a
+  Bayer threshold it laid a **regular halftone across the hole** that read as
+  a wire mesh, and rewriting it as an alpha blend traded that for invented
+  in-between colours (§2). The scatter is neither a gradient nor a wash — it
+  is broken sight of something far away, and the grammar for that is a
+  **hash** (§3). Reaching for the wrong one of the three is the whole bug.
+
 ## 8. Conformance checklist
 
 Before a new visual merges, ask:
@@ -385,6 +410,9 @@ Before a new visual merges, ask:
 10. If it exists in more than one orientation or facing, do those agree with
    **each other** — same size, same proportions, measured in the body's axes
    (§5, §7 "the stretching diagonal")?
+11. Does it draw every pixel it owns, or does it **leave gaps for something
+    underneath**? The served chunks are one opaque level each — a bake that
+    skips pixels bakes the clear colour (§7, "the pits that were holes").
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.
