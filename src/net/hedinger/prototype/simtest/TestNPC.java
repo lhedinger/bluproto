@@ -1642,8 +1642,12 @@ public class TestNPC extends NPC {
 		s[AgentIO.S_WHISKER_R] = blockedAt(D + Math.PI / 4);
 		double hx = X + Math.cos(D), hy = Y + Math.sin(D);
 		net.hedinger.prototype.engine.Tile ahead = getWorld().getTile(hx, hy, Z);
+		// Water and pits are hazards a body cannot survive entering; corrosive
+		// ground is the third and the interesting one, because a body CAN enter
+		// it and merely pays for the crossing. The channel says "ahead of you
+		// costs something", and what that something is is the terrain's business.
 		boolean hazard = !isFlying() && ahead != null
-				&& (ahead.isWater()
+				&& (ahead.isWater() || ahead.isCorrosive()
 						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 		s[AgentIO.S_HAZARD_AHEAD] = hazard ? 1.0 : 0.0;
 	}

@@ -595,6 +595,16 @@ public final class Worlds {
 		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		// The waste sump: whatever the machine wing makes drains to the storage
+		// wing's west end and stays there. Walkable, so it is a shortcut with a
+		// price rather than a wall -- the only ground in the world that costs a
+		// body health to cross, and the reason the storage wing is worth
+		// crossing carefully instead of just crossing.
+		for (int x = x0 + 1; x <= x0 + 2; x++) {
+			for (int y = y0 + 9; y <= y0 + 11; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
+			}
+		}
 
 		// The shaft bay, Black-Mesa style: the whole south-east quadrant has
 		// given way to a bottomless pit, crossed by two catwalks meeting at
@@ -687,6 +697,14 @@ public final class Worlds {
 		// the north deck under the pipe run, out of the walk from the mouth
 		// to the vault.
 		setBare(w, x0 + 2, y0 + 2, CAVE_Z, Tile.TileType.TYPE_DOCK);
+		// The annex has no storage wing to drain into, so its spill pools in
+		// the hall itself -- squarely on the walk from the mouth to the vault,
+		// which is the point: the shortest way across the room costs something.
+		for (int x = x0 + 5; x <= x0 + 6; x++) {
+			for (int y = y0 + 5; y <= y0 + 6; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
+			}
+		}
 		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
 		for (int x = vx; x < vx + vw; x++) {
 			for (int y = vy; y < vy + vh; y++) {

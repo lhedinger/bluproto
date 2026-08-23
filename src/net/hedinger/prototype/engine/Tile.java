@@ -516,6 +516,24 @@ public class Tile {
 		return type == TileType.TYPE_WATER;
 	}
 
+	/**
+	 * Whether standing here hurts. The facility's waste channels are the only
+	 * such ground, and they are the first in the world at all: until now the
+	 * map could stop a body, slow it, hide it or drop it, but never wound it,
+	 * so every injury in the world came from another creature or from its own
+	 * empty stomach.
+	 *
+	 * <p>Deliberately walkable rather than solid. A wall is a fact you route
+	 * around and forget; a floor that costs you something to cross is a
+	 * decision — the short way through the spill against the long way round —
+	 * and a decision is the only kind of terrain a mind can get better at. It
+	 * also gives {@code S_HAZARD_AHEAD} a third thing to report, on ground a
+	 * creature can actually choose to stand on, unlike water and pits.
+	 */
+	public boolean isCorrosive() {
+		return type == TileType.TYPE_SLUDGE;
+	}
+
 	/** Movement multiplier for an entity standing on this tile: quicksand
 	 *  near-stops, mud drags hardest of the ordinary ground, reeds tangle,
 	 *  wading shallows and scrambling rubble slow. */
@@ -535,6 +553,8 @@ public class Tile {
 			return 0.6; // clambering over the runs
 		case TYPE_DUCT:
 			return 0.5; // crawling
+		case TYPE_SLUDGE:
+			return 0.5; // wading a viscous spill
 		case TYPE_CRYSTAL_BED:
 			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
@@ -685,7 +705,8 @@ public class Tile {
 		TYPE_CRYSTAL_SPARSE(28, true, "scattered shards"), // scattered shards on stone: ordinary ground
 		TYPE_SWITCH(29, true, "pressure plate"), // pressure-plate floor: a button a body stands on
 		TYPE_DOCK(30, true, "charge dock"), // the steward drone's berth: a powered pad it parks on
-		TYPE_ROCKY(31, true, "rocky grassland"); // stony ground that keeps a thin sward
+		TYPE_ROCKY(31, true, "rocky grassland"), // stony ground that keeps a thin sward
+		TYPE_SLUDGE(32, true, "waste sludge"); // the facility's spill: walkable, slow, and it burns
 
 		private int value;
 		private boolean open;

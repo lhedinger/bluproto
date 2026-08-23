@@ -45,7 +45,7 @@ public final class GroundTextures {
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
 			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
-			CLS_ROCKY = 30;
+			CLS_ROCKY = 30, CLS_SLUDGE = 31;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -84,6 +84,7 @@ public final class GroundTextures {
 			// slabs bedded in it are drawn from CLS_STONE itself, so a rocky
 			// tile's rock IS the rock floor's rock.
 			{ 0x4a4338, 0x6b6353, 0x8f8776 }, // rocky grassland (dusty grit)
+			{ 0x2a4a16, 0x548f22, 0x86c832 }, // waste sludge (acid green, never pit-dark)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -95,6 +96,11 @@ public final class GroundTextures {
 	/** Facility accents: hazard striping for anything that drops or crushes,
 	 *  and a rust bloom for weathered pipework. */
 	private static final int HAZARD = 0xd8b028, HAZARD_DARK = 0x17171a, RUST = 0x8a5a34;
+	/** The one colour allowed above the sludge ramp: an acid bloom on a
+	 *  surfacing bubble. Kept distinct from the fungus spark (0x9df5c6) on
+	 *  purpose -- the caves glow because they are alive, the spill glows
+	 *  because it is not, and the two must never read as the same thing. */
+	private static final int TOXIC = 0xb6f04a;
 	/** The rare over-bright spore speck on a fungus clump -- the one colour
 	 *  allowed to sit above its ramp, so the beds read as faintly emissive. */
 	private static final int FUNGUS_SPARK = 0x9df5c6;
@@ -155,6 +161,8 @@ public final class GroundTextures {
 			return CLS_SWITCH;
 		case TYPE_DOCK:
 			return CLS_DOCK;
+		case TYPE_SLUDGE:
+			return CLS_SLUDGE;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -1192,6 +1200,40 @@ public final class GroundTextures {
 		// The berth floor, with the charge coil's faint glow at dead centre --
 		// the one warm pixel on the pad, so a dock is findable at a glance.
 		return d2 < 2 ? HAZARD : darken(RAMP[CLS_DOCK][0], 0.75);
+	}
+
+	/**
+	 * A waste channel: the facility's spill, pooled and going nowhere.
+	 *
+	 * <p>Built from the same grammar as quicksand -- a low-frequency noise
+	 * field dithered across the ramp, with hash-gated bubbles surfacing -- for
+	 * the good reason that they are the same kind of thing: a treacherous
+	 * liquid ground you can walk into. What separates them is entirely
+	 * palette and rate. Sludge is thicker, so the noise is coarser and the
+	 * pools read as slabs of colour rather than a gradient; it is fouler, so
+	 * the bubbles are twice as common and a few carry the acid bloom.
+	 *
+	 * <p>The scum crust along the top of each pool is the one detail doing
+	 * real work: a flat green field reads as painted floor, and the crust is
+	 * what says liquid.
+	 */
+	public static int sludge(double wx, double wy, int px, int py) {
+		double pool = Utils.noise2(wx + 141, wy + 87, 0.55);
+		// A surfacing bubble, and occasionally one bright enough to be a
+		// warning. 2-px clusters, never lone pixels -- see quietGround.
+		double b = hash01(px >> 1, py >> 1, 74);
+		if (b > 0.982) {
+			return pool > 0.5 ? TOXIC : RAMP[CLS_SLUDGE][2];
+		}
+		// Scum crust: where the pool field crosses its own edge going north,
+		// a 1-px lip of the pale shade. The eye reads it as a meniscus.
+		double above = Utils.noise2(wx + 141, wy + 87 - 0.09, 0.55);
+		if (pool > 0.5 && above <= 0.5) {
+			return RAMP[CLS_SLUDGE][2];
+		}
+		double p = (pool - 0.3) / 0.4;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		return ditherRamp(CLS_SLUDGE, p, px, py);
 	}
 
 	private static int lighten2(int rgb, double f) {

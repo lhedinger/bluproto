@@ -768,6 +768,8 @@ public class Grid {
 								col = GroundTextures.switchPlate(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_DOCK) {
 								col = GroundTextures.chargeDock(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_SLUDGE) {
+								col = GroundTextures.sludge(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
