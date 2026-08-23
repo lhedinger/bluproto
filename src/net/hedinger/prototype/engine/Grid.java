@@ -590,10 +590,10 @@ public class Grid {
 				}
 				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE
 						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
-				boolean wallN = isWallish(x, y - 1);
-				boolean wallS = isWallish(x, y + 1);
-				boolean wallE = isWallish(x + 1, y);
-				boolean wallW = isWallish(x - 1, y);
+				boolean wallN = wallSideFor(x, y - 1, x, y);
+				boolean wallS = wallSideFor(x, y + 1, x, y);
+				boolean wallE = wallSideFor(x + 1, y, x, y);
+				boolean wallW = wallSideFor(x - 1, y, x, y);
 				// A pit rims every side it meets ground — except where a DOWN ramp
 				// pours in: the ramp's own bands fade to the pit's dark, so a lip
 				// between them would cut the descent with an earth line.
@@ -1148,6 +1148,30 @@ public class Grid {
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
+	}
+
+	/**
+	 * As above, but asked on behalf of the tile at {@code (tx, ty)}: an up ramp
+	 * that climbs into THAT tile counts as wall on that side.
+	 *
+	 * <p>Because it is not open ground. A wall raises a cliff face wherever its
+	 * mass fronts something a body could stand on lower down — but the head of a
+	 * ramp is where the climb ARRIVES, level with the rock, and a cliff face
+	 * drawn across it says the opposite of what the ramp means: it walls off the
+	 * exact tile the slope exists to reach. The face survived the autotiling fix
+	 * because it is not autotiled — the wall's mass comes from the tile sprite,
+	 * while its lighting is decided here in the ground pass, and only the first
+	 * of the two had been taught about ramps.
+	 */
+	private boolean wallSideFor(int nx, int ny, int tx, int ty) {
+		if (isWallish(nx, ny)) {
+			return true;
+		}
+		if (!isType(nx, ny, Tile.TileType.TYPE_RAMPUP)) {
+			return false;
+		}
+		int up = tiles[nx][ny].getRampUphill();
+		return nx + Tile.dirDx(up) == tx && ny + Tile.dirDy(up) == ty;
 	}
 
 	/** Open vertical space, for shaft rims: the drop continues into another
