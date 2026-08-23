@@ -7569,10 +7569,169 @@ public class SimTests {
 		}
 	}
 
+	static class TheLoaderStowsALooseCrate extends Scenario {
+		@Override
+		public void run() {
+			seed(517);
+			World w = room(20, 10);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			w.alignTiles();
+			// Berth at one end, vault at the other, one crate loose between.
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(2.5, 5.5, 0, 17.5, 5.5, 0);
+			Item crate = Item.crate(10.5, 5.5, 0);
+			w.spawnEntity(ld);
+			w.spawnEntity(crate);
+			w.think();
+			snapshot(w, "before (a crate on the floor, the loader berthed)");
+
+			assertTrue("it starts parked", ld.isBerthed());
+			tick(w, 3000);
+			snapshot(w, "after (the crate is in the vault)");
+
+			assertLess("the crate ends up at the vault",
+					Math.hypot(crate.getX() - 17.5, crate.getY() - 5.5), 2.5);
+			assertTrue("and the loader let go of it", ld.load() == null);
+			assertTrue("and went back to its berth", ld.isBerthed());
+		}
+	}
+
+	static class TheLoaderLeavesStowedCratesAlone extends Scenario {
+		@Override
+		public void run() {
+			seed(518);
+			World w = room(20, 10);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			w.alignTiles();
+			// Everything already put away. A machine that cannot tell finished
+			// from unfinished picks its own last delivery up again and hauls it
+			// in a circle forever, which is the failure this pins.
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(2.5, 5.5, 0, 17.5, 5.5, 0);
+			Item stowed = Item.crate(17.5, 5.5, 0);
+			w.spawnEntity(ld);
+			w.spawnEntity(stowed);
+			w.think();
+			double x0 = stowed.getX(), y0 = stowed.getY();
+			tick(w, 1500);
+
+			assertNear("the stowed crate never moved", stowed.getX(), x0, 0.01);
+			assertNear("nor on the other axis", stowed.getY(), y0, 0.01);
+			assertTrue("and the loader stayed home", ld.isBerthed());
+		}
+	}
+
+	static class TheLoaderIsSlowerThanTheDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(519);
+			World w = room(30, 8);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			w.alignTiles();
+			// Both machines sent the length of the same corridor. The loader is
+			// plant that hauls; the drone is the warden's hand. If the hauler
+			// keeps up, neither reads as what it is.
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(2.5, 3.5, 0, 27.5, 3.5, 0);
+			net.hedinger.prototype.sim.StewardDrone dr =
+					new net.hedinger.prototype.sim.StewardDrone(2.5, 4.5, 0,
+							new Order(w, null, 0));
+			w.spawnEntity(ld);
+			w.spawnEntity(dr);
+			// Well clear of the vault, or it counts as already stowed and the
+			// loader correctly refuses to budge — which is what the first draft
+			// of this scenario actually measured.
+			w.spawnEntity(Item.crate(14.5, 3.5, 0));
+			w.think();
+			double lx = ld.getX();
+			tick(w, 300);
+			double loaderRan = ld.getX() - lx;
+
+			assertGreater("the loader did set off", loaderRan, 1.0);
+			assertLess("but slower than the drone cruises", loaderRan / 300.0, 0.12);
+		}
+	}
+
+	static class NothingEatsTheLoader extends Scenario {
+		@Override
+		public void run() {
+			seed(520);
+			World w = room(12, 8);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			w.alignTiles();
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(6.5, 3.5, 0, 6.5, 3.5, 0);
+			w.spawnEntity(ld);
+			w.think();
+
+			assertTrue("it is not organic", !ld.isOrganic());
+			assertTrue("it has its own trophic name", "loader".equals(ld.ecoRole()));
+			int before = ld.getHealth();
+			ld.damage(1000);
+			assertEquals("and nothing damages it", before, ld.getHealth());
+		}
+	}
+
+	static class TheLoaderWalksAndIsDraggedByTheGround extends Scenario {
+		@Override
+		public void run() {
+			seed(521);
+			World w = room(30, 10);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			// A band of sludge across one lane and clean deck across the other.
+			for (int x = 8; x < 20; x++) {
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_SLUDGE);
+			}
+			w.alignTiles();
+			// The whole point of a machine that WALKS: the ground it crosses
+			// costs it something. The drone flies the same lane for free, which
+			// is the contrast the two bodies exist to draw.
+			net.hedinger.prototype.sim.FacilityLoader wading =
+					new net.hedinger.prototype.sim.FacilityLoader(2.5, 3.5, 0, 27.5, 3.5, 0);
+			net.hedinger.prototype.sim.FacilityLoader clear =
+					new net.hedinger.prototype.sim.FacilityLoader(2.5, 6.5, 0, 27.5, 6.5, 0);
+			w.spawnEntity(wading);
+			w.spawnEntity(clear);
+			w.spawnEntity(Item.crate(14.5, 3.5, 0));
+			w.spawnEntity(Item.crate(14.5, 6.5, 0));
+			w.think();
+			snapshot(w, "before (one lane fouled, one clean)");
+			tick(w, 900);
+			snapshot(w, "after (the wader is behind)");
+
+			assertGreater("the clean lane got further", clear.getX(), wading.getX());
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new SeededWorldBerthsOneDrone(),
+				new TheLoaderStowsALooseCrate(),
+				new TheLoaderLeavesStowedCratesAlone(),
+				new TheLoaderIsSlowerThanTheDrone(),
+				new NothingEatsTheLoader(),
+				new TheLoaderWalksAndIsDraggedByTheGround(),
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),
 				new TheTramRunIsOrdinaryGround(),
