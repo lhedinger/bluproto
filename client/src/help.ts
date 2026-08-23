@@ -21,7 +21,7 @@ import type { EntityState } from './protocol';
 import {
   DOT_LOD_SCALE, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
-  drawRing, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
+  drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
 
 const root = document.getElementById('root')!;
@@ -35,6 +35,7 @@ const artRoot = document.createElement('div');
 root.append(artRoot);
 
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
+const DECK = '#4a5058'; // ditto, for the underground base's steel plate
 
 {
   const intro = document.getElementById('intro');
@@ -214,6 +215,53 @@ function loadCanvas(src: string): Promise<HTMLCanvasElement | null> {
     };
     img.onerror = () => resolve(null);
     img.src = src;
+  });
+}
+
+// ---- the steward's drone -------------------------------------------------
+
+const droneSec = section("The steward's drone",
+  'The one body in the world that is machinery rather than an organism, so it is an '
+  + 'authored pixel stamp instead of a procedural creature. Java\u2019s DronePainter stamps the '
+  + 'same two silhouettes through the same shading rule \u2014 a cardinal and a diagonal drawn '
+  + 'by hand, the other six headings exact 90\u00b0 lattice rotations of them. The light is '
+  + 'applied after the rotation, never carried through it, so every heading is lit from the '
+  + 'north rather than carrying its highlight around the compass.');
+
+{
+  const S = 96;
+  pair(droneSec, 'eight headings \u2014 E, SE, S, SW, W, NW, N, NE', 8 * S, S * 1.5, (g) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, 8 * S, S * 1.5);
+    for (let i = 0; i < 8; i++) {
+      drawSentinel(g, S * (i + 0.5), S * 0.62, S, i);
+    }
+  });
+}
+
+{
+  // The zoom ladder is the entry that earns its place: the stamp is sized by
+  // the tile grid, not by the body radius, so this is what the drone actually
+  // looks like as the viewer scrolls out — and where it stops being legible.
+  const W = 900;
+  pair(droneSec, 'across the zoom range (tile size 16\u2026120px)', W, 150, (g) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, W, 150);
+    let x = 60;
+    for (const sc of [16, 24, 32, 48, 64, 80, 96, 120]) {
+      drawSentinel(g, x, 60, sc, 0);
+      x += 110;
+    }
+  });
+}
+
+{
+  // Turning on the spot, at the eight buckets the sticky headingCol snaps to.
+  const S = 128;
+  pair(droneSec, 'turning on the spot', S * 2, S * 2, (g, t) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, S * 2, S * 2);
+    drawSentinel(g, S, S * 0.85, S, Math.floor(t * 1.5) % 8);
   });
 }
 
