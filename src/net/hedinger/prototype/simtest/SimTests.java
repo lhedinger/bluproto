@@ -7706,7 +7706,7 @@ public class SimTests {
 		}
 	}
 
-	static class NothingEatsTheLoader extends Scenario {
+	static class MachineryIsNeitherFedNorWatered extends Scenario {
 		@Override
 		public void run() {
 			seed(520);
@@ -7716,17 +7716,50 @@ public class SimTests {
 					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
 				}
 			}
+			// A lane of the facility's own waste for the walker to stand in.
+			for (int x = 3; x < 9; x++) {
+				w.setTile(x, 5, 0, Tile.TileType.TYPE_SLUDGE);
+			}
 			w.alignTiles();
 			net.hedinger.prototype.sim.FacilityLoader ld =
-					new net.hedinger.prototype.sim.FacilityLoader(6.5, 3.5, 0, 6.5, 3.5, 0);
+					new net.hedinger.prototype.sim.FacilityLoader(5.5, 5.5, 0, 5.5, 5.5, 0);
+			net.hedinger.prototype.sim.StewardDrone dr =
+					new net.hedinger.prototype.sim.StewardDrone(7.5, 3.5, 0,
+							new Order(w, null, 0));
 			w.spawnEntity(ld);
+			w.spawnEntity(dr);
 			w.think();
 
-			assertTrue("it is not organic", !ld.isOrganic());
-			assertTrue("it has its own trophic name", "loader".equals(ld.ecoRole()));
+			assertTrue("the loader is not organic", !ld.isOrganic());
+			assertTrue("nor is the drone", !dr.isOrganic());
+			assertTrue("the loader has its own trophic name", "loader".equals(ld.ecoRole()));
+
+			// Plant does not keep the four books. Neither machine opts into the
+			// energy economy, so no clock of hunger or thirst runs for them --
+			// and this asserts it rather than trusting that `metabolic` keeps
+			// defaulting to false, which is the only thing standing between a
+			// machine and a slow death by starvation.
+			int lifetimes = (int) Math.max(NPC.HUNGER_PERIOD, NPC.THIRST_PERIOD) * 2;
+			tick(w, Math.min(lifetimes, 40000));
+
+			assertNear("the loader never gets hungry", ld.getHunger(), 0.0, 1e-9);
+			assertNear("nor thirsty", ld.getThirst(), 0.0, 1e-9);
+			assertNear("the drone never gets hungry", dr.getHunger(), 0.0, 1e-9);
+			assertNear("nor thirsty", dr.getThirst(), 0.0, 1e-9);
+			assertTrue("and both are still here", !ld.isRemoved() && !dr.isRemoved());
+			assertTrue("and alive", !ld.isDead() && !dr.isDead());
+
+			// Indestructible, through every door into harm. The two-arg form is
+			// the one the world actually calls -- corrosive ground uses it, and
+			// the loader WALKS, so it has been standing in sludge for the whole
+			// run above.
 			int before = ld.getHealth();
 			ld.damage(1000);
-			assertEquals("and nothing damages it", before, ld.getHealth());
+			ld.damage(1000, "toxic");
+			assertEquals("nothing damages the loader", before, ld.getHealth());
+			int droneBefore = dr.getHealth();
+			dr.damage(1000, "predation");
+			assertEquals("nor the drone", droneBefore, dr.getHealth());
 		}
 	}
 
@@ -7869,7 +7902,7 @@ public class SimTests {
 				new TheLoaderStowsALooseCrate(),
 				new TheLoaderLeavesStowedCratesAlone(),
 				new TheLoaderIsSlowerThanTheDrone(),
-				new NothingEatsTheLoader(),
+				new MachineryIsNeitherFedNorWatered(),
 				new TheLoaderWalksAndIsDraggedByTheGround(),
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),

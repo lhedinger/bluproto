@@ -31,10 +31,52 @@ public final class ServerTests {
 		fertilityCapsTheGrassSpriteStage();
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
+		machineryIsNotInspectedForFoodAndWater();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
 		}
+	}
+
+	/**
+	 * The inspector's four books are physiology, and the facility's machines
+	 * keep none of them: not metabolic, so hunger and thirst never leave zero
+	 * and energy never leaves it either. Sent regardless, the panel drew a
+	 * drone as fully fed, fully watered and completely out of energy — two bars
+	 * that mean nothing and one that reads as a machine about to drop.
+	 *
+	 * <p>Tested at the wire rather than at the panel because that is where the
+	 * decision now lives: the client omits any book it is not given, so what
+	 * matters is that a machine is not given one.
+	 */
+	static void machineryIsNotInspectedForFoodAndWater() {
+		WorldHost host = new WorldHost(11);
+
+		int machines = 0, creatures = 0;
+		for (int id : host.liveMachineIds()) {
+			java.util.Map<String, Object> d = host.entityDetail(id);
+			if (d == null) {
+				continue;
+			}
+			machines++;
+			check("a machine is not reported fed: " + d.get("subtype"),
+					!d.containsKey("hunger"));
+			check("nor watered: " + d.get("subtype"), !d.containsKey("thirst"));
+			check("nor out of energy: " + d.get("subtype"), !d.containsKey("energy"));
+			check("but it still has a health reading: " + d.get("subtype"),
+					d.containsKey("health"));
+		}
+		for (int id : host.liveCreatureIds()) {
+			java.util.Map<String, Object> d = host.entityDetail(id);
+			if (d == null) {
+				continue;
+			}
+			creatures++;
+			check("a creature still keeps its books", d.containsKey("hunger")
+					&& d.containsKey("thirst") && d.containsKey("energy"));
+		}
+		check("the world actually contained machinery", machines > 0);
+		check("and creatures to contrast it with", creatures > 0);
 	}
 
 	/** diff() classifies every case: unchanged, moved, born, gone. */
