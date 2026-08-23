@@ -1428,6 +1428,15 @@ public final class Worlds {
 					// the tunnel arrives along the slope every time.
 					continue;
 				}
+				if (rampLanding(w, cx, cy)) {
+					// Nor the rock at the head of the cut. An up ramp that runs
+					// out into open floor climbs to nothing: the slope is a
+					// staircase into a ceiling, and the surface tile it should
+					// have arrived at is left resting on air. Measured before
+					// this guard: three of eight stations had lost their landing
+					// rock to a passing corridor.
+					continue;
+				}
 				w.setTile(cx, cy, CAVE_Z, Tile.TileType.TYPE_STONE);
 				w.getTile(cx, cy, CAVE_Z).setFertility(0);
 			}
@@ -1564,6 +1573,23 @@ public final class Worlds {
 			w.setTile(x3, y3, SURFACE_Z, Tile.TileType.TYPE_STONE); // landing above
 			w.getTile(x3, y3, SURFACE_Z).setFertility(0);
 		}
+	}
+
+	/** Whether the cave tile at {@code (x, y)} is the rock an up ramp climbs
+	 *  into — the head of the cut, which holds up the surface tile the climb
+	 *  arrives at and which the wall art merges the ramp's top into. */
+	private static boolean rampLanding(World w, int x, int y) {
+		for (int d = 0; d < 4; d++) {
+			int rx = x - Tile.dirDx(d), ry = y - Tile.dirDy(d);
+			if (rx < 0 || ry < 0 || rx >= w.getColums() || ry >= w.getRows()) {
+				continue;
+			}
+			Tile n = w.getTile(rx, ry, CAVE_Z);
+			if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** One tile of station apron — bare stone, on both levels.

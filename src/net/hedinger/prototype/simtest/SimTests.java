@@ -805,6 +805,27 @@ public class SimTests {
 			w.think();
 			tick(w, 60);
 			assertEquals("a surface ramp walks a body down into the cave", surface - 1, walker.getLvl());
+
+			// Every climb ends in rock. An up ramp whose high side is open floor
+			// is a staircase into a ceiling — it climbs to a surface tile resting
+			// on nothing, and the art has no mass to disappear into. The corridor
+			// carver used to take that rock out on its way past: three of eight
+			// stations lost theirs before it learned to leave it alone.
+			int ramps = 0;
+			for (int x = 0; x < cols; x++) {
+				for (int y = 0; y < rows; y++) {
+					Tile t = w.getTile(x, y, surface - 1);
+					if (t.getType() != RAMPUP) {
+						continue;
+					}
+					ramps++;
+					int u = t.getRampUphill();
+					Tile head = w.getTile(x + Tile.dirDx(u), y + Tile.dirDy(u), surface - 1);
+					assertTrue("the ramp at " + x + "," + y + " climbs into rock",
+							head.isSolid());
+				}
+			}
+			assertGreater("the cave has ramps to check", ramps, 0);
 		}
 	}
 
@@ -4002,6 +4023,54 @@ public class SimTests {
 	 * rule quietly in place, and the bug would only surface as a body strolling
 	 * up a cliff face somewhere else.
 	 */
+	/**
+	 * An up ramp climbs INTO the rock, and the rock knows it. The wall at the
+	 * head of the cut counts the ramp among its own mass, so it draws no edge
+	 * across the join — no rounded corner, no silhouette rim — and the slope
+	 * reads as cut into the cliff rather than parked against it.
+	 *
+	 * <p>Checked on the tilecode rather than on pixels. The bake lays film grain
+	 * over everything, so an image diff of two renders differs on roughly a
+	 * third of every tile in the map whether or not anything real changed;
+	 * the connectivity string is the thing the wall art is actually chosen by.
+	 *
+	 * <p>The second half is the half that matters: a wall merely STANDING beside
+	 * a ramp is still a wall beside a ramp and must keep its edge. Only the tile
+	 * the ramp climbs toward belongs to the mass.
+	 */
+	static class RockOwnsTheRampCutIntoIt extends Scenario {
+		/** The tilecode digit for the neighbour at {@code (dx, dy)}: the
+		 *  3x3 keypad 123/405/678 the autotiler is written in. */
+		private static char digit(int dx, int dy) {
+			int[] pad = { 1, 2, 3, 4, 0, 5, 6, 7, 8 };
+			return (char) ('0' + pad[(dy + 1) * 3 + (dx + 1)]);
+		}
+
+		@Override
+		public void run() {
+			seed(44);
+			World w = room(12, 12, 2);
+			// A ramp at (5,5) climbing north into the wall at (5,4), and an
+			// unrelated wall at (7,5) that the ramp merely passes.
+			w.setTile(5, 5, 0, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(5, 5, 0).setRampUphill(Tile.DIR_N);
+			w.setTile(5, 4, 0, Tile.TileType.TYPE_WALL);
+			w.setTile(7, 5, 0, Tile.TileType.TYPE_WALL);
+			w.alignTiles();
+
+			// From the head-wall at (5,4) the ramp lies south: digit 7.
+			String head = w.getTile(5, 4, 0).getTileCode();
+			assertTrue("the rock at the head of the cut counts the ramp as its own"
+					+ " (code " + head + ")", head.indexOf(digit(0, 1)) >= 0);
+
+			// From the bystander wall at (7,5) the ramp lies west: digit 4, and
+			// it must NOT be there — that wall is not what the ramp climbs into.
+			String bystander = w.getTile(7, 5, 0).getTileCode();
+			assertTrue("a wall the ramp merely passes keeps its own edge"
+					+ " (code " + bystander + ")", bystander.indexOf(digit(-1, 0)) < 0);
+		}
+	}
+
 	static class RampsRunWhicheverWayTheyAreLaid extends Scenario {
 		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading}
 		 *  over a ramp pair whose high side faces {@code uphill}. */
@@ -7207,6 +7276,7 @@ public class SimTests {
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
 				new RampsRunWhicheverWayTheyAreLaid(),
+				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
