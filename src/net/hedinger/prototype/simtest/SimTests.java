@@ -7336,6 +7336,72 @@ public class SimTests {
 		}
 	}
 
+	static class BothRenderersDrawTheSameDrone extends Scenario {
+		/** The stamp literals out of the client's render.ts, by name. */
+		private static java.util.List<String> stampIn(String src, String name) {
+			int at = src.indexOf("const " + name + " = [");
+			assertTrueStatic("the client still declares " + name, at >= 0);
+			int end = src.indexOf("];", at);
+			java.util.List<String> out = new java.util.ArrayList<String>();
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("'([^']*)'")
+					.matcher(src.substring(at, end));
+			while (m.find()) {
+				out.add(m.group(1));
+			}
+			return out;
+		}
+
+		private static void assertTrueStatic(String what, boolean ok) {
+			if (!ok) {
+				throw new AssertionError(what);
+			}
+		}
+
+		@Override
+		public void run() {
+			// ART-STYLE.md section 6: the Java renderer is the source of truth
+			// and the client repaints the same art, so the two must agree. They
+			// cannot share a literal across the language boundary, which means
+			// the only thing keeping them together is that somebody remembered
+			// to change both -- and "somebody remembered" is not a mechanism.
+			// The drone is the entity that proves it: for weeks the client drew
+			// a sentinel the Java renderer had never heard of, and nothing said
+			// a word.
+			//
+			// Comparing the RESOLVED stamps would be better still, but the
+			// client's shading rule only exists in TypeScript. Comparing the
+			// authored silhouettes catches the drift that actually happens: a
+			// stamp edited on one side only.
+			java.io.File f = new java.io.File("client/src/render.ts");
+			assertTrue("the client source is where the build says it is: "
+					+ f.getAbsolutePath(), f.isFile());
+			String src;
+			try {
+				src = new String(java.nio.file.Files.readAllBytes(f.toPath()),
+						java.nio.charset.StandardCharsets.UTF_8);
+			} catch (java.io.IOException e) {
+				throw new AssertionError("could not read the client source", e);
+			}
+
+			String[][] pairs = {
+					{ "SENTINEL_CARDINAL", "CARDINAL" },
+					{ "SENTINEL_DIAGONAL", "DIAGONAL" },
+			};
+			for (String[] pair : pairs) {
+				java.util.List<String> web = stampIn(src, pair[0]);
+				String[] java = pair[1].equals("CARDINAL") ? DronePainter.CARDINAL
+						: DronePainter.DIAGONAL;
+				assertEquals(pair[1] + ": both renderers draw the same number of rows",
+						java.length, web.size());
+				for (int r = 0; r < java.length; r++) {
+					assertTrue(pair[1] + " row " + r + " differs between the renderers:\n"
+							+ "  java: " + java[r] + "\n  web:  " + web.get(r),
+							java[r].equals(web.get(r)));
+				}
+			}
+		}
+	}
+
 	static class TheDroneKeepsItsSizeWhenItTurns extends Scenario {
 		/** Hull extent along the body's own axis and across it, in art-pixels.
 		 *  For the cardinal those are just rows and columns; for the diagonal
@@ -7445,6 +7511,7 @@ public class SimTests {
 				new EveryHeadingIsLitFromTheNorth(),
 				new TheDroneWearsTheFacilitysOwnYellow(),
 				new TheDroneIsWiderAcrossThanItIsLong(),
+				new BothRenderersDrawTheSameDrone(),
 				new TheDroneKeepsItsSizeWhenItTurns(),
 				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
