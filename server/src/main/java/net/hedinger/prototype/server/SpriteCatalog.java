@@ -160,7 +160,7 @@ final class SpriteCatalog {
 
 	/**
 	 * Every body plan the renderer can draw, whether or not anything in the world
-	 * wears it. Three of the six are unselected: the plan follows the genome's diet
+	 * wears it. Three of the six are unselected: the plan follows the genome's clade
 	 * and there are three trophic levels, so half the space sits idle. A reference
 	 * that only showed what happened to be in use would quietly stop being a
 	 * reference to the space and become a census of the population, and the plans
@@ -376,7 +376,7 @@ final class SpriteCatalog {
 	 * are registered so an atlas is servable for each, and the page draws them the
 	 * way the live world does.
 	 *
-	 * <p>Every plan appears, including the two no diet selects: a reference that
+	 * <p>Every plan appears, including the two no clade selects: a reference that
 	 * shows only what happens to be alive is a census, not a reference.
 	 */
 	static java.util.List<java.util.Map<String, Object>> referenceBodies() {
@@ -386,34 +386,34 @@ final class SpriteCatalog {
 		for (int f = 0; f < planNames.length; f++) {
 			Genome g = sample(11, 0.05, false, 0, new double[] { 0.5, 0.6, 0.4 });
 			ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
-			ph.form = f; // reach the plans the diet mapping cannot express
+			ph.form = f; // reach the plans the clade mapping cannot express
 			out.add(body("plan", "plan " + f + " — " + planNames[f], ph, worn[f], 0x9BB8A0));
 		}
-		addSample(out, "founder grazer", 6, false, Genome.DIET_HERBIVORE,
+		addSample(out, "founder grazer", 6, false, Genome.Clade.HERBIVORE,
 				new double[] { 0.20, 0.50, 0.80 }, 0x5A9BD8);
-		addSample(out, "tiny darter", 3, false, Genome.DIET_HERBIVORE,
+		addSample(out, "tiny darter", 3, false, Genome.Clade.HERBIVORE,
 				new double[] { 0.90, 0.10, 0.40 }, 0xE0507A);
-		addSample(out, "bulky armoured", 14, false, Genome.DIET_HERBIVORE,
+		addSample(out, "bulky armoured", 14, false, Genome.Clade.HERBIVORE,
 				new double[] { 0.50, 0.90, 0.20 }, 0x8FD046);
-		addSample(out, "herd mother", 8, false, Genome.DIET_HERBIVORE,
+		addSample(out, "herd mother", 8, false, Genome.Clade.HERBIVORE,
 				new double[] { 0.35, 0.70, 0.55 }, 0x54C0A0);
-		addSample(out, "carrion eater", 7, false, Genome.DIET_SCAVENGER,
+		addSample(out, "carrion eater", 7, false, Genome.Clade.SCAVENGER,
 				new double[] { 0.45, 0.25, 0.65 }, 0xA070D0);
-		addSample(out, "parasite", 4, false, Genome.DIET_PARASITE,
+		addSample(out, "parasite", 4, false, Genome.Clade.PARASITE,
 				new double[] { 0.70, 0.15, 0.30 }, 0xB07FE0);
-		addSample(out, "apex predator", 11, false, Genome.DIET_CARNIVORE,
+		addSample(out, "apex predator", 11, false, Genome.Clade.PREDATOR,
 				new double[] { 0.05, 0.05, 0.90 }, 0x4050E0);
-		addSample(out, "flier", 5, true, Genome.DIET_HERBIVORE,
+		addSample(out, "flier", 5, true, Genome.Clade.HERBIVORE,
 				new double[] { 0.60, 0.30, 0.10 }, 0xC07830);
-		addSample(out, "winged hunter", 9, true, Genome.DIET_CARNIVORE,
+		addSample(out, "winged hunter", 9, true, Genome.Clade.PREDATOR,
 				new double[] { 0.15, 0.60, 0.35 }, 0x30C060);
 		return out;
 	}
 
 	private static void addSample(java.util.List<java.util.Map<String, Object>> out,
-			String label, double size, boolean flying, int diet, double[] markers, int rgb) {
-		Genome g = sample(size, 0.06, flying, diet == Genome.DIET_CARNIVORE ? 0.9 : 0,
-				diet, markers);
+			String label, double size, boolean flying, Genome.Clade clade, double[] markers, int rgb) {
+		Genome g = sample(size, 0.06, flying, clade == Genome.Clade.PREDATOR ? 0.9 : 0,
+				clade, markers);
 		out.add(body("creature", label, ProcCreature.phenotype(g), true, rgb));
 	}
 
@@ -430,7 +430,7 @@ final class SpriteCatalog {
 
 	private static Genome sample(double size, double speed, boolean flying,
 			double predatory, double[] markers) {
-		return sample(size, speed, flying, predatory, Genome.DIET_HERBIVORE, markers);
+		return sample(size, speed, flying, predatory, Genome.Clade.HERBIVORE, markers);
 	}
 
 	/** As above, for a sample whose trophic level is the point of it. Diet is what
@@ -438,11 +438,11 @@ final class SpriteCatalog {
 	 *  passing a high {@code predatory} never did, and the "apex_predator" entry was
 	 *  drawing a grazer under a hunter's name. */
 	private static Genome sample(double size, double speed, boolean flying,
-			double predatory, int diet, double[] markers) {
+			double predatory, Genome.Clade clade, double[] markers) {
 		Genome g = Genome.phenotype(size, speed, 5, 6, Math.PI / 2, 100000);
 		g.flying = flying;
 		g.predatory = predatory;
-		g.diet = diet;
+		g.clade = clade;
 		for (int i = 0; i < g.markers.length && i < markers.length; i++) {
 			g.markers[i] = markers[i];
 		}

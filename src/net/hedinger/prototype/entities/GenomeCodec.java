@@ -49,7 +49,7 @@ public final class GenomeCodec {
 			}
 			b.append(g.markers[i]);
 		}
-		b.append(";diet=").append(g.diet);
+		b.append(";diet=").append(g.clade.code()); // frozen wire code, not ordinal
 		b.append(";pred=").append(g.predatory);
 		b.append(";xeno=").append(g.xenophobia);
 		b.append(";greg=").append(g.gregariousness);
@@ -101,7 +101,7 @@ public final class GenomeCodec {
 				case "maxAge" -> g.maxAge = Integer.parseInt(v);
 				case "flying" -> g.flying = v.equals("1");
 				case "markers" -> g.markers = doubles(v);
-				case "diet" -> g.diet = Integer.parseInt(v);
+				case "diet" -> g.clade = Genome.Clade.ofCode(Integer.parseInt(v));
 				case "pred" -> g.predatory = Double.parseDouble(v);
 				case "xeno" -> g.xenophobia = Double.parseDouble(v);
 				case "greg" -> g.gregariousness = Double.parseDouble(v);

@@ -161,7 +161,22 @@ public final class AgentIO {
 	 *  proximity, so "which way was that" stays answerable for exactly as long as
 	 *  "was there anything". */
 	public static final int S_SOUND_BEARING = 36;
-	public static final int NUM_SENSORS = 37;
+	/**
+	 * Whether the nearest perceived neighbour is of this creature's own
+	 * <b>clade</b>: 1 same, -1 different, 0 when nothing is perceived.
+	 *
+	 * <p>A separate axis from {@link #S_NEAR_SIM}, and deliberately so. Similarity
+	 * is continuous and answers "how closely related, within my kind" — the
+	 * species question. This is categorical and answers "is that thing my kind at
+	 * all". A grazer and a hunter can sit close in marker space; they are still not
+	 * the same sort of animal, and without this channel a mind has no way to tell.
+	 *
+	 * <p>Clade is visible in the world — each one wears its own body plan — so this
+	 * is a thing a creature could genuinely see, not a fact smuggled in from the
+	 * simulation.
+	 */
+	public static final int S_NEAR_CLADE = 37;
+	public static final int NUM_SENSORS = 38;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -171,7 +186,7 @@ public final class AgentIO {
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
-			"sound_prox", "sound_bearing" };
+			"sound_prox", "sound_bearing", "near_clade" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

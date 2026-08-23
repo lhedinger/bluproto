@@ -70,9 +70,10 @@ public final class ProcCreature {
 		// creatures wore 95 shapes with no systematic difference between the roles.
 		// You could not tell what you were looking at, which for an ecology being
 		// watched is most of the point.
-		int eco = g.diet == Genome.DIET_SCAVENGER ? 1
-				: g.diet == Genome.DIET_CARNIVORE ? 2
-						: g.diet == Genome.DIET_PARASITE ? 3 : 0;
+		// Which plan this clade wears is a property OF the clade, asked for rather
+		// than re-decided here -- this used to be a fourth encoding of the same idea,
+		// in a different order from the genome's, with nothing checking they agreed.
+		int eco = g.clade.bodyPlan();
 		// One body plan per trophic level, and these specifically: `form` is
 		// not a free index -- 0 and 4 grow bilateral legs, 1 grows radial cilia, the
 		// rest go bare -- so the plans are chosen for what they draw. A grazer walks

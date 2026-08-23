@@ -54,7 +54,7 @@ public final class VitalsProbe {
 					para++;
 				} else if (n.isMinded()) {
 					minded++;
-				} else if ("prey".equals(r)) {
+				} else if ("herbivore".equals(r)) {
 					prey++;
 				} else if ("predator".equals(r)) {
 					pred++;

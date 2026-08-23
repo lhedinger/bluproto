@@ -447,7 +447,15 @@ public final class Mechanics {
 								+ "is."),
 						sense(AgentIO.S_NEAR_BEARING, "Which way that neighbour lies."),
 						sense(AgentIO.S_NEAR_SIM, "How like itself that neighbour is — kin or "
-								+ "stranger."),
+								+ "stranger. Continuous, and the SPECIES axis: it separates "
+								+ "lineages within a clade, not one clade from another."),
+						sense(AgentIO.S_NEAR_CLADE, "Whether that neighbour is the same KIND of "
+								+ "animal at all: +1 same clade, −1 different, 0 if nothing is "
+								+ "perceived. Categorical where similarity is continuous — a "
+								+ "grazer and a hunter can sit close in marker space and are "
+								+ "still not the same sort of creature. Each clade wears its own "
+								+ "body plan, so this is something a creature can genuinely "
+								+ "see."),
 						sense(AgentIO.S_NEAR_SIZEADV, "Whether it outweighs that neighbour, and "
 								+ "by how much."),
 						sense(AgentIO.S_PREY_PROX, "The nearest SMALLER creature, at full sight "

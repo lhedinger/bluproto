@@ -35,35 +35,14 @@ public class TestNPC extends NPC {
 		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL, PREDATOR
 	}
 
-	/**
-	 * What a body can turn into energy. This is the ONE thing that makes a
-	 * scavenger a scavenger — it is a property of the body, not of the mind, so a
-	 * minded scavenger runs the same brain and the same forage intent as any other
-	 * minded creature and simply finds carrion where a grazer finds grass.
+	/** This body's clade, mirrored from {@link Genome#clade} by
+	 *  {@link #adoptClade} so the body can answer without a null check on every
+	 *  read. The genome is the source of truth; this is a cache of it.
 	 *
-	 * <p>Deliberately not a gene. Diet decides what a lineage can eat at all, and a
-	 * mutation that flipped it would strand a creature in a world with none of its
-	 * food; the genome already carries everything that should drift.
-	 */
-	public enum Diet {
-		/** Vegetation from the tile underfoot. */
-		HERBIVORE,
-		/** Living bodies, taken by force. Predation is its own hardcoded loop. */
-		CARNIVORE,
-		/** Carrion. Eating a corpse both feeds the eater and hastens the corpse's
-		 *  return to the world -- {@link net.hedinger.prototype.entities.NPC#eat}
-		 *  ages a dead body toward removal, so a fed scavenger IS decomposition. */
-		SCAVENGER,
-		/** A bigger living body, eaten slowly from on top of it. A parasite
-		 *  latches onto a host it could never bring down in a fight and drains
-		 *  it bite by bite while it rides; its mouth works on nothing else — it
-		 *  cannot graze — and predators leave it alone (too small and too foul
-		 *  to be worth a bite), so its checks are the host's bucking, the
-		 *  drained host dying under it, and its own four books. */
-		PARASITE,
-	}
-
-	private Diet diet = Diet.HERBIVORE;
+	 *  <p>There used to be a second enum declared right here, a parallel copy of
+	 *  the genome's, kept in step by hand. One concept spelled twice is one
+	 *  concept that can disagree with itself. */
+	private Genome.Clade clade = Genome.Clade.HERBIVORE;
 
 	/** Damage a predator's bite does to prey of its own size or smaller (prey
 	 *  health 100 -> a few-second kill). Scaled down against bigger quarry — see
@@ -541,7 +520,7 @@ public class TestNPC extends NPC {
 	public static TestNPC minded(double x, double y, double z, Genome g, Mind mind) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
 		t.genome = g;
-		adoptDiet(t, g);
+		adoptClade(t, g);
 		t.size = (int) Math.round(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
@@ -582,25 +561,25 @@ public class TestNPC extends NPC {
 	 */
 	/**
 	 * A minded scavenger: the same brain, body and forage intent as any other
-	 * minded creature, with a diet that makes carrion its food. Nothing about its
+	 * minded creature, with a clade that makes carrion its food. Nothing about its
 	 * mind is scavenger-specific — it forages, and forage means carcasses. Whether
 	 * a lineage actually makes a living that way is left to selection, which is the
 	 * same bargain the rest of the minded cohort is on.
 	 */
 	public static TestNPC mindedScavenger(double x, double y, double z, Genome g) {
-		// Own the genome before writing a diet into it. Founder pools are shared
+		// Own the genome before writing a clade into it. Founder pools are shared
 		// arrays and callers hand the same instance to several bodies, so mutating
 		// what was passed in would quietly re-flavour creatures nobody was building.
 		// Copied BEFORE the mind is bound, so the two never point at different ones.
 		TestNPC t = mindedForager(x, y, z, g.copy());
-		t.withDiet(Diet.SCAVENGER); // writes through to the genome the body is drawn from
+		t.withClade(Genome.Clade.SCAVENGER); // writes through to the genome the body is drawn from
 		t.speed *= SCAVENGER_STRIDE;
 		return t;
 	}
 
 	/**
 	 * A minded parasite: the same brains and forage intent as the rest of the
-	 * cohort, with a diet that makes a bigger living body its food. Its forage
+	 * cohort, with a clade that makes a bigger living body its food. Its forage
 	 * channel points at the nearest host, the shared attach machinery latches it
 	 * on when it arrives (the starter mind holds {@code A_ATTACH} through the
 	 * forage walk), and the drain itself is a body reflex — riding while hungry
@@ -611,7 +590,7 @@ public class TestNPC extends NPC {
 		Genome own = g.copy();
 		own.size = Math.min(own.size, PARASITE_MAX_SIZE_PX); // small by nature
 		TestNPC t = mindedForager(x, y, z, own);
-		t.withDiet(Diet.PARASITE); // writes through to the genome the body is drawn from
+		t.withClade(Genome.Clade.PARASITE); // writes through to the genome the body is drawn from
 		return t;
 	}
 
@@ -634,7 +613,7 @@ public class TestNPC extends NPC {
 	@Override
 	protected void run_extended() {
 		super.run_extended(); // the four books first (needs, regen, health)
-		if (diet == Diet.PARASITE && !isDead()) {
+		if (clade == Genome.Clade.PARASITE && !isDead()) {
 			parasiteFeed();
 		}
 	}
@@ -712,7 +691,7 @@ public class TestNPC extends NPC {
 
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
-		adoptDiet(t, g); // heredity carries diet in the genome; the body follows it
+		adoptClade(t, g); // heredity carries clade in the genome; the body follows it
 		// Born a juvenile and grow into the genome's body (see NPC.beginGrowth).
 		t.beginGrowth(g.size);
 		// A body takes as long to rot away as it took to build: the corpse span IS
@@ -746,7 +725,7 @@ public class TestNPC extends NPC {
 	public static TestNPC genomeDriven(double x, double y, double z, net.hedinger.prototype.entities.Genome g) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.GENOME);
 		t.genome = g;
-		adoptDiet(t, g);
+		adoptClade(t, g);
 		t.size = (int) Math.round(g.size);
 		t.speed = g.speed;
 		t.turn = g.turnRate;
@@ -786,7 +765,9 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
-	/** Sets what this body can turn into energy — see {@link Diet}. */
+	/** Sets this body's clade — what it can turn into energy, who it can breed
+ *  with, and what it looks like. Writes through to the genome, which is the
+ *  source of truth. */
 	// --- parasitism ---------------------------------------------------------
 	/** Ticks between a riding parasite's bites of its host. */
 	public static final int PARA_BITE_PERIOD = 30;
@@ -799,24 +780,21 @@ public class TestNPC extends NPC {
 	 *  through cover, the way carrion is smelled rather than seen. */
 	public static final double HOST_SENSE_R = 12.0;
 
-	public TestNPC withDiet(Diet d) {
-		diet = d;
+	public TestNPC withClade(Genome.Clade d) {
+		clade = d;
 		if (genome != null) {
-			genome.diet = d == Diet.SCAVENGER ? net.hedinger.prototype.entities.Genome.DIET_SCAVENGER
-					: d == Diet.CARNIVORE ? net.hedinger.prototype.entities.Genome.DIET_CARNIVORE
-							: d == Diet.PARASITE ? net.hedinger.prototype.entities.Genome.DIET_PARASITE
-									: net.hedinger.prototype.entities.Genome.DIET_HERBIVORE;
+			genome.clade = d == Genome.Clade.SCAVENGER ? net.hedinger.prototype.entities.Genome.Clade.SCAVENGER
+					: d == Genome.Clade.PREDATOR ? net.hedinger.prototype.entities.Genome.Clade.PREDATOR
+							: d == Genome.Clade.PARASITE ? net.hedinger.prototype.entities.Genome.Clade.PARASITE
+									: net.hedinger.prototype.entities.Genome.Clade.HERBIVORE;
 		}
 		return this;
 	}
 
-	/** Reads the diet the genome carries onto the body. The genome is the source:
+	/** Reads the clade the genome carries onto the body. The genome is the source:
 	 *  it is what heredity copies and what the body plan is drawn from. */
-	private static void adoptDiet(TestNPC t, net.hedinger.prototype.entities.Genome g) {
-		t.diet = g.diet == net.hedinger.prototype.entities.Genome.DIET_SCAVENGER ? Diet.SCAVENGER
-				: g.diet == net.hedinger.prototype.entities.Genome.DIET_CARNIVORE ? Diet.CARNIVORE
-						: g.diet == net.hedinger.prototype.entities.Genome.DIET_PARASITE ? Diet.PARASITE
-								: Diet.HERBIVORE;
+	private static void adoptClade(TestNPC t, net.hedinger.prototype.entities.Genome g) {
+		t.clade = g.clade;
 	}
 
 	/** Sets the body radius; gates grabbing and the carry offset. */
@@ -1323,7 +1301,7 @@ public class TestNPC extends NPC {
 		for (NPC n : getWorld().census().creatures(getLvl())) {
 			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
 					|| !n.isOrganic() // no blood in a machine: nothing to ride and nothing to drink
-					|| (n instanceof TestNPC tn && tn.diet == Diet.PARASITE)) {
+					|| (n instanceof TestNPC tn && tn.clade == Genome.Clade.PARASITE)) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
@@ -1365,7 +1343,7 @@ public class TestNPC extends NPC {
 			// Parasites are ignored outright, at any hunger: too small and too
 			// foul to be worth a bite. Nothing preys on them — their checks are
 			// the host's bucking and their own four books.
-			if (n instanceof TestNPC tp && tp.diet == Diet.PARASITE) {
+			if (n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE) {
 				continue;
 			}
 			// Nor is a machine ever quarry. The steward's drone is the size of a
@@ -1490,11 +1468,16 @@ public class TestNPC extends NPC {
 			net.hedinger.prototype.entities.Genome og = near.getGenome();
 			s[AgentIO.S_NEAR_SIM] = (genome != null && og != null) ? genome.similarityTo(og) : 0;
 			s[AgentIO.S_NEAR_SIZEADV] = Math.tanh(getSize() / Math.max(1e-6f, near.getSize()) - 1);
+			// Categorical, not continuous: same kind of animal or not. Separate from
+			// the similarity channel above, which is the species axis within a clade.
+			s[AgentIO.S_NEAR_CLADE] = (og != null && genome != null && og.clade == genome.clade)
+					? 1 : -1;
 		} else {
 			s[AgentIO.S_NEAR_PROX] = 0;
 			s[AgentIO.S_NEAR_BEARING] = 0;
 			s[AgentIO.S_NEAR_SIM] = 0;
 			s[AgentIO.S_NEAR_SIZEADV] = 0;
+			s[AgentIO.S_NEAR_CLADE] = 0; // nothing perceived: neither same nor other
 		}
 		// Hearing: neither facing-gated nor stopped by terrain, and it reports an
 		// event rather than a thing -- so unlike every other distance channel it
@@ -1586,7 +1569,7 @@ public class TestNPC extends NPC {
 			// nearestPrey), and the minded hunt sense agrees so evolution cannot
 			// quietly relearn a taste the scripted hunters are denied.
 			if (n.getSize() < getSize() && dist < preyD && n.isOrganic()
-					&& !(n instanceof TestNPC tp && tp.diet == Diet.PARASITE)) {
+					&& !(n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE)) {
 				preyD = dist;
 				preyDx = dx;
 				preyDy = dy;
@@ -1663,9 +1646,9 @@ public class TestNPC extends NPC {
 		// A scavenger's food is a body, not a patch of ground, so its forage channel
 		// points at the best carcass in sight instead of the best vegetation. Same
 		// channel, same units, same intent: what changes is only what counts as food,
-		// which is exactly what a diet is. Rescanned every tick because a carcass can
+		// which is exactly what a clade is. Rescanned every tick because a carcass can
 		// be eaten out from under it by another scavenger, unlike a tile of grass.
-		if (diet == Diet.SCAVENGER) {
+		if (clade == Genome.Clade.SCAVENGER) {
 			scanCarrion();
 			if (forageCol < 0) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
@@ -1682,7 +1665,7 @@ public class TestNPC extends NPC {
 		// the way a scavenger smells carrion. Riding one, the channel reads "you
 		// are on it", so the forage intent holds it in place instead of marching
 		// it off its own meal.
-		if (diet == Diet.PARASITE) {
+		if (clade == Genome.Clade.PARASITE) {
 			NPC host = nearestHost();
 			if (host == null) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
@@ -2337,7 +2320,7 @@ public class TestNPC extends NPC {
 		// eat it. What the gate is really for is not acting on ground that was asked
 		// for as cover or as water, and that reasoning only concerns a grazer.
 		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE
-				&& (diet == Diet.SCAVENGER || tileWanted == AgentIO.TILE_FOOD);
+				&& (clade == Genome.Clade.SCAVENGER || tileWanted == AgentIO.TILE_FOOD);
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
 		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
 		// Seeking a fixture and reaching it presses it: arriving IS the act,
@@ -2361,8 +2344,8 @@ public class TestNPC extends NPC {
 			// A parasite's mouth works on nothing here: it cannot graze and it
 			// does not scavenge — its whole living is the host drain reflex
 			// (parasiteFeed), which runs while it rides, hungry.
-			eaten = diet == Diet.SCAVENGER ? scavenge()
-					: diet == Diet.PARASITE ? 0 : graze(grazeDemand());
+			eaten = clade == Genome.Clade.SCAVENGER ? scavenge()
+					: clade == Genome.Clade.PARASITE ? 0 : graze(grazeDemand());
 			totalIntake += eaten;
 		}
 		boolean ateItem = false;
@@ -2444,7 +2427,7 @@ public class TestNPC extends NPC {
 		// the captor's call, via drop()).
 		if (a[AgentIO.A_ATTACH] > 0.5) {
 			attachToLarger();
-		} else if (chasing && seekClass == AgentIO.SEEK_FORAGE && diet == Diet.PARASITE) {
+		} else if (chasing && seekClass == AgentIO.SEEK_FORAGE && clade == Genome.Clade.PARASITE) {
 			// A parasite that reaches the host its forage intent names latches on:
 			// arriving IS the act, exactly as pressing is for a fixture, so the
 			// starter mind that merely forages can make this living at all. The
@@ -2514,7 +2497,7 @@ public class TestNPC extends NPC {
 			}
 			// Parasites do not stack: a parasite never rides another parasite
 			// (a chain of drains would bleed the bottom host through the pile).
-			if (diet == Diet.PARASITE && n instanceof TestNPC tn && tn.diet == Diet.PARASITE) {
+			if (clade == Genome.Clade.PARASITE && n instanceof TestNPC tn && tn.clade == Genome.Clade.PARASITE) {
 				continue;
 			}
 			if (n.getSize() > getSize() && attachTo(n)) {
@@ -2701,7 +2684,7 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * Diet is a reproductive barrier on top of the genome's own similarity test: a
+	 * The clade is a reproductive barrier on top of the genome's own similarity test: a
 	 * grazer and a scavenger are not the same animal, whatever their markers say.
 	 *
 	 * <p>Without this a scavenger spends its scarce fertile ticks courting the far
@@ -2713,12 +2696,12 @@ public class TestNPC extends NPC {
 	 */
 	@Override
 	protected double travelEfficiency() {
-		return diet == Diet.SCAVENGER ? SCAVENGER_TRAVEL : 1.0;
+		return clade == Genome.Clade.SCAVENGER ? SCAVENGER_TRAVEL : 1.0;
 	}
 
 	@Override
 	public boolean canMateWith(NPC other) {
-		if (other instanceof TestNPC t && t.diet != diet) {
+		if (other instanceof TestNPC t && t.clade != clade) {
 			return false;
 		}
 		return super.canMateWith(other);
@@ -2942,14 +2925,14 @@ public class TestNPC extends NPC {
 	 * because each factory branch remembered a different subset of them. A minded
 	 * child inherited none at all.
 	 *
-	 * <p>Diet is the one that mattered: a scavenger's child was born a grazer, so
+	 * <p>The clade is the one that mattered: a scavenger's child was born a grazer, so
 	 * the niche could not grow no matter how well its parents ate. Corpse lifespan
 	 * and predator-vigilance were dropped the same way for minded lineages. They
 	 * are copied together here so that adding a body trait means adding it in one
 	 * place rather than in four, and forgetting is not the default.
 	 */
 	private void passBodyTraitsTo(TestNPC child) {
-		// Diet is NOT copied here: it rides in the genome now, so the child was born
+		// The clade is NOT copied here: it rides in the genome now, so the child was born
 		// with it. Copying it a second time would be a second source of truth, and
 		// the one that silently wins whenever the two disagree.
 		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
@@ -2987,7 +2970,7 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
-		passBodyTraitsTo(child); // a pair breeds within its diet, so either parent's will do
+		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {
@@ -3142,74 +3125,32 @@ public class TestNPC extends NPC {
 		}
 	}
 
-	/** Ecosystem role, for the world steward's population census: {@code
-	 *  "predator"}, {@code "prey"}, or {@code ""} for anything else. */
-	/**
-	 * Where this body sits in the food chain, for the viewer: {@code "prey"},
-	 * {@code "predator"} or {@code "scavenger"}. Every creature has one.
-	 *
-	 * <p>Deliberately NOT {@link #ecoRole()}, which returns {@code ""} for the
-	 * minded cohort because its role is meant to emerge rather than be assigned.
-	 * That blank is right for the steward -- which counts minded creatures as their
-	 * own category -- and useless to someone looking at a creature and asking what
-	 * it eats. The two must stay separate: {@code ecoRole} is also the key the
-	 * population trims and the flee/herd scans match on, so widening it to cover
-	 * minded bodies would quietly enrol them in the prey ceiling and the herds.
-	 */
-	public String trophicRole() {
-		if (diet == Diet.SCAVENGER) {
-			return "scavenger";
-		}
-		if (diet == Diet.PARASITE) {
-			return "parasite";
-		}
-		if (diet == Diet.CARNIVORE || behavior == Behavior.PREDATOR) {
-			return "predator";
-		}
-		return "prey"; // grazes, and is hunted by anything its size or larger
-	}
-
 	public String ecoRole() {
-		// DIET decides this, and nothing else does. What a creature eats is the
-		// whole of what it is ecologically: it fixes what it competes with, what it
-		// is food for, and which supply its numbers are coupled to. How the body is
-		// steered -- a hardcoded loop, an evolved program, a hand-written
-		// controller -- is an implementation detail the census has no business
-		// seeing, because it changes none of those things.
+		// The CLADE decides this, and nothing else does. A clade fixes what a
+		// creature can digest, who it can breed with, and what it looks like -- so
+		// it is the whole of what a creature is ecologically. How the body is
+		// steered (a hardcoded loop, an evolved program, a hand-written controller)
+		// changes none of those things and has no business in the census.
 		//
 		// This used to fall through to "" for anything minded, which made the
 		// emergent cohort roleless: a herbivore with a brain was not counted as a
-		// herbivore anywhere, and the steward held it in a separate "minded" cohort
-		// with guardrails of its own. The same animal was governed one way with a
-		// brain and another way without. Diet is inherited and hardwired to the
-		// body, so keying on it gives every creature exactly one role for life.
+		// herbivore anywhere, and the steward held it in a separate cohort with
+		// guardrails of its own. The same animal was governed one way with a brain
+		// and another way without.
 		//
-		// A genome is what makes a body part of the ecosystem: it can breed, it
-		// carries a diet, and it is subject to selection. The suite's bare fixtures
-		// -- a roamer, an inert block, a chaser -- have none, do not eat, and must
-		// stay roleless so the steward never counts or trims them. Deliberately not
-		// gated on `metabolic`: a scripted scavenger built for a test is still a
+		// A genome is what makes a body part of the ecosystem: it carries the clade,
+		// it can breed, and it is subject to selection. The suite's bare fixtures --
+		// a roamer, an inert block, a chaser -- have none, do not eat, and must stay
+		// roleless so the steward never counts or trims them. Deliberately not gated
+		// on `metabolic`: a scripted scavenger built for a test is still a
 		// scavenger, and asking whether it burns energy answers a different question.
 		if (genome == null) {
 			return "";
 		}
-		if (diet == Diet.SCAVENGER) {
-			return "scavenger";
-		}
-		if (diet == Diet.PARASITE) {
-			return "parasite"; // its own supply: the standing herd it rides
-		}
-		// Behaviour is honoured as a fallback so the hardcoded hunting loop can
-		// never disagree with the role it is counted under, whatever its genome says.
-		if (diet == Diet.CARNIVORE || behavior == Behavior.PREDATOR) {
-			return "predator";
-		}
-		// Everything else eats plants -- breeders, nesters and minded foragers
-		// alike. Nesters were once roleless here and that made them invisible to
-		// every population check: an unhunted, uncapped lineage that exploded
-		// exponentially the moment the demo seeded some. The same trap, one level
-		// up, is what keying on diet closes for the minded cohort.
-		return "prey";
+		// Behaviour is honoured as an override so the hardcoded hunting loop can
+		// never disagree with the bucket it is counted under, whatever its genome says.
+		return behavior == Behavior.PREDATOR
+				? Genome.Clade.PREDATOR.wireName() : clade.wireName();
 	}
 
 	@Override

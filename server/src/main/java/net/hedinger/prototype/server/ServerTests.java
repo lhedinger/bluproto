@@ -166,11 +166,11 @@ public final class ServerTests {
 	 * The role census counts the living, splits them by trophic role, and
 	 * accounts for every one of them.
 	 *
-	 * <p>The last part is the one worth pinning: {@code trophicRole()} has four
-	 * answers today and the census switches on them, so a fifth added later
-	 * would silently land in the {@code default} arm and be counted as prey. Here
-	 * the columns are checked against an independent headcount of the live
-	 * creatures, which fails the moment they stop adding up.
+	 * <p>The last part is the one worth pinning: {@code ecoRole()} has one answer
+	 * per clade and the census switches on them, so a clade added later would land
+	 * in the {@code default} arm and be counted as nothing at all. Here the columns
+	 * are checked against an independent headcount of the live creatures, which
+	 * fails the moment they stop adding up.
 	 */
 	static void populationCensusCountsEveryLivingRole() {
 		net.hedinger.prototype.engine.Utils.seed(7);
@@ -185,10 +185,10 @@ public final class ServerTests {
 			}
 		}
 		check("the census finds creatures", alive > 0);
-		check("every living creature lands in exactly one role",
-				s.prey() + s.predator() + s.scavenger() + s.parasite() == alive);
-		check("a seeded world has all four roles",
-				s.prey() > 0 && s.predator() > 0 && s.scavenger() > 0 && s.parasite() > 0);
+		check("every living creature lands in exactly one clade",
+				s.herbivore() + s.predator() + s.scavenger() + s.parasite() == alive);
+		check("a seeded world has all four clades",
+				s.herbivore() > 0 && s.predator() > 0 && s.scavenger() > 0 && s.parasite() > 0);
 		check("the reading is stamped with the tick it was taken at", s.tick() == 123);
 
 		// Corpses are not population: killing one must move the count down by one.
@@ -201,8 +201,30 @@ public final class ServerTests {
 		}
 		WorldHost.PopSample after = WorldHost.censusOf(w, 124);
 		check("a corpse is not counted as population",
-				after.prey() + after.predator() + after.scavenger() + after.parasite()
+				after.herbivore() + after.predator() + after.scavenger() + after.parasite()
 						== alive - 1);
+
+		// The wire carries the clade AND the species label a viewer reads. The
+		// species is derived at read time from the markers -- nothing stores it --
+		// so this is the only place the plumbing gets checked.
+		// Its own world rather than the one above: WorldHost builds and owns one.
+		WorldHost host = new WorldHost(7);
+		java.util.Map<String, Object> detail = null;
+		for (int id : host.liveCreatureIds()) {
+			detail = host.entityDetail(id);
+			if (detail != null && detail.get("role") != null && detail.get("species") != null) {
+				break;
+			}
+		}
+		check("a creature's detail reaches the wire", detail != null);
+		String role = String.valueOf(detail.get("role"));
+		check("the role on the wire is a clade name (" + role + ")",
+				role.equals("herbivore") || role.equals("predator")
+						|| role.equals("scavenger") || role.equals("parasite"));
+		check("the species label rides along", detail.get("species") != null);
+		check("and it is one of the named species",
+				java.util.List.of("umbral", "vermil", "verdant", "cobalt", "ochre", "dusken")
+						.contains(String.valueOf(detail.get("species"))));
 	}
 
 	/**

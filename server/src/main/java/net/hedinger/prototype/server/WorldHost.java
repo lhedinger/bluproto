@@ -333,6 +333,20 @@ final class WorldHost {
 	 * fields without locking the sim: a momentarily stale number in an info panel
 	 * is harmless, and it never mutates anything.
 	 */
+	/** Ids of the living, genome-bearing creatures in this host's world — a test
+	 *  seam, so the suite can ask what the wire says about a real creature without
+	 *  reaching past the host into its world. */
+	java.util.List<Integer> liveCreatureIds() {
+		java.util.List<Integer> out = new java.util.ArrayList<>();
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
+					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null) {
+				out.add(t.getID());
+			}
+		}
+		return out;
+	}
+
 	java.util.Map<String, Object> entityDetail(int id) {
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
 			if (e == null || e.getID() != id || e.isRemoved()) {
@@ -410,7 +424,14 @@ final class WorldHost {
 					// to be ecoRole(), which is blank for the minded cohort by design --
 					// so the majority of the world's creatures showed no role at all,
 					// which is the one thing you want to know when you tap one.
-					d.put("role", tn.trophicRole());
+					d.put("role", tn.ecoRole());
+					// The species label: derived from the markers at read time, never
+					// stored, so it costs the simulation nothing and cannot drift out
+					// of step with the genome it describes.
+					if (tn.getGenome() != null) {
+						d.put("species",
+								net.hedinger.prototype.entities.Species.of(tn.getGenome()).name());
+					}
 					if (!tn.currentAction().isEmpty()) {
 						d.put("action", tn.currentAction());
 					}
@@ -711,7 +732,7 @@ final class WorldHost {
 	static final int POP_SAMPLES = 6000;
 
 	/** One reading of the world's trophic makeup. */
-	record PopSample(long tick, int prey, int predator, int scavenger, int parasite) { }
+	record PopSample(long tick, int herbivore, int predator, int scavenger, int parasite) { }
 
 	// Written only by the sampler task, read by request threads: an immutable
 	// list swapped in wholesale, so a reader either sees the old series or the
@@ -741,13 +762,21 @@ final class WorldHost {
 	 * server, a socket or a layer bake.
 	 */
 	static PopSample censusOf(net.hedinger.prototype.engine.World w, long tick) {
-		int prey = 0, pred = 0, scav = 0, para = 0;
+		int herb = 0, pred = 0, scav = 0, para = 0;
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (!(e instanceof net.hedinger.prototype.simtest.TestNPC tn)
 					|| tn.isDead() || tn.isRemoved()) {
 				continue; // corpses are not population; nor are items or clouds
 			}
-			switch (tn.trophicRole()) {
+			// One case per clade, and roleless bodies counted as nothing. This used
+			// to fall through to `default: prey++`, which quietly enrolled anything
+			// without a role into the herbivore series -- harmless while the only
+			// roleless bodies were test fixtures, and a silent lie the moment
+			// anything else grew one.
+			switch (tn.ecoRole()) {
+			case "herbivore":
+				herb++;
+				break;
 			case "predator":
 				pred++;
 				break;
@@ -758,11 +787,10 @@ final class WorldHost {
 				para++;
 				break;
 			default:
-				prey++;
-				break;
+				break; // outside the ecosystem: not population
 			}
 		}
-		return new PopSample(tick, prey, pred, scav, para);
+		return new PopSample(tick, herb, pred, scav, para);
 	}
 
 	/** Adds a reading, dropping the oldest once the ring is full. */
@@ -784,18 +812,18 @@ final class WorldHost {
 	java.util.Map<String, Object> population() {
 		java.util.List<PopSample> h = popHistory;
 		long[] ticks = new long[h.size()];
-		int[] prey = new int[h.size()], pred = new int[h.size()], scav = new int[h.size()];
+		int[] herb = new int[h.size()], pred = new int[h.size()], scav = new int[h.size()];
 		int[] para = new int[h.size()];
 		for (int i = 0; i < h.size(); i++) {
 			PopSample p = h.get(i);
 			ticks[i] = p.tick();
-			prey[i] = p.prey();
+			herb[i] = p.herbivore();
 			pred[i] = p.predator();
 			scav[i] = p.scavenger();
 			para[i] = p.parasite();
 		}
 		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
-				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "prey", prey,
+				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "herbivore", herb,
 				"predator", pred, "scavenger", scav, "parasite", para);
 	}
 
