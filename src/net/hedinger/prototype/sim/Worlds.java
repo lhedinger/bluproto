@@ -1532,24 +1532,29 @@ public final class Worlds {
 			w.setTile(x0, y0, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
 			w.getTile(x0, y0, CAVE_Z).setFertility(0);
 
-			// Up: a ramp in the cave climbing onto the surface floor carved above.
+			// Up: a ramp in the cave climbing onto the stone landing carved above.
 			w.setTile(x2, y2, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
 			w.getTile(x2, y2, CAVE_Z).setRampUphill(u);
 			w.setTile(x3, y3, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
-			w.setTile(x3, y3, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
-			w.getTile(x3, y3, SURFACE_Z).setFertility(0.7);
+			w.setTile(x3, y3, SURFACE_Z, Tile.TileType.TYPE_STONE); // landing above
+			w.getTile(x3, y3, SURFACE_Z).setFertility(0);
 		}
 	}
 
-	/** One tile of station apron: walkable ground, lush on the surface and bare
-	 *  underground. */
+	/** One tile of station apron — bare stone, on both levels.
+	 *
+	 *  <p>The surface apron used to be meadow, which put grass growing to the
+	 *  very lip of a pit and up to the edge of a cut stone ramp. A station is
+	 *  where the bedrock opens: the rock the ramp is cut into should reach the
+	 *  surface around it, and the meadow should stop where the rock starts.
+	 *  Stone outranks earth in the autotiling, so the apron laps out into the
+	 *  grass with the same scalloped edge every other terrain boundary gets. */
 	private static void carveTile(World w, int x, int y, int z) {
 		if (x < 1 || y < 1 || x >= w.getColums() - 1 || y >= w.getRows() - 1) {
 			return;
 		}
-		w.setTile(x, y, z, z == SURFACE_Z
-				? Tile.TileType.TYPE_FLOOR : Tile.TileType.TYPE_STONE);
-		w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
+		w.setTile(x, y, z, Tile.TileType.TYPE_STONE);
+		w.getTile(x, y, z).setFertility(0);
 	}
 
 	/** A random open cave tile, for seeding the underground cohort onto stone or
