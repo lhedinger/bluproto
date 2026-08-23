@@ -6964,6 +6964,79 @@ public class SimTests {
 	}
 
 	/**
+	 * The track works out its own geometry. A yard laid as bare tiles resolves
+	 * into straights, curves, a set of points, a crossing and a buffer stop,
+	 * with nothing in the generator saying which is which — the shape follows
+	 * from which sides each tile's neighbours continue into.
+	 *
+	 * <p>Before autotiling, orientation was a single boolean ("is there rail
+	 * north or south?"), which is exactly enough for one straight run and wrong
+	 * for everything else: a corner drew as two perpendicular stubs meeting at
+	 * a seam, and a crossing drew as a vertical tile with the east-west run
+	 * dead-ending into it. Nothing had shown it because nothing had yet asked
+	 * the track to turn.
+	 *
+	 * <p>Rendering is not otherwise pinned by the suite — it is checked by eye
+	 * against captured strips — so this asserts the classification rather than
+	 * the pixels: every tile in the yard reports the neighbours it actually
+	 * has, which is the input the painter switches on.
+	 */
+	static class TrackAutotilesItsOwnGeometry extends Scenario {
+		@Override
+		public void run() {
+			seed(425);
+			World w = room(20, 14);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 13; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			// A loop with four corners, a spur crossing it, and a dead end.
+			for (int x = 3; x <= 13; x++) {
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_RAIL);  // north side
+				w.setTile(x, 10, 0, Tile.TileType.TYPE_RAIL); // south side
+			}
+			for (int y = 3; y <= 10; y++) {
+				w.setTile(3, y, 0, Tile.TileType.TYPE_RAIL);  // west side
+				w.setTile(13, y, 0, Tile.TileType.TYPE_RAIL); // east side
+			}
+			for (int x = 3; x <= 16; x++) {
+				w.setTile(x, 6, 0, Tile.TileType.TYPE_RAIL);  // spur, crossing both sides
+			}
+			w.setTile(16, 5, 0, Tile.TileType.TYPE_RAIL);     // a stub off the spur's end
+			w.alignTiles();
+			snapshot(w, "a yard: loop, spur, crossing, points and a buffer stop");
+
+			assertEquals("the loop's north-west corner turns two ways", 2, arms(w, 3, 3));
+			assertEquals("its north-east corner too", 2, arms(w, 13, 3));
+			assertEquals("and both southern corners", 2, arms(w, 3, 10));
+			assertEquals("and both southern corners", 2, arms(w, 13, 10));
+			assertEquals("the spur crosses the west side as points", 3, arms(w, 3, 6));
+			assertEquals("and the east side as points", 4, arms(w, 13, 6));
+			assertEquals("plain track down the north side is a straight", 2, arms(w, 8, 3));
+			assertEquals("the stub off the spur has one neighbour", 1, arms(w, 16, 5));
+		}
+
+		/** How many sides this tile's run continues into — the painter's input. */
+		private int arms(World w, int x, int y) {
+			int n = 0;
+			if (w.getTile(x, y - 1, 0).getType() == Tile.TileType.TYPE_RAIL) {
+				n++;
+			}
+			if (w.getTile(x + 1, y, 0).getType() == Tile.TileType.TYPE_RAIL) {
+				n++;
+			}
+			if (w.getTile(x, y + 1, 0).getType() == Tile.TileType.TYPE_RAIL) {
+				n++;
+			}
+			if (w.getTile(x - 1, y, 0).getType() == Tile.TileType.TYPE_RAIL) {
+				n++;
+			}
+			return n;
+		}
+	}
+
+	/**
 	 * A server rack stops a body and hides nothing — the second solid in the
 	 * world (after crystal) you can see straight through.
 	 *
@@ -7017,6 +7090,7 @@ public class SimTests {
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),
 				new TheTramRunIsOrdinaryGround(),
+				new TrackAutotilesItsOwnGeometry(),
 				new ServerRacksStopABodyButNotAnEye(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
