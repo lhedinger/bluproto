@@ -122,6 +122,7 @@ final class SpriteCatalog {
 		ground("switch_seat", Tile.TileType.TYPE_SWITCH);
 		ground("charge_dock", Tile.TileType.TYPE_DOCK);
 		ground("waste_sludge", Tile.TileType.TYPE_SLUDGE);
+		ground("tram_rail", Tile.TileType.TYPE_RAIL);
 		ramps();
 	}
 

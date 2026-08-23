@@ -6444,12 +6444,55 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Track is the first ground that gives back more than plain. Every other
+	 * terrain in the world is a tax on movement — mud, reeds, rubble, ducts,
+	 * the spill — and a body on rails covers measurably more ground per tick
+	 * than the same body on bare deck beside it.
+	 *
+	 * <p>Worth pinning because the engine has to take it safely: drag is
+	 * applied before the {@code MAX_STEP} clamp, so a speeded body still cannot
+	 * outrun collision resolution and tunnel through terrain.
+	 */
+	static class RailsCarryABodyFasterThanDeck extends Scenario {
+		@Override
+		public void run() {
+			seed(422);
+			World w = room(30, 8);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_RAIL); // the run, one lane
+			}
+			// Two identical bodies, same heading, one on the track and one on
+			// the deck a lane away.
+			TestNPC onRail = TestNPC.mover(2.5, 3.5, 0, 0);
+			TestNPC onDeck = TestNPC.mover(2.5, 5.5, 0, 0);
+			w.spawnEntity(onRail);
+			w.spawnEntity(onDeck);
+			w.think();
+			snapshot(w, "before (one on the run, one on the deck)");
+			tick(w, 300);
+			snapshot(w, "after (the rail body is further along)");
+
+			double railRun = onRail.getX() - 2.5, deckRun = onDeck.getX() - 2.5;
+			assertGreater("the body on the track covered more ground", railRun, deckRun);
+			assertEquals("and the run is worth its stated 1.4", 14,
+					(long) Math.round(w.getTile(5, 3, 0).speedFactor() * 10));
+			// The engine's guarantee: faster ground still never tunnels.
+			assertLess("no step outran the collision clamp", railRun / 300.0,
+					net.hedinger.prototype.engine.Entity.MAX_STEP);
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new SeededWorldBerthsOneDrone(),
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),
+				new RailsCarryABodyFasterThanDeck(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),

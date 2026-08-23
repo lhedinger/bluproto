@@ -555,6 +555,13 @@ public class Tile {
 			return 0.5; // crawling
 		case TYPE_SLUDGE:
 			return 0.5; // wading a viscous spill
+		case TYPE_RAIL:
+			// The only ground in the world that gives back more than plain. A
+			// levelled, sleepered bed is genuinely easier going than raw floor,
+			// and the engine takes it safely: drag is applied BEFORE the
+			// MAX_STEP clamp, so a speeded body still cannot outrun collision
+			// resolution and tunnel through a wall.
+			return 1.4;
 		case TYPE_CRYSTAL_BED:
 			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
@@ -706,7 +713,8 @@ public class Tile {
 		TYPE_SWITCH(29, true, "pressure plate"), // pressure-plate floor: a button a body stands on
 		TYPE_DOCK(30, true, "charge dock"), // the steward drone's berth: a powered pad it parks on
 		TYPE_ROCKY(31, true, "rocky grassland"), // stony ground that keeps a thin sward
-		TYPE_SLUDGE(32, true, "waste sludge"); // the facility's spill: walkable, slow, and it burns
+		TYPE_SLUDGE(32, true, "waste sludge"), // the facility's spill: walkable, slow, and it burns
+		TYPE_RAIL(33, true, "tram rail"); // the transit run: the one ground that is faster than plain
 
 		private int value;
 		private boolean open;

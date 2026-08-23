@@ -578,6 +578,15 @@ public final class Worlds {
 			setBare(w, x, y0 + 8, CAVE_Z, Tile.TileType.TYPE_DUCT);
 		}
 
+		// The tram run: track laid the length of the spine, from the blast
+		// mouth to the vault's step. It is how the facility was supplied, and
+		// it is the one ground in the world that is faster than plain -- so the
+		// base's main corridor is also its fastest, which is what a corridor
+		// ought to be.
+		for (int x = x0 + 1; x < x0 + 12; x++) {
+			setBare(w, x, y0 + 6, CAVE_Z, Tile.TileType.TYPE_RAIL);
+		}
+
 		// Machine wing: a pipe run the room's whole width, vents in the deck.
 		for (int x = x0 + 2; x < x0 + W - 2; x++) {
 			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
@@ -690,6 +699,10 @@ public final class Worlds {
 		}
 		for (int x = x0 + 2; x < x0 + W - 2; x++) {
 			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		}
+		// The annex's stub of track, running the hall from mouth to vault.
+		for (int x = x0 + 1; x < x0 + W - 6; x++) {
+			setBare(w, x, y0 + 4, CAVE_Z, Tile.TileType.TYPE_RAIL);
 		}
 		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);

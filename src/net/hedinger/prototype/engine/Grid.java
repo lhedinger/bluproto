@@ -770,6 +770,14 @@ public class Grid {
 								col = GroundTextures.chargeDock(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_SLUDGE) {
 								col = GroundTextures.sludge(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_RAIL) {
+								// The run follows its own connectivity, like the pipes:
+								// track beside track sets the axis, so a line of rail
+								// reads as one road instead of a row of stamps.
+								boolean vertRail = isType(x, y - 1, Tile.TileType.TYPE_RAIL)
+										|| isType(x, y + 1, Tile.TileType.TYPE_RAIL);
+								col = vertRail ? GroundTextures.rail(aj, ai, gx, gy)
+										: GroundTextures.rail(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {

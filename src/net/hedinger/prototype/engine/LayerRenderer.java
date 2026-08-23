@@ -98,6 +98,7 @@ public class LayerRenderer {
 		case TYPE_SWITCH:
 		case TYPE_DOCK:
 		case TYPE_SLUDGE:
+		case TYPE_RAIL:
 		case TYPE_VENT:
 		case TYPE_WALL_BUILT:
 		case TYPE_PAVED:
