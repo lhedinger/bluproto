@@ -602,6 +602,17 @@ public final class Worlds {
 			setBare(w, x0 + 6, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
 			setBare(w, x0 + 7, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
 		}
+		// The plant, and the reason the racks can be there at all: a lagged
+		// coolant run comes down the wing to the cabinets, and a heat exchanger
+		// on the far side dumps what it carried away. Neither does anything yet
+		// -- they are the facility explaining, in the only language a tile has,
+		// where its cold and its heat come from, so that when temperature is a
+		// field rather than a picture it already has somewhere to start.
+		for (int x = x0 + 2; x <= x0 + 5; x++) {
+			setBare(w, x, y0 + 2, CAVE_Z, Tile.TileType.TYPE_COOLANT);
+		}
+		setBare(w, x0 + 9, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
+		setBare(w, x0 + 10, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
 		// The drone's berth, in the machine wing among the plant it belongs
 		// to -- clear of the pipe run along row 1 and of both vents, and one
 		// tile in from the partition doorway at x0+11 so the pad is not the
@@ -642,7 +653,13 @@ public final class Worlds {
 		for (int y = y0 + 9; y <= y0 + 11; y++) {
 			setBare(w, x0 + 11, y, CAVE_Z, Tile.TileType.TYPE_CATWALK); // north-south walk
 		}
-		setBare(w, x0 + 16, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PLATE); // the platform
+		// The supply platform at the catwalk's end: chequerplate, worn by
+		// whatever was landed on it, and lit grating on the approach so the
+		// walk over the void has one stretch that is lit from below rather
+		// than opening onto nothing.
+		setBare(w, x0 + 16, y0 + 10, CAVE_Z, Tile.TileType.TYPE_TREADPLATE);
+		setBare(w, x0 + 14, y0 + 10, CAVE_Z, Tile.TileType.TYPE_LIGHTGRATE);
+		setBare(w, x0 + 15, y0 + 10, CAVE_Z, Tile.TileType.TYPE_LIGHTGRATE);
 		w.spawnEntity(Item.food(x0 + 16.5, y0 + 10.5, CAVE_Z));
 
 		// The south gate: the catwalk's south arm exits through the shell, a
@@ -677,6 +694,14 @@ public final class Worlds {
 		// hauler can move them, and one parked on a plate holds a door), and
 		// the vault's cache: the food worth locking behind buttons, plus a
 		// hazard standing guard over it.
+		// Where the ceiling came down: the storage wing's north-east corner,
+		// between the crates and the shaft. It is the only ground in the base
+		// that says something went wrong here.
+		for (int x = x0 + 6; x <= x0 + 7; x++) {
+			for (int y = y0 + 10; y <= y0 + 11; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_COLLAPSE);
+			}
+		}
 		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 10.5, CAVE_Z));

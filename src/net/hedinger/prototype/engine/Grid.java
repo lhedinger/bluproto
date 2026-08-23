@@ -776,6 +776,21 @@ public class Grid {
 								col = GroundTextures.switchPlate(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_DOCK) {
 								col = GroundTextures.chargeDock(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_TREADPLATE) {
+								col = GroundTextures.treadPlate(gx, gy);
+							} else if (cl == GroundTextures.CLS_LIGHTGRATE) {
+								col = GroundTextures.litGrate(ai, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_COLLAPSE) {
+								col = GroundTextures.collapsedDeck(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_COOLANT) {
+								// Lagged pipework runs along its own connectivity, the
+								// same way the working pipes and the ducts do.
+								boolean vertCool = isType(x, y - 1, Tile.TileType.TYPE_COOLANT)
+										|| isType(x, y + 1, Tile.TileType.TYPE_COOLANT);
+								col = vertCool ? GroundTextures.coolantRun(gy, ai, gx, gy)
+										: GroundTextures.coolantRun(gx, aj, gx, gy);
+							} else if (cl == GroundTextures.CLS_EXCHANGER) {
+								col = GroundTextures.heatExchanger(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_SLUDGE) {
 								col = GroundTextures.sludge(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_RAIL) {
