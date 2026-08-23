@@ -481,6 +481,17 @@ public abstract class NPC extends Entity {
 			size = (int) Math.round(grownSize);
 		}
 
+		// Corrosive ground: the facility's waste channels burn what wades them.
+		// Outside the metabolic block on purpose -- this is chemistry, not
+		// physiology, so it costs a body its health whether or not that body
+		// keeps the four books, and the same erosion rate as a pegged need
+		// keeps a spill comparable to a hunger a creature already understands.
+		// Flyers skim over untouched, exactly as they do over water.
+		if (age >= 0 && !isFlying() && age % DEPRIVATION_PERIOD == DEPRIVATION_PERIOD / 4
+				&& getWorld() != null && getWorld().getTile(X, Y, Z).isCorrosive()) {
+			damage(1, "toxic");
+		}
+
 		// The four books (VITALS.md): hunger and thirst rise with time, both gate
 		// energy regeneration through satiation and erode health when pegged;
 		// energy is spent by the acts and regenerated from satiation scaled by

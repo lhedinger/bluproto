@@ -6362,10 +6362,94 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The first ground in the world that wounds. A body wading a waste channel
+	 * loses health for as long as it stands there and its corpse says what did
+	 * it; an identical body on clean deck beside it is untouched, and a flyer
+	 * over the same spill never feels it.
+	 *
+	 * <p>The flyer half is the one worth pinning. Water and pits already spare
+	 * flyers, and a corrosive floor that did not would quietly make the steward
+	 * drone mortal — which the drone's whole design says it must not be.
+	 */
+	static class WasteSludgeBurnsWhatWadesIt extends Scenario {
+		@Override
+		public void run() {
+			seed(420);
+			World w = room(14, 9);
+			// Floored as the facility, because that is where a spill lives —
+			// and the contrast that matters is sludge against deck, not sludge
+			// against grass.
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			for (int x = 4; x <= 6; x++) {
+				for (int y = 3; y <= 5; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_SLUDGE);
+				}
+			}
+			Genome g = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC waders = TestNPC.grazer(5.5, 4.5, 0, g).withHealth(100);
+			TestNPC ashore = TestNPC.grazer(10.5, 4.5, 0, g).withHealth(100);
+			TestNPC overhead = TestNPC.grazer(5.5, 3.5, 0, g).withHealth(100).withFlying();
+			w.spawnEntity(waders);
+			w.spawnEntity(ashore);
+			w.spawnEntity(overhead);
+			w.think();
+			snapshot(w, "before (one in the spill, one on deck, one above it)");
+			tick(w, 400);
+			snapshot(w, "after (only the wader is burned)");
+
+			assertLess("the body in the spill was burned", waders.getHealth(), 100);
+			assertEquals("the body on clean deck was untouched", 100, ashore.getHealth());
+			assertEquals("the flyer skimmed over it, as over water", 100, overhead.getHealth());
+			assertEquals("and the spill drags like a ford", 5,
+					(long) Math.round(w.getTile(5, 4, 0).speedFactor() * 10));
+		}
+	}
+
+	/**
+	 * A spill reports on the hazard channel, so a mind can learn to route round
+	 * it. Unlike water and pits — which a body simply cannot enter — this is a
+	 * hazard it is free to walk into and merely pays for, which is what makes
+	 * avoiding it a decision rather than a wall.
+	 */
+	static class SludgeReadsOnTheHazardChannel extends Scenario {
+		@Override
+		public void run() {
+			seed(421);
+			World w = room(14, 9);
+			for (int y = 1; y <= 7; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_SLUDGE);
+			}
+			Genome g = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000);
+			// Facing east, one tile short of the channel: the spill is dead ahead.
+			TestNPC facing = TestNPC.minded(6.5, 4.5, 0, g);
+			// Facing west, away from it, from the same tile.
+			TestNPC away = TestNPC.minded(6.5, 2.5, 0, g).withHeading(Math.PI);
+			w.spawnEntity(facing);
+			w.spawnEntity(away);
+			w.think();
+			tick(w, 2);
+			snapshot(w, "a mind one tile short of a waste channel");
+
+			double[] sensedAt = facing.sensorSnapshot();
+			double[] sensedAway = away.sensorSnapshot();
+			assertEquals("the spill ahead reads as a hazard", 1,
+					(long) Math.round(sensedAt[net.hedinger.prototype.entities.AgentIO.S_HAZARD_AHEAD]));
+			assertEquals("clean ground ahead reads as none", 0,
+					(long) Math.round(sensedAway[net.hedinger.prototype.entities.AgentIO.S_HAZARD_AHEAD]));
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new SeededWorldBerthsOneDrone(),
+				new WasteSludgeBurnsWhatWadesIt(),
+				new SludgeReadsOnTheHazardChannel(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),

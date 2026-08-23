@@ -97,6 +97,7 @@ public class LayerRenderer {
 		case TYPE_CRYSTAL_SPARSE:
 		case TYPE_SWITCH:
 		case TYPE_DOCK:
+		case TYPE_SLUDGE:
 		case TYPE_VENT:
 		case TYPE_WALL_BUILT:
 		case TYPE_PAVED:
