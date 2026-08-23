@@ -13,19 +13,20 @@ import net.hedinger.prototype.entities.NPC;
  * HAND-AUTHORED pixel stamp — symmetric runs, a deliberate silhouette, one
  * accent pixel — stamped onto the world-absolute art-pixel lattice.
  *
- * <p>The shape is a sentinel rather than a quadrotor: a compact pod with two
- * broad plates held off to either side, so the machine reads as panels kept in
- * formation around a core rather than as something held up by spinning parts.
- * It has a FRONT — the eye leads and the plates trail — because a body that
- * visibly points where it is going tells you what it is about to do.
+ * <p>The shape is a sentinel rather than a quadrotor: a solid hull with the eye
+ * set into its face and two plates held off it on thin pylons, so the machine
+ * reads as something built to a purpose rather than as a thing held up by
+ * spinning parts. It has a FRONT — the eye leads and the plates flank — because
+ * a body that visibly points where it is going tells you what it is about to
+ * do.
  *
- * <p>Two silhouettes are authored and six are derived, which is the only part
- * of this worth explaining. A cardinal stamp and a diagonal stamp are drawn by
- * hand; the remaining headings are exact 90-degree lattice rotations of those
- * two, which are lossless on a square grid and so stay perfectly on-lattice. A
- * 45-degree rotation would not be, and rasterising one would produce exactly
- * the lumpy math that "authored beats computed" (ART-STYLE.md section 5) exists
- * to forbid — hence a second authored stamp instead of a cleverer transform.
+ * <p>Two silhouettes are authored and six are derived. A cardinal stamp and a
+ * diagonal stamp are drawn by hand; the remaining headings are exact 90-degree
+ * lattice rotations of those two, which are lossless on a square grid and so
+ * stay perfectly on-lattice. A 45-degree rotation would not be, and rasterising
+ * one produces exactly the lumpy math that "authored beats computed"
+ * (section 5) exists to forbid — hence a second authored stamp instead of a
+ * cleverer transform.
  *
  * <p>Shading is applied AFTER the rotation, never carried through it. There is
  * one sun and it is fixed straight overhead-north in world space, so a rotated
@@ -49,45 +50,85 @@ public final class DronePainter {
 	 *  rotate about. */
 	public static final int N = 13;
 
-	/** Facing east. '#' is body, 'A' the eye, '.' nothing. Eleven art-pixels
-	 *  across the plates and nine along the pod: wider than it is long, which
-	 *  is what separates a sentinel from an aircraft. The plates stand clear of
-	 *  the pod rather than joining it — the gap is what makes them read as held
-	 *  in formation, and it also gives every column its own lit and sunk edge. */
+	/**
+	 * Facing east. '#' is body, 'A' the eye, '.' nothing.
+	 *
+	 * <p>The hull is the mass and the plates are secondary, which took three
+	 * tries to get right and is the whole difference between a sentinel and a
+	 * pile of bars. Plates as long and as heavy as the hull read as a stack of
+	 * planks. Plates joined to the hull by broad pylons invert the reading
+	 * entirely — the vertical mass wins and the machine looks like it faces
+	 * north whichever way the eye points. What works is a hull that dominates,
+	 * small plates set well clear of it, and a pylon exactly one art-pixel
+	 * wide: enough to say the plates are held rather than floating, too little
+	 * to compete.
+	 *
+	 * <p>Eleven art-pixels across the plates against ten along the hull, so the
+	 * silhouette is still wider than it is long — the proportion that separates
+	 * a sentinel from an aircraft, and the one a scenario pins.
+	 */
 	public static final String[] CARDINAL = {
 			".............",
 			"....#####....",
 			"....#####....",
-			"....#####....",
-			".............",
-			"...########..",
-			"...########A.",
-			"...########..",
-			".............",
-			"....#####....",
+			"......#......",
+			"...#########.",
+			"..##########.",
+			"..#########A.",
+			"..##########.",
+			"...#########.",
+			"......#......",
 			"....#####....",
 			"....#####....",
 			".............",
 	};
 
-	/** Facing south-east: the same three-plate arrangement drawn on the
-	 *  diagonal, as staircases of two-pixel runs. Authored separately because
-	 *  no lattice-exact transform gets here from the cardinal. */
+	/** Facing south-east: the same hull-and-plates arrangement drawn on the
+	 *  diagonal, as staircases of two-pixel runs. Authored rather than derived,
+	 *  because no lattice-exact transform reaches a diagonal from a cardinal. */
 	public static final String[] DIAGONAL = {
 			".............",
 			".............",
-			"..##....##...",
-			"..###...###..",
+			"..##.....##..",
+			"..###....###.",
 			"..####...###.",
-			"...####...##.",
-			"....####.....",
-			".....####....",
-			"..##..####...",
+			"..#####...##.",
+			"...#####.....",
+			"....#####....",
+			".....#####...",
+			"..##..#####..",
 			"..###..####..",
-			"...###..##A..",
-			"....##...##..",
-			".............",
+			"...###..###..",
+			"....##...#A..",
 	};
+
+	/**
+	 * The ground shadow: sanctioned translucency 2 of 4, the blocky translucent
+	 * oval — an ellipse rasterised into art-pixel steps, each block tinting the
+	 * ground beneath.
+	 *
+	 * <p>Authored as its own small shape rather than stamped from the body's
+	 * silhouette, which is what the first pass did and it failed twice over. A
+	 * silhouette copy fills the gaps between hull and plates, destroying the
+	 * separation those gaps exist to create; and offset far enough south to
+	 * clear the glyph it stops reading as shadow at all and becomes a second
+	 * dark plate parked underneath. An oval reads as ground because that is
+	 * what a shadow on ground looks like from above, and it needs no rotation:
+	 * the drone turns, the light does not.
+	 */
+	private static final String[] SHADOW_OVAL = {
+			".#####.",
+			"#######",
+			".#####.",
+	};
+
+	/** How far south the shadow falls, in art-pixels. A body that stands casts
+	 *  at one; this one casts at eight, clear of the glyph, because it is the
+	 *  single thing in the world that genuinely does not touch the ground and
+	 *  the gap between body and shadow is the only cue that says so. It still
+	 *  casts: "nothing floats" (section 4) means nothing is drawn without a
+	 *  shadow to sit against, not that nothing may fly. */
+	private static final int LIFT = 8;
 
 	/** Heading buckets, matching the creature atlases' eight. */
 	private static final int DIRS = 8;
@@ -95,6 +136,16 @@ public final class DronePainter {
 	/** The eight shaded stamps, resolved once: a pure function of the two
 	 *  authored silhouettes, with no RNG and no clock in sight. */
 	static final char[][][] FACING = new char[DIRS][][];
+
+	static {
+		for (int i = 0; i < DIRS; i++) {
+			char[][] s = grid((i & 1) == 0 ? CARDINAL : DIAGONAL);
+			for (int q = 0; q < i / 2; q++) {
+				s = rot90(s);
+			}
+			FACING[i] = shade(s);
+		}
+	}
 
 	/** The shaded stamp for one heading bucket, for the conformance scenarios
 	 *  and for {@code /sprites}. Copied, so nobody can edit the art in place. */
@@ -112,68 +163,63 @@ public final class DronePainter {
 		return DIRS;
 	}
 
-	static {
-		for (int i = 0; i < DIRS; i++) {
-			char[][] s = grid((i & 1) == 0 ? CARDINAL : DIAGONAL);
-			for (int q = 0; q < i / 2; q++) {
-				s = rot90(s);
-			}
-			FACING[i] = shade(s);
-		}
-	}
-
-	private static final Color IRON_DARK = new Color(Door.IRON_DARK_RGB);
 	private static final Color STEEL_MID = new Color(Door.STEEL_MID_RGB);
 	private static final Color STEEL_HI = new Color(Door.STEEL_HI_RGB);
+	/** The sunk south edge: the base shade at the x0.65 of section 4's raised
+	 *  grammar, NOT the near-black iron a first pass used. Iron is a housing
+	 *  and an outline colour; against the deck it reads as a hole punched in
+	 *  the machine rather than as an edge turned away from the light. */
+	private static final Color STEEL_LOW = darken(Door.STEEL_MID_RGB, 0.65);
 	/** The one warm pixel on the machine, and deliberately the same hazard
 	 *  amber as the charge dock's coil, so drone and berth read as a pair. */
 	private static final Color EYE = new Color(0xd8b028);
-	/** Sanctioned translucency 1 of 4: the contact shadow. */
-	private static final Color SHADOW = new Color(0, 0, 0, 110);
+	private static final Color SHADOW = new Color(0, 0, 0, 78);
 
-	/** How far south the shadow falls, in art-pixels. A body that stands casts
-	 *  at one; this one casts at four because it is the single thing in the
-	 *  world that genuinely does not touch the ground, and the gap between body
-	 *  and shadow is the only cue that says so. It still casts: "nothing
-	 *  floats" (section 4) means nothing is drawn without a shadow to sit
-	 *  against, not that nothing may fly. */
-	private static final int LIFT = 4;
+	private static Color darken(int rgb, double f) {
+		return new Color((int) Math.round(((rgb >> 16) & 0xff) * f),
+				(int) Math.round(((rgb >> 8) & 0xff) * f),
+				(int) Math.round((rgb & 0xff) * f));
+	}
 
 	public static void draw(NPC n, Graphics g, View v) {
 		Graphics2D g2 = (Graphics2D) g;
 		double Z = n.getZ();
 		// One art-pixel on screen. Below a pixel there is nothing to draw.
-		double step = (v.pixelX(n.getX() + 1, Z, 0) - v.pixelX(n.getX(), Z, 0)) / (double) A;
-		if (step <= 0) {
+		if (v.pixelX(n.getX() + 1, Z, 0) - v.pixelX(n.getX(), Z, 0) <= 0) {
 			return;
 		}
-		char[][] stamp = FACING[bucket(n.getDirection())];
-
 		// Anchor on the world art-pixel lattice, exactly as the nest stamp
 		// does: nothing positions itself off-lattice to look smoother.
-		int cgx = (int) Math.round(n.getX() * A) - N / 2;
-		int cgy = (int) Math.round(n.getY() * A) - N / 2;
+		int cgx = (int) Math.round(n.getX() * A);
+		int cgy = (int) Math.round(n.getY() * A);
 
-		for (int pass = 0; pass < 2; pass++) {
-			int drop = pass == 0 ? LIFT : 0;
-			for (int row = 0; row < N; row++) {
-				for (int col = 0; col < N; col++) {
-					char ch = stamp[row][col];
-					if (ch == '.') {
-						continue;
-					}
-					Color c = pass == 0 ? SHADOW : shadeOf(ch);
-					int gx = cgx + col, gy = cgy + row + drop;
-					// Edge-exact blocks: each block's extent comes from its
-					// neighbour's rounded edge, never a rounded-up box, or the
-					// translucent shadow's overlaps double-tint into grid lines.
-					int x0 = v.pixelX(gx / (double) A, Z, 0);
-					int x1 = v.pixelX((gx + 1) / (double) A, Z, 0);
-					int y0 = v.pixelY(gy / (double) A, Z, 0);
-					int y1 = v.pixelY((gy + 1) / (double) A, Z, 0);
-					g2.setColor(c);
-					g2.fillRect(x0, y0, x1 - x0, y1 - y0);
+		int sh = SHADOW_OVAL.length, sw = SHADOW_OVAL[0].length();
+		blit(g2, grid(SHADOW_OVAL, sh, sw), cgx - sw / 2, cgy - sh / 2 + LIFT, Z, v, true);
+		blit(g2, FACING[bucket(n.getDirection())], cgx - N / 2, cgy - N / 2, Z, v, false);
+	}
+
+	private static void blit(Graphics2D g2, char[][] rows, int gx0, int gy0, double Z, View v,
+			boolean asShadow) {
+		for (int row = 0; row < rows.length; row++) {
+			for (int col = 0; col < rows[row].length; col++) {
+				char ch = rows[row][col];
+				if (ch == '.') {
+					continue;
 				}
+				Color c = asShadow ? SHADOW : shadeOf(ch);
+				if (c == null) {
+					continue;
+				}
+				int gx = gx0 + col, gy = gy0 + row;
+				// Edge-exact blocks: each block's extent comes from its
+				// neighbour's rounded edge, never a rounded-up box, or the
+				// translucent oval's overlaps double-tint into grid lines.
+				int x0 = v.pixelX(gx / (double) A, Z, 0);
+				int x1 = v.pixelX((gx + 1) / (double) A, Z, 0);
+				int y0 = v.pixelY(gy / (double) A, Z, 0);
+				int y1 = v.pixelY((gy + 1) / (double) A, Z, 0);
+				g2.setColor(c);
+				g2.fillRect(x0, y0, x1 - x0, y1 - y0);
 			}
 		}
 	}
@@ -190,7 +236,7 @@ public final class DronePainter {
 		case 'M':
 			return STEEL_MID;
 		case 'D':
-			return IRON_DARK;
+			return STEEL_LOW;
 		case 'A':
 			return EYE;
 		default:
@@ -199,9 +245,13 @@ public final class DronePainter {
 	}
 
 	private static char[][] grid(String[] rows) {
-		char[][] g = new char[N][N];
-		for (int r = 0; r < N; r++) {
-			for (int c = 0; c < N; c++) {
+		return grid(rows, N, N);
+	}
+
+	private static char[][] grid(String[] rows, int h, int w) {
+		char[][] g = new char[h][w];
+		for (int r = 0; r < h; r++) {
+			for (int c = 0; c < w; c++) {
 				g[r][c] = rows[r].charAt(c);
 			}
 		}
@@ -220,15 +270,18 @@ public final class DronePainter {
 		return o;
 	}
 
-	/** One sun, straight overhead-north: in every column, the north cell of a
-	 *  contiguous run of body is lit and its south cell is sunk. Because the
-	 *  plates stand clear of the pod, each gets its own pair.
+	/**
+	 * One sun, straight overhead-north: in every column, the north cell of a
+	 * contiguous run of body is lit and its south cell is sunk. Because the
+	 * plates stand clear of the hull, each gets its own pair.
 	 *
-	 *  <p>A run one art-pixel tall is the exception, and it stays mid. Such a
-	 *  cell is simultaneously the north edge and the south edge of its plate —
-	 *  a sliver that thin has no two faces to light differently — and lighting
-	 *  it anyway speckles the tips of the diagonal staircases with stray bright
-	 *  pixels, which reads as noise rather than as shape. */
+	 * <p>A run one art-pixel tall is the exception, and it stays mid. Such a
+	 * cell is simultaneously the north edge and the south edge of its plate — a
+	 * sliver that thin has no two faces to light differently — and lighting it
+	 * anyway speckles the tips of the diagonal staircases with stray bright
+	 * pixels, which reads as noise rather than as shape. A scenario found that
+	 * case; it was not foreseen.
+	 */
 	static char[][] shade(char[][] s) {
 		char[][] o = new char[N][N];
 		for (char[] row : o) {
@@ -243,9 +296,7 @@ public final class DronePainter {
 						r++;
 					}
 					for (int k = r0; k < r; k++) {
-						o[k][c] = r - r0 == 1 ? 'M'
-								: k == r0 ? 'H'
-								: k == r - 1 ? 'D' : 'M';
+						o[k][c] = r - r0 == 1 ? 'M' : k == r0 ? 'H' : k == r - 1 ? 'D' : 'M';
 					}
 				} else {
 					if (s[r][c] == 'A') {
