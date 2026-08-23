@@ -222,11 +222,15 @@ function loadCanvas(src: string): Promise<HTMLCanvasElement | null> {
 
 const droneSec = section("The steward's drone",
   'The one body in the world that is machinery rather than an organism, so it is an '
-  + 'authored pixel stamp instead of a procedural creature. Java\u2019s DronePainter stamps the '
-  + 'same two silhouettes through the same shading rule \u2014 a cardinal and a diagonal drawn '
-  + 'by hand, the other six headings exact 90\u00b0 lattice rotations of them. The light is '
-  + 'applied after the rotation, never carried through it, so every heading is lit from the '
-  + 'north rather than carrying its highlight around the compass.');
+  + 'authored pixel stamp instead of a procedural creature \u2014 and it is painted like plant '
+  + 'equipment: the facility\u2019s own safety yellow for the hull, the hazard checker its '
+  + 'ground markings use for the plates, chassis iron for the pylons and the hull\u2019s sunk '
+  + 'edge, and one red warning lamp. Every one of those colours was already in the world. '
+  + 'Java\u2019s DronePainter stamps the same two silhouettes through the same rule \u2014 a '
+  + 'cardinal and a diagonal drawn by hand, the other six headings exact 90\u00b0 lattice '
+  + 'rotations of them. Material and light compose: the stamp says what a cell is made of, '
+  + 'the run says which way it faces the sun, and the light goes on after the rotation so no '
+  + 'heading carries its highlight around the compass.');
 
 {
   const S = 96;

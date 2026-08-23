@@ -661,39 +661,38 @@ const SENTINEL_N = 13;
  *  across against ten along, so it stays wider than it is long. */
 const SENTINEL_CARDINAL = [
   '.............',
-  '....#####....',
-  '....#####....',
-  '......#......',
+  '....SSSSS....',
+  '....SSSSS....',
+  '......C......',
   '...#########.',
   '..##########.',
   '..#########A.',
   '..##########.',
   '...#########.',
-  '......#......',
-  '....#####....',
-  '....#####....',
+  '......C......',
+  '....SSSSS....',
+  '....SSSSS....',
   '.............',
 ];
 
 /** Facing south-east: the same hull-and-plates arrangement on the diagonal, as
  *  staircases of two-pixel runs. Authored rather than derived — no
- *  lattice-exact transform reaches a diagonal from a cardinal, and rasterising
- *  a 45-degree rotation is exactly the lumpy math "authored beats computed"
- *  forbids. */
+ *  lattice-exact transform reaches a diagonal from a cardinal. The diagonal
+ *  plates need no pylon; they already stand clear. */
 const SENTINEL_DIAGONAL = [
   '.............',
   '.............',
-  '..##.....##..',
-  '..###....###.',
-  '..####...###.',
-  '..#####...##.',
+  '..##.....SS..',
+  '..###....SSS.',
+  '..####...SSS.',
+  '..#####...SS.',
   '...#####.....',
   '....#####....',
   '.....#####...',
-  '..##..#####..',
-  '..###..####..',
-  '...###..###..',
-  '....##...#A..',
+  '..SS..#####..',
+  '..SSS..####..',
+  '...SSS..###..',
+  '....SS...#A..',
 ];
 
 /** The ground shadow: sanctioned translucency 2 of 4, the blocky translucent
@@ -714,8 +713,28 @@ const SENTINEL_OVAL = [
  *  shade at section 4's x0.65, not the near-black iron a first pass used —
  *  iron is a housing colour and against the deck it reads as a hole punched in
  *  the machine rather than an edge turned from the light. */
+const HAZARD_RGB = 0xd8b028;
+const scale = (rgb: number, f: number): string => {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return '#' + ((c(((rgb >> 16) & 0xff) * f) << 16) | (c(((rgb >> 8) & 0xff) * f) << 8)
+    | c((rgb & 0xff) * f)).toString(16).padStart(6, '0');
+};
+/** The facility's own safety yellow, given the two shades it needs to be a body
+ *  colour rather than a stripe. Nothing invented: 0xd8b028 is the hazard yellow
+ *  already on the dock's keep-clear border and every other "machinery works
+ *  here" marking underground, and the shadow and highlight come off it by
+ *  section 4's own x0.65 and x1.18. Section 2 asks for exactly this promotion —
+ *  an accent common enough to read as a texture IS a ramp colour now. */
 const SENTINEL_SHADES: Record<string, string> = {
-  H: '#707885', M: '#515862', D: '#353940', A: '#d8b028',
+  H: scale(HAZARD_RGB, 1.18),   // hull, lit north edge
+  M: '#d8b028',                 // hull, mid
+  I: '#14161f',                 // hull, sunk south edge — iron, see below
+  h: scale(HAZARD_RGB, 1.18),   // plate, lit
+  m: '#d8b028',
+  d: scale(HAZARD_RGB, 0.65),   // plate, sunk — yellow: a plate is thin
+  K: '#17171a',                 // the hazard checker's black, a marking
+  C: '#14161f',                 // pylon: chassis iron
+  A: '#E0455F',                 // the warning lamp, the signal family's red
 };
 
 /** Sanctioned translucency 1 of 4, and how far south it falls. A standing body
@@ -746,14 +765,16 @@ function sentinelRot90(s: string[]): string[] {
 function sentinelShade(s: string[]): string[] {
   const o: string[][] = [];
   for (let r = 0; r < SENTINEL_N; r++) o.push(new Array(SENTINEL_N).fill('.'));
+  const body = (ch: string) => ch === '#' || ch === 'S' || ch === 'C';
   for (let c = 0; c < SENTINEL_N; c++) {
     let r = 0;
     while (r < SENTINEL_N) {
-      if (s[r][c] === '#') {
+      if (body(s[r][c])) {
         const r0 = r;
-        while (r < SENTINEL_N && s[r][c] === '#') r++;
+        while (r < SENTINEL_N && body(s[r][c])) r++;
         for (let k = r0; k < r; k++) {
-          o[k][c] = r - r0 === 1 ? 'M' : k === r0 ? 'H' : k === r - 1 ? 'D' : 'M';
+          const pos = r - r0 === 1 ? 1 : k === r0 ? 2 : k === r - 1 ? 0 : 1;
+          o[k][c] = sentinelMark(s[k][c], pos, k, c);
         }
       } else {
         if (s[r][c] === 'A') o[r][c] = 'A';
@@ -762,6 +783,20 @@ function sentinelShade(s: string[]): string[] {
     }
   }
   return o.map((row) => row.join(''));
+}
+
+/** Material and lighting compose into one mark. The plates carry the facility's
+ *  hazard checker, resolved here so the stamps stay pure data, and indexed
+ *  body-locally rather than world-absolutely — world indexing is for ground,
+ *  and a world-anchored pattern would crawl across the hull as the machine
+ *  flew. A one-on-one-off checker is its own reflection under a quarter turn,
+ *  so it survives the derived headings unchanged. */
+function sentinelMark(material: string, pos: number, row: number, col: number): string {
+  if (material === 'C') return 'C';
+  if (material === 'S') {
+    return ((row + col) & 1) === 0 ? (pos === 2 ? 'h' : pos === 0 ? 'd' : 'm') : 'K';
+  }
+  return pos === 2 ? 'H' : pos === 0 ? 'I' : 'M';
 }
 
 /** The eight shaded stamps: two authored silhouettes, six exact 90-degree
