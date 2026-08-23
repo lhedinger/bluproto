@@ -40,9 +40,16 @@ public final class ProcTiles {
 	private static final Color WALL_BASE = GroundTextures.GRASS_GREEN;
 	// Pit: near-black void framed by an earth lip (the hole-floor layer below).
 	private static final Color HOLE_DARK = new Color(10, 11, 16);
-	// Ramp: an earthy slope, light at the high end, with uphill chevrons.
-	private static final Color RAMP_LO = new Color(86, 80, 64);
-	private static final Color RAMP_HI = new Color(160, 152, 126);
+	// Ramp: a cut stone slope, light at the high end, with uphill chevrons.
+	// Taken from the stone-floor ramp (GroundTextures CLS_STONE) rather than
+	// picked to taste: a ramp is rock the ground was cut into, so it is drawn
+	// from the same rock as the stone floor it lands on and the walls it climbs
+	// past. Its four bands land on that ramp's own shades — the midpoint of
+	// these two IS the stone base — so a slope reads as the same material at
+	// every step of its descent. It was earth-toned before, which made the one
+	// built thing in the terrain look like a mound of soil.
+	private static final Color RAMP_LO = new Color(46, 50, 60);
+	private static final Color RAMP_HI = new Color(102, 108, 122);
 
 	private ProcTiles() {
 	}
@@ -189,13 +196,18 @@ public final class ProcTiles {
 				Math.min(255, RAMP_HI.getRed() + 45),
 				Math.min(255, RAMP_HI.getGreen() + 45),
 				Math.min(255, RAMP_HI.getBlue() + 45));
-		Color dusk = new Color(RAMP_LO.getRed() / 2, RAMP_LO.getGreen() / 2,
-				RAMP_LO.getBlue() / 2);
 		// Shade ladder indexed from the HIGH edge (0) to the LOW edge (3): the
 		// up ramp tops out in sunlight, the down ramp bottoms out in the void.
+		//
+		// The descent starts at the LIT stone and spends the whole ramp getting
+		// to the dark. It used to start at the midpoint and pass through a
+		// half-black shade on the way, which worked while the slope was earth —
+		// a tan midtone still read as ground against the pit. In stone it did
+		// not: the ramp began nearly as dark as the hole it poured into, and a
+		// route down stopped looking like one.
 		Color[] shades = up
 				? new Color[] { sun, RAMP_HI, mid, RAMP_LO }
-				: new Color[] { mid, RAMP_LO, dusk, HOLE_DARK };
+				: new Color[] { RAMP_HI, mid, RAMP_LO, HOLE_DARK };
 		// Which side edges the slope's cut channel shows on: an edge shared
 		// with another ramp tile (a two-wide run) stays flush — no dark seam
 		// down the middle of the run.
