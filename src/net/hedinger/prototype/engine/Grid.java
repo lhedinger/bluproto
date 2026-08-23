@@ -661,6 +661,14 @@ public class Grid {
 										: GroundTextures.steelTop(gx, gy, lit);
 							}
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
+						} else if (cl == GroundTextures.CLS_SERVER) {
+							// A rack is a solid and takes the raised read like any
+							// mass, but it is a cabinet rather than a poured wall:
+							// one cross-section face, no separate south face band,
+							// because the thing is the same all the way down.
+							boolean litRack = aj < A * 0.28;
+							col = GroundTextures.serverRack(ai, aj, gx, gy, litRack);
+							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							// A dense formation is a thicket of standing prisms on
 							// the cave floor -- each prism self-shaded with its own

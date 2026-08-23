@@ -603,7 +603,12 @@ public class Tile {
 	 *  thicket cover, reed beds, and enclosed crawl ducts -- but NOT
 	 *  crystal, which is solid to movement yet clear to the eye. */
 	public boolean blocksSight() {
-		if (type == TileType.TYPE_CRYSTAL) {
+		// Crystal and server racks are the two solids you can see through: a
+		// prism thicket is glass, and a rack is a frame with air in it. Both
+		// make cover that stops a body without hiding one, which is a
+		// different tactical shape from a wall -- prey watching a hunter it
+		// cannot be reached through is a standoff a wall cannot produce.
+		if (type == TileType.TYPE_CRYSTAL || type == TileType.TYPE_SERVER) {
 			return false;
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
@@ -714,7 +719,8 @@ public class Tile {
 		TYPE_DOCK(30, true, "charge dock"), // the steward drone's berth: a powered pad it parks on
 		TYPE_ROCKY(31, true, "rocky grassland"), // stony ground that keeps a thin sward
 		TYPE_SLUDGE(32, true, "waste sludge"), // the facility's spill: walkable, slow, and it burns
-		TYPE_RAIL(33, true, "tram rail"); // the transit run: the one ground that is faster than plain
+		TYPE_RAIL(33, true, "tram rail"), // the transit run: the one ground that is faster than plain
+		TYPE_SERVER(34, false, "server bank"); // racks: solid to a body, clear to the eye
 
 		private int value;
 		private boolean open;
