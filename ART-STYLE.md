@@ -99,6 +99,12 @@ One sun, straight overhead-north. The grammar:
   (×0.78). Walls add a face band where mass fronts open ground to the south,
   and a cornice/base-shadow read (`wallDepth`). Doors, crates and slabs reuse
   exactly this.
+- **A face needs a drop to front.** The band is drawn where a mass stands
+  *above* what is beside it, so a tile that arrives at the mass's own height
+  gets none: an up ramp's head is where the climb lands, level with the rock,
+  and a cliff drawn across it walls off the very tile the slope exists to
+  reach. Its flanks are a different question and keep their faces — there the
+  wall really does stand over ground below it.
 - **Sunken things** (pits, shafts): a lit, *crumbling* north lip — a broken
   run of dashes with per-column depth, not a solid band — and thin dim edges
   with dithered dropouts elsewhere.
@@ -242,6 +248,25 @@ The precedents, so nobody pays twice:
   the next move is a comparison sheet, not another guess. Put every heading, a
   zoom ladder, and two different grounds on it — most failures are invisible
   at one size on one background.
+- **The seam that took three tries** — a ramp is a cut in the rock, and made
+  it look like one three separate times before it was. A wall is drawn by
+  **two systems that must agree**: its MASS comes from the tile sprite chosen
+  by the tilecode (`isConnectedStatic` → `ProcTiles.buildWall`), and its
+  LIGHTING — face band, cornice, base shadow — is decided independently in the
+  ground pixel pass (`isWallish` → `wallDepth`). Teaching only the first that
+  a ramp is rock left the second still drawing a cliff across the ramp's head,
+  and the screen did not move. The rules that fell out:
+  *(a)* when two tiles are one mass, **both** must say so — a boundary drawn
+  from either side is a boundary, and one drawn from both is a doubled seam;
+  *(b)* a query like `isWallish(nx, ny)` that answers for a neighbour **alone**
+  cannot express "this counts as rock *to you*" — anything gating on a
+  neighbour's material has to know who is asking; and *(c)* the tests written
+  along the way passed every time while the picture stayed wrong, because each
+  pinned the path already thought of. **A render fix is not verified until the
+  render is looked at** — bake the actual scene and compare it side by side.
+  (An image diff will not do it either: the film grain moves a third of every
+  tile in the map between any two renders, so the diff reports everything
+  changed. Compare the picture, or assert on the data the art is chosen by.)
 
 ## 8. Conformance checklist
 
@@ -258,6 +283,11 @@ Before a new visual merges, ask:
 6. Is it a **pure function** of position/seed/state — no RNG, no wall-clock?
 7. Does the web client's version (if any) agree with the Java bake on
    `/sprites`?
+8. If it touches how tiles meet, does **every** system that draws that
+   boundary agree — the tile sprite's autotiling *and* the ground pass's
+   lighting (§7, "the seam that took three tries")?
+9. Has the **actual scene been baked and looked at**, before and after? A
+   green suite is not evidence a render changed.
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.
