@@ -453,11 +453,35 @@ public class Tile {
 			}
 		} else {
 			if (t != type) {
-				return false;
+				return rockAnUpRampClimbsInto(temp, x, y);
 			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether this tile is the rock a {@code RAMPUP} at {@code (x, y)} climbs
+	 * into — the mass its top disappears under.
+	 *
+	 * <p>Autotiling otherwise treats a wall and a ramp as different things
+	 * standing next to each other, so the wall drew its outer edge across the
+	 * join: a rounded corner and a silhouette rim, as if the ramp had been
+	 * parked against a cliff. But a ramp is a CUT in that rock, not a thing
+	 * leaning on it, and the way to say so is to let the wall carry its face
+	 * straight over the join — the wall treats the ramp as more of itself and
+	 * renders no edge there at all.
+	 *
+	 * <p>Only the tile the ramp actually climbs toward counts. A wall merely
+	 * standing beside a ramp is a wall beside a ramp, and should draw its edge
+	 * like anything else; it is the head of the cut that belongs to the mass.
+	 */
+	private boolean rockAnUpRampClimbsInto(Tile neighbour, int x, int y) {
+		if (!isSolid() || neighbour.getType() != TileType.TYPE_RAMPUP) {
+			return false;
+		}
+		int uphill = neighbour.getRampUphill();
+		return x + dirDx(uphill) == col && y + dirDy(uphill) == row;
 	}
 
 	public boolean isConnected(World w, double x, double y, double z, boolean diagonal, boolean floorsOnly) {
