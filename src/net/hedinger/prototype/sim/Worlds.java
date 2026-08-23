@@ -1819,7 +1819,25 @@ public final class Worlds {
 			w.spawnEntity(new StewardDrone(dock[0] + 0.5, dock[1] + 0.5, CAVE_Z, steward));
 		}
 
-		w.think(); // admit every spawn: tick 1 is a fully populated world
+		// The building's other machine. It marshals loose crates back onto the
+		// stack in the storage wing -- which is where the stack already is, so
+		// the drop point locates itself the way the dock does: by looking at
+		// what is on the map rather than by threading a coordinate out of
+		// whichever base plan ran. A world with nothing stacked in it has
+		// nothing to marshal and simply gets no loader.
+		w.think(); // admit every spawn: the crates below must be findable
+
+		// Sited after the first tick on purpose. A spawn is pending until the
+		// world admits it, so a stack looked for before that tick is a stack of
+		// nothing -- which is precisely what happened, and it reads as the
+		// loader simply not existing rather than as an ordering bug.
+		double[] stack = findStack(w);
+		if (stack != null) {
+			w.spawnEntity(new FacilityLoader(stack[0], stack[1], CAVE_Z,
+					stack[0], stack[1], CAVE_Z));
+		}
+
+		w.think(); // and admit the loader
 		return w;
 	}
 
@@ -1844,6 +1862,32 @@ public final class Worlds {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Where the crates are stacked: the mean position of the crates already in
+	 * the base, or null if there are none.
+	 *
+	 * <p>The loader's berth and its drop point are the same place, and that is
+	 * the whole design rather than a shortcut. A machine that fetches strays
+	 * back to the pile it is standing next to needs no depot, no schedule and
+	 * no second coordinate; the pile is the instruction. Averaging rather than
+	 * taking the first crate matters only for where it stands, and standing in
+	 * the middle of the stack is what makes "bring it back here" legible.
+	 */
+	static double[] findStack(World w) {
+		double sx = 0, sy = 0;
+		int n = 0;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.entities.Item it && !it.isRemoved()
+					&& it.getKind() == net.hedinger.prototype.entities.Item.Kind.CRATE
+					&& it.getZ() == CAVE_Z) {
+				sx += it.getX();
+				sy += it.getY();
+				n++;
+			}
+		}
+		return n == 0 ? null : new double[] { sx / n, sy / n };
 	}
 
 	/** Scale a base count by the map's area ratio, never below 1. */

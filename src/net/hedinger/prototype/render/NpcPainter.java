@@ -110,7 +110,12 @@ final class NpcPainter {
 		float relativeSize = Utils.scaleZ2((int) n.getZ(), v.getCamZ(), size);
 		int relativeSize2 = round(relativeSize * 2);
 
-		if ("drone".equals(n.ecoRole())) {
+		if ("loader".equals(n.ecoRole())) {
+			// Plant, like the drone: an authored stamp rather than a
+			// procedural body, and reached the same way — by role, not by
+			// class, so the render package keeps knowing nothing about sim.
+			LoaderPainter.draw(n, g, v);
+		} else if ("drone".equals(n.ecoRole())) {
 			// Machinery, not an organism: an authored stamp rather than a
 			// procedural body. It has no genome, and without this branch it
 			// would fall through to the legacy hostility sprite below --

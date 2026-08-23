@@ -15,6 +15,7 @@ import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
 import net.hedinger.prototype.entities.Species;
 import net.hedinger.prototype.render.DronePainter;
+import net.hedinger.prototype.render.LoaderPainter;
 
 /**
  * Runner for simulation scenario tests: deterministic mini-worlds with
@@ -7445,13 +7446,17 @@ public class SimTests {
 			}
 
 			String[][] pairs = {
-					{ "SENTINEL_CARDINAL", "CARDINAL" },
-					{ "SENTINEL_DIAGONAL", "DIAGONAL" },
+					{ "SENTINEL_CARDINAL", "drone cardinal" },
+					{ "SENTINEL_DIAGONAL", "drone diagonal" },
+					{ "LOADER_CARDINAL", "loader cardinal" },
+					{ "LOADER_DIAGONAL", "loader diagonal" },
 			};
 			for (String[] pair : pairs) {
 				java.util.List<String> web = stampIn(src, pair[0]);
-				String[] java = pair[1].equals("CARDINAL") ? DronePainter.CARDINAL
-						: DronePainter.DIAGONAL;
+				String[] java = pair[1].equals("drone cardinal") ? DronePainter.CARDINAL
+						: pair[1].equals("drone diagonal") ? DronePainter.DIAGONAL
+						: pair[1].equals("loader cardinal") ? LoaderPainter.CARDINAL
+						: LoaderPainter.DIAGONAL;
 				assertEquals(pair[1] + ": both renderers draw the same number of rows",
 						java.length, web.size());
 				for (int r = 0; r < java.length; r++) {
@@ -7760,6 +7765,103 @@ public class SimTests {
 		}
 	}
 
+	static class TheLoadersArtHoldsUpToTheChecklist extends Scenario {
+		private static boolean shaded(char c) {
+			return c == 'H' || c == 'M' || c == 'I' || c == 'h' || c == 'm' || c == 'd';
+		}
+
+		private static boolean bodyish(char c) {
+			return shaded(c) || c == 'K' || c == 'C';
+		}
+
+		@Override
+		public void run() {
+			// The same checklist the drone is held to, on the second machine
+			// that is drawn this way. Written as one scenario rather than five
+			// because the rules are the drone's and were argued there; what is
+			// worth knowing here is only whether this body obeys them.
+			int lit = 0;
+			for (int i = 0; i < LoaderPainter.dirs(); i++) {
+				char[][] f = LoaderPainter.facing(i);
+				assertEquals("the stamp is square, " + i, LoaderPainter.N, f.length);
+				int body = 0, lamps = 0;
+				for (char[] row : f) {
+					for (char c : row) {
+						assertTrue("only lattice marks, never a blend: " + c,
+								c == '.' || bodyish(c) || c == 'A');
+						if (bodyish(c)) {
+							body++;
+						}
+						if (c == 'A') {
+							lamps++;
+						}
+					}
+				}
+				assertGreater("heading " + i + " has a body", body, 40);
+				assertEquals("and exactly one lamp", 1, lamps);
+
+				// One sun, fixed overhead-north, applied after the rotation.
+				for (int c = 0; c < LoaderPainter.N; c++) {
+					int r = 0;
+					while (r < LoaderPainter.N) {
+						if (bodyish(f[r][c])) {
+							int r0 = r;
+							while (r < LoaderPainter.N && bodyish(f[r][c])) {
+								r++;
+							}
+							char north = f[r0][c], south = f[r - 1][c];
+							if (r - r0 > 1 && shaded(north)) {
+								assertTrue("north edge lit (heading " + i + ", col " + c
+										+ "): " + north, north == 'H' || north == 'h');
+								lit++;
+							}
+							if (r - r0 > 1 && shaded(south)) {
+								assertTrue("south edge sunk (heading " + i + ", col " + c
+										+ "): " + south, south == 'I' || south == 'd');
+							}
+						} else {
+							r++;
+						}
+					}
+				}
+			}
+			assertGreater("and the lighting check looked at something", lit, 40);
+
+			// Turn invariance, measured in the body's own axes -- the rule the
+			// drone's stretching diagonal produced. Extents only: cell count is
+			// not a cross-orientation measure of shape, and this body proved it,
+			// coming out at 0.72 of the cardinal where the drone came out above
+			// 1.0.
+			double[] card = hullExtent(LoaderPainter.CARDINAL, false);
+			double[] diag = hullExtent(LoaderPainter.DIAGONAL, true);
+			assertLess("the diagonal is no longer than the cardinal", diag[0], card[0] + 1.5);
+			assertGreater("nor shorter", diag[0], card[0] - 1.5);
+			assertLess("and no wider across", diag[1], card[1] + 1.5);
+			assertGreater("nor narrower", diag[1], card[1] - 1.5);
+		}
+
+		private static double[] hullExtent(String[] stamp, boolean diagonal) {
+			double c = (stamp.length - 1) / 2.0;
+			double loA = 99, hiA = -99, loX = 99, hiX = -99;
+			for (int r = 0; r < stamp.length; r++) {
+				for (int col = 0; col < stamp[r].length(); col++) {
+					char ch = stamp[r].charAt(col);
+					if (ch != '#' && ch != 'S' && ch != 'A') {
+						continue; // hull and cab: the body, not the forks
+					}
+					double dr = r - c, dc = col - c;
+					double along = diagonal ? (dr + dc) / Math.sqrt(2) : dc;
+					double across = diagonal ? (dc - dr) / Math.sqrt(2) : dr;
+					loA = Math.min(loA, along);
+					hiA = Math.max(hiA, along);
+					loX = Math.min(loX, across);
+					hiX = Math.max(hiX, across);
+				}
+			}
+			return new double[] { hiA - loA + 1, hiX - loX + 1 };
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
@@ -7779,6 +7881,7 @@ public class SimTests {
 				new TheDroneWearsTheFacilitysOwnYellow(),
 				new TheDroneIsWiderAcrossThanItIsLong(),
 				new BothRenderersDrawTheSameDrone(),
+				new TheLoadersArtHoldsUpToTheChecklist(),
 				new TheDroneKeepsItsSizeWhenItTurns(),
 				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
