@@ -4036,9 +4036,12 @@ public class SimTests {
 	 * third of every tile in the map whether or not anything real changed;
 	 * the connectivity string is the thing the wall art is actually chosen by.
 	 *
-	 * <p>The second half is the half that matters: a wall merely STANDING beside
-	 * a ramp is still a wall beside a ramp and must keep its edge. Only the tile
-	 * the ramp climbs toward belongs to the mass.
+	 * <p>It has to hold on the FLANKS as well as at the head, and it has to run
+	 * both ways. Rock and ramp each used to draw a boundary at the join — the
+	 * wall a rim and a rounded corner, the ramp one of its own triangular side
+	 * walls against rock already standing there — so the seam was doubled and
+	 * the slope read as a bright block dropped into a socket. Both sides have
+	 * to agree they are one mass for the join to disappear.
 	 */
 	static class RockOwnsTheRampCutIntoIt extends Scenario {
 		/** The tilecode digit for the neighbour at {@code (dx, dy)}: the
@@ -4052,12 +4055,12 @@ public class SimTests {
 		public void run() {
 			seed(44);
 			World w = room(12, 12, 2);
-			// A ramp at (5,5) climbing north into the wall at (5,4), and an
-			// unrelated wall at (7,5) that the ramp merely passes.
+			// A ramp at (5,5) climbing north into the wall at (5,4), flanked by
+			// rock at (4,5) — the geometry a link station actually builds.
 			w.setTile(5, 5, 0, Tile.TileType.TYPE_RAMPUP);
 			w.getTile(5, 5, 0).setRampUphill(Tile.DIR_N);
 			w.setTile(5, 4, 0, Tile.TileType.TYPE_WALL);
-			w.setTile(7, 5, 0, Tile.TileType.TYPE_WALL);
+			w.setTile(4, 5, 0, Tile.TileType.TYPE_WALL);
 			w.alignTiles();
 
 			// From the head-wall at (5,4) the ramp lies south: digit 7.
@@ -4065,11 +4068,17 @@ public class SimTests {
 			assertTrue("the rock at the head of the cut counts the ramp as its own"
 					+ " (code " + head + ")", head.indexOf(digit(0, 1)) >= 0);
 
-			// From the bystander wall at (7,5) the ramp lies west: digit 4, and
-			// it must NOT be there — that wall is not what the ramp climbs into.
-			String bystander = w.getTile(7, 5, 0).getTileCode();
-			assertTrue("a wall the ramp merely passes keeps its own edge"
-					+ " (code " + bystander + ")", bystander.indexOf(digit(-1, 0)) < 0);
+			// From the flanking wall at (4,5) the ramp lies east: digit 5. This
+			// is the one that was drawing the visible seam down the ramp's side.
+			String flank = w.getTile(4, 5, 0).getTileCode();
+			assertTrue("the rock along the side of the cut does too"
+					+ " (code " + flank + ")", flank.indexOf(digit(1, 0)) >= 0);
+
+			// And the ramp agrees, so it raises no side wall against rock that
+			// is already standing there: from the ramp the flank lies west.
+			String ramp = w.getTile(5, 5, 0).getTileCode();
+			assertTrue("and the ramp counts the rock as its own side"
+					+ " (code " + ramp + ")", ramp.indexOf(digit(-1, 0)) >= 0);
 		}
 	}
 
