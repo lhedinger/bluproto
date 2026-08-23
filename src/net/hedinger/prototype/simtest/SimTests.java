@@ -7336,6 +7336,73 @@ public class SimTests {
 		}
 	}
 
+	static class TheDroneKeepsItsSizeWhenItTurns extends Scenario {
+		/** Hull extent along the body's own axis and across it, in art-pixels.
+		 *  For the cardinal those are just rows and columns; for the diagonal
+		 *  they are the forty-five degree axes, which is the only frame in
+		 *  which the two shapes are comparable at all. */
+		private static double[] extent(String[] stamp, boolean diagonal) {
+			double loA = 99, hiA = -99, loX = 99, hiX = -99;
+			for (int r = 0; r < stamp.length; r++) {
+				for (int c = 0; c < stamp[r].length(); c++) {
+					char ch = stamp[r].charAt(c);
+					if (ch != '#' && ch != 'A') {
+						continue; // hull only: the plates are not the body
+					}
+					double dr = r - 6, dc = c - 6;
+					double along = diagonal ? (dr + dc) / Math.sqrt(2) : dc;
+					double across = diagonal ? (dc - dr) / Math.sqrt(2) : dr;
+					loA = Math.min(loA, along);
+					hiA = Math.max(hiA, along);
+					loX = Math.min(loX, across);
+					hiX = Math.max(hiX, across);
+				}
+			}
+			return new double[] { hiA - loA + 1, hiX - loX + 1 };
+		}
+
+		@Override
+		public void run() {
+			// A machine that changes size when it turns is a machine the eye
+			// stops believing in, and nothing else here would catch it: both
+			// stamps are on the lattice, both are drawn from the ramp, both are
+			// lit from the north. They were simply not drawn to each other.
+			//
+			// The first diagonal ran 13 long by under 4 across against the
+			// cardinal's 10 by 5 -- turning forty-five degrees stretched the
+			// drone by a third and slimmed it by a quarter. That is what a
+			// staircase of fixed vertical thickness costs: T rows buys only
+			// T/root-2 across the body, and the error grows with the length.
+			double[] card = extent(DronePainter.CARDINAL, false);
+			double[] diag = extent(DronePainter.DIAGONAL, true);
+
+			assertLess("the diagonal is no longer than the cardinal",
+					diag[0], card[0] + 1.5);
+			assertGreater("nor is it shorter", diag[0], card[0] - 1.5);
+			assertLess("and no thinner across the body", diag[1], card[1] + 1.5);
+			assertGreater("nor fatter", diag[1], card[1] - 1.5);
+
+			// The same thing said as area, which catches a shape that matches on
+			// both extents while being hollow or bloated between them.
+			int cardCells = 0, diagCells = 0;
+			for (String row : DronePainter.CARDINAL) {
+				for (char ch : row.toCharArray()) {
+					if (ch == '#' || ch == 'A') {
+						cardCells++;
+					}
+				}
+			}
+			for (String row : DronePainter.DIAGONAL) {
+				for (char ch : row.toCharArray()) {
+					if (ch == '#' || ch == 'A') {
+						diagCells++;
+					}
+				}
+			}
+			assertLess("and carries about as much metal", Math.abs(cardCells - diagCells), 10.0);
+		}
+	}
+
 	static class TheDroneFacesWhereItIsGoing extends Scenario {
 		@Override
 		public void run() {
@@ -7378,6 +7445,7 @@ public class SimTests {
 				new EveryHeadingIsLitFromTheNorth(),
 				new TheDroneWearsTheFacilitysOwnYellow(),
 				new TheDroneIsWiderAcrossThanItIsLong(),
+				new TheDroneKeepsItsSizeWhenItTurns(),
 				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),

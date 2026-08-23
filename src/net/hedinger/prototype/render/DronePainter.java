@@ -83,24 +83,42 @@ public final class DronePainter {
 			".............",
 	};
 
-	/** Facing south-east: the same hull-and-plates arrangement drawn on the
-	 *  diagonal, as staircases of two-pixel runs. Authored rather than derived,
-	 *  because no lattice-exact transform reaches a diagonal from a cardinal.
-	 *  The diagonal plates need no pylon — they already stand clear. */
+	/**
+	 * Facing south-east. Authored rather than derived, because no lattice-exact
+	 * transform reaches a diagonal from a cardinal.
+	 *
+	 * <p>Which means the two are only as consistent as someone made them, and
+	 * the first version was not. Measured along its own axis, that hull ran
+	 * thirteen art-pixels long by under four across, against the cardinal's ten
+	 * by five: turning forty-five degrees made the machine thirty percent
+	 * longer and a quarter thinner, so it appeared to stretch and slim as it
+	 * came about. Drawing a diagonal as a staircase of fixed vertical thickness
+	 * is what does it — vertical thickness T buys only T/root-2 across the
+	 * body, and the error compounds with every step of length.
+	 *
+	 * <p>This one is laid out in the body's own axes instead: ten long and five
+	 * across, matching the cardinal, with the plates at the same perpendicular
+	 * offset. The tips are blunted because a rotated rectangle ends in single
+	 * pixels on a square lattice, and a one-pixel point is the lumpy-math tell
+	 * that section 5 warns about — pixel art ends flat.
+	 *
+	 * <p>The plates need no pylon here: at this offset they already sit one
+	 * clear cell off the hull, which is all the pylon was ever buying.
+	 */
 	public static final String[] DIAGONAL = {
 			".............",
+			"........SS...",
+			"...###.SSSS..",
+			"..#####.SSSS.",
+			".#######.SSS.",
+			"..#######....",
+			"...#######...",
+			"....#######..",
+			".SSS.#######.",
+			".SSSS.####A..",
+			"..SSSS.###...",
+			"...SS........",
 			".............",
-			"..##.....SS..",
-			"..###....SSS.",
-			"..####...SSS.",
-			"..#####...SS.",
-			"...#####.....",
-			"....#####....",
-			".....#####...",
-			"..SS..#####..",
-			"..SSS..####..",
-			"...SSS..###..",
-			"....SS...#A..",
 	};
 
 	/**
