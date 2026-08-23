@@ -6803,44 +6803,70 @@ public class SimTests {
 	}
 
 	/**
-	 * Track is the first ground that gives back more than plain. Every other
-	 * terrain in the world is a tax on movement — mud, reeds, rubble, ducts,
-	 * the spill — and a body on rails covers measurably more ground per tick
-	 * than the same body on bare deck beside it.
+	 * A tram run carries machinery and gives legs nothing.
 	 *
-	 * <p>Worth pinning because the engine has to take it safely: drag is
-	 * applied before the {@code MAX_STEP} clamp, so a speeded body still cannot
-	 * outrun collision resolution and tunnel through terrain.
+	 * <p>The track is a guideway, not a smoother road: the steward drone locks
+	 * onto it and runs, while a creature crossing the same sleepers is walking
+	 * over timber and ballast, which is no easier than deck. So the base's
+	 * spine is its fastest corridor for exactly one body in the world, and the
+	 * herd wandering through it is neither helped nor hindered.
+	 *
+	 * <p>Both halves are pinned. The gain is the point of the tile; the absence
+	 * of a gain for the herd is the rule that stops the ground handing out speed
+	 * no creature earned.
 	 */
-	static class RailsCarryABodyFasterThanDeck extends Scenario {
+	static class TramRunCarriesMachineryNotLegs extends Scenario {
 		@Override
 		public void run() {
 			seed(422);
-			World w = room(30, 8);
+			World w = room(30, 10);
 			for (int x = 1; x < 29; x++) {
-				for (int y = 1; y < 7; y++) {
+				for (int y = 1; y < 9; y++) {
 					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
 				}
-				w.setTile(x, 3, 0, Tile.TileType.TYPE_RAIL); // the run, one lane
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_RAIL); // a drone's lane
+				w.setTile(x, 6, 0, Tile.TileType.TYPE_RAIL); // a creature's lane
 			}
-			// Two identical bodies, same heading, one on the track and one on
-			// the deck a lane away.
-			TestNPC onRail = TestNPC.mover(2.5, 3.5, 0, 0);
-			TestNPC onDeck = TestNPC.mover(2.5, 5.5, 0, 0);
-			w.spawnEntity(onRail);
-			w.spawnEntity(onDeck);
-			w.think();
-			snapshot(w, "before (one on the run, one on the deck)");
-			tick(w, 300);
-			snapshot(w, "after (the rail body is further along)");
+			w.setTile(2, 3, 0, Tile.TileType.TYPE_DOCK);
+			w.setTile(2, 1, 0, Tile.TileType.TYPE_DOCK);
+			w.alignTiles();
 
-			double railRun = onRail.getX() - 2.5, deckRun = onDeck.getX() - 2.5;
-			assertGreater("the body on the track covered more ground", railRun, deckRun);
-			assertEquals("and the run is worth its stated 1.4", 14,
-					(long) Math.round(w.getTile(5, 3, 0).speedFactor() * 10));
-			// The engine's guarantee: faster ground still never tunnels.
-			assertLess("no step outran the collision clamp", railRun / 300.0,
-					net.hedinger.prototype.engine.Entity.MAX_STEP);
+			Genome still = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000);
+			// One quarry per lane, of a DIFFERENT cohort each, so neither drone
+			// can pick the other's target and the race stays deterministic.
+			w.spawnEntity(TestNPC.breeder(27.5, 3.5, 0, still).withReproCooldown(100000));
+			w.spawnEntity(TestNPC.predator(27.5, 1.5, 0, still).withReproCooldown(100000));
+
+			// Two drones berthed at the west end, each sent the length of the
+			// room — one down the run, one over bare deck.
+			net.hedinger.prototype.sim.StewardDrone onRun =
+					new net.hedinger.prototype.sim.StewardDrone(2.5, 3.5, 0, new Order(w, "herbivore", 0));
+			net.hedinger.prototype.sim.StewardDrone onDeck =
+					new net.hedinger.prototype.sim.StewardDrone(2.5, 1.5, 0, new Order(w, "predator", 0));
+			w.spawnEntity(onRun);
+			w.spawnEntity(onDeck);
+
+			// Two identical creatures, same heading, one on track and one on deck.
+			TestNPC creatureOnRun = TestNPC.mover(2.5, 6.5, 0, 0);
+			TestNPC creatureOnDeck = TestNPC.mover(2.5, 8.5, 0, 0);
+			w.spawnEntity(creatureOnRun);
+			w.spawnEntity(creatureOnDeck);
+
+			w.think();
+			snapshot(w, "before (drones west, quarry east; the run is lanes 3 and 6)");
+			tick(w, 80);
+			snapshot(w, "after (only the drone on the run gained)");
+
+			assertGreater("the drone on the run outran the drone on deck",
+					onRun.getX(), onDeck.getX());
+			// The creatures are unaffected: same start, same heading, and the
+			// same ground covered whether it was track or deck under them.
+			assertNear("track is plain ground to a creature",
+					creatureOnDeck.getX(), creatureOnRun.getX(), 0.05);
+			assertEquals("a machine gets the run's full 1.4", 14,
+					(long) Math.round(w.getTile(5, 3, 0).speedFactorFor(16, false) * 10));
+			assertEquals("a body gets nothing from it", 10,
+					(long) Math.round(w.getTile(5, 3, 0).speedFactorFor(8, true) * 10));
 		}
 	}
 
@@ -6897,7 +6923,7 @@ public class SimTests {
 				new SeededWorldBerthsOneDrone(),
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),
-				new RailsCarryABodyFasterThanDeck(),
+				new TramRunCarriesMachineryNotLegs(),
 				new ServerRacksStopABodyButNotAnEye(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
