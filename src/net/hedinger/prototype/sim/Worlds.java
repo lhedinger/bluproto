@@ -580,9 +580,9 @@ public final class Worlds {
 
 		// The tram run: track laid the length of the spine, from the blast
 		// mouth to the vault's step. It is how the facility was supplied, and
-		// it is the one ground in the world that is faster than plain -- so the
-		// base's main corridor is also its fastest, which is what a corridor
-		// ought to be.
+		// it is ordinary ground to walk on -- the tile earns its place by
+		// explaining the room rather than by changing anyone's speed, which
+		// makes it the one piece of terrain here that is frankly scenery.
 		for (int x = x0 + 1; x < x0 + 12; x++) {
 			setBare(w, x, y0 + 6, CAVE_Z, Tile.TileType.TYPE_RAIL);
 		}
