@@ -6,6 +6,7 @@ import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Brain;
+import net.hedinger.prototype.entities.Door;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Item;
 import net.hedinger.prototype.entities.LgpMind;
@@ -13,6 +14,7 @@ import net.hedinger.prototype.entities.Mind;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.entities.Sound;
 import net.hedinger.prototype.entities.Species;
+import net.hedinger.prototype.render.DronePainter;
 
 /**
  * Runner for simulation scenario tests: deterministic mini-worlds with
@@ -7152,6 +7154,163 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The drone's glyph against the design system (ART-STYLE.md section 8).
+	 *
+	 * <p>None of this is on the compiler's gate, which is exactly why it wants
+	 * scenarios: the first sentinel was smooth rotated polygons in three
+	 * invented colours and it compiled, passed CI and shipped. What follows is
+	 * the checklist turned into assertions, so the next drift is caught by the
+	 * suite rather than by someone reading the guide months later.
+	 */
+	static class TheDroneIsDrawnOnTheArtPixelLattice extends Scenario {
+		@Override
+		public void run() {
+			// Every heading resolves to a stamp of art-pixel cells, and every
+			// cell is one of the four sanctioned marks. Nothing continuous,
+			// nothing in between.
+			for (int i = 0; i < DronePainter.dirs(); i++) {
+				char[][] f = DronePainter.facing(i);
+				assertEquals("the stamp is square, " + i, DronePainter.N, f.length);
+				int body = 0, eyes = 0;
+				for (char[] row : f) {
+					assertEquals("and its rows are too", DronePainter.N, row.length);
+					for (char c : row) {
+						assertTrue("only lattice marks, never a blend: " + c,
+								c == '.' || c == 'H' || c == 'M' || c == 'D' || c == 'A');
+						if (c != '.' && c != 'A') {
+							body++;
+						}
+						if (c == 'A') {
+							eyes++;
+						}
+					}
+				}
+				assertGreater("the heading has a body", body, 20);
+				assertEquals("and exactly one eye — an accent is rare or it is "
+						+ "a ramp colour now", 1, eyes);
+			}
+		}
+	}
+
+	static class EveryHeadingIsLitFromTheNorth extends Scenario {
+		@Override
+		public void run() {
+			// One sun, straight overhead-north, and it does NOT turn with the
+			// drone. In every column of every heading, a contiguous run of body
+			// is lit at its north end and sunk at its south end — never the
+			// other way round, which is what a rotated pre-lit sprite would do
+			// for half the compass.
+			for (int i = 0; i < DronePainter.dirs(); i++) {
+				char[][] f = DronePainter.facing(i);
+				for (int c = 0; c < DronePainter.N; c++) {
+					int r = 0;
+					while (r < DronePainter.N) {
+						char ch = f[r][c];
+						if (ch == 'H' || ch == 'M' || ch == 'D') {
+							int r0 = r;
+							while (r < DronePainter.N && (f[r][c] == 'H' || f[r][c] == 'M'
+									|| f[r][c] == 'D')) {
+								r++;
+							}
+							if (r - r0 == 1) {
+								// A sliver one art-pixel tall is its own north
+								// AND south edge, so it stays mid rather than
+								// speckling the staircase tips with stray lights.
+								assertEquals("a one-pixel run stays mid (heading " + i
+										+ ", col " + c + ")", 'M', f[r0][c]);
+							} else {
+								assertEquals("north edge lit (heading " + i + ", col " + c + ")",
+										'H', f[r0][c]);
+								assertEquals("south edge sunk (heading " + i + ", col " + c + ")",
+										'D', f[r - 1][c]);
+							}
+						} else {
+							r++;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	static class TheDroneBorrowsTheSteelItIsBuiltFrom extends Scenario {
+		@Override
+		public void run() {
+			// Materials borrow existing ramp families so built things sit in the
+			// same world as grown things (section 2). The drone is machinery, so
+			// it is the door's steel — the same three shades, not a new grey.
+			assertTrue("the shadow shade is the world's iron",
+					Door.IRON_DARK_RGB == 0x14161f);
+			assertTrue("the body is the world's steel",
+					Door.STEEL_MID_RGB == 0x515862);
+			assertTrue("the lit edge is the world's steel highlight",
+					Door.STEEL_HI_RGB == 0x707885);
+			// And the drone reports that same mid steel as its colour, so the
+			// web client's stamp and the entity swatch cannot drift apart.
+			World w = room(8, 8);
+			net.hedinger.prototype.sim.StewardDrone d =
+					new net.hedinger.prototype.sim.StewardDrone(3.5, 3.5, 0,
+							new Order(w, null, 0));
+			w.spawnEntity(d);
+			assertEquals("the drone's own colour is that steel",
+					Door.STEEL_MID_RGB, d.getColor().getRGB() & 0xffffff);
+		}
+	}
+
+	static class TheDroneIsWiderAcrossThanItIsLong extends Scenario {
+		@Override
+		public void run() {
+			// The one shape rule worth pinning: a sentinel is a cross, an
+			// aircraft is a dart. Two earlier drafts failed here — swept fins
+			// read as a paper dart, parallel slivers as a stack of planks — and
+			// both were longer than they were wide.
+			char[][] e = DronePainter.facing(0); // facing east
+			int minR = DronePainter.N, maxR = -1, minC = DronePainter.N, maxC = -1;
+			for (int r = 0; r < DronePainter.N; r++) {
+				for (int c = 0; c < DronePainter.N; c++) {
+					if (e[r][c] != '.') {
+						minR = Math.min(minR, r);
+						maxR = Math.max(maxR, r);
+						minC = Math.min(minC, c);
+						maxC = Math.max(maxC, c);
+					}
+				}
+			}
+			int across = maxR - minR + 1, along = maxC - minC + 1;
+			assertGreater("the plates span further than the pod runs", across, along);
+		}
+	}
+
+	static class TheDroneFacesWhereItIsGoing extends Scenario {
+		@Override
+		public void run() {
+			// Eight distinct headings, and the bucket maths lands each compass
+			// point on its own stamp. A glyph that looked the same in every
+			// direction would say nothing about what the machine is about to do.
+			assertEquals("east", 0, DronePainter.bucket(0));
+			assertEquals("south", 2, DronePainter.bucket(Math.PI / 2));
+			assertEquals("west", 4, DronePainter.bucket(Math.PI));
+			assertEquals("north", 6, DronePainter.bucket(-Math.PI / 2));
+			assertEquals("and it wraps", 0, DronePainter.bucket(Math.PI * 2));
+			int distinct = 0;
+			for (int i = 0; i < DronePainter.dirs(); i++) {
+				boolean seen = false;
+				for (int j = 0; j < i; j++) {
+					if (java.util.Arrays.deepEquals(DronePainter.facing(i),
+							DronePainter.facing(j))) {
+						seen = true;
+					}
+				}
+				if (!seen) {
+					distinct++;
+				}
+			}
+			assertEquals("all eight headings are drawn differently",
+					DronePainter.dirs(), distinct);
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
@@ -7161,6 +7320,11 @@ public class SimTests {
 				new TheTramRunIsOrdinaryGround(),
 				new TrackAutotilesItsOwnGeometry(),
 				new ServerRacksStopABodyButNotAnEye(),
+				new TheDroneIsDrawnOnTheArtPixelLattice(),
+				new EveryHeadingIsLitFromTheNorth(),
+				new TheDroneBorrowsTheSteelItIsBuiltFrom(),
+				new TheDroneIsWiderAcrossThanItIsLong(),
+				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),
