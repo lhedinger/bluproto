@@ -6850,6 +6850,67 @@ public class SimTests {
 	 * off what it cannot reach and gets on with the rest of the cohort instead
 	 * of hovering over one animal for the rest of that animal's life.
 	 */
+	/**
+	 * Nothing rides the drone.
+	 *
+	 * <p>The machine is armour plate and rotors: no blood to drink, nothing a claw
+	 * can hold, and — since it flies and cannot be hurt — a free invulnerable taxi
+	 * for whatever climbed on. The rule existed on the sensing side, in the host
+	 * scan that feeds the seek intent, so a parasite would never go LOOKING for
+	 * one. It was missing on the acting side, which is the half that actually
+	 * latches: a mind raising A_ATTACH beside a drone got one regardless.
+	 *
+	 * <p>Driven by a scripted mind that simply holds "attach", so this pins the
+	 * BODY's rule rather than whatever a starter brain happens to have evolved
+	 * into — a random brain rarely raises the actuator at all, and a test that
+	 * waited for one would pass by never trying.
+	 */
+	static class NothingRidesTheDrone extends Scenario {
+		@Override
+		public void run() {
+			seed(5);
+			World w = room(16, 12);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(6.5, 6.0, 0, new Order(w, "herbivore", 999));
+			w.spawnEntity(drone);
+			assertTrue("the drone is not a body", !drone.isOrganic());
+
+			Mind latch = (sensors, act) -> act[AgentIO.A_ATTACH] = 1;
+			Genome pg = new Genome();
+			pg.clade = Genome.Clade.PARASITE;
+			pg.size = 5;
+			TestNPC para = TestNPC.minded(6.5, 6.4, 0, pg, latch);
+			w.spawnEntity(para);
+			tick(w, 1);
+			assertTrue("the drone really is the larger body",
+					drone.getSize() > para.getSize());
+
+			tick(w, 300);
+			assertTrue("a parasite never latches onto the machine",
+					para.getAttachTarget() == null);
+			assertEquals("and the drone carries nothing", 0,
+					Math.round(drone.getCarriedLoad() * 1000));
+
+			// The guard must refuse machines, not attachment: a parasite beside a
+			// real host still rides. Without this the fix could be "nothing ever
+			// attaches" and the scenario above would still pass.
+			Genome hg = new Genome();
+			hg.size = 16; // comfortably larger than the parasite
+			TestNPC host = TestNPC.breeder(2.5, 2.5, 0, hg);
+			w.spawnEntity(host);
+			Genome pg2 = new Genome();
+			pg2.clade = Genome.Clade.PARASITE;
+			pg2.size = 5;
+			TestNPC rider = TestNPC.minded(2.5, 2.9, 0, pg2, latch);
+			w.spawnEntity(rider);
+			tick(w, 1);
+			assertTrue("the host really is the larger body", host.getSize() > rider.getSize());
+			tick(w, 60);
+			assertTrue("but it does ride a living host",
+					rider.getAttachTarget() == host);
+		}
+	}
+
 	static class DuctedBodyIsSafeFromTheDrone extends Scenario {
 		@Override
 		public void run() {
@@ -7528,6 +7589,7 @@ public class SimTests {
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),
 				new DoorsOpenForTheDrone(),
+				new NothingRidesTheDrone(),
 				new DuctedBodyIsSafeFromTheDrone(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
