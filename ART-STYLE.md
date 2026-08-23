@@ -105,6 +105,14 @@ One sun, straight overhead-north. The grammar:
 - **Drop shadows**: one art-pixel south of the body, translucent black
   (~`alpha 110`), art-pixel-aligned blocks. Entities that stand (doors,
   shrubs, creatures) sit ON the ground because of this; nothing floats.
+  A body that genuinely flies still casts — "nothing floats" means nothing is
+  drawn without a shadow to sit against, not that nothing may leave the
+  ground. It casts *further south* (the drone at eight art-pixels, clear of
+  its own glyph), and the gap between body and shadow is the only cue that
+  says the thing is airborne. Use the blocky oval below rather than a copy of
+  the silhouette: a silhouette shadow fills the gaps that make a compact glyph
+  legible, and pushed far enough to clear the body it stops reading as shadow
+  and becomes a second dark object parked underneath.
 - **Sanctioned translucency** — exactly four: (1) drop/contact shadows as
   above; (2) the **blocky translucent oval** — an ellipse rasterised into
   art-pixel steps, each block *tinting* the ground (shrub shadows, hollows);
@@ -118,6 +126,15 @@ One sun, straight overhead-north. The grammar:
 
 ## 5. Entities
 
+- **Machines** are authored stamps rather than procedural bodies, and where
+  they have a heading they need one stamp per facing. Author a cardinal and a
+  diagonal and derive the other six by **90-degree lattice rotations**, which
+  are lossless on a square grid; a 45-degree rotation is not, and rasterising
+  one is the computed-ring mistake again. Rotate the **silhouette only** and
+  apply the light afterwards, in world space — the sun does not turn with the
+  body, and a rotated copy of a pre-lit sprite is lit from underneath for half
+  the compass. A run one art-pixel tall is its own north and south edge at
+  once, so it stays mid rather than lit.
 - **Creatures** are `ProcCreature` organisms: procedural bodies on their own
   small art-pixel grid (radius `ph.r` art-px), palette derived from genome
   markers, 8 facings × 8 gait frames, plus shared **action envelopes**
@@ -205,6 +222,26 @@ The precedents, so nobody pays twice:
   overlay re-composites the bake, never repaints it (§6) — and `/sprites` is
   the catalog of record, so a client visual without an entry drawn by its own
   live code path does not merge.
+
+- **The rotated sentinel** — the drone's first glyph was polygons rotated by
+  `ctx.rotate()` in three invented greys, with an anti-aliased `arc` for its
+  eye, no shading at all, sized from the body radius rather than the tile
+  grid, no Java twin, and no catalog entry. Six checklist failures, and it
+  passed CI and shipped, because not one of them is mechanically checkable.
+  Two lessons, and the second is the load-bearing one. Scenarios asserting
+  over the resolved stamp data — every cell a sanctioned mark, one accent, all
+  headings lit from the north — put the checklist on the gate cheaply, and the
+  first one written found a case nobody had considered. And the real cause was
+  never the code: the guide simply was not read before the art was drawn, and
+  a glyph iterated to "looks good" against screenshots will satisfy an eye
+  while breaking every rule on this page.
+- **Judging one draft at a time** — three sentinel silhouettes were drawn,
+  screenshotted and rejected in sequence before six candidates on a single
+  sheet settled the shape in one pass. Pixel art cannot be judged by reading
+  it, and it can barely be judged in isolation: when a shape is not working,
+  the next move is a comparison sheet, not another guess. Put every heading, a
+  zoom ladder, and two different grounds on it — most failures are invisible
+  at one size on one background.
 
 ## 8. Conformance checklist
 
