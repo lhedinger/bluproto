@@ -179,7 +179,36 @@ merged.
 
 The merge kicks `publish.yml`. Watch both of its jobs — `publish` (builds and
 pushes the image) and `verify-deploy` (waits for the live server to report the
-new commit). Then confirm it yourself:
+new commit).
+
+**Both of the Actions signals lag, in opposite directions, and neither is
+evidence a job is still running.** Measured on one real deploy:
+
+- `status` said `in_progress` for twenty minutes after `publish` had finished
+  (16:12:59, a 33-second build).
+- `get_job_logs` returned **404** for `verify-deploy` well after that job had
+  completed at 16:14:05.
+
+So a job that reads `in_progress` may be long done, and a 404 on its logs may
+mean "finished, not indexed yet" just as easily as "still going". Treat both as
+*unknown*. The one thing that is authoritative is **log content that actually
+comes back** — it is generated from the run and it is right. For
+`verify-deploy` it states the answer the whole step is after, verbatim:
+
+```
+✅ deploy verified: https://world.evarium.cc/api/health is serving commit a2dc4ec
+```
+
+The practical rule: poll the logs, act on them when they return, and say
+"unknown" for as long as they don't. What this earns you is not speed but
+honesty — reading `in_progress` as fact once produced a confident report that
+the build was hung and Actions was degraded, when the image had been in GHCR
+the whole time and the world went live ninety seconds after the merge.
+
+And when the question is specifically *did it deploy*, remember the CI plumbing
+is only a proxy. The ground truth is the server itself:
+
+Then confirm it yourself:
 
 ```bash
 curl -fsS https://world.evarium.cc/api/health
@@ -236,3 +265,7 @@ failure:
 - Don't merge red, and don't merge with a stale base — CI would have tested
   commits that aren't the ones landing.
 - Don't claim a deploy without having seen the commit in `/api/health`.
+- Don't report a job as hung, stuck, or still running from `status` or from a
+  404 on its logs. Both lag, in opposite directions, and neither distinguishes
+  "running" from "finished a while ago". Only returned log content is evidence;
+  short of that the honest answer is that you don't know yet.
