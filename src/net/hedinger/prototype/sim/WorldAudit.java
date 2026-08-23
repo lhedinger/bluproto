@@ -156,15 +156,17 @@ public final class WorldAudit {
 					visit(walk, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}
-			// Climb: walking east off a RAMPUP's top lands on the level above.
-			if (z + 1 < lvls && inBounds(x + 1, y, cols, rows)
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP) {
-				visit(walk, seen, q, x + 1, y, z + 1, cols, rows);
-			}
-			// Descend: walking west off a RAMPDOWN's foot lands on the level below.
-			if (z - 1 >= 0 && inBounds(x - 1, y, cols, rows)
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPDOWN) {
-				visit(walk, seen, q, x - 1, y, z - 1, cols, rows);
+			// Ramps: stepping off the slope's own side lands a level up (RAMPUP)
+			// or down (RAMPDOWN), whichever cardinal that ramp happens to run
+			// along — the same rule Tile.isConnected gives a walking body.
+			Tile.TileType rt = w.getTile(x, y, z).getType();
+			if (rt == Tile.TileType.TYPE_RAMPUP || rt == Tile.TileType.TYPE_RAMPDOWN) {
+				int exit = w.getTile(x, y, z).rampExit();
+				int nx = x + Tile.dirDx(exit), ny = y + Tile.dirDy(exit);
+				int nz = rt == Tile.TileType.TYPE_RAMPUP ? z + 1 : z - 1;
+				if (nz >= 0 && nz < lvls && inBounds(nx, ny, cols, rows)) {
+					visit(walk, seen, q, nx, ny, nz, cols, rows);
+				}
 			}
 		}
 		return size;

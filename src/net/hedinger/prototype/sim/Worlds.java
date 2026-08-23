@@ -1409,15 +1409,18 @@ public final class Worlds {
 					floodVisit(w, seen, q, n[0], n[1], z - 1, cols, rows);
 				}
 			}
-			// Climb: walking east off a RAMPUP's top lands on the level above.
-			if (z + 1 < 2 && x + 1 < cols
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPUP) {
-				floodVisit(w, seen, q, x + 1, y, z + 1, cols, rows);
-			}
-			// Descend: walking west off a RAMPDOWN's foot lands on the level below.
-			if (z - 1 >= 0 && x - 1 >= 0
-					&& w.getTile(x, y, z).getType() == Tile.TileType.TYPE_RAMPDOWN) {
-				floodVisit(w, seen, q, x - 1, y, z - 1, cols, rows);
+			// Ramps: stepping off the slope's own side lands a level up (RAMPUP)
+			// or down (RAMPDOWN). Which side that is comes from the tile, so
+			// this follows a ramp facing any cardinal — the same rule
+			// Tile.isConnected enforces for a body actually walking it.
+			Tile.TileType rt = w.getTile(x, y, z).getType();
+			if (rt == Tile.TileType.TYPE_RAMPUP || rt == Tile.TileType.TYPE_RAMPDOWN) {
+				int exit = w.getTile(x, y, z).rampExit();
+				int nx = x + Tile.dirDx(exit), ny = y + Tile.dirDy(exit);
+				int nz = rt == Tile.TileType.TYPE_RAMPUP ? z + 1 : z - 1;
+				if (nz >= 0 && nz < 2 && nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
+					floodVisit(w, seen, q, nx, ny, nz, cols, rows);
+				}
 			}
 		}
 		for (int z = 0; z < 2; z++) {
