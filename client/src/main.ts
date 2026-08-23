@@ -88,6 +88,9 @@ let currentLevel = 0;
  * round trip does not let the first response through on the second A.
  */
 let levelEpoch = 0;
+/** Whether a `meta` has ever been seen. The first one places the viewer; every
+ *  later one is a reconnect and must leave it where it is. */
+let seenMeta = false;
 let paused = false;
 // World population across every level: the stream itself only carries the
 // entities of the level in view (the server filters per viewer), so the HUD
@@ -351,15 +354,39 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       speedSel.value = String(m.speed);
       chunkTiles = m.chunkTiles;
       chunkCache.clear();
-      currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
+      // A `meta` arrives on the FIRST connection and again on every reconnect —
+      // and the server restarts on every deploy, so reconnects are routine.
+      //
+      // Only the first one places the viewer. A reconnect used to reset
+      // currentLevel to the surface, which moved someone watching the cave to
+      // another floor without being asked; worse, it never told the SERVER,
+      // which kept streaming the level the client had last requested. Terrain
+      // and vegetation followed the new level while the entities came from the
+      // old one, and the label agreed with neither for as long as it took the
+      // next poll to land. That is the "grass from the wrong level" this fixes:
+      // it needed a restart to show, which is why it followed deploys.
+      const firstMeta = !seenMeta;
+      seenMeta = true;
+      if (firstMeta) {
+        currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
+        cam.fit(m.cols, m.rows);
+      } else {
+        // Keep the viewer where it was, but never off the end of a world that
+        // may have come back a different shape.
+        currentLevel = Math.min(currentLevel, Math.max(0, m.levels - 1));
+      }
       levelEpoch++;
       vegGrid = null;
       startVegPolling();
       fetchCover();
+      // Tell the server which level to stream. The client says this on every
+      // connection now, not only when someone taps: after a reconnect the two
+      // ends have no other way to agree, and silence meant the server carried on
+      // with whatever the previous session had asked for.
+      net.send({ cmd: 'level', z: currentLevel });
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
       levelBtn.textContent = levelName(currentLevel);
-      cam.fit(m.cols, m.rows);
       reflect();
       break;
     }
