@@ -97,6 +97,11 @@ public class LayerRenderer {
 		case TYPE_CRYSTAL_SPARSE:
 		case TYPE_SWITCH:
 		case TYPE_DOCK:
+		case TYPE_TREADPLATE:
+		case TYPE_LIGHTGRATE:
+		case TYPE_COLLAPSE:
+		case TYPE_COOLANT:
+		case TYPE_EXCHANGER:
 		case TYPE_SLUDGE:
 		case TYPE_RAIL:
 		case TYPE_SERVER:

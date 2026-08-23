@@ -45,7 +45,9 @@ public final class GroundTextures {
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
 			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
-			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32, CLS_SERVER = 33;
+			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32, CLS_SERVER = 33,
+			CLS_TREADPLATE = 34, CLS_LIGHTGRATE = 35, CLS_COLLAPSE = 36,
+			CLS_COOLANT = 37, CLS_EXCHANGER = 38;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -87,6 +89,11 @@ public final class GroundTextures {
 			{ 0x2a4a16, 0x548f22, 0x86c832 }, // waste sludge (acid green, never pit-dark)
 			{ 0x35302a, 0x554c40, 0x7a6f5d }, // tram bed (creosoted sleepers, warm grey-brown)
 			{ 0x14171d, 0x252a34, 0x3c434f }, // server rack (darkest built thing in the world)
+			{ 0x2f343c, 0x4a515c, 0x6b7480 }, // loading deck (plate, worn brighter by traffic)
+			{ 0x3a3f34, 0x5c6450, 0x8d9670 }, // lit grating (metal warmed by the light below)
+			{ 0x35373c, 0x53565d, 0x767a83 }, // collapsed deck (concrete dust over steel)
+			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // coolant run (rimed steel, the plant's cold side)
+			{ 0x2b2420, 0x453833, 0x6b574c }, // heat exchanger (scorched fins, the hot side)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -178,6 +185,16 @@ public final class GroundTextures {
 			return CLS_RAIL;
 		case TYPE_SERVER:
 			return CLS_SERVER;
+		case TYPE_EXCHANGER:
+			return CLS_EXCHANGER;
+		case TYPE_COOLANT:
+			return CLS_COOLANT;
+		case TYPE_COLLAPSE:
+			return CLS_COLLAPSE;
+		case TYPE_LIGHTGRATE:
+			return CLS_LIGHTGRATE;
+		case TYPE_TREADPLATE:
+			return CLS_TREADPLATE;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -1414,6 +1431,153 @@ public final class GroundTextures {
 		// raised mass, and vented with a fine hash grille.
 		int idx = (litEdge && aj <= 1) ? 2 : 1;
 		return hash01(px >> 1, py, 80) < 0.18 ? RAMP[CLS_SERVER][0] : RAMP[CLS_SERVER][idx];
+	}
+
+	/**
+	 * Loading deck: the same steel plate as the rest of the facility, laid in
+	 * bigger panels and worn brighter by whatever was dragged across it —
+	 * chequerplate tread, scuffed smooth along the lines of travel.
+	 *
+	 * <p>Deliberately a near neighbour of {@link #plate} rather than a new
+	 * material. A loading bay is not made of something else; it is the same
+	 * deck that has had a harder life, and saying that with panel size and wear
+	 * rather than with a different colour is what keeps the facility reading as
+	 * one building.
+	 */
+	public static int treadPlate(int px, int py) {
+		int S = 12; // one broad panel per tile, against plate's 6
+		int mx = Math.floorMod(px, S), my = Math.floorMod(py, S);
+		if (mx == 0 || my == 0) {
+			return RAMP[CLS_TREADPLATE][0]; // panel seam
+		}
+		// The tread: a lozenge every 3 px, offset row to row so the pattern
+		// reads as chequerplate rather than as a grid.
+		int lx = Math.floorMod(px + (Math.floorDiv(py, 3) & 1) * 2, 3);
+		int ly = Math.floorMod(py, 3);
+		if (lx == 1 && ly == 1) {
+			return RAMP[CLS_TREADPLATE][2]; // a raised nub catching the light
+		}
+		if (lx == 1 && ly == 2) {
+			return RAMP[CLS_TREADPLATE][0]; // and its shadow
+		}
+		// Wear: broad smooth scuffs where the traffic ran, hashed coarsely so
+		// they read as paths rather than as noise.
+		double wear = Utils.noise2(px * 0.08, py * 0.16, 0.5);
+		return wear > 0.62 ? RAMP[CLS_TREADPLATE][2] : RAMP[CLS_TREADPLATE][1];
+	}
+
+	/**
+	 * Lit grating: a walkway grille with light coming up through it.
+	 *
+	 * <p>The counterpart to the catwalk, and the contrast is the point. A
+	 * catwalk's gaps show the void and are therefore dark; these show a lit
+	 * plenum underneath and are therefore bright. Same grille, opposite
+	 * reading, and a body can tell at a glance whether the hole under its feet
+	 * goes anywhere.
+	 *
+	 * <p>The light is the ramp's own highlight rather than a new colour, and it
+	 * only ever appears in the gaps — the bars stay metal. Painting the whole
+	 * tile pale would make it a glowing floor instead of a floor with light
+	 * beneath it.
+	 */
+	public static int litGrate(int ai, int aj, int px, int py) {
+		boolean bar = Math.floorMod(aj, 4) < 2; // grille bars, across the walk
+		boolean stringer = Math.floorMod(ai, 6) == 0; // the members they sit on
+		if (stringer) {
+			return RAMP[CLS_LIGHTGRATE][0];
+		}
+		if (bar) {
+			// A bar, lit along its northern edge like every raised thing.
+			return Math.floorMod(aj, 4) == 0 ? RAMP[CLS_LIGHTGRATE][2] : RAMP[CLS_LIGHTGRATE][1];
+		}
+		// The gap: light from below, dithered so it reads as glow through a
+		// grille rather than as a flat pale stripe.
+		return hash01(px, py, 81) < 0.72 ? LAMP_LIT : RAMP[CLS_LIGHTGRATE][2];
+	}
+
+	/**
+	 * Collapsed deck: plate under a fall of ceiling. Concrete rubble and dust
+	 * over steel, with the deck still showing through in patches.
+	 *
+	 * <p>Built as two materials fighting rather than as one new one, because
+	 * that is what a collapse is: the floor is still there, and something else
+	 * is now on top of it. The patches where plate wins are what stop it
+	 * reading as a natural rubble field that wandered indoors.
+	 */
+	public static int collapsedDeck(double wx, double wy, int px, int py) {
+		double fall = Utils.noise2(wx + 311, wy + 47, 0.7);
+		if (fall < 0.42) {
+			return plate(px, py); // deck still showing between the debris
+		}
+		// Concrete chunks: 2-px clusters, never lone pixels, with dust between.
+		double g = hash01(px >> 1, py >> 1, 82);
+		if (g > 0.86) {
+			return RAMP[CLS_COLLAPSE][2]; // a lit chunk face
+		}
+		if (g < 0.2) {
+			return RAMP[CLS_COLLAPSE][0]; // the shadow under one
+		}
+		return RAMP[CLS_COLLAPSE][1];
+	}
+
+	/**
+	 * Coolant run: heavy pipework carrying the facility's cold side, rimed with
+	 * frost and dripping condensate onto the deck around it.
+	 *
+	 * <p>Drawn on the same lattice as {@link #pipeRun} and coloured against it:
+	 * the working pipes are industrial green-grey, these are a pale blue-white.
+	 * The base now has two pipe systems that are visibly different fluids,
+	 * which is the whole reason this is its own tile rather than a recolour —
+	 * when temperature arrives, the cold has to already be somewhere the eye
+	 * has been told about.
+	 *
+	 * <p>The frost is the ramp's highlight, gathered on the pipe's northern
+	 * face where the light does not fall, and it thins as it runs away from the
+	 * lagging. No new accent: cold is a ramp, not a spark.
+	 */
+	public static int coolantRun(int along, int across, int px, int py) {
+		// Two lagged pipes side by side, the same 12-px pitch the pipe runs use.
+		boolean onPipe = (across >= 2 && across <= 4) || (across >= 7 && across <= 9);
+		if (!onPipe) {
+			// The deck between and beside them, with condensate pooling.
+			return hash01(px, py >> 1, 83) > 0.93
+					? RAMP[CLS_COOLANT][0] : plate(px, py);
+		}
+		int edge = (across == 2 || across == 7) ? 2 : (across == 4 || across == 9) ? 0 : 1;
+		// Frost: gathers unevenly along the pipe, thickest in patches.
+		double rime = Utils.noise2(along * 0.3 + 90, across * 0.2, 0.6);
+		if (edge == 1 && rime > 0.55 && hash01(px, py, 84) > 0.35) {
+			return RAMP[CLS_COOLANT][2]; // a bloom of frost on the lagging
+		}
+		return RAMP[CLS_COOLANT][edge];
+	}
+
+	/**
+	 * Heat exchanger: a finned grille sunk into the deck, where the plant puts
+	 * the heat it has taken out of everything else.
+	 *
+	 * <p>The counterpart to the coolant run, and it borrows the caves'
+	 * {@link #VENT_EMBER} rather than inventing a warm colour of its own. That
+	 * is deliberate: the world should have exactly one "this is hot", whether
+	 * the heat came out of the rock or out of a machine. A geothermal vent and
+	 * a heat exchanger are the same fact about a place, arrived at differently.
+	 *
+	 * <p>The ember only ever shows deep between the fins. Heat is glimpsed
+	 * through a grille, not radiated off its face, and keeping the accent down
+	 * in the gaps is what stops the tile reading as lava in a box.
+	 */
+	public static int heatExchanger(int ai, int aj, int px, int py) {
+		if (ai == 0 || ai == 11 || aj == 0 || aj == 11) {
+			return RAMP[CLS_EXCHANGER][0]; // the housing rim, sunk into the deck
+		}
+		boolean fin = Math.floorMod(aj, 3) != 2; // fins across the run, gaps between
+		if (fin) {
+			// A fin: lit on its north edge, sooty along the rest.
+			int idx = Math.floorMod(aj, 3) == 0 ? 2 : 1;
+			return hash01(px >> 1, py, 85) < 0.15 ? RAMP[CLS_EXCHANGER][0] : RAMP[CLS_EXCHANGER][idx];
+		}
+		// The gap between fins: the glow, and only here.
+		return hash01(px, py, 86) < 0.45 ? VENT_EMBER : RAMP[CLS_EXCHANGER][0];
 	}
 
 	private static int lighten2(int rgb, double f) {

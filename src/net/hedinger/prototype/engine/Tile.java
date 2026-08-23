@@ -618,6 +618,8 @@ public class Tile {
 			return 0.5; // crawling
 		case TYPE_SLUDGE:
 			return 0.5; // wading a viscous spill
+		case TYPE_COLLAPSE:
+			return 0.6; // picking over fallen ceiling, as with natural rubble
 		case TYPE_CRYSTAL_BED:
 			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
@@ -776,7 +778,12 @@ public class Tile {
 		TYPE_ROCKY(31, true, "rocky grassland"), // stony ground that keeps a thin sward
 		TYPE_SLUDGE(32, true, "waste sludge"), // the facility's spill: walkable, slow, and it burns
 		TYPE_RAIL(33, true, "tram rail"), // the transit run: ordinary ground, and a road for the eye
-		TYPE_SERVER(34, false, "server bank"); // racks: solid to a body, clear to the eye
+		TYPE_SERVER(34, false, "server bank"), // racks: solid to a body, clear to the eye
+		TYPE_TREADPLATE(35, true, "loading deck"), // heavy chequerplate: ground that carried weight
+		TYPE_LIGHTGRATE(36, true, "lit grating"), // walkway over a lit plenum, not over a void
+		TYPE_COLLAPSE(37, true, "collapsed deck"), // deck under fallen ceiling; slow to cross
+		TYPE_COOLANT(38, true, "coolant run"), // rimed pipework: the plant's cold side
+		TYPE_EXCHANGER(39, true, "heat exchanger"); // finned deck grille: where the heat goes
 
 		private int value;
 		private boolean open;
