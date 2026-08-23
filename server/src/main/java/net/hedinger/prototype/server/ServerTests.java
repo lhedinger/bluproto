@@ -30,6 +30,7 @@ public final class ServerTests {
 		populationCensusCountsEveryLivingRole();
 		fertilityCapsTheGrassSpriteStage();
 		vegetationFeedCarriesTheKind();
+		theBakeLeavesNoUnpaintedPixels();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -266,6 +267,105 @@ public final class ServerTests {
 		grazed.graze(t, 1.0);
 		check("a stripped tile falls to the trampled remnants",
 				VegFeed.stateOf(WorldHost.grassLevel(grazed, t)) == 1);
+	}
+
+	/**
+	 * A served chunk is one opaque level: every art-pixel is the bake's to draw.
+	 *
+	 * <p>Pit interiors used to be drawn by SKIPPING their see-through pixels and
+	 * letting the level below show through from underneath — which the desktop
+	 * renderer composites and the chunk bake does not, so those pixels shipped as
+	 * the clear colour. Pure black is in no ramp; finding any means something in
+	 * the ground pass declined to paint. The second half pins what replaced it:
+	 * a pit over a floor shows that floor's material, and a pit over nothing
+	 * stays void all the way down.
+	 *
+	 * <p>This bakes every level of the demo world and roughly doubles the time
+	 * {@code gradle check} takes. It earns it: a bake that declines to paint is
+	 * invisible to every other test in the suite — the one that shipped was
+	 * caught by eye, months late — and there is no cheaper way to ask.
+	 */
+	static void theBakeLeavesNoUnpaintedPixels() {
+		net.hedinger.prototype.engine.World terrain = Worlds.demoTerrain(42);
+		int deep = 0, bottom = -1;
+		for (int z = 0; z < terrain.getLevels(); z++) {
+			// One render per level: baking a whole level is the slow part here.
+			java.awt.image.BufferedImage img = LayerBaker.renderLevelImage(terrain, z);
+			check("level " + z + " bakes no unpainted art-pixels", countBlack(img) == 0);
+
+			int[] p = findPit(terrain, z);
+			if (p == null) {
+				continue;
+			}
+			if (z == 0) {
+				// The bottom level's pits have nothing under them to show.
+				bottom = z;
+				check("a pit over nothing shows no material at all",
+						!pitHolds(img, p, net.hedinger.prototype.engine.GroundTextures.CLS_STONE));
+			} else {
+				deep = z;
+				int belowCls = net.hedinger.prototype.engine.GroundTextures
+						.groundClass(terrain.getTile(p[0], p[1], z - 1));
+				check("a pit over a floor shows that floor's material",
+						pitHolds(img, p, belowCls));
+			}
+		}
+		check("the demo world has a pit over another level", deep > 0);
+		check("the demo world has a pit over nothing", bottom == 0);
+	}
+
+	/** The first pit on a level that is not on the map edge, as {x, y}. */
+	private static int[] findPit(net.hedinger.prototype.engine.World w, int z) {
+		if (z < 0) {
+			return null;
+		}
+		for (int x = 1; x < w.getColums() - 1; x++) {
+			for (int y = 1; y < w.getRows() - 1; y++) {
+				if (w.getTile(x, y, z).getType()
+						== net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE) {
+					return new int[] { x, y };
+				}
+			}
+		}
+		return null;
+	}
+
+	/** Whether any art-pixel inside the pit is one of {@code cls}'s three shades. */
+	private static boolean pitHolds(java.awt.image.BufferedImage img, int[] p, int cls) {
+		for (int aj = 3; aj < 9; aj++) { // inside the rim on every side
+			for (int ai = 3; ai < 9; ai++) {
+				int rgb = artPixel(img, p[0], p[1], ai, aj);
+				for (int s = 0; s < 3; s++) {
+					if (rgb == net.hedinger.prototype.engine.GroundTextures.rampColor(cls, s)) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Art-pixel (ai, aj) of tile (x, y), sampled where the encoder samples it. */
+	private static int artPixel(java.awt.image.BufferedImage img, int x, int y, int ai, int aj) {
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize, a = LayerBaker.CHUNK_PX;
+		return img.getRGB(x * ts + ai * ts / a, y * ts + aj * ts / a) & 0xffffff;
+	}
+
+	private static int countBlack(java.awt.image.BufferedImage img) {
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize, a = LayerBaker.CHUNK_PX;
+		int n = 0;
+		for (int y = 0; y + ts <= img.getHeight(); y += ts) {
+			for (int x = 0; x + ts <= img.getWidth(); x += ts) {
+				for (int aj = 0; aj < a; aj++) {
+					for (int ai = 0; ai < a; ai++) {
+						if ((img.getRGB(x + ai * ts / a, y + aj * ts / a) & 0xffffff) == 0) {
+							n++;
+						}
+					}
+				}
+			}
+		}
+		return n;
 	}
 
 	private static net.hedinger.prototype.engine.Tile grassland(double fertility) {
