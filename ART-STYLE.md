@@ -17,6 +17,17 @@ are stable frame to frame and continuous across tile seams. Screen size per
 art-pixel is derived (`tileSize / 12`, fractionally rounded); nothing may
 position itself off-lattice to "look smoother".
 
+World-absolute indexing is for **ground**. A pattern belonging to a body that
+*moves* — the hazard checker on the drone's plates — is indexed **body-locally**
+instead, or the world lattice shows through it and the pattern crawls across the
+hull as the machine flies. The lattice still decides where marks land; only what
+the pattern is a function of changes. A one-on-one-off checker survives the
+derived headings unchanged *because the stamp grid is odd*: a quarter turn maps
+`(r, c)` to `(N-1-c, r)`, which preserves the parity of `r + c` when `N` is odd
+and inverts it when `N` is even. On an even grid the same checker flips every
+quarter turn. Patterns with a longer period survive neither, and want checking
+per facing.
+
 ### Texture is identity, scalars are magnitude
 Terrains are told apart by **pattern**, not by flat colour: grass stipples,
 mud speckles, water ripples, steel rivets. A live scalar (vegetation density,
@@ -59,6 +70,18 @@ wildflowers, shrub berries and thicket berries so all flora reads as one
 family). Accents are single art-pixels or 2-px motifs, at low hash-gated
 frequency. If an accent is common enough to read as a texture, it is a ramp
 colour now — pick one of the three.
+
+**Promote it by deriving, never by picking.** An accent that becomes a body
+colour needs the two shades it does not have; take them off the accent itself
+by scaling, the way §4's raised grammar and `chargeDock`'s contact ring already
+do (the drone's hull uses ×0.65 down and ×1.18 up), so the hue stays the
+world's. The drone's hull is the facility's own hazard yellow
+`0xd8b028` given a shadow and a highlight, which is why a machine painted in it
+still reads as belonging to the same building as the stripes on its floor.
+Choosing a fresh yellow would have read as a machine from somewhere else.
+
+**One accent to a body.** Two warm accents on the same small glyph do not add
+up, they compete — see "the second eye" in §7.
 
 ### Signal colours
 Interactive state gets its own reserved family: button/plate red
@@ -141,6 +164,31 @@ One sun, straight overhead-north. The grammar:
   body, and a rotated copy of a pre-lit sprite is lit from underneath for half
   the compass. A run one art-pixel tall is its own north and south edge at
   once, so it stays mid rather than lit.
+
+  Draw the diagonal **to the cardinal**, and check it in the *body's* axes
+  rather than the screen's — length along the heading, width across it. Nothing
+  else catches a mismatch: both stamps can be on the lattice, on the ramp, lit
+  from the north and in the catalog while the machine visibly changes size as it
+  turns, because "consistent with the other stamp" is not otherwise a rule. The
+  trap is drawing a diagonal as a staircase of fixed vertical thickness, which
+  is the obvious way and is wrong: `T` rows of thickness buys only `T/√2`
+  measured across the body, and the shortfall compounds with every step of
+  length. Features on a diagonal match by **weight, not depth**, for the same
+  reason — a rank measured along a diagonal crosses a wider slice of the body,
+  so a tail cap cut to the cardinal's depth comes out half again as large and
+  reads as a bite taken out of the machine.
+- **Material and light compose.** A stamp with more than one material says what
+  each cell is *made of*; the run it sits in says which way that cell *faces the
+  sun*. Resolve the two together when the stamp is baked, rather than laying
+  materials down and shading over them afterwards. Markings are the exception
+  that proves the rule: a hazard stripe is paint *on* a surface, not a surface,
+  so it takes no shade — the ground painters do not shade theirs either.
+- **Direction is carried by mass, not by an accent.** A lamp reads as "there is
+  a lamp" long before it reads as "and therefore that end is the front". Put an
+  asymmetry in the *silhouette* — the drone's rearmost rank is chassis iron —
+  and let the accent confirm the reading rather than carry it. A one-art-pixel
+  protrusion is not an asymmetry: it is invisible at the size the thing is
+  actually seen, and gone entirely at map zoom.
 - **Creatures** are `ProcCreature` organisms: procedural bodies on their own
   small art-pixel grid (radius `ph.r` art-px), palette derived from genome
   markers, 8 facings × 8 gait frames, plus shared **action envelopes**
@@ -182,6 +230,20 @@ code path* the live view runs (the exported painters and compositors —
 `drawDoor`, `veilTile`, `ditherTile`, the atlas bakes), with the Java bake
 beside it wherever a Java twin exists. A client visual with no catalog entry
 is a review failure; a divergence visible on the page is a bug report.
+
+**The two renderers cannot share a literal**, so nothing holds them together
+except a test that says so. Assert one against the other — the scenario guarding
+the drone reads the client's stamp strings and compares them to the Java
+painter's — because "somebody remembered to edit both" is not a mechanism, and
+the drone is the entity that proves it: for weeks the client drew a sentinel the
+Java renderer had never heard of, and nothing said a word. Where the shading
+rule exists in only one language, compare the authored silhouettes; silhouette
+drift is the failure that actually happens.
+
+Note too that `SnapshotRenderer` draws its **own diagnostic glyphs** — heading
+arrows, carry links — rather than going through the painters, so a scenario shot
+is not a picture of entity art and never was. Looking at an entity means a
+harness that builds a real `World` and `View` and calls the painter itself.
 
 ## 7. Case law — how these rules were learned
 
@@ -267,12 +329,44 @@ The precedents, so nobody pays twice:
   (An image diff will not do it either: the film grain moves a third of every
   tile in the map between any two renders, so the diff reports everything
   changed. Compare the picture, or assert on the data the art is chosen by.)
+- **The stretching diagonal** — the drone's cardinal and diagonal stamps were
+  each drawn until they looked right on their own, and never against each other.
+  Measured in the body's own axes the cardinal hull ran 10 art-pixels by 5 and
+  the diagonal 13.7 by 3.8, so turning forty-five degrees made the machine a
+  third longer and a quarter thinner, then swelled it back on the next bucket.
+  Every existing rule passed: both were on the lattice, drawn from the ramp, lit
+  from the north, catalogued. What was missing was any rule saying the facings
+  must agree with *each other*, and the fix was to measure — the numbers were
+  obvious the moment anyone computed them, and invisible for as long as nobody
+  did. Where a shape exists in more than one orientation, the comparison is the
+  test.
+- **The second eye** — the drone's tail was given a warm vent ember to sell it
+  as running machinery. It was the best-sounding idea of that session and the
+  worst on screen: against the red lamp at the head, an orange pixel at the tail
+  is indistinguishable at a glance, so the body read as having two eyes and
+  stopped saying which way it faced. An accent that duplicates another accent's
+  job does not add detail, it destroys the reading the first one was carrying.
+  Hence "one accent to a body" (§2) — and the general form, that a second cue
+  for something already cued is a cue competing, not reinforcing.
+- **The threshold that fought geometry** — a scenario written to pin the
+  stretching diagonal asserted the two hulls were within ten lattice cells of
+  each other. It then failed on art that was correct, because a band at
+  forty-five degrees genuinely spends more cells than an axis-aligned one of the
+  same measured size: its staircase edges are cells the straight version never
+  pays for. The number had been invented rather than derived, and it was
+  measuring the lattice instead of the shape. Two rules out of it. **A threshold
+  you chose yourself is a hypothesis** — when correct art fails it, fix the
+  premise, do not bend the art. And **run a new assertion against the OLD art
+  before trusting it**: an assertion that has never failed has not been shown to
+  be capable of failing, and both of the drone's shape scenarios were confirmed
+  by reverting the stamp and watching them go red on the right number.
 
 ## 8. Conformance checklist
 
 Before a new visual merges, ask:
 
-1. Is every mark on the **art-pixel lattice** (world-absolute indexing)?
+1. Is every mark on the **art-pixel lattice** — indexed world-absolutely for
+   ground, body-locally for a pattern that travels with a moving body (§1)?
 2. Do all colours come from an existing **ramp** (or a disciplined accent /
    signal colour)? No new in-betweens, no alpha washes?
 3. Are gradients **dithered**, organic scatters **hashed**, plants on a
@@ -288,6 +382,9 @@ Before a new visual merges, ask:
    lighting (§7, "the seam that took three tries")?
 9. Has the **actual scene been baked and looked at**, before and after? A
    green suite is not evidence a render changed.
+10. If it exists in more than one orientation or facing, do those agree with
+   **each other** — same size, same proportions, measured in the body's axes
+   (§5, §7 "the stretching diagonal")?
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.
