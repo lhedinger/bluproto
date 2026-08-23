@@ -45,7 +45,7 @@ public final class GroundTextures {
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
 			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
-			CLS_ROCKY = 30, CLS_SLUDGE = 31;
+			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -85,6 +85,7 @@ public final class GroundTextures {
 			// tile's rock IS the rock floor's rock.
 			{ 0x4a4338, 0x6b6353, 0x8f8776 }, // rocky grassland (dusty grit)
 			{ 0x2a4a16, 0x548f22, 0x86c832 }, // waste sludge (acid green, never pit-dark)
+			{ 0x35302a, 0x554c40, 0x7a6f5d }, // tram bed (creosoted sleepers, warm grey-brown)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -163,6 +164,8 @@ public final class GroundTextures {
 			return CLS_DOCK;
 		case TYPE_SLUDGE:
 			return CLS_SLUDGE;
+		case TYPE_RAIL:
+			return CLS_RAIL;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -1234,6 +1237,39 @@ public final class GroundTextures {
 		double p = (pool - 0.3) / 0.4;
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		return ditherRamp(CLS_SLUDGE, p, px, py);
+	}
+
+	/**
+	 * A tram run: two polished rails on creosoted sleepers, laid on a ballast
+	 * bed. Drawn along the axis its own neighbours imply, exactly as the pipe
+	 * runs and duct channels are, so a line of track reads as one continuous
+	 * road rather than a row of stamps.
+	 *
+	 * <p>The rail heads are the one place ordinary ground is allowed to be
+	 * near-white: a rail in use is polished by the wheels to a shine nothing
+	 * else underground has, and that shine is the whole silhouette. Everything
+	 * else here is deliberately drab so the two bright lines carry it.
+	 *
+	 * <p>{@code along} is the coordinate running down the track and
+	 * {@code across} the one running over it, so one painter serves both
+	 * orientations.
+	 */
+	public static int rail(int along, int across, int px, int py) {
+		// Sleepers: a 4-px pitch of dark timber under everything, with the
+		// ballast showing in the gaps between them.
+		boolean sleeper = Math.floorMod(along, 4) < 2;
+		// The two rail heads, inset from the tile edges.
+		if (across == 3 || across == 8) {
+			return RAMP[CLS_STEELWALL][2]; // polished steel, the run's signature
+		}
+		if (across == 4 || across == 9) {
+			return RAMP[CLS_RAIL][0]; // the web's shadow, just south of each head
+		}
+		if (sleeper) {
+			return hash01(px >> 1, py, 76) < 0.25 ? RAMP[CLS_RAIL][0] : RAMP[CLS_RAIL][1];
+		}
+		double g = hash01(px, py >> 1, 77); // ballast: coarse, quiet grit
+		return g < 0.14 ? RAMP[CLS_RAIL][0] : (g > 0.9 ? RAMP[CLS_RAIL][2] : RAMP[CLS_RAIL][1]);
 	}
 
 	private static int lighten2(int rgb, double f) {
