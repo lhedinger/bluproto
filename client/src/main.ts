@@ -72,6 +72,22 @@ let hello: HelloMsg | null = null;
 let loadedBuild: string | null = null; // server build this tab loaded against; reload if it changes
 let chunkTiles = 0;
 let currentLevel = 0;
+/**
+ * Bumped every time the viewer changes level.
+ *
+ * <p>The per-level grids (vegetation, cover) are fetched asynchronously, and a
+ * request reads `currentLevel` before its await but assigns the shared grid
+ * after it. Switch level while one is in flight and the OLD level's answer lands
+ * on top of the NEW level's grid — grass from the wrong floor, and the sequence
+ * number that comes with it then makes every later delta a delta against the
+ * wrong history, so it stays wrong until the next full resync. The switch itself
+ * fires a fresh poll immediately, which is exactly what makes the two overlap.
+ *
+ * <p>A response is therefore only applied if the epoch it started in is still
+ * current. A counter rather than comparing the level, so a fast A -> B -> A
+ * round trip does not let the first response through on the second A.
+ */
+let levelEpoch = 0;
 let paused = false;
 // World population across every level: the stream itself only carries the
 // entities of the level in view (the server filters per viewer), so the HUD
@@ -180,10 +196,13 @@ let vegSeq = -1;
 let vegVersion = 0;
 let vegTimer = 0;
 async function pollVeg(): Promise<void> {
+  const epoch = levelEpoch;
   try {
     const r = await fetch(`/api/world/vegetation/${currentLevel}?since=${vegSeq}`);
+    if (epoch !== levelEpoch) return; // level changed under us: this answer is stale
     if (!r.ok) { vegGrid = null; vegSeq = -1; return; }
     const j = await r.json();
+    if (epoch !== levelEpoch) return;
     if (j.states !== undefined) {
       const bin = atob(j.states);
       const a = new Uint8Array(bin.length);
@@ -217,11 +236,13 @@ function startVegPolling(): void {
 // the renderer can draw a shrub canopy over the entities standing in cover.
 let coverGrid: Uint8Array | null = null;
 async function fetchCover(): Promise<void> {
+  const epoch = levelEpoch;
   coverGrid = null;
   try {
     const r = await fetch(`/api/world/cover/${currentLevel}?v=${hello ? hello.build : '0'}`);
-    if (!r.ok) return;
+    if (epoch !== levelEpoch || !r.ok) return; // stale: the level moved on
     const j = await r.json();
+    if (epoch !== levelEpoch) return;
     const bin = atob(j.data);
     const a = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
@@ -331,6 +352,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       chunkTiles = m.chunkTiles;
       chunkCache.clear();
       currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
+      levelEpoch++;
       vegGrid = null;
       startVegPolling();
       fetchCover();
@@ -900,6 +922,7 @@ speedSel.onchange = () => net.send({ cmd: 'speed', value: parseFloat(speedSel.va
 levelBtn.onclick = () => {
   if (!hello || hello.levels <= 1) return;
   currentLevel = (currentLevel + 1) % hello.levels; // cycle surface -> underground -> …
+  levelEpoch++; // any grid still in flight for the old level is now stale
   levelBtn.textContent = levelName(currentLevel);
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
