@@ -153,6 +153,7 @@ public abstract class Entity {
 				think(); // determine movement
 				collisionCheck();
 				executeMovement(); // update movement
+				unstick(); // and never end a tick inside terrain
 			} else {
 				age = -deathspan;
 			}
@@ -165,6 +166,118 @@ public abstract class Entity {
 			age--;
 		}
 		return true;
+	}
+
+	/**
+	 * How far to look for open ground when a body finds itself inside terrain.
+	 * Small on purpose: this is a rescue from being a tile or two into a wall, not
+	 * a teleport service. A body further in than this than has been put somewhere
+	 * no short hop can fix, and silently flinging it across the map would hide the
+	 * real fault rather than repair it.
+	 */
+	private static final int UNSTICK_RADIUS = 6;
+
+	/**
+	 * Whether this entity is bound by terrain at all.
+	 *
+	 * <p>False here, so smells, sounds and other incorporeal things are left
+	 * exactly where they are put — a pheromone cloud hanging over a wall is not a
+	 * bug. Bodies override it.
+	 */
+	protected boolean boundToTerrain() {
+		return false;
+	}
+
+	/**
+	 * Whether this body is somewhere it could have got to legitimately — which is
+	 * a narrower question than whether it could stand there.
+	 *
+	 * <p>Open ground counts even when it is lethal. A hole is open air: a body over
+	 * one is not stuck, it is <em>falling</em>, and that is a state the world
+	 * already handles. Rescuing it would be the guard quietly repealing gravity —
+	 * which it did, on its first version, and the bottomless-pit scenario caught
+	 * it. Only genuinely impassable ground counts as stuck: solid rock, off the
+	 * map, or water under a body that cannot swim.
+	 */
+	private boolean standingClear(double x, double y) {
+		Tile t = world.getTile(x, y, Z);
+		if (t == null) {
+			return false; // off the map
+		}
+		if (!t.isFlyable()) {
+			return false; // solid: nothing can be inside it
+		}
+		return isFlying() || !t.isWater();
+	}
+
+	/**
+	 * Puts a body back on open ground if it is standing inside terrain.
+	 *
+	 * <p>Movement cannot walk into a wall — {@link #isColliding} sees to that — but
+	 * movement is not the only thing that sets a position. A carried or ridden body
+	 * is placed at an offset from its host every tick with no collision test at
+	 * all, so a host that walks along a wall plants its passenger inside it; a
+	 * spawn can land in rock; and a body can be left in terrain by anything that
+	 * edits the world underneath it. None of those paths is a movement, so none of
+	 * them is caught by the movement check, and a body left there is stuck for
+	 * good: every escape step is a move that starts illegally and is refused.
+	 *
+	 * <p>Measured before this existed: bodies accumulated in walls over a long run
+	 * and never came out — none at tick 12000, five by tick 20000, and they were
+	 * herbivores and parasites, which is precisely the pair that rides.
+	 *
+	 * <p>Deliberately does nothing while attached. A passenger inside a wall is its
+	 * host's problem and rights itself the moment it is set down; pulling it off
+	 * the host mid-ride to stand it on open ground would break the carry instead of
+	 * fixing the ground. The rescue happens once the body is its own again.
+	 *
+	 * <p>Draws no RNG and scans a fixed spiral in a fixed order, so it cannot
+	 * disturb the deterministic actor stream: the same seed still replays the same
+	 * world.
+	 */
+	private void unstick() {
+		if (!boundToTerrain() || attachTarget != null || age < 0 || world == null) {
+			return;
+		}
+		if (standingClear(X, Y)) {
+			return; // the overwhelmingly common case: one tile lookup and out
+		}
+		int col = (int) Math.floor(X), row = (int) Math.floor(Y);
+		double bestD = Double.MAX_VALUE;
+		int bestC = 0, bestR = 0;
+		for (int r = 1; r <= UNSTICK_RADIUS; r++) {
+			for (int dr = -r; dr <= r; dr++) {
+				for (int dc = -r; dc <= r; dc++) {
+					// The ring only: inner tiles were covered by a smaller r.
+					if (Math.max(Math.abs(dr), Math.abs(dc)) != r) {
+						continue;
+					}
+					double cx = col + dc + 0.5, cy = row + dr + 0.5;
+					if (!standingClear(cx, cy)) {
+						continue;
+					}
+					double d = (cx - X) * (cx - X) + (cy - Y) * (cy - Y);
+					// Strictly-less keeps the scan order as the tie-break, which is
+					// fixed -- two equidistant tiles always resolve the same way.
+					if (d < bestD) {
+						bestD = d;
+						bestC = col + dc;
+						bestR = row + dr;
+					}
+				}
+			}
+			if (bestD < Double.MAX_VALUE) {
+				break; // nearest ring wins; no need to look further out
+			}
+		}
+		if (bestD == Double.MAX_VALUE) {
+			return; // walled in beyond the search: leave it and try again next tick
+		}
+		X = bestC + 0.5;
+		Y = bestR + 0.5;
+		dX = 0;
+		dY = 0;
+		lastStep = 0; // set down, not travelled: nothing to charge for
 	}
 
 	protected void run_extended() {
@@ -522,6 +635,23 @@ public abstract class Entity {
 		attachTarget = target;
 		target.carriedLoad += getSize(); // this body now weighs on the carrier
 		return true;
+	}
+
+	/**
+	 * Puts this entity at a position outright, with no collision test.
+	 *
+	 * <p>This is the operation that gets bodies into walls in the first place —
+	 * a carry offset, a spawn, a world edit — so it exists here named for what it
+	 * is rather than being spelled out by hand at each call site. It is the unsafe
+	 * placement; {@link #unstick} is what makes it survivable.
+	 */
+	public void setPos(double x, double y, int z) {
+		X = x;
+		Y = y;
+		Z = z;
+		dX = 0;
+		dY = 0;
+		dZ = 0;
 	}
 
 	public void detach() {
