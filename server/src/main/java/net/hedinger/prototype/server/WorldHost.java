@@ -336,6 +336,20 @@ final class WorldHost {
 	/** Ids of the living, genome-bearing creatures in this host's world — a test
 	 *  seam, so the suite can ask what the wire says about a real creature without
 	 *  reaching past the host into its world. */
+	/** Ids of the living machines — the counterpart seam to
+	 *  {@link #liveCreatureIds()}, so the suite can ask what the wire says
+	 *  about plant as well as about animals. */
+	java.util.List<Integer> liveMachineIds() {
+		java.util.List<Integer> out = new java.util.ArrayList<>();
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e instanceof net.hedinger.prototype.entities.NPC n && !n.isRemoved()
+					&& !n.isOrganic()) {
+				out.add(n.getID());
+			}
+		}
+		return out;
+	}
+
 	java.util.List<Integer> liveCreatureIds() {
 		java.util.List<Integer> out = new java.util.ArrayList<>();
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
@@ -397,9 +411,21 @@ final class WorldHost {
 				// The four books (VITALS.md): the needs, the action budget, and the
 				// life gate — each its own number, so the inspector shows why a
 				// creature is doing what it is doing.
-				d.put("energy", round(n.getEnergy()));
-				d.put("hunger", round(n.getHunger()));
-				d.put("thirst", round(n.getThirst()));
+				//
+				// Three of the four are physiology, and physiology belongs to
+				// organisms. The facility's machines keep none of them: they are
+				// not metabolic, so their hunger and thirst never move off zero
+				// and their energy never moves off it either. Sent anyway, the
+				// inspector faithfully drew a drone as fully fed, fully watered
+				// and completely out of energy — three bars that mean nothing,
+				// one of which actively reads as a machine about to drop. The
+				// client already omits any book it is not given, so the fix is
+				// not to give it one.
+				if (n.isOrganic()) {
+					d.put("energy", round(n.getEnergy()));
+					d.put("hunger", round(n.getHunger()));
+					d.put("thirst", round(n.getThirst()));
+				}
 				d.put("health", n.getHealth());
 				d.put("carrying", n.getCarriedLoad() > 0); // hauling an ITEM (a crate)
 				d.put("grabbed", n.isGrabbed());
