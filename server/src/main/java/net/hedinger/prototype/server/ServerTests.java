@@ -29,6 +29,7 @@ public final class ServerTests {
 		visitorLogReadsTheClientThroughTheProxy();
 		populationCensusCountsEveryLivingRole();
 		fertilityCapsTheGrassSpriteStage();
+		vegetationFeedCarriesTheKind();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -276,6 +277,64 @@ public final class ServerTests {
 
 	private static EntityState probe(int id, double x) {
 		return new EntityState(id, "npc.testnpc", x, 2.0, 0, 0.5, 0.1f, 0f, 0xAABBCC, 0, -1, 1.0, 0);
+	}
+
+	/**
+	 * The vegetation feed says WHICH vegetation a tile grows, not just how much.
+	 *
+	 * <p>The viewer stamps one sprite per tile and had no way to tell a fungus bed
+	 * from a meadow, so it drew grass on both and the mushroom sprite — baked all
+	 * along — was never once put on screen. The kind rides as the high bit of the
+	 * full grid and deliberately NOT in the deltas: a change entry packs
+	 * {@code tile << 3 | state} with three bits for the state, and terrain does not
+	 * change at runtime, so a delta has neither room for the kind nor any need of
+	 * it. This pins both halves.
+	 */
+	static void vegetationFeedCarriesTheKind() {
+		net.hedinger.prototype.engine.Utils.seed(42);
+		WorldHost host = new WorldHost(42);
+		int fungusLevels = 0;
+		for (int z = 0; z < 2; z++) {
+			byte[] kinds = host.vegKinds(z);
+			if (kinds == null) {
+				continue;
+			}
+			int fungus = 0;
+			for (byte k : kinds) {
+				if (k != 0) {
+					fungus++;
+				}
+			}
+			if (fungus == 0) {
+				continue;
+			}
+			fungusLevels++;
+			@SuppressWarnings("unchecked")
+			java.util.Map<String, Object> full =
+					(java.util.Map<String, Object>) host.vegetationSince(z, -1);
+			check("a full grid comes back for level " + z, full.get("states") != null);
+			byte[] grid = java.util.Base64.getDecoder()
+					.decode((String) full.get("states"));
+			check("the grid covers the level", grid.length == kinds.length);
+
+			int marked = 0, markedButBare = 0;
+			for (int i = 0; i < grid.length; i++) {
+				boolean bit = (grid[i] & VegFeed.KIND_FUNGUS) != 0;
+				check("the kind bit is set exactly on the fungus tiles",
+						bit == (kinds[i] != 0));
+				if (bit) {
+					marked++;
+					if ((grid[i] & 0x07) == 0) {
+						markedButBare++;
+					}
+				}
+			}
+			check("the fungus beds are marked (" + marked + ")", marked == fungus);
+			// The stage must survive alongside the kind, or every bed would draw as
+			// "nothing grows here" and the fix would swap one blank for another.
+			check("and they still carry a growth stage", markedButBare < marked);
+		}
+		check("the world has a level that grows fungus", fungusLevels > 0);
 	}
 
 	private static void check(String what, boolean ok) {

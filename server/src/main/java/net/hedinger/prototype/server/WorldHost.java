@@ -629,7 +629,8 @@ final class WorldHost {
 		}
 		var w = runner.world();
 		VegFeed f = vegFeeds.computeIfAbsent(z, k -> new VegFeed());
-		return f.respond(raw, since, System.currentTimeMillis(), w.getColums(), w.getRows());
+		return f.respond(raw, vegKinds(z), since, System.currentTimeMillis(),
+				w.getColums(), w.getRows());
 	}
 
 	/** One tile's grass level on the absolute scale (see {@link #vegetation}):
@@ -642,6 +643,32 @@ final class WorldHost {
 		// poor ground can never report a full meadow.
 		long frac = Math.round(t.getVegetation(tick) / Tile.VEG_MAX * 100);
 		return (int) Math.max(0, Math.min(100, frac));
+	}
+
+	/**
+	 * Which tiles of level {@code z} grow fungus rather than grass: 1 per fungus
+	 * tile, 0 elsewhere. Static for the life of the world, so the client is told
+	 * once in the full grid and never again.
+	 *
+	 * <p>Without this the viewer had no way to know, and drew grass everywhere —
+	 * so the cave's fungus beds came up as meadow and the mushroom sprite, which
+	 * has always been baked, was never once put on screen.
+	 */
+	byte[] vegKinds(int z) {
+		var w = runner.world();
+		if (z < 0 || z >= w.getLevels()) {
+			return null;
+		}
+		int cols = w.getColums(), rows = w.getRows();
+		byte[] k = new byte[cols * rows];
+		for (int y = 0; y < rows; y++) {
+			for (int x = 0; x < cols; x++) {
+				Tile t = w.getTile(x, y, z);
+				k[y * cols + x] = (byte) (t != null
+						&& t.getType() == Tile.TileType.TYPE_FUNGUS ? 1 : 0);
+			}
+		}
+		return k;
 	}
 
 	byte[] vegetation(int z) {

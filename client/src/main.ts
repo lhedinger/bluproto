@@ -172,6 +172,9 @@ const perfOffStr = PERF_FLAGS.filter(([k]) => k !== 'gl' && flagOff(k)).map(([k]
 // base64 grid. States change ~4x less often than the old 17 dither buckets,
 // so the poll also relaxes to 4s. vegVersion bumps on every applied change so
 // the renderer can tell "same array, new content" without an identity swap.
+/** High bit of a vegetation byte: this tile grows fungus, not grass. Set by the
+ *  server in the full grid only — see VegFeed.KIND_FUNGUS. */
+const VEG_KIND_MASK = 0x80;
 let vegGrid: Uint8Array | null = null;
 let vegSeq = -1;
 let vegVersion = 0;
@@ -189,7 +192,12 @@ async function pollVeg(): Promise<void> {
       vegSeq = j.seq;
       vegVersion++;
     } else if (j.changes !== undefined && vegGrid) {
-      for (const p of j.changes as number[]) vegGrid[p >> 3] = p & 7;
+      // A change entry carries density only — three bits, no room for anything
+      // else — so the kind bit already held for that tile is preserved. Terrain
+      // never changes underfoot, so the kind cannot have gone stale.
+      for (const p of j.changes as number[]) {
+        vegGrid[p >> 3] = (vegGrid[p >> 3] & VEG_KIND_MASK) | (p & 7);
+      }
       if (j.changes.length > 0) vegVersion++;
       vegSeq = j.seq;
     }

@@ -55,7 +55,20 @@ final class VegFeed {
 
 	/** Builds the JSON response for a client holding {@code since} (-1 = none),
 	 *  refreshing the quantised grid from {@code raw} when it is due. */
-	synchronized Map<String, Object> respond(byte[] raw, long since, long now, int cols, int rows) {
+	/**
+	 * The vegetation KIND bit, set on tiles that grow fungus rather than grass.
+	 *
+	 * <p>It rides only in the full grid, never in a delta. Terrain does not change
+	 * at runtime, so the kind is a constant per tile: a client that has the full
+	 * grid already knows it, and a delta only ever needs to say what the density
+	 * did. That matters because a change entry packs {@code tile << 3 | state} and
+	 * has exactly three bits for the state — there is no room for a kind in there,
+	 * and widening the entry would cost every poll for a fact that never moves.
+	 */
+	static final int KIND_FUNGUS = 0x80;
+
+	synchronized Map<String, Object> respond(byte[] raw, byte[] kinds, long since, long now,
+			int cols, int rows) {
 		if (states == null || states.length != raw.length || now - refreshedAt >= REFRESH_MS) {
 			refresh(raw);
 			refreshedAt = now;
@@ -76,8 +89,19 @@ final class VegFeed {
 			}
 			return Map.of("seq", seq, "changes", merged);
 		}
+		// The kind is OR-ed in only here, on the way out. The `states` array itself
+		// stays pure density, because it is what deltas are diffed against and what
+		// they are packed from -- a kind bit left in it would ride into the three
+		// state bits of every change entry and corrupt them.
+		byte[] out = states;
+		if (kinds != null && kinds.length == states.length) {
+			out = new byte[states.length];
+			for (int i = 0; i < out.length; i++) {
+				out[i] = (byte) (states[i] | (kinds[i] != 0 ? KIND_FUNGUS : 0));
+			}
+		}
 		return Map.of("cols", cols, "rows", rows, "seq", seq,
-				"states", Base64.getEncoder().encodeToString(states));
+				"states", Base64.getEncoder().encodeToString(out));
 	}
 
 	private void refresh(byte[] raw) {
