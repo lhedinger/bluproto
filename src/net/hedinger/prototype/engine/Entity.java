@@ -318,10 +318,24 @@ public abstract class Entity {
 
 		// Mud drags: scale this step by the tile the entity stands on -- and
 		// by how well this body fits it (a crystal bed drags by size).
-		double drag = world.getTile(X, Y, Z).speedFactorFor(getPixelSize(), isOrganic());
-		if (drag != 1.0) {
-			dX *= drag;
-			dY *= drag;
+		//
+		// Ground drags what touches it, and a flyer touches nothing. Every
+		// terrain that slows a body slows it by a mechanism of contact -- mud
+		// sucks at feet, reeds tangle legs, rubble has to be climbed, a duct
+		// has to be crawled -- and none of them can reach something in the air.
+		// Skipping the whole lookup rather than special-casing tiles keeps that
+		// honest for terrain not invented yet: the rule is about the flying,
+		// not about a list of grounds.
+		//
+		// The gates in isColliding are already flying-aware (water, shard
+		// beds), so this closes the last place where terrain reached a body it
+		// could not touch.
+		if (!isFlying()) {
+			double drag = world.getTile(X, Y, Z).speedFactorFor(getPixelSize(), isOrganic());
+			if (drag != 1.0) {
+				dX *= drag;
+				dY *= drag;
+			}
 		}
 
 		// Engine speed limit. Collision is decided one tile at a time, so an

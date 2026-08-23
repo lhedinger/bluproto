@@ -2444,6 +2444,57 @@ public class SimTests {
 	}
 
 	/**
+	 * Ground drags what touches it, and a flyer touches nothing.
+	 *
+	 * <p>Every terrain that slows a body does so by a mechanism of contact —
+	 * mud sucks at feet, reeds tangle legs, rubble is climbed, a duct is
+	 * crawled — and none of them reaches something in the air. A flying body
+	 * crossing a mud strip keeps pace with one over clean floor; a walker
+	 * crossing the same strip does not.
+	 *
+	 * <p>The walker is half the test on purpose. "Flyers ignore drag" is only
+	 * correct if the drag is still there for everything else, and a fix that
+	 * quietly turned mud into ordinary floor would pass a test that checked
+	 * the flyers alone.
+	 */
+	static class FlyersAreNotDraggedByGroundTheyNeverTouch extends Scenario {
+		@Override
+		public void run() {
+			seed(424);
+			World w = room(16, 7);
+			for (int x = 5; x <= 8; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_MUD); // one mud strip, row 2
+				w.setTile(x, 4, 0, Tile.TileType.TYPE_MUD); // and another, row 4
+			}
+			TestNPC flyerOverMud = TestNPC.mover(2.5, 2.5, 0, 0).withFlying();
+			TestNPC flyerOverFloor = TestNPC.mover(2.5, 1.5, 0, 0).withFlying();
+			TestNPC walkerOverMud = TestNPC.mover(2.5, 4.5, 0, 0);
+			TestNPC walkerOverFloor = TestNPC.mover(2.5, 5.5, 0, 0);
+			w.spawnEntity(flyerOverMud);
+			w.spawnEntity(flyerOverFloor);
+			w.spawnEntity(walkerOverMud);
+			w.spawnEntity(walkerOverFloor);
+			w.think();
+			snapshot(w, "before (two flyers, two walkers, two mud strips)");
+			tick(w, 200);
+			snapshot(w, "after (only the walker was held up)");
+
+			// Compared as gaps rather than as equality: move() jitters each step
+			// by a tenth, so two identical bodies drift apart a little over 200
+			// ticks whatever the ground. What separates drag from jitter is the
+			// SIZE of the gap, and mud at 0.4 is not a near miss.
+			double flyerGap = Math.abs(flyerOverFloor.getX() - flyerOverMud.getX());
+			double walkerGap = walkerOverFloor.getX() - walkerOverMud.getX();
+			assertLess("the flyer over mud kept pace with the flyer over floor",
+					flyerGap, 0.25);
+			assertGreater("the walker over floor is well ahead of the one in mud",
+					walkerGap, 0.5);
+			assertGreater("and the ground told the two cases far apart",
+					walkerGap / Math.max(0.01, flyerGap), 4.0);
+		}
+	}
+
+	/**
 	 * Crystal comes in three densities: a solid formation stops every walker,
 	 * a packed bed admits only bodies that fit between its shards -- dragging
 	 * them by size, the smaller the freer -- and sparse shards are ordinary
@@ -6989,6 +7040,7 @@ public class SimTests {
 				new FertileHabitatPatches(),
 				new WaterBlocksLandPassesFlyers(),
 				new MudSlowsMovement(),
+				new FlyersAreNotDraggedByGroundTheyNeverTouch(),
 				new CrystalDensityTiers(),
 				new DuctAdmitsOnlySmallBodies(),
 				new BlockedBodySlidesAlongAnObstacle(),
