@@ -675,24 +675,29 @@ const SENTINEL_CARDINAL = [
   '.............',
 ];
 
-/** Facing south-east: the same hull-and-plates arrangement on the diagonal, as
- *  staircases of two-pixel runs. Authored rather than derived — no
- *  lattice-exact transform reaches a diagonal from a cardinal. The diagonal
- *  plates need no pylon; they already stand clear. */
+/** Facing south-east. Authored rather than derived — no lattice-exact transform
+ *  reaches a diagonal from a cardinal, which means the two are only as
+ *  consistent as someone made them, and the first version was not: measured
+ *  along its own axis that hull ran 13 art-pixels by under 4, against the
+ *  cardinal's 10 by 5, so turning 45 degrees made the machine 30% longer and a
+ *  quarter thinner. This one is laid out in the body's own axes — 10 long, 5
+ *  across, plates at the same perpendicular offset — with blunted tips,
+ *  because a rotated rectangle ends in single pixels on a square lattice and a
+ *  one-pixel point is the lumpy-math tell. */
 const SENTINEL_DIAGONAL = [
   '.............',
+  '........SS...',
+  '...###.SSSS..',
+  '..#####.SSSS.',
+  '.#######.SSS.',
+  '..#######....',
+  '...#######...',
+  '....#######..',
+  '.SSS.#######.',
+  '.SSSS.####A..',
+  '..SSSS.###...',
+  '...SS........',
   '.............',
-  '..##.....SS..',
-  '..###....SSS.',
-  '..####...SSS.',
-  '..#####...SS.',
-  '...#####.....',
-  '....#####....',
-  '.....#####...',
-  '..SS..#####..',
-  '..SSS..####..',
-  '...SSS..###..',
-  '....SS...#A..',
 ];
 
 /** The ground shadow: sanctioned translucency 2 of 4, the blocky translucent
