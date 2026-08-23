@@ -421,7 +421,9 @@ export function render(
     // the no-atlas dot and the one thing in the world that is not alive looks
     // exactly like everything that is.
     if (e.kind === 'npc.stewarddrone') {
-      drawSentinel(g, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'), p.dir);
+      const dc = headingCol(p.dir, t.col ?? -1);
+      t.col = dc;
+      drawSentinel(g, s.x, s.y, cam.scale, dc);
       continue;
     }
 
@@ -629,21 +631,198 @@ function itemStamp(kind: string, rgb: number): HTMLCanvasElement {
  *  A sentinel has a front, so unlike an item it needs a column per heading; it
  *  reuses the creature atlases' bucket count and their sticky headingCol so the
  *  two never disagree about which way a body is pointing. */
-const droneStamps = new Map<number, HTMLCanvasElement>();
-function droneStamp(rgb: number): HTMLCanvasElement {
-  let cv = droneStamps.get(rgb);
-  if (!cv) {
-    cv = document.createElement('canvas');
-    cv.width = 96 * DIRS;
-    cv.height = 96;
+/**
+ * The steward's drone: a HAND-AUTHORED pixel stamp, the exact twin of the Java
+ * renderer's DronePainter — same two silhouettes, same shading rule, same steel
+ * ramp — so /sprites shows the two pipelines agreeing rather than diverging.
+ *
+ * The shape is a sentinel, not a quadrotor: a compact pod with two broad plates
+ * held off to either side, so it reads as panels kept in formation around a
+ * core rather than as something held up by spinning parts. It has a front — the
+ * eye leads, the plates trail — because a body that visibly points where it is
+ * going tells you what it is about to do.
+ *
+ * What this replaced was rotated polygons in three invented greys with an
+ * anti-aliased arc for the eye: off-lattice, off-palette, unshaded, and drawn
+ * with the smooth curves ART-STYLE.md section 4 forbids outright. It passed CI,
+ * because none of that is mechanically checkable. The scenarios added alongside
+ * this now check it.
+ */
+const SENTINEL_N = 13;
+
+/** Facing east. '#' is body, 'A' the eye.
+ *
+ *  The hull is the mass and the plates are secondary, which is the whole
+ *  difference between a sentinel and a pile of bars. Plates as heavy as the
+ *  hull read as a stack of planks; plates joined by broad pylons invert the
+ *  reading entirely, so the vertical mass wins and the machine looks like it
+ *  faces north whichever way the eye points. A dominant hull, small plates set
+ *  clear of it, and a pylon exactly one art-pixel wide is what works. Eleven
+ *  across against ten along, so it stays wider than it is long. */
+const SENTINEL_CARDINAL = [
+  '.............',
+  '....#####....',
+  '....#####....',
+  '......#......',
+  '...#########.',
+  '..##########.',
+  '..#########A.',
+  '..##########.',
+  '...#########.',
+  '......#......',
+  '....#####....',
+  '....#####....',
+  '.............',
+];
+
+/** Facing south-east: the same hull-and-plates arrangement on the diagonal, as
+ *  staircases of two-pixel runs. Authored rather than derived — no
+ *  lattice-exact transform reaches a diagonal from a cardinal, and rasterising
+ *  a 45-degree rotation is exactly the lumpy math "authored beats computed"
+ *  forbids. */
+const SENTINEL_DIAGONAL = [
+  '.............',
+  '.............',
+  '..##.....##..',
+  '..###....###.',
+  '..####...###.',
+  '..#####...##.',
+  '...#####.....',
+  '....#####....',
+  '.....#####...',
+  '..##..#####..',
+  '..###..####..',
+  '...###..###..',
+  '....##...#A..',
+];
+
+/** The ground shadow: sanctioned translucency 2 of 4, the blocky translucent
+ *  oval. Authored as its own shape rather than copied from the silhouette — a
+ *  silhouette copy fills the gaps between hull and plates that the design
+ *  depends on, and pushed clear of the glyph it reads as a second dark plate
+ *  rather than as ground. It needs no rotation: the drone turns, the light
+ *  does not. */
+const SENTINEL_OVAL = [
+  '.#####.',
+  '#######',
+  '.#####.',
+];
+
+/** The drone is machinery, so it is built from the door's steel — the world's
+ *  existing ramp, not a new grey. The eye is the charge dock's hazard amber, so
+ *  drone and berth read as a matched pair. The sunk south edge is the base
+ *  shade at section 4's x0.65, not the near-black iron a first pass used —
+ *  iron is a housing colour and against the deck it reads as a hole punched in
+ *  the machine rather than an edge turned from the light. */
+const SENTINEL_SHADES: Record<string, string> = {
+  H: '#707885', M: '#515862', D: '#353940', A: '#d8b028',
+};
+
+/** Sanctioned translucency 1 of 4, and how far south it falls. A standing body
+ *  casts at one art-pixel; the drone casts at four, because it is the only
+ *  thing here that genuinely does not touch the ground and the gap is the sole
+ *  cue that says so. Seven art-pixels and not one or two: the stamp is
+ *  thirteen tall with the plates at its extremes, so any smaller drop lands
+ *  the pod's shadow on the south plate, where it reads as a black box welded
+ *  under the machine rather than as ground. */
+const SENTINEL_SHADOW = 'rgba(0,0,0,0.31)';
+const SENTINEL_LIFT = 8;
+
+function sentinelRot90(s: string[]): string[] {
+  const o: string[] = [];
+  for (let r = 0; r < SENTINEL_N; r++) {
+    let row = '';
+    for (let c = 0; c < SENTINEL_N; c++) row += s[SENTINEL_N - 1 - c][r];
+    o.push(row);
+  }
+  return o;
+}
+
+/** One sun, straight overhead-north, and it does not turn with the drone: the
+ *  light is laid on AFTER rotation, so a heading never carries its highlight
+ *  around and lights the machine from underneath. In each column the north cell
+ *  of a contiguous run is lit and the south cell sunk; a run one art-pixel tall
+ *  stays mid, being its own north and south edge at once. */
+function sentinelShade(s: string[]): string[] {
+  const o: string[][] = [];
+  for (let r = 0; r < SENTINEL_N; r++) o.push(new Array(SENTINEL_N).fill('.'));
+  for (let c = 0; c < SENTINEL_N; c++) {
+    let r = 0;
+    while (r < SENTINEL_N) {
+      if (s[r][c] === '#') {
+        const r0 = r;
+        while (r < SENTINEL_N && s[r][c] === '#') r++;
+        for (let k = r0; k < r; k++) {
+          o[k][c] = r - r0 === 1 ? 'M' : k === r0 ? 'H' : k === r - 1 ? 'D' : 'M';
+        }
+      } else {
+        if (s[r][c] === 'A') o[r][c] = 'A';
+        r++;
+      }
+    }
+  }
+  return o.map((row) => row.join(''));
+}
+
+/** The eight shaded stamps: two authored silhouettes, six exact 90-degree
+ *  lattice rotations of them. Pure, resolved once. */
+const SENTINEL_FACING: string[][] = (() => {
+  const out: string[][] = [];
+  for (let i = 0; i < DIRS; i++) {
+    let s = (i & 1) === 0 ? SENTINEL_CARDINAL : SENTINEL_DIAGONAL;
+    for (let q = 0; q < i >> 1; q++) s = sentinelRot90(s);
+    out.push(sentinelShade(s));
+  }
+  return out;
+})();
+
+/** Stamp one heading. `sc` is the tile size in screen pixels, so an art-pixel
+ *  is sc/12 exactly as everywhere else — the drone is sized by the world grid,
+ *  not by its own body radius, which is what keeps it on the lattice at zoom. */
+export function drawSentinel(g: CanvasRenderingContext2D, x: number, y: number,
+    sc: number, bucket: number): void {
+  const p = Math.max(1, sc / 12); // one art-pixel on screen
+  blit(g, SENTINEL_OVAL, x, y + SENTINEL_LIFT * p, p, SENTINEL_SHADOW);
+  blit(g, SENTINEL_FACING[((bucket % DIRS) + DIRS) % DIRS], x, y, p, null);
+}
+
+/** Stamp art-pixel blocks, centred. Edge-exact: each block's extent comes from
+ *  its neighbour's rounded edge, never a rounded-up box, or the translucent
+ *  oval's overlaps double-tint into grid lines. */
+function blit(g: CanvasRenderingContext2D, rows: string[], cx: number, cy: number,
+    p: number, flat: string | null): void {
+  const x0 = cx - (rows[0].length / 2) * p;
+  const y0 = cy - (rows.length / 2) * p;
+  for (let row = 0; row < rows.length; row++) {
+    for (let col = 0; col < rows[row].length; col++) {
+      const ch = rows[row][col];
+      if (ch === '.') continue;
+      const c = flat ?? SENTINEL_SHADES[ch];
+      if (!c) continue;
+      g.fillStyle = c;
+      const rx = Math.round(x0 + col * p), ry = Math.round(y0 + row * p);
+      g.fillRect(rx, ry, Math.round(x0 + (col + 1) * p) - rx,
+        Math.round(y0 + (row + 1) * p) - ry);
+    }
+  }
+}
+
+const SENTINEL_BAKE_P = 8;                       // atlas pixels per art-pixel
+const SENTINEL_CELL = SENTINEL_N * SENTINEL_BAKE_P; // a whole number of them
+let droneStampCache: HTMLCanvasElement | null = null;
+function droneStamp(): HTMLCanvasElement {
+  if (!droneStampCache) {
+    const cv = document.createElement('canvas');
+    cv.width = SENTINEL_CELL * DIRS;
+    cv.height = SENTINEL_CELL;
     const cx = cv.getContext('2d')!;
     for (let i = 0; i < DIRS; i++) {
-      drawSentinel(cx, 96 * i + 48, 48, ITEM_R,
-        '#' + rgb.toString(16).padStart(6, '0'), (i * Math.PI * 2) / DIRS);
+      drawSentinel(cx, SENTINEL_CELL * i + SENTINEL_CELL / 2, SENTINEL_CELL / 2,
+        SENTINEL_BAKE_P * 12, i);
     }
-    droneStamps.set(rgb, cv);
+    droneStampCache = cv;
   }
-  return cv;
+  return droneStampCache;
 }
 
 export function renderGL(
@@ -783,12 +962,15 @@ export function renderGL(
     }
 
     if (e.kind === 'npc.stewarddrone') {
-      const stamp = droneStamp(e.rgb);
-      const k = r / ITEM_R;
+      // Fixed steel palette, so one bake serves every drone. The destination
+      // is SENTINEL_N art-pixels of the world grid, matching the 2D path and
+      // the Java stamp rather than the body's own radius.
+      const stamp = droneStamp();
+      const dst = SENTINEL_N * (cam.scale / 12);
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
-      glr.sprite('drone:' + e.rgb, stamp, 1, 96 * dc, 0, 96, 96,
-        s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
+      glr.sprite('drone', stamp, 1, SENTINEL_CELL * dc, 0, SENTINEL_CELL, SENTINEL_CELL,
+        s.x - dst / 2, s.y - dst / 2, dst, dst);
       continue;
     }
 
@@ -1439,102 +1621,6 @@ export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: 
         Math.round(y0 + (row + 1) * p) - ry);
     }
   }
-}
-
-/**
- * The steward's drone, drawn as a sentinel rather than a quadrotor: a slender
- * tapered spine, a pair of swept fins standing off it, and one lit aperture at
- * the head. It hovers; nothing about it spins.
- *
- * <p>The first version was four rotor discs and a hexagonal chassis, which is
- * a drone in the sense of the things people fly in parks — a machine held up
- * by obvious moving parts. Wrong register for this world. The steward's drone
- * is the warden's hand: it should read as something built to a purpose and not
- * quite explaining how it works, closer to a floating instrument than to
- * hardware you could buy.
- *
- * <p>That costs it the rotational symmetry the quadrotor had for free, and the
- * cost is worth paying: a sentinel has a FRONT, and a body that visibly points
- * where it is going tells you what it is about to do. The eye leads, the fins
- * trail, and a drone crossing the map now reads as aimed rather than as
- * drifting. Both draw paths take a heading for it (the GL path bakes one frame
- * per heading bucket, as the creature atlases do).
- *
- * <p>Drawn in a local frame pointing east and rotated into place, so the shape
- * is authored once at the angle it is easiest to reason about.
- */
-export function drawSentinel(g: CanvasRenderingContext2D, x: number, y: number, r: number,
-    col: string, dir: number): void {
-  g.save();
-  g.translate(x, y);
-  g.rotate(dir);
-
-  const dark = '#171b22';
-  const panel = '#39424e';
-  // Below a few pixels the outline is most of the shape, so it goes: at map
-  // zoom this is a handful of pixels and a dark rim would eat all of them.
-  const outline = r > 7;
-
-  // Two broad wing plates reaching out to the sides, barely swept. The
-  // silhouette is a cross — wider across than long — which is what separates a
-  // sentinel from an aircraft and from the quadrotor this replaced. They are
-  // plates rather than tapering wedges: flat, blunt-ended and substantial, so
-  // the machine reads as panels held in formation around a core rather than as
-  // a body with fins on it.
-  if (r > 4) {
-    g.fillStyle = panel;
-    for (const side of [-1, 1]) {
-      g.beginPath();
-      g.moveTo(r * 0.30, side * r * 0.40);
-      g.lineTo(r * 0.06, side * r * 1.52);
-      g.lineTo(-r * 0.52, side * r * 1.44);
-      g.lineTo(-r * 0.40, side * r * 0.36);
-      g.closePath();
-      g.fill();
-      if (outline) {
-        g.strokeStyle = dark;
-        g.lineWidth = Math.max(1, r * 0.08);
-        g.stroke();
-      }
-    }
-  }
-
-  // The pod: small and narrow, because the wings carry the width. A longer
-  // body would drag it back toward being an aeroplane.
-  g.fillStyle = col;
-  g.beginPath();
-  g.moveTo(r * 1.0, 0);
-  g.lineTo(r * 0.30, -r * 0.30);
-  g.lineTo(-r * 0.62, -r * 0.22);
-  g.lineTo(-r * 0.76, 0);
-  g.lineTo(-r * 0.62, r * 0.22);
-  g.lineTo(r * 0.30, r * 0.30);
-  g.closePath();
-  g.fill();
-  if (outline) {
-    g.strokeStyle = dark;
-    g.lineWidth = Math.max(1, r * 0.09);
-    g.stroke();
-  }
-
-  // The eye: an aperture set into the pod's face, well forward. The one warm
-  // colour on the machine, and the same hazard amber as the charge dock's coil
-  // so drone and berth stay a matched pair. Kept small — a big glow turns the
-  // whole shape into a lamp with wings, and the point is a thing that looks
-  // rather than a thing that shines.
-  const eye = Math.max(1, r * 0.15);
-  g.fillStyle = '#d8b028';
-  g.beginPath();
-  g.arc(r * 0.55, 0, eye, 0, 7);
-  g.fill();
-  if (r > 10) {
-    g.fillStyle = '#f6e08a';
-    g.beginPath();
-    g.arc(r * 0.55, 0, eye * 0.5, 0, 7);
-    g.fill();
-  }
-
-  g.restore();
 }
 
 export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
