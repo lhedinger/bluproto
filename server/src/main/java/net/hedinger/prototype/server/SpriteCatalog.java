@@ -85,9 +85,14 @@ final class SpriteCatalog {
 
 	private void groundSection() {
 		section("Ground", "One swatch per tile class, straight from the layer bake. "
-				+ "Each tile type has ONE look — vegetation (and its depletion) is the "
-				+ "sprite layer stamped on top, not part of the ground.");
+				+ "A tile type's look is fixed by its type and its fertility — the "
+				+ "ground that grows things is drawn at the potential it has, rich or "
+				+ "poor. What is actually standing there to be eaten (and its "
+				+ "depletion) is the sprite layer stamped on top, not part of the "
+				+ "ground.");
 		ground("grassland_soil", Tile.TileType.TYPE_FLOOR);
+		ground("grassland_poor", Tile.TileType.TYPE_FLOOR, 0.25);
+		ground("rocky_grassland", Tile.TileType.TYPE_ROCKY, 0.30);
 		ground("tall_grass_cover", Tile.TileType.TYPE_COVER);
 		ground("water", Tile.TileType.TYPE_WATER);
 		ground("shallows", Tile.TileType.TYPE_SHALLOWS);
@@ -184,8 +189,21 @@ final class SpriteCatalog {
 	/** An 8x8 stage whose interior is all {@code type}; the centre 4x4 tiles
 	 *  become the swatch (border walls and their transitions cropped away). */
 	private void ground(String name, Tile.TileType type) {
+		ground(name, type, 1.0);
+	}
+
+	/** As above, at a chosen fertility — the ground types whose art is drawn
+	 *  from their growing potential (grassland's sward, rocky ground's thin
+	 *  one) look different at each end of their range, so their swatch has to
+	 *  say which end it is showing. */
+	private void ground(String name, Tile.TileType type, double fertility) {
 		World w = stage(8, 8);
 		fill(w, type);
+		for (int x = 0; x < w.getColums(); x++) {
+			for (int y = 0; y < w.getRows(); y++) {
+				w.getTile(x, y, 0).setFertility(fertility);
+			}
+		}
 		w.alignTiles();
 		// A reference body in every walkable swatch, so the texture reads at
 		// creature scale (and cover types demonstrate their veil). Walls,

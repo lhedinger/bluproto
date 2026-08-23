@@ -44,7 +44,8 @@ public final class GroundTextures {
 			CLS_CRYSTAL = 14, CLS_VENT = 15, CLS_WALL_BUILT = 16, CLS_PAVED = 17,
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
-			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29;
+			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
+			CLS_ROCKY = 30;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -76,6 +77,13 @@ public final class GroundTextures {
 			{ 0x2c313e, 0x464c5e, 0x646c82 }, // sparse shards (cave stone, cool cast)
 			{ 0x353a42, 0x515862, 0x707885 }, // switch plate (deck steel family)
 			{ 0x2a2f38, 0x424a57, 0x5d6675 }, // charge dock (deck steel, a shade colder)
+			// Rocky grassland's grit: the bridge between meadow earth and bare
+			// rock. Deliberately BETWEEN its two neighbours — the soil ramp
+			// desaturated and lifted toward the stone's grey, but staying warm
+			// enough that it never reads as the cave's cold blue floor. The
+			// slabs bedded in it are drawn from CLS_STONE itself, so a rocky
+			// tile's rock IS the rock floor's rock.
+			{ 0x4a4338, 0x6b6353, 0x8f8776 }, // rocky grassland (dusty grit)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -169,6 +177,8 @@ public final class GroundTextures {
 			return CLS_STEELWALL;
 		case TYPE_DUCT:
 			return CLS_DUCT;
+		case TYPE_ROCKY:
+			return CLS_ROCKY; // slabs bedded in grit; its sward is drawn from fertility too
 		case TYPE_FLOOR:
 			// The living substrate. Its class is earth (for autotiling rank);
 			// the pixel pass paints it as sward(fertility) — green where the
@@ -303,6 +313,94 @@ public final class GroundTextures {
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
 		return ditherRamp(CLS_GRASS, p, px, py);
+	}
+
+	/**
+	 * Rocky grassland: broad stone slabs bedded in dusty grit, with what grass
+	 * the thin ground can keep clinging around their edges.
+	 *
+	 * <p>Three materials, and only one of them is new. The slabs are drawn from
+	 * {@link #CLS_STONE} — the rock-floor ramp itself, so a slab here and a
+	 * stone-floor tile next door are the same rock — and the grass is
+	 * {@link #grassPixel}, the same blades the meadow grows. Only the grit
+	 * between them has its own ramp, and that one is built as the bridge
+	 * between the two. The tile therefore reads as a PLACE where meadow and
+	 * rock meet, not as a third biome with a palette of its own.
+	 *
+	 * <p>The grass gets a shelter bonus close to a slab: on thin ground the
+	 * blades come up in the lee of the stones, where the runoff collects and
+	 * nothing can trample them flat, which is what makes a rocky sward read as
+	 * rocky rather than merely patchy.
+	 */
+	public static int rockyGround(double fert, double wx, double wy, int px, int py) {
+		// Slabs on a jittered lattice: the repeated-motif-varied-placement
+		// grammar the canopy and the reed beds use, at stone scale. Each plate
+		// is FACETED rather than round — its radius steps per angular sector,
+		// so the outline breaks into straight runs and corners the way split
+		// rock does. A smooth ellipse here reads as a pebble, and a field of
+		// identical pebbles reads as procedural; broken edges read as bedrock.
+		int C = 14; // slab lattice pitch, art-px — a plate to the tile, not cobbles
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		double bestD = 1e9, bestDy = 0, bestR = 0;
+		boolean bestPale = false;
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 96) < 0.52) {
+					continue; // open grit between the stones: most of the ground
+				}
+				double jx = cx * C + 1 + hash01(cx, cy, 97) * (C - 2);
+				double jy = cy * C + 1 + hash01(cx, cy, 98) * (C - 2);
+				double r = 2.8 + hash01(cx, cy, 99) * 4.2;
+				// Each plate lies its own way: some squat, some long.
+				double squash = 0.62 + hash01(cx, cy, 93) * 0.5;
+				double dx = (px + 0.5 - jx) * squash, dy = (py + 0.5 - jy) * 1.35;
+				double d = Math.sqrt(dx * dx + dy * dy);
+				int sector = (int) ((Math.atan2(dy, dx) + Math.PI) * (7 / (2 * Math.PI)));
+				double rr = r * (0.76 + 0.46 * hash01(cx * 7 + sector, cy, 94));
+				if (d - rr < bestD - bestR) {
+					bestD = d;
+					bestDy = py + 0.5 - jy;
+					bestR = rr;
+					// Plates weather differently: some sit pale in the light,
+					// others stay dark. Without this a rock field is one colour.
+					bestPale = hash01(cx, cy, 95) > 0.42;
+				}
+			}
+		}
+		if (bestD < bestR) {
+			int body = bestPale ? 2 : 1, band = bestPale ? 1 : 0;
+			if (bestDy < -0.45 * bestR) {
+				return RAMP[CLS_STONE][2]; // the crown catches the light
+			}
+			// Foliation: the noise is sampled far more finely across the plate
+			// than along it, so the darker rock runs in bands rather than
+			// blotches — the layered schist the photograph is bedded in.
+			return Utils.noise2(wx * 3.4 + 61, wy * 0.8 + 17, 2.2) > 0.62
+					? RAMP[CLS_STONE][band]
+					: RAMP[CLS_STONE][body];
+		}
+		if (bestD < bestR + 1.0 && bestDy > 0) {
+			return RAMP[CLS_ROCKY][0]; // contact shadow grounding the slab's south edge
+		}
+		// Off the stone: what the thin ground can grow, then the grit itself.
+		double cover = (fert - SWARD_BARE) / (SWARD_FULL - SWARD_BARE);
+		cover = cover < 0 ? 0 : (cover > 1 ? 1 : cover);
+		if (cover > 0) {
+			double clump = Utils.noise2(wx + 57, wy + 91, 1.6);
+			double shelter = bestD - bestR < 2.5 ? 0.26 : 0.0; // the lee of a stone
+			double local = cover * 1.3 + shelter + (clump - 0.5) * 0.8 - 0.30;
+			if (local > bayer(px, py)) {
+				return grassPixel(fert, wx, wy, px, py);
+			}
+		}
+		if (hash01(px >> 1, py, 88) > 0.988) {
+			return RAMP[CLS_SAND][2]; // a dead stalk bleached on the grit
+		}
+		if (hash01(px, py, 90) > 0.99) {
+			return RAMP[CLS_STONE][2]; // a chip broken off the slabs
+		}
+		return quietGround(CLS_ROCKY, wx, wy, px, py);
 	}
 
 	/**

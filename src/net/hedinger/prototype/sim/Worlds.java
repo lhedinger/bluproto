@@ -342,6 +342,15 @@ public final class Worlds {
 				} else if (elev > 0.82) {
 					t = Tile.TileType.TYPE_STONE;
 					fert = 0; // bare rock apron outside the scree
+				} else if (elev > 0.74) {
+					// The skirt where the highlands come apart into the meadow:
+					// bedrock breaking the surface as slabs, thin grit between
+					// them, and only what sward that grit can keep. Sparse by
+					// nature — this is the poorest ground a grazer can still
+					// make a living on, so it reads as a real frontier rather
+					// than a texture swap.
+					t = Tile.TileType.TYPE_ROCKY;
+					fert = 0.10 + 0.30 * moist;
 				} else if (moist > 0.70 && elev < 0.45) {
 					t = Tile.TileType.TYPE_WATER;
 					fert = 0; // lakes in the low, wet ground
