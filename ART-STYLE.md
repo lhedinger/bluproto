@@ -261,8 +261,21 @@ drift is the failure that actually happens.
 
 Note too that `SnapshotRenderer` draws its **own diagnostic glyphs** — heading
 arrows, carry links — rather than going through the painters, so a scenario shot
-is not a picture of entity art and never was. Looking at an entity means a
-harness that builds a real `World` and `View` and calls the painter itself.
+is not a picture of entity art and never was. `EntityShot` is the tool that is:
+it builds a real `World` and `View` and calls `renderWorld`, the same entry
+point the live application uses, so it exercises the painter **dispatch** as
+well as the painter — which matters, because the dispatch is where the drone was
+missing, and a harness calling the painter directly would have drawn a perfect
+drone while the renderer drew none.
+
+```
+EntityShot out.png --focus StewardDrone --sweep --ticks 3000 --span 12000
+```
+
+`--sweep` keeps one frame per heading the body is actually seen in. It reports
+how many of the eight it got and never invents the rest: a drone that spends the
+first few thousand ticks berthed returns a strip of one, which is the truth
+about that run rather than a gap in the art.
 
 ## 7. Case law — how these rules were learned
 
