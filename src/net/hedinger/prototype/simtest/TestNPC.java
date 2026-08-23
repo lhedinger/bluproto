@@ -2499,6 +2499,19 @@ public class TestNPC extends NPC {
 			if (n == this || n.isDead() || n.isRemoved()) {
 				continue;
 			}
+			// Nothing rides a machine. The drone is armour plate and rotors: no
+			// blood to drink, nothing a claw can hold, and — since it flies and
+			// cannot be hurt — a free invulnerable taxi for whatever climbed on.
+			//
+			// The rule already existed on the SENSING side, in the host scan that
+			// feeds the seek intent, so a parasite would never go LOOKING for a
+			// drone. It was missing here, on the acting side, which is the half
+			// that actually latches: any mind raising A_ATTACH beside a drone got
+			// one regardless of what it had been hunting for. Guarding only the
+			// search left the door open behind it.
+			if (!n.isOrganic()) {
+				continue;
+			}
 			// Parasites do not stack: a parasite never rides another parasite
 			// (a chain of drains would bleed the bottom host through the pile).
 			if (clade == Genome.Clade.PARASITE && n instanceof TestNPC tn && tn.clade == Genome.Clade.PARASITE) {
