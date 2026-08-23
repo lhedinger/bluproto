@@ -105,7 +105,7 @@ small, deterministic, test-backed slices.
 | 2a · Fertility field | Patchy grass capacity | Spatial niches | ✅ done |
 | **2b · Living pressure** | Temperature/light fields + day/night clock that drain energy and can starve/kill | **Real selection pressure — habitat-driven survival** | keystone; **do it after sensing** — a pressure creatures cannot perceive only kills them at random |
 | 3 · Terrain variety | `WATER` (blocks land / passes flyers), `MUD` (slows), `COVER` (blocks LOS) | Behavioural richness | ✅ done |
-| 3b · Ramps as floor | A ramp spans two levels, so walking across one changes level | Vertical space costs a mind nothing to use | ✅ done |
+| 3b · Ramps as floor | A ramp spans two levels, so walking across one changes level — along whichever cardinal it was laid, and the world lays all four | Vertical space costs a mind nothing to use | ✅ done |
 | 4 · Scent / stigmergy | Per-tile pheromone (lazy decay) + deposit/sense/home | Emergent **nests**: a marked peak the lineage clusters around | ✅ done (nesting) |
 
 ---

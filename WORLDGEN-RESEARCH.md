@@ -87,9 +87,11 @@ out over a cave cavern, that is where a natural shaft or pit belongs; link
 stations should *prefer* sites where both levels are already open instead of
 carving both flat. Roguelike practice ("pick a floor tile whose tile below is
 also floor, put the stairs there") is the degenerate version of this; the
-field version makes the two levels feel like one geology. Ramp conventions
-(east-west run, foot/top rules) stay exactly as they are — only *siting*
-gets smarter.
+field version makes the two levels feel like one geology. The foot/top rules
+stay exactly as they are — only *siting* gets smarter. (The east-west run is
+no longer a constraint: a ramp carries the cardinal it climbs, and stations
+are built in the ramp's own frame, so siting is free to turn a station to
+suit the ground it lands on.)
 
 ### 6. Graph-first design for built places (Dormans / Unexplored)
 

@@ -130,8 +130,9 @@ final class SpriteCatalog {
 	/** The level links, staged with the context that orients them: a DOWN ramp
 	 *  fading into the pit it pours into (its dark bands meet the void with no
 	 *  lip between), and an UP ramp brightening to a sunlit high end against
-	 *  the rock its landing rests on. The slope art reads its direction from
-	 *  these neighbours, so a ramp can face any way its world places it. */
+	 *  the rock its landing rests on. Both are staged facing east, the default
+	 *  a ramp is born with; the slope art takes its direction from the tile
+	 *  itself, so a ramp faces whichever way its world laid it. */
 	private void ramps() {
 		World w = stage(8, 8);
 		for (int y = 3; y <= 4; y++) {
