@@ -453,7 +453,7 @@ public class Tile {
 			}
 		} else {
 			if (t != type) {
-				return rockAnUpRampClimbsInto(temp, x, y);
+				return oneMassWithUpRamp(t);
 			}
 		}
 
@@ -461,27 +461,26 @@ public class Tile {
 	}
 
 	/**
-	 * Whether this tile is the rock a {@code RAMPUP} at {@code (x, y)} climbs
-	 * into — the mass its top disappears under.
+	 * Whether this tile and its neighbour are one mass of rock, because one of
+	 * them is an up ramp cut into the other.
 	 *
-	 * <p>Autotiling otherwise treats a wall and a ramp as different things
-	 * standing next to each other, so the wall drew its outer edge across the
-	 * join: a rounded corner and a silhouette rim, as if the ramp had been
-	 * parked against a cliff. But a ramp is a CUT in that rock, not a thing
-	 * leaning on it, and the way to say so is to let the wall carry its face
-	 * straight over the join — the wall treats the ramp as more of itself and
-	 * renders no edge there at all.
+	 * <p>Autotiling otherwise treats a wall and a ramp as two different things
+	 * standing side by side, and BOTH of them then draw a boundary: the wall
+	 * puts a rounded corner and a silhouette rim across the join, and the ramp
+	 * raises one of its own triangular side walls against rock that is already
+	 * there. The result is a doubled seam — the slope reads as a bright block
+	 * set into a socket rather than as a cut in the cliff.
 	 *
-	 * <p>Only the tile the ramp actually climbs toward counts. A wall merely
-	 * standing beside a ramp is a wall beside a ramp, and should draw its edge
-	 * like anything else; it is the head of the cut that belongs to the mass.
+	 * <p>So the two agree to be one thing: the wall carries its face over the
+	 * join and the ramp drops the wedge it does not need. It is deliberately
+	 * every side, not just the one the ramp climbs toward — the flanks are
+	 * where the doubled seam was most of the picture.
 	 */
-	private boolean rockAnUpRampClimbsInto(Tile neighbour, int x, int y) {
-		if (!isSolid() || neighbour.getType() != TileType.TYPE_RAMPUP) {
-			return false;
+	private boolean oneMassWithUpRamp(TileType other) {
+		if (isSolid() && other == TileType.TYPE_RAMPUP) {
+			return true; // I am the rock, and the ramp is a cut in me
 		}
-		int uphill = neighbour.getRampUphill();
-		return x + dirDx(uphill) == col && y + dirDy(uphill) == row;
+		return type == TileType.TYPE_RAMPUP && !other.isOpen(); // and the reverse
 	}
 
 	public boolean isConnected(World w, double x, double y, double z, boolean diagonal, boolean floorsOnly) {
