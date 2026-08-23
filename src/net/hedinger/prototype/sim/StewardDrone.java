@@ -197,10 +197,13 @@ public final class StewardDrone extends NPC {
 		this.turnRate = TURN;
 		this.flying = true;
 		this.hostile = 1; // neither friend nor foe: it is equipment
-		// Steel, out of the facility's own palette (Door.STEEL_MID_RGB): the
-		// drone belongs to the buried base, not to the biosphere, and it should
-		// read that way against the grass at a glance.
-		this.col = new java.awt.Color(net.hedinger.prototype.entities.Door.STEEL_MID_RGB);
+		// The facility's safety yellow (0xd8b028), the same hazard colour as its
+		// own charge dock's keep-clear border: the drone belongs to the buried
+		// base, not to the biosphere, and it should read that way against the
+		// grass at a glance. This is what the map dot and the minimap use --
+		// the painters carry the full palette themselves -- so it wants to be
+		// the body's dominant colour and not a detail of it.
+		this.col = new java.awt.Color(0xd8b028);
 		this.health = 100;
 		this.LOS_RANGE = 14;
 		this.SEARCH_FREQ = 20;

@@ -7186,7 +7186,9 @@ public class SimTests {
 					assertEquals("and its rows are too", DronePainter.N, row.length);
 					for (char c : row) {
 						assertTrue("only lattice marks, never a blend: " + c,
-								c == '.' || c == 'H' || c == 'M' || c == 'D' || c == 'A');
+								c == '.' || c == 'H' || c == 'M' || c == 'I' || c == 'h'
+										|| c == 'm' || c == 'd' || c == 'K' || c == 'C'
+										|| c == 'A');
 						if (c != '.' && c != 'A') {
 							body++;
 						}
@@ -7203,36 +7205,58 @@ public class SimTests {
 	}
 
 	static class EveryHeadingIsLitFromTheNorth extends Scenario {
+		/** Marks that carry lighting. The checker's black and the pylon iron do
+		 *  not: a hazard marking is a marking, and the ground painters do not
+		 *  shade theirs either. */
+		private static boolean shaded(char c) {
+			return c == 'H' || c == 'M' || c == 'I' || c == 'h' || c == 'm' || c == 'd';
+		}
+
+		private static boolean bodyish(char c) {
+			return shaded(c) || c == 'K' || c == 'C';
+		}
+
 		@Override
 		public void run() {
 			// One sun, straight overhead-north, and it does NOT turn with the
 			// drone. In every column of every heading, a contiguous run of body
 			// is lit at its north end and sunk at its south end — never the
 			// other way round, which is what a rotated pre-lit sprite would do
-			// for half the compass.
+			// for half the compass. Ends that fall on an unshaded marking are
+			// skipped rather than asserted: there is nothing there to light.
+			int checked = 0;
 			for (int i = 0; i < DronePainter.dirs(); i++) {
 				char[][] f = DronePainter.facing(i);
 				for (int c = 0; c < DronePainter.N; c++) {
 					int r = 0;
 					while (r < DronePainter.N) {
-						char ch = f[r][c];
-						if (ch == 'H' || ch == 'M' || ch == 'D') {
+						if (bodyish(f[r][c])) {
 							int r0 = r;
-							while (r < DronePainter.N && (f[r][c] == 'H' || f[r][c] == 'M'
-									|| f[r][c] == 'D')) {
+							while (r < DronePainter.N && bodyish(f[r][c])) {
 								r++;
 							}
+							char north = f[r0][c], south = f[r - 1][c];
 							if (r - r0 == 1) {
 								// A sliver one art-pixel tall is its own north
 								// AND south edge, so it stays mid rather than
 								// speckling the staircase tips with stray lights.
-								assertEquals("a one-pixel run stays mid (heading " + i
-										+ ", col " + c + ")", 'M', f[r0][c]);
+								if (shaded(north)) {
+									assertTrue("a one-pixel run stays mid (heading " + i
+											+ ", col " + c + "): " + north,
+											north == 'M' || north == 'm');
+									checked++;
+								}
 							} else {
-								assertEquals("north edge lit (heading " + i + ", col " + c + ")",
-										'H', f[r0][c]);
-								assertEquals("south edge sunk (heading " + i + ", col " + c + ")",
-										'D', f[r - 1][c]);
+								if (shaded(north)) {
+									assertTrue("north edge lit (heading " + i + ", col " + c
+											+ "): " + north, north == 'H' || north == 'h');
+									checked++;
+								}
+								if (shaded(south)) {
+									assertTrue("south edge sunk (heading " + i + ", col " + c
+											+ "): " + south, south == 'I' || south == 'd');
+									checked++;
+								}
 							}
 						} else {
 							r++;
@@ -7240,30 +7264,51 @@ public class SimTests {
 					}
 				}
 			}
+			// Guard against the assertions quietly checking nothing, which is
+			// exactly what would happen if a material change swallowed every
+			// shaded mark.
+			assertGreater("and the check actually looked at something", checked, 60);
 		}
 	}
 
-	static class TheDroneBorrowsTheSteelItIsBuiltFrom extends Scenario {
+	static class TheDroneWearsTheFacilitysOwnYellow extends Scenario {
 		@Override
 		public void run() {
-			// Materials borrow existing ramp families so built things sit in the
-			// same world as grown things (section 2). The drone is machinery, so
-			// it is the door's steel — the same three shades, not a new grey.
-			assertTrue("the shadow shade is the world's iron",
-					Door.IRON_DARK_RGB == 0x14161f);
-			assertTrue("the body is the world's steel",
-					Door.STEEL_MID_RGB == 0x515862);
-			assertTrue("the lit edge is the world's steel highlight",
-					Door.STEEL_HI_RGB == 0x707885);
-			// And the drone reports that same mid steel as its colour, so the
-			// web client's stamp and the entity swatch cannot drift apart.
-			World w = room(8, 8);
-			net.hedinger.prototype.sim.StewardDrone d =
-					new net.hedinger.prototype.sim.StewardDrone(3.5, 3.5, 0,
-							new Order(w, null, 0));
-			w.spawnEntity(d);
-			assertEquals("the drone's own colour is that steel",
-					Door.STEEL_MID_RGB, d.getColor().getRGB() & 0xffffff);
+			// Materials borrow existing families so built things sit in the same
+			// world as grown things (section 2). The drone is facility
+			// machinery, so it is painted in the facility's safety yellow --
+			// the SAME 0xd8b028 already on the dock's keep-clear border, the
+			// vent gratings and every other "machinery works here" marking --
+			// with its shadow and highlight taken off that by section 4's own
+			// x0.65 and x1.18 rather than picked by eye.
+			assertEquals("the hull is the world's hazard yellow", 0xd8b028,
+					DronePainter.hullRgb());
+			assertEquals("its lit edge is that yellow at x1.18", 0xff, DronePainter.litRgb() >> 16);
+			// The checker's black and the chassis iron are the world's, too.
+			assertEquals("the checker's black is the ground painters'", 0x17171a,
+					DronePainter.checkerRgb());
+			assertEquals("the chassis is the door's iron", Door.IRON_DARK_RGB,
+					DronePainter.chassisRgb());
+
+			// The plates carry the hazard checker, so both halves must appear on
+			// every heading -- a plate that lost its stripe is a plate that
+			// stopped saying "machinery".
+			for (int i = 0; i < DronePainter.dirs(); i++) {
+				char[][] f = DronePainter.facing(i);
+				int black = 0, yellow = 0;
+				for (char[] row : f) {
+					for (char c : row) {
+						if (c == 'K') {
+							black++;
+						}
+						if (c == 'h' || c == 'm' || c == 'd') {
+							yellow++;
+						}
+					}
+				}
+				assertGreater("heading " + i + " keeps the checker's black", black, 3);
+				assertGreater("heading " + i + " keeps the checker's yellow", yellow, 3);
+			}
 		}
 	}
 
@@ -7331,7 +7376,7 @@ public class SimTests {
 				new ServerRacksStopABodyButNotAnEye(),
 				new TheDroneIsDrawnOnTheArtPixelLattice(),
 				new EveryHeadingIsLitFromTheNorth(),
-				new TheDroneBorrowsTheSteelItIsBuiltFrom(),
+				new TheDroneWearsTheFacilitysOwnYellow(),
 				new TheDroneIsWiderAcrossThanItIsLong(),
 				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
