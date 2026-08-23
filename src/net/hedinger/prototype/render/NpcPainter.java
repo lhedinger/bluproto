@@ -110,7 +110,14 @@ final class NpcPainter {
 		float relativeSize = Utils.scaleZ2((int) n.getZ(), v.getCamZ(), size);
 		int relativeSize2 = round(relativeSize * 2);
 
-		if (n.getGenome() != null) {
+		if ("drone".equals(n.ecoRole())) {
+			// Machinery, not an organism: an authored stamp rather than a
+			// procedural body. It has no genome, and without this branch it
+			// would fall through to the legacy hostility sprite below --
+			// which is where it sat while the web client drew a sentinel the
+			// Java renderer had never heard of.
+			DronePainter.draw(n, g, v);
+		} else if (n.getGenome() != null) {
 			// Genome-driven top-down organism: oriented to the heading; animated
 			// faster while moving, gently while idle (offset by id so they aren't
 			// in lockstep). Newborns pop in with the generic spawn action.
