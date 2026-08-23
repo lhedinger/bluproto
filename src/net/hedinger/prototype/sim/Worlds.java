@@ -1079,9 +1079,21 @@ public final class Worlds {
 					Math.min(rows - 4, Math.max(2, rows / 2)) });
 		}
 
-		// 4. Carve a station at each site, then link the cave landings.
-		for (int[] s : sites) {
-			linkStation(w, s[0], s[1]);
+		// 4. Carve a station at each site, then link the cave landings. Stations
+		//    take their direction in turn rather than by lot: a world with four
+		//    of them has one facing each way by construction. Left to a hash the
+		//    four are only likely, and "likely" over the handful of stations a
+		//    map holds means a world that quietly has no north ramp in it — the
+		//    freedom would be in the engine and invisible in the world, which is
+		//    the state this whole change existed to leave. The starting cardinal
+		//    is hashed from the first site so the cycle does not always open the
+		//    same way.
+		int dirOffset = sites.isEmpty() ? 0
+				: (int) (net.hedinger.prototype.engine.GroundTextures.hash01(
+						sites.get(0)[0], sites.get(0)[1], 61) * 4) & 3;
+		for (int i = 0; i < sites.size(); i++) {
+			int[] s = sites.get(i);
+			linkStation(w, s[0], s[1], (i + dirOffset) & 3);
 		}
 		for (int i = 1; i < sites.size(); i++) {
 			carveCaveCorridor(w, sites.get(i - 1), sites.get(i), cols, rows);
@@ -1103,9 +1115,10 @@ public final class Worlds {
 		double bestD = Double.MAX_VALUE;
 		for (int[] p : members) {
 			int sx = p[0], sy = p[1];
-			// linkStation touches sx-2..sx+3 (apron + up-ramp wall) and sy-1..sy+2
-			// (the ramp run is two rows wide).
-			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 4) {
+			// The station's footprint turns with the direction this site faces,
+			// so the room it needs is asked for in its own frame rather than as
+			// a fixed east-west box.
+			if (!stationFits(sx, sy, cols, rows)) {
 				continue;
 			}
 			double d = (sx - gx) * (double) (sx - gx) + (sy - gy) * (double) (sy - gy);
@@ -1378,6 +1391,18 @@ public final class Worlds {
 				if (cx < 1 || cy < 1 || cx >= cols - 1 || cy >= rows - 1) {
 					continue;
 				}
+				Tile.TileType at = w.getTile(cx, cy, CAVE_Z).getType();
+				if (at == Tile.TileType.TYPE_RAMPUP || at == Tile.TileType.TYPE_RAMPDOWN) {
+					// A corridor that meets a ramp JOINS it — a ramp is walkable
+					// floor already. Paving over it would leave the station's two
+					// levels tied together by nothing but the pit beside it, and
+					// silently: the corridor is stone either way, so the map looks
+					// right and only the route up is gone. That stayed hidden
+					// while every ramp pointed east and the corridors mostly ran
+					// the other way; now that a station faces the next station,
+					// the tunnel arrives along the slope every time.
+					continue;
+				}
 				w.setTile(cx, cy, CAVE_Z, Tile.TileType.TYPE_STONE);
 				w.getTile(cx, cy, CAVE_Z).setFertility(0);
 			}
@@ -1445,65 +1470,86 @@ public final class Worlds {
 	}
 
 	/**
+	 * Whether a station fits inside the map at {@code (sx, sy)}. A station's
+	 * footprint reaches 3 tiles along its slope and 2 across, so whichever way
+	 * it is turned it stays inside a 7x7 box centred on the site — ask for that
+	 * box and the site is safe to build in any of the four directions, which is
+	 * what lets the direction be chosen freely afterwards.
+	 */
+	private static boolean stationFits(int sx, int sy, int cols, int rows) {
+		return sx >= 3 && sy >= 3 && sx < cols - 3 && sy < rows - 3;
+	}
+
+	/**
 	 * A working two-way link between the surface and the cave, built to match the
-	 * engine's movement rules: a ramp is floor spanning two levels, so walking east
-	 * off a RAMPUP lands a level up and walking west off a RAMPDOWN lands a level
+	 * engine's movement rules: a ramp is floor spanning two levels, so stepping
+	 * off a RAMPUP's high side lands a level up and off a RAMPDOWN's foot a level
 	 * down. A HOLE is not a route at all, just a pit that drops whatever stands on
 	 * it — kept here because a second way down costs nothing.
 	 *
-	 * <p>Laid out along two adjacent rows at {@code (sx, sy)} and {@code (sx,
-	 * sy+1)} — the ramps run east-west as the engine's movement rules require,
-	 * and the run is two tiles wide so bodies pass each other on it instead of
-	 * queueing on a one-tile thread. Per row:
+	 * <p>The whole station is laid out in the RAMP'S OWN FRAME: {@code t} runs
+	 * up the slope and {@code r} across it, and both are mapped to the map's
+	 * axes through the direction this site faces. So the same station is built
+	 * whichever way it points, and there is one description of it rather than
+	 * four. The run is two tiles wide ({@code r} of 0 and 1) so bodies pass each
+	 * other on it instead of queueing on a one-tile thread. Per row:
 	 * <ul>
-	 *   <li><b>Down</b> — on the surface, a RAMPDOWN whose foot faces west onto the
-	 *       cave floor carved below, with a HOLE beside it that falls to the same
-	 *       landing.</li>
-	 *   <li><b>Up</b> — in the cave, a RAMPUP whose top faces east onto the surface
-	 *       floor carved above. The WALL below that landing is not part of the
-	 *       mechanism any more, only the rock the surface tile rests on.</li>
+	 *   <li><b>Down</b> — on the surface at {@code t=1}, a RAMPDOWN whose foot
+	 *       faces back down-slope onto the cave floor carved at {@code t=0},
+	 *       with a HOLE on that same tile that falls to the same landing.</li>
+	 *   <li><b>Up</b> — in the cave at {@code t=2}, a RAMPUP whose top faces up
+	 *       the slope onto the surface floor carved at {@code t=3}. The WALL
+	 *       below that landing is only the rock the surface tile rests on.</li>
 	 * </ul>
 	 */
-	private static void linkStation(World w, int sx, int sy) {
-		// A small open patch on both levels so creatures can reach the link; the
-		// two-row ramp run needs the apron to cover both rows.
-		carveFloor(w, sx, sy, SURFACE_Z);
-		carveFloor(w, sx, sy + 1, SURFACE_Z);
-		carveFloor(w, sx, sy, CAVE_Z);
-		carveFloor(w, sx, sy + 1, CAVE_Z);
+	private static void linkStation(World w, int sx, int sy, int u) {
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);          // up the slope
+		int cx = Tile.dirDx((u + 1) & 3), cy = Tile.dirDy((u + 1) & 3); // across it
+
+		// A small open patch on both levels so creatures can reach the link,
+		// carved in the station's frame so it covers the run whichever way the
+		// slope points.
+		for (int t = -2; t <= 2; t++) {
+			for (int r = -1; r <= 2; r++) {
+				int x = sx + t * ax + r * cx, y = sy + t * ay + r * cy;
+				carveTile(w, x, y, SURFACE_Z);
+				carveTile(w, x, y, CAVE_Z);
+			}
+		}
 
 		for (int r = 0; r <= 1; r++) {
-			int y = sy + r;
-			// Down: ramp on the surface descending west, with a hole beside it; the
-			// cave floor below (sx, y) is what both routes land on.
-			w.setTile(sx, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
-			w.setTile(sx + 1, y, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
-			w.setTile(sx, y, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
-			w.getTile(sx, y, CAVE_Z).setFertility(0);
+			int bx = sx + r * cx, by = sy + r * cy;
+			int x0 = bx, y0 = by;                       // t = 0: the cave landing
+			int x1 = bx + ax, y1 = by + ay;             // t = 1: the descending ramp
+			int x2 = bx + 2 * ax, y2 = by + 2 * ay;     // t = 2: the climbing ramp
+			int x3 = bx + 3 * ax, y3 = by + 3 * ay;     // t = 3: the surface landing
 
-			// Up: ramp in the cave climbing east onto the surface floor carved above.
-			int rx = sx + 2;
-			w.setTile(rx, y, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
-			w.setTile(rx + 1, y, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
-			w.setTile(rx + 1, y, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
-			w.getTile(rx + 1, y, SURFACE_Z).setFertility(0.7);
+			// Down: a pit, and beside it a ramp whose foot faces back down-slope;
+			// the cave floor at t=0 is what both routes land on.
+			w.setTile(x0, y0, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+			w.setTile(x1, y1, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(x1, y1, SURFACE_Z).setRampUphill(u);
+			w.setTile(x0, y0, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
+			w.getTile(x0, y0, CAVE_Z).setFertility(0);
+
+			// Up: a ramp in the cave climbing onto the surface floor carved above.
+			w.setTile(x2, y2, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(x2, y2, CAVE_Z).setRampUphill(u);
+			w.setTile(x3, y3, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
+			w.setTile(x3, y3, SURFACE_Z, Tile.TileType.TYPE_FLOOR); // landing above
+			w.getTile(x3, y3, SURFACE_Z).setFertility(0.7);
 		}
 	}
 
-	/** Clears a 5x3 patch of walkable floor around a tile (a link landing/apron),
-	 *  lush on the surface, bare underground. */
-	private static void carveFloor(World w, int cx, int cy, int z) {
-		for (int dx = -2; dx <= 2; dx++) {
-			for (int dy = -1; dy <= 1; dy++) {
-				int x = cx + dx, y = cy + dy;
-				if (x < 1 || y < 1 || x >= w.getColums() - 1 || y >= w.getRows() - 1) {
-					continue;
-				}
-				w.setTile(x, y, z, z == SURFACE_Z
-						? Tile.TileType.TYPE_FLOOR : Tile.TileType.TYPE_STONE);
-				w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
-			}
+	/** One tile of station apron: walkable ground, lush on the surface and bare
+	 *  underground. */
+	private static void carveTile(World w, int x, int y, int z) {
+		if (x < 1 || y < 1 || x >= w.getColums() - 1 || y >= w.getRows() - 1) {
+			return;
 		}
+		w.setTile(x, y, z, z == SURFACE_Z
+				? Tile.TileType.TYPE_FLOOR : Tile.TileType.TYPE_STONE);
+		w.getTile(x, y, z).setFertility(z == SURFACE_Z ? 0.7 : 0);
 	}
 
 	/** A random open cave tile, for seeding the underground cohort onto stone or

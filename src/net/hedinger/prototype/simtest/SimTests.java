@@ -702,9 +702,16 @@ public class SimTests {
 	 * (grass-growing level) sits ABOVE the cave, so a creature that walks onto a
 	 * surface hole falls into the cave — a VALID level — rather than off the
 	 * bottom into an invalid negative level (the inversion bug that silently lost
-	 * wandering creatures). Also pins the up-link: a walker on a cave RAMPUP that
-	 * steps east into the flanking wall climbs to the surface. Guards against
-	 * re-inverting the levels or breaking the ramp geometry.
+	 * wandering creatures). Also pins both links as WALKS: a body on a cave
+	 * RAMPUP that heads up the slope climbs to the surface, and one on a surface
+	 * RAMPDOWN that heads down it descends. Guards against re-inverting the
+	 * levels or breaking the ramp geometry.
+	 *
+	 * <p>Every heading here is taken from the ramp the world actually built,
+	 * rather than assumed. The world lays its stations facing all four ways now,
+	 * so a test that walked east on principle would be pinning the direction the
+	 * generator happens to have chosen for whichever ramp it found first — which
+	 * is a fact about this seed, not about the world's links working.
 	 */
 	static class DemoLevelsLinkSurfaceAndCave extends Scenario {
 		private static final Tile.TileType HOLE = Tile.TileType.TYPE_HOLE;
@@ -763,7 +770,10 @@ public class SimTests {
 				}
 			}
 			assertGreater("the cave has ramps up to the surface", rx, -1);
-			TestNPC climber = TestNPC.mover(rx + 0.5, ry + 0.5, surface - 1, 0.0).withSpeed(0.05);
+			int upDir = w.getTile(rx, ry, surface - 1).getRampUphill();
+			double upHeading = Math.atan2(Tile.dirDy(upDir), Tile.dirDx(upDir));
+			TestNPC climber = TestNPC.mover(rx + 0.5, ry + 0.5, surface - 1, upHeading)
+					.withSpeed(0.05);
 			w.spawnEntity(climber);
 			w.think();
 			tick(w, 200);
@@ -782,11 +792,15 @@ public class SimTests {
 				}
 			}
 			assertGreater("the surface has ramps down into the cave", dx, -1);
-			// Seal the pit beside the ramp first. It descends to the same landing, so
-			// leaving it open would let gravity pass this test and prove nothing; with
-			// it walled off, only the ramp can carry the walker down.
-			w.setTile(dx - 1, dy, surface, Tile.TileType.TYPE_WALL);
-			TestNPC walker = TestNPC.mover(dx + 0.5, dy + 0.5, surface, Math.PI).withSpeed(0.05);
+			// Seal the pit at the ramp's foot first. It descends to the same landing,
+			// so leaving it open would let gravity pass this test and prove nothing;
+			// with it walled off, only the ramp can carry the walker down.
+			int downDir = Tile.opposite(w.getTile(dx, dy, surface).getRampUphill());
+			double downHeading = Math.atan2(Tile.dirDy(downDir), Tile.dirDx(downDir));
+			w.setTile(dx + Tile.dirDx(downDir), dy + Tile.dirDy(downDir), surface,
+					Tile.TileType.TYPE_WALL);
+			TestNPC walker = TestNPC.mover(dx + 0.5, dy + 0.5, surface, downHeading)
+					.withSpeed(0.05);
 			w.spawnEntity(walker);
 			w.think();
 			tick(w, 60);
