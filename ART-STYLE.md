@@ -382,16 +382,25 @@ The precedents, so nobody pays twice:
   for something already cued is a cue competing, not reinforcing.
 - **The threshold that fought geometry** — a scenario written to pin the
   stretching diagonal asserted the two hulls were within ten lattice cells of
-  each other. It then failed on art that was correct, because a band at
-  forty-five degrees genuinely spends more cells than an axis-aligned one of the
-  same measured size: its staircase edges are cells the straight version never
-  pays for. The number had been invented rather than derived, and it was
-  measuring the lattice instead of the shape. Two rules out of it. **A threshold
-  you chose yourself is a hypothesis** — when correct art fails it, fix the
-  premise, do not bend the art. And **run a new assertion against the OLD art
-  before trusting it**: an assertion that has never failed has not been shown to
-  be capable of failing, and both of the drone's shape scenarios were confirmed
-  by reverting the stamp and watching them go red on the right number.
+  each other. It failed on art that was correct, so it was loosened to a ratio;
+  the ratio then failed on the *loader*, in the opposite direction, and the
+  second failure is the instructive one. **Cell count is not a cross-orientation
+  measure of shape at all.** Rasterised at forty-five degrees the same form can
+  gain cells or lose them depending only on how its edges fall on the lattice —
+  measured here, half-extents 5.0×1.5 come out at 1.12 of the axis-aligned
+  count, 5.0×2.5 at 0.96, 4.0×4.0 at 0.75 and 6.0×1.0 at 0.64. Not even
+  monotonic. The first fix reasoned from one shape and wrote the conclusion down
+  as though it were general, which is the same mistake as the original threshold
+  wearing a better disguise.
+  What survives is: compare **extents**, in the body's own axes, and test
+  hollowness *directly* — assert the hull encloses no empty cell — rather than
+  inferring it from an area that the lattice is free to change. Three rules out
+  of it. **A threshold you chose yourself is a hypothesis**: when correct art
+  fails it, fix the premise, do not bend the art. **A fix derived from one
+  example is also a hypothesis** — the loosened ratio was as invented as the
+  number it replaced. And **run a new assertion against the OLD art before
+  trusting it**: an assertion that has never failed has not been shown to be
+  capable of failing.
 
 - **The pits that were holes in the picture** — pit interiors were drawn by
   *skipping* the see-through art-pixels: leave them unpainted and the level

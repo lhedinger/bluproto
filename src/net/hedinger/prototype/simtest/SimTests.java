@@ -7488,16 +7488,56 @@ public class SimTests {
 			return new double[] { hiA - loA + 1, hiX - loX + 1 };
 		}
 
-		private static int hullCells(String[] stamp) {
-			int n = 0;
-			for (String row : stamp) {
-				for (char ch : row.toCharArray()) {
-					if (ch == '#' || ch == 'A') {
-						n++;
+		/**
+		 * Whether the body encloses an empty cell — a hole the lattice can
+		 * neither gain nor lose under rotation, unlike an area.
+		 *
+		 * <p>Flood the empty cells inward from the border; anything empty the
+		 * flood cannot reach is walled in by body on every side.
+		 *
+		 * <p>The flood is EIGHT-connected, which is not a detail. A gap running
+		 * diagonally between two parts is one art-pixel wide and joined only
+		 * corner to corner, and there are four such cells in the drone's own
+		 * diagonal stamp — the channel between its hull and its plates. Flood
+		 * orthogonally and every one of them reads as a sealed void, so the
+		 * check fails on art that is correct and has been looked at. A hole is
+		 * a cell with body on all eight sides, not on four.
+		 */
+		private static boolean enclosesAHole(String[] stamp) {
+			int h = stamp.length, w = stamp[0].length();
+			boolean[][] open = new boolean[h][w];
+			java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+			for (int r = 0; r < h; r++) {
+				for (int c = 0; c < w; c++) {
+					if ((r == 0 || c == 0 || r == h - 1 || c == w - 1)
+							&& stamp[r].charAt(c) == '.') {
+						open[r][c] = true;
+						q.add(new int[] { r, c });
 					}
 				}
 			}
-			return n;
+			int[][] step = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+					{ 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+			while (!q.isEmpty()) {
+				int[] at = q.poll();
+				for (int[] d : step) {
+					int nr = at[0] + d[0], nc = at[1] + d[1];
+					if (nr < 0 || nc < 0 || nr >= h || nc >= w || open[nr][nc]
+							|| stamp[nr].charAt(nc) != '.') {
+						continue;
+					}
+					open[nr][nc] = true;
+					q.add(new int[] { nr, nc });
+				}
+			}
+			for (int r = 0; r < h; r++) {
+				for (int c = 0; c < w; c++) {
+					if (stamp[r].charAt(c) == '.' && !open[r][c]) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		@Override
@@ -7521,22 +7561,19 @@ public class SimTests {
 			assertLess("and no thinner across the body", diag[1], card[1] + 1.5);
 			assertGreater("nor fatter", diag[1], card[1] - 1.5);
 
-			// The same thing said as area, which catches a shape that matches on
-			// both extents while being hollow or bloated between them.
+			// Hollowness is tested DIRECTLY rather than inferred from area.
 			//
-			// Compared as a RATIO, and generously, because the diagonal
-			// legitimately carries more cells than the cardinal at the same
-			// measured size: a band at forty-five degrees has staircase edges,
-			// and every step of that staircase is lattice cells the
-			// axis-aligned version does not spend. An absolute cell difference
-			// was tried first and is the wrong test — it fights that geometry
-			// instead of measuring the shape, and it fails on art that is
-			// correct.
-			int cardCells = hullCells(DronePainter.CARDINAL);
-			int diagCells = hullCells(DronePainter.DIAGONAL);
-			double ratio = diagCells / (double) cardCells;
-			assertGreater("the diagonal is not hollow next to the cardinal", ratio, 0.8);
-			assertLess("nor bloated beside it", ratio, 1.25);
+			// Two earlier versions of this check compared cell counts — first
+			// as an absolute difference, then as a ratio — and both were wrong,
+			// because cell count is not a cross-orientation measure of shape.
+			// Rasterised at forty-five degrees the same form gains or loses
+			// cells depending only on how its edges fall on the lattice: at
+			// half-extents 5.0x1.5 the diagonal comes out at 1.12 of the
+			// axis-aligned count, at 5.0x2.5 at 0.96, at 4.0x4.0 at 0.75, at
+			// 6.0x1.0 at 0.64. Not even monotonic. Whatever bound is chosen
+			// fails some correct shape.
+			assertTrue("the cardinal hull is solid", !enclosesAHole(DronePainter.CARDINAL));
+			assertTrue("and so is the diagonal", !enclosesAHole(DronePainter.DIAGONAL));
 		}
 	}
 
