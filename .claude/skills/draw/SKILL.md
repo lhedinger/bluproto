@@ -89,9 +89,25 @@ live in a simpler idiom, but the two must agree.
 
 ## Look at it before you commit
 
-You cannot judge pixel art by reading it, and the Java renderer is not easy to
-run headless. For client-side glyphs, extract the painter into a scratch page
-and screenshot it:
+You cannot judge pixel art by reading it.
+
+For anything the **Java** renderer draws, use `EntityShot` — it builds a real
+world and calls `renderWorld`, the same entry point the live app uses, so it
+shows the art through the real dispatch rather than through the painter you
+hoped was being called:
+
+```bash
+./gradlew compileJava -q
+java -cp engine/build/classes/java/main net.hedinger.prototype.simtest.EntityShot \
+  out.png --focus StewardDrone --sweep --ticks 3000 --span 12000 --cell 3
+```
+
+`--sweep` collects one frame per heading the body is actually seen in and tells
+you how many of the eight it managed. A short strip is information, not a bug:
+an entity that stays parked is only ever drawn one way.
+
+For client-side glyphs, extract the painter into a scratch page and screenshot
+it:
 
 ```bash
 # strip the TS types out of the drawing functions into a plain <script>,
