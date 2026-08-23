@@ -165,6 +165,13 @@ public abstract class NPC extends Entity {
 	/** This creature's clade ("herbivore", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick
 	 *  census can bucket bodies without knowing their concrete classes. */
+	/** A body is bound by terrain: it cannot end a tick inside a wall, whatever
+	 *  put it there. See {@link net.hedinger.prototype.engine.Entity#boundToTerrain}. */
+	@Override
+	protected boolean boundToTerrain() {
+		return true;
+	}
+
 	public String ecoRole() {
 		return "";
 	}

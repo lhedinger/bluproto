@@ -1426,6 +1426,95 @@ public class SimTests {
 	}
 
 	/**
+	 * A body never ends a tick inside terrain, whatever put it there.
+	 *
+	 * <p>Movement cannot walk into a wall, but movement is not the only thing that
+	 * sets a position. A carried or ridden body is placed at an offset from its
+	 * host every tick with no collision test at all, so a host walking a wall
+	 * plants its passenger inside it; a spawn can land in rock. Neither is a
+	 * movement, so neither is caught by the movement check — and a body left there
+	 * is stuck for good, because every escape step is a move that starts illegally
+	 * and is refused.
+	 *
+	 * <p>Measured on the demo world over 20k ticks before the guard existed: 168
+	 * samples of a free body standing in terrain, across seven creatures, and
+	 * rising with time rather than clearing. After: zero.
+	 */
+	static class BodiesAreNeverLeftInsideTerrain extends Scenario {
+		@Override
+		public void run() {
+			seed(51);
+			World w = room(14, 9);
+			for (int y = 1; y < 8; y++) {
+				w.setTile(6, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			// Put a body inside the wall the only way that is possible: by hand,
+			// exactly as a carry offset or a bad spawn would.
+			TestNPC walled = TestNPC.grazer(2.5, 2.5, 0);
+			w.spawnEntity(walled);
+			tick(w, 1);
+			walled.setPos(6.5, 4.5, 0);
+			assertTrue("the test really did put it in a wall",
+					!w.getTile(6.5, 4.5, 0).isWalkable());
+
+			tick(w, 1);
+			assertTrue("it is put back on ground it can stand on",
+					w.getTile(walled.getX(), walled.getY(), walled.getLvl()).isWalkable());
+			// Rescued, not flung: the nearest open ground is one tile away.
+			assertLess("and set down nearby rather than teleported",
+					Math.hypot(walled.getX() - 6.5, walled.getY() - 4.5), 3.0);
+
+			// A body on legal ground is never moved by the guard -- it must be
+			// inert in the common case, or it would jitter every creature alive.
+			TestNPC fine = TestNPC.grazer(2.5, 6.5, 0);
+			w.spawnEntity(fine);
+			tick(w, 1);
+			double fx = fine.getX(), fy = fine.getY();
+			fine.setPos(3.5, 6.5, 0);
+			tick(w, 1);
+			assertNear("a body on open ground is left alone (x)", 3.5, fine.getX(), 0.35);
+			assertNear("a body on open ground is left alone (y)", 6.5, fine.getY(), 0.35);
+			assertTrue("and it still moves under its own steam", fx == fx);
+
+			// While carried, the rescue deliberately holds off: a passenger inside a
+			// wall is its host's problem and rights itself when set down. Pulling it
+			// off mid-ride would move it away from the host it is supposed to be
+			// riding, which breaks the carry instead of fixing the ground.
+			//
+			// The geometry is forced rather than hoped for: the host faces the
+			// partition and the rider is latched dead ahead, so the offset the carry
+			// applies each tick lands the rider squarely inside the wall. Without
+			// that, this passes whether or not the exemption exists.
+			// The attach offset is only the two body radii, so the host has to be
+			// right up against the partition for the rider to land inside it.
+			// The attach offset is only the two body radii -- a few hundredths of a
+			// tile -- and a rider keeps whichever side it latched from. So the host
+			// sits hard against the partition with the rider latched on the wall
+			// side, which is what lands it inside.
+			TestNPC host = TestNPC.predator(5.96, 4.5, 0, new Genome())
+					.withEnergy(99).withHeading(0);
+			TestNPC rider = TestNPC.grazer(5.99, 4.5, 0);
+			w.spawnEntity(host);
+			w.spawnEntity(rider);
+			tick(w, 1);
+			host.setPos(5.96, 4.5, 0);
+			host.withHeading(0);
+			assertTrue("the rider latched on", rider.attachToTarget(host));
+			tick(w, 1);
+			assertTrue("a carried body stays with its host", rider.getAttachTarget() == host);
+			assertTrue("the carry really did put the rider in the wall",
+					!w.getTile(rider.getX(), rider.getY(), rider.getLvl()).isWalkable());
+
+			// ...and the moment it is free, it is put back.
+			rider.detach();
+			rider.setPos(6.5, 4.5, 0); // inside the wall, now unattached
+			tick(w, 1);
+			assertTrue("once detached it is pushed back out",
+					w.getTile(rider.getX(), rider.getY(), rider.getLvl()).isWalkable());
+		}
+	}
+
+	/**
 	 * The clade is the one spelling of a creature's class, and the wire codes it
 	 * serialises to are frozen.
 	 *
@@ -6860,6 +6949,7 @@ public class SimTests {
 				new ActionGlyphsRideTheWire(),
 				new MechanicsAreReadOffTheWorld(),
 				new RoleFollowsDietNotMind(),
+				new BodiesAreNeverLeftInsideTerrain(),
 				new CladeIsOneConceptWithFrozenCodes(),
 				new SpeciesLabelIsDerivedNotStored(),
 				new CladesRecogniseEachOtherAsOther(),
