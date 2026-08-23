@@ -70,22 +70,27 @@ public final class StewardDrone extends NPC {
 	 * time a cull takes, so this is the knob that decides whether the
 	 * intervention is a thing you watch happen or a thing you notice afterwards.
 	 *
+	 * <p>Eased a further quarter to 0.12 — four tiles a second, some thirty-eight
+	 * end to end — because at 0.16 it still read as hurrying. Each step down has
+	 * made the cull more of an event and less of a fact you find out about.
+	 *
 	 * <p>The price is paid by the largest cohort, and it is worth knowing before
 	 * anyone changes this number back. Measured over 16k ticks of the seeded
 	 * world, halving the speed cut the cull rate from about 0.05 bodies a tick
-	 * to 0.017 — and at that rate the drone can no longer finish a prey cull.
-	 * Prey settles at 167-174 against a ceiling of 160, which is to say against
-	 * the {@code BACKSTOP} rather than against the drone, and the prey order
-	 * never clears. So for the big cohort the visible machine is now
-	 * accompanying the control rather than being it; the small cohorts
-	 * (predators, parasites) it still services to the full 70% target.
+	 * to 0.017 — and at that rate the drone can no longer finish a herbivore
+	 * cull. The herd settles at 167-174 against a ceiling of 160, which is to
+	 * say against the {@code BACKSTOP} rather than against the drone, and the
+	 * order never clears. Easing to 0.12 only deepens that. So for the big
+	 * cohort the visible machine now accompanies the control rather than being
+	 * it; the small cohorts (predators, parasites) it still services to the
+	 * full 70% target.
 	 *
 	 * <p>That is a deliberate trade of throughput for legibility, not an
 	 * oversight. If the throughput is wanted back without giving up the pace,
 	 * the knob to reach for is {@code CHARGE_TICKS} or {@code BACKSTOP} — not
 	 * this one, which is what makes the drone watchable.
 	 */
-	private static final double CRUISE = 0.16;
+	private static final double CRUISE = 0.12;
 
 	/** Steering divisor for {@link #steer} — lower turns harder. A machine
 	 *  pivots about its own axis, so it out-turns anything with legs. */
