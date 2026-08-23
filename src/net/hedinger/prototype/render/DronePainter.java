@@ -1,11 +1,9 @@
 package net.hedinger.prototype.render;
 
-import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 
 import net.hedinger.prototype.engine.View;
-import net.hedinger.prototype.entities.Door;
 import net.hedinger.prototype.entities.NPC;
 
 /**
@@ -164,27 +162,14 @@ public final class DronePainter {
 	 *  shadow to sit against, not that nothing may fly. */
 	private static final int LIFT = 8;
 
-	/** Heading buckets, matching the creature atlases' eight. */
-	private static final int DIRS = 8;
-
 	/** The eight shaded stamps, resolved once: a pure function of the two
 	 *  authored silhouettes, with no RNG and no clock in sight. */
-	static final char[][][] FACING = new char[DIRS][][];
-
-	static {
-		for (int i = 0; i < DIRS; i++) {
-			char[][] s = grid((i & 1) == 0 ? CARDINAL : DIAGONAL);
-			for (int q = 0; q < i / 2; q++) {
-				s = rot90(s);
-			}
-			FACING[i] = shade(s);
-		}
-	}
+	static final char[][][] FACING = MachineStamp.facings(CARDINAL, DIAGONAL, N);
 
 	/** The shaded stamp for one heading bucket, for the conformance scenarios
 	 *  and for {@code /sprites}. Copied, so nobody can edit the art in place. */
 	public static char[][] facing(int bucket) {
-		char[][] s = FACING[Math.floorMod(bucket, DIRS)];
+		char[][] s = FACING[Math.floorMod(bucket, MachineStamp.DIRS)];
 		char[][] o = new char[N][];
 		for (int r = 0; r < N; r++) {
 			o[r] = s[r].clone();
@@ -193,248 +178,50 @@ public final class DronePainter {
 	}
 
 	/** How many headings the drone is drawn for. */
+	public static int dirs() {
+		return MachineStamp.DIRS;
+	}
+
 	/** The palette, for the conformance scenarios: proof the machine is painted
 	 *  in colours the world already owned rather than ones picked by eye. */
 	public static int hullRgb() {
-		return YELLOW[1].getRGB() & 0xffffff;
+		return MachineStamp.YELLOW[1].getRGB() & 0xffffff;
 	}
 
 	public static int litRgb() {
-		return YELLOW[2].getRGB() & 0xffffff;
+		return MachineStamp.YELLOW[2].getRGB() & 0xffffff;
 	}
 
 	public static int checkerRgb() {
-		return HAZARD_DARK.getRGB() & 0xffffff;
+		return MachineStamp.HAZARD_DARK.getRGB() & 0xffffff;
 	}
 
 	public static int chassisRgb() {
-		return IRON.getRGB() & 0xffffff;
-	}
-
-	public static int dirs() {
-		return DIRS;
-	}
-
-	/**
-	 * The facility's own safety yellow, given the two shades it needs to be a
-	 * body colour rather than a stripe.
-	 *
-	 * <p>Nothing here is invented. {@code 0xd8b028} is the hazard yellow already
-	 * painted on the dock's keep-clear border, the vent gratings and every other
-	 * "machinery works here" marking underground; the shadow and highlight come
-	 * off it by section 4's own x0.65 and x1.18, the same operation
-	 * {@code chargeDock} uses on its contact ring. Section 2 asks for exactly
-	 * this promotion: an accent common enough to read as a texture IS a ramp
-	 * colour now, so it gets a ramp.
-	 */
-	private static final int HAZARD_RGB = 0xd8b028;
-
-	private static final Color[] YELLOW = {
-			darken(HAZARD_RGB, 0.65), new Color(HAZARD_RGB), lighten(HAZARD_RGB, 1.18),
-	};
-	/** The black half of the hazard checker, as the ground painters use it. */
-	private static final Color HAZARD_DARK = new Color(0x17171a);
-	/** The hull's sunk south edge, and the pylons. Iron rather than a darker
-	 *  yellow: against pale ground a yellow-on-yellow edge disappears, and the
-	 *  machine needs a hard bottom line to sit against anything. The pylons are
-	 *  chassis, so they are iron for the same reason they are thin — they hold
-	 *  the plates, they do not compete with them. */
-	private static final Color IRON = new Color(Door.IRON_DARK_RGB);
-	/** The warning lamp: the signal family's red, which is the one colour that
-	 *  survives against a yellow body. Amber vanished into the hull and the
-	 *  cold lamp white read as a dead pixel. */
-	private static final Color LAMP = new Color(0xE0455F);
-	private static final Color SHADOW = new Color(0, 0, 0, 78);
-
-	private static Color darken(int rgb, double f) {
-		return scale(rgb, f);
-	}
-
-	private static Color lighten(int rgb, double f) {
-		return scale(rgb, f);
-	}
-
-	private static Color scale(int rgb, double f) {
-		return new Color(clamp(((rgb >> 16) & 0xff) * f), clamp(((rgb >> 8) & 0xff) * f),
-				clamp((rgb & 0xff) * f));
-	}
-
-	private static int clamp(double v) {
-		return (int) Math.max(0, Math.min(255, Math.round(v)));
-	}
-
-	public static void draw(NPC n, Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-		double Z = n.getZ();
-		// One art-pixel on screen. Below a pixel there is nothing to draw.
-		if (v.pixelX(n.getX() + 1, Z, 0) - v.pixelX(n.getX(), Z, 0) <= 0) {
-			return;
-		}
-		// Anchor on the world art-pixel lattice, exactly as the nest stamp
-		// does: nothing positions itself off-lattice to look smoother.
-		int cgx = (int) Math.round(n.getX() * A);
-		int cgy = (int) Math.round(n.getY() * A);
-
-		int sh = SHADOW_OVAL.length, sw = SHADOW_OVAL[0].length();
-		blit(g2, grid(SHADOW_OVAL, sh, sw), cgx - sw / 2, cgy - sh / 2 + LIFT, Z, v, true);
-		blit(g2, FACING[bucket(n.getDirection())], cgx - N / 2, cgy - N / 2, Z, v, false);
-	}
-
-	private static void blit(Graphics2D g2, char[][] rows, int gx0, int gy0, double Z, View v,
-			boolean asShadow) {
-		for (int row = 0; row < rows.length; row++) {
-			for (int col = 0; col < rows[row].length; col++) {
-				char ch = rows[row][col];
-				if (ch == '.') {
-					continue;
-				}
-				Color c = asShadow ? SHADOW : shadeOf(ch);
-				if (c == null) {
-					continue;
-				}
-				int gx = gx0 + col, gy = gy0 + row;
-				// Edge-exact blocks: each block's extent comes from its
-				// neighbour's rounded edge, never a rounded-up box, or the
-				// translucent oval's overlaps double-tint into grid lines.
-				int x0 = v.pixelX(gx / (double) A, Z, 0);
-				int x1 = v.pixelX((gx + 1) / (double) A, Z, 0);
-				int y0 = v.pixelY(gy / (double) A, Z, 0);
-				int y1 = v.pixelY((gy + 1) / (double) A, Z, 0);
-				g2.setColor(c);
-				g2.fillRect(x0, y0, x1 - x0, y1 - y0);
-			}
-		}
+		return MachineStamp.IRON.getRGB() & 0xffffff;
 	}
 
 	/** Which of the eight headings a direction falls in. */
 	public static int bucket(double dir) {
-		return Math.floorMod((int) Math.round(dir / (Math.PI * 2 / DIRS)), DIRS);
+		return MachineStamp.bucket(dir);
 	}
 
-	private static Color shadeOf(char ch) {
-		switch (ch) {
-		case 'H':
-			return YELLOW[2]; // hull, lit north edge
-		case 'M':
-			return YELLOW[1]; // hull, mid
-		case 'I':
-			return IRON;      // hull, sunk south edge
-		case 'h':
-			return YELLOW[2]; // plate, lit
-		case 'm':
-			return YELLOW[1];
-		case 'd':
-			return YELLOW[0]; // plate, sunk — yellow, not iron: a plate is thin
-		case 'K':
-			return HAZARD_DARK; // the checker's black, a marking and so unshaded
-		case 'C':
-			return IRON;      // pylon
-		case 'A':
-			return LAMP;
-		default:
-			return null;
+	public static void draw(NPC n, Graphics g, View v) {
+		Graphics2D g2 = (Graphics2D) g;
+		double z = n.getZ();
+		// One art-pixel on screen. Below a pixel there is nothing to draw.
+		if (v.pixelX(n.getX() + 1, z, 0) - v.pixelX(n.getX(), z, 0) <= 0) {
+			return;
 		}
-	}
+		// Anchor on the world art-pixel lattice, exactly as the nest stamp
+		// does: nothing positions itself off-lattice to look smoother.
+		int cgx = (int) Math.round(n.getX() * MachineStamp.A);
+		int cgy = (int) Math.round(n.getY() * MachineStamp.A);
 
-	private static char[][] grid(String[] rows) {
-		return grid(rows, N, N);
-	}
-
-	private static char[][] grid(String[] rows, int h, int w) {
-		char[][] g = new char[h][w];
-		for (int r = 0; r < h; r++) {
-			for (int c = 0; c < w; c++) {
-				g[r][c] = rows[r].charAt(c);
-			}
-		}
-		return g;
-	}
-
-	/** Clockwise quarter turn. Lossless on a square lattice, which is the whole
-	 *  reason the derived headings stay as on-grid as the authored ones. */
-	private static char[][] rot90(char[][] s) {
-		char[][] o = new char[N][N];
-		for (int r = 0; r < N; r++) {
-			for (int c = 0; c < N; c++) {
-				o[r][c] = s[N - 1 - c][r];
-			}
-		}
-		return o;
-	}
-
-	/**
-	 * One sun, straight overhead-north: in every column, the north cell of a
-	 * contiguous run of body is lit and its south cell is sunk. Because the
-	 * plates stand clear of the hull, each gets its own pair.
-	 *
-	 * <p>A run one art-pixel tall is the exception, and it stays mid. Such a
-	 * cell is simultaneously the north edge and the south edge of its plate — a
-	 * sliver that thin has no two faces to light differently — and lighting it
-	 * anyway speckles the tips of the diagonal staircases with stray bright
-	 * pixels, which reads as noise rather than as shape. A scenario found that
-	 * case; it was not foreseen.
-	 */
-	static char[][] shade(char[][] s) {
-		char[][] o = new char[N][N];
-		for (char[] row : o) {
-			java.util.Arrays.fill(row, '.');
-		}
-		for (int c = 0; c < N; c++) {
-			int r = 0;
-			while (r < N) {
-				if (isBody(s[r][c])) {
-					int r0 = r;
-					while (r < N && isBody(s[r][c])) {
-						r++;
-					}
-					for (int k = r0; k < r; k++) {
-						// Lighting first: where in its run does this cell sit?
-						int pos = r - r0 == 1 ? 1 : k == r0 ? 2 : k == r - 1 ? 0 : 1;
-						o[k][c] = mark(s[k][c], pos, k, c);
-					}
-				} else {
-					if (s[r][c] == 'A') {
-						o[r][c] = 'A';
-					}
-					r++;
-				}
-			}
-		}
-		return o;
-	}
-
-	/** Hull, plate and pylon are all body — they light as one run where they
-	 *  touch, which is what makes the pylon read as holding the plate rather
-	 *  than as a separate speck. */
-	private static boolean isBody(char ch) {
-		return ch == '#' || ch == 'S' || ch == 'C';
-	}
-
-	/**
-	 * Material and lighting compose into one mark: the stamp says what a cell
-	 * is made of, the run position says which way it faces the sun.
-	 *
-	 * <p>The plates carry the facility's hazard checker, resolved here rather
-	 * than at paint time so the stamps stay pure data. It is indexed
-	 * body-locally, not world-absolutely — world indexing is for ground
-	 * (section 1), and a world-anchored pattern would crawl across the hull as
-	 * the machine flew. A one-on-one-off checker is its own reflection under a
-	 * quarter turn, so it survives the derived headings unchanged.
-	 */
-	private static char mark(char material, int pos, int row, int col) {
-		switch (material) {
-		case 'C':
-			return 'C'; // pylon: chassis iron, flat
-		case 'S':
-			// The checker's black is a marking, like the dock's keep-clear
-			// border, and markings are not shaded.
-			return ((row + col) & 1) == 0 ? (pos == 2 ? 'h' : pos == 0 ? 'd' : 'm') : 'K';
-		default:
-			// Hull. The sunk edge goes to iron rather than a darker yellow: on
-			// pale ground a yellow-on-yellow edge disappears and the machine
-			// loses its bottom line.
-			return pos == 2 ? 'H' : pos == 0 ? 'I' : 'M';
-		}
+		int sh = SHADOW_OVAL.length, sw = SHADOW_OVAL[0].length();
+		MachineStamp.blit(g2, MachineStamp.grid(SHADOW_OVAL, sh, sw), cgx - sw / 2,
+				cgy - sh / 2 + LIFT, z, v, MachineStamp.SHADOW);
+		MachineStamp.blit(g2, FACING[MachineStamp.bucket(n.getDirection())], cgx - N / 2,
+				cgy - N / 2, z, v, null);
 	}
 
 	private DronePainter() {
