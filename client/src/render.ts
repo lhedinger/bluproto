@@ -4,7 +4,7 @@
 // nearest-neighbour scaling of the layer.
 
 import {
-  ART_RADIUS, CELL, MIP, atlasFor, atlasMipFor, cell, corpseFor,
+  ART_RADIUS, CELL, DIRS, MIP, atlasFor, atlasMipFor, cell, corpseFor,
   corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
@@ -421,7 +421,7 @@ export function render(
     // the no-atlas dot and the one thing in the world that is not alive looks
     // exactly like everything that is.
     if (e.kind === 'npc.stewarddrone') {
-      drawDrone(g, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'));
+      drawSentinel(g, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'), p.dir);
       continue;
     }
 
@@ -624,17 +624,23 @@ function itemStamp(kind: string, rgb: number): HTMLCanvasElement {
   return cv;
 }
 
-/** The drone glyph baked once per colour — same painter as the 2D path, at a
- *  reference radius, then scaled by the GPU. Radially symmetric, so unlike a
- *  creature it needs no per-heading column. */
+/** The sentinel glyph baked once per colour as a strip of DIRS heading frames —
+ *  same painter as the 2D path, at a reference radius, then scaled by the GPU.
+ *  A sentinel has a front, so unlike an item it needs a column per heading; it
+ *  reuses the creature atlases' bucket count and their sticky headingCol so the
+ *  two never disagree about which way a body is pointing. */
 const droneStamps = new Map<number, HTMLCanvasElement>();
 function droneStamp(rgb: number): HTMLCanvasElement {
   let cv = droneStamps.get(rgb);
   if (!cv) {
     cv = document.createElement('canvas');
-    cv.width = 96;
+    cv.width = 96 * DIRS;
     cv.height = 96;
-    drawDrone(cv.getContext('2d')!, 48, 48, ITEM_R, '#' + rgb.toString(16).padStart(6, '0'));
+    const cx = cv.getContext('2d')!;
+    for (let i = 0; i < DIRS; i++) {
+      drawSentinel(cx, 96 * i + 48, 48, ITEM_R,
+        '#' + rgb.toString(16).padStart(6, '0'), (i * Math.PI * 2) / DIRS);
+    }
     droneStamps.set(rgb, cv);
   }
   return cv;
@@ -779,7 +785,9 @@ export function renderGL(
     if (e.kind === 'npc.stewarddrone') {
       const stamp = droneStamp(e.rgb);
       const k = r / ITEM_R;
-      glr.sprite('drone:' + e.rgb, stamp, 1, 0, 0, 96, 96,
+      const dc = headingCol(p.dir, t.col ?? -1);
+      t.col = dc;
+      glr.sprite('drone:' + e.rgb, stamp, 1, 96 * dc, 0, 96, 96,
         s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
       continue;
     }
@@ -1434,51 +1442,99 @@ export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: 
 }
 
 /**
- * The steward's drone: a quadrotor seen from above — a plated hexagonal
- * chassis, four rotor discs on their arms, and the emitter lit amber at the
- * centre.
+ * The steward's drone, drawn as a sentinel rather than a quadrotor: a slender
+ * tapered spine, a pair of swept fins standing off it, and one lit aperture at
+ * the head. It hovers; nothing about it spins.
  *
- * <p>Radially symmetric on purpose. Every other body in this world is drawn
- * from a phenotype atlas with a column per heading, because a creature's
- * silhouette says which way it is facing; a quadrotor's does not, and pretending
- * otherwise would cost eight baked headings to draw the same shape eight times.
- * What it needs to say is "machine, and above the ground" — hard straight edges
- * where everything organic is round, the facility's steel where everything alive
- * is warm, and rotors nothing in the biosphere has.
+ * <p>The first version was four rotor discs and a hexagonal chassis, which is
+ * a drone in the sense of the things people fly in parks — a machine held up
+ * by obvious moving parts. Wrong register for this world. The steward's drone
+ * is the warden's hand: it should read as something built to a purpose and not
+ * quite explaining how it works, closer to a floating instrument than to
+ * hardware you could buy.
+ *
+ * <p>That costs it the rotational symmetry the quadrotor had for free, and the
+ * cost is worth paying: a sentinel has a FRONT, and a body that visibly points
+ * where it is going tells you what it is about to do. The eye leads, the fins
+ * trail, and a drone crossing the map now reads as aimed rather than as
+ * drifting. Both draw paths take a heading for it (the GL path bakes one frame
+ * per heading bucket, as the creature atlases do).
+ *
+ * <p>Drawn in a local frame pointing east and rotated into place, so the shape
+ * is authored once at the angle it is easiest to reason about.
  */
-export function drawDrone(g: CanvasRenderingContext2D, x: number, y: number, r: number,
-    col: string): void {
-  const arm = r * 0.78;
-  // Rotor discs first, so the chassis plates sit over their hubs.
-  for (let i = 0; i < 4; i++) {
-    const a = Math.PI / 4 + (i * Math.PI) / 2;
-    const cx = x + Math.cos(a) * arm, cy = y + Math.sin(a) * arm;
-    g.strokeStyle = 'rgba(160,172,188,0.55)'; // the blur of a turning rotor
-    g.lineWidth = Math.max(1, r * 0.14);
-    g.beginPath(); g.arc(cx, cy, r * 0.42, 0, 7); g.stroke();
-    g.fillStyle = '#2a2f38';
-    g.beginPath(); g.arc(cx, cy, Math.max(1, r * 0.16), 0, 7); g.fill(); // the hub
+export function drawSentinel(g: CanvasRenderingContext2D, x: number, y: number, r: number,
+    col: string, dir: number): void {
+  g.save();
+  g.translate(x, y);
+  g.rotate(dir);
+
+  const dark = '#171b22';
+  const panel = '#39424e';
+  // Below a few pixels the outline is most of the shape, so it goes: at map
+  // zoom this is a handful of pixels and a dark rim would eat all of them.
+  const outline = r > 7;
+
+  // Two broad wing plates reaching out to the sides, barely swept. The
+  // silhouette is a cross — wider across than long — which is what separates a
+  // sentinel from an aircraft and from the quadrotor this replaced. They are
+  // plates rather than tapering wedges: flat, blunt-ended and substantial, so
+  // the machine reads as panels held in formation around a core rather than as
+  // a body with fins on it.
+  if (r > 4) {
+    g.fillStyle = panel;
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(r * 0.30, side * r * 0.40);
+      g.lineTo(r * 0.06, side * r * 1.52);
+      g.lineTo(-r * 0.52, side * r * 1.44);
+      g.lineTo(-r * 0.40, side * r * 0.36);
+      g.closePath();
+      g.fill();
+      if (outline) {
+        g.strokeStyle = dark;
+        g.lineWidth = Math.max(1, r * 0.08);
+        g.stroke();
+      }
+    }
   }
-  // The chassis: a flat-topped hexagon, plated and rimmed.
+
+  // The pod: small and narrow, because the wings carry the width. A longer
+  // body would drag it back toward being an aeroplane.
   g.fillStyle = col;
   g.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI) / 3;
-    const px = x + Math.cos(a) * r * 0.72, py = y + Math.sin(a) * r * 0.72;
-    if (i === 0) g.moveTo(px, py);
-    else g.lineTo(px, py);
-  }
+  g.moveTo(r * 1.0, 0);
+  g.lineTo(r * 0.30, -r * 0.30);
+  g.lineTo(-r * 0.62, -r * 0.22);
+  g.lineTo(-r * 0.76, 0);
+  g.lineTo(-r * 0.62, r * 0.22);
+  g.lineTo(r * 0.30, r * 0.30);
   g.closePath();
   g.fill();
-  g.strokeStyle = '#1a1e26';
-  g.lineWidth = Math.max(1, r * 0.13);
-  g.stroke();
-  // The emitter, hazard amber — the one warm colour on it, and the same one
-  // the charge dock's coil is painted in, so machine and berth are a pair.
-  if (r > 3) {
-    g.fillStyle = '#d8b028';
-    g.beginPath(); g.arc(x, y, Math.max(1, r * 0.26), 0, 7); g.fill();
+  if (outline) {
+    g.strokeStyle = dark;
+    g.lineWidth = Math.max(1, r * 0.09);
+    g.stroke();
   }
+
+  // The eye: an aperture set into the pod's face, well forward. The one warm
+  // colour on the machine, and the same hazard amber as the charge dock's coil
+  // so drone and berth stay a matched pair. Kept small — a big glow turns the
+  // whole shape into a lamp with wings, and the point is a thing that looks
+  // rather than a thing that shines.
+  const eye = Math.max(1, r * 0.15);
+  g.fillStyle = '#d8b028';
+  g.beginPath();
+  g.arc(r * 0.55, 0, eye, 0, 7);
+  g.fill();
+  if (r > 10) {
+    g.fillStyle = '#f6e08a';
+    g.beginPath();
+    g.arc(r * 0.55, 0, eye * 0.5, 0, 7);
+    g.fill();
+  }
+
+  g.restore();
 }
 
 export function drawItem(g: CanvasRenderingContext2D, kind: string, x: number, y: number, r: number, col: string): void {
