@@ -21,7 +21,7 @@ import type { EntityState } from './protocol';
 import {
   DOT_LOD_SCALE, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
-  drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
+  drawLoader, drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
 
 const root = document.getElementById('root')!;
@@ -266,6 +266,56 @@ const droneSec = section("The steward's drone",
     g.fillStyle = DECK;
     g.fillRect(0, 0, S * 2, S * 2);
     drawSentinel(g, S, S * 0.85, S, Math.floor(t * 1.5) % 8);
+  });
+}
+
+// ---- the facility loader --------------------------------------------------
+
+const loaderSec = section('The facility loader',
+  'The building\u2019s other machine, and the same livery: safety yellow hull, the hazard '
+  + 'checker on its cab, one red lamp. Where the drone flies, this one walks \u2014 so it is '
+  + 'dragged by the ground it crosses, and it casts its shadow at ONE art-pixel where the '
+  + 'drone casts at eight. Put the two rows side by side and that gap of air is the whole '
+  + 'difference between a body that hangs and a body that stands. Seventeen art-pixels to the '
+  + 'drone\u2019s thirteen, being a size-20 body against a size-16 one at the same scale.');
+
+{
+  const S = 104;
+  pair(loaderSec, 'eight headings \u2014 E, SE, S, SW, W, NW, N, NE', 8 * S, S * 1.5, (g) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, 8 * S, S * 1.5);
+    for (let i = 0; i < 8; i++) drawLoader(g, S * (i + 0.5), S * 0.72, S, i);
+  });
+}
+
+{
+  // The comparison that earns its place: the same heading, both machines, one
+  // above the other. Nothing in either source says "one of these floats".
+  const S = 128;
+  pair(loaderSec, 'loader and drone, same heading, same scale', 4 * S, S * 2.1, (g, t) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, 4 * S, S * 2.1);
+    const dir = Math.floor(t * 1.2) % 8;
+    drawLoader(g, S * 1.1, S * 0.8, S, dir);
+    drawSentinel(g, S * 2.9, S * 0.8, S, dir);
+    g.fillStyle = '#cfd6e0';
+    g.font = '13px ui-monospace, monospace';
+    g.textAlign = 'center';
+    g.fillText('loader \u2014 stands', S * 1.1, S * 1.75);
+    g.fillText('drone \u2014 flies', S * 2.9, S * 1.75);
+  });
+}
+
+{
+  const W = 900;
+  pair(loaderSec, 'across the zoom range (tile size 16\u2026120px)', W, 160, (g) => {
+    g.fillStyle = DECK;
+    g.fillRect(0, 0, W, 160);
+    let x = 60;
+    for (const sc of [16, 24, 32, 48, 64, 80, 96, 120]) {
+      drawLoader(g, x, 65, sc, 0);
+      x += 110;
+    }
   });
 }
 

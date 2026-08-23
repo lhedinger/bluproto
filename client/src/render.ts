@@ -504,10 +504,11 @@ export function render(
     // phenotype to build an atlas from, so without this it falls through to
     // the no-atlas dot and the one thing in the world that is not alive looks
     // exactly like everything that is.
-    if (e.kind === 'npc.stewarddrone') {
+    if (e.kind === 'npc.stewarddrone' || e.kind === 'npc.facilityloader') {
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
-      drawSentinel(g, s.x, s.y, cam.scale, dc);
+      if (e.kind === 'npc.facilityloader') drawLoader(g, s.x, s.y, cam.scale, dc);
+      else drawSentinel(g, s.x, s.y, cam.scale, dc);
       continue;
     }
 
@@ -842,11 +843,11 @@ const SENTINEL_SHADES: Record<string, string> = {
 const SENTINEL_SHADOW = 'rgba(0,0,0,0.31)';
 const SENTINEL_LIFT = 8;
 
-function sentinelRot90(s: string[]): string[] {
-  const o: string[] = [];
-  for (let r = 0; r < SENTINEL_N; r++) {
+function machineRot90(s: string[]): string[] {
+  const n = s.length, o: string[] = [];
+  for (let r = 0; r < n; r++) {
     let row = '';
-    for (let c = 0; c < SENTINEL_N; c++) row += s[SENTINEL_N - 1 - c][r];
+    for (let c = 0; c < n; c++) row += s[n - 1 - c][r];
     o.push(row);
   }
   return o;
@@ -857,19 +858,20 @@ function sentinelRot90(s: string[]): string[] {
  *  around and lights the machine from underneath. In each column the north cell
  *  of a contiguous run is lit and the south cell sunk; a run one art-pixel tall
  *  stays mid, being its own north and south edge at once. */
-function sentinelShade(s: string[]): string[] {
+function machineShade(s: string[]): string[] {
+  const n = s.length;
   const o: string[][] = [];
-  for (let r = 0; r < SENTINEL_N; r++) o.push(new Array(SENTINEL_N).fill('.'));
+  for (let r = 0; r < n; r++) o.push(new Array(n).fill('.'));
   const body = (ch: string) => ch === '#' || ch === 'S' || ch === 'C';
-  for (let c = 0; c < SENTINEL_N; c++) {
+  for (let c = 0; c < n; c++) {
     let r = 0;
-    while (r < SENTINEL_N) {
+    while (r < n) {
       if (body(s[r][c])) {
         const r0 = r;
-        while (r < SENTINEL_N && body(s[r][c])) r++;
+        while (r < n && body(s[r][c])) r++;
         for (let k = r0; k < r; k++) {
           const pos = r - r0 === 1 ? 1 : k === r0 ? 2 : k === r - 1 ? 0 : 1;
-          o[k][c] = sentinelMark(s[k][c], pos, k, c);
+          o[k][c] = machineMark(s[k][c], pos, k, c);
         }
       } else {
         if (s[r][c] === 'A') o[r][c] = 'A';
@@ -880,13 +882,13 @@ function sentinelShade(s: string[]): string[] {
   return o.map((row) => row.join(''));
 }
 
-/** Material and lighting compose into one mark. The plates carry the facility's
- *  hazard checker, resolved here so the stamps stay pure data, and indexed
- *  body-locally rather than world-absolutely — world indexing is for ground,
- *  and a world-anchored pattern would crawl across the hull as the machine
- *  flew. A one-on-one-off checker is its own reflection under a quarter turn,
- *  so it survives the derived headings unchanged. */
-function sentinelMark(material: string, pos: number, row: number, col: number): string {
+/** Material and lighting compose into one mark. The hazard checker is resolved
+ *  here so the stamps stay pure data, and indexed body-locally rather than
+ *  world-absolutely — world indexing is for ground, and a world-anchored
+ *  pattern would crawl across the hull as the machine moved. A one-on-one-off
+ *  checker is its own reflection under a quarter turn on an odd grid, so it
+ *  survives the derived headings unchanged. */
+function machineMark(material: string, pos: number, row: number, col: number): string {
   if (material === 'C') return 'C';
   if (material === 'S') {
     return ((row + col) & 1) === 0 ? (pos === 2 ? 'h' : pos === 0 ? 'd' : 'm') : 'K';
@@ -894,21 +896,95 @@ function sentinelMark(material: string, pos: number, row: number, col: number): 
   return pos === 2 ? 'H' : pos === 0 ? 'I' : 'M';
 }
 
-/** The eight shaded stamps: two authored silhouettes, six exact 90-degree
- *  lattice rotations of them. Pure, resolved once. */
-const SENTINEL_FACING: string[][] = (() => {
+/** Two authored silhouettes into eight headings: six are exact 90-degree
+ *  lattice rotations, and the light goes on afterwards so no facing carries its
+ *  highlight around the compass. */
+function machineFacings(cardinal: string[], diagonal: string[]): string[][] {
   const out: string[][] = [];
   for (let i = 0; i < DIRS; i++) {
-    let s = (i & 1) === 0 ? SENTINEL_CARDINAL : SENTINEL_DIAGONAL;
-    for (let q = 0; q < i >> 1; q++) s = sentinelRot90(s);
-    out.push(sentinelShade(s));
+    let s = (i & 1) === 0 ? cardinal : diagonal;
+    for (let q = 0; q < i >> 1; q++) s = machineRot90(s);
+    out.push(machineShade(s));
   }
   return out;
-})();
+}
 
-/** Stamp one heading. `sc` is the tile size in screen pixels, so an art-pixel
- *  is sc/12 exactly as everywhere else — the drone is sized by the world grid,
- *  not by its own body radius, which is what keeps it on the lattice at zoom. */
+const SENTINEL_FACING: string[][] = machineFacings(SENTINEL_CARDINAL, SENTINEL_DIAGONAL);
+
+/**
+ * The facility loader: the same livery and the same rule as the drone, on a
+ * body that stands on the floor instead of hanging over it. Seventeen
+ * art-pixels to the drone's thirteen — a size-20 body against a size-16 one,
+ * drawn at the same scale.
+ *
+ * The Java twin is LoaderPainter and holds these exact strings; a scenario
+ * compares them, because the two files cannot share a literal and "somebody
+ * remembered to edit both" is not a mechanism.
+ */
+const LOADER_CARDINAL = [
+  '.................',
+  '.................',
+  '.................',
+  '.................',
+  '....SSS######....',
+  '....SSS#########.',
+  '....SSS#########.',
+  '....SSS######....',
+  '....SSS######A...',
+  '....SSS######....',
+  '....SSS#########.',
+  '....SSS#########.',
+  '....SSS######....',
+  '.................',
+  '.................',
+  '.................',
+  '.................',
+];
+
+/** Facing south-east. Its forks are one blade rather than two prongs: the gap
+ *  between the cardinal's forks is two art-pixels and a diagonal staircase
+ *  closes a gap that narrow, so two prongs here would be two prongs that touch
+ *  — a smudge where the eye expects a shape. What the lattice can express at
+ *  forty-five degrees is not what it can express square-on. */
+const LOADER_DIAGONAL = [
+  '.................',
+  '.................',
+  '.................',
+  '.................',
+  '.......SSS.......',
+  '......SSS##......',
+  '.....SSS####.....',
+  '....SSS######....',
+  '...SSS########...',
+  '.....########....',
+  '.....######A.##..',
+  '......#####......',
+  '.......###.......',
+  '.........##......',
+  '..........##.....',
+  '.................',
+  '.................',
+];
+
+const LOADER_FACING: string[][] = machineFacings(LOADER_CARDINAL, LOADER_DIAGONAL);
+
+/** A standing body's contact shadow: its own silhouette one art-pixel south,
+ *  and darker than a flyer's because it is cast from directly underneath
+ *  rather than across a gap of air. The drone's oval would vanish entirely
+ *  under a body this wide. */
+const LOADER_CONTACT = 'rgba(0,0,0,0.42)';
+const LOADER_DROP = 1;
+
+/** Stamp the loader. `sc` is the tile size in screen pixels, so an art-pixel is
+ *  sc/12 exactly as everywhere else. */
+export function drawLoader(g: CanvasRenderingContext2D, x: number, y: number,
+    sc: number, bucket: number): void {
+  const p = Math.max(1, sc / 12);
+  const f = LOADER_FACING[((bucket % DIRS) + DIRS) % DIRS];
+  blit(g, f, x, y + LOADER_DROP * p, p, LOADER_CONTACT);
+  blit(g, f, x, y, p, null);
+}
+
 export function drawSentinel(g: CanvasRenderingContext2D, x: number, y: number,
     sc: number, bucket: number): void {
   const p = Math.max(1, sc / 12); // one art-pixel on screen
@@ -941,18 +1017,33 @@ const SENTINEL_BAKE_P = 8;                       // atlas pixels per art-pixel
 const SENTINEL_CELL = SENTINEL_N * SENTINEL_BAKE_P; // a whole number of them
 let droneStampCache: HTMLCanvasElement | null = null;
 function droneStamp(): HTMLCanvasElement {
-  if (!droneStampCache) {
-    const cv = document.createElement('canvas');
-    cv.width = SENTINEL_CELL * DIRS;
-    cv.height = SENTINEL_CELL;
-    const cx = cv.getContext('2d')!;
-    for (let i = 0; i < DIRS; i++) {
-      drawSentinel(cx, SENTINEL_CELL * i + SENTINEL_CELL / 2, SENTINEL_CELL / 2,
-        SENTINEL_BAKE_P * 12, i);
-    }
-    droneStampCache = cv;
-  }
+  if (!droneStampCache) droneStampCache = bakeMachine(SENTINEL_N, drawSentinel);
   return droneStampCache;
+}
+
+const LOADER_N = LOADER_CARDINAL.length;
+const LOADER_CELL = LOADER_N * SENTINEL_BAKE_P;
+let loaderStampCache: HTMLCanvasElement | null = null;
+function loaderStamp(): HTMLCanvasElement {
+  if (!loaderStampCache) loaderStampCache = bakeMachine(LOADER_N, drawLoader);
+  return loaderStampCache;
+}
+
+/** Bake all eight headings into one strip. The palettes are fixed, so one bake
+ *  serves every body of that kind, and the cell is a whole number of
+ *  art-pixels so the bake itself is on-lattice before the GPU scales it. */
+function bakeMachine(n: number,
+    paint: (g: CanvasRenderingContext2D, x: number, y: number, sc: number,
+      bucket: number) => void): HTMLCanvasElement {
+  const cell = n * SENTINEL_BAKE_P;
+  const cv = document.createElement('canvas');
+  cv.width = cell * DIRS;
+  cv.height = cell;
+  const cx = cv.getContext('2d')!;
+  for (let i = 0; i < DIRS; i++) {
+    paint(cx, cell * i + cell / 2, cell / 2, SENTINEL_BAKE_P * 12, i);
+  }
+  return cv;
 }
 
 export function renderGL(
@@ -1098,15 +1189,18 @@ export function renderGL(
       continue;
     }
 
-    if (e.kind === 'npc.stewarddrone') {
-      // Fixed steel palette, so one bake serves every drone. The destination
-      // is SENTINEL_N art-pixels of the world grid, matching the 2D path and
-      // the Java stamp rather than the body's own radius.
-      const stamp = droneStamp();
-      const dst = SENTINEL_N * (cam.scale / 12);
+    if (e.kind === 'npc.stewarddrone' || e.kind === 'npc.facilityloader') {
+      // Fixed palettes, so one bake serves every body of each kind. The
+      // destination is the stamp's own art-pixels of the WORLD grid, matching
+      // the 2D path and the Java stamp rather than the body's radius.
+      const loader = e.kind === 'npc.facilityloader';
+      const stamp = loader ? loaderStamp() : droneStamp();
+      const n = loader ? LOADER_N : SENTINEL_N;
+      const cell = loader ? LOADER_CELL : SENTINEL_CELL;
+      const dst = n * (cam.scale / 12);
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
-      glr.sprite('drone', stamp, 1, SENTINEL_CELL * dc, 0, SENTINEL_CELL, SENTINEL_CELL,
+      glr.sprite(loader ? 'loader' : 'drone', stamp, 1, cell * dc, 0, cell, cell,
         s.x - dst / 2, s.y - dst / 2, dst, dst);
       continue;
     }
