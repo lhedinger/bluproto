@@ -555,13 +555,6 @@ public class Tile {
 			return 0.5; // crawling
 		case TYPE_SLUDGE:
 			return 0.5; // wading a viscous spill
-		case TYPE_RAIL:
-			// The only ground in the world that gives back more than plain --
-			// and only to machinery; see speedFactorFor. Nominal here, as with
-			// the crystal bed. The engine takes the gain safely: drag is
-			// applied BEFORE the MAX_STEP clamp, so a speeded body still cannot
-			// outrun collision resolution and tunnel through a wall.
-			return 1.4;
 		case TYPE_CRYSTAL_BED:
 			return 0.6; // nominal; the true drag is size-scaled, see speedFactorFor
 		default:
@@ -577,22 +570,9 @@ public class Tile {
 	 * anything above {@link #CRYSTAL_CLEARANCE} never got in at all (the
 	 * collision gate stops it at the bed's edge).
 	 */
-	public double speedFactorFor(double size, boolean organic) {
+	public double speedFactorFor(double size) {
 		if (type == TileType.TYPE_CRYSTAL_BED) {
 			return 1.0 - 0.65 * Math.min(1.0, size / CRYSTAL_CLEARANCE);
-		}
-		if (type == TileType.TYPE_RAIL && organic) {
-			// A track is a guideway, not a smoother road. It gives a machine
-			// something to lock onto and run along; it gives legs nothing at
-			// all -- a creature crossing the sleepers is simply walking over
-			// timber and ballast, which is no easier than deck and arguably
-			// worse. So the run is plain ground to everything alive.
-			//
-			// The alternative -- track that hurries the herd along too -- was
-			// rejected because it is the tram doing a favour it has no way to
-			// do. Speed a body has not earned, from ground that cannot explain
-			// how, is the kind of rule that makes a world feel arbitrary.
-			return 1.0;
 		}
 		return speedFactor();
 	}
@@ -732,7 +712,7 @@ public class Tile {
 		TYPE_DOCK(30, true, "charge dock"), // the steward drone's berth: a powered pad it parks on
 		TYPE_ROCKY(31, true, "rocky grassland"), // stony ground that keeps a thin sward
 		TYPE_SLUDGE(32, true, "waste sludge"), // the facility's spill: walkable, slow, and it burns
-		TYPE_RAIL(33, true, "tram rail"), // the transit run: the one ground that is faster than plain
+		TYPE_RAIL(33, true, "tram rail"), // the transit run: ordinary ground, and a road for the eye
 		TYPE_SERVER(34, false, "server bank"); // racks: solid to a body, clear to the eye
 
 		private int value;
