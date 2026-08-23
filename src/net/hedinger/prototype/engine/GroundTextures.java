@@ -45,7 +45,7 @@ public final class GroundTextures {
 			CLS_PLATE = 18, CLS_CATWALK = 19, CLS_SHAFT = 20, CLS_PIPES = 21,
 			CLS_AIRVENT = 22, CLS_CONCRETE = 23, CLS_STEELWALL = 24, CLS_DUCT = 25,
 			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
-			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32;
+			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32, CLS_SERVER = 33;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -86,6 +86,7 @@ public final class GroundTextures {
 			{ 0x4a4338, 0x6b6353, 0x8f8776 }, // rocky grassland (dusty grit)
 			{ 0x2a4a16, 0x548f22, 0x86c832 }, // waste sludge (acid green, never pit-dark)
 			{ 0x35302a, 0x554c40, 0x7a6f5d }, // tram bed (creosoted sleepers, warm grey-brown)
+			{ 0x14171d, 0x252a34, 0x3c434f }, // server rack (darkest built thing in the world)
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -112,6 +113,15 @@ public final class GroundTextures {
 	/** Crystal facet glint and vent ember: the mineral accents, disciplined
 	 *  the same way as the fungus spark -- rare, small, deliberate. */
 	private static final int CRYSTAL_SPARK = 0xD0ECFF, VENT_EMBER = 0xD8622C;
+	/** The indicator-lamp family (ART-STYLE.md §2, "signal colours"): dim
+	 *  for a lamp that is present and dark, lit for one that is on. Written
+	 *  down here as constants for the first time -- the design system named
+	 *  these values before any ground painter used them, and the server
+	 *  racks are the first. The lit shade is the same white-blue as the
+	 *  crystal spark by design, not by accident: one "this is emitting"
+	 *  colour across the whole world, whether the emitter grew or was
+	 *  built. */
+	private static final int LAMP_DIM = 0x6a7280, LAMP_LIT = 0xD0ECFF;
 
 	/** Whether a class is a solid structure rather than open ground. */
 	public static boolean isStructure(int cls) {
@@ -166,6 +176,8 @@ public final class GroundTextures {
 			return CLS_SLUDGE;
 		case TYPE_RAIL:
 			return CLS_RAIL;
+		case TYPE_SERVER:
+			return CLS_SERVER;
 		case TYPE_VENT:
 			return CLS_VENT;
 		case TYPE_WALL_BUILT:
@@ -1270,6 +1282,44 @@ public final class GroundTextures {
 		}
 		double g = hash01(px, py >> 1, 77); // ballast: coarse, quiet grit
 		return g < 0.14 ? RAMP[CLS_RAIL][0] : (g > 0.9 ? RAMP[CLS_RAIL][2] : RAMP[CLS_RAIL][1]);
+	}
+
+	/**
+	 * The cross-section top of a server rack: a dark cabinet of stacked
+	 * blade slots, a vented flank, and a column of indicator lamps.
+	 *
+	 * <p>It is drawn as a wall top -- this is a solid, and it obeys the raised
+	 * grammar like every other mass -- but it is the darkest built thing in the
+	 * world on purpose. A rack absorbs light where concrete and steel bounce
+	 * it, so a room full of them reads as a hole in the deck's brightness, and
+	 * the lamps are the only thing in that hole with any value at all.
+	 *
+	 * <p>The lamps use the reserved indicator family rather than inventing a
+	 * colour, and they are hash-gated so a bank of racks blinks in an
+	 * irregular pattern that is nonetheless fixed per world position -- machine
+	 * rooms should look busy, not animated.
+	 */
+	public static int serverRack(int ai, int aj, int px, int py, boolean litEdge) {
+		// Blade slots: 2-px shelves stacked up the face, with a thin dark gap
+		// between each. The regularity is the tell, as with masonry courses.
+		boolean gap = Math.floorMod(aj, 3) == 0;
+		if (ai == 1 || ai == 10) {
+			return RAMP[CLS_SERVER][0]; // cabinet uprights
+		}
+		if (ai >= 8) {
+			// The lamp column, down the cabinet's east edge.
+			if (!gap && hash01(px, py >> 1, 78) > 0.62) {
+				return hash01(px, py, 79) > 0.5 ? LAMP_LIT : LAMP_DIM;
+			}
+			return RAMP[CLS_SERVER][gap ? 0 : 1];
+		}
+		if (gap) {
+			return RAMP[CLS_SERVER][0]; // the shadow between blades
+		}
+		// The blade faces themselves, lifted on the lit north edge like any
+		// raised mass, and vented with a fine hash grille.
+		int idx = (litEdge && aj <= 1) ? 2 : 1;
+		return hash01(px >> 1, py, 80) < 0.18 ? RAMP[CLS_SERVER][0] : RAMP[CLS_SERVER][idx];
 	}
 
 	private static int lighten2(int rgb, double f) {

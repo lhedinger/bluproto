@@ -123,6 +123,7 @@ final class SpriteCatalog {
 		ground("charge_dock", Tile.TileType.TYPE_DOCK);
 		ground("waste_sludge", Tile.TileType.TYPE_SLUDGE);
 		ground("tram_rail", Tile.TileType.TYPE_RAIL);
+		ground("server_bank", Tile.TileType.TYPE_SERVER);
 		ramps();
 	}
 

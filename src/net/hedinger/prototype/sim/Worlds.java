@@ -593,6 +593,15 @@ public final class Worlds {
 		}
 		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		// Two rack rows in the machine wing, aisled so a body can walk between
+		// them. Solid, so they are cover; clear to the eye, so they are cover
+		// that hides nothing -- a creature in the aisle can watch what it
+		// cannot be reached by, which is a standoff no wall in this world
+		// produces.
+		for (int y = y0 + 2; y <= y0 + 3; y++) {
+			setBare(w, x0 + 6, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
+			setBare(w, x0 + 7, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
+		}
 		// The drone's berth, in the machine wing among the plant it belongs
 		// to -- clear of the pipe run along row 1 and of both vents, and one
 		// tile in from the partition doorway at x0+11 so the pad is not the
@@ -706,6 +715,9 @@ public final class Worlds {
 		}
 		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
 		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		// One rack pair in the annex, against the north deck.
+		setBare(w, x0 + 8, y0 + 2, CAVE_Z, Tile.TileType.TYPE_SERVER);
+		setBare(w, x0 + 8, y0 + 3, CAVE_Z, Tile.TileType.TYPE_SERVER);
 		// The drone's berth: the annex has one room, so the pad goes against
 		// the north deck under the pipe run, out of the walk from the mouth
 		// to the vault.

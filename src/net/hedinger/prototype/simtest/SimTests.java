@@ -6486,6 +6486,53 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A server rack stops a body and hides nothing — the second solid in the
+	 * world (after crystal) you can see straight through.
+	 *
+	 * <p>That combination is its whole reason to exist. A wall ends both the
+	 * chase and the watching; a rack ends only the chase, so prey can stand
+	 * behind one and keep the hunter in sight, which is a standoff the terrain
+	 * could not previously express.
+	 */
+	static class ServerRacksStopABodyButNotAnEye extends Scenario {
+		@Override
+		public void run() {
+			seed(423);
+			World w = room(16, 9);
+			for (int x = 1; x < 15; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			for (int y = 1; y < 8; y++) {
+				w.setTile(8, y, 0, Tile.TileType.TYPE_SERVER); // a full rack row
+			}
+			w.alignTiles();
+			// A body walking east into the racks, and the same walk one row over
+			// through an aisle gap.
+			w.setTile(8, 4, 0, Tile.TileType.TYPE_PLATE); // the aisle
+			w.alignTiles();
+			TestNPC blocked = TestNPC.mover(6.5, 2.5, 0, 0);
+			TestNPC through = TestNPC.mover(6.5, 4.5, 0, 0);
+			w.spawnEntity(blocked);
+			w.spawnEntity(through);
+			w.think();
+            snapshot(w, "before (a rack row with one aisle)");
+			tick(w, 400);
+			snapshot(w, "after (stopped at the racks; through the aisle)");
+
+			assertLess("the racks stopped the body", blocked.getX(), 8.0);
+			assertGreater("the aisle let the other through", through.getX(), 9.0);
+			assertTrue("but sight crosses the racks", !w.getTile(8, 2, 0).blocksSight());
+			assertTrue("a rack is solid all the same", w.getTile(8, 2, 0).isSolid());
+			// The contrast that makes the point: a wall in the same place ends
+			// the watching too.
+			w.setTile(8, 2, 0, Tile.TileType.TYPE_WALL_STEEL);
+			assertTrue("where a bulkhead would not", w.getTile(8, 2, 0).blocksSight());
+		}
+	}
+
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
@@ -6493,6 +6540,7 @@ public class SimTests {
 				new WasteSludgeBurnsWhatWadesIt(),
 				new SludgeReadsOnTheHazardChannel(),
 				new RailsCarryABodyFasterThanDeck(),
+				new ServerRacksStopABodyButNotAnEye(),
 				new DroneCullsToTargetAndReturnsToDock(),
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),
