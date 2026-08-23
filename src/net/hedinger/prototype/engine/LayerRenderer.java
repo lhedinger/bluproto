@@ -117,39 +117,28 @@ public class LayerRenderer {
 		// see-through cut-out, letting the level below show (and parallax) through.
 		// The pit shade and lip are drawn live by Grid.renderGroundPixel instead.
 		case TYPE_RAMPUP:
-			return ResourceManager.getRamptile(tilecode, true, rampDownhill(x, y, z, true));
+			return ResourceManager.getRamptile(tilecode, true, rampDownhill(x, y, z));
 		case TYPE_RAMPDOWN:
-			return ResourceManager.getRamptile(tilecode, false, rampDownhill(x, y, z, false));
+			return ResourceManager.getRamptile(tilecode, false, rampDownhill(x, y, z));
 		default:
 			return null;
 		}
 	}
 
 	/**
-	 * The cardinal a ramp descends toward (0 N, 1 E, 2 S, 3 W), read from the
-	 * layout so the slope art can face any direction: a DOWN ramp pours into
-	 * the pit beside it, so downhill is toward the adjacent {@code TYPE_HOLE};
-	 * an UP ramp climbs onto the rock its landing rests on, so downhill is
-	 * away from the adjacent solid mass. When no neighbour decides (nothing
-	 * built by the generators today), fall back to the movement convention —
-	 * ramps run east-high to west-low. Neighbour scan order is biased toward
-	 * that same convention so a ramp boxed in on several sides stays true to
-	 * how it actually walks.
+	 * The cardinal a ramp descends toward (0 N, 1 E, 2 S, 3 W) — the opposite
+	 * of the high side the tile itself carries, for an UP ramp and a DOWN ramp
+	 * alike.
+	 *
+	 * <p>It reads {@link Tile#getRampUphill()} rather than guessing from the
+	 * neighbours, which is what this used to do. Guessing meant the picture and
+	 * the movement rule were two independent opinions about which way a ramp
+	 * ran, and they only agreed while every generator laid ramps the same way.
+	 * Taking both from one field is what lets the art be trusted: a ramp is
+	 * drawn descending exactly where a body would actually walk down it.
 	 */
-	private int rampDownhill(int x, int y, int z, boolean up) {
-		int[] dx = { 0, 1, 0, -1 }, dy = { -1, 0, 1, 0 }; // N E S W
-		int[] order = up ? new int[] { 1, 3, 2, 0 } : new int[] { 3, 1, 0, 2 };
-		for (int d : order) {
-			int nx = x + dx[d], ny = y + dy[d];
-			if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
-				continue;
-			}
-			Tile n = world.levels[z].getTile(nx, ny);
-			if (up ? n.isSolid() : n.getType() == Tile.TileType.TYPE_HOLE) {
-				return up ? (d + 2) % 4 : d; // up: high side found, low is opposite
-			}
-		}
-		return 3; // west-low, the engine's movement convention
+	private int rampDownhill(int x, int y, int z) {
+		return Tile.opposite(world.levels[z].getTile(x, y).getRampUphill());
 	}
 
 	private BufferedImage getWallTile(World world, Tile tile) {

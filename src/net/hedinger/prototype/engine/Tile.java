@@ -60,6 +60,66 @@ public class Tile {
 	// so the map has rich and poor habitats instead of uniform pasture.
 	private double fertility = 1.0;
 
+	// --- ramp orientation ---------------------------------------------------
+	/**
+	 * Which way this ramp's HIGH side faces, as a cardinal (see {@link #DIR_N}).
+	 * A {@code RAMPUP} lets a body out one level up when it steps toward this
+	 * direction; a {@code RAMPDOWN} lets it out one level down when it steps the
+	 * other way, off its foot. One value decides both, because a ramp's slope is
+	 * one axis with a sign.
+	 *
+	 * <p>It is STORED rather than read off the neighbours, though the art could
+	 * guess it from the layout. A ramp's direction decides where bodies may walk
+	 * and what the pathfinder believes; deriving that from the surrounding tiles
+	 * would mean carving rock near a ramp could silently turn it around, and the
+	 * route someone was walking would stop existing. Stored, the art and the
+	 * movement read the same field, so a ramp can never look like it climbs one
+	 * way and walk another.
+	 *
+	 * <p>Defaults to EAST, which is exactly the old hardcoded convention — a
+	 * ramp nobody gave a direction to behaves as every ramp did before.
+	 */
+	private int rampUphill = DIR_E;
+
+	/** Cardinals, in the order the renderer already numbers them. */
+	public static final int DIR_N = 0, DIR_E = 1, DIR_S = 2, DIR_W = 3;
+	private static final int[] DIR_DX = { 0, 1, 0, -1 };
+	private static final int[] DIR_DY = { -1, 0, 1, 0 };
+
+	/** Column step of a cardinal. */
+	public static int dirDx(int dir) {
+		return DIR_DX[dir & 3];
+	}
+
+	/** Row step of a cardinal. */
+	public static int dirDy(int dir) {
+		return DIR_DY[dir & 3];
+	}
+
+	/** The cardinal facing the other way. */
+	public static int opposite(int dir) {
+		return (dir + 2) & 3;
+	}
+
+	/** Which way this ramp's high side faces (see {@link #rampUphill}). */
+	public int getRampUphill() {
+		return rampUphill;
+	}
+
+	/** Points this ramp's high side at {@code dir}. Set by whoever builds the
+	 *  ramp; every reader — movement, pathfinding, the connectivity floods and
+	 *  the art — takes its answer from here. */
+	public void setRampUphill(int dir) {
+		rampUphill = dir & 3;
+	}
+
+	/** The cardinal a body must step to leave this ramp at the level it joins:
+	 *  up the slope off a {@code RAMPUP}, down off a {@code RAMPDOWN}'s foot.
+	 *  The single place that rule is written down. */
+	public int rampExit() {
+		return type == TYPE_RAMPUP ? rampUphill : opposite(rampUphill);
+	}
+
 	// Tall grass is a purely cosmetic overlay: blades drawn on top of the ground
 	// that bend aside as entities pass through. It has NO effect on movement,
 	// perception, vegetation, or anything the simulation reads -- it is only a
@@ -330,15 +390,16 @@ public class Tile {
 				}
 			}
 		}
-		if (type == TYPE_RAMPUP && w.isValid(col + 1, row, lvl + 1)
-				&& !w.getTile(col + 1, row, lvl + 1).isSolid()
-				&& fits(w, col + 1, row, lvl + 1, clearance)) {
-			connected.add(w.hashCode(col + 1, row, lvl + 1)); // off the top, going east
-		}
-		if (type == TYPE_RAMPDOWN && w.isValid(col - 1, row, lvl - 1)
-				&& !w.getTile(col - 1, row, lvl - 1).isSolid()
-				&& fits(w, col - 1, row, lvl - 1, clearance)) {
-			connected.add(w.hashCode(col - 1, row, lvl - 1)); // off the foot, going west
+		if (type == TYPE_RAMPUP || type == TYPE_RAMPDOWN) {
+			// The one edge the same-level scan cannot see, taken off whichever
+			// side this ramp's slope actually runs to.
+			int exit = rampExit();
+			int nx = col + dirDx(exit), ny = row + dirDy(exit);
+			int nz = type == TYPE_RAMPUP ? lvl + 1 : lvl - 1;
+			if (w.isValid(nx, ny, nz) && !w.getTile(nx, ny, nz).isSolid()
+					&& fits(w, nx, ny, nz, clearance)) {
+				connected.add(w.hashCode(nx, ny, nz));
+			}
 		}
 		return connected;
 	}
@@ -433,19 +494,21 @@ public class Tile {
 		}
 
 		if (dz != 0) {
-			// Only a ramp joins two levels, and only along its own slope. A ramp is
-			// floor that spans the gap: a RAMPUP runs west-low to east-high, a
-			// RAMPDOWN east-high to west-low, so walking off the high side leaves you
-			// a level up and off the low side a level down. Everything else is a
-			// cliff. (dx is source minus destination, so dx < 0 is a step east.)
-			if (temp == null || dy != 0 || Math.abs(dx) != 1) {
+			// Only a ramp joins two levels, and only along its own slope, in the
+			// one direction that slope runs: a RAMPUP lets you out a level up
+			// off its high side, a RAMPDOWN a level down off its foot. Which way
+			// that is comes from the tile (see rampUphill), so a ramp may face
+			// any cardinal; everything else is a cliff. (dx/dy are source minus
+			// destination, so the step actually taken is their negation.)
+			if (temp == null || Math.abs(dx) + Math.abs(dy) != 1) {
+				return false; // level changes are cardinal, never diagonal
+			}
+			if (dz < 0 ? type != TYPE_RAMPUP : type != TYPE_RAMPDOWN) {
 				return false;
 			}
-			if (dz < 0 && !(type == TYPE_RAMPUP && dx < 0)) {
-				return false; // destination above: only east, off a RAMPUP's top
-			}
-			if (dz > 0 && !(type == TYPE_RAMPDOWN && dx > 0)) {
-				return false; // destination below: only west, off a RAMPDOWN's foot
+			int exit = rampExit();
+			if (-dx != dirDx(exit) || -dy != dirDy(exit)) {
+				return false; // stepping off any other side of the ramp is a cliff
 			}
 			return floorsOnly ? temp.isWalkable() : !temp.isSolid();
 		} else {

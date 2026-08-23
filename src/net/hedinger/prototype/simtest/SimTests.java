@@ -3976,6 +3976,54 @@ public class SimTests {
 	 * terrain is what moves them. Guards against reintroducing a vertical intent
 	 * that a random policy would have to get right before it could use a ramp.
 	 */
+	/**
+	 * A ramp runs whichever way it was laid. The same pair built facing north
+	 * is climbed by walking north and descended by walking south — and walking
+	 * the old east-west way off it now finds a cliff, because the slope is not
+	 * there any more.
+	 *
+	 * <p>The last part is what makes this a test rather than a demonstration.
+	 * A ramp that walks in its own direction *and* still walks the hardcoded
+	 * one would pass every "can it climb north" check while leaving the old
+	 * rule quietly in place, and the bug would only surface as a body strolling
+	 * up a cliff face somewhere else.
+	 */
+	static class RampsRunWhicheverWayTheyAreLaid extends Scenario {
+		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading}
+		 *  over a ramp pair whose high side faces {@code uphill}. */
+		private int levelAfterWalking(double x, double y, int z, double heading, int uphill) {
+			seed(81);
+			World w = room(10, 10, 2);
+			w.setTile(5, 5, 0, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(5, 5, 1, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(5, 5, 0).setRampUphill(uphill);
+			w.getTile(5, 5, 1).setRampUphill(uphill);
+			Genome g = new Genome();
+			g.size = 6;
+			Mind walk = (s, a) -> a[AgentIO.A_THROTTLE] = 1;
+			TestNPC body = TestNPC.minded(x, y, z, g, walk).withSpeed(0.05).withHeading(heading);
+			w.spawnEntity(body);
+			w.think();
+			tick(w, 200);
+			return body.getLvl();
+		}
+
+		@Override
+		public void run() {
+			// Screen-north is -y, which is heading -PI/2; south is +PI/2.
+			assertEquals("a north-facing ramp is climbed by walking north",
+					1, levelAfterWalking(5.5, 8.5, 0, -Math.PI / 2, Tile.DIR_N));
+			assertEquals("and descended by walking south off its foot",
+					0, levelAfterWalking(5.5, 2.5, 1, Math.PI / 2, Tile.DIR_N));
+			// The old hardcoded axis must be gone, not merely joined.
+			assertEquals("walking east off a north-facing ramp finds a cliff, not a climb",
+					0, levelAfterWalking(2.5, 5.5, 0, 0.0, Tile.DIR_N));
+			// And a west-facing pair mirrors the original convention.
+			assertEquals("a west-facing ramp is climbed by walking west",
+					1, levelAfterWalking(8.5, 5.5, 0, Math.PI, Tile.DIR_W));
+		}
+	}
+
 	static class MindsChangeLevelByWalkingRamps extends Scenario {
 		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading} and
 		 *  reports the level it ends on. */
@@ -7070,6 +7118,7 @@ public class SimTests {
 				new WaypointRemembersAPlace(),
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
+				new RampsRunWhicheverWayTheyAreLaid(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
