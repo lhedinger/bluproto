@@ -318,7 +318,7 @@ public abstract class Entity {
 
 		// Mud drags: scale this step by the tile the entity stands on -- and
 		// by how well this body fits it (a crystal bed drags by size).
-		double drag = world.getTile(X, Y, Z).speedFactorFor(getPixelSize());
+		double drag = world.getTile(X, Y, Z).speedFactorFor(getPixelSize(), isOrganic());
 		if (drag != 1.0) {
 			dX *= drag;
 			dY *= drag;
@@ -719,6 +719,30 @@ public abstract class Entity {
 	public void kill() {
 		age = -1;
 	}
+
+	/**
+	 * Whether this body is made of meat — the one question every appetite in
+	 * the world is really asking, and now also the question the ground asks.
+	 * Living things answer yes; a machine answers no, and by answering no drops
+	 * out of the prey channel, the host search, the mating test and the tram
+	 * run's guideway all at once.
+	 *
+	 * <p>Asked as a property of the body rather than tested with an
+	 * {@code instanceof} at each site, because "is that alive?" is a fact about
+	 * the thing being looked at, not about the looker: a machine has to be
+	 * inedible to every appetite there is, including the ones a future diet
+	 * invents. A hunter that could learn to bite the drone is a hunter that
+	 * starves chewing on steel.
+	 *
+	 * <p>It lives on {@code Entity} rather than {@code NPC} because movement
+	 * resolution needs it — the ground a body stands on can now treat living
+	 * and mechanical bodies differently, and that decision is made below the
+	 * level where NPCs exist.
+	 */
+	public boolean isOrganic() {
+		return true;
+	}
+
 
 	/**
 	 * Ages this corpse forward to {@code progress} of the way through its
