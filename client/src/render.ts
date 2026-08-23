@@ -658,17 +658,23 @@ const SENTINEL_N = 13;
  *  reading entirely, so the vertical mass wins and the machine looks like it
  *  faces north whichever way the eye points. A dominant hull, small plates set
  *  clear of it, and a pylon exactly one art-pixel wide is what works. Eleven
- *  across against ten along, so it stays wider than it is long. */
+ *  across against ten along, so it stays wider than it is long.
+ *
+ *  The rearmost rank is chassis iron, and that dark cap is what tells front
+ *  from back — one accent pixel reads as "there is a lamp" long before it
+ *  reads as "and so that end is the front". A snout at the other end was
+ *  tried and dropped: one art-pixel of protrusion is invisible at the size
+ *  the drone is actually seen. The tail carries the read. */
 const SENTINEL_CARDINAL = [
   '.............',
   '....SSSSS....',
   '....SSSSS....',
   '......C......',
-  '...#########.',
-  '..##########.',
-  '..#########A.',
-  '..##########.',
-  '...#########.',
+  '...########..',
+  '..C#########.',
+  '..C########A.',
+  '..C#########.',
+  '...########..',
   '......C......',
   '....SSSSS....',
   '....SSSSS....',
@@ -687,9 +693,9 @@ const SENTINEL_CARDINAL = [
 const SENTINEL_DIAGONAL = [
   '.............',
   '........SS...',
-  '...###.SSSS..',
-  '..#####.SSSS.',
-  '.#######.SSS.',
+  '...C##.SSSS..',
+  '..C####.SSSS.',
+  '.C######.SSS.',
   '..#######....',
   '...#######...',
   '....#######..',

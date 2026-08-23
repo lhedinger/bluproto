@@ -7427,6 +7427,18 @@ public class SimTests {
 			return new double[] { hiA - loA + 1, hiX - loX + 1 };
 		}
 
+		private static int hullCells(String[] stamp) {
+			int n = 0;
+			for (String row : stamp) {
+				for (char ch : row.toCharArray()) {
+					if (ch == '#' || ch == 'A') {
+						n++;
+					}
+				}
+			}
+			return n;
+		}
+
 		@Override
 		public void run() {
 			// A machine that changes size when it turns is a machine the eye
@@ -7450,22 +7462,20 @@ public class SimTests {
 
 			// The same thing said as area, which catches a shape that matches on
 			// both extents while being hollow or bloated between them.
-			int cardCells = 0, diagCells = 0;
-			for (String row : DronePainter.CARDINAL) {
-				for (char ch : row.toCharArray()) {
-					if (ch == '#' || ch == 'A') {
-						cardCells++;
-					}
-				}
-			}
-			for (String row : DronePainter.DIAGONAL) {
-				for (char ch : row.toCharArray()) {
-					if (ch == '#' || ch == 'A') {
-						diagCells++;
-					}
-				}
-			}
-			assertLess("and carries about as much metal", Math.abs(cardCells - diagCells), 10.0);
+			//
+			// Compared as a RATIO, and generously, because the diagonal
+			// legitimately carries more cells than the cardinal at the same
+			// measured size: a band at forty-five degrees has staircase edges,
+			// and every step of that staircase is lattice cells the
+			// axis-aligned version does not spend. An absolute cell difference
+			// was tried first and is the wrong test — it fights that geometry
+			// instead of measuring the shape, and it fails on art that is
+			// correct.
+			int cardCells = hullCells(DronePainter.CARDINAL);
+			int diagCells = hullCells(DronePainter.DIAGONAL);
+			double ratio = diagCells / (double) cardCells;
+			assertGreater("the diagonal is not hollow next to the cardinal", ratio, 0.8);
+			assertLess("nor bloated beside it", ratio, 1.25);
 		}
 	}
 

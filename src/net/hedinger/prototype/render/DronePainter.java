@@ -63,20 +63,29 @@ public final class DronePainter {
 	 * wide: enough to say the plates are held rather than floating, too little
 	 * to compete.
 	 *
-	 * <p>Eleven art-pixels across the plates against ten along the hull, so the
+	 * <p>Eleven art-pixels across the plates against ten along, so the
 	 * silhouette is still wider than it is long — the proportion that separates
 	 * a sentinel from an aircraft, and the one a scenario pins.
+	 *
+	 *  <p>The rearmost rank is chassis iron rather than hull yellow, and that
+	 *  dark cap is what tells front from back. The lamp alone could not: one
+	 *  accent pixel on a body this size is legible as "there is a lamp" long
+	 *  before it is legible as "and therefore that end is the front". A snout
+	 *  was tried at the other end and dropped — one art-pixel of protrusion is
+	 *  invisible at the size the drone is actually seen, and at map zoom it is
+	 *  not drawn at all. The tail carries the read; the head needed nothing it
+	 *  did not already have.
 	 */
 	public static final String[] CARDINAL = {
 			".............",
 			"....SSSSS....",
 			"....SSSSS....",
 			"......C......",
-			"...#########.",
-			"..##########.",
-			"..#########A.",
-			"..##########.",
-			"...#########.",
+			"...########..",
+			"..C#########.",
+			"..C########A.",
+			"..C#########.",
+			"...########..",
 			"......C......",
 			"....SSSSS....",
 			"....SSSSS....",
@@ -104,13 +113,19 @@ public final class DronePainter {
 	 *
 	 * <p>The plates need no pylon here: at this offset they already sit one
 	 * clear cell off the hull, which is all the pylon was ever buying.
+	 *
+	 * <p>The tail cap is cut to the same three cells the cardinal's is. Cutting
+	 * it to the same DEPTH instead makes it half again as large, because a
+	 * rank measured along a diagonal crosses a wider slice of the body, and it
+	 * then reads as a bite taken out of the machine rather than as its back
+	 * end. Match the cap by weight, not by depth.
 	 */
 	public static final String[] DIAGONAL = {
 			".............",
 			"........SS...",
-			"...###.SSSS..",
-			"..#####.SSSS.",
-			".#######.SSS.",
+			"...C##.SSSS..",
+			"..C####.SSSS.",
+			".C######.SSS.",
 			"..#######....",
 			"...#######...",
 			"....#######..",
