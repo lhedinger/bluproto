@@ -30,7 +30,7 @@ public final class ServerTests {
 		populationCensusCountsEveryLivingRole();
 		fertilityCapsTheGrassSpriteStage();
 		vegetationFeedCarriesTheKind();
-		theBakeLeavesNoUnpaintedPixels();
+		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -270,44 +270,53 @@ public final class ServerTests {
 	}
 
 	/**
-	 * A served chunk is one opaque level: every art-pixel is the bake's to draw.
+	 * The alpha channel of a served chunk means exactly one thing: you can see
+	 * down here. Nothing else in the bake is allowed to be see-through, and
+	 * nothing that should be see-through is allowed to be painted shut.
 	 *
-	 * <p>Pit interiors used to be drawn by SKIPPING their see-through pixels and
-	 * letting the level below show through from underneath — which the desktop
-	 * renderer composites and the chunk bake does not, so those pixels shipped as
-	 * the clear colour. Pure black is in no ramp; finding any means something in
-	 * the ground pass declined to paint. The second half pins what replaced it:
-	 * a pit over a floor shows that floor's material, and a pit over nothing
-	 * stays void all the way down.
+	 * <p>Both halves have shipped broken. Pit interiors were once drawn by
+	 * SKIPPING their open pixels and letting the level below show through from
+	 * underneath — which the desktop renderer composites and the chunk bake does
+	 * not, so 55% of every pit shipped as the colour the image was cleared to.
+	 * The bake now clears to nothing instead, which fixes that but hands the
+	 * alpha channel a second job: if any pass quietly failed to cover its own
+	 * tile, the gap would be a window onto the wrong floor rather than a black
+	 * square, and would look plausible. So this pins the whole channel — every
+	 * non-opaque art-pixel must sit in a tile that can actually be seen down.
 	 *
 	 * <p>This bakes every level of the demo world and roughly doubles the time
 	 * {@code gradle check} takes. It earns it: a bake that declines to paint is
 	 * invisible to every other test in the suite — the one that shipped was
 	 * caught by eye, months late — and there is no cheaper way to ask.
 	 */
-	static void theBakeLeavesNoUnpaintedPixels() {
+	static void theBakeIsOpaqueExceptWhereYouCanSeeDown() {
 		net.hedinger.prototype.engine.World terrain = Worlds.demoTerrain(42);
+		// bakeLevelImage through chunkRenderer, because that is the pair WorldHost
+		// serves from. renderLevelImage builds the DESKTOP renderer's layers, which
+		// composite every level into one picture — a pit there is filled in by the
+		// floor below and could never be see-through. Asserting on it would be the
+		// same mistake the pits themselves were: testing the path nobody looks at.
+		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
 		int deep = 0, bottom = -1;
 		for (int z = 0; z < terrain.getLevels(); z++) {
 			// One render per level: baking a whole level is the slow part here.
-			java.awt.image.BufferedImage img = LayerBaker.renderLevelImage(terrain, z);
-			check("level " + z + " bakes no unpainted art-pixels", countBlack(img) == 0);
+			java.awt.image.BufferedImage img = LayerBaker.bakeLevelImage(terrain, lr, z);
+			check("level " + z + " leaves no art-pixel unpainted", opaqueBlack(img) == 0);
+			String stray = strayOpenTile(terrain, img, z);
+			check("level " + z + " is see-through only where a pit is (" + stray + ")",
+					stray == null);
 
 			int[] p = findPit(terrain, z);
 			if (p == null) {
 				continue;
 			}
 			if (z == 0) {
-				// The bottom level's pits have nothing under them to show.
+				// The bottom level's pits have nothing under them to look down onto.
 				bottom = z;
-				check("a pit over nothing shows no material at all",
-						!pitHolds(img, p, net.hedinger.prototype.engine.GroundTextures.CLS_STONE));
+				check("a pit over nothing is solid to the eye", openPixels(img, p) == 0);
 			} else {
 				deep = z;
-				int belowCls = net.hedinger.prototype.engine.GroundTextures
-						.groundClass(terrain.getTile(p[0], p[1], z - 1));
-				check("a pit over a floor shows that floor's material",
-						pitHolds(img, p, belowCls));
+				check("a pit over a floor opens onto it", openPixels(img, p) > 0);
 			}
 		}
 		check("the demo world has a pit over another level", deep > 0);
@@ -330,35 +339,65 @@ public final class ServerTests {
 		return null;
 	}
 
-	/** Whether any art-pixel inside the pit is one of {@code cls}'s three shades. */
-	private static boolean pitHolds(java.awt.image.BufferedImage img, int[] p, int cls) {
-		for (int aj = 3; aj < 9; aj++) { // inside the rim on every side
-			for (int ai = 3; ai < 9; ai++) {
-				int rgb = artPixel(img, p[0], p[1], ai, aj);
-				for (int s = 0; s < 3; s++) {
-					if (rgb == net.hedinger.prototype.engine.GroundTextures.rampColor(cls, s)) {
-						return true;
+	/** Whether a tile is one you could ever see through: a pit, a drop-shaft,
+	 *  or a grated catwalk. Anything else must cover itself completely. */
+	private static boolean canSeeDown(net.hedinger.prototype.engine.Tile t) {
+		net.hedinger.prototype.engine.Tile.TileType ty = t.getType();
+		return ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHAFT
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK;
+	}
+
+	/** The first tile that is see-through without being a pit, or null. */
+	private static String strayOpenTile(net.hedinger.prototype.engine.World w,
+			java.awt.image.BufferedImage img, int z) {
+		int a = LayerBaker.CHUNK_PX;
+		for (int x = 0; x < w.getColums(); x++) {
+			for (int y = 0; y < w.getRows(); y++) {
+				if (canSeeDown(w.getTile(x, y, z))) {
+					continue;
+				}
+				for (int aj = 0; aj < a; aj++) {
+					for (int ai = 0; ai < a; ai++) {
+						if ((artPixel(img, x, y, ai, aj) >>> 24) < 255) {
+							return "(" + x + "," + y + ") " + w.getTile(x, y, z).getType();
+						}
 					}
 				}
 			}
 		}
-		return false;
+		return null;
+	}
+
+	/** Art-pixels inside the pit at {@code p} that are not fully opaque. */
+	private static int openPixels(java.awt.image.BufferedImage img, int[] p) {
+		int n = 0;
+		for (int aj = 3; aj < 9; aj++) { // inside the rim on every side
+			for (int ai = 3; ai < 9; ai++) {
+				if ((artPixel(img, p[0], p[1], ai, aj) >>> 24) < 255) {
+					n++;
+				}
+			}
+		}
+		return n;
 	}
 
 	/** Art-pixel (ai, aj) of tile (x, y), sampled where the encoder samples it. */
 	private static int artPixel(java.awt.image.BufferedImage img, int x, int y, int ai, int aj) {
 		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize, a = LayerBaker.CHUNK_PX;
-		return img.getRGB(x * ts + ai * ts / a, y * ts + aj * ts / a) & 0xffffff;
+		return img.getRGB(x * ts + ai * ts / a, y * ts + aj * ts / a);
 	}
 
-	private static int countBlack(java.awt.image.BufferedImage img) {
+	/** Art-pixels that are opaque black — a colour in no ramp, and the mark the
+	 *  old skip-the-pixel bug left behind. */
+	private static int opaqueBlack(java.awt.image.BufferedImage img) {
 		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize, a = LayerBaker.CHUNK_PX;
 		int n = 0;
 		for (int y = 0; y + ts <= img.getHeight(); y += ts) {
 			for (int x = 0; x + ts <= img.getWidth(); x += ts) {
 				for (int aj = 0; aj < a; aj++) {
 					for (int ai = 0; ai < a; ai++) {
-						if ((img.getRGB(x + ai * ts / a, y + aj * ts / a) & 0xffffff) == 0) {
+						if (img.getRGB(x + ai * ts / a, y + aj * ts / a) == 0xff000000) {
 							n++;
 						}
 					}

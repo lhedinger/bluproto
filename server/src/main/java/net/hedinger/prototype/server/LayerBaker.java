@@ -63,7 +63,7 @@ final class LayerBaker {
 		int ts = ResourceManager.tileSize;
 		int w = terrain.getColums() * ts;
 		int h = terrain.getRows() * ts;
-		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = img.createGraphics();
 		g.setClip(0, 0, w, h);
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -72,8 +72,13 @@ final class LayerBaker {
 		// Compose only the world passes — ground, foliage, the film-grain
 		// effect — and skip View.render()'s HUD (minimap, entity counter),
 		// which would be baked into the ground for every viewer forever.
+		//
+		// NO clearScreen: a level is baked onto nothing, so the art-pixels the
+		// ground pass declines to paint — a pit's open scatter — stay genuinely
+		// transparent and the client can show the level below through them.
+		// Everything else covers its own tile, so the alpha channel ends up
+		// meaning exactly "you can see down here" (pinned in ServerTests).
 		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
-		view.clearScreen(g);
 		view.renderWorld(g);
 		view.renderEffects(g);
 		g.dispose();
@@ -95,14 +100,13 @@ final class LayerBaker {
 			net.hedinger.prototype.engine.LayerRenderer lr, int z) {
 		int ts = ResourceManager.tileSize;
 		int w = terrain.getColums() * ts, h = terrain.getRows() * ts;
-		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g.setClip(0, 0, w, h);
 		View view = new View(terrain, lr);
 		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
-		view.clearScreen(g);
-		view.renderWorld(g);
+		view.renderWorld(g); // no clearScreen: see renderLevelImage
 		view.renderEffects(g);
 		g.dispose();
 		return img;
@@ -131,7 +135,7 @@ final class LayerBaker {
 		// upscales nearest-neighbour, so the screen shows the same art.
 		int ts = ResourceManager.tileSize;
 		int aw = w / ts * CHUNK_PX, ah = h / ts * CHUNK_PX;
-		BufferedImage sub = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_RGB);
+		BufferedImage sub = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = sub.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
@@ -171,7 +175,7 @@ final class LayerBaker {
 		int x0 = cx * chunkTiles, y0 = cy * chunkTiles;
 		int cw = Math.min(chunkTiles, cols - x0), ch = Math.min(chunkTiles, rows - y0);
 		int wpx = cw * ts, hpx = ch * ts;
-		BufferedImage img = new BufferedImage(wpx, hpx, BufferedImage.TYPE_INT_RGB);
+		BufferedImage img = new BufferedImage(wpx, hpx, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		// Full-level clip while the view sets up, so its camera aligns tile (0,0)
@@ -184,8 +188,7 @@ final class LayerBaker {
 		g.setClip(x0 * ts, y0 * ts, wpx, hpx);
 		// Same passes and order as the whole-level bake, so the chunk is
 		// pixel-identical to the corresponding slice (grain/effects included).
-		view.clearScreen(g);
-		view.renderWorld(g);
+		view.renderWorld(g); // no clearScreen: see renderLevelImage
 		view.renderEffects(g);
 		g.dispose();
 		// Encode at ART resolution, not render resolution. The bake draws
@@ -198,7 +201,7 @@ final class LayerBaker {
 		// the design system counts as a feature). The client upscales
 		// nearest-neighbour, so what reaches the screen is the same art.
 		int aw = cw * CHUNK_PX, ah = ch * CHUNK_PX;
-		BufferedImage art = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_RGB);
+		BufferedImage art = new BufferedImage(aw, ah, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D ag = art.createGraphics();
 		ag.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);

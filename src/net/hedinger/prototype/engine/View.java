@@ -119,13 +119,24 @@ public class View {
 		graphics.fillRect(0, 0, windowX, windowY);
 	}
 
+	/** Film grain over the finished frame. Composited SRC_ATOP: the grain is a
+	 *  surface treatment ON the art, so it lands only where art was painted and
+	 *  leaves untouched pixels untouched. Over an opaque frame — the live desktop
+	 *  view, which clears to {@link #bg} first — that is identical to the plain
+	 *  SRC_OVER this always did; it matters for the server's layer bake, which
+	 *  clears to nothing so a pit's open scatter can carry real transparency.
+	 *  Grain veiling those pixels at 59% opacity would fog the level seen
+	 *  through them. */
 	public void renderEffects(Graphics g) {
 		Graphics2D g2 = (Graphics2D) g;
+		java.awt.Composite prev = g2.getComposite();
+		g2.setComposite(java.awt.AlphaComposite.SrcAtop);
 		for (int x = 0; x < chunkX; x++) {
 			for (int y = 0; y < chunkX; y++) {
 				g2.drawImage(ResourceManager.getEffects(0), chunkSize * x, chunkSize * y, null);
 			}
 		}
+		g2.setComposite(prev);
 	}
 
 	public void renderWorld(Graphics g) {

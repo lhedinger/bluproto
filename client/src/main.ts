@@ -110,13 +110,13 @@ let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 // on software-rendered canvases), while a canvas source blits at memcpy speed.
 // One copy per chunk at decode time buys back every frame thereafter.
 const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
-function chunkImage(cx: number, cy: number): HTMLCanvasElement | null {
+function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
   // The bake carries no vegetation (server ground classes are type-only) —
   // vegetation renders as one-tile sprites stamped over these chunks by the
   // chunked vegetation layer (render.vegLayerUpdate).
   const name = `${cx}_${cy}`;
-  const key = `${v}/${currentLevel}/${name}`;
+  const key = `${v}/${z}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;
   chunkCache.set(key, null); // mark in-flight so we fetch once
@@ -138,11 +138,14 @@ function chunkImage(cx: number, cy: number): HTMLCanvasElement | null {
       if (chunkCache.get(key) === null) chunkCache.delete(key);
     }, 8000);
   };
-  img.src = `/api/world/layers/${currentLevel}/${name}.png?v=${v}`;
+  img.src = `/api/world/layers/${z}/${name}.png?v=${v}`;
   return null;
 }
-function getChunk(cx: number, cy: number): HTMLCanvasElement | null {
-  return chunkImage(cx, cy);
+/** The renderer asks by level, not just by chunk: the level in view needs its
+ *  own chunks, and the one below it needs the few its holes look down onto
+ *  (render.belowChunks). Both live in the same cache, keyed by level. */
+function getChunk(cx: number, cy: number, z: number): HTMLCanvasElement | null {
+  return chunkImage(cx, cy, z);
 }
 
 function levelName(z: number): string {
