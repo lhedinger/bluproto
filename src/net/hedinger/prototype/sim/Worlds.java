@@ -281,7 +281,18 @@ public final class Worlds {
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
 	 *  open-air surface must sit ABOVE the cave: surface is the higher index. */
-	static final int CAVE_Z = 0, SURFACE_Z = 1;
+	/**
+	 * The three floors, bottom to top.
+	 *
+	 * <p>They are numbered rather than named in the engine, and the numbering
+	 * only runs upward — {@code lvl + 1} is up, and there is no index below
+	 * zero. So a floor UNDER the caves cannot be appended; it has to take index
+	 * zero and push the other two up, which is why these constants changed
+	 * together and why nothing else had to. Every reference in the world builder
+	 * already went through these names, so the renumbering is the constants and
+	 * the world's depth, and no coordinate anywhere needed touching.
+	 */
+	static final int DEEP_Z = 0, CAVE_Z = 1, SURFACE_Z = 2;
 
 	/**
 	 * The demo world's terrain — same seed, same tiles, same fertility, no
@@ -320,9 +331,9 @@ public final class Worlds {
 		Utils.seed(seed);
 		Perf.stopwatch = new StopWatch();
 
-		World w = new World(cols, rows, 2);
+		World w = new World(cols, rows, 3);
 
-		// ---- level 0: surface biomes inside a rocky boundary ----
+		// ---- the surface: biomes inside a rocky boundary ----
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
@@ -461,7 +472,7 @@ public final class Worlds {
 
 		// ---- shallows: every shore-touching water tile becomes a walkable,
 		// wading fringe, so lakes have fords instead of hard edges ----
-		for (int z = 0; z < 2; z++) {
+		for (int z = CAVE_Z; z <= SURFACE_Z; z++) {
 			java.util.ArrayList<int[]> shore = new java.util.ArrayList<int[]>();
 			for (int x = 1; x < cols - 1; x++) {
 				for (int y = 1; y < rows - 1; y++) {
@@ -1450,7 +1461,7 @@ public final class Worlds {
 	 *  {@link WorldAudit#connectivity}'s traversal, so the audit agrees by
 	 *  construction. */
 	private static void sealUnreachable(World w, int cols, int rows, int[] surfaceSeed) {
-		boolean[][][] seen = new boolean[2][cols][rows];
+		boolean[][][] seen = new boolean[w.getLevels()][cols][rows];
 		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
 		if (w.getTile(surfaceSeed[0], surfaceSeed[1], SURFACE_Z).isWalkable()) {
 			seen[SURFACE_Z][surfaceSeed[0]][surfaceSeed[1]] = true;
@@ -1477,12 +1488,12 @@ public final class Worlds {
 				int exit = w.getTile(x, y, z).rampExit();
 				int nx = x + Tile.dirDx(exit), ny = y + Tile.dirDy(exit);
 				int nz = rt == Tile.TileType.TYPE_RAMPUP ? z + 1 : z - 1;
-				if (nz >= 0 && nz < 2 && nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
+				if (nz >= 0 && nz < w.getLevels() && nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
 					floodVisit(w, seen, q, nx, ny, nz, cols, rows);
 				}
 			}
 		}
-		for (int z = 0; z < 2; z++) {
+		for (int z = 0; z < w.getLevels(); z++) {
 			for (int x = 0; x < cols; x++) {
 				for (int y = 0; y < rows; y++) {
 					if (w.getTile(x, y, z).isWalkable() && !seen[z][x][y]) {
