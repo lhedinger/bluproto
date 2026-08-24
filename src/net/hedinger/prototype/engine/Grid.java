@@ -945,6 +945,7 @@ public class Grid {
 		g2.setComposite(prev);
 	}
 
+
 	private static int darken(int rgb, double f) {
 		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
 		return (r << 16) | (g << 8) | b;
@@ -980,7 +981,10 @@ public class Grid {
 		if (GroundTextures.groundClass(world.getTile(x, y, level - 1)) < 0) {
 			return dark; // a ramp down there: nothing flat to look down onto
 		}
-		return GroundTextures.hash01(gx, gy, 71) < RenderFx.holeDepth ? (Integer) dark : null;
+		// 2-px opening clusters (gx >> 1), the grain rule from quietGround: a
+		// lone open art-pixel is sub-pixel at the fit zoom the world opens at,
+		// and a reveal built from them was invisible right where people pan.
+		return GroundTextures.hash01(gx >> 1, gy, 71) < RenderFx.holeDepth ? (Integer) dark : null;
 	}
 
 	private int groundClassAt(int cx, int cy) {
