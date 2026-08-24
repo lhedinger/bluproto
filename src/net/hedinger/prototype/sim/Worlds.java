@@ -553,6 +553,165 @@ public final class Worlds {
 		}
 	}
 
+	/**
+	 * The plant floor's plan, in the room's own interior coordinates: sixteen
+	 * tiles wide by nine tall, with the shell added around it.
+	 *
+	 * <pre>
+	 *   .  deck plate      C  coolant run    S  waste sump    P  pipe run
+	 *   X  heat exchanger  w  catwalk        R  collapsed deck
+	 *   T  loading deck    L  lit grating    B  shard bed     V  vent grille
+	 *   s  steel bulkhead
+	 * </pre>
+	 *
+	 * <p>Drawn rather than computed, and that is the whole of the change. The
+	 * first version placed each feature by arithmetic off the room's centre —
+	 * exchangers at cx+-2, coolant at cy+-3, a sump four in from the corner —
+	 * and the features quietly wrote over one another in the order they
+	 * happened to be listed. The loading walk erased the coolant loop's entire
+	 * south leg, so the loop was three sides of a rectangle; the collapse ate
+	 * its east end; the stairwell landed in the sump and cut it from three
+	 * tiles to one. None of that is visible in the source, all of it is
+	 * obvious in a render, and none of it could fail a test. ART-STYLE.md
+	 * section 5 already says authored beats computed for discrete things, and
+	 * a room is a discrete thing.
+	 *
+	 * <p>The room is one fixed size rather than the station's, because it is
+	 * cut into virgin rock and nothing up there constrains it. Every plan that
+	 * gets a floor beneath it is at least this big, so the plan is simply
+	 * centred under whichever shell it is handed.
+	 *
+	 * <p>What is down here is the plant the rooms above keep referring to. The
+	 * machine wing has a coolant run and an exchanger dumping heat, and until
+	 * now they came from nowhere: the run started at a wall. Now it starts
+	 * somewhere. A closed loop of coolant around a block of exchangers, a
+	 * catwalk down its east face to walk the reactor from, a sump the floor
+	 * drains into, and a bay behind a bulkhead whose only way in is over the
+	 * fallen ceiling — which is also why the level reads as somewhere that
+	 * stopped being maintained.
+	 *
+	 * <p>Every tile it uses already existed. The point of the new rooms is not
+	 * new terrain but somewhere for the terrain to mean something: the crystal
+	 * bed has been in the caves all along, and putting lit grating and a
+	 * walkway around one says a facility was studying it.
+	 */
+	private static final String[] PLANT_FLOOR = {
+			"PV..CCCCCCCw.RRR",
+			"P...CXXXXXCw.RRR",
+			"P...CXXXXXCwsTTT",
+			"P...CXXXXXCwsTTT",
+			"P...CCCCCCCwsTTT",
+			"PLLL.......w....",
+			"PLBL.TTTTTTTT...",
+			"PLLL...SSS......",
+			"P..V...SSSV.....",
+	};
+
+	/** The plan's interior extent, and the shell around it. */
+	static final int PLANT_W = 16 + 2, PLANT_H = 9 + 2;
+
+	/** Cuts the plant floor into the rock under a station shell of W x H at
+	 *  (x0, y0), centred. The stairwell is NOT cut here: only the builder above
+	 *  knows which of its own rooms the stairs may come up in, and the two
+	 *  station plans do not agree — one has a storage hall where the other has
+	 *  a bottomless shaft. See {@link #sinkStairwell}. */
+	private static void sinkPlantFloor(World w, int x0, int y0, int W, int H) {
+		int px0 = x0 + (W - PLANT_W) / 2, py0 = y0 + (H - PLANT_H) / 2;
+		for (int x = px0; x < px0 + PLANT_W; x++) {
+			for (int y = py0; y < py0 + PLANT_H; y++) {
+				boolean shell = x == px0 || y == py0
+						|| x == px0 + PLANT_W - 1 || y == py0 + PLANT_H - 1;
+				setBare(w, x, y, DEEP_Z, shell
+						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		for (int j = 0; j < PLANT_FLOOR.length; j++) {
+			for (int i = 0; i < PLANT_FLOOR[j].length(); i++) {
+				Tile.TileType t = plantTile(PLANT_FLOOR[j].charAt(i));
+				if (t != null) {
+					setBare(w, px0 + 1 + i, py0 + 1 + j, DEEP_Z, t);
+				}
+			}
+		}
+	}
+
+	private static Tile.TileType plantTile(char ch) {
+		switch (ch) {
+		case 'P':
+			return Tile.TileType.TYPE_PIPES;
+		case 'C':
+			return Tile.TileType.TYPE_COOLANT;
+		case 'X':
+			return Tile.TileType.TYPE_EXCHANGER;
+		case 'w':
+			return Tile.TileType.TYPE_CATWALK;
+		case 's':
+			return Tile.TileType.TYPE_WALL_STEEL;
+		case 'T':
+			return Tile.TileType.TYPE_TREADPLATE;
+		case 'L':
+			return Tile.TileType.TYPE_LIGHTGRATE;
+		case 'B':
+			return Tile.TileType.TYPE_CRYSTAL_BED;
+		case 'S':
+			return Tile.TileType.TYPE_SLUDGE;
+		case 'R':
+			return Tile.TileType.TYPE_COLLAPSE;
+		case 'V':
+			return Tile.TileType.TYPE_AIRVENT;
+		case '.':
+			return null; // the shell pass already laid deck plate
+		default:
+			throw new IllegalArgumentException("no such plant-floor tile: " + ch);
+		}
+	}
+
+	/**
+	 * The stairwell from the cave level down to the plant floor, {@code lanes}
+	 * of it side by side running south from (hx, hy).
+	 *
+	 * <p>The link copies the surface-to-cave pattern exactly, one level down: a
+	 * hole to fall through, a descending ramp beside it so the fall is not the
+	 * only way, a landing below, and a climbing ramp back up. Written out
+	 * rather than reusing {@code linkStation} because that carves cave and
+	 * surface by name, and this joins the two floors underneath them — the
+	 * geometry is the same, the levels are not.
+	 *
+	 * <p>Two lanes where the room above allows it, so a body coming down does
+	 * not have to wait for one going up; one where it does not.
+	 *
+	 * <p>The hole beside each ramp is scenery for connectivity purposes: a pit
+	 * is not walkable, so nothing routes through one and the flood never
+	 * enters it.
+	 */
+	private static void sinkStairwell(World w, int hx, int hy, int lanes) {
+		// u = 1 is east in Tile's direction order, so the slope climbs east and
+		// a body steps off its west foot to come down.
+		final int u = 1;
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
+		for (int r = 0; r < lanes; r++) {
+			int bx = hx, by = hy + r;
+			int dx1 = bx + ax, dy1 = by + ay;            // the descending ramp
+			int ux = bx + 2 * ax, uy = by + 2 * ay;      // the climbing ramp
+			int lx = bx + 3 * ax, ly = by + 3 * ay;      // the upper landing
+
+			setBare(w, bx, by, CAVE_Z, Tile.TileType.TYPE_HOLE);
+			setBare(w, dx1, dy1, CAVE_Z, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(dx1, dy1, CAVE_Z).setRampUphill(u);
+			setBare(w, bx, by, DEEP_Z, Tile.TileType.TYPE_PLATE); // landing below
+
+			setBare(w, ux, uy, DEEP_Z, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(ux, uy, DEEP_Z).setRampUphill(u);
+			// Nothing is put under the upper landing. The first version walled
+			// it — "rock under" — which is right when the stairs are cut into
+			// rock and wrong once there is a room down there: it left a lone
+			// concrete block standing in the middle of the plant floor holding
+			// up a deck plate that did not need holding up. Floors are per
+			// level here; a landing rests on its own tile.
+			setBare(w, lx, ly, CAVE_Z, Tile.TileType.TYPE_PLATE); // landing above
+		}
+	}
+
 	/** The full station plan, in an 18x13 shell. */
 	private static void buildFullBase(World w, int cols, int rows, int x0, int y0) {
 		final int W = 18, H = 13;
@@ -731,7 +890,7 @@ public final class Worlds {
 		}
 		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
 		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 10.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 9.5, CAVE_Z)); // clear of the stair head
 		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 11.5, CAVE_Z));
 		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
 		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
@@ -741,7 +900,19 @@ public final class Worlds {
 		// so gravity is the base's third entrance.
 		dropShaft(w, x0 + 2, x0 + 10, y0 + 5, y0 + 7);
 
-		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
+		// The rock below is virgin whatever shell the caves allowed up here, so a
+		// smaller station is no reason for the building to stop at one storey.
+		// The floor is sunk only if the station survives: a site with no way out
+		// through the rock is un-carved back to wall, and a second floor left
+		// hanging under a base that no longer exists is a hundred-odd walkable
+		// tiles nothing in the world can reach.
+		if (finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh)) {
+			sinkPlantFloor(w, x0, y0, W, H);
+			// One lane, and at the storage wing's WEST end: this plan's south-east
+			// quadrant is the shaft bay, and a stairwell head over a bottomless pit
+			// is a stairwell nothing can stand at the top of.
+			sinkStairwell(w, x0 + 3, y0 + 10, 1);
+		}
 	}
 
 	/**
@@ -813,7 +984,7 @@ public final class Worlds {
 	 * walkable cavern (un-carving everything if no way out exists), the two
 	 * doors, and their switches.
 	 */
-	private static void finishBase(World w, int cols, int rows, int x0, int y0,
+	private static boolean finishBase(World w, int cols, int rows, int x0, int y0,
 			int W, int H, int vx, int vy, int vh) {
 		int my = y0 + H / 2 - 1;
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
@@ -828,7 +999,7 @@ public final class Worlds {
 					setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_WALL);
 				}
 			}
-			return;
+			return false;
 		}
 		// The doors themselves: a two-tile blast door across the mouth and a
 		// grate on the vault. Doors are ordinary non-living entities (they
@@ -859,6 +1030,7 @@ public final class Worlds {
 				net.hedinger.prototype.entities.Switch.BUTTON); // mid-hall, facing the vault
 		wireSwitch(w, vx + 2, vy + vh - 2, grate,
 				net.hedinger.prototype.entities.Switch.BUTTON); // the vault's far corner
+		return true;
 	}
 
 	/**
