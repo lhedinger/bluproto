@@ -756,7 +756,7 @@ public final class Worlds {
 	 * bed has been in the caves all along, and putting lit grating and a
 	 * walkway around one says a facility was studying it.
 	 */
-	private static final String[] PLANT_FLOOR = {
+	static final String[] PLANT_FLOOR = {
 			"PV..CCCCCCCw.RRR",
 			"P...CXXXXXCw.RRR",
 			"P...CXXXXXCwsTTT",
@@ -770,6 +770,13 @@ public final class Worlds {
 
 	/** The plan's interior extent, and the shell around it. */
 	static final int PLANT_W = 16 + 2, PLANT_H = 9 + 2;
+
+	/** The plant floor's plan, for the scenarios: the drawing the deep level is
+	 *  supposed to be, so a scenario can ask whether it still is one. Copied,
+	 *  so nobody can edit the room in place. */
+	public static String[] plantFloorPlan() {
+		return PLANT_FLOOR.clone();
+	}
 
 	/** Cuts the plant floor into the rock under a station shell of W x H at
 	 *  (x0, y0), centred. The stairwell is NOT cut here: only the builder above
@@ -2241,7 +2248,7 @@ public final class Worlds {
 	 * world where the map says four and the population says one — and the map is
 	 * the thing a viewer can see.
 	 */
-	static java.util.List<int[]> findDocks(World w) {
+	public static java.util.List<int[]> findDocks(World w) {
 		java.util.List<int[]> out = new java.util.ArrayList<int[]>();
 		for (int y = 0; y < w.getRows(); y++) {
 			for (int x = 0; x < w.getColums(); x++) {
