@@ -361,6 +361,44 @@ final class WorldHost {
 		return out;
 	}
 
+	/**
+	 * The steward's drones, in a stable order, as {@code {id, x, y, z}}.
+	 *
+	 * <p>For the viewer's "next drone" button. The entity stream is filtered to
+	 * the level a viewer is watching, so from the surface a client cannot see
+	 * that the drones exist at all, let alone where they are — the same blindness
+	 * that made a followed creature walking downstairs look like one that died.
+	 * This endpoint is not level-filtered, which is the whole point of it.
+	 *
+	 * <p>Drones and no other machinery. {@link #liveMachineIds()} asks the
+	 * broader question — anything inorganic — and answering it here would put the
+	 * facility loader in a rank of stewards it is not part of. The rank is a
+	 * cohort with one standing order between them; the loader hauls crates and
+	 * has nothing to do with it.
+	 *
+	 * <p>Ordered by id, which is spawn order, which is the order the pads were
+	 * cut. That makes the button's cycle the same every time round rather than
+	 * whatever order the entity list happens to be in this tick.
+	 */
+	java.util.List<java.util.Map<String, Object>> droneRank() {
+		java.util.List<net.hedinger.prototype.sim.StewardDrone> rank =
+				new java.util.ArrayList<>();
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e instanceof net.hedinger.prototype.sim.StewardDrone d && !d.isRemoved()
+					&& !d.isDead()) {
+				rank.add(d);
+			}
+		}
+		rank.sort(java.util.Comparator.comparingInt(
+				net.hedinger.prototype.engine.Entity::getID));
+		java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+		for (net.hedinger.prototype.sim.StewardDrone d : rank) {
+			out.add(java.util.Map.of("id", d.getID(), "x", round(d.getX()),
+					"y", round(d.getY()), "z", d.getLvl()));
+		}
+		return out;
+	}
+
 	java.util.Map<String, Object> entityDetail(int id) {
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
 			if (e == null || e.getID() != id || e.isRemoved()) {
