@@ -334,6 +334,12 @@ public final class ServerMain {
 					.result(png);
 		});
 
+		// The steward's drone rank, for the viewer's "next drone" button: where
+		// each one is, on whatever floor it is on. Not level-filtered, unlike the
+		// entity stream — a viewer on the surface has to be able to find a machine
+		// parked two floors down without knowing to look there first.
+		app.get("/api/world/drones", ctx -> ctx.json(host.droneRank()));
+
 		// Tap-to-inspect: full detail for one entity (genome, energy, state).
 		app.get("/api/world/entity/{id}", ctx -> {
 			var d = host.entityDetail(Integer.parseInt(ctx.pathParam("id")));

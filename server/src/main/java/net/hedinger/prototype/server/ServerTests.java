@@ -32,6 +32,7 @@ public final class ServerTests {
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
+		theDroneRankIsDronesAndOnlyDrones();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -77,6 +78,57 @@ public final class ServerTests {
 		}
 		check("the world actually contained machinery", machines > 0);
 		check("and creatures to contrast it with", creatures > 0);
+	}
+
+	/**
+	 * The viewer's "next drone" button is offered the steward's drones and no
+	 * other machinery.
+	 *
+	 * <p>The narrowing is the whole assertion. {@link WorldHost#liveMachineIds()}
+	 * answers the broader question — anything inorganic — and it was sitting
+	 * right there when this endpoint was written; using it would have quietly put
+	 * the facility loader into a rank of stewards it is not part of, and the
+	 * button would have cycled through a crate-hauler with no way for anyone to
+	 * tell that was a mistake rather than the design. So this checks both halves:
+	 * every id offered is a drone, and the world it was asked about really does
+	 * contain machinery that was left out.
+	 *
+	 * <p>Also that each entry carries a level. The entity stream is filtered to
+	 * the floor a viewer is watching, so a client that is not already on the
+	 * drones' floor cannot see them at all — the z is the only thing that lets
+	 * the button go and get one.
+	 */
+	static void theDroneRankIsDronesAndOnlyDrones() {
+		WorldHost host = new WorldHost(11);
+
+		java.util.List<java.util.Map<String, Object>> rank = host.droneRank();
+		check("the rank is the world's full complement of drones",
+				rank.size() == net.hedinger.prototype.sim.Worlds.DRONE_RANK);
+
+		java.util.Set<Integer> offered = new java.util.HashSet<>();
+		for (java.util.Map<String, Object> d : rank) {
+			int id = ((Number) d.get("id")).intValue();
+			offered.add(id);
+			check("every entry says where it is, floor included",
+					d.get("x") != null && d.get("y") != null && d.get("z") != null);
+			java.util.Map<String, Object> detail = host.entityDetail(id);
+			check("id " + id + " is a steward drone",
+					detail != null && "stewarddrone".equals(detail.get("subtype")));
+		}
+		check("no drone is offered twice", offered.size() == rank.size());
+
+		// The other half: machinery deliberately left out. Without this the test
+		// would still pass on an endpoint that returned every machine in a world
+		// that happened to contain only drones.
+		int machines = 0, omitted = 0;
+		for (int id : host.liveMachineIds()) {
+			machines++;
+			if (!offered.contains(id)) {
+				omitted++;
+			}
+		}
+		check("the world has more machinery than drones", machines > rank.size());
+		check("and the rank leaves it out", omitted == machines - rank.size());
 	}
 
 	/** diff() classifies every case: unchanged, moved, born, gone. */
