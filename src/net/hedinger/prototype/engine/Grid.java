@@ -691,6 +691,17 @@ public class Grid {
 								col = GroundTextures.bayer(gx, gy) < 0.35
 										? GroundTextures.rampColor(cl, 0)
 										: darken(GroundTextures.rampColor(cl, 2), 0.6);
+							} else if (cls != GroundTextures.CLS_HOLE) {
+								// A BORROWED hole pixel: the jitter above lets a
+								// structure's edge nibble into a pit it touches, so
+								// rock does not meet a hole in a laser-cut line. It
+								// may take the pit's colour; it may not take the pit's
+								// transparency. Since a pit's open pixels became real
+								// alpha, punching one here cut a window clean through
+								// solid rock -- eight of them in the demo world's
+								// caves, each a hole in a wall you could see the floor
+								// below through. The nibble is a shape, not an opening.
+								col = GroundTextures.rampColor(cl, 0);
 							} else {
 								Integer pit = pitFloor(x, y, gx, gy, cl);
 								if (pit == null) {
