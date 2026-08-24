@@ -2912,6 +2912,47 @@ public class SimTests {
 	}
 
 	/**
+	 * A pit is drawn as scenery on whatever level it sits on, by code that
+	 * makes no promise about what is directly beneath it. That held by accident
+	 * for as long as the world had one underground level, where a pit's floor
+	 * was always either open ground or nothing at all — never rock, because
+	 * rock is exactly what a cave's own passages are cut through. It broke the
+	 * day a level was added under the caves: the caves' pits still fall, but
+	 * some of them now fall onto solid stone instead of onto air, and the body
+	 * that takes one down used to end the tick embedded in it — nowhere
+	 * {@code unstick} could rescue it from, because the search radius is finite
+	 * and the deep floor outside its one carved room is rock in every direction.
+	 *
+	 * <p>Two lanes settle which kind of "nothing to land on" a pit means: void
+	 * all the way down still empties the faller out of the world exactly as
+	 * before, and a pit with open floor waiting below still delivers a safe
+	 * landing. What must not happen is the third case this world now has that
+	 * the old two-level one never could — a pit whose floor is there, but solid.
+	 */
+	static class APitOntoRockIsBottomlessNotAWall extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(14, 6, 2);
+			w.setTile(4, 2, 1, Tile.TileType.TYPE_HOLE); // drops onto open floor below
+			w.setTile(9, 2, 1, Tile.TileType.TYPE_HOLE); // drops onto solid rock below
+			w.setTile(9, 2, 0, Tile.TileType.TYPE_WALL);
+			TestNPC lands = TestNPC.mover(4.5, 1.5, 1, Math.PI / 2); // heads south, onto its hole
+			TestNPC blocked = TestNPC.mover(9.5, 1.5, 1, Math.PI / 2);
+			w.spawnEntity(lands);
+			w.spawnEntity(blocked);
+			w.think();
+			snapshot(w, "before (one hole over floor, one over rock)");
+			tick(w, 60);
+			snapshot(w, "after (one lands below; the other is gone, not embedded)");
+
+			assertTrue("open floor below still catches a falling body", !lands.isRemoved());
+			assertEquals("and it lands on the level the floor is on", 0, lands.getLvl());
+			assertTrue("rock below is as bottomless as no floor at all", blocked.isRemoved());
+		}
+	}
+
+	/**
 	 * Tall-grass cover blocks line of sight: a chaser locks onto the prey it can
 	 * see and ignores an equally-close prey hiding in cover (invisible to it).
 	 */
@@ -8230,6 +8271,7 @@ public class SimTests {
 				new BrainInteractsWithButton(),
 				new BrainSeeksAndPressesButton(),
 				new BottomlessPitsAndCatwalks(),
+				new APitOntoRockIsBottomlessNotAWall(),
 				new ThirstyGrazerWalksToWater(),
 				new ThirstWalksRoundAWallNotIntoIt(),
 				new AmblingMindIsShakenOffAWall(),

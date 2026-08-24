@@ -200,7 +200,14 @@ public abstract class Entity {
 	 * map, or water under a body that cannot swim.
 	 */
 	private boolean standingClear(double x, double y) {
-		Tile t = world.getTile(x, y, Z);
+		return standingClear(x, y, Z);
+	}
+
+	/** {@link #standingClear(double, double)}, at a level other than the one
+	 *  this body currently occupies — what a fall through a hole needs to ask
+	 *  about the floor it is headed for, before it arrives there. */
+	private boolean standingClear(double x, double y, double z) {
+		Tile t = world.getTile(x, y, z);
 		if (t == null) {
 			return false; // off the map
 		}
@@ -354,10 +361,18 @@ public abstract class Entity {
 		if (isOverHole() && !isFlying()) {
 			// A pit is not a route, it is gravity: standing over one drops you.
 			// FIXME allow flying entities to go down the hole if they wish
-			if ((int) Z - 1 < 0) {
-				// A drop on the lowest level is bottomless: there is no floor
-				// below to land on, so the body simply falls out of the world
-				// -- no corpse, nothing to scavenge, just gone.
+			//
+			// A pit is drawn as scenery on the level it sits on, by code that
+			// makes no promise about what, if anything, is directly beneath it
+			// -- a promise the caves' own pits kept only by accident while the
+			// caves were the bottom of the world, and broke the moment a level
+			// was added underneath them: solid rock, not open floor. Checking
+			// the tile the fall would land on, rather than trusting that one
+			// exists, is what tells the two cases apart.
+			if ((int) Z - 1 < 0 || !standingClear(X, Y, Z - 1)) {
+				// No floor below to land on -- off the bottom of the world, or
+				// solid rock waiting there instead -- so the body falls out of
+				// the world: no corpse, nothing to scavenge, just gone.
 				remove();
 				return;
 			}
