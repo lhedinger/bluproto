@@ -729,7 +729,7 @@ public class SimTests {
 
 			// The surface is the level that grows grass; it must be the TOP level.
 			int surface = -1;
-			for (int z = 0; z < 2; z++) {
+			for (int z = 0; z < w.getLevels(); z++) {
 				for (int x = 0; x < cols && surface != z; x++) {
 					for (int y = 0; y < rows; y++) {
 						Tile t = w.getTile(x, y, z);
@@ -740,7 +740,10 @@ public class SimTests {
 					}
 				}
 			}
-			assertEquals("the grassy surface is the top level (cave below it)", 1, surface);
+			// Asked of the world rather than named, so a floor added below does
+			// not make this a lie: the grass is on TOP, whatever that index is.
+			assertEquals("the grassy surface is the top level (everything else below it)",
+					w.getLevels() - 1, surface);
 
 			// Down-link: a walker on a surface hole falls into the cave, not the void.
 			int hx = -1, hy = -1;
@@ -6969,7 +6972,10 @@ public class SimTests {
 			assertEquals("it is berthed on a charge dock",
 					Tile.TileType.TYPE_DOCK.getValue(),
 					w.getTile(drone.getX(), drone.getY(), drone.getZ()).getType().getValue());
-			assertTrue("the dock is underground, in the buried base", drone.getZ() < 1);
+			// Below the surface, whatever the surface's index happens to be —
+			// a floor added underneath must not turn this assertion into a lie.
+			assertLess("the dock is underground, in the buried base",
+					drone.getZ(), w.getLevels() - 1);
 			tick(w, 200);
 			assertTrue("with nothing over its ceiling, it stays on standby", drone.isDocked());
 		}
