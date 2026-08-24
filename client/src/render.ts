@@ -245,10 +245,13 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // exactly this. No new shade is invented.
 //
 // Cost is proportional to the holes, not to the world. Only chunks actually IN
-// VIEW are considered, only those whose own art has any transparency ask for
-// the chunk beneath them, and far zoom skips the pass entirely — under 12 px a
-// tile a pit is smaller than a pixel and there is no parallax to see. A world
-// with no pits therefore never fetches a second level at all.
+// VIEW are considered, and only those whose own art has any transparency ask
+// for the chunk beneath them. A world with no pits therefore never fetches a
+// second level at all. The pass runs at EVERY zoom: the world opens at its fit
+// zoom (~9 px/tile on an ordinary window), and a below-layer that only existed
+// past 12 px/tile was a feature nobody saw — at fit zoom the openings are
+// small, but a hole that is dark blue nothing until the third wheel-click
+// reads as a bug, not a hole.
 export const PARALLAX = 0.94;
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
@@ -280,7 +283,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
 ): Array<[number, HTMLCanvasElement, number, number, number, number]> {
   const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
-  if (level - 1 < 0 || chunkTiles <= 0 || cam.scale < ART) return out;
+  if (level - 1 < 0 || chunkTiles <= 0) return out;
   const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
   const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
   const cx0 = Math.max(0, Math.floor(tl.x / chunkTiles));
@@ -365,6 +368,10 @@ export function render(
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       g.imageSmoothingEnabled = false;
+      for (const [, img, bx, by, bw, bh] of
+          belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
+        g.drawImage(img, bx, by, bw, bh);
+      }
       g.drawImage(layer, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
     }
   } else if (chunkTiles > 0) {
