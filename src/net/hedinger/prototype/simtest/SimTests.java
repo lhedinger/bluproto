@@ -6983,6 +6983,234 @@ public class SimTests {
 	}
 
 	/**
+	 * Every drone in the rank gets its own pad, and no pad is a doorway.
+	 *
+	 * <p>Two claims, and the second is the one with history. A rank of four laid
+	 * out as a LINE was the first attempt, and it does not fit a machine wing
+	 * three rows tall: spaced along it, three of the four land in the partition
+	 * wall and out in the spine, which quietly turns charge pads into the only
+	 * way between two rooms — and a parked machine is then standing in a doorway.
+	 *
+	 * <p>So a pad must look like deck rather than like a gap in a wall, and
+	 * blocking one must strand nothing. The second half found a live one the
+	 * first half did not: the rank's east pad had been laid across the approach
+	 * to the crawl duct through the vault's north wall, and since the vault's
+	 * grate answers only its own buttons, that duct is the whole of the other way
+	 * in. A berth is a place to stand, not a place to pass through.
+	 */
+	static class EveryDroneInTheRankHasItsOwnPad extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demo(s);
+				java.util.Set<String> pads = new java.util.HashSet<String>();
+				int drones = 0;
+				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+					if (e instanceof net.hedinger.prototype.sim.StewardDrone d) {
+						drones++;
+						assertEquals("seed " + s + ": drone " + drones + " is on a charge dock",
+								Tile.TileType.TYPE_DOCK.getValue(),
+								w.getTile(d.getX(), d.getY(), d.getZ()).getType().getValue());
+						pads.add((int) d.getX() + "," + (int) d.getY());
+					}
+				}
+				assertEquals("seed " + s + ": the rank is full",
+						net.hedinger.prototype.sim.Worlds.DRONE_RANK, drones);
+				assertEquals("seed " + s + ": no two drones share a pad", drones, pads.size());
+
+				java.util.List<int[]> docks =
+						net.hedinger.prototype.sim.Worlds.findDocks(w);
+				int open = flood(w, docks.get(0), null);
+				for (int[] d : docks) {
+					// Not a threshold: a pad set into a wall has solid ground on two
+					// opposite sides and open deck on the other two, which is the
+					// shape of a doorway and not of a berth.
+					assertTrue("seed " + s + ": the pad at " + d[0] + "," + d[1]
+							+ " is deck, not a gap in a wall",
+							!(solid(w, d[0] - 1, d[1]) && solid(w, d[0] + 1, d[1]))
+									&& !(solid(w, d[0], d[1] - 1) && solid(w, d[0], d[1] + 1)));
+					// And not a bottleneck: blocking it must strand nothing. The one
+					// this caught was subtler than a doorway — the east pad had been
+					// laid across the approach to the crawl duct through the vault's
+					// north wall, and the vault's grate answers only its own buttons,
+					// so that duct is the whole of the other way in.
+					assertEquals("seed " + s + ": the pad at " + d[0] + "," + d[1]
+							+ " is a berth, not the only way between two rooms",
+							open - 1, flood(w, docks.get(0), d));
+				}
+			}
+		}
+
+		static boolean solid(World w, int x, int y) {
+			Tile t = w.getTile(x, y, 1);
+			return t == null || !t.isWalkable();
+		}
+
+		/** Walkable tiles on the cave level reachable from {@code from},
+		 *  treating {@code blocked} (if given) as solid. */
+		static int flood(World w, int[] from, int[] blocked) {
+			int C = w.getColums(), R = w.getRows();
+			boolean[][] seen = new boolean[C][R];
+			java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+			if (blocked != null && blocked[0] == from[0] && blocked[1] == from[1]) {
+				// Start beside the blocked pad rather than on it, or the flood
+				// measures nothing at all.
+				from = new int[] { from[0], from[1] + 1 };
+			}
+			seen[from[0]][from[1]] = true;
+			q.add(from);
+			int n = 0;
+			while (!q.isEmpty()) {
+				int[] p = q.poll();
+				n++;
+				Tile t = w.getTile(p[0], p[1], 1);
+				for (int dx = -1; dx <= 1; dx++) {
+					for (int dy = -1; dy <= 1; dy++) {
+						int nx = p[0] + dx, ny = p[1] + dy;
+						if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= C || ny >= R
+								|| seen[nx][ny]) {
+							continue;
+						}
+						if (blocked != null && nx == blocked[0] && ny == blocked[1]) {
+							continue;
+						}
+						Tile o = w.getTile(nx, ny, 1);
+						if (o == null || !o.isWalkable()
+								|| !t.isConnected(w, nx, ny, 1, true, false)) {
+							continue;
+						}
+						seen[nx][ny] = true;
+						q.add(new int[] { nx, ny });
+					}
+				}
+			}
+			return n;
+		}
+	}
+
+	/**
+	 * The plant floor under the station is the room that was drawn, and not a
+	 * room some later feature wrote over.
+	 *
+	 * <p>This is the scenario the plant floor's own history asks for. The first
+	 * version of that room placed each feature by arithmetic off the room's
+	 * centre, and the features overwrote one another in the order they happened
+	 * to be listed: the loading walk erased the coolant loop's entire south leg,
+	 * the collapse ate its east end, and the stairwell landed in the sump. The
+	 * suite was green through all of it.
+	 *
+	 * <p>Asserted without a second copy of the legend, which would only be one
+	 * more thing to keep in step. Every cell drawn with the same character must
+	 * have come out the same tile type, and cells drawn with different
+	 * characters must have come out different ones — a bijection between the
+	 * drawing and the deck. Any overwrite breaks the first half; a feature laid
+	 * wholesale over another breaks the second.
+	 *
+	 * <p>Deck plate is exempt, and only deck plate: it is the room's background,
+	 * and the stairwell is deliberately cut through it (see sinkStairwell, which
+	 * is not part of the plan precisely because only the builder above knows
+	 * which of its own rooms the stairs may come up in).
+	 */
+	static class ThePlantFloorIsTheRoomThatWasDrawn extends Scenario {
+		@Override
+		public void run() {
+			String[] plan = net.hedinger.prototype.sim.Worlds.plantFloorPlan();
+			int floors = 0;
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demo(s);
+				int[] at = plantFloorOrigin(w);
+				if (at == null) {
+					continue; // this seed's caves only had room for the annex
+				}
+				floors++;
+				java.util.Map<Character, Integer> type =
+						new java.util.HashMap<Character, Integer>();
+				for (int j = 0; j < plan.length; j++) {
+					for (int i = 0; i < plan[j].length(); i++) {
+						char ch = plan[j].charAt(i);
+						if (ch == '.') {
+							continue;
+						}
+						int got = w.getTile(at[0] + i, at[1] + j, 0).getType().getValue();
+						Integer want = type.put(ch, got);
+						assertTrue("seed " + s + ": every '" + ch + "' is the same tile"
+								+ " (" + at[0] + i + "," + (at[1] + j) + " is " + got
+								+ ", elsewhere " + want + ")",
+								want == null || want.intValue() == got);
+					}
+				}
+				java.util.Set<Integer> seen = new java.util.HashSet<Integer>(type.values());
+				assertEquals("seed " + s + ": every drawn feature is still its own tile",
+						type.size(), seen.size());
+			}
+			assertLess("some seed actually built a plant floor", 0, floors);
+		}
+
+		/** The room's interior north-west corner on the deep level, or null if
+		 *  this world got no plant floor. Found by looking: the deep level is
+		 *  solid rock apart from this one room, so the box of everything that
+		 *  is not rock IS the room's shell. */
+		static int[] plantFloorOrigin(World w) {
+			int minx = Integer.MAX_VALUE, miny = Integer.MAX_VALUE;
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, 0);
+					if (t != null && t.getType() != Tile.TileType.TYPE_WALL) {
+						minx = Math.min(minx, x);
+						miny = Math.min(miny, y);
+					}
+				}
+			}
+			return minx == Integer.MAX_VALUE ? null : new int[] { minx + 1, miny + 1 };
+		}
+	}
+
+	/**
+	 * The reactor's coolant run is a closed loop.
+	 *
+	 * <p>Every coolant tile has exactly two orthogonal coolant neighbours, which
+	 * is true of a ring and of nothing else: an open end has one, a junction or
+	 * a solid block has three or four. The room was shipped once with three
+	 * sides of the rectangle, the fourth erased by the loading walk laid over
+	 * it, and it looked like two unrelated pipes rather than a plant.
+	 */
+	static class TheReactorLoopIsClosed extends Scenario {
+		@Override
+		public void run() {
+			int loops = 0;
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demo(s);
+				int coolant = 0;
+				for (int x = 0; x < w.getColums(); x++) {
+					for (int y = 0; y < w.getRows(); y++) {
+						if (!isCoolant(w, x, y)) {
+							continue;
+						}
+						coolant++;
+						int n = (isCoolant(w, x - 1, y) ? 1 : 0) + (isCoolant(w, x + 1, y) ? 1 : 0)
+								+ (isCoolant(w, x, y - 1) ? 1 : 0)
+								+ (isCoolant(w, x, y + 1) ? 1 : 0);
+						assertEquals("seed " + s + ": the coolant run at " + x + "," + y
+								+ " has two neighbours, as a loop does", 2, n);
+					}
+				}
+				if (coolant > 0) {
+					loops++;
+				}
+			}
+			assertLess("some seed actually built a reactor", 0, loops);
+		}
+
+		static boolean isCoolant(World w, int x, int y) {
+			if (x < 0 || y < 0 || x >= w.getColums() || y >= w.getRows()) {
+				return false;
+			}
+			Tile t = w.getTile(x, y, 0);
+			return t != null && t.getType() == Tile.TileType.TYPE_COOLANT;
+		}
+	}
+
+	/**
 	 * The first ground in the world that wounds. A body wading a waste channel
 	 * loses health for as long as it stands there and its corpse says what did
 	 * it; an identical body on clean deck beside it is untouched, and a flyer
@@ -7906,6 +8134,9 @@ public class SimTests {
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new SeededWorldBerthsTheDroneRank(),
+				new EveryDroneInTheRankHasItsOwnPad(),
+				new ThePlantFloorIsTheRoomThatWasDrawn(),
+				new TheReactorLoopIsClosed(),
 				new TheLoaderStowsALooseCrate(),
 				new TheLoaderLeavesStowedCratesAlone(),
 				new TheLoaderIsSlowerThanTheDrone(),
