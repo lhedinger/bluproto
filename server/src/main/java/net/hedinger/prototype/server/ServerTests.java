@@ -355,7 +355,9 @@ public final class ServerTests {
 			if (z == 0) {
 				// The bottom level's pits have nothing under them to look down onto.
 				bottom = z;
-				check("a pit over nothing is solid to the eye", openPixels(img, p) == 0);
+				check("a pit over nothing is solid to the eye (" + p[0] + "," + p[1] + " "
+						+ terrain.getTile(p[0], p[1], z).getType() + ")",
+						openPixels(img, p) == 0);
 			} else {
 				deep = z;
 				check("a pit over a floor opens onto it", openPixels(img, p) > 0);
@@ -365,20 +367,35 @@ public final class ServerTests {
 		check("the demo world has a pit over nothing", bottom == 0);
 	}
 
-	/** The first pit on a level that is not on the map edge, as {x, y}. */
+	/**
+	 * The first see-through tile on a level that is not on the map edge, as
+	 * {x, y}: a pit for preference, and a grate if the level has no pit.
+	 *
+	 * <p>The grate fallback is what keeps the bottom-level half of this test
+	 * alive. It used to look for pits alone, which was enough while the caves
+	 * were the bottom level and had plenty; a floor added underneath them left
+	 * the bottom level with no pit at all, and the "nothing below" branch simply
+	 * stopped running. A catwalk's gaps take a pit's treatment for exactly this
+	 * reason (see Grid.pitFloor), so they answer the same question.
+	 */
 	private static int[] findPit(net.hedinger.prototype.engine.World w, int z) {
 		if (z < 0) {
 			return null;
 		}
+		int[] grate = null;
 		for (int x = 1; x < w.getColums() - 1; x++) {
 			for (int y = 1; y < w.getRows() - 1; y++) {
-				if (w.getTile(x, y, z).getType()
-						== net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE) {
+				net.hedinger.prototype.engine.Tile.TileType t = w.getTile(x, y, z).getType();
+				if (t == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE) {
 					return new int[] { x, y };
+				}
+				if (grate == null
+						&& t == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK) {
+					grate = new int[] { x, y };
 				}
 			}
 		}
-		return null;
+		return grate;
 	}
 
 	/** Whether a tile is one you could ever see through: a pit, a drop-shaft,
