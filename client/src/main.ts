@@ -149,9 +149,13 @@ function getChunk(cx: number, cy: number, z: number): HTMLCanvasElement | null {
 }
 
 function levelName(z: number): string {
-  // The surface is the top level (highest index); the cave sits below it.
-  const top = hello ? hello.levels - 1 : 1;
-  return z === top ? 'surface' : z === 0 ? 'underground' : `level ${z}`;
+  // The surface is the top level (highest index); everything else is named by
+  // how far below it sits, not by its raw index -- a bare index reads "level 0"
+  // for the deepest floor of a 2-level world and "level 0" again for the
+  // deepest of a 3-level one, the same label for two different depths.
+  const top = hello ? hello.levels - 1 : 0;
+  const depth = top - z;
+  return depth === 0 ? 'surface' : `level -${depth}`;
 }
 
 // ---- perf experiment toggles ----------------------------------------------
@@ -1007,7 +1011,11 @@ levelBtn.onclick = () => {
     cam.followId = null;
     reflect();
   }
-  goToLevel((currentLevel + 1) % hello.levels); // cycle surface -> underground -> …
+  // Step down one floor at a time and wrap back to the surface -- incrementing
+  // the index would do that for exactly two levels (index 0 IS the only floor
+  // below the top) but skips the middle floor of a three-level world, jumping
+  // straight from the surface to the bottom.
+  goToLevel(currentLevel === 0 ? hello.levels - 1 : currentLevel - 1);
 };
 function reflect(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
