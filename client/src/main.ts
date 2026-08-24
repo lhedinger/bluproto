@@ -62,6 +62,7 @@ const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mindEl = document.getElementById('mind') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
+const droneBtn = document.getElementById('drone') as HTMLButtonElement;
 const injectBtn = document.getElementById('inject') as HTMLButtonElement;
 const injectFile = document.getElementById('injectFile') as HTMLInputElement;
 
@@ -390,6 +391,10 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
       levelBtn.textContent = levelName(currentLevel);
+      // A world with no base carves no charge pads and spawns no drones, and a
+      // reset can hand back one that does or does not — so the button asks on
+      // every hello and shows itself only if there is a rank to cycle.
+      void fetchDroneRank();
       reflect();
       break;
     }
@@ -483,11 +488,21 @@ let selectedId: number | null = null;
 let selectedTile: { x: number; y: number; z: number } | null = null;
 let detailTimer = 0;
 
-function select(id: number): void {
+/**
+ * Selects an entity: opens its inspector, and follows it if it is a living body.
+ *
+ * <p>`sightUnseen` is for a caller that already knows what it picked and cannot
+ * check. The entity stream is filtered to the watched level, so a drone parked
+ * two floors down has no track here to read a kind off — and the ordinary
+ * guard, which needs one, would decline to follow the very body the caller
+ * asked for. The detail poll settles it within the second either way: it either
+ * takes the viewer to that floor or deselects a body that is gone.
+ */
+function select(id: number, sightUnseen = false): void {
   selectedId = id;
   selectedTile = null;
   const t = state.tracks.get(id);
-  if (t && t.curr.kind.startsWith('npc.') && !(t.curr.flags & F_DEAD)) {
+  if (sightUnseen || (t && t.curr.kind.startsWith('npc.') && !(t.curr.flags & F_DEAD))) {
     cam.followId = id; // follow living creatures; items stay put
   }
   refreshDetail();
@@ -1009,6 +1024,69 @@ levelBtn.onclick = () => {
   }
   goToLevel((currentLevel + 1) % hello.levels); // cycle surface -> underground -> …
 };
+// ---- the drone button ------------------------------------------------------
+// Four machines parked on charge pads in a base buried somewhere in the rock,
+// on a floor the viewer is probably not watching. Nothing on screen said they
+// existed: the entity stream carries only the level being watched, so from the
+// surface the client cannot see a drone, and the minimap — which draws what the
+// client has — cannot show one either. Finding one meant cycling levels by hand
+// and hunting a two-pixel dot that looks exactly like the loader and the crates
+// beside it. This is the button that does that for you.
+
+interface DroneMark { id: number; x: number; y: number; z: number }
+let droneRank: DroneMark[] = [];
+
+/** The rank, newest answer wins. Cheap — four rows — and asked again on every
+ *  press rather than cached, because a drone can be culled and the world can be
+ *  reset underneath a stale list, and a button that walks you to a body that is
+ *  no longer there is worse than no button. */
+async function fetchDroneRank(): Promise<void> {
+  try {
+    const r = await fetch('/api/world/drones');
+    droneRank = r.ok ? await r.json() : [];
+  } catch {
+    /* transient: keep whatever we had */
+  }
+  droneBtn.style.display = droneRank.length ? 'inline-block' : 'none';
+  droneLabel();
+}
+
+/** Where the currently followed body sits in the rank, or -1. Asking the camera
+ *  rather than keeping a counter is what makes the cycle behave: tap a drone by
+ *  hand, press the button, and it goes to the NEXT one — a private index would
+ *  send you back to wherever the button had got to on its own. */
+function droneIndex(): number {
+  return cam.followId === null ? -1 : droneRank.findIndex(d => d.id === cam.followId);
+}
+
+/** The label carries which of the rank is being followed, so the cycle says
+ *  where it has got to. Driven from the frame loop rather than from the press:
+ *  the follow ends in several places that have no reason to know about this
+ *  button — a pan, a death, a tap on open ground — and a counter still naming a
+ *  drone the camera let go of is a button lying about what it will do next.
+ *  Writes only on change, so it is a string compare per frame and no DOM work. */
+function droneLabel(): void {
+  const i = droneIndex();
+  const want = i < 0 ? 'drone' : `drone ${i + 1}/${droneRank.length}`;
+  if (droneBtn.textContent !== want) droneBtn.textContent = want;
+}
+
+droneBtn.onclick = async () => {
+  await fetchDroneRank();
+  if (!droneRank.length) return;
+  const next = droneRank[(droneIndex() + 1) % droneRank.length];
+  goToLevel(next.z); // it is almost never on the floor you are watching
+  cam.cx = next.x;
+  cam.cy = next.y;
+  // Only ever zoom IN. Opening on a fitted whole world puts the camera at a few
+  // pixels per tile, where a drone is one speck among the base's other specks
+  // and arriving is indistinguishable from not arriving; but someone who zoomed
+  // in deliberately should keep the zoom they chose.
+  if (cam.scale < 32) cam.scale = 32;
+  select(next.id, true);
+  droneLabel();
+};
+
 function reflect(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
   pauseBtn.classList.toggle('on', paused);
@@ -1287,6 +1365,7 @@ function frame(now: number): void {
     lastStats = now;
     statsEl.textContent = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
         (hello ? ` · seed ${hello.seed}` : '');
+    droneLabel();
   }
   // Our whole share of the frame: everything above, GL submission included.
   // A big gap between this and the frame interval is time spent OUTSIDE this
