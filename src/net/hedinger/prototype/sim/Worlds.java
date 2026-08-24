@@ -542,7 +542,12 @@ public final class Worlds {
 		// The full three-band plan wants an 18x13 pocket. A cave too riddled
 		// with caverns to host one (commonly the mid sizes) gets the compact
 		// single-hall annex instead; only a truly tiny map gets nothing.
-		int[] site = findRockPocket(w, cols, rows, 18, 13);
+		int[] site = findRockPocket(w, cols, rows, DEEP_W, DEEP_H);
+		if (site != null) {
+			buildDeepStation(w, cols, rows, site[0], site[1]);
+			return;
+		}
+		site = findRockPocket(w, cols, rows, 18, 13);
 		if (site != null) {
 			buildFullBase(w, cols, rows, site[0], site[1]);
 			return;
@@ -551,6 +556,158 @@ public final class Worlds {
 		if (site != null) {
 			buildCompactBase(w, cols, rows, site[0], site[1]);
 		}
+	}
+
+	/** The expanded station's shell: the largest pocket the caves reliably
+	 *  leave, measured rather than wished for. */
+	static final int DEEP_W = 22, DEEP_H = 15;
+
+	/**
+	 * The expanded station: three bands on the cave level over a plant floor cut
+	 * into the rock beneath, joined by a stairwell.
+	 *
+	 * <p>The old plan was three bands in an 18x13 shell and it had run out of
+	 * room in the most literal way — a rank of four charge pads did not fit in a
+	 * machine wing three rows tall, and putting them in anyway walked them
+	 * through a partition wall and out into the spine. The building is the
+	 * constraint the drones ran into, so the building is what changed.
+	 *
+	 * <pre>
+	 *   rows  1..3   machine wing   plate, pipe run, vents, racks, drone rank
+	 *   row   4      partition
+	 *   rows  5..7   central spine  paved, blast mouth west, tram run, vault east
+	 *   row   8      partition
+	 *   rows  9..13  storage hall   plate, crates, the waste sump, the stairwell
+	 * </pre>
+	 *
+	 * <p>Three bands and not four, and the shell is 22x15 rather than the 26x17
+	 * this started as, because the caves do not leave room for more. Measured
+	 * across seeds, a 26x17 rock pocket never appears and a 24x15 one appears
+	 * about half the time — the site is riddled with caverns by the time this
+	 * runs, which is the point of running it after the caves rather than before.
+	 *
+	 * <p>That constraint is what sent the expansion DOWNWARD, and the design is
+	 * better for it. Rock under the station is virgin: there is no pocket to
+	 * find, nothing to displace, and the plant floor can be laid out to suit
+	 * itself. The rooms that would not fit up here are down there, and the
+	 * building now has to be walked through in three dimensions to be seen.
+	 *
+	 */
+	private static void buildDeepStation(World w, int cols, int rows, int x0, int y0) {
+		final int W = DEEP_W, H = DEEP_H;
+
+		for (int x = x0; x < x0 + W; x++) {
+			for (int y = y0; y < y0 + H; y++) {
+				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
+				boolean partition = y == y0 + 4 || y == y0 + 8;
+				setBare(w, x, y, CAVE_Z, shell || partition
+						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
+			}
+		}
+
+		// The spine, paved from the mouth to the vault's step.
+		for (int x = x0 + 1; x < x0 + 15; x++) {
+			for (int y = y0 + 5; y <= y0 + 7; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_PAVED);
+			}
+		}
+		// Doorways through the partitions: two per wall, paved thresholds, and
+		// crawl ducting through the west end of each so a small body can move
+		// the whole height of the station inside the walls.
+		for (int dy : new int[] { 4, 8 }) {
+			setBare(w, x0 + 7, y0 + dy, CAVE_Z, Tile.TileType.TYPE_PAVED);
+			setBare(w, x0 + 13, y0 + dy, CAVE_Z, Tile.TileType.TYPE_PAVED);
+			for (int x = x0 + 2; x <= x0 + 4; x++) {
+				setBare(w, x, y0 + dy, CAVE_Z, Tile.TileType.TYPE_DUCT);
+			}
+		}
+
+		// The tram run, the length of the spine.
+		for (int x = x0 + 1; x < x0 + 15; x++) {
+			setBare(w, x, y0 + 6, CAVE_Z, Tile.TileType.TYPE_RAIL);
+		}
+
+		// ---- machine wing -------------------------------------------------
+		for (int x = x0 + 2; x < x0 + W - 2; x++) {
+			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		}
+		setBare(w, x0 + 5, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 11, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		for (int y = y0 + 2; y <= y0 + 3; y++) {
+			setBare(w, x0 + 8, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
+			setBare(w, x0 + 9, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
+		}
+		for (int x = x0 + 2; x <= x0 + 6; x++) {
+			setBare(w, x, y0 + 2, CAVE_Z, Tile.TileType.TYPE_COOLANT);
+		}
+		setBare(w, x0 + 12, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
+		setBare(w, x0 + 12, y0 + 3, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
+
+		// The drone rank: four pads at the wing's east end, as two columns of
+		// two rather than a line of four. A line was the first try and it does
+		// not fit — the wing is three rows tall, and pads spaced along it walk
+		// straight out through the partition and into the spine, which is how
+		// three of the four quietly became doorways. Blocked up, they fit any
+		// wing that fits the wing.
+		for (int i = 0; i < DRONE_RANK; i++) {
+			setBare(w, x0 + 15 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
+					Tile.TileType.TYPE_DOCK);
+		}
+
+		// ---- storage wing --------------------------------------------------
+		setBare(w, x0 + 12, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 12, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
+		setBare(w, x0 + 4, y0 + 12, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		setBare(w, x0 + 9, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
+		for (int x = x0 + 1; x <= x0 + 2; x++) {
+			for (int y = y0 + 10; y <= y0 + 12; y++) {
+				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
+			}
+		}
+		// Tread-plate down the hall's spine: the walk the stairwell is at the
+		// end of, and the one piece of floor here that says people used it.
+		for (int x = x0 + 4; x <= x0 + 16; x++) {
+			setBare(w, x, y0 + 11, CAVE_Z, Tile.TileType.TYPE_TREADPLATE);
+		}
+
+		// ---- the steel vault, closing the spine's east end -------------------
+		int vx = x0 + 15, vy = y0 + 4, vw = 6, vh = 5;
+		for (int x = vx; x < vx + vw; x++) {
+			for (int y = vy; y < vy + vh; y++) {
+				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
+				setBare(w, x, y, CAVE_Z, rim
+						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
+			}
+		}
+		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // doorway
+		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct from the wing
+
+		// ---- the way in, and only then the way down --------------------------
+		// The mouth is cut on the spine (rows 5..7), not at the shell's
+		// midpoint: with four bands the midpoint is a partition wall, and a
+		// mouth there opens the storage wing straight onto the rock.
+		//
+		// The plant floor is sunk only if the station survives. A site with no
+		// way out through the rock is un-carved back to wall, and a second
+		// floor left hanging under a base that no longer exists is a hundred-odd
+		// walkable tiles nothing can reach — which is exactly how this was
+		// found, as a connectivity failure rather than as anything visible.
+		if (!finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + 6)) {
+			return;
+		}
+		sinkPlantFloor(w, x0, y0, W, H);
+		// Two lanes, at the east end of the storage hall's tread-plate walk.
+		sinkStairwell(w, x0 + 15, y0 + 10, 2);
+
+		// Furnishing: the stack the loader marshals to, the vault's cache.
+		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 6.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 12.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 8.5, y0 + 9.5, CAVE_Z));
+		w.spawnEntity(Item.crate(x0 + 11.5, y0 + 6.5, CAVE_Z)); // one left on the tram run
+		w.spawnEntity(Item.food(vx + 2.5, vy + 1.5, CAVE_Z));
+		w.spawnEntity(Item.food(vx + 3.5, vy + 2.5, CAVE_Z));
+		w.spawnEntity(Item.hazard(vx + 2.5, vy + 3.5, CAVE_Z));
 	}
 
 	/**
@@ -804,7 +961,6 @@ public final class Worlds {
 					Tile.TileType.TYPE_DOCK);
 		}
 
-
 		// Storage wing (west half): a vertical pipe drop and its own vents.
 		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
 		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
@@ -986,7 +1142,23 @@ public final class Worlds {
 	 */
 	private static boolean finishBase(World w, int cols, int rows, int x0, int y0,
 			int W, int H, int vx, int vy, int vh) {
-		int my = y0 + H / 2 - 1;
+		return finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + H / 2 - 1);
+	}
+
+	/**
+	 * As above, with the mouth row given rather than assumed.
+	 *
+	 * <p>The assumed row is the shell's midpoint, which is the spine's middle
+	 * in a plan whose spine is in the middle. It is not in every plan: put four
+	 * bands under one shell and the midpoint lands on a partition wall, and the
+	 * mouth is cut through the one row that was holding two rooms apart.
+	 *
+	 * <p>Returns whether the base survived. A site with no way out through the
+	 * rock is un-carved back to wall here, and a caller that has built anything
+	 * else — another floor, say — has to know to take it back down too.
+	 */
+	private static boolean finishBase(World w, int cols, int rows, int x0, int y0,
+			int W, int H, int vx, int vy, int vh, int my) {
 		setBare(w, x0, my, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		setBare(w, x0, my + 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
 		java.util.List<int[]> gallery = carveGallery(w, cols, rows, x0 - 1, my,
