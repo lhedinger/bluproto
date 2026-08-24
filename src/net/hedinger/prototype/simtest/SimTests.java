@@ -6955,7 +6955,7 @@ public class SimTests {
 	 * any of its ceilings, so a drone out flying on tick one would mean the
 	 * steward was flagging a cull that nothing called for.
 	 */
-	static class SeededWorldBerthsOneDrone extends Scenario {
+	static class SeededWorldBerthsTheDroneRank extends Scenario {
 		@Override
 		public void run() {
 			seed(415);
@@ -6968,8 +6968,9 @@ public class SimTests {
 					drones++;
 				}
 			}
-			assertEquals("the world ships exactly one drone", 1, drones);
-			assertEquals("it is berthed on a charge dock",
+			assertEquals("the world berths a full rank of drones",
+					net.hedinger.prototype.sim.Worlds.DRONE_RANK, drones);
+			assertEquals("each is berthed on a charge dock",
 					Tile.TileType.TYPE_DOCK.getValue(),
 					w.getTile(drone.getX(), drone.getY(), drone.getZ()).getType().getValue());
 			// Below the surface, whatever the surface's index happens to be —
@@ -7904,7 +7905,7 @@ public class SimTests {
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
-				new SeededWorldBerthsOneDrone(),
+				new SeededWorldBerthsTheDroneRank(),
 				new TheLoaderStowsALooseCrate(),
 				new TheLoaderLeavesStowedCratesAlone(),
 				new TheLoaderIsSlowerThanTheDrone(),
