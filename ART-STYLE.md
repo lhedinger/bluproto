@@ -131,14 +131,25 @@ One sun, straight overhead-north. The grammar:
 - **Sunken things** (pits, shafts): a lit, *crumbling* north lip — a broken
   run of dashes with per-column depth, not a solid band — and thin dim edges
   with dithered dropouts elsewhere.
-- **A pit shows what it drops onto.** Inside the lip, a hole with a level
-  under it scatters that floor's own texture — its ramp, its hue — across
-  `1 - RenderFx.holeDepth` of the art-pixels, over the void shade
-  (`Grid.pitFloor`). At the default 0.7 a pit is 30% see-through: enough to
-  read stone from fungus from water, not enough to stop reading as a hole.
-  A pit with nothing under it — the lowest level's — is that void shade all
-  the way, and reads bottomless because it is. Grate gaps and drop-shafts are
-  small pits and take the identical treatment.
+- **A pit is a hole, not a picture of one.** Inside the lip, a hole with a
+  level under it leaves `1 - RenderFx.holeDepth` of its art-pixels **genuinely
+  unpainted** — hash-scattered, cleared to real transparency — over the void
+  shade (`Grid.pitFloor`, `Grid.openPixel`). At the default 0.7 a pit is 30%
+  see-through: enough to read stone from fungus from water, not enough to stop
+  reading as a hole. The alpha channel of a served chunk means exactly that and
+  nothing else, so every other pass must cover its own tile completely.
+  A pit with nothing under it — the lowest level's — is void shade all the way,
+  and reads bottomless because it is. Grate gaps and drop-shafts are small pits
+  and take the identical treatment.
+- **What shows through a hole moves with its own depth.** The client draws the
+  level below scaled about the screen centre by `PARALLAX` (0.94), which is the
+  projection of a plane one storey further from the eye: pan by *d* and the top
+  layer moves *d* while the floor below moves 0.94*d*. That slide is the whole
+  point of the transparency — it is what separates "there is a place down
+  there" from "someone painted rock on the lid", and no amount of texture in a
+  painted stand-in can produce it. Nothing dims the lower floor on the way up;
+  the darkness a pit needs is already carried by the void-shade scatter around
+  the openings.
 - **Drop shadows**: one art-pixel south of the body, translucent black
   (~`alpha 110`), art-pixel-aligned blocks. Entities that stand (doors,
   shrubs, creatures) sit ON the ground because of this; nothing floats.
@@ -385,6 +396,26 @@ The precedents, so nobody pays twice:
   in-between colours (§2). The scatter is neither a gradient nor a wash — it
   is broken sight of something far away, and the grammar for that is a
   **hash** (§3). Reaching for the wrong one of the three is the whole bug.
+  *Coda*: painting the floor below into those pixels was the right fix for a
+  format that could not do better, and the wrong end state. The material was
+  correct and the place was not — the same rock sat in the same spot however
+  the camera moved, which is a texture of a pit rather than a view down one.
+  Giving the chunks an alpha channel let the client put the **real** level
+  under the hole and move it with its own parallax, and the whole illusion
+  arrived with it. **When a stand-in is convincing but static, ask what it is
+  standing in for**: the answer is usually cheaper than it looks, because the
+  thing itself was already rendered somewhere.
+- **The bake that was tested on the wrong renderer** — the test written to pin
+  all of the above baked its levels through `renderLevelImage`, and passed. It
+  was asserting on the DESKTOP renderer's layers, which composite every level
+  into one picture, so a pit there is filled by the floor below and can never
+  be see-through; what the server actually slices and serves is
+  `bakeLevelImage`. The test only failed once the pits were genuinely
+  transparent — because the path it watched had never had them. §6 says the
+  Java renderer is the source of truth, and that is still true, but **"the Java
+  renderer" is not one function**: check which entry point the server calls
+  before asserting on it, or the test pins a picture nobody is shown. Exactly
+  the bug it was written to catch, one level up.
 
 ## 8. Conformance checklist
 
@@ -410,9 +441,13 @@ Before a new visual merges, ask:
 10. If it exists in more than one orientation or facing, do those agree with
    **each other** — same size, same proportions, measured in the body's axes
    (§5, §7 "the stretching diagonal")?
-11. Does it draw every pixel it owns, or does it **leave gaps for something
-    underneath**? The served chunks are one opaque level each — a bake that
-    skips pixels bakes the clear colour (§7, "the pits that were holes").
+11. Does it **cover its own tile completely**? A served chunk's alpha means
+    "you can see down here" and nothing else, so an unpainted pixel anywhere
+    else is a window onto the wrong floor (§4, §7 "the pits that were holes").
+12. If it is verified by a bake, is that the **entry point the server calls**?
+    `bakeLevelImage` is served; `renderLevelImage` builds the desktop
+    renderer's composited layers (§7, "the bake that was tested on the wrong
+    renderer").
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.

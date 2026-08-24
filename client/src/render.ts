@@ -170,7 +170,7 @@ function refreshGroundLow(meta: WorldMeta): void {
 }
 
 function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
     level: number, nowMs: number): HTMLCanvasElement | null {
   const fresh = level !== groundLevel || !groundCv
     || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART;
@@ -193,7 +193,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
     for (let cy = 0; cy < cyN; cy++) {
       for (let cx = 0; cx < cxN; cx++) {
-        const chunk = getChunk(cx, cy);
+        const chunk = getChunk(cx, cy, level);
         if (!chunk) { groundHoles.push([cx, cy]); continue; }
         const [dx, dy, dw, dh] = chunkRect(cx, cy);
         ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
@@ -211,7 +211,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     ctx.imageSmoothingEnabled = false;
     const filled: Array<[number, number, number, number]> = [];
     groundHoles = groundHoles.filter(([cx, cy]) => {
-      const chunk = getChunk(cx, cy);
+      const chunk = getChunk(cx, cy, level);
       if (!chunk) return true;
       const [dx, dy, dw, dh] = chunkRect(cx, cy);
       ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
@@ -226,6 +226,84 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   }
   groundRetryAt = nowMs + 1000; // holes still open: look again shortly
   return groundCv;
+}
+
+// ---- the level below, seen through the holes -------------------------------
+//
+// A pit's open art-pixels reach the client TRANSPARENT: the bake clears to
+// nothing and the ground pass declines to paint them (Grid.pitFloor), so what
+// shows through a hole is a real second layer rather than a picture of one.
+//
+// That layer is drawn scaled about the SCREEN CENTRE by PARALLAX, which is the
+// projection of a plane one storey further from the eye: pan by d and the top
+// layer moves d while the floor below moves 0.94d, so the view down a hole
+// slides as you travel. That slide is the whole point — it is what separates
+// "there is a place down there" from "someone painted rock on the lid".
+//
+// Nothing here dims the floor below: the hole tile's own sprite is black at
+// 59% alpha, so it arrives at 41% through art the bake already carried for
+// exactly this. No new shade is invented.
+//
+// Cost is proportional to the holes, not to the world. Only chunks actually IN
+// VIEW are considered, only those whose own art has any transparency ask for
+// the chunk beneath them, and far zoom skips the pass entirely — under 12 px a
+// tile a pit is smaller than a pixel and there is no parallax to see. A world
+// with no pits therefore never fetches a second level at all.
+export const PARALLAX = 0.94;
+
+// Whether a decoded chunk has any see-through art-pixel, memoised against the
+// canvas itself: one getImageData per chunk for the life of the tab, and it
+// dies with the chunk. Without the memo this would be a full readback of every
+// visible chunk every frame.
+const chunkHoles = new WeakMap<HTMLCanvasElement, boolean>();
+function hasHoles(chunk: HTMLCanvasElement): boolean {
+  const memo = chunkHoles.get(chunk);
+  if (memo !== undefined) return memo;
+  let holed = false;
+  try {
+    const d = chunk.getContext('2d', { willReadFrequently: true })!
+      .getImageData(0, 0, chunk.width, chunk.height).data;
+    for (let i = 3; i < d.length; i += 4) {
+      if (d[i] < 255) { holed = true; break; }
+    }
+  } catch {
+    holed = false; // a tainted or zero-sized canvas simply has no holes to show
+  }
+  chunkHoles.set(chunk, holed);
+  return holed;
+}
+
+/** For every visible chunk whose art has holes, the chunk one level down and
+ *  the screen rect its parallax puts it in: [key, canvas, x, y, w, h]. */
+function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+    chunkTiles: number, level: number,
+    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
+): Array<[number, HTMLCanvasElement, number, number, number, number]> {
+  const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
+  if (level - 1 < 0 || chunkTiles <= 0 || cam.scale < ART) return out;
+  const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
+  const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
+  const cx0 = Math.max(0, Math.floor(tl.x / chunkTiles));
+  const cy0 = Math.max(0, Math.floor(tl.y / chunkTiles));
+  const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
+  const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
+  const mx = cvW / 2, my = cvH / 2;
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const top = getChunk(cx, cy, level);
+      if (!top || !hasHoles(top)) continue;
+      const below = getChunk(cx, cy, level - 1);
+      if (!below) continue;
+      const wx = cx * chunkTiles, wy = cy * chunkTiles;
+      const cw = Math.min(chunkTiles, meta.cols - wx);
+      const ch = Math.min(chunkTiles, meta.rows - wy);
+      const o = cam.worldToScreen(wx, wy);
+      out.push([cx + cy * cxN, below,
+        mx + (o.x - mx) * PARALLAX, my + (o.y - my) * PARALLAX,
+        cw * cam.scale * PARALLAX, ch * cam.scale * PARALLAX]);
+    }
+  }
+  return out;
 }
 
 /** Camera zoom (px per tile) below which EVERY creature draws as a flat
@@ -263,7 +341,7 @@ export function render(
   meta: WorldMeta | null,
   chunkTiles: number,
   tilePx: number,
-  getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+  getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
@@ -299,9 +377,15 @@ export function render(
     const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
     const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
     g.imageSmoothingEnabled = false;
+    // The floor below goes down FIRST, under its own parallax, so the holes in
+    // the chunks drawn next look onto it (see belowChunks).
+    for (const [, img, bx, by, bw, bh] of
+        belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
+      g.drawImage(img, bx, by, bw, bh);
+    }
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
-        const img = getChunk(cx, cy); // lazily fetches + caches this chunk
+        const img = getChunk(cx, cy, level); // lazily fetches + caches this chunk
         if (!img) continue;
         const wx = cx * chunkTiles, wy = cy * chunkTiles;
         const cw = Math.min(chunkTiles, meta.cols - wx);
@@ -879,7 +963,7 @@ export function renderGL(
   meta: WorldMeta | null,
   chunkTiles: number,
   tilePx: number,
-  getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+  getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
@@ -910,6 +994,13 @@ export function renderGL(
   const lowZoom = cam.scale < ART;
   if (chunkTiles > 0 && tilePx > 0) {
     const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
+    // The floor below goes down FIRST, under its own parallax, so the ground
+    // layer's holes look onto it (see belowChunks). Its chunks never change
+    // once decoded, so each is a permanent texture at rev 0.
+    for (const [key, img, bx, by, bw, bh] of
+        belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
+      glr.layer('below:' + level + ':' + key, img, 0, null, bx, by, bw, bh);
+    }
     if (ground) {
       if (lowZoom && groundLowCv) {
         glr.layer('groundlo', groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
@@ -1392,7 +1483,7 @@ function refreshCanopyLow(meta: WorldMeta): void {
 }
 
 function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getChunk: (cx: number, cy: number) => HTMLCanvasElement | null,
+    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
     cover: Uint8Array, level: number, nowMs: number): HTMLCanvasElement {
   const fresh = cover !== canopySrc || level !== canopyLevel || !canopyCv
     || canopyCv.width !== meta.cols * ART;
@@ -1401,7 +1492,7 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
     const v = cover[i];
     const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-    const chunk = getChunk(ccx, ccy);
+    const chunk = getChunk(ccx, ccy, level);
     if (!chunk) return false;
     veilTile(ctx, v, tx, ty, tx * ART, ty * ART, chunk,
       (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx, tilePx);

@@ -692,7 +692,12 @@ public class Grid {
 										? GroundTextures.rampColor(cl, 0)
 										: darken(GroundTextures.rampColor(cl, 2), 0.6);
 							} else {
-								col = pitFloor(x, y, wx, wy, gx, gy, cl);
+								Integer pit = pitFloor(x, y, gx, gy, cl);
+								if (pit == null) {
+									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									continue;
+								}
+								col = pit;
 							}
 						} else if (cl == GroundTextures.CLS_SHAFT) {
 							// Vertical shaft: a hazard-striped lip on every side that
@@ -706,7 +711,12 @@ public class Grid {
 									|| (!vW && ai < band) || (!vE && ai >= A - band)) {
 								col = GroundTextures.hazardStripe(gx, gy);
 							} else {
-								col = pitFloor(x, y, wx, wy, gx, gy, cl);
+								Integer pit = pitFloor(x, y, gx, gy, cl);
+								if (pit == null) {
+									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									continue;
+								}
+								col = pit;
 							}
 						} else if (cl == GroundTextures.CLS_CATWALK) {
 							// Grated walkway: rails and cross-treads, with the void
@@ -719,9 +729,15 @@ public class Grid {
 									? GroundTextures.catwalk(gy, ai, gx, gy)
 									: GroundTextures.catwalk(gx, aj, gx, gy);
 							// A grate gap is a small pit, and takes a pit's treatment:
-							// the void shade, with whatever lies below washing through.
-							col = cw != null ? cw
-									: pitFloor(x, y, wx, wy, gx, gy, GroundTextures.CLS_HOLE);
+							// the void shade, scattered open onto whatever lies below.
+							if (cw == null) {
+								cw = pitFloor(x, y, gx, gy, GroundTextures.CLS_HOLE);
+								if (cw == null) {
+									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									continue;
+								}
+							}
+							col = cw;
 						} else if (cl == GroundTextures.CLS_WATER
 								|| cl == GroundTextures.CLS_SHALLOWS) {
 							// One water surface from wading fringe to abyss: both
@@ -903,6 +919,21 @@ public class Grid {
 		return (r << 16) | (g << 8) | b;
 	}
 
+	/** Punches an art-pixel clear through everything already drawn there — the
+	 *  tile sprite included. A pit's open pixels have to reach the client as
+	 *  REAL transparency, not as the hole sprite's 59%-black veil: that veil is
+	 *  a picture of depth painted for the desktop compositor, and leaving it on
+	 *  brought the floor below through at 41% brightness, which read as black.
+	 *  The darkness a pit needs is already carried by the void-shade scatter
+	 *  around these pixels (see pitFloor); what shows between them should be
+	 *  the floor exactly as bright as it is. */
+	private static void openPixel(Graphics2D g2, int x, int y, int w, int h) {
+		java.awt.Composite prev = g2.getComposite();
+		g2.setComposite(java.awt.AlphaComposite.Clear);
+		g2.fillRect(x, y, w, h);
+		g2.setComposite(prev);
+	}
+
 	private static int darken(int rgb, double f) {
 		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
 		return (r << 16) | (g << 8) | b;
@@ -915,18 +946,19 @@ public class Grid {
 	 * at {@code 1 - holeDepth} of the art-pixels. A pit with nothing under it
 	 * stays dark all the way.
 	 *
-	 * <p>Two things this fixes. The renderer used to SKIP the see-through
-	 * art-pixels outright, on the assumption that the level below had already
-	 * been composited underneath — true of the desktop renderer, and false of
-	 * everything anyone actually looks at: the served chunks are one opaque
-	 * level each, so the skipped pixels stayed the black the image was cleared
-	 * to. Measured on the surface bake, 55% of every pit was pure black. And the
-	 * scatter is HASHED, not Bayer-thresholded: an ordered matrix at a fixed
-	 * threshold lays a regular halftone over the hole, which reads as a mesh
-	 * stretched across it. This is not a gradient between two shades, it is
+	 * <p>The scatter is HASHED, not Bayer-thresholded: an ordered matrix at a
+	 * fixed threshold lays a regular halftone over the hole, which reads as a
+	 * mesh stretched across it. This is not a gradient between two shades, it is
 	 * broken sight of something far away — the guide's rule for that is a hash.
+	 *
+	 * <p>The open pixels are left UNPAINTED — {@code null}, and the caller skips
+	 * them — so the bake carries a real alpha hole rather than a picture of one.
+	 * Both renderers then show the actual floor below through it, and both move
+	 * it with the parallax of its own depth. A painted stand-in could only ever
+	 * show the material, never the place: the same rock in the same spot however
+	 * the camera moved, which is a texture of a pit and not a view down one.
 	 */
-	private int pitFloor(int x, int y, double wx, double wy, int gx, int gy, int cl) {
+	private Integer pitFloor(int x, int y, int gx, int gy, int cl) {
 		if (!RenderFx.holeTranslucent) {
 			return GroundTextures.rampColor(cl, 1); // opaque style: a shallow dark floor
 		}
@@ -934,14 +966,10 @@ public class Grid {
 		if (level - 1 < 0) {
 			return dark; // the lowest floor: its pits are bottomless
 		}
-		int below = GroundTextures.groundClass(world.getTile(x, y, level - 1));
-		if (below < 0) {
-			return dark; // a ramp down there: no flat ground class to show
+		if (GroundTextures.groundClass(world.getTile(x, y, level - 1)) < 0) {
+			return dark; // a ramp down there: nothing flat to look down onto
 		}
-		if (GroundTextures.hash01(gx, gy, 71) < RenderFx.holeDepth) {
-			return dark;
-		}
-		return GroundTextures.quietGround(below, wx, wy, gx, gy);
+		return GroundTextures.hash01(gx, gy, 71) < RenderFx.holeDepth ? (Integer) dark : null;
 	}
 
 	private int groundClassAt(int cx, int cy) {
