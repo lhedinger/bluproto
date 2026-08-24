@@ -294,6 +294,14 @@ public final class Worlds {
 	 */
 	static final int DEEP_Z = 0, CAVE_Z = 1, SURFACE_Z = 2;
 
+	/** How many drones the facility berths, and therefore how many charge pads
+	 *  are cut into its deck. They share one standing order rather than dividing
+	 *  the work: the steward recounts every tick and drops the order the moment
+	 *  the target is met, so four machines converge on it four times as fast and
+	 *  stop together. Splitting the cohorts between them would need a second
+	 *  scoreboard, which is the one thing the order was designed not to have. */
+	public static final int DRONE_RANK = 4;
+
 	/**
 	 * The demo world's terrain — same seed, same tiles, same fertility, no
 	 * creatures: an exact twin of {@link #demo}'s ground, from which the
@@ -624,11 +632,19 @@ public final class Worlds {
 		}
 		setBare(w, x0 + 9, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
 		setBare(w, x0 + 10, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
-		// The drone's berth, in the machine wing among the plant it belongs
-		// to -- clear of the pipe run along row 1 and of both vents, and one
-		// tile in from the partition doorway at x0+11 so the pad is not the
-		// threshold anything else has to cross.
-		setBare(w, x0 + 13, y0 + 2, CAVE_Z, Tile.TileType.TYPE_DOCK);
+		// The drone rank, in the machine wing among the plant it belongs to --
+		// clear of the pipe run along row 1 and of both vents, and one tile in
+		// from the partition doorway at x0+11 so no pad is the threshold
+		// anything else has to cross.
+		//
+		// Four pads as two columns of two. A line of four does not fit a wing
+		// three rows tall — spaced along it, three of them land in the
+		// partition and the spine, which turns charge pads into doorways.
+		for (int i = 0; i < DRONE_RANK; i++) {
+			setBare(w, x0 + 13 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
+					Tile.TileType.TYPE_DOCK);
+		}
+
 
 		// Storage wing (west half): a vertical pipe drop and its own vents.
 		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
@@ -754,10 +770,14 @@ public final class Worlds {
 		// One rack pair in the annex, against the north deck.
 		setBare(w, x0 + 8, y0 + 2, CAVE_Z, Tile.TileType.TYPE_SERVER);
 		setBare(w, x0 + 8, y0 + 3, CAVE_Z, Tile.TileType.TYPE_SERVER);
-		// The drone's berth: the annex has one room, so the pad goes against
-		// the north deck under the pipe run, out of the walk from the mouth
-		// to the vault.
-		setBare(w, x0 + 2, y0 + 2, CAVE_Z, Tile.TileType.TYPE_DOCK);
+		// The drone rank: the annex has one room, so the pads go against the
+		// north deck under the pipe run, out of the walk from the mouth to the
+		// vault. Same four as the full plan -- a smaller building is not a
+		// reason to warden the world with a smaller crew.
+		for (int i = 0; i < DRONE_RANK; i++) {
+			setBare(w, x0 + 2 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
+					Tile.TileType.TYPE_DOCK);
+		}
 		// The annex has no storage wing to drain into, so its spill pools in
 		// the hall itself -- squarely on the walk from the mouth to the vault,
 		// which is the point: the shortest way across the room costs something.
@@ -1825,8 +1845,12 @@ public final class Worlds {
 		// by deletion -- so a world with no base carved into it (a map too
 		// small for either plan) simply has no drone, and the steward's own
 		// backstop keeps the ceilings on its own, exactly as before.
-		int[] dock = findDock(w);
-		if (dock != null) {
+		// One drone per pad, all reading the same standing order. They do not
+		// divide the cohorts between them and do not need to: the steward keeps
+		// the only scoreboard, recounts every tick and drops the order the
+		// moment the target is met, so a rank of four converges on it faster
+		// and stops together. The drone was always written not to count.
+		for (int[] dock : findDocks(w)) {
 			w.spawnEntity(new StewardDrone(dock[0] + 0.5, dock[1] + 0.5, CAVE_Z, steward));
 		}
 
@@ -1853,26 +1877,32 @@ public final class Worlds {
 	}
 
 	/**
-	 * The charge dock the world generator laid into the buried base, as
-	 * {@code {col, row}} on the cave level, or null if this map got no base.
+	 * The charge docks the world generator laid into the buried base, as
+	 * {@code {col, row}} pairs on the cave level, in reading order. Empty if
+	 * this map got no base.
 	 *
-	 * <p>Found by looking rather than remembered, because the two base plans
-	 * put their berth in different places and a coordinate threaded back out
-	 * through {@code buryInstallation} would be one more thing for the plans
-	 * to keep in step with each other. The dock tile is the record: it is on
-	 * the map, there is exactly one, and anything that needs to know where the
-	 * drone lives can ask the same question this does. One pass over one level
-	 * at world creation.
+	 * <p>Found by looking rather than remembered, because the two base plans put
+	 * their rank in different places and coordinates threaded back out through
+	 * {@code buryInstallation} would be one more thing for the plans to keep in
+	 * step with each other. The dock tiles are the record: they are on the map,
+	 * and anything that needs to know where the drones live asks the same
+	 * question this does. One pass over one level at world creation.
+	 *
+	 * <p>Returns every pad rather than the first. A world that berthed one drone
+	 * on the first pad it found and left three cut into the deck would be a
+	 * world where the map says four and the population says one — and the map is
+	 * the thing a viewer can see.
 	 */
-	static int[] findDock(World w) {
+	static java.util.List<int[]> findDocks(World w) {
+		java.util.List<int[]> out = new java.util.ArrayList<int[]>();
 		for (int y = 0; y < w.getRows(); y++) {
 			for (int x = 0; x < w.getColums(); x++) {
 				if (w.getTile(x, y, CAVE_Z).getType() == Tile.TileType.TYPE_DOCK) {
-					return new int[] { x, y };
+					out.add(new int[] { x, y });
 				}
 			}
 		}
-		return null;
+		return out;
 	}
 
 	/**
