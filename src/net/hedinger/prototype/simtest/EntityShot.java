@@ -64,6 +64,7 @@ final class EntityShot {
 		File out = new File(args.length > 0 ? args[0] : "entity.png");
 		String focus = null;
 		int ticks = 400, span = 2400, cell = 7;
+		int[] at = null;
 		boolean sweep = false;
 		for (int i = 1; i < args.length; i++) {
 			switch (args[i]) {
@@ -78,6 +79,11 @@ final class EntityShot {
 				break;
 			case "--cell":
 				cell = Integer.parseInt(args[++i]); // crop size, in tiles
+				break;
+			case "--at": // col,row,level — look at a PLACE rather than a body
+				String[] p = args[++i].split(",");
+				at = new int[] { Integer.parseInt(p[0]), Integer.parseInt(p[1]),
+						Integer.parseInt(p[2]) };
 				break;
 			case "--sweep":
 				sweep = true;
@@ -100,7 +106,8 @@ final class EntityShot {
 			for (int i = 0; i < ticks; i++) {
 				w.think();
 			}
-			ImageIO.write(frame(w, v, focus, cell), "png", out);
+			ImageIO.write(at != null ? place(w, v, at, cell) : frame(w, v, focus, cell),
+					"png", out);
 		}
 		System.out.println("wrote " + out + " (" + out.length() + " bytes)");
 	}
@@ -128,6 +135,26 @@ final class EntityShot {
 			v.think(g, (float) (e.getX() - v.getCamX()), (float) (e.getY() - v.getCamY()),
 					(float) (e.getZ() - v.getCamZ()), 0, 0);
 		}
+		v.renderWorld(g);
+		g.dispose();
+		return img;
+	}
+
+	/**
+	 * One frame centred on a place rather than a body.
+	 *
+	 * <p>Not everything worth looking at is an entity. A room has no heading and
+	 * nothing stands in it, and a floor with nothing alive on it — the plant
+	 * level under the station, say — cannot be reached by {@code --focus} at
+	 * all, which is exactly the floor most worth checking after carving it.
+	 */
+	private static BufferedImage place(World w, View v, int[] at, int cell) {
+		int px = cell * TILE, py = cell * TILE;
+		BufferedImage img = new BufferedImage(px, py, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = img.createGraphics();
+		g.setClip(0, 0, px, py);
+		v.think(g, 0, 0, 0, 0, 0);
+		v.think(g, at[0] - v.getCamX(), at[1] - v.getCamY(), at[2] - v.getCamZ(), 0, 0);
 		v.renderWorld(g);
 		g.dispose();
 		return img;
