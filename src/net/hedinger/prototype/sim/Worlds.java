@@ -870,12 +870,19 @@ public final class Worlds {
 
 			setBare(w, ux, uy, DEEP_Z, Tile.TileType.TYPE_RAMPUP);
 			w.getTile(ux, uy, DEEP_Z).setRampUphill(u);
-			// Nothing is put under the upper landing. The first version walled
-			// it — "rock under" — which is right when the stairs are cut into
-			// rock and wrong once there is a room down there: it left a lone
-			// concrete block standing in the middle of the plant floor holding
-			// up a deck plate that did not need holding up. Floors are per
-			// level here; a landing rests on its own tile.
+			// Under the upper landing stands the mass the climb rises into.
+			// This has flipped twice, so the reasoning in full: the first
+			// version walled it as "rock under", the second removed it as "a
+			// lone concrete block holding up a deck plate that did not need
+			// holding up" — and bare, the ramp read as attached to nothing, a
+			// bright band ending in open floor (an up ramp climbs into
+			// something; that is the difference between a stair and a plank).
+			// The block is not scenery under the landing, it is the stair's
+			// own housing: in the deep station it merges into the east shell
+			// it abuts, and mid-room it reads as the masonry core the stair
+			// wraps, which is what real stairwells have. The engine never
+			// walks it — the climb exits one level up, on the landing.
+			setBare(w, lx, ly, DEEP_Z, Tile.TileType.TYPE_WALL_CONCRETE);
 			setBare(w, lx, ly, CAVE_Z, Tile.TileType.TYPE_PLATE); // landing above
 		}
 	}

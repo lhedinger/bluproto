@@ -586,7 +586,12 @@ public class Grid {
 				Tile t = tiles[x][y];
 				int cls = GroundTextures.groundClass(t);
 				if (cls < 0) {
-					continue; // ramps: baked layer shows through
+					// Ramps: the baked tile sprite shows through, but the cut
+					// still needs seating — see seatRamp.
+					if (t.getType() == Tile.TileType.TYPE_RAMPUP) {
+						seatRamp(g2, ox + x * ts, oy + y * ts, x, y, t.getRampUphill());
+					}
+					continue;
 				}
 				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE
 						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
@@ -945,6 +950,58 @@ public class Grid {
 		g2.setComposite(prev);
 	}
 
+	/**
+	 * Seats an up ramp into the rock it climbs into. The ramp sprite alone
+	 * reads as a bright band floating in front of flat ground: the rock casts
+	 * its base shadow on every ground pixel at its foot EXCEPT the ramp,
+	 * because ramps skip the ground pass — so the one tile that actually
+	 * touches the rock was the one tile with no contact shadow. This paints
+	 * the recess back in: a graded band along the uphill edge (the gloom just
+	 * inside the cut, under the rock's brow — a recess cue, not a sun shadow,
+	 * so it holds for all four headings) and a thin rim along each flank a
+	 * wall runs beside, the cheeks of the cut. Translucent black over the
+	 * sprite, §4's sanctioned contact shadow.
+	 */
+	private void seatRamp(Graphics2D g2, int sx, int sy, int x, int y, int up) {
+		int A = 12, ts = ResourceManager.tileSize;
+		int[] alpha = { 110, 70, 40 }; // grade out from the rock
+		java.awt.Color[] shade = new java.awt.Color[alpha.length];
+		for (int i = 0; i < alpha.length; i++) {
+			shade[i] = new java.awt.Color(0, 0, 0, alpha[i]);
+		}
+		if (isWallish(x + Tile.dirDx(up), y + Tile.dirDy(up))) {
+			for (int d = 0; d < alpha.length; d++) {
+				g2.setColor(shade[d]);
+				// The art-pixel row (or column) d steps in from the uphill edge.
+				int lo = d * ts / A, hi = (d + 1) * ts / A;
+				switch (up) {
+				case Tile.DIR_N -> g2.fillRect(sx, sy + lo, ts, hi - lo);
+				case Tile.DIR_S -> g2.fillRect(sx, sy + ts - hi, ts, hi - lo);
+				case Tile.DIR_W -> g2.fillRect(sx + lo, sy, hi - lo, ts);
+				default -> g2.fillRect(sx + ts - hi, sy, hi - lo, ts);
+				}
+			}
+		}
+		// The cut's cheeks: a 1-art-px rim on each side a wall runs along.
+		int px = ts / A;
+		g2.setColor(new java.awt.Color(0, 0, 0, 90));
+		boolean vertical = up == Tile.DIR_N || up == Tile.DIR_S;
+		if (vertical) {
+			if (isWallish(x - 1, y)) {
+				g2.fillRect(sx, sy, px, ts);
+			}
+			if (isWallish(x + 1, y)) {
+				g2.fillRect(sx + ts - px, sy, px, ts);
+			}
+		} else {
+			if (isWallish(x, y - 1)) {
+				g2.fillRect(sx, sy, ts, px);
+			}
+			if (isWallish(x, y + 1)) {
+				g2.fillRect(sx, sy + ts - px, ts, px);
+			}
+		}
+	}
 
 	private static int darken(int rgb, double f) {
 		int r = (int) (((rgb >> 16) & 255) * f), g = (int) (((rgb >> 8) & 255) * f), b = (int) ((rgb & 255) * f);
