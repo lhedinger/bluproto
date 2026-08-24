@@ -680,7 +680,11 @@ public final class Worlds {
 			}
 		}
 		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // doorway
-		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct from the wing
+		// The duct through the vault's north wall opens at vx+3 and not vx+2,
+		// which is the drone rank's east pad. The vault's grate answers only its
+		// buttons, so this duct is the whole of the other way in -- and a berth
+		// laid across its approach makes a parked machine the doorman.
+		setBare(w, vx + 3, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct from the wing
 
 		// ---- the way in, and only then the way down --------------------------
 		// The mouth is cut on the spine (rows 5..7), not at the shell's
