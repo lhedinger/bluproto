@@ -688,6 +688,12 @@ public class Grid {
 							// raised read, the same all the way down.
 							col = GroundTextures.windowWall(ai, aj, gx, gy);
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
+						} else if (cl == GroundTextures.CLS_DESK) {
+							col = GroundTextures.desk(ai, aj, gx, gy);
+						} else if (cl == GroundTextures.CLS_BUNK) {
+							col = GroundTextures.bunk(ai, aj, gx, gy);
+						} else if (cl == GroundTextures.CLS_WRECK) {
+							col = GroundTextures.wreck(ai, aj, gx, gy);
 						} else if (cl == GroundTextures.CLS_STALAGMITE) {
 							// A cave column is a fixture like a crystal prism: it
 							// shades itself and casts its own contact shadow.

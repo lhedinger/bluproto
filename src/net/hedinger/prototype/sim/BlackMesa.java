@@ -300,10 +300,13 @@ public final class BlackMesa {
 		shell(w, SURFACE, 18, 12, 48, 34,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PAVED);
 		fill(w, SURFACE, 32, 34, 34, 34, Tile.TileType.TYPE_PAVED); // the gate
-		// Barracks.
+		// Barracks, with its rank of bunks.
 		shell(w, SURFACE, 20, 14, 30, 20,
 				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_PLATE);
 		set(w, 25, 20, SURFACE, Tile.TileType.TYPE_PLATE);
+		for (int x : new int[] { 22, 24, 26, 28 }) {
+			set(w, x, 16, SURFACE, Tile.TileType.TYPE_BUNK);
+		}
 		// Garage.
 		shell(w, SURFACE, 36, 14, 46, 20,
 				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_TREADPLATE);
@@ -330,6 +333,9 @@ public final class BlackMesa {
 		shell(w, SURFACE, 58, 17, 64, 22,
 				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_PLATE);
 		set(w, 61, 22, SURFACE, Tile.TileType.TYPE_PLATE);
+		for (int[] b : new int[][] { { 60, 12 }, { 62, 12 }, { 60, 19 }, { 62, 19 } }) {
+			set(w, b[0], b[1], SURFACE, Tile.TileType.TYPE_BUNK);
+		}
 		fill(w, SURFACE, 67, 12, 72, 17, Tile.TileType.TYPE_PAVED); // the court
 		// The dish: server-rack tiles standing in for the antenna framework —
 		// solid to a body, open to the eye, which is what a dish is.
@@ -478,7 +484,7 @@ public final class BlackMesa {
 
 		// Lobby.
 		fill(w, LABS, 54, 42, 67, 62, Tile.TileType.TYPE_PAVED);
-		fill(w, LABS, 58, 51, 60, 51, Tile.TileType.TYPE_SERVER); // reception
+		fill(w, LABS, 58, 51, 60, 51, Tile.TileType.TYPE_DESK); // reception
 		// The spine corridor.
 		fill(w, LABS, 67, 51, 86, 53, Tile.TileType.TYPE_PAVED);
 
@@ -504,10 +510,17 @@ public final class BlackMesa {
 		set(w, 81, 61, LABS, Tile.TileType.TYPE_PAVED);
 		set(w, 72, 54, LABS, Tile.TileType.TYPE_PAVED); // doors to the spine
 		set(w, 81, 54, LABS, Tile.TileType.TYPE_PAVED);
+		// A desk or two per office -- the rooms stop being empty floor.
+		for (int[] d : new int[][] { { 71, 57 }, { 74, 58 }, { 80, 57 },
+				{ 83, 58 }, { 71, 63 }, { 74, 64 }, { 80, 63 }, { 83, 64 } }) {
+			set(w, d[0], d[1], LABS, Tile.TileType.TYPE_DESK);
+		}
 
 		// Control room, its instrument wall facing the chamber.
 		fill(w, LABS, 87, 46, 92, 58, Tile.TileType.TYPE_PLATE);
 		fill(w, LABS, 91, 48, 91, 56, Tile.TileType.TYPE_SERVER);
+		set(w, 88, 48, LABS, Tile.TileType.TYPE_DESK);
+		set(w, 88, 55, LABS, Tile.TileType.TYPE_DESK);
 		set(w, 86, 52, LABS, Tile.TileType.TYPE_PAVED); // from the spine
 
 		// The test chamber: shell, catwalk gallery, and the bore.
@@ -594,6 +607,7 @@ public final class BlackMesa {
 		}
 		for (int x : new int[] { 23, 29, 35, 41, 47 }) {
 			set(w, x, 80, LABS, Tile.TileType.TYPE_PAVED); // each opens south
+			set(w, x, 74, LABS, Tile.TileType.TYPE_DESK);  // and works north
 		}
 		// Cafeteria with its serving line.
 		fill(w, LABS, 20, 85, 34, 92, Tile.TileType.TYPE_PLATE);
@@ -771,6 +785,7 @@ public final class BlackMesa {
 			set(w, 120, y, WORKS, Tile.TileType.TYPE_PLATE);
 		}
 		fill(w, WORKS, 116, 19, 116, 22, Tile.TileType.TYPE_STONE); // loop door
+		set(w, 127, 36, WORKS, Tile.TileType.TYPE_WRECK); // the forklift that died
 	}
 
 	/** Cold storage: a steel box off the warehouse, stone-cold floor, the
@@ -854,6 +869,10 @@ public final class BlackMesa {
 		fill(w, DEEP, 74, 42, 84, 46, Tile.TileType.TYPE_LIGHTGRATE);
 		set(w, 79, 44, DEEP, Tile.TileType.TYPE_CRYSTAL_SPARSE);
 		set(w, 76, 43, DEEP, Tile.TileType.TYPE_CRYSTAL_SPARSE);
+		// The machines that stopped where the work did.
+		set(w, 75, 20, DEEP, Tile.TileType.TYPE_WRECK);
+		set(w, 44, 36, DEEP, Tile.TileType.TYPE_WRECK);
+		set(w, 57, 21, DEEP, Tile.TileType.TYPE_WRECK);
 		// The leak, and the crawl duct along the south wall.
 		fill(w, DEEP, 80, 18, 84, 20, Tile.TileType.TYPE_SLUDGE);
 		fill(w, DEEP, 42, 47, 60, 47, Tile.TileType.TYPE_DUCT);
@@ -1161,7 +1180,7 @@ public final class BlackMesa {
 		// Surface: a wreck out in the desert, debris thrown around it — and
 		// the bones of whatever was aboard, or found it.
 		fill(w, SURFACE, 118, 28, 122, 32, Tile.TileType.TYPE_RUBBLE);
-		fill(w, SURFACE, 120, 29, 120, 31, Tile.TileType.TYPE_WALL_STEEL);
+		fill(w, SURFACE, 120, 29, 120, 31, Tile.TileType.TYPE_WRECK);
 		fill(w, SURFACE, 123, 30, 124, 31, Tile.TileType.TYPE_BONES);
 		set(w, 117, 27, SURFACE, Tile.TileType.TYPE_BONES);
 		// Labs floor: a burst pipe in the office break room, still pooling.

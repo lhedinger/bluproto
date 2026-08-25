@@ -110,6 +110,9 @@ public class LayerRenderer {
 		case TYPE_HAZARD:
 		case TYPE_CONVEYOR:
 		case TYPE_WINDOW:
+		case TYPE_DESK:
+		case TYPE_BUNK:
+		case TYPE_WRECK:
 		case TYPE_RAIL:
 		case TYPE_SERVER:
 		case TYPE_VENT:
