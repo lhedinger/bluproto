@@ -103,6 +103,10 @@ public class LayerRenderer {
 		case TYPE_COOLANT:
 		case TYPE_EXCHANGER:
 		case TYPE_SLUDGE:
+		case TYPE_MESA:
+		case TYPE_STALAGMITE:
+		case TYPE_CACTUS:
+		case TYPE_BONES:
 		case TYPE_RAIL:
 		case TYPE_SERVER:
 		case TYPE_VENT:

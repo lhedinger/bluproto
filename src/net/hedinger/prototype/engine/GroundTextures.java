@@ -47,7 +47,8 @@ public final class GroundTextures {
 			CLS_CRYSTAL_BED = 26, CLS_CRYSTAL_SPARSE = 27, CLS_SWITCH = 28, CLS_DOCK = 29,
 			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32, CLS_SERVER = 33,
 			CLS_TREADPLATE = 34, CLS_LIGHTGRATE = 35, CLS_COLLAPSE = 36,
-			CLS_COOLANT = 37, CLS_EXCHANGER = 38;
+			CLS_COOLANT = 37, CLS_EXCHANGER = 38, CLS_MESA = 39,
+			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -94,6 +95,14 @@ public final class GroundTextures {
 			{ 0x35373c, 0x53565d, 0x767a83 }, // collapsed deck (concrete dust over steel)
 			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // coolant run (rimed steel, the plant's cold side)
 			{ 0x2b2420, 0x453833, 0x6b574c }, // heat exchanger (scorched fins, the hot side)
+			// Mesa rock: the rust accent (0x8a5a34) promoted to a body colour
+			// the sanctioned way -- by deriving the two shades it lacks off the
+			// accent itself (x0.65 down, x1.25 up), so the red rock is the same
+			// red the weathered pipework already wears, not a new desert.
+			{ 0x5a3a22, 0x8a5a34, 0xac7041 }, // mesa rock (rust, promoted)
+			{ 0x3a3e49, 0x565b69, 0x7c828f }, // stalagmite: cave rock's own ramp, verbatim
+			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // cactus: the flora family's green, verbatim
+			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // bone field: its ground IS sand, verbatim
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -133,7 +142,7 @@ public final class GroundTextures {
 	/** Whether a class is a solid structure rather than open ground. */
 	public static boolean isStructure(int cls) {
 		return cls == CLS_WALL || cls == CLS_WALL_BUILT || cls == CLS_CRYSTAL
-				|| cls == CLS_CONCRETE || cls == CLS_STEELWALL;
+				|| cls == CLS_CONCRETE || cls == CLS_STEELWALL || cls == CLS_MESA;
 	}
 
 	/** Terrain colour class for a tile: ground, structure, or -1 (ramp).
@@ -181,6 +190,14 @@ public final class GroundTextures {
 			return CLS_DOCK;
 		case TYPE_SLUDGE:
 			return CLS_SLUDGE;
+		case TYPE_MESA:
+			return CLS_MESA;
+		case TYPE_STALAGMITE:
+			return CLS_STALAGMITE;
+		case TYPE_CACTUS:
+			return CLS_CACTUS;
+		case TYPE_BONES:
+			return CLS_BONES;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -1356,6 +1373,150 @@ public final class GroundTextures {
 		double p = (pool - 0.3) / 0.4;
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		return ditherRamp(CLS_SLUDGE, p, px, py);
+	}
+
+	/**
+	 * The flat top of a mesa-rock mass: the same quiet cross-section grammar
+	 * as {@link #wallTop}, in the red ramp.
+	 */
+	public static int mesaTop(int px, int py, boolean litEdge) {
+		double r = hash01(px >> 1, py >> 1, 57);
+		int idx = r < 0.12 ? 0 : (r > 0.96 ? 2 : 1);
+		if (litEdge) {
+			idx = Math.min(2, idx + 1);
+		}
+		return RAMP[CLS_MESA][idx];
+	}
+
+	/**
+	 * The exposed face of mesa rock: horizontal STRATA, where grey rock's face
+	 * is vertical dashes -- texture is identity, and a sedimentary cliff and a
+	 * granite one must not read as the same stone. Each stratum is 3 px tall,
+	 * shaded per 4-px run so the bands wander, with the top line of each
+	 * stratum caught by the light.
+	 */
+	public static int mesaFace(int px, int py) {
+		int seg = Math.floorDiv(py, 3);
+		double r = hash01(px >> 2, seg, 58);
+		int idx = r < 0.35 ? 0 : (r > 0.9 ? 2 : 1);
+		if (Math.floorMod(py, 3) == 0 && idx < 2) {
+			idx++; // the lit brow of each stratum
+		}
+		return RAMP[CLS_MESA][idx];
+	}
+
+	/**
+	 * A stalagmite cluster: two authored spires on the cave floor, seen from
+	 * above -- north caps lit, south rims sunk, contact shadow south of each,
+	 * cave stone showing everywhere else. An authored stamp, because a
+	 * distance-tested cone is the computed nest ring again.
+	 */
+	// The first draft's spires were 4 px wide and read as smudges on the cave
+	// floor -- grey on grey, outshone by the vein glints beside them. The mass
+	// is what carries a fixture at map zoom: one dominant spire with a full
+	// shadow rim and a bright north cap, and a small companion so the pair
+	// still reads as growth rather than a boulder.
+	private static final String[] STALAGMITE_STAMP = {
+			"............",
+			"...hhh......",
+			"..hbbbs.....",
+			".hbbbbbs....",
+			".bbbbbbs....",
+			".sbbbbs.....",
+			"..ssss......",
+			"...xx...hh..",
+			".......hbbs.",
+			".......sbbs.",
+			"........ss..",
+			".........x..",
+	};
+
+	public static int stalagmite(int ai, int aj, double wx, double wy, int px, int py) {
+		char c = STALAGMITE_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			return RAMP[CLS_STALAGMITE][2];
+		case 'b':
+			return RAMP[CLS_STALAGMITE][1];
+		case 's':
+			return RAMP[CLS_STALAGMITE][0];
+		case 'x': // contact shadow on the cave floor
+			return darken(quietGround(CLS_STONE, wx, wy, px, py), 0.65);
+		default:
+			return quietGround(CLS_STONE, wx, wy, px, py);
+		}
+	}
+
+	/**
+	 * A cactus: authored stamp of a standing trunk and two arms over sand --
+	 * north tips lit, dark green flanks, contact shadow south. One bloom
+	 * accent at the crown, hash-gated rare, in the shared flora red so the
+	 * desert's one flower is the same flower the meadow shrubs carry.
+	 */
+	private static final String[] CACTUS_STAMP = {
+			"............",
+			"....hh......",
+			"....bb......",
+			".hh.bb......",
+			".bb.bb.hh...",
+			".dbbbb.bb...",
+			"....bbbbb...",
+			"....bb.d....",
+			"....bb......",
+			"....dd......",
+			"....xx......",
+			"............",
+	};
+
+	public static int cactus(int ai, int aj, int px, int py) {
+		char c = CACTUS_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			// The crown: rarely, the bloom instead of the lit tip.
+			return hash01(px >> 3, py >> 3, 59) > 0.9 && aj == 1
+					? BLOOM_RED : RAMP[CLS_CACTUS][2];
+		case 'b':
+			return RAMP[CLS_CACTUS][1];
+		case 'd':
+			return RAMP[CLS_CACTUS][0];
+		case 'x':
+			return darken(sand(px, py), 0.65); // contact shadow on the sand
+		default:
+			return sand(px, py);
+		}
+	}
+
+	/**
+	 * A bone field: sand with old remains scattered on the motif lattice --
+	 * 6-px cells that hash-decide between nothing, a long bone, or a rib run,
+	 * each bone a pale run with its own 1-px south shadow so it lies ON the
+	 * sand rather than in it. The pale is concrete's highlight: sun-bleached
+	 * bone and weathered pale concrete are the same white in this palette.
+	 */
+	public static int boneField(double wx, double wy, int px, int py) {
+		int cx = Math.floorDiv(px, 6), cy = Math.floorDiv(py, 6);
+		double pick = hash01(cx, cy, 61);
+		int ox = px - cx * 6, oy = py - cy * 6;
+		if (pick > 0.45) {
+			int jx = (int) (hash01(cx, cy, 62) * 2), jy = (int) (hash01(cy, cx, 66) * 2);
+			int bx = ox - 1 - jx, by = oy - 2 - jy;
+			if (pick > 0.75) {
+				// A rib run: three short parallel pale dashes.
+				if (by >= 0 && by <= 4 && by % 2 == 0 && bx >= 0 && bx <= 1 + by / 2) {
+					return RAMP[CLS_CONCRETE][2];
+				}
+			} else {
+				// A long bone: a 4-px shaft with knobbed ends, shadow under.
+				if (by == 0 && bx >= 0 && bx <= 3) {
+					return bx == 0 || bx == 3
+							? RAMP[CLS_CONCRETE][1] : RAMP[CLS_CONCRETE][2];
+				}
+				if (by == 1 && bx >= 0 && bx <= 3) {
+					return darken(sand(px, py), 0.75);
+				}
+			}
+		}
+		return sand(px, py);
 	}
 
 	/** Side bits for the autotiled runs ({@link #rail}, {@link #pipes}): which

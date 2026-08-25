@@ -3177,6 +3177,22 @@ public class SimTests {
 				assertGreater("fungus grows in the caves of floor " + z,
 						tiles(w, z, Tile.TileType.TYPE_FUNGUS), 50);
 			}
+			// The nature tiles landed where they belong: red rock on the
+			// surface, cacti and bones in the desert, columns in the caves.
+			assertGreater("the buttes are mesa rock",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_MESA), 400);
+			assertGreater("the desert grows cacti",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_CACTUS), 20);
+			assertGreater("and keeps its dead",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_BONES), 100);
+			int stals = 0;
+			for (int z = 0; z <= 2; z++) {
+				stals += tiles(w, z, Tile.TileType.TYPE_STALAGMITE);
+			}
+			assertGreater("the caves grow their columns", stals, 8);
 
 			// Whole: ONE connected space — every walkable tile reachable from
 			// the open desert. A doorway bug anywhere shows up here first;
