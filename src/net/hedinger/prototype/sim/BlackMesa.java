@@ -23,14 +23,28 @@ import net.hedinger.prototype.engine.World;
  * <p>Four levels, top-down:
  * <pre>
  *   z=3  SURFACE   desert, canyon + dam, topside compound, silo doors, the
- *                  launch pad's rocket tip, tram
- *   z=2  LABS      Sector C labs + test chamber top, office complex, dorm
- *                  station, Sector E specimen labs
- *   z=1  WORKS     the transit loop, silo mid, the old freight line out to
- *                  the launch gantry, residue processing, warehouse + cold
- *                  storage, reactor complex entry
- *   z=0  DEEP      test chamber floor, engine bay, launch flame trench,
- *                  waste sump, reactor core + teleport chamber
+ *                  launch pad's rocket tip, tram — and the sinkhole
+ *   z=2  LABS      Sector C labs + test chamber top, office complex, the
+ *                  records maze, dorm station, Sector E specimen labs
+ *   z=1  WORKS     the transit loop and the caves it tunnels through, silo
+ *                  mid, the old freight line, residue processing, warehouse
+ *                  + cold storage, reactor complex entry
+ *   z=0  DEEP      the OLD LABS — a derelict complex the facility grew out
+ *                  of — plus the chamber floor, engine bay, flame trench,
+ *                  ice cellar, waste sump, reactor core + teleport chamber
+ *
+ * <p>Every subterranean floor is riddled with natural cave systems, carved
+ * before the buildings so the facility reads as built INTO living rock. On
+ * top of that, three big cavities span multiple floors: where a cave is
+ * bigger than a room, its ceiling is a correspondingly big opening on the
+ * floor above — the size of the hole tells you the size of what is under
+ * it. A cavity carves after the buildings, because a cave-in does not ask.
+ *
+ * <p>A labyrinth this dense cannot be hand-guaranteed whole, so it is not:
+ * after everything is carved, a driller pass floods the world from the open
+ * desert and bores a straight service drift to every walkable pocket the
+ * flood cannot reach, repeating until the campus is one connected space.
+ * The scenario asserts that as an equality, not a hope.
  * </pre>
  *
  * <p>Determinism: {@link World}'s constructor draws RNG, so the seed is set
@@ -64,14 +78,91 @@ public final class BlackMesa {
 		}
 		surface(w);
 
-		labsFloor(w);
+		caves(w);      // the rock was never solid: winding systems, every floor
+		labsFloor(w);  // the buildings win where they stand...
 		worksFloor(w);
 		deepFloor(w);
+		cavities(w);   // ...and the cave-ins win over the buildings
 		gorge(w);
 		stairs(w);
+		connectAll(w); // drill drifts until the labyrinth is one space
 
 		shallowsFringe(w);
 		return w;
+	}
+
+	/**
+	 * The cave systems: banded noise carves winding passages through every
+	 * subterranean floor, each floor offset so no two levels share a layout.
+	 * Cave floors are bare stone with fungus beds where a second noise says
+	 * life took hold — fertile and regrowing, so the caves glow — and rubble
+	 * where the ceiling has been coming down for a while.
+	 */
+	private static void caves(World w) {
+		for (int z = DEEP; z <= LABS; z++) {
+			for (int x = 3; x < COLS - 3; x++) {
+				for (int y = 3; y < ROWS - 3; y++) {
+					double n = Utils.noise2(x + z * 997, y + z * 571, 0.085);
+					if (n <= 0.60 || n >= 0.75) {
+						continue; // solid rock stays solid
+					}
+					double life = Utils.noise2(x + z * 313 + 50, y + z * 127 + 80, 0.2);
+					if (life > 0.82) {
+						set(w, x, y, z, Tile.TileType.TYPE_FUNGUS);
+						w.getTile(x, y, z).setFertility(0.5);
+						w.getTile(x, y, z).setRegrowRate(0.002);
+					} else if (life < 0.12) {
+						set(w, x, y, z, Tile.TileType.TYPE_RUBBLE);
+					} else {
+						set(w, x, y, z, Tile.TileType.TYPE_STONE);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * The three big cavities — caves too big for a floor to contain. Each
+	 * spans several levels: its bottom floor is the cavern, and every floor
+	 * of rock that used to be its ceiling is an opening whose SIZE matches
+	 * the void below, so a big hole read from above means a big cave under
+	 * it. Carved after the buildings: a cave-in does not ask what it takes.
+	 */
+	private static void cavities(World w) {
+		// The grand cavern: three floors of void, a pool at the bottom. Its
+		// collapse bit the old labs' east rooms and nicked Sector C's shell.
+		diskAt(w, LABS, 86.0, 30.0, 6.0, Tile.TileType.TYPE_HOLE);
+		diskAt(w, WORKS, 86.0, 30.0, 5.0, Tile.TileType.TYPE_HOLE);
+		diskAt(w, DEEP, 86.0, 30.0, 8.0, Tile.TileType.TYPE_STONE);
+		diskAt(w, DEEP, 86.0, 30.0, 5.0, Tile.TileType.TYPE_FUNGUS);
+		for (int x = 79; x <= 93; x++) {
+			for (int y = 23; y <= 37; y++) {
+				if (w.getTile(x, y, DEEP).getType() == Tile.TileType.TYPE_FUNGUS) {
+					w.getTile(x, y, DEEP).setFertility(0.5);
+					w.getTile(x, y, DEEP).setRegrowRate(0.002);
+				}
+			}
+		}
+		diskAt(w, DEEP, 86.0, 30.0, 2.5, Tile.TileType.TYPE_WATER);
+
+		// The sinkhole: the desert floor gave way over a labs-level cave.
+		diskAt(w, SURFACE, 30.0, 60.0, 4.5, Tile.TileType.TYPE_HOLE);
+		diskAt(w, LABS, 30.0, 60.0, 6.0, Tile.TileType.TYPE_STONE);
+		diskAt(w, LABS, 30.0, 60.0, 3.5, Tile.TileType.TYPE_FUNGUS);
+		for (int x = 24; x <= 36; x++) {
+			for (int y = 54; y <= 66; y++) {
+				if (w.getTile(x, y, LABS).getType() == Tile.TileType.TYPE_FUNGUS) {
+					w.getTile(x, y, LABS).setFertility(0.5);
+					w.getTile(x, y, LABS).setRegrowRate(0.002);
+				}
+			}
+		}
+
+		// The undercroft: a works-floor opening over a deep cavern that the
+		// waste sump has been quietly draining into.
+		diskAt(w, WORKS, 60.0, 88.0, 4.0, Tile.TileType.TYPE_HOLE);
+		diskAt(w, DEEP, 60.0, 88.0, 6.0, Tile.TileType.TYPE_STONE);
+		diskAt(w, DEEP, 60.0, 88.0, 2.5, Tile.TileType.TYPE_SLUDGE);
 	}
 
 	// ---- z=3: the surface --------------------------------------------------
@@ -274,6 +365,35 @@ public final class BlackMesa {
 		// station's wall, and a shell stamped after the breach walls it back
 		// up — the same lesson the stairs already paid for.
 		sectorE(w);
+		archive(w);
+	}
+
+	/**
+	 * The records archive: the labyrinth wing proper. A grid of narrow
+	 * stacks with the door gaps offset so no straight line crosses it — you
+	 * thread it or you do not — and dead server rows for the records nobody
+	 * will read again. Its corridor breaches Sector C's shell into the lobby.
+	 */
+	private static void archive(World w) {
+		shell(w, LABS, 26, 40, 46, 52,
+				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PAVED);
+		// Stack walls, doors alternating high and low.
+		for (int i = 0; i < 4; i++) {
+			int x = 30 + i * 4;
+			fill(w, LABS, x, 41, x, 51, Tile.TileType.TYPE_WALL_BUILT);
+			set(w, x, (i % 2 == 0) ? 43 : 49, LABS, Tile.TileType.TYPE_PAVED);
+		}
+		// A cross wall with its own offset gaps.
+		fill(w, LABS, 27, 46, 45, 46, Tile.TileType.TYPE_WALL_BUILT);
+		for (int x : new int[] { 28, 36, 44 }) {
+			set(w, x, 46, LABS, Tile.TileType.TYPE_PAVED);
+		}
+		// Dead records.
+		set(w, 28, 42, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 33, 50, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 41, 42, LABS, Tile.TileType.TYPE_SERVER);
+		// The corridor east into the lobby.
+		fill(w, LABS, 46, 48, 53, 48, Tile.TileType.TYPE_PAVED);
 	}
 
 	/**
@@ -601,11 +721,68 @@ public final class BlackMesa {
 
 	private static void deepFloor(World w) {
 		testChamberFloor(w);
+		oldLabs(w);
 		engineBay(w);
 		launchTrench(w);
 		iceCellar(w);
 		wasteSump(w);
 		lambdaCore(w);
+	}
+
+	/**
+	 * The old labs: the complex the facility grew out of, and then grew out
+	 * of needing. A quartered block on two spine corridors, dressed the way
+	 * thirty abandoned years dress a place — collapsed ceiling where the
+	 * noise says so, rubble where it has been coming down longer, one lab
+	 * still lit because nobody came back to turn it off, a sludge leak, and
+	 * a crawl duct along the south wall. The grand cavern's collapse ate its
+	 * east rooms; what the cave-in left is left as it fell.
+	 */
+	private static void oldLabs(World w) {
+		shell(w, DEEP, 40, 16, 86, 48,
+				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
+		// Quartering partitions, then the two spines carved through them.
+		fill(w, DEEP, 52, 17, 52, 47, Tile.TileType.TYPE_WALL_CONCRETE);
+		fill(w, DEEP, 72, 17, 72, 47, Tile.TileType.TYPE_WALL_CONCRETE);
+		fill(w, DEEP, 41, 24, 85, 24, Tile.TileType.TYPE_WALL_CONCRETE);
+		fill(w, DEEP, 41, 40, 85, 40, Tile.TileType.TYPE_WALL_CONCRETE);
+		fill(w, DEEP, 41, 31, 85, 33, Tile.TileType.TYPE_PAVED);
+		fill(w, DEEP, 62, 17, 64, 47, Tile.TileType.TYPE_PAVED);
+		// Room doors off the spines.
+		for (int x : new int[] { 46, 58, 68, 80 }) {
+			set(w, x, 24, DEEP, Tile.TileType.TYPE_PLATE);
+			set(w, x, 40, DEEP, Tile.TileType.TYPE_PLATE);
+		}
+		// Decay, drawn by noise so no two rooms rotted alike.
+		for (int x = 41; x <= 85; x++) {
+			for (int y = 17; y <= 47; y++) {
+				if (w.getTile(x, y, DEEP).getType() != Tile.TileType.TYPE_PLATE) {
+					continue;
+				}
+				double rot = Utils.noise2(x + 811, y + 457, 0.16);
+				if (rot > 0.68) {
+					set(w, x, y, DEEP, Tile.TileType.TYPE_COLLAPSE);
+				} else if (rot < 0.12) {
+					set(w, x, y, DEEP, Tile.TileType.TYPE_RUBBLE);
+				}
+			}
+		}
+		// The lab nobody turned off.
+		fill(w, DEEP, 42, 18, 50, 22, Tile.TileType.TYPE_LIGHTGRATE);
+		fill(w, DEEP, 43, 20, 49, 20, Tile.TileType.TYPE_SERVER);
+		set(w, 46, 20, DEEP, Tile.TileType.TYPE_LIGHTGRATE);
+		// The old test annex, shards still scattered where the work stopped.
+		fill(w, DEEP, 74, 42, 84, 46, Tile.TileType.TYPE_LIGHTGRATE);
+		set(w, 79, 44, DEEP, Tile.TileType.TYPE_CRYSTAL_SPARSE);
+		set(w, 76, 43, DEEP, Tile.TileType.TYPE_CRYSTAL_SPARSE);
+		// The leak, and the crawl duct along the south wall.
+		fill(w, DEEP, 80, 18, 84, 20, Tile.TileType.TYPE_SLUDGE);
+		fill(w, DEEP, 42, 47, 60, 47, Tile.TileType.TYPE_DUCT);
+		// The way in from the chamber's corridor, and through to the reactor.
+		set(w, 86, 44, DEEP, Tile.TileType.TYPE_PLATE);
+		fill(w, DEEP, 87, 44, 87, 51, Tile.TileType.TYPE_PLATE);
+		set(w, 88, 51, DEEP, Tile.TileType.TYPE_PLATE);
+		fill(w, DEEP, 34, 32, 41, 32, Tile.TileType.TYPE_PLATE);
 	}
 
 	/** The bottom of the launch pad: the flame trench, with the rocket's base
@@ -777,6 +954,143 @@ public final class BlackMesa {
 		for (int[] p : shore) {
 			set(w, p[0], p[1], SURFACE, Tile.TileType.TYPE_SHALLOWS);
 		}
+	}
+
+	/**
+	 * Drills the labyrinth whole. Floods the world from the open desert the
+	 * way a body moves — same-floor steps, ramps both ways, drops one way —
+	 * and for every walkable pocket the flood cannot reach, bores a straight
+	 * L-shaped service drift on that pocket's own floor to the nearest tile
+	 * the flood did reach. Repeats until nothing is left out. The drift only
+	 * cuts what is solid (water it crosses becomes a ford); anything already
+	 * walkable is left exactly as carved.
+	 *
+	 * <p>This is what buys the cave systems their freedom: the noise can cut
+	 * whatever pockets it likes, the cave-ins can sever whatever they hit,
+	 * and the campus still audits as ONE connected space — by construction,
+	 * not by luck.
+	 */
+	private static void connectAll(World w) {
+		for (int guard = 0; guard < 400; guard++) {
+			boolean[][][] seen = flood(w);
+			int[] pocket = null;
+			outer:
+			for (int z = 0; z < LVLS; z++) {
+				for (int y = 0; y < ROWS; y++) {
+					for (int x = 0; x < COLS; x++) {
+						if (w.getTile(x, y, z).isWalkable() && !seen[z][x][y]) {
+							pocket = new int[] { z, x, y };
+							break outer;
+						}
+					}
+				}
+			}
+			if (pocket == null) {
+				return; // one space; done
+			}
+			int pz = pocket[0], px = pocket[1], py = pocket[2];
+			int bx = -1, by = -1, best = Integer.MAX_VALUE;
+			for (int x = 2; x < COLS - 2; x++) {
+				for (int y = 2; y < ROWS - 2; y++) {
+					if (!seen[pz][x][y]) {
+						continue;
+					}
+					int d = Math.abs(x - px) + Math.abs(y - py);
+					if (d < best) {
+						best = d;
+						bx = x;
+						by = y;
+					}
+				}
+			}
+			if (bx < 0) {
+				return; // no anchor on this floor: leave it to the audit to say so
+			}
+			drill(w, pz, px, py, bx, by);
+		}
+	}
+
+	/** One straight L-drift: x-leg then y-leg, cutting only solid tiles. */
+	private static void drill(World w, int z, int x0, int y0, int x1, int y1) {
+		int x = x0, y = y0;
+		while (x != x1) {
+			x += x1 > x ? 1 : -1;
+			drillTile(w, x, y, z);
+		}
+		while (y != y1) {
+			y += y1 > y ? 1 : -1;
+			drillTile(w, x, y, z);
+		}
+	}
+
+	private static void drillTile(World w, int x, int y, int z) {
+		Tile t = w.getTile(x, y, z);
+		if (t.isWalkable()) {
+			return;
+		}
+		set(w, x, y, z, t.getType() == Tile.TileType.TYPE_WATER
+				? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_STONE);
+	}
+
+	/** The flood: how a body actually gets around, one boolean per tile. */
+	private static boolean[][][] flood(World w) {
+		boolean[][][] seen = new boolean[LVLS][COLS][ROWS];
+		java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+		for (int x = 4; x < COLS; x++) {
+			if (w.getTile(x, 60, SURFACE).isWalkable()) {
+				seen[SURFACE][x][60] = true;
+				q.add(new int[] { SURFACE, x, 60 });
+				break;
+			}
+		}
+		int[][] d4 = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+		while (!q.isEmpty()) {
+			int[] p = q.poll();
+			int z = p[0], x = p[1], y = p[2];
+			for (int[] d : d4) {
+				int nx = x + d[0], ny = y + d[1];
+				if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) {
+					continue;
+				}
+				Tile n = w.getTile(nx, ny, z);
+				if (n.isWalkable() && !seen[z][nx][ny]) {
+					seen[z][nx][ny] = true;
+					q.add(new int[] { z, nx, ny });
+				}
+				// Stepping onto a drop: fall to the first walkable floor below.
+				if (n.isDrop()) {
+					int fz = z - 1;
+					while (fz >= 0 && w.getTile(nx, ny, fz).isDrop()) {
+						fz--;
+					}
+					if (fz >= 0 && w.getTile(nx, ny, fz).isWalkable() && !seen[fz][nx][ny]) {
+						seen[fz][nx][ny] = true;
+						q.add(new int[] { fz, nx, ny });
+					}
+				}
+			}
+			// Ramps join two floors at the tile edge, both directions.
+			Tile here = w.getTile(x, y, z);
+			if (here.getType() == Tile.TileType.TYPE_RAMPUP && z + 1 < LVLS) {
+				int u = here.getRampUphill();
+				int ex = x + Tile.dirDx(u), ey = y + Tile.dirDy(u);
+				if (w.isValid(ex, ey, z + 1) && w.getTile(ex, ey, z + 1).isWalkable()
+						&& !seen[z + 1][ex][ey]) {
+					seen[z + 1][ex][ey] = true;
+					q.add(new int[] { z + 1, ex, ey });
+				}
+			}
+			if (here.getType() == Tile.TileType.TYPE_RAMPDOWN && z - 1 >= 0) {
+				int u = here.getRampUphill();
+				int ex = x - Tile.dirDx(u), ey = y - Tile.dirDy(u);
+				if (w.isValid(ex, ey, z - 1) && w.getTile(ex, ey, z - 1).isWalkable()
+						&& !seen[z - 1][ex][ey]) {
+					seen[z - 1][ex][ey] = true;
+					q.add(new int[] { z - 1, ex, ey });
+				}
+			}
+		}
+		return seen;
 	}
 
 	// ---- drawing helpers ----------------------------------------------------

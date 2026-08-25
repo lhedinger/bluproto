@@ -3139,6 +3139,34 @@ public class SimTests {
 					Tile.TileType.TYPE_COOLANT.getValue(),
 					w.getTile(26, 25, net.hedinger.prototype.sim.BlackMesa.DEEP)
 							.getType().getValue());
+			// The big cavities: a floor's opening is the size of the void
+			// under it. The grand cavern is open on two floors and holds a
+			// pool at the bottom; the sinkhole opens the desert itself.
+			assertEquals("the grand cavern opens the labs floor",
+					Tile.TileType.TYPE_HOLE.getValue(),
+					w.getTile(86, 30, net.hedinger.prototype.sim.BlackMesa.LABS)
+							.getType().getValue());
+			assertEquals("and the works floor below it",
+					Tile.TileType.TYPE_HOLE.getValue(),
+					w.getTile(86, 30, net.hedinger.prototype.sim.BlackMesa.WORKS)
+							.getType().getValue());
+			assertEquals("with a pool on the cavern floor",
+					Tile.TileType.TYPE_WATER.getValue(),
+					w.getTile(86, 30, net.hedinger.prototype.sim.BlackMesa.DEEP)
+							.getType().getValue());
+			assertEquals("the sinkhole opens the desert",
+					Tile.TileType.TYPE_HOLE.getValue(),
+					w.getTile(30, 60, net.hedinger.prototype.sim.BlackMesa.SURFACE)
+							.getType().getValue());
+			// The old labs rotted: collapsed deck all over the deep floor.
+			assertGreater("the old labs are falling in",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.DEEP,
+							Tile.TileType.TYPE_COLLAPSE), 80);
+			// And the caves are alive on every subterranean floor.
+			for (int z = 0; z <= 2; z++) {
+				assertGreater("fungus grows in the caves of floor " + z,
+						tiles(w, z, Tile.TileType.TYPE_FUNGUS), 50);
+			}
 
 			// Whole: ONE connected space — every walkable tile reachable from
 			// the open desert. A doorway bug anywhere shows up here first;
