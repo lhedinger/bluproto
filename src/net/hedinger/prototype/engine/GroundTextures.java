@@ -1126,25 +1126,115 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Pipe run along one axis at art-pixel (along, across): two parallel
-	 * pipes, each lit on its leading edge, with darker flange rings every
-	 * 6 px and the odd rust bloom -- drawn over deck plating.
+	 * A pipe run: two parallel pipes over deck plating, autotiled from the
+	 * sides the run continues into — the same shape-from-a-mask contract as
+	 * {@link #rail}, because a pipe gallery turns corners and tees exactly as
+	 * often as a tram line does, and the boolean it had before ("is there pipe
+	 * north or south?") drew a corner as two perpendicular stubs meeting at a
+	 * seam. One arm is a stub closed by a blind flange, two opposite a
+	 * straight, two adjacent an elbow, three a tee, four a crossing.
+	 *
+	 * <p>An elbow at this size is the rails' L with its corner cut, lane for
+	 * lane: each 2-px pipe runs straight to the lane it becomes and turns, the
+	 * inner pipe tight against the corner the bend hugs, the outer sweeping
+	 * wide. Each pipe keeps its own lit edge (north for an east-west pipe, west
+	 * for a north-south one — one sun, small cylinders), its flange rings every
+	 * 6 px along its own run, and the odd rust bloom.
 	 */
-	public static Integer pipeRun(int along, int across, int px, int py) {
-		boolean pipeA = across == 3 || across == 4;
-		boolean pipeB = across == 7 || across == 8;
-		if (!pipeA && !pipeB) {
+	public static Integer pipes(int mask, int ai, int aj, int px, int py) {
+		int arm = pipeArm(mask, ai, aj);
+		if (arm == 0) {
 			return null; // deck shows between and beside the pipes
 		}
-		boolean flange = Math.floorMod(along, 6) == 0;
-		if (flange) {
+		boolean vertical = arm == 1;
+		// A stub's end is capped by a blind flange: a run has to end in
+		// something, and stopping in mid-deck reads as unfinished art (the
+		// rails' buffer-stop lesson, in pipefitting).
+		int arms = Integer.bitCount(mask & (RAIL_N | RAIL_E | RAIL_S | RAIL_W));
+		if (arms == 1) {
+			int stop = 8;
+			boolean cap = ((mask & RAIL_N) != 0 && aj == stop)
+					|| ((mask & RAIL_S) != 0 && aj == 11 - stop)
+					|| ((mask & RAIL_E) != 0 && ai == 11 - stop)
+					|| ((mask & RAIL_W) != 0 && ai == stop);
+			if (cap) {
+				return RAMP[CLS_PIPES][0];
+			}
+		}
+		if (Math.floorMod(vertical ? py : px, 6) == 0) {
 			return RAMP[CLS_PIPES][0]; // flange ring
 		}
 		if (hash01(px >> 1, py >> 1, 83) > 0.93) {
 			return RUST; // weathering bloom
 		}
-		boolean lit = across == 3 || across == 7; // lit edge of each cylinder
+		boolean lit = vertical ? (ai == 3 || ai == 7) : (aj == 3 || aj == 7);
 		return RAMP[CLS_PIPES][lit ? 2 : 1];
+	}
+
+	/**
+	 * Which run the art-pixel at {@code (ai, aj)} belongs to for a pipe tile
+	 * whose gallery continues into the sides named by {@code mask}: 0 none
+	 * (deck), 1 a north-south pipe, 2 an east-west one. The two lanes sit at
+	 * art-pixels 3–4 and 7–8, and the elbow geometry is {@link #railHead}'s
+	 * translated from 1-px rails to 2-px lanes: a lane's arm runs to the far
+	 * edge of the lane it merges into, so the bend's corner is filled rather
+	 * than mitred. Where runs cross, the north-south pipe reads on top —
+	 * somebody routed one over the other.
+	 */
+	private static int pipeArm(int mask, int ai, int aj) {
+		boolean n = (mask & RAIL_N) != 0, e = (mask & RAIL_E) != 0;
+		boolean s = (mask & RAIL_S) != 0, w = (mask & RAIL_W) != 0;
+		int arms = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+		int vl = ai == 3 || ai == 4 ? 0 : (ai == 7 || ai == 8 ? 1 : -1);
+		int hl = aj == 3 || aj == 4 ? 0 : (aj == 7 || aj == 8 ? 1 : -1);
+
+		if (arms == 2 && !(n && s) && !(e && w)) {
+			// An elbow. The inner lanes are the ones nearer the corner the
+			// bend hugs; each lane runs to the far edge of the lane it joins.
+			int innerV = e ? 1 : 0; // vertical lane nearer the horizontal exit
+			int innerH = n ? 0 : 1; // horizontal lane nearer the vertical exit
+			if (vl >= 0) {
+				int join = vl == innerV ? innerH : 1 - innerH;
+				int end = n ? (join == 0 ? 4 : 8) : (join == 0 ? 3 : 7);
+				if (n ? aj <= end : aj >= end) {
+					return 1;
+				}
+			}
+			if (hl >= 0) {
+				int join = hl == innerH ? innerV : 1 - innerV;
+				int end = e ? (join == 0 ? 3 : 7) : (join == 0 ? 4 : 8);
+				if (e ? ai >= end : ai <= end) {
+					return 2;
+				}
+			}
+			return 0;
+		}
+		if (arms == 1) {
+			// A stub: the run comes in from its edge and stops (capped above).
+			int stop = 8;
+			if (n) {
+				return vl >= 0 && aj <= stop ? 1 : 0;
+			}
+			if (s) {
+				return vl >= 0 && aj >= 11 - stop ? 1 : 0;
+			}
+			if (e) {
+				return hl >= 0 && ai >= 11 - stop ? 2 : 0;
+			}
+			return hl >= 0 && ai <= stop ? 2 : 0;
+		}
+		// Straights, tees and crossings: every arm present runs the full tile,
+		// and the north-south run crosses over the east-west one.
+		if ((n || s) && vl >= 0) {
+			return 1;
+		}
+		if ((e || w) && hl >= 0) {
+			return 2;
+		}
+		if (arms == 0) {
+			return hl >= 0 ? 2 : 0; // a lone tile: a scrap of east-west run
+		}
+		return 0;
 	}
 
 	/**
@@ -1268,8 +1358,8 @@ public final class GroundTextures {
 		return ditherRamp(CLS_SLUDGE, p, px, py);
 	}
 
-	/** Rail-neighbour bits for {@link #rail}: which sides of this tile the run
-	 *  continues into. */
+	/** Side bits for the autotiled runs ({@link #rail}, {@link #pipes}): which
+	 *  sides of this tile the run continues into. */
 	public static final int RAIL_N = 1, RAIL_E = 2, RAIL_S = 4, RAIL_W = 8;
 
 	/** The two rail lines, in art-pixels across the 12-px tile. Everything the
