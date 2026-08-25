@@ -689,7 +689,8 @@ public class Tile {
 		// make cover that stops a body without hiding one, which is a
 		// different tactical shape from a wall -- prey watching a hunter it
 		// cannot be reached through is a standoff a wall cannot produce.
-		if (type == TileType.TYPE_CRYSTAL || type == TileType.TYPE_SERVER) {
+		if (type == TileType.TYPE_CRYSTAL || type == TileType.TYPE_SERVER
+				|| type == TileType.TYPE_CACTUS) {
 			return false;
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
@@ -806,7 +807,11 @@ public class Tile {
 		TYPE_LIGHTGRATE(36, true, "lit grating"), // walkway over a lit plenum, not over a void
 		TYPE_COLLAPSE(37, true, "collapsed deck"), // deck under fallen ceiling; slow to cross
 		TYPE_COOLANT(38, true, "coolant run"), // rimed pipework: the plant's cold side
-		TYPE_EXCHANGER(39, true, "heat exchanger"); // finned deck grille: where the heat goes
+		TYPE_EXCHANGER(39, true, "heat exchanger"), // finned deck grille: where the heat goes
+		TYPE_MESA(40, false, "mesa rock"), // red desert rock: the surface's own stone, strata on its faces
+		TYPE_STALAGMITE(41, false, "stalagmite"), // cave columns: solid, and they block sight like the rock they grew from
+		TYPE_CACTUS(42, false, "cactus"), // a standing desert plant: solid to a body, too narrow to hide behind
+		TYPE_BONES(43, true, "bone field"); // walkable scatter of old remains on sand
 
 		private int value;
 		private boolean open;

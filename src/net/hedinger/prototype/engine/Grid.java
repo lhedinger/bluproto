@@ -649,7 +649,8 @@ public class Grid {
 						boolean wallCls = cl == GroundTextures.CLS_WALL
 								|| cl == GroundTextures.CLS_WALL_BUILT
 								|| cl == GroundTextures.CLS_CONCRETE
-								|| cl == GroundTextures.CLS_STEELWALL;
+								|| cl == GroundTextures.CLS_STEELWALL
+								|| cl == GroundTextures.CLS_MESA;
 						if (wallCls) {
 							// Every wall material is two surfaces from above: the flat
 							// cross-section top, and a face band where the mass fronts
@@ -666,6 +667,9 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_CONCRETE) {
 								col = face ? GroundTextures.concreteFace(gx, gy)
 										: GroundTextures.concreteTop(gx, gy, lit);
+							} else if (cl == GroundTextures.CLS_MESA) {
+								col = face ? GroundTextures.mesaFace(gx, gy)
+										: GroundTextures.mesaTop(gx, gy, lit);
 							} else {
 								col = face ? GroundTextures.steelFace(gx, gy)
 										: GroundTextures.steelTop(gx, gy, lit);
@@ -679,6 +683,12 @@ public class Grid {
 							boolean litRack = aj < A * 0.28;
 							col = GroundTextures.serverRack(ai, aj, gx, gy, litRack);
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
+						} else if (cl == GroundTextures.CLS_STALAGMITE) {
+							// A cave column is a fixture like a crystal prism: it
+							// shades itself and casts its own contact shadow.
+							col = GroundTextures.stalagmite(ai, aj, wx, wy, gx, gy);
+						} else if (cl == GroundTextures.CLS_CACTUS) {
+							col = GroundTextures.cactus(ai, aj, gx, gy);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							// A dense formation is a thicket of standing prisms on
 							// the cave floor -- each prism self-shaded with its own
@@ -816,6 +826,8 @@ public class Grid {
 								col = GroundTextures.heatExchanger(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_SLUDGE) {
 								col = GroundTextures.sludge(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_BONES) {
+								col = GroundTextures.boneField(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_RAIL) {
 								// Autotiled from the sides the run continues into, so
 								// the track works out its own geometry: straights,
@@ -1090,6 +1102,7 @@ public class Grid {
 		case GroundTextures.CLS_MUD: return 3;
 		case GroundTextures.CLS_QUICKSAND: return 4;
 		case GroundTextures.CLS_SAND: return 5;
+		case GroundTextures.CLS_BONES: return 5;
 		case GroundTextures.CLS_SOIL: return 6;
 		// Rocky ground laps over meadow and bare rock laps over rocky, so the
 		// slope from pasture to outcrop always reads in that order.
@@ -1275,7 +1288,8 @@ public class Grid {
 		return isType(nx, ny, Tile.TileType.TYPE_WALL)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_BUILT)
 				|| isType(nx, ny, Tile.TileType.TYPE_WALL_CONCRETE)
-				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL);
+				|| isType(nx, ny, Tile.TileType.TYPE_WALL_STEEL)
+				|| isType(nx, ny, Tile.TileType.TYPE_MESA);
 	}
 
 	/**

@@ -112,7 +112,9 @@ public final class BlackMesa {
 						continue; // solid rock stays solid
 					}
 					double life = Utils.noise2(x + z * 313 + 50, y + z * 127 + 80, 0.2);
-					if (life > 0.82) {
+					if (Utils.noise2(x + z * 77 + 900, y + z * 41 + 300, 0.7) > 0.975) {
+						set(w, x, y, z, Tile.TileType.TYPE_STALAGMITE);
+					} else if (life > 0.82) {
 						set(w, x, y, z, Tile.TileType.TYPE_FUNGUS);
 						w.getTile(x, y, z).setFertility(0.5);
 						w.getTile(x, y, z).setRegrowRate(0.002);
@@ -149,6 +151,10 @@ public final class BlackMesa {
 			}
 		}
 		diskAt(w, DEEP, 86.0, 30.0, 2.5, Tile.TileType.TYPE_WATER);
+		for (int[] sp : new int[][] { { 81, 25 }, { 91, 26 }, { 80, 34 },
+				{ 90, 35 }, { 86, 23 } }) {
+			set(w, sp[0], sp[1], DEEP, Tile.TileType.TYPE_STALAGMITE);
+		}
 
 		// The sinkhole: the desert floor gave way over a labs-level cave.
 		diskAt(w, SURFACE, 30.0, 60.0, 4.5, Tile.TileType.TYPE_HOLE);
@@ -168,6 +174,8 @@ public final class BlackMesa {
 		diskAt(w, WORKS, 60.0, 88.0, 4.0, Tile.TileType.TYPE_HOLE);
 		diskAt(w, DEEP, 60.0, 88.0, 6.0, Tile.TileType.TYPE_STONE);
 		diskAt(w, DEEP, 60.0, 88.0, 2.5, Tile.TileType.TYPE_SLUDGE);
+		set(w, 57, 85, DEEP, Tile.TileType.TYPE_STALAGMITE);
+		set(w, 63, 91, DEEP, Tile.TileType.TYPE_STALAGMITE);
 	}
 
 	// ---- z=3: the surface --------------------------------------------------
@@ -182,11 +190,15 @@ public final class BlackMesa {
 				double detail = Utils.noise2(x + 700, y + 200, 0.13);
 				Tile.TileType t;
 				if (rim || elev > 0.88) {
-					t = Tile.TileType.TYPE_WALL; // rim + buttes
+					t = Tile.TileType.TYPE_MESA; // rim + buttes: red desert rock
 				} else if (elev > 0.82) {
 					t = Tile.TileType.TYPE_ROCKY;
-				} else if (detail < 0.28) {
+				} else if (detail < 0.26) {
 					t = Tile.TileType.TYPE_RUBBLE;
+				} else if (detail >= 0.26 && detail < 0.272) {
+					t = Tile.TileType.TYPE_BONES; // something died out here
+				} else if (detail > 0.955) {
+					t = Tile.TileType.TYPE_CACTUS;
 				} else if (detail > 0.93) {
 					t = Tile.TileType.TYPE_COVER; // desert scrub
 				} else {
@@ -363,10 +375,10 @@ public final class BlackMesa {
 		// halls with raw canyon the whole way down.
 		fill(w, SURFACE, 51, 24, 140, 24, Tile.TileType.TYPE_RAIL);
 		fill(w, SURFACE, 140, 24, 140, 64, Tile.TileType.TYPE_RAIL);
-		fill(w, SURFACE, 86, 23, 110, 23, Tile.TileType.TYPE_WALL);
-		fill(w, SURFACE, 86, 25, 110, 25, Tile.TileType.TYPE_WALL);
-		fill(w, SURFACE, 139, 30, 139, 50, Tile.TileType.TYPE_WALL);
-		fill(w, SURFACE, 141, 30, 141, 50, Tile.TileType.TYPE_WALL);
+		fill(w, SURFACE, 86, 23, 110, 23, Tile.TileType.TYPE_MESA);
+		fill(w, SURFACE, 86, 25, 110, 25, Tile.TileType.TYPE_MESA);
+		fill(w, SURFACE, 139, 30, 139, 50, Tile.TileType.TYPE_MESA);
+		fill(w, SURFACE, 141, 30, 141, 50, Tile.TileType.TYPE_MESA);
 	}
 
 	/**
@@ -1127,9 +1139,12 @@ public final class BlackMesa {
 	/** One incident per floor, clustered so it reads as an event: something
 	 *  broke here, something spilled, nobody has been back. */
 	private static void incidents(World w) {
-		// Surface: a wreck out in the desert, debris thrown around it.
+		// Surface: a wreck out in the desert, debris thrown around it — and
+		// the bones of whatever was aboard, or found it.
 		fill(w, SURFACE, 118, 28, 122, 32, Tile.TileType.TYPE_RUBBLE);
 		fill(w, SURFACE, 120, 29, 120, 31, Tile.TileType.TYPE_WALL_STEEL);
+		fill(w, SURFACE, 123, 30, 124, 31, Tile.TileType.TYPE_BONES);
+		set(w, 117, 27, SURFACE, Tile.TileType.TYPE_BONES);
 		// Labs floor: a burst pipe in the office break room, still pooling.
 		fill(w, LABS, 38, 86, 40, 86, Tile.TileType.TYPE_PIPES);
 		set(w, 39, 87, LABS, Tile.TileType.TYPE_SHALLOWS);
