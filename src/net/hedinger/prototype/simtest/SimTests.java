@@ -3101,6 +3101,19 @@ public class SimTests {
 			assertGreater("the reservoir holds water",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
 							Tile.TileType.TYPE_WATER), 200);
+			// The rocket is one steel column through all four floors — the
+			// same coordinates on every level, or it is four drawings.
+			for (int z = 0; z < 4; z++) {
+				assertEquals("the rocket stands on floor " + z,
+						Tile.TileType.TYPE_WALL_STEEL.getValue(),
+						w.getTile(118, 87, z).getType().getValue());
+			}
+			assertGreater("the specimen pens grow fungus",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.LABS,
+							Tile.TileType.TYPE_FUNGUS), 20);
+			assertGreater("the freight line runs through rubble, not dressed stone",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
+							Tile.TileType.TYPE_RUBBLE), 50);
 
 			// Whole: one connected space, except the silo gallery's 20 rim
 			// tiles. A doorway bug anywhere shows up here as a bigger number —
