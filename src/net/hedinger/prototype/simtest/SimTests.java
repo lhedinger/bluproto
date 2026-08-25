@@ -8149,6 +8149,128 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The loader fetches the crate on its own floor, and does not stall on the
+	 * one below it.
+	 *
+	 * <p>The same floor-blind reading the drone had, with a worse ending. The
+	 * engine's distance counts a level as a tile, so a crate one storey down
+	 * scored a third of a tile away and won the pick over one eight tiles off
+	 * across the same room. That much is only a bad choice. What follows is the
+	 * bug: a third of a tile is inside FINAL_APPROACH, so the loader dropped its
+	 * route and walked by eye at a point on its OWN floor where there was
+	 * nothing — and it can never arrive, never grab, and never write the crate
+	 * off either, because a write-off needs a route to fail and it had stopped
+	 * routing.
+	 *
+	 * <p>Measured before the fix: the loader crept a quarter of a tile in 260
+	 * ticks and stood there for good, with work on its own floor the whole time.
+	 * A stall, not a slow pick — which is why this asserts the crate is actually
+	 * fetched rather than merely that the pick went the right way.
+	 */
+	static class TheLoaderPicksItsOwnFloorFirst extends Scenario {
+		@Override
+		public void run() {
+			seed(518);
+			World w = room(24, 14, 2);
+			for (int z = 0; z < 2; z++) {
+				for (int x = 1; x < 23; x++) {
+					for (int y = 1; y < 13; y++) {
+						w.setTile(x, y, z, Tile.TileType.TYPE_PLATE);
+					}
+				}
+			}
+			w.alignTiles();
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(5.5, 5.5, 1, 20.5, 11.5, 1);
+			Item across = Item.crate(16.5, 5.5, 1);  // eight tiles off, same floor
+			Item below = Item.crate(5.8, 5.5, 0);    // a third of a tile off, one floor down
+			w.spawnEntity(ld);
+			w.spawnEntity(across);
+			w.spawnEntity(below);
+			w.think();
+			snapshot(w, "before (a crate across the hall, a crate through the floor)");
+
+			// The pick itself, not where the machine ends up. Asked at the end
+			// this scenario passes with the metric reverted, because the
+			// same-floor gate then refuses the bad target, the route fails, and
+			// the crate is written off — the right answer reached by a longer
+			// road. Asking which crate it CHOSE separates the two.
+			tick(w, 2);
+			assertTrue("it chose the crate on its own floor", ld.target() == across);
+
+			tick(w, 3000);
+			snapshot(w, "after (the hall's crate is in the vault)");
+			assertLess("and fetched and stowed it",
+					Math.hypot(across.getX() - 20.5, across.getY() - 11.5), 2.5);
+			assertEquals("the crate through the floor was left on its own floor",
+					0, below.getLvl());
+			assertLess("and was not moved", Math.hypot(below.getX() - 5.8,
+					below.getY() - 5.5), 0.3);
+		}
+	}
+
+	/**
+	 * A crate it cannot get to does not park the machine forever.
+	 *
+	 * <p>The other half of the same floor-blind reading, and the one with teeth.
+	 * When a crate through the floor is the ONLY work, the loader picks it —
+	 * correctly, since something unreachable is still the nearest thing there
+	 * is. The engine's distance then reads it as a tile away, which is inside
+	 * FINAL_APPROACH, so the loader drops its route and walks by eye at a point
+	 * on its own floor where there is nothing.
+	 *
+	 * <p>From there it cannot recover. It never arrives, so it never grabs; and
+	 * it never writes the crate off either, because a write-off needs a route to
+	 * fail and it has stopped routing. Measured: a quarter of a tile of creep in
+	 * 260 ticks and then nothing, for as long as the world ran.
+	 *
+	 * <p>What should happen is what happens to any unreachable crate: route,
+	 * fail, write it off, go home. So the assertion is that the machine is back
+	 * on its berth — a loader parked with nothing to do is a loader that
+	 * finished thinking, and the stall never gets there.
+	 */
+	static class TheLoaderDoesNotStallOnACrateThroughTheFloor extends Scenario {
+		@Override
+		public void run() {
+			seed(519);
+			World w = room(24, 14, 2);
+			for (int z = 0; z < 2; z++) {
+				for (int x = 1; x < 23; x++) {
+					for (int y = 1; y < 13; y++) {
+						w.setTile(x, y, z, Tile.TileType.TYPE_PLATE);
+					}
+				}
+			}
+			w.alignTiles();
+			// The berth is directly over the crate, which is the arrangement the
+			// stall needs: the machine has to START inside FINAL_APPROACH of it,
+			// or it routes, fails and writes the crate off before the by-eye
+			// branch is ever reached — and the scenario proves nothing.
+			net.hedinger.prototype.sim.FacilityLoader ld =
+					new net.hedinger.prototype.sim.FacilityLoader(5.5, 5.5, 1, 20.5, 11.5, 1);
+			// The only crate in the world, one floor down and no way to it.
+			Item below = Item.crate(5.8, 5.5, 0);
+			w.spawnEntity(ld);
+			w.spawnEntity(below);
+			w.think();
+			snapshot(w, "before (the only crate is through the floor)");
+
+			tick(w, 1500);
+			snapshot(w, "after (given up on it)");
+
+			// That it let the crate GO, not where it is standing. The berth has
+			// to be over the crate for the stall to be reachable at all, so a
+			// seized machine is sitting on its berth and "is it parked" answers
+			// yes for the wrong reason. A stalled loader holds its target for
+			// ever; a working one routes, fails, writes it off and lets go.
+			assertTrue("it gave up on the crate it could not reach",
+					ld.target() == null);
+			assertLess("and never shifted it", Math.hypot(below.getX() - 5.8,
+					below.getY() - 5.5), 0.3);
+		}
+	}
+
 	static class TheLoaderLeavesStowedCratesAlone extends Scenario {
 		@Override
 		public void run() {
@@ -8410,6 +8532,8 @@ public class SimTests {
 				new ThePlantFloorIsTheRoomThatWasDrawn(),
 				new TheReactorLoopIsClosed(),
 				new TheLoaderStowsALooseCrate(),
+				new TheLoaderPicksItsOwnFloorFirst(),
+				new TheLoaderDoesNotStallOnACrateThroughTheFloor(),
 				new TheLoaderLeavesStowedCratesAlone(),
 				new TheLoaderIsSlowerThanTheDrone(),
 				new MachineryIsNeitherFedNorWatered(),

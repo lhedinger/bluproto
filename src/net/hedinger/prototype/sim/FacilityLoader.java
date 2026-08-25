@@ -139,8 +139,19 @@ public final class FacilityLoader extends NPC {
 			returnToBerth();
 			return;
 		}
+		// Everything below this line is about a crate within arm's length or
+		// nearly so, and none of it means anything through a floor. The engine's
+		// distance counts a level as a tile, so a crate on the storey below
+		// reads as one tile off — inside FINAL_APPROACH, which then drops the
+		// route and walks the machine at a point on its OWN floor where there is
+		// nothing. It never arrives, never grabs, and never writes the crate off
+		// either, because a write-off needs a route to fail and it stopped
+		// routing. Measured: a loader crept a quarter of a tile in 260 ticks and
+		// stood there, with a crate on its own floor eight tiles away that it
+		// never went for. A stall, not a slow pick.
+		boolean sameFloor = target.getLvl() == getLvl();
 		double gap = distance(target);
-		if (gap <= reachTo(target)) {
+		if (sameFloor && gap <= reachTo(target)) {
 			if (grab(target)) {
 				load = target;
 				target = null;
@@ -155,7 +166,7 @@ public final class FacilityLoader extends NPC {
 			stop();
 			return;
 		}
-		if (gap <= FINAL_APPROACH) {
+		if (sameFloor && gap <= FINAL_APPROACH) {
 			// Close the last stretch by eye rather than by route. The route
 			// ends at the crate's tile and a grab reaches about a fifth of a
 			// tile, so a machine that stops where the path stops is standing
@@ -183,7 +194,11 @@ public final class FacilityLoader extends NPC {
 			speed = CRAWL;
 			return;
 		}
-		if (distance(vaultX, vaultY, vaultZ) <= DROP_AT) {
+		// On the vault's own floor, and only there. Standing directly above or
+		// below the drop point reads as 1.0 away, inside DROP_AT — so a loader
+		// that had gone downstairs would set the crate down on the plant floor
+		// and count the delivery made.
+		if (getLvl() == (int) vaultZ && distance(vaultX, vaultY, vaultZ) <= DROP_AT) {
 			drop();
 			load = null;
 			speed = CRAWL;
@@ -203,7 +218,7 @@ public final class FacilityLoader extends NPC {
 
 	/** Nothing to haul: go and stand on the berth. */
 	private void returnToBerth() {
-		if (distance(berthX, berthY, berthZ) <= BERTHED) {
+		if (onBerth()) {
 			stop();
 			return;
 		}
@@ -219,6 +234,11 @@ public final class FacilityLoader extends NPC {
 	 * doing something legible, and the route it then fails to find is handled
 	 * by {@link #writtenOff} rather than by a second pathfind per candidate
 	 * per tick.
+	 *
+	 * <p>Straight line within a floor, that is. Across floors it is a world per
+	 * storey — see {@link MachineRange}. A crate one level down is not a third
+	 * of a tile away however the arithmetic reads; it is down the stairwell and
+	 * back.
 	 */
 	private Item pickCrate() {
 		Item best = null;
@@ -233,7 +253,7 @@ public final class FacilityLoader extends NPC {
 			if (writtenOff.contains(it.getID())) {
 				continue;
 			}
-			double d = distance(it);
+			double d = MachineRange.toChooseBy(this, it);
 			if (d < bestD) {
 				bestD = d;
 				best = it;
@@ -258,6 +278,15 @@ public final class FacilityLoader extends NPC {
 	 * size, and {@code Item} is an NPC — so a crate is 0.125 and this body is
 	 * 0.3125, which makes the real reach about a fifth of a tile.
 	 */
+	/** Standing on the berth: near it, and on its floor. BERTHED is under a
+	 *  tile so the floor test changes nothing today — but it is the same
+	 *  reading that was wrong twice above, and a berth is a place on a floor
+	 *  rather than a column through the building. */
+	private boolean onBerth() {
+		return getLvl() == (int) berthZ
+				&& distance(berthX, berthY, berthZ) <= BERTHED;
+	}
+
 	private double reachTo(Item it) {
 		return it.getSize() / 2 + getSize() / 2;
 	}
@@ -366,13 +395,21 @@ public final class FacilityLoader extends NPC {
 	}
 
 	/** The crate this loader is carrying, or null. */
+	/** The crate it is on its way to, or null. The counterpart to the drone's
+	 *  {@code quarry()}, and here for the same reason: what a machine has
+	 *  decided to do next is not visible from where it happens to be standing,
+	 *  and a scenario that can only see position can only guess. */
+	public Item target() {
+		return target;
+	}
+
 	public Item load() {
 		return load;
 	}
 
 	/** Whether it is parked on its berth with nothing to haul. */
 	public boolean isBerthed() {
-		return load == null && distance(berthX, berthY, berthZ) <= BERTHED;
+		return load == null && onBerth();
 	}
 
 	/** Equipment, not an animal: nothing eats it and nothing rides it. */
