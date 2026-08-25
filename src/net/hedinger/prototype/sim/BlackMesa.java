@@ -22,12 +22,15 @@ import net.hedinger.prototype.engine.World;
  *
  * <p>Four levels, top-down:
  * <pre>
- *   z=3  SURFACE   desert, canyon + dam, topside compound, silo doors, tram
- *   z=2  LABS      Sector C labs + test chamber top, office complex
- *   z=1  WORKS     the transit loop, silo mid, residue processing, warehouse,
- *                  reactor complex entry
- *   z=0  DEEP      test chamber floor, engine bay, waste sump, reactor core +
- *                  teleport chamber
+ *   z=3  SURFACE   desert, canyon + dam, topside compound, silo doors, the
+ *                  launch pad's rocket tip, tram
+ *   z=2  LABS      Sector C labs + test chamber top, office complex, dorm
+ *                  station, Sector E specimen labs
+ *   z=1  WORKS     the transit loop, silo mid, the old freight line out to
+ *                  the launch gantry, residue processing, warehouse + cold
+ *                  storage, reactor complex entry
+ *   z=0  DEEP      test chamber floor, engine bay, launch flame trench,
+ *                  waste sump, reactor core + teleport chamber
  * </pre>
  *
  * <p>Determinism: {@link World}'s constructor draws RNG, so the seed is set
@@ -97,6 +100,7 @@ public final class BlackMesa {
 		dormitories(w);
 		sectorCHead(w);
 		siloDoors(w);
+		launchDoors(w);
 		topsideTram(w);
 	}
 
@@ -191,6 +195,15 @@ public final class BlackMesa {
 		fill(w, SURFACE, 121, 73, 124, 76, Tile.TileType.TYPE_SHAFT);
 	}
 
+	/** The launch pad from above: an apron around the flame-trench gap, and
+	 *  the rocket's tip standing in the middle of it. The rocket is a steel
+	 *  column through all four floors — the one thing on the map that is
+	 *  taller than the mesa. */
+	private static void launchDoors(World w) {
+		fill(w, SURFACE, 113, 83, 126, 93, Tile.TileType.TYPE_PLATE);
+		launchThroat(w, SURFACE);
+	}
+
 	/** The topside stretch of the tram: out of one portal, across the desert,
 	 *  into the other. The loop itself runs two floors down; the portals hold
 	 *  the stairs that join them. */
@@ -212,12 +225,23 @@ public final class BlackMesa {
 		sectorC(w);
 		officeComplex(w);
 		siloBore(w, LABS);
+		launchThroat(w, LABS); // the rocket passes this floor in rock
+
+		// The dormitory station: the commute the whole facility is built
+		// around starts here — down from the dorm court, onto the loop.
+		shell(w, LABS, 60, 14, 70, 22,
+				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
 
 		// Station rooms under the two portals.
 		shell(w, LABS, 44, 20, 54, 28,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
 		shell(w, LABS, 136, 60, 144, 70,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
+
+		// Sector E carves last: its access corridor breaches the east
+		// station's wall, and a shell stamped after the breach walls it back
+		// up — the same lesson the stairs already paid for.
+		sectorE(w);
 	}
 
 	/**
@@ -270,10 +294,63 @@ public final class BlackMesa {
 		// through a gap in the instrument wall: the shell's west arc crosses
 		// the column east of the racks, so the door row is the only way past
 
-		// Connector south to the office complex.
-		fill(w, LABS, 40, 56, 52, 56, Tile.TileType.TYPE_PAVED);
-		fill(w, LABS, 40, 56, 40, 70, Tile.TileType.TYPE_PAVED);
-		set(w, 53, 56, LABS, Tile.TileType.TYPE_PAVED); // through the shell
+		// The way to the office complex is not a corridor: it is the
+		// maintenance route — pipe runs, then a stretch where the ceiling has
+		// come down and the deck is climbed as much as walked. Back-of-house,
+		// the way that path is in the story.
+		fill(w, LABS, 40, 56, 52, 56, Tile.TileType.TYPE_PIPES);
+		for (int y = 56; y <= 70; y++) {
+			set(w, 40, y, LABS, (y % 2 == 0)
+					? Tile.TileType.TYPE_COLLAPSE : Tile.TileType.TYPE_PLATE);
+		}
+		set(w, 53, 56, LABS, Tile.TileType.TYPE_PIPES); // through the shell
+	}
+
+	/**
+	 * Sector E: the specimen labs. Three enclosure pens behind rack-glass —
+	 * a fungus bed, a wetland of reeds, a dry scrub pen — on a corridor with
+	 * an observation room and a surgery. The glass is server-rack tile:
+	 * solid to a body, clear to the eye, which is what an enclosure wall is.
+	 * The pens are the one part of the campus that is alive: the fungus bed
+	 * is fertile and regrows, so the enclosures keep themselves stocked.
+	 */
+	private static void sectorE(World w) {
+		fill(w, LABS, 112, 38, 138, 58, Tile.TileType.TYPE_WALL_CONCRETE);
+		// Corridor.
+		fill(w, LABS, 114, 47, 136, 49, Tile.TileType.TYPE_PAVED);
+		// The pens.
+		shell(w, LABS, 114, 40, 120, 46,
+				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_FUNGUS);
+		for (int x = 115; x <= 119; x++) {
+			for (int y = 41; y <= 45; y++) {
+				w.getTile(x, y, LABS).setFertility(0.5);
+				w.getTile(x, y, LABS).setRegrowRate(0.002);
+			}
+		}
+		shell(w, LABS, 122, 44 - 4, 128, 46,
+				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_REEDS);
+		set(w, 125, 42, LABS, Tile.TileType.TYPE_SHALLOWS);
+		set(w, 125, 43, LABS, Tile.TileType.TYPE_SHALLOWS);
+		shell(w, LABS, 130, 40, 136, 46,
+				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_COVER);
+		set(w, 132, 42, LABS, Tile.TileType.TYPE_ROCKY);
+		set(w, 134, 44, LABS, Tile.TileType.TYPE_ROCKY);
+		// Each pen's gate.
+		set(w, 117, 46, LABS, Tile.TileType.TYPE_PLATE);
+		set(w, 125, 46, LABS, Tile.TileType.TYPE_PLATE);
+		set(w, 133, 46, LABS, Tile.TileType.TYPE_PLATE);
+		// Observation room and surgery, south of the corridor.
+		fill(w, LABS, 114, 51, 124, 56, Tile.TileType.TYPE_PLATE);
+		fill(w, LABS, 115, 55, 123, 55, Tile.TileType.TYPE_SERVER);
+		fill(w, LABS, 127, 51, 136, 56, Tile.TileType.TYPE_LIGHTGRATE);
+		set(w, 128, 52, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 135, 52, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 118, 50, LABS, Tile.TileType.TYPE_PAVED); // doors off the corridor
+		set(w, 130, 50, LABS, Tile.TileType.TYPE_PAVED);
+		// The way in: a corridor from the east tram station, cut through the
+		// block's south face and up into the surgery.
+		fill(w, LABS, 134, 57, 134, 65, Tile.TileType.TYPE_PAVED);
+		fill(w, LABS, 135, 65, 136, 65, Tile.TileType.TYPE_PAVED);
 	}
 
 	/** The office complex: a cubicle farm on a corridor, cafeteria, freezer,
@@ -316,8 +393,10 @@ public final class BlackMesa {
 	private static void worksFloor(World w) {
 		transitLoop(w);
 		siloComplex(w);
+		freightLine(w);
 		residueProcessing(w);
 		warehouse(w);
+		coldStorage(w);
 		lambdaEntry(w);
 
 		// The test chamber again: gallery and bore, one floor further down.
@@ -347,6 +426,10 @@ public final class BlackMesa {
 		// Platform under portal A, straddling the north run.
 		fill(w, WORKS, 42, 16, 54, 24, Tile.TileType.TYPE_PLATE);
 		fill(w, WORKS, 43, 18, 53, 18, Tile.TileType.TYPE_RAIL);
+
+		// Platform under the dormitories — the far end of the commute.
+		fill(w, WORKS, 60, 16, 70, 24, Tile.TileType.TYPE_PLATE);
+		fill(w, WORKS, 60, 18, 70, 18, Tile.TileType.TYPE_RAIL);
 
 		// Platform against the east run, for the silo and portal B.
 		fill(w, WORKS, 138, 62, 147, 70, Tile.TileType.TYPE_PLATE);
@@ -397,6 +480,30 @@ public final class BlackMesa {
 		fill(w, WORKS, 119, 72, 119, 77, Tile.TileType.TYPE_PLATE);
 	}
 
+	/**
+	 * The old freight line: a second, older rail system, distinct from the
+	 * transit loop on purpose — its tunnel is broken rubble where the loop's
+	 * is dressed stone. It branches off past the silo complex and runs out to
+	 * the launch gantry, where the rocket stands in its flame-trench gap with
+	 * the gantry arms reaching it.
+	 */
+	private static void freightLine(World w) {
+		// The branch south from the east platform, then west to the gantry.
+		fill(w, WORKS, 141, 71, 143, 88, Tile.TileType.TYPE_RUBBLE);
+		fill(w, WORKS, 120, 86, 143, 88, Tile.TileType.TYPE_RUBBLE);
+		// The gantry hall.
+		shell(w, WORKS, 112, 82, 126, 94,
+				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
+		fill(w, WORKS, 115, 84, 122, 91, Tile.TileType.TYPE_CATWALK);
+		launchThroat(w, WORKS);
+		// The gantry arms, reaching the rocket across the gap.
+		fill(w, WORKS, 116, 87, 117, 88, Tile.TileType.TYPE_CATWALK);
+		fill(w, WORKS, 120, 87, 121, 88, Tile.TileType.TYPE_CATWALK);
+		// The rail itself, laid last so it cuts through wall and rubble alike.
+		fill(w, WORKS, 142, 66, 142, 87, Tile.TileType.TYPE_RAIL);
+		fill(w, WORKS, 123, 87, 142, 87, Tile.TileType.TYPE_RAIL);
+	}
+
 	/** Residue processing: the sludge channels, catwalks over them, and the
 	 *  conveyor line along the top. */
 	private static void residueProcessing(World w) {
@@ -423,6 +530,18 @@ public final class BlackMesa {
 		fill(w, WORKS, 116, 19, 116, 22, Tile.TileType.TYPE_STONE); // loop door
 	}
 
+	/** Cold storage: a steel box off the warehouse, stone-cold floor, the
+	 *  hanging rows in rack steel. */
+	private static void coldStorage(World w) {
+		shell(w, WORKS, 112, 42, 124, 52,
+				Tile.TileType.TYPE_WALL_STEEL, Tile.TileType.TYPE_STONE);
+		for (int y : new int[] { 45, 48 }) {
+			fill(w, WORKS, 114, y, 122, y, Tile.TileType.TYPE_SERVER);
+			set(w, 118, y, WORKS, Tile.TileType.TYPE_STONE);
+		}
+		fill(w, WORKS, 116, 38, 116, 42, Tile.TileType.TYPE_STONE); // from the warehouse
+	}
+
 	/** The reactor complex's entry floor: security, corridors, and the stair
 	 *  down to the core. The end of the line, west of the loop. */
 	private static void lambdaEntry(World w) {
@@ -437,8 +556,19 @@ public final class BlackMesa {
 	private static void deepFloor(World w) {
 		testChamberFloor(w);
 		engineBay(w);
+		launchTrench(w);
 		wasteSump(w);
 		lambdaCore(w);
+	}
+
+	/** The bottom of the launch pad: the flame trench, with the rocket's base
+	 *  standing on it and the deluge exchangers either side. */
+	private static void launchTrench(World w) {
+		shell(w, DEEP, 112, 84, 126, 94,
+				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
+		fill(w, DEEP, 118, 87, 119, 88, Tile.TileType.TYPE_WALL_STEEL);
+		set(w, 122, 92, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		set(w, 124, 92, DEEP, Tile.TileType.TYPE_EXCHANGER);
 	}
 
 	/** The bottom of the bore: the chamber floor, its emitters, and the
@@ -518,16 +648,19 @@ public final class BlackMesa {
 		stair(w, SURFACE, 64, 45, 1);  // sector head -> lobby
 		stair(w, SURFACE, 48, 25, 1);  // portal A -> its station room
 		stair(w, SURFACE, 140, 65, 2); // portal B -> its station room
+		stair(w, SURFACE, 67, 15, 1); // dorm court -> the dormitory station
 		// Labs floor down to the works floor.
 		stair(w, LABS, 45, 22, 1);     // station A -> loop platform
 		stair(w, LABS, 137, 68, 1);    // station B -> east platform
 		stair(w, LABS, 55, 60, 1);     // lobby -> the sector's tram platform
 		stair(w, LABS, 21, 82, 1);     // office corridor -> office platform
+		stair(w, LABS, 62, 20, 1);     // dormitory station -> its platform
 		// Works floor down to the deep floor.
 		stair(w, WORKS, 84, 52, 1);    // service tunnel -> chamber antechamber
 		stair(w, WORKS, 113, 79, 1);   // oxygen room -> engine bay
 		stair(w, WORKS, 66, 88, 1);    // residue processing -> the sump
 		stair(w, WORKS, 12, 36, 1);    // reactor entry -> the core
+		stair(w, WORKS, 114, 92, 1);   // launch gantry -> the flame trench
 	}
 
 	// ---- shared pieces ------------------------------------------------------
@@ -538,6 +671,15 @@ public final class BlackMesa {
 		ring(w, z, 7.5, 8.5, Tile.TileType.TYPE_WALL_CONCRETE);
 		ring(w, z, 3.5, 7.5, Tile.TileType.TYPE_CATWALK);
 		disk(w, z, 3.5, Tile.TileType.TYPE_SHAFT);
+	}
+
+	/** The launch pad's throat on one floor: the flame-trench gap as an
+	 *  annulus of open shaft, and the rocket — a steel column — standing in
+	 *  the middle of it. The same column on every floor is what makes it one
+	 *  rocket rather than four drawings. */
+	private static void launchThroat(World w, int z) {
+		fill(w, z, 116, 85, 121, 90, Tile.TileType.TYPE_SHAFT);
+		fill(w, z, 118, 87, 119, 88, Tile.TileType.TYPE_WALL_STEEL);
 	}
 
 	/** One floor of the silo bore: shaft all the way through, with a catwalk
