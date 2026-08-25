@@ -6756,6 +6756,84 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * The rank splits the cull: no two drones ever work on the same animal.
+	 *
+	 * <p>They berth on adjacent pads and take the same standing order in the
+	 * same tick, and the choice is "the nearest cullable body" — which, from
+	 * four machines standing two tiles apart, is the same animal for all four.
+	 * Measured over twelve thousand ticks of the seeded world before this was
+	 * fixed: all four held the identical target on 6962 of the 7721 ticks any of
+	 * them held one, and on exactly ONE tick did all four hold different
+	 * animals. Three machines flew escort to a fourth doing the work.
+	 *
+	 * <p>Nothing about that is visible in a headcount. The cull still finished,
+	 * the order still cleared, every existing drone scenario still passed — it
+	 * was simply four times the plant doing one drone's work, and the only way
+	 * to see it was to ask what each machine had in hand.
+	 *
+	 * <p>Both halves are asserted. That the rank never doubles up is the fix;
+	 * that it is seen holding four different animals at once is the guard
+	 * against a test that passes because nothing was ever hunting.
+	 */
+	static class TheRankSplitsTheCull extends Scenario {
+		@Override
+		public void run() {
+			seed(416);
+			World w = room(34, 22);
+			// Four pads in a block, as the machine wing lays them.
+			double[][] pads = { { 3.5, 3.5 }, { 5.5, 3.5 }, { 3.5, 4.5 }, { 5.5, 4.5 } };
+			for (double[] p : pads) {
+				w.setTile((int) p[0], (int) p[1], 0, Tile.TileType.TYPE_DOCK);
+			}
+			// Enough grazers that four drones can always find four, spread wide
+			// enough that "nearest" is a real choice rather than a formality.
+			// No reproduction: a birth mid-cull would move the arithmetic.
+			for (int i = 0; i < 20; i++) {
+				w.spawnEntity(TestNPC.breeder(12.5 + (i % 5) * 4, 6.5 + (i / 5) * 4, 0,
+						Genome.phenotype(8, 0.05, 8, 4, Math.PI, 100000))
+						.withReproCooldown(100000));
+			}
+			Order order = new Order(w, "herbivore", 4);
+			java.util.List<net.hedinger.prototype.sim.StewardDrone> rank =
+					new java.util.ArrayList<>();
+			for (double[] p : pads) {
+				net.hedinger.prototype.sim.StewardDrone d =
+						new net.hedinger.prototype.sim.StewardDrone(p[0], p[1], 0, order);
+				rank.add(d);
+				w.spawnEntity(d);
+			}
+			w.think();
+			snapshot(w, "before (20 grazers, four drones on the rank)");
+
+			int sawFourApart = 0, hunting = 0;
+			for (int t = 0; t < 3000; t++) {
+				tick(w, 1);
+				java.util.List<Integer> held = new java.util.ArrayList<>();
+				for (net.hedinger.prototype.sim.StewardDrone d : rank) {
+					if (d.quarry() != null) {
+						held.add(d.quarry().getID());
+					}
+				}
+				if (held.isEmpty()) {
+					continue;
+				}
+				hunting++;
+				assertEquals("tick " + t + ": " + held.size() + " drones hold "
+						+ held.size() + " different animals",
+						held.size(), new java.util.HashSet<>(held).size());
+				if (held.size() == net.hedinger.prototype.sim.Worlds.DRONE_RANK) {
+					sawFourApart++;
+				}
+			}
+			snapshot(w, "after (culled to four, the rank home)");
+			assertLess("the rank actually hunted", 0, hunting);
+			assertLess("and was seen working four animals at once", 0, sawFourApart);
+			assertEquals("culled to exactly the ordered headcount", 4, order.standing());
+		}
+	}
+
 	/**
 	 * A zapped body is a remnant, not a carcass: it dies at once and arrives
 	 * nine tenths decomposed, so what the cull leaves on the ground is worth
@@ -8197,6 +8275,7 @@ public class SimTests {
 				new TheDroneKeepsItsSizeWhenItTurns(),
 				new TheDroneFacesWhereItIsGoing(),
 				new DroneCullsToTargetAndReturnsToDock(),
+				new TheRankSplitsTheCull(),
 				new ZappedBodyIsAlmostGone(),
 				new NothingEatsTheDrone(),
 				new DoorsOpenForTheDrone(),
