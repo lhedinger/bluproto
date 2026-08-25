@@ -393,30 +393,11 @@ public final class StewardDrone extends NPC {
 		return best;
 	}
 
-	/**
-	 * Distance for CHOOSING between candidates: the plane, plus a whole world
-	 * for every floor in between.
-	 *
-	 * <p>The engine's own {@code distance} is a straight line through all three
-	 * axes and counts one level as one tile, which is the right reading for a
-	 * world where a level is a height. It is the wrong reading for choosing what
-	 * to fly at: an animal on the floor below, directly underneath, scores one
-	 * tile away — nearer than something four tiles off across the same room —
-	 * while actually reaching it means finding the stairwell, flying the length
-	 * of the storage hall and coming back. The drone would set off after the
-	 * near thing and spend the cull walking.
-	 *
-	 * <p>The penalty is the world's own width plus its height, which is longer
-	 * than any distance within a single floor. That is not a big number picked
-	 * to be big: it makes "on my floor beats off my floor" true by construction
-	 * rather than true for the map sizes someone happened to try, and it still
-	 * orders the off-floor candidates sensibly among themselves when a floor is
-	 * all that is left.
-	 */
+	/** Distance for CHOOSING between candidates. See {@link MachineRange}: an
+	 *  animal on another floor is a world away, because reaching it means
+	 *  finding the stairwell rather than crossing the room. */
 	private double huntDistance(Entity e) {
-		double dz = Math.abs(e.getZ() - getZ());
-		double flat = Math.hypot(e.getX() - getX(), e.getY() - getY());
-		return flat + dz * (getWorld().getColums() + getWorld().getRows());
+		return MachineRange.toChooseBy(this, e);
 	}
 
 	/**
