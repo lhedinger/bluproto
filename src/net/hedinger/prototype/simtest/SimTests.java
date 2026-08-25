@@ -3075,7 +3075,10 @@ public class SimTests {
 		public void run() {
 			World w = net.hedinger.prototype.sim.BlackMesa.build(7);
 			assertEquals("four floors", 4, w.getLevels());
-			assertEquals("nothing lives here", 0, count(w));
+			// Furnishings are allowed — doors, their switches, crates — but
+			// nothing living: the campus is a place, not a population.
+			assertEquals("nothing lives here", 0, living(w));
+			assertGreater("but the doors and crates are in", count(w), 5);
 
 			// The landmarks that make it the place it is: the chamber bore on
 			// both upper floors and the crystal on its floor; the transit
@@ -3204,6 +3207,19 @@ public class SimTests {
 			for (@SuppressWarnings("unused") net.hedinger.prototype.engine.Entity e
 					: w.getEntities()) {
 				n++;
+			}
+			return n;
+		}
+
+		static int living(World w) {
+			// Creatures are TestNPCs; crates are Items, which share the NPC
+			// base class without sharing a pulse — so the test names the
+			// creature class, not the hierarchy.
+			int n = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC) {
+					n++;
+				}
 			}
 			return n;
 		}

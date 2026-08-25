@@ -86,9 +86,13 @@ public final class BlackMesa {
 		cavities(w);   // ...and the cave-ins win over the buildings
 		gorge(w);
 		stairs(w);
+		dressing(w);   // the details that say people worked here, and left
+		furniture(w);  // doors, their switches, and the warehouse's crates
 		connectAll(w); // drill drifts until the labyrinth is one space
 
 		shallowsFringe(w);
+		w.think(); // one tick flushes the spawn queue: the doors, switches
+		           // and crates are in the world, not waiting at its edge
 		return w;
 	}
 
@@ -997,6 +1001,184 @@ public final class BlackMesa {
 		}
 		for (int[] p : shore) {
 			set(w, p[0], p[1], SURFACE, Tile.TileType.TYPE_SHALLOWS);
+		}
+	}
+
+	/**
+	 * The dressing pass: the details that turn architecture into evidence.
+	 * Composed in clusters, not sprinkled — a spill next to rubble next to a
+	 * dead berth reads as one event; the same tiles scattered read as noise.
+	 * Runs after every structural pass so nothing paves over it, and before
+	 * the driller so any pocket it creates still gets connected.
+	 */
+	private static void dressing(World w) {
+		ductNetworks(w);
+		caveinAprons(w);
+		veinsAndPools(w);
+		leadingLines(w);
+		incidents(w);
+
+		// The second bridge over the gorge, the one that did not hold: two
+		// catwalk stubs reaching from either rim, and nothing between them.
+		fill(w, SURFACE, 100, 72, 101, 72, Tile.TileType.TYPE_CATWALK);
+		fill(w, SURFACE, 100, 75, 101, 75, Tile.TileType.TYPE_CATWALK);
+	}
+
+	/** Crawl ducts inside the walls, with vent grilles where they open into
+	 *  rooms — the facility's other circulation system, sized for what can
+	 *  fit through a duct. */
+	private static void ductNetworks(World w) {
+		// Sector C: a run in the north wall linking both labs to the control
+		// room's ceiling space.
+		fill(w, LABS, 69, 37, 90, 37, Tile.TileType.TYPE_DUCT);
+		fill(w, LABS, 90, 38, 90, 45, Tile.TileType.TYPE_DUCT);
+		set(w, 70, 38, LABS, Tile.TileType.TYPE_AIRVENT); // lab A grille
+		set(w, 80, 38, LABS, Tile.TileType.TYPE_AIRVENT); // lab B grille
+		set(w, 90, 46, LABS, Tile.TileType.TYPE_AIRVENT); // control room grille
+		// The office complex: a run over the cubicles.
+		fill(w, LABS, 21, 71, 47, 71, Tile.TileType.TYPE_DUCT);
+		set(w, 25, 72, LABS, Tile.TileType.TYPE_AIRVENT);
+		set(w, 37, 72, LABS, Tile.TileType.TYPE_AIRVENT);
+		// Sector E: a service duct behind the pens.
+		fill(w, LABS, 114, 39, 136, 39, Tile.TileType.TYPE_DUCT);
+		// The old labs' duct reaches the whole south wall now.
+		fill(w, DEEP, 60, 47, 84, 47, Tile.TileType.TYPE_DUCT);
+		set(w, 46, 46, DEEP, Tile.TileType.TYPE_AIRVENT);
+		set(w, 78, 46, DEEP, Tile.TileType.TYPE_AIRVENT);
+	}
+
+	/** Rubble haloes around every cave-in: a collapse is not a clean circle,
+	 *  it shatters its rim and buries what it lands on. Only rock and desert
+	 *  take the rubble — rooms keep their floors. */
+	private static void caveinAprons(World w) {
+		rubbleHalo(w, LABS, 86.0, 30.0, 6.0, 7.5);
+		rubbleHalo(w, WORKS, 86.0, 30.0, 5.0, 6.5);
+		rubbleHalo(w, DEEP, 86.0, 30.0, 8.0, 9.5);
+		rubbleHalo(w, SURFACE, 30.0, 60.0, 4.5, 6.0);
+		rubbleHalo(w, LABS, 30.0, 60.0, 6.0, 7.5);
+		rubbleHalo(w, WORKS, 60.0, 88.0, 4.0, 5.5);
+		rubbleHalo(w, DEEP, 60.0, 88.0, 6.0, 7.5);
+	}
+
+	private static void rubbleHalo(World w, int z, double cx, double cy,
+			double r0, double r1) {
+		for (int x = (int) (cx - r1 - 1); x <= (int) (cx + r1 + 1); x++) {
+			for (int y = (int) (cy - r1 - 1); y <= (int) (cy + r1 + 1); y++) {
+				double d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+				if (d <= r0 || d > r1) {
+					continue;
+				}
+				Tile.TileType t = w.getTile(x, y, z).getType();
+				if (t == Tile.TileType.TYPE_WALL || t == Tile.TileType.TYPE_SAND
+						|| t == Tile.TileType.TYPE_ROCKY) {
+					set(w, x, y, z, Tile.TileType.TYPE_RUBBLE);
+				}
+			}
+		}
+	}
+
+	/** Shard veins glinting along the cave floors, and standing water where
+	 *  the deep caves meet the water table. */
+	private static void veinsAndPools(World w) {
+		for (int z = DEEP; z <= LABS; z++) {
+			for (int x = 3; x < COLS - 3; x++) {
+				for (int y = 3; y < ROWS - 3; y++) {
+					if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_STONE) {
+						continue;
+					}
+					double vein = Utils.noise2(x + 91, y + 37, 0.15);
+					if (vein > 0.845 && vein < 0.87) {
+						set(w, x, y, z, Tile.TileType.TYPE_CRYSTAL_SPARSE);
+					} else if (z == DEEP
+							&& Utils.noise2(x + 64, y + 640, 0.11) > 0.93) {
+						set(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
+					}
+				}
+			}
+		}
+		// The grand cavern's floor gets a shard-bed collar under its walls.
+		for (int x = 77; x <= 95; x++) {
+			for (int y = 21; y <= 39; y++) {
+				double d = Math.hypot(x + 0.5 - 86.0, y + 0.5 - 30.0);
+				if (d > 6.5 && d <= 8.0 && (x + y) % 3 != 0
+						&& w.getTile(x, y, DEEP).getType() == Tile.TileType.TYPE_STONE) {
+					set(w, x, y, DEEP, Tile.TileType.TYPE_CRYSTAL_BED);
+				}
+			}
+		}
+	}
+
+	/** The lines that aim the eye: a forklift lane straight through the
+	 *  warehouse racks to the loop door, buffer stops where rails end, and
+	 *  signal cabinets at the loop's corners. */
+	private static void leadingLines(World w) {
+		for (int y : new int[] { 26, 30, 34 }) {
+			set(w, 116, y, WORKS, Tile.TileType.TYPE_PLATE);
+		}
+		fill(w, WORKS, 116, 23, 116, 37, Tile.TileType.TYPE_TREADPLATE);
+		set(w, 58, 61, WORKS, Tile.TileType.TYPE_WALL_STEEL);  // spur buffer
+		set(w, 24, 78, WORKS, Tile.TileType.TYPE_WALL_STEEL);  // spur buffer
+		set(w, 31, 20, WORKS, Tile.TileType.TYPE_SERVER);      // signal cabinet
+		set(w, 144, 94, WORKS, Tile.TileType.TYPE_SERVER);     // signal cabinet
+		// The reactor's feed, up from the core to the north wall.
+		fill(w, DEEP, 21, 13, 21, 17, Tile.TileType.TYPE_PIPES);
+	}
+
+	/** One incident per floor, clustered so it reads as an event: something
+	 *  broke here, something spilled, nobody has been back. */
+	private static void incidents(World w) {
+		// Surface: a wreck out in the desert, debris thrown around it.
+		fill(w, SURFACE, 118, 28, 122, 32, Tile.TileType.TYPE_RUBBLE);
+		fill(w, SURFACE, 120, 29, 120, 31, Tile.TileType.TYPE_WALL_STEEL);
+		// Labs floor: a burst pipe in the office break room, still pooling.
+		fill(w, LABS, 38, 86, 40, 86, Tile.TileType.TYPE_PIPES);
+		set(w, 39, 87, LABS, Tile.TileType.TYPE_SHALLOWS);
+		set(w, 38, 88, LABS, Tile.TileType.TYPE_RUBBLE);
+		// Works floor: a spill at the warehouse tunnel mouth, with the berth
+		// of whatever machine was abandoned mid-job.
+		fill(w, WORKS, 110, 20, 112, 21, Tile.TileType.TYPE_SLUDGE);
+		set(w, 111, 19, WORKS, Tile.TileType.TYPE_DOCK);
+		set(w, 110, 19, WORKS, Tile.TileType.TYPE_COLLAPSE);
+		// Deep: a dead berth in the old labs, half buried.
+		set(w, 56, 44, DEEP, Tile.TileType.TYPE_DOCK);
+		set(w, 55, 44, DEEP, Tile.TileType.TYPE_RUBBLE);
+		set(w, 57, 45, DEEP, Tile.TileType.TYPE_RUBBLE);
+	}
+
+	/**
+	 * The non-living furnishings: secured doors with the switches that work
+	 * them, and the warehouse's crates. Doors and switches are ordinary
+	 * non-living entities (they ride the entity stream and the client draws
+	 * them); the world stays uninhabited — nothing here has a metabolism.
+	 */
+	private static void furniture(World w) {
+		// The armory: a blast door on the only doorway, plates both sides.
+		secure(w, 25, 28, SURFACE, 0, 27, 28, 23, 28);
+		// The old labs' east door, where the way in from the chamber is.
+		secure(w, 86, 44, DEEP, 0, 88, 44, 84, 44);
+		// The reactor entry's corridor to the loop.
+		secure(w, 27, 29, WORKS, 0, 29, 29, 25, 29);
+
+		// Crates where crates live.
+		for (int[] c : new int[][] { { 108, 25 }, { 109, 28 }, { 122, 25 },
+				{ 126, 33 }, { 108, 36 } }) {
+			w.spawnEntity(net.hedinger.prototype.entities.Item.crate(
+					c[0] + 0.5, c[1] + 0.5, WORKS));
+		}
+	}
+
+	/** A grate door at (x, y, z) with a weight plate either side of it. */
+	private static void secure(World w, int x, int y, int z, int dir,
+			int px1, int py1, int px2, int py2) {
+		net.hedinger.prototype.entities.Door door =
+				new net.hedinger.prototype.entities.Door(x, y, z, dir,
+						net.hedinger.prototype.entities.Door.GRATE);
+		w.addDoor(door);
+		for (int[] pxy : new int[][] { { px1, py1 }, { px2, py2 } }) {
+			set(w, pxy[0], pxy[1], z, Tile.TileType.TYPE_SWITCH);
+			w.spawnEntity(new net.hedinger.prototype.entities.Switch(
+					pxy[0], pxy[1], z, door,
+					net.hedinger.prototype.entities.Switch.PLATE));
 		}
 	}
 
