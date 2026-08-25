@@ -7066,6 +7066,69 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A duct is a refuge even with the drone hovering at its mouth.
+	 *
+	 * <p>{@link DuctedBodyIsSafeFromTheDrone} puts the shelter three tiles deep
+	 * behind rock, which is safe at any reach the emitter could plausibly have —
+	 * and so it says nothing about the reach. The promise it is meant to be
+	 * guarding is stronger than that: ground the drone's frame does not fit is
+	 * ground the drone cannot kill in.
+	 *
+	 * <p>That promise used to rest on the pathfinder. The drone could not route
+	 * into a duct, so it wrote the animal off and never came — which is not a
+	 * refuge, it is a refuge-shaped side effect of a search failing. It did not
+	 * survive a wider strike reach and a final approach flown by eye: berth the
+	 * drone two tiles from a duct mouth and it closed to 0.81 of a body it could
+	 * not follow, through a wall, and shot it.
+	 *
+	 * <p>So the emitter needs line of sight, and this is the scenario that says
+	 * so. The drone is berthed beside the mouth, the animal is one tile inside,
+	 * and the drone is given three thousand ticks to fail.
+	 */
+	static class ADuctIsARefugeEvenAtItsMouth extends Scenario {
+		@Override
+		public void run() {
+			seed(417);
+			World w = room(24, 11);
+			w.setTile(10, 5, 0, Tile.TileType.TYPE_DOCK); // berth beside the mouth
+			// Rock, with one duct tile opening straight onto the open floor the
+			// drone can hover on: the tightest the geometry gets.
+			for (int x = 12; x <= 20; x++) {
+				for (int y = 1; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WALL);
+				}
+			}
+			w.setTile(12, 5, 0, Tile.TileType.TYPE_DUCT);
+			Genome small = Genome.phenotype(6, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC ducted = TestNPC.breeder(12.5, 5.5, 0, small).withReproCooldown(100000);
+			w.spawnEntity(ducted);
+			Order order = new Order(w, "herbivore", 0); // kill everything it can
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(10.5, 5.5, 0, order);
+			w.spawnEntity(drone);
+			w.think();
+			snapshot(w, "before (a grazer one tile inside the duct, the drone at the door)");
+
+			double closest = Double.MAX_VALUE;
+			for (int t = 0; t < 3000 && !ducted.isDead(); t++) {
+				tick(w, 1);
+				closest = Math.min(closest, Math.hypot(drone.getX() - ducted.getX(),
+						drone.getY() - ducted.getY()));
+			}
+			snapshot(w, "after (still there)");
+
+			assertTrue("the ducted grazer was never shot", !ducted.isDead());
+			// And the test earned it: the drone really did come close enough that
+			// distance alone would have let it fire. Without this the scenario
+			// would pass just as well on a drone that never left its pad.
+			double radii = (drone.getSize() + ducted.getSize()) / 2.0;
+			assertLess("the drone did close to within the emitter's range",
+					closest - radii, 0.7);
+		}
+	}
+
 	/**
 	 * The seeded world ships one drone, berthed on the charge dock the world
 	 * generator carved into the buried base, asleep.
@@ -8281,6 +8344,7 @@ public class SimTests {
 				new DoorsOpenForTheDrone(),
 				new NothingRidesTheDrone(),
 				new DuctedBodyIsSafeFromTheDrone(),
+				new ADuctIsARefugeEvenAtItsMouth(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),

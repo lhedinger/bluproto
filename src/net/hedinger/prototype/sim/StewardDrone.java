@@ -107,6 +107,15 @@ public final class StewardDrone extends NPC {
 	 *  range: it has to arrive. */
 	private static final double STRIKE_REACH = 0.5;
 
+	/** When to stop following the route and fly straight at the body. A route
+	 *  ends at the quarry's TILE, and a tile centre can be two thirds of a tile
+	 *  from the animal standing in it — further than the emitter reaches. Inside
+	 *  this range the drone closes by eye. Wider than the loader's 1.5 because
+	 *  this quarry runs: a fleeing animal crosses the last tile while the drone
+	 *  is still deciding, and a band that only just contains the gap is a band
+	 *  the drone keeps falling out of. */
+	private static final double FINAL_APPROACH = 2.5;
+
 	/** Ticks the emitter spends charging on a held target before it fires.
 	 *  Short, but not nothing — it is what makes a kill an event with a
 	 *  beginning rather than a body blinking out on contact. */
@@ -266,6 +275,35 @@ public final class StewardDrone extends NPC {
 			return;
 		}
 		charge = 0; // the emitter loses its charge the moment contact breaks
+		if (quarry.getZ() == getZ()
+				&& distance(quarry.getX(), quarry.getY(), quarry.getZ()) <= FINAL_APPROACH) {
+			// Close the last stretch by eye rather than by route, exactly as the
+			// loader does for the same reason.
+			//
+			// A route is a list of TILE CENTRES and advance() calls a waypoint
+			// reached within half a tile, so a drone that stops where its path
+			// stops can be half a tile from the centre of a tile whose occupant
+			// is standing another two thirds of a tile off-centre — which is
+			// further than the emitter reaches. Measured over twelve thousand ticks of
+			// the seeded world: the drone held a quarry for 30804 ticks and was
+			// in reach for only a third of them, with the separation piling up
+			// between half a tile and a whole one — just outside the emitter,
+			// dipping in and out, resetting the charge each time it dipped out.
+			// The median hold ran 127 ticks to land a kill that needs 8.
+			//
+			// It looks like a machine hovering over an animal it cannot bring
+			// itself to shoot, and it reads as the taser being short-ranged. The
+			// range was never the problem: the drone was parking on the lattice
+			// while the body stood off it.
+			//
+			// Same level only. Steering by eye across a drop means steering at a
+			// point on another floor, and the route is the only thing that knows
+			// where the ramp is.
+			path = null;
+			steer(quarry.getX(), quarry.getY());
+			lostRoute = 0;
+			return;
+		}
 		if (flyTo(quarry.getX(), quarry.getY(), quarry.getZ())) {
 			lostRoute = 0;
 		} else if (++lostRoute >= GIVE_UP) {
@@ -362,11 +400,28 @@ public final class StewardDrone extends NPC {
 		return taken;
 	}
 
-	/** Whether the emitter can reach a body from where the drone is: contact,
-	 *  scaled by both bodies like every other strike in the sim. */
+	/**
+	 * Whether the emitter can reach a body from where the drone is: contact,
+	 * scaled by both bodies like every other strike in the sim, and in sight.
+	 *
+	 * <p>Sight is what keeps the refuges real. Ducting and the rock behind it
+	 * block sight, and the promise this machine is built around is that a body
+	 * in ground the drone's frame does not fit is safe from it — see the note on
+	 * {@code writtenOff}. That promise used to rest on the route: the drone
+	 * could not path into a duct, so it wrote the animal off and never came.
+	 * Resting a promise on a pathfinder's failure is resting it on nothing, and
+	 * it did not survive contact with a wider strike reach and a final approach
+	 * flown by eye — a drone berthed two tiles from a duct mouth closed to 0.81
+	 * of a body it could not follow, through a wall, and shot it.
+	 *
+	 * <p>Full circle rather than the drone's facing: it is charging a held
+	 * target and has already turned to it, so gating on the cone would only
+	 * flicker the hold while it came about.
+	 */
 	private boolean inReach(NPC n) {
 		double reach = (getSize() + n.getSize()) / 2.0 + STRIKE_REACH;
-		return distance(n.getX(), n.getY(), n.getZ()) <= reach;
+		return distance(n.getX(), n.getY(), n.getZ()) <= reach
+				&& isInLOS(n.getX(), n.getY(), n.getZ(), reach + 1, Math.PI);
 	}
 
 	/**
