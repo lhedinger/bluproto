@@ -48,7 +48,8 @@ public final class GroundTextures {
 			CLS_ROCKY = 30, CLS_SLUDGE = 31, CLS_RAIL = 32, CLS_SERVER = 33,
 			CLS_TREADPLATE = 34, CLS_LIGHTGRATE = 35, CLS_COLLAPSE = 36,
 			CLS_COOLANT = 37, CLS_EXCHANGER = 38, CLS_MESA = 39,
-			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42;
+			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42,
+			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -103,6 +104,11 @@ public final class GroundTextures {
 			{ 0x3a3e49, 0x565b69, 0x7c828f }, // stalagmite: cave rock's own ramp, verbatim
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // cactus: the flora family's green, verbatim
 			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // bone field: its ground IS sand, verbatim
+			// The last three rows keep the table parallel to the CLS list;
+			// their painters draw from signal colours and borrowed families.
+			{ 0x17171a, 0xd8b028, 0xd8b028 }, // hazard striping (the signal pair, on record)
+			{ 0x14171d, 0x252a34, 0x3c434f }, // conveyor: the rack's dark steel, verbatim
+			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // window: coolant's cold glass-blue, verbatim
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -198,6 +204,12 @@ public final class GroundTextures {
 			return CLS_CACTUS;
 		case TYPE_BONES:
 			return CLS_BONES;
+		case TYPE_HAZARD:
+			return CLS_HAZARD;
+		case TYPE_CONVEYOR:
+			return CLS_CONVEYOR;
+		case TYPE_WINDOW:
+			return CLS_WINDOW;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -1517,6 +1529,50 @@ public final class GroundTextures {
 			}
 		}
 		return sand(px, py);
+	}
+
+	/**
+	 * A conveyor belt along one axis at art-pixel (along, across): the belt in
+	 * the rack's dark steel with lit chevron slats every 4 px pointing the way
+	 * the line runs, framed by tread-worn side rails. Paint, slats and rails
+	 * are all borrowed families -- the belt is the same steel as the racks it
+	 * feeds.
+	 */
+	public static int conveyor(int along, int across, int px, int py) {
+		if (across <= 1 || across >= 10) {
+			return RAMP[CLS_TREADPLATE][1]; // the side rails
+		}
+		if (across == 2 || across == 9) {
+			return RAMP[CLS_CONVEYOR][0]; // the belt's shadowed lip
+		}
+		// Chevron slats: a lit diagonal every 4 px, mirrored about the belt's
+		// centreline so the arrows point along the run.
+		int phase = Math.floorMod(along - Math.abs(across - 6), 4);
+		if (phase == 0) {
+			return RAMP[CLS_CONVEYOR][2];
+		}
+		return RAMP[CLS_CONVEYOR][1];
+	}
+
+	/**
+	 * A window wall: steel mullions framing glass panes. The frame is the
+	 * bulkhead's own steel; the glass is coolant's cold blue with the crystal
+	 * glint as its one accent, hash-gated rare, so a pane catches the light
+	 * the way the prisms do. Solid to a body, open to the eye -- the pens and
+	 * the control room look THROUGH this.
+	 */
+	public static int windowWall(int ai, int aj, int px, int py) {
+		boolean frame = ai == 0 || ai == 11 || aj == 0 || aj == 11
+				|| ai == 5 || ai == 6;
+		if (frame) {
+			return RAMP[CLS_STEELWALL][aj == 0 ? 2 : (aj == 11 ? 0 : 1)];
+		}
+		if (hash01(px, py, 67) > 0.985) {
+			return CRYSTAL_SPARK; // the pane catches the light
+		}
+		// The glass: pale toward the north edge of each pane, the way a lit
+		// sheet reads, dithered in the pane's own two shades.
+		return RAMP[CLS_WINDOW][aj < 4 ? 2 : 1];
 	}
 
 	/** Side bits for the autotiled runs ({@link #rail}, {@link #pipes}): which

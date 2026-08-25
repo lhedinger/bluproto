@@ -312,8 +312,9 @@ public final class BlackMesa {
 		shell(w, SURFACE, 20, 26, 25, 31,
 				Tile.TileType.TYPE_WALL_STEEL, Tile.TileType.TYPE_PLATE);
 		set(w, 25, 28, SURFACE, Tile.TileType.TYPE_PLATE);
-		// Helipad.
-		fill(w, SURFACE, 36, 26, 42, 32, Tile.TileType.TYPE_TREADPLATE);
+		// Helipad, ringed in its painted border.
+		fill(w, SURFACE, 36, 26, 42, 32, Tile.TileType.TYPE_HAZARD);
+		fill(w, SURFACE, 37, 27, 41, 31, Tile.TileType.TYPE_TREADPLATE);
 
 		// The paved road from the gate to the sector head.
 		fill(w, SURFACE, 33, 35, 33, 52, Tile.TileType.TYPE_PAVED);
@@ -348,6 +349,7 @@ public final class BlackMesa {
 	 *  — straight down through every floor to the engine bay. */
 	private static void siloDoors(World w) {
 		fill(w, SURFACE, 117, 69, 128, 80, Tile.TileType.TYPE_PLATE);
+		ringAt(w, SURFACE, SILO_X, SILO_Y, 3.5, 4.5, Tile.TileType.TYPE_HAZARD);
 		diskAt(w, SURFACE, SILO_X, SILO_Y, 3.5, Tile.TileType.TYPE_SHAFT);
 	}
 
@@ -357,6 +359,14 @@ public final class BlackMesa {
 	 *  taller than the mesa. */
 	private static void launchDoors(World w) {
 		fill(w, SURFACE, 113, 83, 126, 93, Tile.TileType.TYPE_PLATE);
+		for (int x = 115; x <= 122; x++) {
+			for (int y = 84; y <= 91; y++) {
+				boolean rim = x == 115 || x == 122 || y == 84 || y == 91;
+				if (rim) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_HAZARD);
+				}
+			}
+		}
 		launchThroat(w, SURFACE);
 	}
 
@@ -502,6 +512,12 @@ public final class BlackMesa {
 
 		// The test chamber: shell, catwalk gallery, and the bore.
 		chamberRing(w, LABS);
+		// The instrument wall's view: four panes of the chamber shell become
+		// glazing, so the control room watches the bore through glass.
+		set(w, 92, 48, LABS, Tile.TileType.TYPE_WINDOW);
+		set(w, 93, 47, LABS, Tile.TileType.TYPE_WINDOW);
+		set(w, 92, 55, LABS, Tile.TileType.TYPE_WINDOW);
+		set(w, 93, 56, LABS, Tile.TileType.TYPE_WINDOW);
 		fill(w, LABS, 91, 52, 94, 52, Tile.TileType.TYPE_PLATE); // chamber door,
 		// through a gap in the instrument wall: the shell's west arc crosses
 		// the column east of the racks, so the door row is the only way past
@@ -532,7 +548,7 @@ public final class BlackMesa {
 		fill(w, LABS, 114, 47, 136, 49, Tile.TileType.TYPE_PAVED);
 		// The pens.
 		shell(w, LABS, 114, 40, 120, 46,
-				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_FUNGUS);
+				Tile.TileType.TYPE_WINDOW, Tile.TileType.TYPE_FUNGUS);
 		for (int x = 115; x <= 119; x++) {
 			for (int y = 41; y <= 45; y++) {
 				w.getTile(x, y, LABS).setFertility(0.5);
@@ -540,11 +556,11 @@ public final class BlackMesa {
 			}
 		}
 		shell(w, LABS, 122, 44 - 4, 128, 46,
-				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_REEDS);
+				Tile.TileType.TYPE_WINDOW, Tile.TileType.TYPE_REEDS);
 		set(w, 125, 42, LABS, Tile.TileType.TYPE_SHALLOWS);
 		set(w, 125, 43, LABS, Tile.TileType.TYPE_SHALLOWS);
 		shell(w, LABS, 130, 40, 136, 46,
-				Tile.TileType.TYPE_SERVER, Tile.TileType.TYPE_COVER);
+				Tile.TileType.TYPE_WINDOW, Tile.TileType.TYPE_COVER);
 		set(w, 132, 42, LABS, Tile.TileType.TYPE_ROCKY);
 		set(w, 134, 44, LABS, Tile.TileType.TYPE_ROCKY);
 		// Each pen's gate.
@@ -635,12 +651,15 @@ public final class BlackMesa {
 		fill(w, WORKS, 29, 18, 29, 96, Tile.TileType.TYPE_RAIL);
 		fill(w, WORKS, 146, 18, 146, 96, Tile.TileType.TYPE_RAIL);
 
-		// Platform under portal A, straddling the north run.
+		// Platform under portal A, straddling the north run — the painted
+		// edge line is the platform's one warning.
 		fill(w, WORKS, 42, 16, 54, 24, Tile.TileType.TYPE_PLATE);
+		fill(w, WORKS, 43, 19, 53, 19, Tile.TileType.TYPE_HAZARD);
 		fill(w, WORKS, 43, 18, 53, 18, Tile.TileType.TYPE_RAIL);
 
 		// Platform under the dormitories — the far end of the commute.
 		fill(w, WORKS, 60, 16, 70, 24, Tile.TileType.TYPE_PLATE);
+		fill(w, WORKS, 60, 19, 70, 19, Tile.TileType.TYPE_HAZARD);
 		fill(w, WORKS, 60, 18, 70, 18, Tile.TileType.TYPE_RAIL);
 
 		// Platform against the east run, for the silo and portal B.
@@ -732,7 +751,7 @@ public final class BlackMesa {
 	 *  conveyor line along the top. */
 	private static void residueProcessing(World w) {
 		fill(w, WORKS, 64, 83, 100, 94, Tile.TileType.TYPE_STONE);
-		fill(w, WORKS, 66, 84, 98, 84, Tile.TileType.TYPE_TREADPLATE);
+		fill(w, WORKS, 66, 84, 98, 84, Tile.TileType.TYPE_CONVEYOR);
 		for (int y : new int[] { 86, 89, 92 }) {
 			fill(w, WORKS, 66, y, 98, y, Tile.TileType.TYPE_SLUDGE);
 		}

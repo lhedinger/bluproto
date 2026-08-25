@@ -690,7 +690,7 @@ public class Tile {
 		// different tactical shape from a wall -- prey watching a hunter it
 		// cannot be reached through is a standoff a wall cannot produce.
 		if (type == TileType.TYPE_CRYSTAL || type == TileType.TYPE_SERVER
-				|| type == TileType.TYPE_CACTUS) {
+				|| type == TileType.TYPE_CACTUS || type == TileType.TYPE_WINDOW) {
 			return false;
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
@@ -811,7 +811,10 @@ public class Tile {
 		TYPE_MESA(40, false, "mesa rock"), // red desert rock: the surface's own stone, strata on its faces
 		TYPE_STALAGMITE(41, false, "stalagmite"), // cave columns: solid, and they block sight like the rock they grew from
 		TYPE_CACTUS(42, false, "cactus"), // a standing desert plant: solid to a body, too narrow to hide behind
-		TYPE_BONES(43, true, "bone field"); // walkable scatter of old remains on sand
+		TYPE_BONES(43, true, "bone field"), // walkable scatter of old remains on sand
+		TYPE_HAZARD(44, true, "hazard striping"), // painted floor: keep-clear marking, walked like the deck it is painted on
+		TYPE_CONVEYOR(45, true, "conveyor belt"), // the works' belt line; orientation from its own run
+		TYPE_WINDOW(46, false, "window wall"); // glazing in a wall run: stops a body, not a look
 
 		private int value;
 		private boolean open;

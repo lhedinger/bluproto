@@ -3193,6 +3193,22 @@ public class SimTests {
 				stals += tiles(w, z, Tile.TileType.TYPE_STALAGMITE);
 			}
 			assertGreater("the caves grow their columns", stals, 8);
+			// The facility's own three: painted keep-clear rings, an actual
+			// belt in residue processing, and glazing where looking through
+			// the wall is the room's whole purpose.
+			assertGreater("the hazard paint is down",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_HAZARD), 30);
+			assertGreater("the residue line runs on a belt",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
+							Tile.TileType.TYPE_CONVEYOR), 20);
+			assertEquals("the control room watches the bore through glass",
+					Tile.TileType.TYPE_WINDOW.getValue(),
+					w.getTile(92, 48, net.hedinger.prototype.sim.BlackMesa.LABS)
+							.getType().getValue());
+			assertGreater("the pens are glazed",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.LABS,
+							Tile.TileType.TYPE_WINDOW), 50);
 
 			// Whole: ONE connected space — every walkable tile reachable from
 			// the open desert. A doorway bug anywhere shows up here first;

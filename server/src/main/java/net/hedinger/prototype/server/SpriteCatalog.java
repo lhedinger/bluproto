@@ -126,6 +126,9 @@ final class SpriteCatalog {
 		ground("stalagmite", Tile.TileType.TYPE_STALAGMITE);
 		ground("cactus", Tile.TileType.TYPE_CACTUS);
 		ground("bone_field", Tile.TileType.TYPE_BONES);
+		ground("hazard_striping", Tile.TileType.TYPE_HAZARD);
+		ground("conveyor", Tile.TileType.TYPE_CONVEYOR);
+		ground("window_wall", Tile.TileType.TYPE_WINDOW);
 		ground("tram_rail", Tile.TileType.TYPE_RAIL);
 		ground("server_bank", Tile.TileType.TYPE_SERVER);
 		ground("loading_deck", Tile.TileType.TYPE_TREADPLATE);

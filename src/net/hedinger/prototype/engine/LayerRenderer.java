@@ -107,6 +107,9 @@ public class LayerRenderer {
 		case TYPE_STALAGMITE:
 		case TYPE_CACTUS:
 		case TYPE_BONES:
+		case TYPE_HAZARD:
+		case TYPE_CONVEYOR:
+		case TYPE_WINDOW:
 		case TYPE_RAIL:
 		case TYPE_SERVER:
 		case TYPE_VENT:
