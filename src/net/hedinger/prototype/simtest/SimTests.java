@@ -3114,14 +3114,39 @@ public class SimTests {
 			assertGreater("the freight line runs through rubble, not dressed stone",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
 							Tile.TileType.TYPE_RUBBLE), 50);
+			// The blast-pit silo is round and glows from the bottom up: the
+			// sludge pool sits under the bore, so every floor above sees green
+			// down the shaft.
+			assertEquals("the silo's base is a sludge pool",
+					Tile.TileType.TYPE_SLUDGE.getValue(),
+					w.getTile(120, 74, net.hedinger.prototype.sim.BlackMesa.DEEP)
+							.getType().getValue());
+			// The gorge is a real drop with a bridge over it and a wash below.
+			assertEquals("the gorge falls away",
+					Tile.TileType.TYPE_SHAFT.getValue(),
+					w.getTile(60, 73, net.hedinger.prototype.sim.BlackMesa.SURFACE)
+							.getType().getValue());
+			assertEquals("one catwalk bridge crosses it",
+					Tile.TileType.TYPE_CATWALK.getValue(),
+					w.getTile(82, 73, net.hedinger.prototype.sim.BlackMesa.SURFACE)
+							.getType().getValue());
+			assertEquals("and its floor is the wash one level down",
+					Tile.TileType.TYPE_STONE.getValue(),
+					w.getTile(60, 73, net.hedinger.prototype.sim.BlackMesa.LABS)
+							.getType().getValue());
+			// The reactor's coolant loop is a circle now.
+			assertEquals("the coolant loop rounds the core",
+					Tile.TileType.TYPE_COOLANT.getValue(),
+					w.getTile(26, 25, net.hedinger.prototype.sim.BlackMesa.DEEP)
+							.getType().getValue());
 
-			// Whole: one connected space, except the silo gallery's 20 rim
-			// tiles. A doorway bug anywhere shows up here as a bigger number —
+			// Whole: ONE connected space — every walkable tile reachable from
+			// the open desert. A doorway bug anywhere shows up here first;
 			// every room in the campus grew one at some point while it was
 			// being authored.
 			var c = net.hedinger.prototype.sim.WorldAudit.connectivity(w);
-			assertGreater("everything is reachable but the silo gallery",
-					c.coverage(), 0.998);
+			assertEquals("the campus is one connected space", 1, c.components);
+			assertEquals("every walkable tile is reachable", c.walkable, c.reachable);
 
 			// Deterministic: the same seed builds the same campus, tile for
 			// tile, on every floor.
