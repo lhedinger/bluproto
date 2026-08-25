@@ -683,6 +683,11 @@ public class Grid {
 							boolean litRack = aj < A * 0.28;
 							col = GroundTextures.serverRack(ai, aj, gx, gy, litRack);
 							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
+						} else if (cl == GroundTextures.CLS_WINDOW) {
+							// Glazing takes the rack's treatment: a solid with the
+							// raised read, the same all the way down.
+							col = GroundTextures.windowWall(ai, aj, gx, gy);
+							col = wallDepth(col, ai, aj, A, wallS, wallE, wallW);
 						} else if (cl == GroundTextures.CLS_STALAGMITE) {
 							// A cave column is a fixture like a crystal prism: it
 							// shades itself and casts its own contact shadow.
@@ -828,6 +833,15 @@ public class Grid {
 								col = GroundTextures.sludge(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_BONES) {
 								col = GroundTextures.boneField(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_HAZARD) {
+								// Paint takes no shade -- the marking is the marking.
+								col = GroundTextures.hazardStripe(gx, gy);
+							} else if (cl == GroundTextures.CLS_CONVEYOR) {
+								boolean vertBelt = isType(x, y - 1, Tile.TileType.TYPE_CONVEYOR)
+										|| isType(x, y + 1, Tile.TileType.TYPE_CONVEYOR);
+								col = vertBelt
+										? GroundTextures.conveyor(gy, ai, gx, gy)
+										: GroundTextures.conveyor(gx, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_RAIL) {
 								// Autotiled from the sides the run continues into, so
 								// the track works out its own geometry: straights,
