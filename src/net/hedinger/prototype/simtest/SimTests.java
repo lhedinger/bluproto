@@ -3064,6 +3064,91 @@ public class SimTests {
 	}
 
 	/**
+	 * The desert campus (the {@code WORLD=blackmesa} host option) builds
+	 * whole: four floors, everything reachable from the open desert except the
+	 * silo's mid-bore gallery (a rim you look down onto, on purpose), the same
+	 * world from the same seed twice, and nothing living in it — it is a
+	 * place, not a population.
+	 */
+	static class TheMesaCampusBuildsWholeAndEmpty extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.BlackMesa.build(7);
+			assertEquals("four floors", 4, w.getLevels());
+			assertEquals("nothing lives here", 0, count(w));
+
+			// The landmarks that make it the place it is: the chamber bore on
+			// both upper floors and the crystal on its floor; the transit
+			// loop's rail; the residue channels; the dam and its reservoir.
+			assertEquals("the bore falls through the labs floor",
+					Tile.TileType.TYPE_SHAFT.getValue(),
+					w.getTile(100, 52, net.hedinger.prototype.sim.BlackMesa.LABS)
+							.getType().getValue());
+			assertEquals("and through the works floor",
+					Tile.TileType.TYPE_SHAFT.getValue(),
+					w.getTile(100, 52, net.hedinger.prototype.sim.BlackMesa.WORKS)
+							.getType().getValue());
+			assertEquals("the crystal waits at the bottom",
+					Tile.TileType.TYPE_CRYSTAL.getValue(),
+					w.getTile(100, 52, net.hedinger.prototype.sim.BlackMesa.DEEP)
+							.getType().getValue());
+			assertGreater("the transit loop is laid",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
+							Tile.TileType.TYPE_RAIL), 300);
+			assertGreater("residue processing runs sludge",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
+							Tile.TileType.TYPE_SLUDGE), 60);
+			assertGreater("the reservoir holds water",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_WATER), 200);
+
+			// Whole: one connected space, except the silo gallery's 20 rim
+			// tiles. A doorway bug anywhere shows up here as a bigger number —
+			// every room in the campus grew one at some point while it was
+			// being authored.
+			var c = net.hedinger.prototype.sim.WorldAudit.connectivity(w);
+			assertGreater("everything is reachable but the silo gallery",
+					c.coverage(), 0.998);
+
+			// Deterministic: the same seed builds the same campus, tile for
+			// tile, on every floor.
+			World w2 = net.hedinger.prototype.sim.BlackMesa.build(7);
+			int diff = 0;
+			for (int z = 0; z < w.getLevels(); z++) {
+				for (int x = 0; x < w.getColums(); x++) {
+					for (int y = 0; y < w.getRows(); y++) {
+						if (w.getTile(x, y, z).getType() != w2.getTile(x, y, z).getType()) {
+							diff++;
+						}
+					}
+				}
+			}
+			assertEquals("the same seed builds the same campus", 0, diff);
+		}
+
+		static int count(World w) {
+			int n = 0;
+			for (@SuppressWarnings("unused") net.hedinger.prototype.engine.Entity e
+					: w.getEntities()) {
+				n++;
+			}
+			return n;
+		}
+
+		static int tiles(World w, int z, Tile.TileType t) {
+			int n = 0;
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					if (w.getTile(x, y, z).getType() == t) {
+						n++;
+					}
+				}
+			}
+			return n;
+		}
+	}
+
+	/**
 	 * A pit is drawn as scenery on whatever level it sits on, by code that
 	 * makes no promise about what is directly beneath it. That held by accident
 	 * for as long as the world had one underground level, where a pit's floor
@@ -9097,6 +9182,7 @@ public class SimTests {
 				new BrainSeeksAndPressesButton(),
 				new BottomlessPitsAndCatwalks(),
 				new APitOntoRockIsBottomlessNotAWall(),
+				new TheMesaCampusBuildsWholeAndEmpty(),
 				new ThirstyGrazerWalksToWater(),
 				new ThirstWalksRoundAWallNotIntoIt(),
 				new AmblingMindIsShakenOffAWall(),
