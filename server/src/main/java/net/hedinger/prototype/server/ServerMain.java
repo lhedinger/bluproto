@@ -60,11 +60,16 @@ public final class ServerMain {
 		// to override — e.g. to scale down under a tight heap without a rebuild.
 		int worldCols = Integer.parseInt(cfg(args, "WORLD_COLS", "0"));
 		int worldRows = Integer.parseInt(cfg(args, "WORLD_ROWS", "0"));
+		// Which world to host: "demo" (default) is the living ecosystem;
+		// "blackmesa" is the authored, uninhabited desert facility. The demo
+		// stays the default so the public deploy is unaffected by the flag
+		// existing.
+		String worldKind = cfg(args, "WORLD", "demo");
 		// The sprite catalog pre-renders BEFORE the live world exists: its staged
 		// scenes tick and draw from the shared engine RNG, which must never be
 		// touched once the deterministic sim thread is running.
 		SpriteCatalog catalog = SpriteCatalog.render();
-		WorldHost host = new WorldHost(seed, worldCols, worldRows);
+		WorldHost host = new WorldHost(seed, worldCols, worldRows, worldKind);
 
 		Javalin app = Javalin.create(c -> {
 			c.showJavalinBanner = false;

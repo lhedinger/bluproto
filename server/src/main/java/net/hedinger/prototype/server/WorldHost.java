@@ -58,17 +58,26 @@ final class WorldHost {
 
 	private final int worldCols; // <=0 means use Worlds' built-in default size
 	private final int worldRows;
+	/** Which world this host runs: "demo" (the living ecosystem, the default)
+	 *  or "blackmesa" (the authored, uninhabited facility). Fixed for the
+	 *  host's lifetime — a reset rebuilds the same kind from a new seed. */
+	private final String worldKind;
 
 	WorldHost(long seed) {
 		this(seed, 0, 0);
 	}
 
+	WorldHost(long seed, int cols, int rows) {
+		this(seed, cols, rows, "demo");
+	}
+
 	/** Size-overridable ctor: {@code cols}/{@code rows} &gt; 0 build the world at
 	 *  that size (so the deployed size can be tuned — or scaled down under a tight
 	 *  heap — from config without a rebuild); otherwise the built-in default. */
-	WorldHost(long seed, int cols, int rows) {
+	WorldHost(long seed, int cols, int rows, String kind) {
 		this.worldCols = cols;
 		this.worldRows = rows;
+		this.worldKind = kind;
 		String rd = System.getenv("RECORD_DIR");
 		this.recordDir = (rd == null || rd.isBlank()) ? null : new java.io.File(rd);
 		if (recordDir != null) {
@@ -89,10 +98,13 @@ final class WorldHost {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
 		popHistory = java.util.List.of(); // a new world starts its own series
-		boolean sized = worldCols > 0 && worldRows > 0;
-		SimulationRunner r = new SimulationRunner(
-				sized ? Worlds.demo(newSeed, worldCols, worldRows) : Worlds.demo(newSeed));
-		var terrain = sized ? Worlds.demoTerrain(newSeed, worldCols, worldRows)
+		boolean mesa = "blackmesa".equals(worldKind);
+		boolean sized = !mesa && worldCols > 0 && worldRows > 0; // the campus is authored at its own size
+		SimulationRunner r = new SimulationRunner(mesa
+				? net.hedinger.prototype.sim.BlackMesa.build(newSeed)
+				: sized ? Worlds.demo(newSeed, worldCols, worldRows) : Worlds.demo(newSeed));
+		var terrain = mesa ? net.hedinger.prototype.sim.BlackMesa.build(newSeed)
+				: sized ? Worlds.demoTerrain(newSeed, worldCols, worldRows)
 				: Worlds.demoTerrain(newSeed); // entity-free twin, for the bake
 		int cols = r.world().getColums(), rows = r.world().getRows();
 		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
