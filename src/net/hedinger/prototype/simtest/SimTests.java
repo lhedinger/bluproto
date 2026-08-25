@@ -3209,6 +3209,19 @@ public class SimTests {
 			assertGreater("the pens are glazed",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.LABS,
 							Tile.TileType.TYPE_WINDOW), 50);
+			// The furniture: desks where people worked, bunks where they
+			// slept, dead machines where the work stopped.
+			assertGreater("the offices have desks",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.LABS,
+							Tile.TileType.TYPE_DESK), 10);
+			assertGreater("the dorms have bunks",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_BUNK), 5);
+			int wrecks = 0;
+			for (int z = 0; z < 4; z++) {
+				wrecks += tiles(w, z, Tile.TileType.TYPE_WRECK);
+			}
+			assertGreater("the dead machines stayed where they stopped", wrecks, 3);
 
 			// Whole: ONE connected space — every walkable tile reachable from
 			// the open desert. A doorway bug anywhere shows up here first;

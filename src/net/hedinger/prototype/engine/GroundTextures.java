@@ -49,7 +49,8 @@ public final class GroundTextures {
 			CLS_TREADPLATE = 34, CLS_LIGHTGRATE = 35, CLS_COLLAPSE = 36,
 			CLS_COOLANT = 37, CLS_EXCHANGER = 38, CLS_MESA = 39,
 			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42,
-			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45;
+			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45,
+			CLS_DESK = 46, CLS_BUNK = 47, CLS_WRECK = 48;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -109,6 +110,9 @@ public final class GroundTextures {
 			{ 0x17171a, 0xd8b028, 0xd8b028 }, // hazard striping (the signal pair, on record)
 			{ 0x14171d, 0x252a34, 0x3c434f }, // conveyor: the rack's dark steel, verbatim
 			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // window: coolant's cold glass-blue, verbatim
+			{ 0x53565d, 0x767a83, 0x9aa0ab }, // desk: concrete's greys a step up -- worn pale laminate
+			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // bunk: the facility-issue blanket is coolant blue, verbatim
+			{ 0x14171d, 0x252a34, 0x3c434f }, // wreck: dead machinery is rack steel, verbatim
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -210,6 +214,12 @@ public final class GroundTextures {
 			return CLS_CONVEYOR;
 		case TYPE_WINDOW:
 			return CLS_WINDOW;
+		case TYPE_DESK:
+			return CLS_DESK;
+		case TYPE_BUNK:
+			return CLS_BUNK;
+		case TYPE_WRECK:
+			return CLS_WRECK;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -1573,6 +1583,133 @@ public final class GroundTextures {
 		// The glass: pale toward the north edge of each pane, the way a lit
 		// sheet reads, dithered in the pane's own two shades.
 		return RAMP[CLS_WINDOW][aj < 4 ? 2 : 1];
+	}
+
+	/**
+	 * A desk: pale worktop on a steel frame, a terminal at its north edge with
+	 * one dim screen pixel from the indicator family, papers as pale flecks,
+	 * contact shadow south. The floor around it is paved -- desks live in the
+	 * paved rooms, and the tile carries its own patch of that floor.
+	 */
+	private static final String[] DESK_STAMP = {
+			"............",
+			".hhhhhhhhhh.",
+			".htmmthhhhb.",
+			".htmmthphhb.",
+			".hhhhhhhhhb.",
+			".hhphhhhphb.",
+			".hbbbbbbbbb.",
+			"..x......x..",
+			"............",
+			"............",
+			"............",
+			"............",
+	};
+
+	public static int desk(int ai, int aj, int px, int py) {
+		char c = DESK_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			return RAMP[CLS_DESK][2];
+		case 'b':
+			return RAMP[CLS_DESK][0];
+		case 't':
+			return RAMP[CLS_SERVER][0]; // the terminal's housing
+		case 'm':
+			return hash01(px >> 2, py >> 2, 68) > 0.5 ? LAMP_DIM : RAMP[CLS_SERVER][1];
+		case 'p':
+			return RAMP[CLS_CONCRETE][2]; // loose papers
+		case 'x':
+			return darken(paved(px, py), 0.65);
+		default:
+			return paved(px, py);
+		}
+	}
+
+	/**
+	 * A bunk: steel frame, pale mattress, pillow block at the north end and
+	 * the facility-issue blanket -- coolant blue, verbatim -- across the
+	 * south two thirds. Contact shadow south; deck plate around it.
+	 */
+	private static final String[] BUNK_STAMP = {
+			"............",
+			"..ffffff....",
+			"..fpphmf....",
+			"..fpphmf....",
+			"..fmmmmf....",
+			"..fkkkkf....",
+			"..fkkkkf....",
+			"..fkkkkf....",
+			"..fkbkbf....",
+			"..ffffff....",
+			"...x..x.....",
+			"............",
+	};
+
+	public static int bunk(int ai, int aj, int px, int py) {
+		char c = BUNK_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'f':
+			return RAMP[CLS_SERVER][1]; // the frame's steel
+		case 'p':
+			return RAMP[CLS_CONCRETE][2]; // the pillow
+		case 'h':
+			return RAMP[CLS_CONCRETE][2];
+		case 'm':
+			return RAMP[CLS_CONCRETE][1]; // mattress
+		case 'k':
+			return RAMP[CLS_BUNK][1]; // the blanket
+		case 'b':
+			return RAMP[CLS_BUNK][0]; // its folds
+		case 'x':
+			return darken(plate(px, py), 0.65);
+		default:
+			return plate(px, py);
+		}
+	}
+
+	/**
+	 * A dead machine: a rack-steel hull holed at one corner, rust blooming
+	 * where the weather got in, its own debris beneath it. Rubble around it,
+	 * because a machine dies into its own mess.
+	 */
+	private static final String[] WRECK_STAMP = {
+			"............",
+			"..hhhhhh....",
+			".hkkkkkkh...",
+			".hkrrkkkbh..",
+			".hkkkkokkb..",
+			".hkkoookkb..",
+			".hkkkokrkb..",
+			".hbkkkkkbb..",
+			"..bbbbbbb...",
+			"...x...x....",
+			"............",
+			"............",
+	};
+
+	public static int wreck(int ai, int aj, int px, int py) {
+		char c = WRECK_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			return RAMP[CLS_WRECK][2];
+		case 'k':
+			return RAMP[CLS_WRECK][1];
+		case 'b':
+			return RAMP[CLS_WRECK][0];
+		case 'r':
+			return RUST; // the bloom where the weather got in
+		case 'o':
+			// The hole torn in the hull: the ramp's own shadow -- inventing a
+			// darker in-between shade is exactly what the ramp rule forbids,
+			// and the rack steel's shadow is already the darkest built colour
+			// in the world.
+			return RAMP[CLS_WRECK][0];
+		case 'x':
+			return darken(rubble(px, py), 0.7);
+		default:
+			return rubble(px, py);
+		}
 	}
 
 	/** Side bits for the autotiled runs ({@link #rail}, {@link #pipes}): which
