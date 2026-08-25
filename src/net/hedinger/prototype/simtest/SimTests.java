@@ -3079,7 +3079,7 @@ public class SimTests {
 
 			// The landmarks that make it the place it is: the chamber bore on
 			// both upper floors and the crystal on its floor; the transit
-			// loop's rail; the residue channels; the dam and its reservoir.
+			// loop's rail; the residue channels; the varied desert.
 			assertEquals("the bore falls through the labs floor",
 					Tile.TileType.TYPE_SHAFT.getValue(),
 					w.getTile(100, 52, net.hedinger.prototype.sim.BlackMesa.LABS)
@@ -3098,9 +3098,16 @@ public class SimTests {
 			assertGreater("residue processing runs sludge",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
 							Tile.TileType.TYPE_SLUDGE), 60);
-			assertGreater("the reservoir holds water",
+			assertEquals("the oasis holds its pond",
+					Tile.TileType.TYPE_WATER.getValue(),
+					w.getTile(52, 92, net.hedinger.prototype.sim.BlackMesa.SURFACE)
+							.getType().getValue());
+			assertGreater("the arroyo and the basin lay mud",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
-							Tile.TileType.TYPE_WATER), 200);
+							Tile.TileType.TYPE_MUD), 80);
+			assertGreater("the basin pools quicksand",
+					tiles(w, net.hedinger.prototype.sim.BlackMesa.SURFACE,
+							Tile.TileType.TYPE_QUICKSAND), 8);
 			// The rocket is one steel column through all four floors — the
 			// same coordinates on every level, or it is four drawings.
 			for (int z = 0; z < 4; z++) {
