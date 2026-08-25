@@ -22,8 +22,9 @@ import net.hedinger.prototype.engine.World;
  *
  * <p>Four levels, top-down:
  * <pre>
- *   z=3  SURFACE   desert, canyon + dam, topside compound, silo doors, the
- *                  launch pad's rocket tip, tram — and the sinkhole
+ *   z=3  SURFACE   desert with arroyo, oasis, quicksand and hardpan;
+ *                  topside compound, silo doors, the launch pad's rocket
+ *                  tip, tram — and the sinkhole
  *   z=2  LABS      Sector C labs + test chamber top, office complex, the
  *                  records maze, dorm station, Sector E specimen labs
  *   z=1  WORKS     the transit loop and the caves it tunnels through, silo
@@ -191,7 +192,7 @@ public final class BlackMesa {
 			}
 		}
 
-		riverCanyonAndDam(w);
+		desertVariety(w);
 		topsideCompound(w);
 		dormitories(w);
 		sectorCHead(w);
@@ -200,38 +201,81 @@ public final class BlackMesa {
 		topsideTram(w);
 	}
 
-	/** The east canyon: reservoir at the top, the dam across it, the river
-	 *  below — and the one green ribbon in the desert, on the wet banks. */
-	private static void riverCanyonAndDam(World w) {
-		// Canyon walls, full height. Gapped twice further south so the wet
-		// valley floor is a place, not a diorama: once from the west desert,
-		// once from the east strip.
-		fill(w, SURFACE, 149, 2, 149, ROWS - 3, Tile.TileType.TYPE_WALL);
-		fill(w, SURFACE, 161, 2, 161, ROWS - 3, Tile.TileType.TYPE_WALL);
-		// Reservoir behind the dam.
-		fill(w, SURFACE, 150, 2, 160, 20, Tile.TileType.TYPE_WATER);
-		// The dam: a concrete wall with a paved crest walkway on the dry side.
-		// The crest runs THROUGH both canyon walls: it is the one bridge over
-		// the canyon, which is also the only way onto the east bank.
-		fill(w, SURFACE, 150, 21, 160, 22, Tile.TileType.TYPE_WALL_CONCRETE);
-		fill(w, SURFACE, 149, 23, 161, 23, Tile.TileType.TYPE_PAVED);
-		// The river, and the banks it waters.
-		fill(w, SURFACE, 154, 24, 156, ROWS - 3, Tile.TileType.TYPE_WATER);
-		for (int y = 24; y <= ROWS - 3; y++) {
-			for (int x : new int[] { 150, 151, 152, 153, 157, 158, 159, 160 }) {
-				if (y >= 28 && y <= 100) {
-					w.setTile(x, y, SURFACE, Tile.TileType.TYPE_FLOOR);
-					w.getTile(x, y, SURFACE).setFertility(0.45);
-				} else {
-					set(w, x, y, SURFACE, Tile.TileType.TYPE_SAND);
+	/**
+	 * The desert stops being one texture. Four features, all natural, all
+	 * placed clear of the compounds so the buildings still win their ground:
+	 *
+	 * <ul>
+	 *   <li><b>The arroyo</b> — a dry creek wandering down the east side
+	 *       where a river once ran: a mud bed between rocky banks, with
+	 *       remnant waterholes ringed in reeds where the water table still
+	 *       shows.</li>
+	 *   <li><b>The oasis</b> — one pond in the south-west with a reed collar
+	 *       and a ring of green, the only fertile ground on the surface.</li>
+	 *   <li><b>The quicksand basin</b> — a low stretch of treacherous ground
+	 *       east of the sector head, quicksand pooled in mud.</li>
+	 *   <li><b>The hardpan</b> — pale weathered rock showing through the
+	 *       sand on the west flats.</li>
+	 * </ul>
+	 */
+	private static void desertVariety(World w) {
+		// The arroyo.
+		for (int y = 3; y < ROWS - 3; y++) {
+			int xc = 152 + (int) Math.round((Utils.noise2(0, y, 0.045) - 0.5) * 24);
+			xc = Math.max(8, Math.min(COLS - 9, xc));
+			boolean pool = Utils.noise2(7, y, 0.15) > 0.8;
+			for (int dx = -1; dx <= 1; dx++) {
+				set(w, xc + dx, y, SURFACE, pool
+						? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_MUD);
+			}
+			for (int dx : new int[] { -2, 2 }) {
+				if (pool) {
+					set(w, xc + dx, y, SURFACE, Tile.TileType.TYPE_REEDS);
+				} else if (w.getTile(xc + dx, y, SURFACE).getType() == Tile.TileType.TYPE_SAND) {
+					set(w, xc + dx, y, SURFACE, Tile.TileType.TYPE_ROCKY);
 				}
 			}
 		}
-		// The ways down into the valley.
-		w.setTile(149, 60, SURFACE, Tile.TileType.TYPE_FLOOR);
-		w.getTile(149, 60, SURFACE).setFertility(0.45);
-		w.setTile(161, 60, SURFACE, Tile.TileType.TYPE_FLOOR);
-		w.getTile(161, 60, SURFACE).setFertility(0.45);
+
+		// The oasis.
+		for (int x = 46; x <= 58; x++) {
+			for (int y = 86; y <= 98; y++) {
+				double d = Math.hypot(x + 0.5 - 52.5, y + 0.5 - 92.5);
+				if (d > 5.0) {
+					continue;
+				}
+				if (d <= 2.5) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_WATER);
+				} else if (d <= 3.5) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_REEDS);
+				} else {
+					w.setTile(x, y, SURFACE, Tile.TileType.TYPE_FLOOR);
+					w.getTile(x, y, SURFACE).setFertility(0.45);
+				}
+			}
+		}
+
+		// The quicksand basin.
+		for (int x = 96; x <= 110; x++) {
+			for (int y = 34; y <= 50; y++) {
+				double n = Utils.noise2(x + 333, y + 888, 0.12);
+				if (n > 0.72) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_QUICKSAND);
+				} else if (n > 0.6) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_MUD);
+				}
+			}
+		}
+
+		// The hardpan.
+		for (int x = 8; x <= 26; x++) {
+			for (int y = 36; y <= 70; y++) {
+				if (Utils.noise2(x + 555, y + 222, 0.1) > 0.66
+						&& w.getTile(x, y, SURFACE).getType() == Tile.TileType.TYPE_SAND) {
+					set(w, x, y, SURFACE, Tile.TileType.TYPE_STONE);
+				}
+			}
+		}
 	}
 
 	/** The topside motorpool: a fenced yard of barracks, garage, armory and a
@@ -930,8 +974,8 @@ public final class BlackMesa {
 		diskAt(w, z, SILO_X, SILO_Y, 3.5, Tile.TileType.TYPE_SHAFT);
 	}
 
-	/** Every shore-touching water tile becomes a wading fringe, exactly as the
-	 *  demo world does it, so the reservoir and river have soft edges. */
+	/** Every shore-touching water tile becomes a wading fringe, exactly as
+	 *  the demo world does it, so the oasis has a soft edge. */
 	private static void shallowsFringe(World w) {
 		java.util.ArrayList<int[]> shore = new java.util.ArrayList<int[]>();
 		for (int x = 1; x < COLS - 1; x++) {
