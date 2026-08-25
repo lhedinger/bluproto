@@ -50,6 +50,10 @@ public final class BlackMesa {
 	 *  floors, which is the point of it. */
 	static final double CHAMBER_X = 100.0, CHAMBER_Y = 52.0;
 
+	/** The blast-pit silo's centre: the same round bore on every floor, down
+	 *  to the sludge pool at its base. */
+	static final double SILO_X = 122.5, SILO_Y = 74.5;
+
 	public static World build(long seed) {
 		Utils.seed(seed);
 		World w = new World(COLS, ROWS, LVLS);
@@ -63,6 +67,7 @@ public final class BlackMesa {
 		labsFloor(w);
 		worksFloor(w);
 		deepFloor(w);
+		gorge(w);
 		stairs(w);
 
 		shallowsFringe(w);
@@ -191,8 +196,8 @@ public final class BlackMesa {
 	/** The silo doors: a plate apron with the bore falling away in its middle
 	 *  — straight down through every floor to the engine bay. */
 	private static void siloDoors(World w) {
-		fill(w, SURFACE, 118, 70, 127, 79, Tile.TileType.TYPE_PLATE);
-		fill(w, SURFACE, 121, 73, 124, 76, Tile.TileType.TYPE_SHAFT);
+		fill(w, SURFACE, 117, 69, 128, 80, Tile.TileType.TYPE_PLATE);
+		diskAt(w, SURFACE, SILO_X, SILO_Y, 3.5, Tile.TileType.TYPE_SHAFT);
 	}
 
 	/** The launch pad from above: an apron around the flame-trench gap, and
@@ -214,9 +219,36 @@ public final class BlackMesa {
 		// Portal B, out east by the silo, backing onto the loop's east run.
 		shell(w, SURFACE, 137, 63, 143, 69,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
-		// The rail between them, through the portal walls.
+		// The rail between them, through the portal walls — and through two
+		// stretches of cut rock, because the inbound ride alternates built
+		// halls with raw canyon the whole way down.
 		fill(w, SURFACE, 51, 24, 140, 24, Tile.TileType.TYPE_RAIL);
 		fill(w, SURFACE, 140, 24, 140, 64, Tile.TileType.TYPE_RAIL);
+		fill(w, SURFACE, 86, 23, 110, 23, Tile.TileType.TYPE_WALL);
+		fill(w, SURFACE, 86, 25, 110, 25, Tile.TileType.TYPE_WALL);
+		fill(w, SURFACE, 139, 30, 139, 50, Tile.TileType.TYPE_WALL);
+		fill(w, SURFACE, 141, 30, 141, 50, Tile.TileType.TYPE_WALL);
+	}
+
+	/**
+	 * The gorge: a canyon torn east-west across the south desert, crossed by
+	 * one catwalk bridge. The opening is real depth, not paint — the drop
+	 * falls to a dry wash carved on the labs floor, which the pit rendering
+	 * shows through the gap from above, and a body that goes over the edge
+	 * lands down there and walks out through the office complex's east door.
+	 * Carved after every floor has built, because it cuts whatever it finds.
+	 */
+	private static void gorge(World w) {
+		fill(w, SURFACE, 54, 72, 114, 75, Tile.TileType.TYPE_SHAFT);
+		fill(w, SURFACE, 82, 72, 83, 75, Tile.TileType.TYPE_CATWALK); // the bridge
+		// The wash below, and the way out of it.
+		for (int x = 54; x <= 114; x++) {
+			for (int y = 72; y <= 75; y++) {
+				set(w, x, y, LABS, (x + y) % 5 == 0
+						? Tile.TileType.TYPE_RUBBLE : Tile.TileType.TYPE_STONE);
+			}
+		}
+		fill(w, LABS, 49, 73, 53, 73, Tile.TileType.TYPE_PLATE);
 	}
 
 	// ---- z=2: the labs floor ----------------------------------------------
@@ -452,6 +484,8 @@ public final class BlackMesa {
 	/** The silo, mid-bore: the shaft with its gallery, and the four service
 	 *  rooms the old program left around it — fuel, oxygen, power, control. */
 	private static void siloComplex(World w) {
+		// The gallery: a catwalk ring around the round bore.
+		ringAt(w, WORKS, SILO_X, SILO_Y, 3.5, 5.5, Tile.TileType.TYPE_CATWALK);
 		siloBore(w, WORKS);
 		// Corridor in from the east platform.
 		fill(w, WORKS, 126, 65, 138, 67, Tile.TileType.TYPE_STONE);
@@ -471,13 +505,17 @@ public final class BlackMesa {
 		shell(w, WORKS, 127, 75, 133, 80,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
 		fill(w, WORKS, 128, 79, 132, 79, Tile.TileType.TYPE_SERVER);
-		// Doorways: the corridor into power, and each room onto the gallery.
+		// Doorways: the corridor into power, power through to control, and
+		// each room straight onto the gallery ring where it passes closest.
 		set(w, 130, 68, WORKS, Tile.TileType.TYPE_PLATE);
 		fill(w, WORKS, 130, 73, 130, 75, Tile.TileType.TYPE_PLATE); // power <-> control
-		fill(w, WORKS, 125, 71, 127, 71, Tile.TileType.TYPE_PLATE);
-		fill(w, WORKS, 118, 71, 120, 71, Tile.TileType.TYPE_PLATE);
-		fill(w, WORKS, 118, 77, 120, 77, Tile.TileType.TYPE_PLATE);
-		fill(w, WORKS, 119, 72, 119, 77, Tile.TileType.TYPE_PLATE);
+		set(w, 118, 71, WORKS, Tile.TileType.TYPE_PLATE); // fuel -> gallery
+		// The ring pokes a stub between the two west rooms' walls; a door
+		// from the fuel room turns it from a dead end into a bore balcony.
+		set(w, 117, 73, WORKS, Tile.TileType.TYPE_PLATE);
+		set(w, 118, 77, WORKS, Tile.TileType.TYPE_PLATE); // oxygen -> gallery
+		set(w, 127, 72, WORKS, Tile.TileType.TYPE_PLATE); // power -> gallery
+		set(w, 127, 76, WORKS, Tile.TileType.TYPE_PLATE); // control -> gallery
 	}
 
 	/**
@@ -488,9 +526,13 @@ public final class BlackMesa {
 	 * the gantry arms reaching it.
 	 */
 	private static void freightLine(World w) {
-		// The branch south from the east platform, then west to the gantry.
-		fill(w, WORKS, 141, 71, 143, 88, Tile.TileType.TYPE_RUBBLE);
-		fill(w, WORKS, 120, 86, 143, 88, Tile.TileType.TYPE_RUBBLE);
+		// The branch south from the east platform, stepping west and south in
+		// two bends: the line goes AROUND the silo complex, the way an old
+		// track skirts the thing that was there first.
+		fill(w, WORKS, 141, 71, 143, 81, Tile.TileType.TYPE_RUBBLE);
+		fill(w, WORKS, 134, 79, 143, 81, Tile.TileType.TYPE_RUBBLE);
+		fill(w, WORKS, 134, 80, 136, 88, Tile.TileType.TYPE_RUBBLE);
+		fill(w, WORKS, 120, 86, 136, 88, Tile.TileType.TYPE_RUBBLE);
 		// The gantry hall.
 		shell(w, WORKS, 112, 82, 126, 94,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
@@ -500,8 +542,10 @@ public final class BlackMesa {
 		fill(w, WORKS, 116, 87, 117, 88, Tile.TileType.TYPE_CATWALK);
 		fill(w, WORKS, 120, 87, 121, 88, Tile.TileType.TYPE_CATWALK);
 		// The rail itself, laid last so it cuts through wall and rubble alike.
-		fill(w, WORKS, 142, 66, 142, 87, Tile.TileType.TYPE_RAIL);
-		fill(w, WORKS, 123, 87, 142, 87, Tile.TileType.TYPE_RAIL);
+		fill(w, WORKS, 142, 66, 142, 80, Tile.TileType.TYPE_RAIL);
+		fill(w, WORKS, 135, 80, 142, 80, Tile.TileType.TYPE_RAIL);
+		fill(w, WORKS, 135, 80, 135, 87, Tile.TileType.TYPE_RAIL);
+		fill(w, WORKS, 123, 87, 135, 87, Tile.TileType.TYPE_RAIL);
 	}
 
 	/** Residue processing: the sludge channels, catwalks over them, and the
@@ -540,6 +584,8 @@ public final class BlackMesa {
 			set(w, 118, y, WORKS, Tile.TileType.TYPE_STONE);
 		}
 		fill(w, WORKS, 116, 38, 116, 42, Tile.TileType.TYPE_STONE); // from the warehouse
+		// The drop to the deep cellar: the freezer's vertical is its drama.
+		fill(w, WORKS, 117, 50, 118, 51, Tile.TileType.TYPE_SHAFT);
 	}
 
 	/** The reactor complex's entry floor: security, corridors, and the stair
@@ -557,6 +603,7 @@ public final class BlackMesa {
 		testChamberFloor(w);
 		engineBay(w);
 		launchTrench(w);
+		iceCellar(w);
 		wasteSump(w);
 		lambdaCore(w);
 	}
@@ -594,6 +641,22 @@ public final class BlackMesa {
 		fill(w, DEEP, 116, 68, 130, 69, Tile.TileType.TYPE_PIPES);
 		set(w, 117, 80, DEEP, Tile.TileType.TYPE_EXCHANGER);
 		set(w, 128, 80, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		// The pool under the bore, and the test engine standing in it. The
+		// sludge is what every floor above sees down the shaft.
+		diskAt(w, DEEP, SILO_X, SILO_Y, 4.5, Tile.TileType.TYPE_SLUDGE);
+		fill(w, DEEP, 122, 74, 123, 75, Tile.TileType.TYPE_EXCHANGER);
+	}
+
+	/** The deep cellar under cold storage: further down, further from the
+	 *  sun, racks in the dark. Reached by the freezer's drop shaft; the
+	 *  stair back up is by the north wall. */
+	private static void iceCellar(World w) {
+		shell(w, DEEP, 112, 42, 124, 54,
+				Tile.TileType.TYPE_WALL_STEEL, Tile.TileType.TYPE_STONE);
+		for (int y : new int[] { 46, 52 }) {
+			fill(w, DEEP, 115, y, 121, y, Tile.TileType.TYPE_SERVER);
+			set(w, 118, y, DEEP, Tile.TileType.TYPE_STONE);
+		}
 	}
 
 	/** The sump the residue channels drain into. */
@@ -612,17 +675,15 @@ public final class BlackMesa {
 	private static void lambdaCore(World w) {
 		shell(w, DEEP, 8, 12, 34, 44,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
-		// The coolant loop: a closed ring, two orthogonal neighbours per tile.
-		fill(w, DEEP, 14, 18, 28, 18, Tile.TileType.TYPE_COOLANT);
-		fill(w, DEEP, 14, 38, 28, 38, Tile.TileType.TYPE_COOLANT);
-		fill(w, DEEP, 14, 18, 14, 38, Tile.TileType.TYPE_COOLANT);
-		fill(w, DEEP, 28, 18, 28, 38, Tile.TileType.TYPE_COOLANT);
+		// The coolant loop is a circle around the core — the reactor reads as
+		// a round machine in a square room, not a square in a square.
+		ringAt(w, DEEP, 21.0, 28.0, 5.5, 6.5, Tile.TileType.TYPE_COOLANT);
 		// The core.
 		fill(w, DEEP, 19, 26, 23, 30, Tile.TileType.TYPE_EXCHANGER);
 		set(w, 21, 28, DEEP, Tile.TileType.TYPE_CRYSTAL);
-		// Catwalk aisles across the loop to the core.
-		fill(w, DEEP, 15, 28, 18, 28, Tile.TileType.TYPE_CATWALK);
-		fill(w, DEEP, 24, 28, 27, 28, Tile.TileType.TYPE_CATWALK);
+		// Catwalk aisles bridging the loop to the core, on both axes.
+		fill(w, DEEP, 13, 28, 18, 28, Tile.TileType.TYPE_CATWALK);
+		fill(w, DEEP, 24, 28, 29, 28, Tile.TileType.TYPE_CATWALK);
 		fill(w, DEEP, 21, 19, 21, 25, Tile.TileType.TYPE_CATWALK);
 		fill(w, DEEP, 21, 31, 21, 37, Tile.TileType.TYPE_CATWALK);
 
@@ -661,6 +722,7 @@ public final class BlackMesa {
 		stair(w, WORKS, 66, 88, 1);    // residue processing -> the sump
 		stair(w, WORKS, 12, 36, 1);    // reactor entry -> the core
 		stair(w, WORKS, 114, 92, 1);   // launch gantry -> the flame trench
+		stair(w, WORKS, 114, 44, 1);   // cold storage -> the ice cellar
 	}
 
 	// ---- shared pieces ------------------------------------------------------
@@ -682,11 +744,13 @@ public final class BlackMesa {
 		fill(w, z, 118, 87, 119, 88, Tile.TileType.TYPE_WALL_STEEL);
 	}
 
-	/** One floor of the silo bore: shaft all the way through, with a catwalk
-	 *  rim to stand on. */
+	/** One floor of the silo bore: a round shaft falling straight through.
+	 *  The green in it is real: the bore's pit rendering scatters the floor
+	 *  below into the opening, and the floor at the bottom is the sludge
+	 *  pool — so the shaft glows green from every level above, the way the
+	 *  silo is remembered. */
 	private static void siloBore(World w, int z) {
-		fill(w, z, 120, 72, 125, 77, Tile.TileType.TYPE_CATWALK);
-		fill(w, z, 121, 73, 124, 76, Tile.TileType.TYPE_SHAFT);
+		diskAt(w, z, SILO_X, SILO_Y, 3.5, Tile.TileType.TYPE_SHAFT);
 	}
 
 	/** Every shore-touching water tile becomes a wading fringe, exactly as the
