@@ -7067,6 +7067,96 @@ public class SimTests {
 	}
 
 
+
+	/**
+	 * The drone picks the animal on its own floor, even when one on the floor
+	 * below is nearer as the engine measures.
+	 *
+	 * <p>{@code World.distance} is a straight line through all three axes and
+	 * counts one level as one tile — the right reading for a world where a level
+	 * is a height, and the wrong one for choosing what to fly at. A body
+	 * directly underneath scores one tile away, nearer than something four tiles
+	 * off across the same room, while actually reaching it means finding the
+	 * stairwell, flying the length of the storage hall and coming back. The
+	 * drone would set off after the near thing and spend the cull walking.
+	 *
+	 * <p>Here the off-floor animal is a third of a tile away and the on-floor
+	 * one is seven tiles away, so the old metric picks the wrong one by a factor
+	 * of twenty.
+	 */
+	static class TheDronePicksItsOwnFloorFirst extends Scenario {
+		@Override
+		public void run() {
+			seed(418);
+			World w = room(20, 12, 2);
+			w.setTile(5, 5, 1, Tile.TileType.TYPE_DOCK);
+			Genome plain = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000);
+			// Seven tiles away, on the drone's own floor.
+			TestNPC sameFloor = TestNPC.breeder(12.5, 5.5, 1, plain)
+					.withReproCooldown(100000);
+			// A third of a tile away in the plane, one floor down.
+			TestNPC belowIt = TestNPC.breeder(5.5, 5.8, 0, plain)
+					.withReproCooldown(100000);
+			w.spawnEntity(sameFloor);
+			w.spawnEntity(belowIt);
+			Order order = new Order(w, "herbivore", 0);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(5.5, 5.5, 1, order);
+			w.spawnEntity(drone);
+			w.think();
+			snapshot(w, "before (one grazer across the room, one through the floor)");
+
+			tick(w, 2);
+			assertTrue("it went for the one on its own floor, not the one under it",
+					drone.quarry() == sameFloor);
+		}
+	}
+
+	/**
+	 * The emitter does not fire through a floor.
+	 *
+	 * <p>Two things that each look like they would stop it, and neither does.
+	 * Sight does not: {@code World.hasLOS} traces within the SOURCE level's
+	 * plane and ignores the target's level entirely, so a body one floor down
+	 * reads as in plain view. Distance does not: the engine counts a level as a
+	 * tile, so a body directly underneath is one tile away, and the emitter
+	 * reaches further than that against anything large.
+	 *
+	 * <p>Measured before the gate went in: a drone sitting on its dock shot a
+	 * big grazer on the floor below, through the deck plate, without moving —
+	 * which is also the one arrangement where nothing else would have saved it,
+	 * since the drone never had to path anywhere to do it.
+	 *
+	 * <p>The animal is deliberately large. Reach scales with both bodies, so a
+	 * big one is what brings a whole tile of floor inside the emitter; a mouse
+	 * down there would be spared by arithmetic rather than by the rule.
+	 */
+	static class TheEmitterDoesNotFireThroughAFloor extends Scenario {
+		@Override
+		public void run() {
+			seed(419);
+			World w = room(20, 12, 2);
+			w.setTile(10, 6, 1, Tile.TileType.TYPE_DOCK); // berth directly above it
+			Genome big = Genome.phenotype(220, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC below = TestNPC.breeder(10.5, 6.5, 0, big).withReproCooldown(100000);
+			w.spawnEntity(below);
+			Order order = new Order(w, "herbivore", 0);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(10.5, 6.5, 1, order);
+			w.spawnEntity(drone);
+			w.think();
+			snapshot(w, "before (a big grazer one floor below the drone's dock)");
+
+			double radii = (drone.getSize() + below.getSize()) / 2.0;
+			assertLess("the test is worth running: it is inside the emitter by distance",
+					1.0 - radii, 0.7);
+
+			tick(w, 1200);
+			snapshot(w, "after (still there)");
+			assertTrue("the grazer below was not shot through the deck", !below.isDead());
+		}
+	}
+
 	/**
 	 * A duct is a refuge even with the drone hovering at its mouth.
 	 *
@@ -8345,6 +8435,8 @@ public class SimTests {
 				new NothingRidesTheDrone(),
 				new DuctedBodyIsSafeFromTheDrone(),
 				new ADuctIsARefugeEvenAtItsMouth(),
+				new TheDronePicksItsOwnFloorFirst(),
+				new TheEmitterDoesNotFireThroughAFloor(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),

@@ -295,7 +295,7 @@ public final class StewardDrone extends NPC {
 			return;
 		}
 		charge = 0; // the emitter loses its charge the moment contact breaks
-		if (quarry.getZ() == getZ()
+		if (quarry.getLvl() == getLvl()
 				&& distance(quarry.getX(), quarry.getY(), quarry.getZ()) <= FINAL_APPROACH) {
 			// Close the last stretch by eye rather than by route, exactly as the
 			// loader does for the same reason.
@@ -384,13 +384,39 @@ public final class StewardDrone extends NPC {
 					|| writtenOff.contains(t.getID()) || taken.contains(t)) {
 				continue;
 			}
-			double d = distance(t.getX(), t.getY(), t.getZ());
+			double d = huntDistance(t);
 			if (d < bestD) {
 				bestD = d;
 				best = t;
 			}
 		}
 		return best;
+	}
+
+	/**
+	 * Distance for CHOOSING between candidates: the plane, plus a whole world
+	 * for every floor in between.
+	 *
+	 * <p>The engine's own {@code distance} is a straight line through all three
+	 * axes and counts one level as one tile, which is the right reading for a
+	 * world where a level is a height. It is the wrong reading for choosing what
+	 * to fly at: an animal on the floor below, directly underneath, scores one
+	 * tile away — nearer than something four tiles off across the same room —
+	 * while actually reaching it means finding the stairwell, flying the length
+	 * of the storage hall and coming back. The drone would set off after the
+	 * near thing and spend the cull walking.
+	 *
+	 * <p>The penalty is the world's own width plus its height, which is longer
+	 * than any distance within a single floor. That is not a big number picked
+	 * to be big: it makes "on my floor beats off my floor" true by construction
+	 * rather than true for the map sizes someone happened to try, and it still
+	 * orders the off-floor candidates sensibly among themselves when a floor is
+	 * all that is left.
+	 */
+	private double huntDistance(Entity e) {
+		double dz = Math.abs(e.getZ() - getZ());
+		double flat = Math.hypot(e.getX() - getX(), e.getY() - getY());
+		return flat + dz * (getWorld().getColums() + getWorld().getRows());
 	}
 
 	/**
@@ -437,10 +463,20 @@ public final class StewardDrone extends NPC {
 	 * <p>Full circle rather than the drone's facing: it is charging a held
 	 * target and has already turned to it, so gating on the cone would only
 	 * flicker the hold while it came about.
+	 *
+	 * <p>Same floor, and that is a gate rather than a distance. Sight alone does
+	 * not cover it: {@code World.hasLOS} traces within the SOURCE level's plane
+	 * and ignores the target's level entirely, so a body one floor down reads as
+	 * in plain view. Nor does distance: the engine counts a level as a tile, so
+	 * a body directly underneath is one tile away, and the emitter reaches
+	 * further than that against anything large. Measured — a drone parked on its
+	 * dock shot a big grazer on the floor below, through the deck plate, without
+	 * moving.
 	 */
 	private boolean inReach(NPC n) {
 		double reach = (getSize() + n.getSize()) / 2.0 + STRIKE_REACH;
-		return distance(n.getX(), n.getY(), n.getZ()) <= reach
+		return n.getLvl() == getLvl()
+				&& distance(n.getX(), n.getY(), n.getZ()) <= reach
 				&& isInLOS(n.getX(), n.getY(), n.getZ(), reach + 1, Math.PI);
 	}
 
