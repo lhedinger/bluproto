@@ -779,13 +779,14 @@ public class Grid {
 										? GroundTextures.ductChannel(gy, ai, gx, gy)
 										: GroundTextures.ductChannel(gx, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_PIPES) {
-								// Pipe runs follow their connectivity: vertical beside
-								// vertical neighbours, horizontal otherwise, over deck.
-								boolean vert = isType(x, y - 1, Tile.TileType.TYPE_PIPES)
-										|| isType(x, y + 1, Tile.TileType.TYPE_PIPES);
-								Integer p = vert
-										? GroundTextures.pipeRun(gy, ai, gx, gy)
-										: GroundTextures.pipeRun(gx, aj, gx, gy);
+								// Autotiled like the rails: the generator lays tiles and
+								// the gallery works out its own elbows, tees and caps.
+								int pipeMask =
+										(isType(x, y - 1, Tile.TileType.TYPE_PIPES) ? GroundTextures.RAIL_N : 0)
+										| (isType(x + 1, y, Tile.TileType.TYPE_PIPES) ? GroundTextures.RAIL_E : 0)
+										| (isType(x, y + 1, Tile.TileType.TYPE_PIPES) ? GroundTextures.RAIL_S : 0)
+										| (isType(x - 1, y, Tile.TileType.TYPE_PIPES) ? GroundTextures.RAIL_W : 0);
+								Integer p = GroundTextures.pipes(pipeMask, ai, aj, gx, gy);
 								col = p != null ? p : GroundTextures.plate(gx, gy);
 							} else if (cl == GroundTextures.CLS_AIRVENT) {
 								col = GroundTextures.airVent(ai, aj, gx, gy);
