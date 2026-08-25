@@ -102,10 +102,30 @@ public final class StewardDrone extends NPC {
 	 *  spent to learn nothing. */
 	private static final int REPATH = 24;
 
-	/** Extra reach beyond the two bodies' radii at which the zap connects,
-	 *  matching {@code TestNPC}'s bite. The drone kills at contact, not at
-	 *  range: it has to arrive. */
-	private static final double STRIKE_REACH = 0.5;
+	/**
+	 * Extra reach beyond the two bodies' radii at which the zap connects. Still
+	 * contact rather than artillery — with an average grazer that is a hair
+	 * under one tile — but it is contact the drone can actually make.
+	 *
+	 * <p>0.5 was a bite's reach, borrowed from {@code TestNPC}, and a bite is
+	 * taken by something that runs its quarry down. This machine stops dead to
+	 * charge and a fleeing animal opens the gap while it does, so the pair
+	 * settle into an equilibrium a fraction outside a bite and sit there.
+	 *
+	 * <p>Measured over twelve thousand ticks of the seeded world, with the final
+	 * approach already fixed: of the drone-ticks spent holding a quarry, the
+	 * share close enough to fire runs 38.9% at 0.5, 57.6% at 0.6, 58.0% at
+	 * 0.7 — and then flat, 58.4% at 0.8 and 59.0% at 1.0. There is a dense
+	 * spike of drones sitting a tenth of a tile outside a bite and almost
+	 * nothing beyond it.
+	 *
+	 * <p>So this is not a range tuned until it felt right: it is the top of a
+	 * cliff, chosen because everything past it buys nothing. Widening further
+	 * would be a giveaway; stopping short of it leaves the drone hovering over
+	 * an animal it is standing next to. Bodies culled over the same twelve
+	 * thousand ticks: 97 to 161.
+	 */
+	private static final double STRIKE_REACH = 0.7;
 
 	/** When to stop following the route and fly straight at the body. A route
 	 *  ends at the quarry's TILE, and a tile centre can be two thirds of a tile
