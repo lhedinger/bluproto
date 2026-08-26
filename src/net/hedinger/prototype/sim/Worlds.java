@@ -2281,7 +2281,17 @@ public final class Worlds {
 		// The warden, with fixed {min,max} bounds that scale with the map's area.
 		// These are guardrails, not the population control: grass, predation and
 		// starvation decide the actual headcount, and the ceilings sit well above
-		// where those forces settle so the steward rarely has to fire at all. The
+		// where those forces settle so the steward rarely has to fire at all.
+		//
+		// That last sentence is not true of any of them, at any value tried.
+		// Sampled every 2000 ticks of the settled world, every cohort sat ON its
+		// backstop -- herbivores 449 against a ceiling of 410, predators 12-13
+		// against 12, scavengers 63-66 against 60, parasites 31-33 against 30.
+		// Raising three of them to 100 moved those three to 108-110 and left the
+		// herd exactly where it was. So these numbers are the population control
+		// rather than a guardrail around one, and a bigger number is a bigger
+		// world rather than a freer one. Worth knowing before the next person
+		// reads the paragraph above and believes it. The
 		// minded cap in particular is generous — predators hunt minded creatures
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
@@ -2291,7 +2301,20 @@ public final class Worlds {
 				// the settled world, so the merge changes WHO is counted rather than
 				// how many the world carries.
 				new int[] { sc(25, scale), sc(410, scale) }, // prey  [floor, ceiling]
-				new int[] { Math.max(2, sc(3, scale)), sc(12, scale) }, // predators
+				// Predators. Ceiling 12 -> 100. At 12 the cohort sat AT the line,
+				// sampled 12 or 13 every time it was looked at, which meant the
+				// warden was setting the predator population and grass, prey and
+				// starvation were not.
+				//
+				// It still is. Run sixty thousand ticks and predators climb
+				// 11 -> 26 -> 52 and then sit on 109 from tick 20000 on, which is
+				// this ceiling's backstop and not an equilibrium. The same is true
+				// of the two below. Nothing in this world limits any of these
+				// cohorts below a hundred, so raising the number raises the
+				// population one for one and the ceiling remains the control. That
+				// is a fact about the ecology, and the honest place to record it is
+				// beside the constant that is standing in for it.
+				new int[] { Math.max(2, sc(3, scale)), sc(100, scale) },
 				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
 				// long stretches, which meant the warden -- not grass, not predators --
 				// was setting the population, and a ceiling that binds is a governor
@@ -2314,12 +2337,22 @@ public final class Worlds {
 				// the map, which with diet as a mate barrier is not a breeding
 				// population -- the warden was keeping the niche occupied and extinct
 				// at the same time.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(60, sc(60, scale)) },
+				new int[] { Math.max(6, sc(6, scale)), Math.max(100, sc(100, scale)) },
 				// Parasites. A floor so the niche survives its own learning curve
-				// (a mindless parasite that never latches starves), and a low
-				// ceiling: their supply is the standing herd, and a parasite bloom
-				// bleeding every big body at once is a plague, not an ecosystem.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(30, sc(30, scale)) });
+				// (a mindless parasite that never latches starves), and a ceiling
+				// raised 30 -> 100 for the same reason as the other two.
+				//
+				// This one gives up something real, and it is worth writing down
+				// rather than discovering later. The old number was argued FOR
+				// rather than defaulted to: their supply is the standing herd, and
+				// a bloom bleeding every big body at once is a plague rather than
+				// an ecosystem. At 30 the cohort sat on 31-33 every time it was
+				// sampled, so that argument was being enforced by deletion --
+				// which is the governor this whole set of bounds is not supposed
+				// to be. If a plague is what the herd actually produces, the herd
+				// should be what stops it; if nothing stops it, that is a finding
+				// about the ecology rather than a reason to hide it behind a cap.
+				new int[] { Math.max(6, sc(6, scale)), Math.max(100, sc(100, scale)) });
 		w.spawnEntity(steward);
 
 		// The warden's one machine, berthed in the buried base. It takes its
