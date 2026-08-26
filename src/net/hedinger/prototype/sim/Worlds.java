@@ -478,6 +478,11 @@ public final class Worlds {
 		// ---- a buried installation: someone built down here, once ----
 		buryInstallation(w, cols, rows);
 
+		// ---- the ravine: a gorge torn through the surface, with the caves
+		// showing through it -- carved last so it can keep clear of everything
+		// the passes above placed ----
+		carveRavine(w, cols, rows);
+
 		// ---- shallows: every shore-touching water tile becomes a walkable,
 		// wading fringe, so lakes have fords instead of hard edges ----
 		for (int z = CAVE_Z; z <= SURFACE_Z; z++) {
@@ -1388,6 +1393,121 @@ public final class Worlds {
 	private static void setBare(World w, int x, int y, int z, Tile.TileType t) {
 		w.setTile(x, y, z, t);
 		w.getTile(x, y, z).setFertility(0);
+	}
+
+	/**
+	 * The ravine: one long gorge torn through the surface, dozens of hole
+	 * tiles in a wandering band two to three wide, with the cave level
+	 * reading through the pit veil down its whole length. The stations'
+	 * one-tile pits prove there is a world below; the ravine is where that
+	 * fact becomes geography — a thing you walk along, plan around, and see
+	 * the caves slide beneath as you pan.
+	 *
+	 * <p>Two causeways of untouched ground cross it at the third points, so
+	 * the banks stay one walkable surface: a gorge with no crossing would cut
+	 * the world in half AFTER {@link #connectLevels} certified it whole, and
+	 * whatever lived on the smaller side would starve against an audit that
+	 * no longer runs. The hole art rims each causeway's flanks by itself —
+	 * a pit rims every side it meets ground.
+	 *
+	 * <p>Sited like the rivers: probe candidate spans from the seeded RNG and
+	 * take the first that fits. A span fits only on natural open ground —
+	 * margin from the map rim, nothing man-made or already sunken within
+	 * three tiles (station ramps, aprons' pits, the drop shaft), and no water
+	 * within one (a gorge swallowing a river's middle would leave its lower
+	 * half flowing from nowhere). A world whose surface never offers such a
+	 * span simply goes without; nothing downstream depends on one existing.
+	 */
+	private static void carveRavine(World w, int cols, int rows) {
+		for (int attempt = 0; attempt < 60; attempt++) {
+			boolean horizontal = (attempt & 1) == 0;
+			int len = 26 + Utils.random(8);
+			int along = horizontal ? cols : rows;
+			int across = horizontal ? rows : cols;
+			if (along < len + 12 || across < 20) {
+				return; // a map too small for a gorge
+			}
+			int s0 = 6 + Utils.random(along - len - 12);
+			int c0 = 8 + Utils.random(across - 16);
+
+			// The band, precomputed so fitting and carving see the same tiles.
+			// The drift is a clamped random walk — one tile of sideways wander
+			// per step at most — so the gorge meanders instead of staggering,
+			// and the band stays 4-connected at every width: a jumpier drift
+			// left runs touching only at corners, which reads as separate pits
+			// rather than one cut.
+			int[][] band = new int[len][2]; // {edge offset, width} per step
+			int off = 0;
+			for (int t = 0; t < len; t++) {
+				double turn = Utils.noise2(s0 * 3 + t * 2, c0 * 5 + 900, 0.16);
+				off += turn > 0.6 ? 1 : turn < 0.4 ? -1 : 0;
+				off = Math.max(-4, Math.min(4, off));
+				int width = Utils.noise2(s0 + t, c0 + 1700, 0.15) > 0.62 ? 3 : 2;
+				band[t][0] = c0 + off;
+				band[t][1] = width;
+			}
+			boolean fits = true;
+			for (int t = 0; t < len && fits; t++) {
+				for (int d = 0; d < band[t][1] && fits; d++) {
+					int x = horizontal ? s0 + t : band[t][0] + d;
+					int y = horizontal ? band[t][0] + d : s0 + t;
+					fits = ravineCarvable(w, cols, rows, x, y);
+				}
+			}
+			if (!fits) {
+				continue;
+			}
+			int c1 = len / 3, c2 = 2 * len / 3; // the causeways, two tiles each
+			for (int t = 0; t < len; t++) {
+				if (t == c1 || t == c1 + 1 || t == c2 || t == c2 + 1) {
+					continue; // the untouched ground the banks cross on
+				}
+				for (int d = 0; d < band[t][1]; d++) {
+					int x = horizontal ? s0 + t : band[t][0] + d;
+					int y = horizontal ? band[t][0] + d : s0 + t;
+					setBare(w, x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+				}
+			}
+			return;
+		}
+	}
+
+	/** Whether the surface at (x, y) may become ravine: natural open ground,
+	 *  well inside the rim, nothing man-made or already sunken within three
+	 *  tiles, no water within one. */
+	private static boolean ravineCarvable(World w, int cols, int rows, int x, int y) {
+		if (x < 4 || y < 4 || x >= cols - 4 || y >= rows - 4) {
+			return false;
+		}
+		switch (w.getTile(x, y, SURFACE_Z).getType()) {
+		case TYPE_FLOOR:
+		case TYPE_STONE:
+		case TYPE_ROCKY:
+		case TYPE_SAND:
+		case TYPE_MUD:
+		case TYPE_COVER:
+		case TYPE_REEDS:
+			break;
+		default:
+			return false;
+		}
+		for (int dx = -3; dx <= 3; dx++) {
+			for (int dy = -3; dy <= 3; dy++) {
+				Tile.TileType n = w.getTile(x + dx, y + dy, SURFACE_Z).getType();
+				boolean near = Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
+				if (n == Tile.TileType.TYPE_RAMPUP || n == Tile.TileType.TYPE_RAMPDOWN
+						|| n == Tile.TileType.TYPE_HOLE || n == Tile.TileType.TYPE_SHAFT
+						|| n == Tile.TileType.TYPE_PAVED || n == Tile.TileType.TYPE_PLATE
+						|| n == Tile.TileType.TYPE_DOCK || n == Tile.TileType.TYPE_RAIL) {
+					return false;
+				}
+				if (near && (n == Tile.TileType.TYPE_WATER
+						|| n == Tile.TileType.TYPE_SHALLOWS)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**
