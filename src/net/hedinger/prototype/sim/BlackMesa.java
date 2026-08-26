@@ -87,6 +87,7 @@ public final class BlackMesa {
 		gorge(w);
 		stairs(w);
 		dressing(w);   // the details that say people worked here, and left
+		intricacy(w);  // the second pass: the details the first pass exposed
 		furniture(w);  // doors, their switches, and the warehouse's crates
 		connectAll(w); // drill drifts until the labyrinth is one space
 
@@ -1074,6 +1075,143 @@ public final class BlackMesa {
 		fill(w, SURFACE, 100, 75, 101, 75, Tile.TileType.TYPE_CATWALK);
 	}
 
+	/**
+	 * The second detail pass — everything the first one exposed by contrast.
+	 * Roads that actually link the surface compounds; a boneyard of dead
+	 * vehicles outside the motorpool fence; a camp somebody kept at the oasis;
+	 * lit sections pacing the loop tunnels; painted platform edges on every
+	 * platform, not just two; consoles facing every pane of glass; keep-clear
+	 * paint around both cores; windows where people lived. Clusters, always —
+	 * the rule that made the first pass work.
+	 */
+	private static void intricacy(World w) {
+		// ---- surface: the roads the compounds always implied ----
+		fill(w, SURFACE, 34, 35, 48, 35, Tile.TileType.TYPE_PAVED); // gate -> portal A
+		fill(w, SURFACE, 49, 28, 49, 35, Tile.TileType.TYPE_PAVED);
+		set(w, 49, 27, SURFACE, Tile.TileType.TYPE_PLATE); // portal A's south door
+		fill(w, SURFACE, 67, 53, 116, 53, Tile.TileType.TYPE_PAVED); // head -> silo
+		fill(w, SURFACE, 116, 53, 116, 69, Tile.TileType.TYPE_PAVED);
+
+		// The boneyard: the machines the motorpool gave up on, parked outside
+		// its west fence in their own rubble.
+		for (int[] r : new int[][] { { 13, 19 }, { 13, 23 }, { 13, 27 } }) {
+			fill(w, SURFACE, r[0], r[1], r[0] + 4, r[1] + 1, Tile.TileType.TYPE_RUBBLE);
+		}
+		set(w, 14, 19, SURFACE, Tile.TileType.TYPE_WRECK);
+		set(w, 16, 23, SURFACE, Tile.TileType.TYPE_WRECK);
+		set(w, 14, 27, SURFACE, Tile.TileType.TYPE_WRECK);
+
+		// The guard hut by the gate.
+		shell(w, SURFACE, 28, 36, 30, 38,
+				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_PLATE);
+		set(w, 29, 36, SURFACE, Tile.TileType.TYPE_PLATE);
+
+		// The camp at the oasis: someone stayed a while, and stopped staying.
+		set(w, 58, 90, SURFACE, Tile.TileType.TYPE_BONES);
+		set(w, 57, 91, SURFACE, Tile.TileType.TYPE_RUBBLE);
+		set(w, 59, 91, SURFACE, Tile.TileType.TYPE_COVER);
+		set(w, 57, 93, SURFACE, Tile.TileType.TYPE_BONES);
+
+		// Windows where people slept: the dorms and the barracks look south.
+		set(w, 59, 15, SURFACE, Tile.TileType.TYPE_WINDOW);
+		set(w, 63, 15, SURFACE, Tile.TileType.TYPE_WINDOW);
+		set(w, 59, 22, SURFACE, Tile.TileType.TYPE_WINDOW);
+		set(w, 63, 22, SURFACE, Tile.TileType.TYPE_WINDOW);
+		set(w, 22, 20, SURFACE, Tile.TileType.TYPE_WINDOW);
+		set(w, 27, 20, SURFACE, Tile.TileType.TYPE_WINDOW);
+
+		// ---- labs floor ----
+		// The spine's walk-line leads straight at the chamber.
+		fill(w, LABS, 67, 52, 86, 52, Tile.TileType.TYPE_TREADPLATE);
+		fill(w, LABS, 58, 52, 67, 52, Tile.TileType.TYPE_TREADPLATE);
+		// The labs deepen: services in A, instruments in B.
+		fill(w, LABS, 70, 43, 75, 43, Tile.TileType.TYPE_PIPES);
+		set(w, 79, 43, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 84, 43, LABS, Tile.TileType.TYPE_SERVER);
+		// Cafeteria tables, and one for the break room.
+		for (int x : new int[] { 23, 26, 29, 32 }) {
+			set(w, x, 89, LABS, Tile.TileType.TYPE_DESK);
+		}
+		set(w, 41, 87, LABS, Tile.TileType.TYPE_DESK);
+		// Ticket counters in the station rooms.
+		set(w, 46, 26, LABS, Tile.TileType.TYPE_DESK);
+		set(w, 67, 16, LABS, Tile.TileType.TYPE_DESK);
+		set(w, 141, 62, LABS, Tile.TileType.TYPE_DESK);
+		// The archive fills its stacks.
+		set(w, 28, 48, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 33, 44, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 41, 50, LABS, Tile.TileType.TYPE_SERVER);
+		set(w, 44, 42, LABS, Tile.TileType.TYPE_DESK); // the reading desk
+
+		// ---- works floor ----
+		// Lit sections pace the loop: a lamp in the floor every dozen tiles,
+		// so the tunnels have rhythm instead of length.
+		for (int x = 34; x <= 142; x += 12) {
+			lampIfStone(w, x, 17);
+			lampIfStone(w, x, 95);
+		}
+		for (int y = 24; y <= 84; y += 12) {
+			lampIfStone(w, 28, y);
+			lampIfStone(w, 147, y);
+		}
+		// Services along the Sector C spur.
+		fill(w, WORKS, 57, 22, 57, 50, Tile.TileType.TYPE_PIPES);
+		// Painted edges for the three platforms the first pass missed.
+		fill(w, WORKS, 145, 63, 145, 69, Tile.TileType.TYPE_HAZARD);
+		fill(w, WORKS, 57, 56, 57, 60, Tile.TileType.TYPE_HAZARD);
+		fill(w, WORKS, 59, 56, 59, 60, Tile.TileType.TYPE_HAZARD);
+		fill(w, WORKS, 23, 79, 23, 85, Tile.TileType.TYPE_HAZARD);
+		fill(w, WORKS, 25, 79, 25, 85, Tile.TileType.TYPE_HAZARD);
+		// The silo rooms look onto their own bore.
+		set(w, 127, 70, WORKS, Tile.TileType.TYPE_WINDOW);
+		set(w, 127, 78, WORKS, Tile.TileType.TYPE_WINDOW);
+		set(w, 129, 77, WORKS, Tile.TileType.TYPE_DESK);
+		set(w, 131, 77, WORKS, Tile.TileType.TYPE_DESK);
+		// The derailed cart on the old freight line.
+		set(w, 141, 76, WORKS, Tile.TileType.TYPE_WRECK);
+		// Sludge seeping into the south run, this close to residue.
+		set(w, 70, 95, WORKS, Tile.TileType.TYPE_SLUDGE);
+		set(w, 71, 95, WORKS, Tile.TileType.TYPE_SLUDGE);
+		// The reactor entry gets its working corner.
+		fill(w, WORKS, 10, 20, 12, 22, Tile.TileType.TYPE_LIGHTGRATE);
+		set(w, 17, 23, WORKS, Tile.TileType.TYPE_DESK);
+		set(w, 17, 25, WORKS, Tile.TileType.TYPE_DESK);
+
+		// ---- deep floor ----
+		// Keep-clear paint around the chamber's crystal, and consoles in the
+		// antechamber facing it.
+		ringAt(w, DEEP, CHAMBER_X, CHAMBER_Y, 1.5, 2.5, Tile.TileType.TYPE_HAZARD);
+		set(w, 89, 51, DEEP, Tile.TileType.TYPE_DESK);
+		set(w, 89, 53, DEEP, Tile.TileType.TYPE_DESK);
+		// The reactor's instrument wall, and paint around the core block.
+		fill(w, DEEP, 16, 15, 20, 15, Tile.TileType.TYPE_SERVER);
+		fill(w, DEEP, 22, 15, 26, 15, Tile.TileType.TYPE_SERVER);
+		for (int x = 18; x <= 24; x++) {
+			for (int y = 25; y <= 31; y++) {
+				boolean rim = x == 18 || x == 24 || y == 25 || y == 31;
+				if (rim && w.getTile(x, y, DEEP).getType() == Tile.TileType.TYPE_PLATE) {
+					set(w, x, y, DEEP, Tile.TileType.TYPE_HAZARD);
+				}
+			}
+		}
+		// The teleport chamber's four field coils.
+		set(w, 18, 48, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		set(w, 24, 48, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		set(w, 18, 54, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		set(w, 24, 54, DEEP, Tile.TileType.TYPE_EXCHANGER);
+		// The old labs' spine junction, where the ceiling let go.
+		set(w, 61, 30, DEEP, Tile.TileType.TYPE_RUBBLE);
+		set(w, 63, 30, DEEP, Tile.TileType.TYPE_COLLAPSE);
+		set(w, 65, 34, DEEP, Tile.TileType.TYPE_RUBBLE);
+	}
+
+	/** A lamp in the tunnel floor, only where the tunnel actually is. */
+	private static void lampIfStone(World w, int x, int y) {
+		if (w.getTile(x, y, WORKS).getType() == Tile.TileType.TYPE_STONE) {
+			set(w, x, y, WORKS, Tile.TileType.TYPE_LIGHTGRATE);
+		}
+	}
+
 	/** Crawl ducts inside the walls, with vent grilles where they open into
 	 *  rooms — the facility's other circulation system, sized for what can
 	 *  fit through a duct. */
@@ -1214,7 +1352,8 @@ public final class BlackMesa {
 
 		// Crates where crates live.
 		for (int[] c : new int[][] { { 108, 25 }, { 109, 28 }, { 122, 25 },
-				{ 126, 33 }, { 108, 36 } }) {
+				{ 126, 33 }, { 108, 36 }, { 110, 33 }, { 124, 28 },
+				{ 114, 25 }, { 126, 25 } }) {
 			w.spawnEntity(net.hedinger.prototype.entities.Item.crate(
 					c[0] + 0.5, c[1] + 0.5, WORKS));
 		}
