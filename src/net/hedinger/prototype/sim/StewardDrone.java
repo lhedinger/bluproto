@@ -104,28 +104,52 @@ public final class StewardDrone extends NPC {
 
 	/**
 	 * Extra reach beyond the two bodies' radii at which the zap connects. Still
-	 * contact rather than artillery — with an average grazer that is a hair
-	 * under one tile — but it is contact the drone can actually make.
+	 * contact rather than artillery — with an average grazer it is a hair under
+	 * one tile, both bodies included — but it is contact the drone can make.
 	 *
 	 * <p>0.5 was a bite's reach, borrowed from {@code TestNPC}, and a bite is
 	 * taken by something that runs its quarry down. This machine stops dead to
 	 * charge and a fleeing animal opens the gap while it does, so the pair
 	 * settle into an equilibrium a fraction outside a bite and sit there.
 	 *
-	 * <p>Measured over twelve thousand ticks of the seeded world, with the final
-	 * approach already fixed: of the drone-ticks spent holding a quarry, the
-	 * share close enough to fire runs 38.9% at 0.5, 57.6% at 0.6, 58.0% at
-	 * 0.7 — and then flat, 58.4% at 0.8 and 59.0% at 1.0. There is a dense
-	 * spike of drones sitting a tenth of a tile outside a bite and almost
-	 * nothing beyond it.
+	 * <p>Where that equilibrium sits is measured rather than felt, and it has
+	 * moved once already. The share of drone-ticks holding a quarry that are
+	 * close enough to fire, over twelve thousand ticks of the seeded world:
 	 *
-	 * <p>So this is not a range tuned until it felt right: it is the top of a
-	 * cliff, chosen because everything past it buys nothing. Widening further
-	 * would be a giveaway; stopping short of it leaves the drone hovering over
-	 * an animal it is standing next to. Bodies culled over the same twelve
-	 * thousand ticks: 97 to 161.
+	 * <pre>
+	 *   reach   0.5    0.6    0.7    0.8    0.9    1.0    1.6
+	 *   fires   2.8%   6.0%  35.3%  46.9%  47.5%  48.0%  50.8%
+	 * </pre>
+	 *
+	 * <p>A cliff and then a flat, and 0.8 is the top of the cliff: everything
+	 * past it is worth about half a point per tenth of a tile, which is the
+	 * argument that this closes a gap rather than handing the machine a longer
+	 * gun. Widening to a whole tile would buy one further point.
+	 *
+	 * <p>What it does NOT do is kill anything more. Six seeds of twelve thousand
+	 * ticks come to 2279 culls at 0.7 and 2166 at 0.8 — three up, three down,
+	 * five per cent apart, which is this simulation's noise and not a result:
+	 * perturb one body early and a deterministic chaotic world re-rolls the
+	 * whole run. The drone spends more of its time in range; what it is waiting
+	 * on is not range. Anyone tempted to widen this again for throughput should
+	 * read that as the answer.
+	 *
+	 * <p>The step used to fall between 0.5 and 0.6 and now falls between 0.7 and
+	 * 0.8. That is not drift in the measurement — the machine changed underneath
+	 * it. A drone no longer barges the bodies it flies over, so it no longer
+	 * blunders into contact with the animal it is chasing, and the distance the
+	 * two of them settle at moved out by exactly the shove that used to close
+	 * it. A constant tuned against a cliff has to be re-measured when the cliff
+	 * can move.
 	 */
-	private static final double STRIKE_REACH = 0.7;
+	private static final double STRIKE_REACH = 0.8;
+
+	/** The emitter's reach beyond the two bodies, for the scenarios: they assert
+	 *  around this number, and a scenario carrying its own copy of it goes quietly
+	 *  stale the first time it is tuned. */
+	public static double strikeReach() {
+		return STRIKE_REACH;
+	}
 
 	/** When to stop following the route and fly straight at the body. A route
 	 *  ends at the quarry's TILE, and a tile centre can be two thirds of a tile

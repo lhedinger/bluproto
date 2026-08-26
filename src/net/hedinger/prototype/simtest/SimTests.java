@@ -7275,7 +7275,7 @@ public class SimTests {
 
 			double radii = (drone.getSize() + below.getSize()) / 2.0;
 			assertLess("the test is worth running: it is inside the emitter by distance",
-					1.0 - radii, 0.7);
+					1.0 - radii, net.hedinger.prototype.sim.StewardDrone.strikeReach());
 
 			tick(w, 1200);
 			snapshot(w, "after (still there)");
@@ -7341,7 +7341,7 @@ public class SimTests {
 			// would pass just as well on a drone that never left its pad.
 			double radii = (drone.getSize() + ducted.getSize()) / 2.0;
 			assertLess("the drone did close to within the emitter's range",
-					closest - radii, 0.7);
+					closest - radii, net.hedinger.prototype.sim.StewardDrone.strikeReach());
 		}
 	}
 
