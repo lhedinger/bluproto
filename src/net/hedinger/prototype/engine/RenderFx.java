@@ -31,10 +31,11 @@ public final class RenderFx {
 	public static boolean concealFoliage = true;
 	/** Render holes as translucent pits, so the layer beneath shows through. */
 	public static boolean holeTranslucent = true;
-	/** How far a pit's interior washes back into its own dark rather than
-	 * showing the floor below (0 fully see-through .. 1 solid dark). At 0.7 a
-	 * pit is 30% transparent: enough to tell there is a floor down there and
-	 * what it is made of, while still reading as a hole rather than a window.
+	/** Opacity of the flat black veil over a pit's interior (0 clear .. 1
+	 * solid dark): the floor below reads through the whole opening at
+	 * {@code 1 - holeDepth} brightness, one continuous window rather than a
+	 * scatter of specks. At 0.7 the floor arrives at 30%: dim enough to read
+	 * as a storey down, whole enough that the parallax slide reads as a place.
 	 * Only pits with a level under them show anything at all — see
 	 * {@code Grid.pitFloor}. */
 	public static double holeDepth = 0.7;

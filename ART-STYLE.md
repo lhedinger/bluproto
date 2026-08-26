@@ -132,15 +132,19 @@ One sun, straight overhead-north. The grammar:
   run of dashes with per-column depth, not a solid band — and thin dim edges
   with dithered dropouts elsewhere.
 - **A pit is a hole, not a picture of one.** Inside the lip, a hole with a
-  level under it leaves `1 - RenderFx.holeDepth` of its art-pixels **genuinely
-  unpainted** — hash-scattered, cleared to real transparency — over the void
-  shade (`Grid.pitFloor`, `Grid.openPixel`). At the default 0.7 a pit is 30%
-  see-through: enough to read stone from fungus from water, not enough to stop
-  reading as a hole. The alpha channel of a served chunk means exactly that and
-  nothing else, so every other pass must cover its own tile completely.
-  A pit with nothing under it — the lowest level's — is void shade all the way,
-  and reads bottomless because it is. Grate gaps and drop-shafts are small pits
-  and take the identical treatment.
+  level under it is one flat veil of **translucent black at
+  `RenderFx.holeDepth` opacity** with real alpha beneath (`Grid.pitFloor`,
+  `Grid.veilPixel`) — §4's own sanctioned shadow, doing what a pit does to
+  the floor a storey down: showing all of it, darkly. At the default 0.7 the
+  floor below reads through at 30% brightness, whole. This replaced a hashed
+  scatter of fully-open pixels among void ones, which showed the floor bright
+  but only in specks — and specks read as noise ON the pit, not a view
+  through it. A window is better dim than perforated: continuity is what
+  makes the parallax slide legible. The alpha channel of a served chunk means
+  exactly "you can see down here", so every other pass must cover its own
+  tile completely. A pit with nothing under it — the lowest level's — is
+  opaque void shade all the way, and reads bottomless because it is. Grate
+  gaps and drop-shafts are small pits and take the identical treatment.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `PARALLAX` (0.94), which is the
   projection of a plane one storey further from the eye: pan by *d* and the top
