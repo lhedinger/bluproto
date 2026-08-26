@@ -1979,21 +1979,41 @@ public final class GroundTextures {
 	 * face where the light does not fall, and it thins as it runs away from the
 	 * lagging. No new accent: cold is a ramp, not a spark.
 	 */
-	public static int coolantRun(int along, int across, int px, int py) {
-		// Two lagged pipes side by side, the same 12-px pitch the pipe runs use.
-		boolean onPipe = (across >= 2 && across <= 4) || (across >= 7 && across <= 9);
-		if (!onPipe) {
-			// The deck between and beside them, with condensate pooling.
-			return hash01(px, py >> 1, 83) > 0.93
-					? RAMP[CLS_COOLANT][0] : plate(px, py);
+	public static Integer coolant(int mask, int ai, int aj, int px, int py) {
+		// The same shape-from-a-mask contract as {@link #pipes}: the cold side
+		// turns corners exactly as often as the hot one, and the boolean it
+		// had before drew the reactor's round loop as perpendicular stubs
+		// meeting at seams -- the rails' corner bug, in lagging.
+		int arm = pipeArm(mask, ai, aj);
+		if (arm == 0) {
+			// The deck between and beside the runs, with condensate pooling.
+			return hash01(px, py >> 1, 83) > 0.93 ? RAMP[CLS_COOLANT][0] : null;
 		}
-		int edge = (across == 2 || across == 7) ? 2 : (across == 4 || across == 9) ? 0 : 1;
-		// Frost: gathers unevenly along the pipe, thickest in patches.
-		double rime = Utils.noise2(along * 0.3 + 90, across * 0.2, 0.6);
-		if (edge == 1 && rime > 0.55 && hash01(px, py, 84) > 0.35) {
-			return RAMP[CLS_COOLANT][2]; // a bloom of frost on the lagging
+		boolean vertical = arm == 1;
+		int arms = Integer.bitCount(mask & (RAIL_N | RAIL_E | RAIL_S | RAIL_W));
+		if (arms == 1) {
+			// A stub ends in a blind flange, like the working pipes' caps.
+			int stop = 8;
+			boolean cap = ((mask & RAIL_N) != 0 && aj == stop)
+					|| ((mask & RAIL_S) != 0 && aj == 11 - stop)
+					|| ((mask & RAIL_E) != 0 && ai == 11 - stop)
+					|| ((mask & RAIL_W) != 0 && ai == stop);
+			if (cap) {
+				return RAMP[CLS_COOLANT][0];
+			}
 		}
-		return RAMP[CLS_COOLANT][edge];
+		if (Math.floorMod(vertical ? py : px, 6) == 0) {
+			return RAMP[CLS_COOLANT][0]; // a band clamp on the lagging
+		}
+		boolean face = vertical ? (ai == 3 || ai == 7) : (aj == 3 || aj == 7);
+		if (face) {
+			// Frost: gathers unevenly along the run, thickest in patches.
+			double rime = Utils.noise2((vertical ? py : px) * 0.3 + 90, arm, 0.6);
+			if (rime > 0.55 && hash01(px, py, 84) > 0.35) {
+				return RAMP[CLS_COOLANT][2]; // a bloom of frost on the lagging
+			}
+		}
+		return RAMP[CLS_COOLANT][face ? 2 : 1];
 	}
 
 	/**
