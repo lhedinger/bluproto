@@ -71,8 +71,17 @@ public final class StewardDrone extends NPC {
 	 * intervention is a thing you watch happen or a thing you notice afterwards.
 	 *
 	 * <p>Eased a further quarter to 0.12 — four tiles a second, some thirty-eight
-	 * end to end — because at 0.16 it still read as hurrying. Each step down has
-	 * made the cull more of an event and less of a fact you find out about.
+	 * end to end — because at 0.16 it still read as hurrying. Each step down made
+	 * the cull more of an event and less of a fact you find out about.
+	 *
+	 * <p>And then back up one notch, to 0.14, which is the first time this
+	 * number has moved in that direction. It sits deliberately between the 0.12
+	 * that read right and the 0.16 that read as hurrying, so the machine covers
+	 * about a sixth more ground per tick without reaching the pace that was
+	 * rejected. The paragraph below is left standing rather than rewritten: the
+	 * trade it describes is still the trade, this is a small step back along it,
+	 * and the argument for where the line sits is worth more than the argument
+	 * for any one value on it.
 	 *
 	 * <p>The price is paid by the largest cohort, and it is worth knowing before
 	 * anyone changes this number back. Measured over 16k ticks of the seeded
@@ -90,7 +99,7 @@ public final class StewardDrone extends NPC {
 	 * the knob to reach for is {@code CHARGE_TICKS} or {@code BACKSTOP} — not
 	 * this one, which is what makes the drone watchable.
 	 */
-	private static final double CRUISE = 0.12;
+	private static final double CRUISE = 0.14;
 
 	/** Steering divisor for {@link #steer} — lower turns harder. A machine
 	 *  pivots about its own axis, so it out-turns anything with legs. */

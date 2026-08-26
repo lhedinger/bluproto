@@ -7395,6 +7395,58 @@ public class SimTests {
 	}
 
 	/**
+	 * The emitter fires at the range it claims, and not past it.
+	 *
+	 * <p>{@code STRIKE_REACH} has been moved twice and nothing checked that the
+	 * number meant anything: the scenarios around it assert what the drone does
+	 * NOT do — not through a floor, not into a duct — and would all still pass
+	 * with the emitter reaching half as far. This asserts the constant against
+	 * behaviour, so a change to it is a change with a test attached.
+	 *
+	 * <p>The prey is parked and held at a fixed gap, and the gap is stated as a
+	 * fraction of {@link StewardDrone#strikeReach()} rather than as a distance,
+	 * so retuning the constant retunes the scenario with it.
+	 *
+	 * <p>Holding the gap open is what makes this a measurement of reach rather
+	 * than of the approach: the drone tests reach before it moves, so a body
+	 * already inside is killed from a standstill, and a body outside is chased —
+	 * which the held position prevents, leaving it alive.
+	 */
+	static class TheEmitterFiresAtTheRangeItClaims extends Scenario {
+		/** Whether the drone kills prey pinned {@code past} beyond the two radii. */
+		private boolean firesAt(double past) {
+			seed(522);
+			World w = room(24, 12);
+			w.setTile(5, 5, 0, Tile.TileType.TYPE_DOCK);
+			Genome g = new Genome();
+			g.size = 10;
+			g.speed = 0; // parked: the gap is the gap
+			TestNPC prey = TestNPC.breeder(5.5, 5.5, 0, g).withReproCooldown(100000);
+			Order order = new Order(w, "herbivore", 0);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(5.5, 5.5, 0, order);
+			w.spawnEntity(prey);
+			w.spawnEntity(drone);
+			w.think();
+			double radii = (drone.getSize() + prey.getSize()) / 2.0;
+			for (int t = 0; t < 40 && !prey.isDead(); t++) {
+				prey.setPos(drone.getX() + radii + past, drone.getY(), 0);
+				tick(w, 1);
+			}
+			return prey.isDead();
+		}
+
+		@Override
+		public void run() {
+			double reach = net.hedinger.prototype.sim.StewardDrone.strikeReach();
+			assertTrue("it fires at nine tenths of its stated reach",
+					firesAt(reach * 0.9));
+			assertTrue("and it does not fire at one and a tenth of it",
+					!firesAt(reach * 1.1));
+		}
+	}
+
+	/**
 	 * A duct is a refuge even with the drone hovering at its mouth.
 	 *
 	 * <p>{@link DuctedBodyIsSafeFromTheDrone} puts the shelter three tiles deep
@@ -8801,6 +8853,7 @@ public class SimTests {
 				new ADuctIsARefugeEvenAtItsMouth(),
 				new TheDronePicksItsOwnFloorFirst(),
 				new TheEmitterDoesNotFireThroughAFloor(),
+				new TheEmitterFiresAtTheRangeItClaims(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
