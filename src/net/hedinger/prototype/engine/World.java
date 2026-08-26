@@ -592,6 +592,36 @@ public class World {
 	 *            field of view of Searcher (PI = 360 degree search)
 	 * @return if there is a line of sight (LOS)
 	 */
+	/**
+	 * Line of sight from one point to another, within {@code range} and inside a
+	 * cone of {@code fov} either side of {@code dir}.
+	 *
+	 * <p>A floor is opaque. This used to trace within the SOURCE level's plane
+	 * and ignore {@code tz} altogether, so anything one storey away was answered
+	 * as though it were standing in the same room — a body under your feet read
+	 * as in plain view. That is what let the steward's drone shoot an animal
+	 * through the deck plate: the strike asks for sight, sight said yes, and the
+	 * floor between them was never consulted by anything.
+	 *
+	 * <p>The exception is an opening, and a ramp is the opening this world has:
+	 * a slope joining two floors is a hole in the ceiling you can see up and
+	 * down through. So a cross-floor sighting needs a ramp joining exactly those
+	 * two floors within the same radius the sighting itself is bounded by. Far
+	 * from a stairwell that is a floor; beside one it is a stairwell.
+	 *
+	 * <p>Adjacent floors only. Ramps join a level to the one above or below, so
+	 * two storeys of separation is two floors and no amount of ramp helps.
+	 *
+	 * <p>Movement was the thing to check before landing this, because {@code
+	 * isValidMoveDestination} asks for sight of the tile a body is stepping onto
+	 * and a staircase is a destination on another level — opaque floors looked
+	 * like they would stop every creature in the world from climbing anything.
+	 * They do not: a body's level turns over as it crosses the ramp's edge, so
+	 * the destination it asks about is still on its own floor when it asks.
+	 * Checked rather than assumed, by disabling the exception and watching
+	 * {@code RampsRunWhicheverWayTheyAreLaid} keep passing. The exception is
+	 * here because a stairwell is a hole, not to prop up movement.
+	 */
 	public boolean hasLOS(double x, double y, double z, double dir, double tx, double ty, double tz, double range,
 			double fov) {
 		if (!isValid(x, y, z)) {
@@ -600,9 +630,81 @@ public class World {
 		if (!isValid(tx, ty, tz)) {
 			return false;
 		}
+		if ((int) z != (int) tz && !openBetweenFloors(x, y, (int) z, (int) tz, range)) {
+			return false;
+		}
 
 		return levels[(int) z].hasLOS(x, y, dir, tx, ty, range, fov);
 	}
+
+	/**
+	 * Whether a ramp joining these two floors stands within {@code range} of
+	 * (x, y) — the one way sight passes between storeys.
+	 *
+	 * <p>Answered off a per-level list of ramp tiles rather than by sweeping the
+	 * radius, because the radius can be ninety-nine and the ramps are a handful.
+	 * A negative range means unbounded, as everywhere else here.
+	 */
+	private boolean openBetweenFloors(double x, double y, int z, int tz, double range) {
+		if (Math.abs(z - tz) != 1) {
+			return false; // a ramp reaches one floor, not two
+		}
+		int[] joining = ramps(z, tz > z);
+		if (joining.length == 0) {
+			return false;
+		}
+		if (range < 0) {
+			return true; // unbounded sight: any ramp on this floor will do
+		}
+		double rr = range * range;
+		for (int packed : joining) {
+			double dx = (packed >>> 16) + 0.5 - x;
+			double dy = (packed & 0xffff) + 0.5 - y;
+			if (dx * dx + dy * dy <= rr) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Every ramp on level {@code l} that leads up (or down), packed
+	 * {@code col<<16|row}.
+	 *
+	 * <p>Built lazily and dropped whenever a tile is written, which is the same
+	 * bargain the water fields make further down this file — terrain barely
+	 * moves once a world is generated, and the cost of being wrong about that
+	 * would be a stale answer about a staircase.
+	 */
+	private int[] ramps(int l, boolean up) {
+		if (rampsUp == null) {
+			rampsUp = new int[levels.length][];
+			rampsDown = new int[levels.length][];
+		}
+		int[][] cache = up ? rampsUp : rampsDown;
+		if (cache[l] == null) {
+			Tile.TileType want = up ? Tile.TileType.TYPE_RAMPUP : Tile.TileType.TYPE_RAMPDOWN;
+			java.util.List<Integer> found = new java.util.ArrayList<Integer>();
+			for (int c = 0; c < cols; c++) {
+				for (int r = 0; r < rows; r++) {
+					Tile t = getTile(c, r, l);
+					if (t != null && t.getType() == want) {
+						found.add((c << 16) | r);
+					}
+				}
+			}
+			int[] out = new int[found.size()];
+			for (int i = 0; i < out.length; i++) {
+				out[i] = found.get(i);
+			}
+			cache[l] = out;
+		}
+		return cache[l];
+	}
+
+	/** Ramp tiles per level, for {@link #openBetweenFloors}. Null until asked
+	 *  for, and thrown away whenever a tile is written. */
+	private int[][] rampsUp, rampsDown;
 
 	public boolean isOpen(double x, double y, double z) {
 		if (!isValid(x, y, z)) {
@@ -659,6 +761,8 @@ public class World {
 		if (!this.isValid(c, r, l)) {
 			return false;
 		}
+		rampsUp = null; // a written tile may have been, or become, a staircase
+		rampsDown = null;
 		return levels[l].setTile(c, r, l, t);
 	}
 
