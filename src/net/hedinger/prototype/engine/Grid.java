@@ -708,9 +708,9 @@ public class Grid {
 								// below through. The nibble is a shape, not an opening.
 								col = GroundTextures.rampColor(cl, 0);
 							} else {
-								Integer pit = pitFloor(x, y, gx, gy, cl);
+								Integer pit = pitFloor(x, y, cl);
 								if (pit == null) {
-									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									veilPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 									continue;
 								}
 								col = pit;
@@ -727,9 +727,9 @@ public class Grid {
 									|| (!vW && ai < band) || (!vE && ai >= A - band)) {
 								col = GroundTextures.hazardStripe(gx, gy);
 							} else {
-								Integer pit = pitFloor(x, y, gx, gy, cl);
+								Integer pit = pitFloor(x, y, cl);
 								if (pit == null) {
-									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									veilPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 									continue;
 								}
 								col = pit;
@@ -747,9 +747,9 @@ public class Grid {
 							// A grate gap is a small pit, and takes a pit's treatment:
 							// the void shade, scattered open onto whatever lies below.
 							if (cw == null) {
-								cw = pitFloor(x, y, gx, gy, GroundTextures.CLS_HOLE);
+								cw = pitFloor(x, y, GroundTextures.CLS_HOLE);
 								if (cw == null) {
-									openPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
+									veilPixel(g2, sx + bx0, sy + by0, bx1 - bx0, by1 - by0);
 									continue;
 								}
 							}
@@ -936,17 +936,19 @@ public class Grid {
 		return (r << 16) | (g << 8) | b;
 	}
 
-	/** Punches an art-pixel clear through everything already drawn there — the
-	 *  tile sprite included. A pit's open pixels have to reach the client as
-	 *  REAL transparency, not as the hole sprite's 59%-black veil: that veil is
-	 *  a picture of depth painted for the desktop compositor, and leaving it on
-	 *  brought the floor below through at 41% brightness, which read as black.
-	 *  The darkness a pit needs is already carried by the void-shade scatter
-	 *  around these pixels (see pitFloor); what shows between them should be
-	 *  the floor exactly as bright as it is. */
-	private static void openPixel(Graphics2D g2, int x, int y, int w, int h) {
+	/** Replaces an art-pixel — the tile sprite's paint included — with the
+	 *  pit's veil: solid black at {@link RenderFx#holeDepth} opacity, and real
+	 *  alpha beneath it. One flat shade over the whole interior, not a
+	 *  scatter: the scatter mixed void pixels with fully-clear ones, and at
+	 *  most zooms it read as noise on the lid rather than a view through it.
+	 *  A uniform translucent black is §4's sanctioned shadow doing what a pit
+	 *  actually does to the floor a storey down — showing all of it, darkly —
+	 *  and the client's parallax slide carries the depth. SRC composite so
+	 *  the veil's alpha lands in the bake exactly, whatever was under it. */
+	private static void veilPixel(Graphics2D g2, int x, int y, int w, int h) {
 		java.awt.Composite prev = g2.getComposite();
-		g2.setComposite(java.awt.AlphaComposite.Clear);
+		g2.setComposite(java.awt.AlphaComposite.Src);
+		g2.setColor(new Color(0f, 0f, 0f, (float) RenderFx.holeDepth));
 		g2.fillRect(x, y, w, h);
 		g2.setComposite(prev);
 	}
@@ -1010,25 +1012,24 @@ public class Grid {
 	}
 
 	/**
-	 * The inside of a pit, below its rim. A hole with a floor under it is not a
-	 * void: a little light reaches down, so a scatter of the material below
-	 * shows through — its own texture in its own palette, over the pit's dark,
-	 * at {@code 1 - holeDepth} of the art-pixels. A pit with nothing under it
-	 * stays dark all the way.
+	 * The inside of a pit, below its rim. A hole with a floor under it shows
+	 * ALL of that floor, darkly: the caller lays one flat translucent-black
+	 * veil (see {@link #veilPixel}) over the whole interior, and the real
+	 * level below reads through it, dimmed to {@code 1 - holeDepth} and
+	 * sliding under the client's parallax. A pit with nothing under it stays
+	 * the opaque void shade all the way, and reads bottomless because it is.
 	 *
-	 * <p>The scatter is HASHED, not Bayer-thresholded: an ordered matrix at a
-	 * fixed threshold lays a regular halftone over the hole, which reads as a
-	 * mesh stretched across it. This is not a gradient between two shades, it is
-	 * broken sight of something far away — the guide's rule for that is a hash.
+	 * <p>This replaced a hashed scatter of fully-open pixels among void ones.
+	 * The scatter showed the floor at full brightness but only in specks, and
+	 * at most zooms the specks read as noise ON the pit rather than a view
+	 * through it. A window is better dim than perforated: the veil trades
+	 * brightness for continuity, and continuity is what makes the parallax
+	 * slide legible — a whole floor moving, not dust twinkling.
 	 *
-	 * <p>The open pixels are left UNPAINTED — {@code null}, and the caller skips
-	 * them — so the bake carries a real alpha hole rather than a picture of one.
-	 * Both renderers then show the actual floor below through it, and both move
-	 * it with the parallax of its own depth. A painted stand-in could only ever
-	 * show the material, never the place: the same rock in the same spot however
-	 * the camera moved, which is a texture of a pit and not a view down one.
+	 * @return the opaque colour to paint, or {@code null} for "veil this
+	 *         art-pixel" — the caller substitutes the translucent black.
 	 */
-	private Integer pitFloor(int x, int y, int gx, int gy, int cl) {
+	private Integer pitFloor(int x, int y, int cl) {
 		if (!RenderFx.holeTranslucent) {
 			return GroundTextures.rampColor(cl, 1); // opaque style: a shallow dark floor
 		}
@@ -1039,10 +1040,7 @@ public class Grid {
 		if (GroundTextures.groundClass(world.getTile(x, y, level - 1)) < 0) {
 			return dark; // a ramp down there: nothing flat to look down onto
 		}
-		// 2-px opening clusters (gx >> 1), the grain rule from quietGround: a
-		// lone open art-pixel is sub-pixel at the fit zoom the world opens at,
-		// and a reveal built from them was invisible right where people pan.
-		return GroundTextures.hash01(gx >> 1, gy, 71) < RenderFx.holeDepth ? (Integer) dark : null;
+		return null;
 	}
 
 	private int groundClassAt(int cx, int cy) {
