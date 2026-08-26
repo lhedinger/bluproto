@@ -478,10 +478,25 @@ public final class Worlds {
 		// ---- a buried installation: someone built down here, once ----
 		buryInstallation(w, cols, rows);
 
+		// ---- the underdark: natural caverns on the bottom level, so the rock
+		// under the caves is a place and not a backstop. Carved only from
+		// virgin rock (the plant floor and its stairwell are already down
+		// there and are not touched), then tied into the world with cut
+		// stairwells wherever cave floor sits over cavern floor ----
+		carveDeepCaverns(w, cols, rows);
+		linkDeepCaverns(w, cols, rows);
+
 		// ---- the ravine: a gorge torn through the surface, with the caves
 		// showing through it -- carved last so it can keep clear of everything
-		// the passes above placed ----
+		// the passes above placed. Where the cave under the cut is solid rock
+		// the gorge keeps going, through both levels, down to the underdark ----
 		carveRavine(w, cols, rows);
+
+		// ---- final connectivity repair: the underdark and the gorge were
+		// carved after connectLevels' seal, so flood the world once more from
+		// the (single, certified) mainland and seal whatever the new terrain
+		// left unreachable — a cavern no stairwell found is rock again ----
+		resealFromSurface(w, cols, rows);
 
 		// ---- shallows: every shore-touching water tile becomes a walkable,
 		// wading fringe, so lakes have fords instead of hard edges ----
@@ -1466,9 +1481,114 @@ public final class Worlds {
 					int x = horizontal ? s0 + t : band[t][0] + d;
 					int y = horizontal ? band[t][0] + d : s0 + t;
 					setBare(w, x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+					// Where the cave under the cut is solid rock, the gorge
+					// keeps going: a second hole below the first, so the eye
+					// (and a falling body) carries on to the underdark. Where
+					// the cave is open — a cavern, a pool — that floor is the
+					// gorge's bed and the cut stops on it.
+					if (w.getTile(x, y, CAVE_Z).getType() == Tile.TileType.TYPE_WALL) {
+						setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_HOLE);
+					}
 				}
 			}
 			return;
+		}
+	}
+
+	/**
+	 * Natural caverns for the bottom level, from the same kind of coordinate
+	 * noise as the caves above but a different fold of it — sparser, with
+	 * pools, fungus beds and crystal, and no pits: the bottom of the world
+	 * has nothing to open onto. Only virgin rock is carved, so the plant
+	 * floor, its shell and its stairwell come through untouched. No polish
+	 * pass: the underdark is allowed to be rougher than the caves.
+	 */
+	private static void carveDeepCaverns(World w, int cols, int rows) {
+		for (int x = 1; x < cols - 1; x++) {
+			for (int y = 1; y < rows - 1; y++) {
+				if (w.getTile(x, y, DEEP_Z).getType() != Tile.TileType.TYPE_WALL) {
+					continue; // someone built here; the rock stops being ours
+				}
+				double cave = Utils.noise2(x + 910, y + 2400, 0.11);
+				if (cave <= 0.42 || cave >= 0.62) {
+					continue;
+				}
+				double pool = Utils.noise2(x + 2100, y + 610, 0.13);
+				Tile.TileType t;
+				if (pool > 0.74) {
+					t = Tile.TileType.TYPE_WATER;
+				} else if (pool > 0.64) {
+					t = Tile.TileType.TYPE_FUNGUS;
+				} else if (pool < 0.15) {
+					t = pool < 0.06 ? Tile.TileType.TYPE_CRYSTAL
+							: pool < 0.11 ? Tile.TileType.TYPE_CRYSTAL_BED
+							: Tile.TileType.TYPE_CRYSTAL_SPARSE;
+				} else {
+					t = Tile.TileType.TYPE_STONE;
+				}
+				w.setTile(x, y, DEEP_Z, t);
+				w.getTile(x, y, DEEP_Z).setFertility(
+						t == Tile.TileType.TYPE_FUNGUS ? 0.6 : 0);
+			}
+		}
+	}
+
+	/**
+	 * Stairwells from the cave level down into the underdark: the same cut
+	 * {@link #sinkStairwell} the plant floor uses, placed wherever a strip of
+	 * plain cave floor sits over cavern floor. Up to two, far apart. Without
+	 * these every cavern is sealed again by {@link #resealFromSurface} —
+	 * falling down the gorge reaches the underdark, but a way IN that is not
+	 * a way BACK leaves whatever took it starving in the dark, so the flood
+	 * only counts what the stairs tie in properly.
+	 */
+	private static void linkDeepCaverns(World w, int cols, int rows) {
+		int placed = 0;
+		int firstX = -1, firstY = -1;
+		for (int attempt = 0; attempt < 200 && placed < 2; attempt++) {
+			int bx = 4 + Utils.random(cols - 12);
+			int by = 4 + Utils.random(rows - 8);
+			if (placed == 1 && Math.abs(bx - firstX) + Math.abs(by - firstY) < 30) {
+				continue; // the second stairwell serves a different neighbourhood
+			}
+			boolean fits = true;
+			// The cave strip and a one-tile skirt: plain rock floor, no features.
+			for (int dx = -1; dx <= 4 && fits; dx++) {
+				for (int dy = -1; dy <= 1 && fits; dy++) {
+					fits = w.getTile(bx + dx, by + dy, CAVE_Z).getType()
+							== Tile.TileType.TYPE_STONE;
+				}
+			}
+			// The landing, the climb and the head below: carved cavern floor.
+			for (int dx = 0; dx <= 2 && fits; dx++) {
+				Tile.TileType d = w.getTile(bx + dx, by, DEEP_Z).getType();
+				fits = d == Tile.TileType.TYPE_STONE
+						|| d == Tile.TileType.TYPE_CRYSTAL_SPARSE
+						|| d == Tile.TileType.TYPE_FUNGUS;
+			}
+			if (!fits) {
+				continue;
+			}
+			sinkStairwell(w, bx, by, 1);
+			if (placed == 0) {
+				firstX = bx;
+				firstY = by;
+			}
+			placed++;
+		}
+	}
+
+	/** One more {@link #sealUnreachable} flood, seeded from any mainland
+	 *  surface tile — after the first seal the surface's walkable space IS the
+	 *  mainland, so any walkable tile serves. */
+	private static void resealFromSurface(World w, int cols, int rows) {
+		for (int x = 2; x < cols - 2; x++) {
+			for (int y = 2; y < rows - 2; y++) {
+				if (w.getTile(x, y, SURFACE_Z).isWalkable()) {
+					sealUnreachable(w, cols, rows, new int[] { x, y });
+					return;
+				}
+			}
 		}
 	}
 
