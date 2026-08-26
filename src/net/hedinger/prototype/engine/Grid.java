@@ -827,12 +827,16 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_COLLAPSE) {
 								col = GroundTextures.collapsedDeck(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_COOLANT) {
-								// Lagged pipework runs along its own connectivity, the
-								// same way the working pipes and the ducts do.
-								boolean vertCool = isType(x, y - 1, Tile.TileType.TYPE_COOLANT)
-										|| isType(x, y + 1, Tile.TileType.TYPE_COOLANT);
-								col = vertCool ? GroundTextures.coolantRun(gy, ai, gx, gy)
-										: GroundTextures.coolantRun(gx, aj, gx, gy);
+								// Autotiled like the working pipes: the loop works out
+								// its own elbows, so a ring is a ring rather than a set
+								// of perpendicular stubs meeting at seams.
+								int coolMask =
+										(isType(x, y - 1, Tile.TileType.TYPE_COOLANT) ? GroundTextures.RAIL_N : 0)
+										| (isType(x + 1, y, Tile.TileType.TYPE_COOLANT) ? GroundTextures.RAIL_E : 0)
+										| (isType(x, y + 1, Tile.TileType.TYPE_COOLANT) ? GroundTextures.RAIL_S : 0)
+										| (isType(x - 1, y, Tile.TileType.TYPE_COOLANT) ? GroundTextures.RAIL_W : 0);
+								Integer cool = GroundTextures.coolant(coolMask, ai, aj, gx, gy);
+								col = cool != null ? cool : GroundTextures.plate(gx, gy);
 							} else if (cl == GroundTextures.CLS_EXCHANGER) {
 								col = GroundTextures.heatExchanger(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_SLUDGE) {
