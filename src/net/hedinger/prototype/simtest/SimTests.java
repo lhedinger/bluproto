@@ -4163,6 +4163,71 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A floor is opaque, and a ramp is the hole in it.
+	 *
+	 * <p>{@code hasLOS} used to trace within the SOURCE level's plane and ignore
+	 * the target's level altogether, so a body one storey away was answered as
+	 * though it were standing in the same room. Nothing in the world consulted
+	 * the floor between them. That is what let the steward's drone shoot an
+	 * animal through the deck plate — the strike asks for sight, and sight said
+	 * yes.
+	 *
+	 * <p>The exception is that a slope joining two floors is a hole in the
+	 * ceiling, and you can see up and down one.
+	 *
+	 * <p>Movement looked like it depended on the exception too, since {@code
+	 * isValidMoveDestination} asks for sight of the tile a body is stepping onto
+	 * and a staircase is a destination on another level. It does not: a body's
+	 * level turns over as it crosses the ramp's edge, so the destination it asks
+	 * about is still on its own floor when it asks. That was checked by
+	 * disabling the exception and watching {@code
+	 * RampsRunWhicheverWayTheyAreLaid} keep passing — worth recording, because
+	 * the comment that says otherwise is the obvious one to write.
+	 */
+	static class AFloorBlocksSightUnlessAStairwellIsNear extends Scenario {
+		@Override
+		public void run() {
+			seed(520);
+			World w = room(30, 12, 3);
+			// One ramp pair at the west end, and nothing but open floor east of
+			// it — so the same two levels are joined near x=4 and not near x=25.
+			w.setTile(4, 6, 0, Tile.TileType.TYPE_RAMPUP);
+			w.setTile(4, 6, 1, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(4, 6, 0).setRampUphill(Tile.DIR_N);
+			w.getTile(4, 6, 1).setRampUphill(Tile.DIR_N);
+			w.alignTiles();
+
+			final double range = 5, all = Math.PI;
+
+			// Same floor: untouched by any of this.
+			assertTrue("along a floor, sight is what it always was",
+					w.hasLOS(25.5, 6.5, 1, 0, 27.5, 6.5, 1, range, all));
+
+			// Across a floor, far from the stairwell: nothing.
+			assertTrue("through a floor, a body underfoot is not in view",
+					!w.hasLOS(25.5, 6.5, 1, 0, 25.5, 6.5, 0, range, all));
+			assertTrue("nor one overhead",
+					!w.hasLOS(25.5, 6.5, 0, 0, 25.5, 6.5, 1, range, all));
+
+			// Beside the stairwell: the floor is open there, so sight passes.
+			assertTrue("beside a ramp, the floor is open and sight passes down",
+					w.hasLOS(5.5, 6.5, 1, 0, 5.5, 6.5, 0, range, all));
+			assertTrue("and up",
+					w.hasLOS(5.5, 6.5, 0, 0, 5.5, 6.5, 1, range, all));
+
+			// The radius is the sighting's own. A ramp twenty tiles west is not
+			// a hole in the ceiling above your head.
+			assertTrue("a ramp outside the radius is not an opening",
+					!w.hasLOS(20.5, 6.5, 1, 0, 20.5, 6.5, 0, range, all));
+
+			// Two floors is two floors. The ramp at (4,6) joins 0 and 1 and
+			// nothing joins 0 to 2, so standing on it buys nothing.
+			assertTrue("two storeys apart is never in view, ramp or no ramp",
+					!w.hasLOS(4.5, 6.5, 2, 0, 4.5, 6.5, 0, range, all));
+		}
+	}
+
 	static class MindsChangeLevelByWalkingRamps extends Scenario {
 		/** Walks a throttle-only mind from {@code (x,y,z)} along {@code heading} and
 		 *  reports the level it ends on. */
@@ -8672,6 +8737,7 @@ public class SimTests {
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
 				new RampsRunWhicheverWayTheyAreLaid(),
+				new AFloorBlocksSightUnlessAStairwellIsNear(),
 				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
