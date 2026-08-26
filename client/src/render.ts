@@ -236,13 +236,18 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 //
 // That layer is drawn scaled about the SCREEN CENTRE by PARALLAX, which is the
 // projection of a plane one storey further from the eye: pan by d and the top
-// layer moves d while the floor below moves 0.94d, so the view down a hole
+// layer moves d while the floor below moves 0.90d, so the view down a hole
 // slides as you travel. That slide is the whole point — it is what separates
-// "there is a place down there" from "someone painted rock on the lid".
+// "there is a place down there" from "someone painted rock on the lid". The
+// factor is a storey read at arm's length, not surveyed geometry: 0.94 was
+// strictly nearer the truth for one storey under a far camera, and too subtle
+// to notice through an opening a few tiles wide — 0.90 trades a little
+// realism for a slide you can actually catch, which is the feature.
 //
-// Nothing here dims the floor below: the hole tile's own sprite is black at
-// 59% alpha, so it arrives at 41% through art the bake already carried for
-// exactly this. No new shade is invented.
+// The dimming of what shows through is the bake's business, not this pass's:
+// the pit interior arrives as a flat black veil at RenderFx.holeDepth opacity
+// with real alpha beneath (Grid.veilPixel), so the floor reads through whole
+// and dark, and nothing here invents a shade.
 //
 // Cost is proportional to the holes, not to the world. Only chunks actually IN
 // VIEW are considered, and only those whose own art has any transparency ask
@@ -252,7 +257,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // past 12 px/tile was a feature nobody saw — at fit zoom the openings are
 // small, but a hole that is dark blue nothing until the third wheel-click
 // reads as a bug, not a hole.
-export const PARALLAX = 0.94;
+export const PARALLAX = 0.90;
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
 // canvas itself: one getImageData per chunk for the life of the tab, and it
