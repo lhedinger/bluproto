@@ -914,7 +914,7 @@ public final class BlackMesa {
 	private static void engineBay(World w) {
 		shell(w, DEEP, 112, 66, 132, 84,
 				Tile.TileType.TYPE_WALL_CONCRETE, Tile.TileType.TYPE_PLATE);
-		fill(w, DEEP, 116, 68, 130, 69, Tile.TileType.TYPE_PIPES);
+		fill(w, DEEP, 116, 68, 130, 68, Tile.TileType.TYPE_PIPES);
 		set(w, 117, 80, DEEP, Tile.TileType.TYPE_EXCHANGER);
 		set(w, 128, 80, DEEP, Tile.TileType.TYPE_EXCHANGER);
 		// The pool under the bore, and the test engine standing in it. The
