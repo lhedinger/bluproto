@@ -593,7 +593,12 @@ public class Grid {
 					}
 					continue;
 				}
-				boolean ownTight = GroundTextures.isStructure(cls) || cls == GroundTextures.CLS_HOLE
+				// A natural pit is NOT tight: it takes the water treatment — the
+				// surrounding ground overhangs its mouth in the autotiler's
+				// scalloped, corner-rounded laps — so a gorge's outline is a
+				// drawn shape, not a staircase of tile edges. Shafts and
+				// catwalks stay tight; machine-cut openings are square.
+				boolean ownTight = GroundTextures.isStructure(cls)
 						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
 				boolean wallN = wallSideFor(x, y - 1, x, y);
 				boolean wallS = wallSideFor(x, y + 1, x, y);
@@ -1073,28 +1078,31 @@ public class Grid {
 
 	/** Draw-order rank for open-ground autotiling: the higher terrain laps
 	 *  over the lower at their shared edge (grass overhangs soil, fungus laps
-	 *  onto stone, everything laps over water). Structures, holes and paving
-	 *  do not participate: their edges are their own. */
+	 *  onto stone, everything laps over water — and everything, water
+	 *  included, overhangs a pit's mouth, because ground breaks off over a
+	 *  drop and nothing pours out of one). Structures, shafts and paving do
+	 *  not participate: their edges are their own. */
 	private static int edgeRank(int cls) {
 		switch (cls) {
-		case GroundTextures.CLS_WATER: return 0;
-		case GroundTextures.CLS_SHALLOWS: return 1;
-		case GroundTextures.CLS_MUD: return 2;
-		case GroundTextures.CLS_QUICKSAND: return 3;
-		case GroundTextures.CLS_SAND: return 4;
-		case GroundTextures.CLS_SOIL: return 5;
+		case GroundTextures.CLS_HOLE: return 0;
+		case GroundTextures.CLS_WATER: return 1;
+		case GroundTextures.CLS_SHALLOWS: return 2;
+		case GroundTextures.CLS_MUD: return 3;
+		case GroundTextures.CLS_QUICKSAND: return 4;
+		case GroundTextures.CLS_SAND: return 5;
+		case GroundTextures.CLS_SOIL: return 6;
 		// Rocky ground laps over meadow and bare rock laps over rocky, so the
 		// slope from pasture to outcrop always reads in that order.
-		case GroundTextures.CLS_ROCKY: return 6;
-		case GroundTextures.CLS_STONE: return 7;
-		case GroundTextures.CLS_CRYSTAL_SPARSE: return 8;
-		case GroundTextures.CLS_CRYSTAL_BED: return 9;
-		case GroundTextures.CLS_RUBBLE: return 10;
-		case GroundTextures.CLS_VENT: return 11;
-		case GroundTextures.CLS_FUNGUS: return 12;
-		case GroundTextures.CLS_REEDS: return 13;
-		case GroundTextures.CLS_COVER: return 14;
-		default: return -1; // structures, holes, paving: no lapping
+		case GroundTextures.CLS_ROCKY: return 7;
+		case GroundTextures.CLS_STONE: return 8;
+		case GroundTextures.CLS_CRYSTAL_SPARSE: return 9;
+		case GroundTextures.CLS_CRYSTAL_BED: return 10;
+		case GroundTextures.CLS_RUBBLE: return 11;
+		case GroundTextures.CLS_VENT: return 12;
+		case GroundTextures.CLS_FUNGUS: return 13;
+		case GroundTextures.CLS_REEDS: return 14;
+		case GroundTextures.CLS_COVER: return 15;
+		default: return -1; // structures, shafts, paving: no lapping
 		}
 	}
 
