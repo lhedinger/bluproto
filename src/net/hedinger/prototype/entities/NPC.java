@@ -826,6 +826,11 @@ public abstract class NPC extends Entity {
 		return flying;
 	}
 
+	/**
+	 * The separation spring: bodies that overlap shove each other apart.
+	 *
+	 * <p>Two pairs are exempt, and the second is about the air.
+	 */
 	@Override
 	public void collisionCheck() {
 		float spring = 0.25f;
@@ -834,6 +839,18 @@ public abstract class NPC extends Entity {
 			// the host we ride. They move together, so the separation spring would
 			// just fight the carry (and stall a hauler pushing against its own load).
 			if (npc.getAttachTarget() == this || getAttachTarget() == npc) {
+				continue;
+			}
+			// Nor against something at a different altitude. Flight in this world
+			// is not a height — Z is the level a body is on, so a flyer stands in
+			// exactly the same cell space as a walker and this spring saw two
+			// bodies at one point. The steward's drone barged grazers along the
+			// ground it was flying over, and its own quarry away from its emitter.
+			//
+			// Every other close interaction already asks. A grounded creature
+			// cannot seize a flyer out of the air (see grab); biting and mating
+			// take flight into account too. The spring was the one that never did.
+			if (npc.isFlying() != isFlying()) {
 				continue;
 			}
 			double dx = npc.getX() - getX();

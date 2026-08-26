@@ -409,6 +409,67 @@ public class SimTests {
 	}
 
 	/**
+	 * A flyer and a walker do not shove each other; two of a kind do.
+	 *
+	 * <p>Flight in this world is not a height. Z is the level a body stands on,
+	 * so a flyer occupies exactly the same cell space as a walker and the
+	 * separation spring saw two bodies at one point — the steward's drone barged
+	 * grazers along the ground it was flying over, and shouldered its own quarry
+	 * away from the emitter it was trying to hold on it.
+	 *
+	 * <p>Every other close interaction already asked. A grounded creature cannot
+	 * seize a flyer out of the air; biting and mating take flight into account.
+	 * The spring was the one that never did.
+	 *
+	 * <p>All three pairings are checked, because the exemption has to be exactly
+	 * one of them: an implementation that simply stopped flyers colliding with
+	 * anything would pass a test that only looked at the mixed pair, and four
+	 * drones would then stack on one charge pad.
+	 */
+	static class AFlyerAndAWalkerDoNotShoveEachOther extends Scenario {
+		/** Two bodies dropped on the same spot; how far apart they end up. */
+		private double gapAfter(boolean aFlies, boolean bFlies) {
+			seed(521);
+			World w = room(16, 16);
+			Genome g = Genome.phenotype(64, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC a = TestNPC.breeder(8.45, 8.5, 0, g).withReproCooldown(100000);
+			TestNPC b = TestNPC.breeder(8.55, 8.5, 0, g).withReproCooldown(100000);
+			if (aFlies) {
+				a = a.withFlying();
+			}
+			if (bFlies) {
+				b = b.withFlying();
+			}
+			w.spawnEntity(a);
+			w.spawnEntity(b);
+			w.think();
+			tick(w, 40);
+			return Math.hypot(a.getX() - b.getX(), a.getY() - b.getY());
+		}
+
+		@Override
+		public void run() {
+			double walkers = gapAfter(false, false);
+			double flyers = gapAfter(true, true);
+			double mixed = gapAfter(true, false);
+
+			// Dropped a tenth of a tile apart, well inside the 0.36 their two
+			// radii want. Both on the ground or both in the air, the spring
+			// takes them back out to touching distance.
+			assertLess("two walkers dropped on one spot push apart", 0.3, walkers);
+			assertLess("and so do two flyers — a rank must not stack on one pad",
+					0.3, flyers);
+			// One of each: nothing to push against, so they stay where they were
+			// put. This is the whole change, and it is asserted against the two
+			// above rather than against a bare number so it cannot pass by the
+			// spring having stopped working altogether.
+			assertLess("but a flyer over a walker is not touching it", mixed, 0.15);
+			assertLess("which is nothing like what two of a kind do",
+					mixed * 2, Math.min(walkers, flyers));
+		}
+	}
+
+	/**
 	 * What a lineage eats is inherited. A scavenger's child is a scavenger, budded
 	 * or crossed — without which the niche cannot grow whatever else is true of it,
 	 * because every scavenger that ever managed to breed produced a grazer and the
@@ -8645,6 +8706,7 @@ public class SimTests {
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsWorthWhatAKillIsWorth(),
 				new ABodyIsShapedByWhatItEats(),
+				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new ScavengerYoungAreScavengers(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),
