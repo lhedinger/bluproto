@@ -281,13 +281,18 @@ function hasHoles(chunk: HTMLCanvasElement): boolean {
   return holed;
 }
 
-/** For every visible chunk whose art has holes, the chunk one level down and
- *  the screen rect its parallax puts it in: [key, canvas, x, y, w, h]. */
+/** For every visible chunk whose art has holes, the chunks below it and the
+ *  screen rects their parallax puts them in, deepest first: [key, z, canvas,
+ *  x, y, w, h]. Where the level below is itself holed over the same chunk —
+ *  the gorge cutting through two storeys — the level under THAT is drawn
+ *  first at PARALLAX², a plane two storeys from the eye, so the stack reads
+ *  as one deepening cut rather than a hole with a hole painted on its
+ *  floor. */
 function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     chunkTiles: number, level: number,
     getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
-): Array<[number, HTMLCanvasElement, number, number, number, number]> {
-  const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
+): Array<[number, number, HTMLCanvasElement, number, number, number, number]> {
+  const out: Array<[number, number, HTMLCanvasElement, number, number, number, number]> = [];
   if (level - 1 < 0 || chunkTiles <= 0) return out;
   const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
   const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
@@ -296,19 +301,29 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
   const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
   const mx = cvW / 2, my = cvH / 2;
+  const rect = (cx: number, cy: number, factor: number):
+      [number, number, number, number] => {
+    const wx = cx * chunkTiles, wy = cy * chunkTiles;
+    const cw = Math.min(chunkTiles, meta.cols - wx);
+    const ch = Math.min(chunkTiles, meta.rows - wy);
+    const o = cam.worldToScreen(wx, wy);
+    return [mx + (o.x - mx) * factor, my + (o.y - my) * factor,
+      cw * cam.scale * factor, ch * cam.scale * factor];
+  };
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
       const top = getChunk(cx, cy, level);
       if (!top || !hasHoles(top)) continue;
       const below = getChunk(cx, cy, level - 1);
       if (!below) continue;
-      const wx = cx * chunkTiles, wy = cy * chunkTiles;
-      const cw = Math.min(chunkTiles, meta.cols - wx);
-      const ch = Math.min(chunkTiles, meta.rows - wy);
-      const o = cam.worldToScreen(wx, wy);
-      out.push([cx + cy * cxN, below,
-        mx + (o.x - mx) * PARALLAX, my + (o.y - my) * PARALLAX,
-        cw * cam.scale * PARALLAX, ch * cam.scale * PARALLAX]);
+      const key = cx + cy * cxN;
+      if (level - 2 >= 0 && hasHoles(below)) {
+        const below2 = getChunk(cx, cy, level - 2);
+        if (below2) {
+          out.push([key, level - 2, below2, ...rect(cx, cy, PARALLAX * PARALLAX)]);
+        }
+      }
+      out.push([key, level - 1, below, ...rect(cx, cy, PARALLAX)]);
     }
   }
   return out;
@@ -373,7 +388,7 @@ export function render(
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       g.imageSmoothingEnabled = false;
-      for (const [, img, bx, by, bw, bh] of
+      for (const [, , img, bx, by, bw, bh] of
           belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
         g.drawImage(img, bx, by, bw, bh);
       }
@@ -391,7 +406,7 @@ export function render(
     g.imageSmoothingEnabled = false;
     // The floor below goes down FIRST, under its own parallax, so the holes in
     // the chunks drawn next look onto it (see belowChunks).
-    for (const [, img, bx, by, bw, bh] of
+    for (const [, , img, bx, by, bw, bh] of
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       g.drawImage(img, bx, by, bw, bh);
     }
@@ -1100,9 +1115,9 @@ export function renderGL(
     // The floor below goes down FIRST, under its own parallax, so the ground
     // layer's holes look onto it (see belowChunks). Its chunks never change
     // once decoded, so each is a permanent texture at rev 0.
-    for (const [key, img, bx, by, bw, bh] of
+    for (const [key, z, img, bx, by, bw, bh] of
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
-      glr.layer('below:' + level + ':' + key, img, 0, null, bx, by, bw, bh);
+      glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
     }
     if (ground) {
       if (lowZoom && groundLowCv) {

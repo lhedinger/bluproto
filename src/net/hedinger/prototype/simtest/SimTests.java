@@ -7656,21 +7656,23 @@ public class SimTests {
 		}
 
 		/** The room's interior north-west corner on the deep level, or null if
-		 *  this world got no plant floor. Found by looking: the deep level is
-		 *  solid rock apart from this one room, so the box of everything that
-		 *  is not rock IS the room's shell. */
+		 *  this world got no plant floor. The first version boxed everything
+		 *  that was not rock — which was the room, while the room was the deep
+		 *  level's only carving. The underdark's caverns ended that; the pipe
+		 *  run is the landmark now, because the plan draws it down the room's
+		 *  west column from its first row and nothing natural grows pipe. */
 		static int[] plantFloorOrigin(World w) {
 			int minx = Integer.MAX_VALUE, miny = Integer.MAX_VALUE;
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
 					Tile t = w.getTile(x, y, 0);
-					if (t != null && t.getType() != Tile.TileType.TYPE_WALL) {
+					if (t != null && t.getType() == Tile.TileType.TYPE_PIPES) {
 						minx = Math.min(minx, x);
 						miny = Math.min(miny, y);
 					}
 				}
 			}
-			return minx == Integer.MAX_VALUE ? null : new int[] { minx + 1, miny + 1 };
+			return minx == Integer.MAX_VALUE ? null : new int[] { minx, miny };
 		}
 	}
 
