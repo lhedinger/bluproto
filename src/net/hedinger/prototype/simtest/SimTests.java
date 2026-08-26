@@ -6035,6 +6035,117 @@ public class SimTests {
 	 * ({@link net.hedinger.prototype.sim.WorldAudit}'s directed flood). Guards the
 	 * world-gen linking so a resize can never strand an area.
 	 */
+	/**
+	 * The surface has its ravine, and the ravine does not cut the world in two.
+	 *
+	 * <p>The gorge is the largest connected blob of surface holes — the link
+	 * stations' pits are one or two tiles, a ravine segment between causeways
+	 * is twenty-odd, so a floor of 18 separates them cleanly. Both halves
+	 * matter: that a gorge exists at all (the siting scan could quietly fail
+	 * on every probe and nothing else would notice), and that ground on one
+	 * bank can reach ground on the other WITHOUT leaving the surface — the
+	 * causeways are the load-bearing part of the design, because the ravine
+	 * is carved after connectLevels certified the world whole, and severed
+	 * banks would fail no audit that still runs.
+	 */
+	static class TheRavineIsCutButTheWorldHolds extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int z = w.getLevels() - 1;
+				int cols = w.getColums(), rows = w.getRows();
+				java.util.List<int[]> gorge = largestHoleBlob(w, z);
+				assertLess("seed " + s + ": the surface has a ravine", 17, gorge.size());
+
+				// One bank tile on each side of some gorge tile, then a flood
+				// over surface walkables only: falling in is not a route.
+				int ax = -1, ay = -1, bx = -1, by = -1;
+				for (int[] p : gorge) {
+					if (ay < 0 && walkable(w, p[0], p[1] - 1, z)) {
+						ax = p[0];
+						ay = p[1] - 1;
+					}
+					int wy = p[1] + 1;
+					while (wy < rows && isHole(w, p[0], wy, z)) {
+						wy++;
+					}
+					if (by < 0 && wy < rows && walkable(w, p[0], wy, z)) {
+						bx = p[0];
+						by = wy;
+					}
+					if (ay >= 0 && by >= 0) {
+						break;
+					}
+				}
+				assertTrue("seed " + s + ": the gorge has ground on both banks",
+						ay >= 0 && by >= 0);
+				boolean[][] vis = new boolean[cols][rows];
+				java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+				q.add(new int[] { ax, ay });
+				vis[ax][ay] = true;
+				boolean linked = false;
+				while (!q.isEmpty() && !linked) {
+					int[] p = q.poll();
+					linked = p[0] == bx && p[1] == by;
+					for (int k = 0; k < 4 && !linked; k++) {
+						int nx = p[0] + (k == 0 ? 1 : k == 1 ? -1 : 0);
+						int ny = p[1] + (k == 2 ? 1 : k == 3 ? -1 : 0);
+						if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && !vis[nx][ny]
+								&& walkable(w, nx, ny, z)) {
+							vis[nx][ny] = true;
+							q.add(new int[] { nx, ny });
+						}
+					}
+				}
+				assertTrue("seed " + s + ": the banks meet again over a causeway,"
+						+ " on the surface alone", linked);
+			}
+		}
+
+		private static boolean isHole(World w, int x, int y, int z) {
+			return w.getTile(x, y, z).getType() == Tile.TileType.TYPE_HOLE;
+		}
+
+		private static boolean walkable(World w, int x, int y, int z) {
+			return w.isValid(x, y, z) && w.getTile(x, y, z).isWalkable();
+		}
+
+		private static java.util.List<int[]> largestHoleBlob(World w, int z) {
+			int cols = w.getColums(), rows = w.getRows();
+			boolean[][] seen = new boolean[cols][rows];
+			java.util.List<int[]> best = new java.util.ArrayList<int[]>();
+			for (int x = 0; x < cols; x++) {
+				for (int y = 0; y < rows; y++) {
+					if (seen[x][y] || !isHole(w, x, y, z)) {
+						continue;
+					}
+					java.util.List<int[]> blob = new java.util.ArrayList<int[]>();
+					java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+					q.add(new int[] { x, y });
+					seen[x][y] = true;
+					while (!q.isEmpty()) {
+						int[] p = q.poll();
+						blob.add(p);
+						for (int k = 0; k < 4; k++) {
+							int nx = p[0] + (k == 0 ? 1 : k == 1 ? -1 : 0);
+							int ny = p[1] + (k == 2 ? 1 : k == 3 ? -1 : 0);
+							if (nx >= 0 && ny >= 0 && nx < cols && ny < rows
+									&& !seen[nx][ny] && isHole(w, nx, ny, z)) {
+								seen[nx][ny] = true;
+								q.add(new int[] { nx, ny });
+							}
+						}
+					}
+					if (blob.size() > best.size()) {
+						best = blob;
+					}
+				}
+			}
+			return best;
+		}
+	}
+
 	static class DemoWorldFullyConnected extends Scenario {
 		@Override
 		public void run() {
@@ -8653,6 +8764,7 @@ public class SimTests {
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
+				new TheRavineIsCutButTheWorldHolds(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),
 				new ThePlantFloorIsTheRoomThatWasDrawn(),
