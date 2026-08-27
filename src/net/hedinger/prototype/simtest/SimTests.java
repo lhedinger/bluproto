@@ -470,6 +470,97 @@ public class SimTests {
 	}
 
 	/**
+	 * A floor is solid to the touch, and an opening is not.
+	 *
+	 * <p>{@code canTouch} folds the level index into the distance as though a
+	 * storey were a tile, so a body directly underneath reads as 1.0 away — and
+	 * any pair whose radii sum past that was in contact through the deck plate.
+	 * The same reading that let sight and a taser cross a floor.
+	 *
+	 * <p>Nothing in the running world reaches this. Perception is filtered to
+	 * one level before the neighbour list is built, so the collision spring
+	 * never sees a body from another floor: measured at zero cross-level calls
+	 * in six thousand ticks of the seeded world. That is exactly why the rule
+	 * needs a scenario — it is held today by a filter in another class that
+	 * happens to run first, and nothing would notice if that filter moved.
+	 *
+	 * <p>The bodies are deliberately huge. Reach is the sum of two radii, so a
+	 * pair small enough not to span a storey would be spared by arithmetic
+	 * rather than by the rule, and the test would pass on the bug.
+	 */
+	static class AFloorIsSolidToTheTouch extends Scenario {
+		private World w;
+		private TestNPC upper, lower;
+
+		/** Two big bodies in the same column, one storey apart. */
+		private void stack() {
+			seed(524);
+			w = room(16, 12, 3);
+			Genome g = new Genome();
+			g.size = 220; // radii sum well past the 1.0 a storey reads as
+			upper = TestNPC.breeder(8.5, 6.5, 1, g).withReproCooldown(100000);
+			lower = TestNPC.breeder(8.5, 6.5, 0, g).withReproCooldown(100000);
+			w.spawnEntity(upper);
+			w.spawnEntity(lower);
+			w.think();
+		}
+
+		@Override
+		public void run() {
+			stack();
+			double radii = (upper.getSize() + lower.getSize()) / 2.0;
+			assertLess("the test is worth running: a storey is inside their reach",
+					1.0, radii);
+			assertTrue("through a plain floor, neither body touches the other",
+					!upper.touches(lower) && !lower.touches(upper));
+
+			// A hole under the upper body: the floor is not there.
+			stack();
+			w.setTile(8, 6, 1, Tile.TileType.TYPE_HOLE);
+			assertTrue("but through a hole it does", upper.touches(lower));
+			assertTrue("and from below, the same hole", lower.touches(upper));
+
+			// A drop shaft is a hole with a hazard stripe round it.
+			stack();
+			w.setTile(8, 6, 1, Tile.TileType.TYPE_SHAFT);
+			assertTrue("a drop shaft reads as a hole too", upper.touches(lower));
+
+			// A ramp joins the two floors where it stands.
+			stack();
+            w.setTile(8, 6, 0, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(8, 6, 0).setRampUphill(Tile.DIR_N);
+			assertTrue("so does the ramp that joins them", lower.touches(upper));
+
+			// Two storeys is a floor with a floor under it, opening or no.
+			seed(525);
+			w = room(16, 12, 3);
+			Genome g = new Genome();
+			g.size = 220;
+			TestNPC top = TestNPC.breeder(8.5, 6.5, 2, g).withReproCooldown(100000);
+			TestNPC bottom = TestNPC.breeder(8.5, 6.5, 0, g).withReproCooldown(100000);
+			w.spawnEntity(top);
+			w.spawnEntity(bottom);
+			w.setTile(8, 6, 2, Tile.TileType.TYPE_HOLE);
+			w.setTile(8, 6, 1, Tile.TileType.TYPE_HOLE);
+			w.think();
+			assertTrue("two storeys apart is out of reach, holes or no holes",
+					!top.touches(bottom));
+
+			// And the ordinary case is untouched.
+			seed(526);
+			World flat = room(16, 12);
+			Genome big = new Genome();
+			big.size = 220;
+			TestNPC a = TestNPC.breeder(8.4, 6.5, 0, big).withReproCooldown(100000);
+			TestNPC b = TestNPC.breeder(8.6, 6.5, 0, big).withReproCooldown(100000);
+			flat.spawnEntity(a);
+			flat.spawnEntity(b);
+			flat.think();
+			assertTrue("two bodies sharing a floor still touch", a.touches(b));
+		}
+	}
+
+	/**
 	 * What a lineage eats is inherited. A scavenger's child is a scavenger, budded
 	 * or crossed — without which the niche cannot grow whatever else is true of it,
 	 * because every scavenger that ever managed to breed produced a grazer and the
@@ -8954,6 +9045,7 @@ public class SimTests {
 				new ACarcassIsWorthWhatAKillIsWorth(),
 				new ABodyIsShapedByWhatItEats(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
+				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),

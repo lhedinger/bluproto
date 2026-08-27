@@ -872,7 +872,33 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////////////////////////////////////
 	// |///////////////////////////////
 
+	/**
+	 * Whether two bodies are close enough to be in contact.
+	 *
+	 * <p>A floor is solid to the touch. Standing on a deck you cannot reach the
+	 * body one storey under your feet, and it cannot reach you — which the
+	 * arithmetic below does not say on its own: it folds the level index into
+	 * the distance as though a storey were a tile, so a body directly beneath
+	 * reads as 1.0 away, and any pair whose radii sum past that was touching
+	 * through the deck plate. The same reading that let sight and a taser cross
+	 * a floor.
+	 *
+	 * <p>The exceptions are the openings — a ramp joining the two floors, or a
+	 * hole or drop-shaft under the upper body. A hole is the one place a floor
+	 * is not there, so reaching through it is reaching through nothing.
+	 *
+	 * <p>Nothing in the world exercises this today and it is worth saying so
+	 * plainly: entity perception is already filtered to one level, so the
+	 * neighbour list this is called against never contains a body from another
+	 * floor — measured at zero cross-level calls in six thousand ticks. The
+	 * guard is here because the correctness belongs to this method rather than
+	 * to a filter in a different class that happens to run first. A caller that
+	 * does not have that filter gets the right answer now.
+	 */
 	protected boolean canTouch(Entity e) {
+		if (getLvl() != e.getLvl() && !reachesBetweenFloors(e)) {
+			return false;
+		}
 		// Squared-distance compare: equivalent to distance(e) < minDist for
 		// non-negative values, without the per-neighbour sqrt.
 		double ddx = e.getX() - X;
@@ -880,6 +906,38 @@ public abstract class NPC extends Entity {
 		double ddz = e.getZ() - Z;
 		double minDist = e.getSize() / 2 + getSize() / 2;
 		return ddx * ddx + ddy * ddy + ddz * ddz < minDist * minDist;
+	}
+
+	/** Whether an opening stands between these two bodies' floors, where they
+	 *  are: a hole or drop-shaft under the upper one, or either of them on the
+	 *  ramp that joins the pair. Adjacent floors only -- an opening reaches one
+	 *  storey, and two storeys is a floor with a floor under it. */
+	private boolean reachesBetweenFloors(Entity e) {
+		if (Math.abs(getLvl() - e.getLvl()) != 1 || getWorld() == null) {
+			return false;
+		}
+		Entity upper = getLvl() > e.getLvl() ? this : e;
+		Entity lower = upper == this ? e : this;
+		net.hedinger.prototype.engine.Tile over = getWorld().getTile(upper.getX(), upper.getY(), upper.getZ());
+		if (over != null && over.isDrop()) {
+			return true; // standing over the hole, reaching down through it
+		}
+		return onRampTo(upper, lower.getLvl()) || onRampTo(lower, upper.getLvl());
+	}
+
+	/** Whether {@code b} stands on a ramp whose far end is level {@code other}. */
+	private boolean onRampTo(Entity b, int other) {
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(b.getX(), b.getY(), b.getZ());
+		if (t == null) {
+			return false;
+		}
+		if (t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP) {
+			return b.getLvl() + 1 == other;
+		}
+		if (t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN) {
+			return b.getLvl() - 1 == other;
+		}
+		return false;
 	}
 
 	protected boolean isInLOS() {
