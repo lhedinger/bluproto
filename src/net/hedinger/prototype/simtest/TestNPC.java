@@ -803,6 +803,14 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Whether this body is in contact with another — a test seam onto
+	 *  {@code NPC.canTouch}, which nothing in the running world calls across a
+	 *  floor because perception is filtered to one level before it gets there.
+	 *  A rule no live path exercises is a rule only a scenario can hold. */
+	public boolean touches(net.hedinger.prototype.engine.Entity e) {
+		return canTouch(e);
+	}
+
 	/** Tints the body (purely cosmetic; the snapshot carries it as the entity rgb). */
 	public TestNPC withColor(java.awt.Color c) {
 		col = c;
