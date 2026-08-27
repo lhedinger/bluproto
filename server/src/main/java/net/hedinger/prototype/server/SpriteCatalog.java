@@ -666,6 +666,7 @@ final class SpriteCatalog {
 
 	private void tileCatalog() {
 		StringBuilder nav = new StringBuilder();
+		nav.append("<a href=\"#rules\">How tiles fit</a>");
 		StringBuilder sections = new StringBuilder();
 		for (java.util.Map.Entry<String, Tile.TileType[]> e : tileGroups().entrySet()) {
 			String id = e.getKey().toLowerCase(java.util.Locale.ROOT)
@@ -724,6 +725,7 @@ final class SpriteCatalog {
 				+ "whatever crosses (factor at reference body size). <i>wounds</i>: "
 				+ "standing here costs health. <i>grows</i>: hosts regrowing vegetation. "
 				+ "<i>small bodies only</i>: a clearance gate, not a wall.</p>"
+				+ tileRules()
 				+ sections
 				+ "</body></html>";
 	}
@@ -955,6 +957,182 @@ final class SpriteCatalog {
 		assets.put(file, png(img.getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts)));
 		out.append("<figure><img src=\"/tiles/").append(file)
 				.append("\" loading=lazy><figcaption>").append(cap)
+				.append("</figcaption></figure>");
+	}
+
+
+	/**
+	 * How tiles fit together: the general rules of the grid, each stated and
+	 * then demonstrated with a staged bake. The prose is written against the
+	 * engine's actual behaviour, and where a rule is a number or an ordering,
+	 * the page reads it off the running code rather than transcribing it —
+	 * the lapping order comes from {@code Grid.edgeRankOf}, the clearances
+	 * from the tile's own constants.
+	 */
+	private String tileRules() {
+		StringBuilder out = new StringBuilder();
+		out.append("<h2 id=\"rules\">How tiles fit together</h2>");
+
+		// ---- one mass, and the seam between materials ----
+		out.append("<p class=note><b>Same type, one mass.</b> Wall tiles of one "
+				+ "material autotile into a single mass: corners round off, rims "
+				+ "silhouette the outline, and the lighting pass adds the raised "
+				+ "read — a lit brow where the mass opens north, a carved face band "
+				+ "where it fronts open ground to the south, a cornice and base "
+				+ "shadow all round. Two different wall materials never merge: the "
+				+ "boundary between them is a real seam, because a concrete pour "
+				+ "against living rock IS a seam.</p><div class=vrow>");
+		StringBuilder demo = new StringBuilder();
+		{
+			World w = stage(8, 8);
+			for (int x = 2; x <= 5; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_WALL);
+			}
+			for (int y = 2; y <= 5; y++) {
+				w.setTile(2, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			bakeRule(demo, w, 0, "rule_mass_corner", "one material, one mass");
+		}
+		{
+			World w = stage(8, 8);
+			for (int y = 2; y <= 4; y++) {
+				w.setTile(2, y, 0, Tile.TileType.TYPE_WALL);
+				w.setTile(3, y, 0, Tile.TileType.TYPE_WALL);
+				w.setTile(4, y, 0, Tile.TileType.TYPE_WALL_CONCRETE);
+				w.setTile(5, y, 0, Tile.TileType.TYPE_WALL_CONCRETE);
+			}
+			bakeRule(demo, w, 0, "rule_material_seam", "two materials, one seam");
+		}
+		out.append(demo).append("</div>");
+
+		// ---- ramps ----
+		out.append("<p class=note><b>A ramp is floor that spans two levels.</b> "
+				+ "The tile carries which way its high side faces; a body that "
+				+ "walks off the top comes out one level up, off the foot one level "
+				+ "down, and the change lands at the tile edge — crossing the ramp "
+				+ "itself is ordinary walking. An up ramp is ONE MASS with the rock "
+				+ "it climbs into: no cliff face is drawn across its head, because "
+				+ "the head is where the climb arrives, level with the rock. The "
+				+ "worlds join their floors with a four-tile stairwell idiom: a "
+				+ "hole to fall through, a descending ramp beside it so the fall "
+				+ "is not the only way, a landing below, and a climbing ramp back "
+				+ "up. Both floors of one stairwell, side by side:</p><div class=vrow>");
+		demo = new StringBuilder();
+		{
+			World w = new World(8, 8, 2);
+			for (int x = 1; x < 7; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_PLATE);
+					w.setTile(x, y, 1, Tile.TileType.TYPE_PLATE);
+				}
+			}
+			w.setTile(2, 3, 1, Tile.TileType.TYPE_HOLE);
+			w.setTile(3, 3, 1, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(3, 3, 1).setRampUphill(1);
+			w.setTile(2, 3, 0, Tile.TileType.TYPE_PLATE);
+			w.setTile(4, 3, 0, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(4, 3, 0).setRampUphill(1);
+			bakeRule(demo, w, 1, "rule_stair_upper", "the floor above: hole + down ramp");
+			bakeRule(demo, w, 0, "rule_stair_lower", "the floor below: landing + up ramp");
+		}
+		out.append(demo).append("</div>");
+
+		// ---- edge lapping, ranked ----
+		StringBuilder order = new StringBuilder();
+		java.util.List<Tile.TileType> ranked = new java.util.ArrayList<>();
+		for (Tile.TileType t : Tile.TileType.values()) {
+			if (net.hedinger.prototype.engine.Grid.edgeRankOf(t) >= 0) {
+				ranked.add(t);
+			}
+		}
+		ranked.sort(java.util.Comparator.comparingInt(
+				net.hedinger.prototype.engine.Grid::edgeRankOf));
+		for (int i = 0; i < ranked.size(); i++) {
+			if (i > 0) {
+				order.append(" &lt; ");
+			}
+			order.append(ranked.get(i).label());
+		}
+		out.append("<p class=note><b>Open ground laps by rank.</b> Where two open "
+				+ "terrains meet, the higher-ranked one laps one to three pixels "
+				+ "into its neighbour in short hand-drawn scallops, so the slope "
+				+ "from water to rock always reads in the same order. The ranking, "
+				+ "read off the renderer itself, lowest first: <i>" + order
+				+ "</i>. Everything not in that list — paving, deck, walls, "
+				+ "openings — takes a hard edge and neither laps nor gets "
+				+ "lapped.</p><div class=vrow>");
+		demo = new StringBuilder();
+		{
+			World w = stage(8, 8);
+			for (int y = 1; y < 7; y++) {
+				w.setTile(1, y, 0, Tile.TileType.TYPE_WATER);
+				w.setTile(2, y, 0, Tile.TileType.TYPE_WATER);
+				w.setTile(3, y, 0, Tile.TileType.TYPE_SHALLOWS);
+				w.setTile(4, y, 0, Tile.TileType.TYPE_SAND);
+				w.setTile(5, y, 0, Tile.TileType.TYPE_ROCKY);
+				w.setTile(6, y, 0, Tile.TileType.TYPE_STONE);
+			}
+			bakeRule(demo, w, 0, "rule_lapping", "water to rock, lapped in rank order");
+		}
+		out.append(demo).append("</div>");
+
+		// ---- openings ----
+		out.append("<p class=note><b>An opening is a hole, not a picture of one.</b> "
+				+ "A pit or shaft bakes genuinely see-through inside its lip, and "
+				+ "the live client shows the real level below through the gap, "
+				+ "moving with its own parallax. A body over an opening falls to "
+				+ "the first walkable floor beneath it; if what waits below is "
+				+ "solid rock, or there is no floor at all, it falls out of the "
+				+ "world. By the map's own convention, the size of an opening "
+				+ "tells you the size of the void under it. The same stage, both "
+				+ "floors:</p><div class=vrow>");
+		demo = new StringBuilder();
+		{
+			World w = new World(8, 8, 2);
+			for (int x = 1; x < 7; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_FUNGUS);
+					w.getTile(x, y, 0).setFertility(0.6);
+					w.setTile(x, y, 1, Tile.TileType.TYPE_STONE);
+				}
+			}
+			for (int x = 3; x <= 4; x++) {
+				for (int y = 3; y <= 4; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_HOLE);
+				}
+			}
+			bakeRule(demo, w, 1, "rule_opening_upper", "the opening, baked see-through");
+			bakeRule(demo, w, 0, "rule_opening_lower", "the cavern floor a viewer sees in it");
+		}
+		out.append(demo).append("</div>");
+
+		// ---- runs and clearances ----
+		out.append("<p class=note><b>Runs work out their own shapes.</b> Rail, "
+				+ "pipe and coolant tiles take the four neighbours of their own "
+				+ "kind as a mask and draw the shape it implies — a lone arm is a "
+				+ "capped stub, two opposite a straight, two adjacent an elbow, "
+				+ "three a tee, four a crossing. The world generator lays tiles; "
+				+ "the run works out its own geometry (see "
+				+ "<a href=\"#runs-lines\">Runs &amp; lines</a> for every shape)."
+				+ "</p>");
+		out.append("<p class=note><b>Clearance gates.</b> Two grounds admit by "
+				+ "body size rather than blocking outright: a crawl duct passes "
+				+ "bodies up to " + (int) Tile.DUCT_CLEARANCE
+				+ " px, a shard bed up to " + (int) Tile.CRYSTAL_CLEARANCE
+				+ " px — read off the tile's own constants. To anything larger "
+				+ "they are walls; to anything smaller, a road the large cannot "
+				+ "follow.</p>");
+		return out.toString();
+	}
+
+	/** Bakes one level of a staged world and appends the rule figure. */
+	private void bakeRule(StringBuilder out, World w, int z, String file, String cap) {
+		w.alignTiles();
+		BufferedImage img = LayerBaker.bakeLevelImage(w, LayerBaker.chunkRenderer(w), z);
+		int ts = ResourceManager.tileSize;
+		assets.put(file + ".png", png(img.getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts)));
+		out.append("<figure><img src=\"/tiles/").append(file)
+				.append(".png\" loading=lazy><figcaption>").append(cap)
 				.append("</figcaption></figure>");
 	}
 
