@@ -211,6 +211,29 @@ public final class ServerMain {
 		// the arithmetic the sim itself uses, so the documentation cannot say one
 		// thing while the simulation does another.
 		app.get("/help/mechanics.json", ctx -> ctx.json(Mechanics.sections()));
+		// The tile catalog: every ground type in the world — name, code, flags
+		// and variants — grouped by function, baked at boot by the same layer
+		// renderer that bakes the served map. A page of record like /help, but
+		// server-rendered whole, because ground IS server-baked: for tiles the
+		// bake is the live rendering, not a picture of it.
+		app.get("/tiles", ctx -> ctx.html(catalog.tilesPage()));
+		app.get("/tiles/{file}", ctx -> {
+			String name = ctx.pathParam("file");
+			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
+			if (bytes == null) {
+				ctx.status(404);
+				return;
+			}
+			String etag = "\"" + buildTag + "-" + name + "\"";
+			if (etag.equals(ctx.header("If-None-Match"))) {
+				ctx.status(304);
+				return;
+			}
+			ctx.contentType(SpriteCatalog.contentType(name))
+					.header("Cache-Control", "no-cache")
+					.header("ETag", etag)
+					.result(bytes);
+		});
 		app.get("/help/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;

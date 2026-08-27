@@ -67,6 +67,7 @@ final class SpriteCatalog {
 		c.concealmentSection();
 		c.furnitureSection();
 		c.creatureSection();
+		c.tileCatalog();
 		System.out.println("sprite catalog: " + c.assets.size() + " assets in "
 				+ (System.currentTimeMillis() - t0) + " ms");
 		return c;
@@ -590,6 +591,371 @@ final class SpriteCatalog {
 		IIOMetadataNode n = new IIOMetadataNode(name);
 		root.appendChild(n);
 		return n;
+	}
+
+
+	// ---- the /tiles catalog -------------------------------------------------
+
+	/** The finished /tiles page, built once at boot beside the sprite bakes. */
+	private String tilesHtml;
+
+	String tilesPage() {
+		return tilesHtml;
+	}
+
+	/**
+	 * The functional grouping of every tile type, in page order. This is the
+	 * catalog's table of contents AND its completeness gate: the method walks
+	 * the whole enum and throws if any type is missing or listed twice, so a
+	 * new tile cannot ship without deciding where it belongs — the same
+	 * mechanism that keeps the ground painters from silently skipping one.
+	 */
+	static java.util.LinkedHashMap<String, Tile.TileType[]> tileGroups() {
+		java.util.LinkedHashMap<String, Tile.TileType[]> g = new java.util.LinkedHashMap<>();
+		g.put("Open country", new Tile.TileType[] {
+				Tile.TileType.TYPE_FLOOR, Tile.TileType.TYPE_SAND, Tile.TileType.TYPE_ROCKY,
+				Tile.TileType.TYPE_MUD, Tile.TileType.TYPE_RUBBLE, Tile.TileType.TYPE_BONES });
+		g.put("Water", new Tile.TileType[] {
+				Tile.TileType.TYPE_WATER, Tile.TileType.TYPE_SHALLOWS, Tile.TileType.TYPE_REEDS });
+		g.put("Flora & cover", new Tile.TileType[] {
+				Tile.TileType.TYPE_COVER, Tile.TileType.TYPE_CACTUS });
+		g.put("Rock & caves", new Tile.TileType[] {
+				Tile.TileType.TYPE_WALL, Tile.TileType.TYPE_MESA, Tile.TileType.TYPE_STONE,
+				Tile.TileType.TYPE_FUNGUS, Tile.TileType.TYPE_CRYSTAL,
+				Tile.TileType.TYPE_CRYSTAL_BED, Tile.TileType.TYPE_CRYSTAL_SPARSE,
+				Tile.TileType.TYPE_STALAGMITE, Tile.TileType.TYPE_VENT });
+		g.put("Hazardous ground", new Tile.TileType[] {
+				Tile.TileType.TYPE_QUICKSAND, Tile.TileType.TYPE_SLUDGE });
+		g.put("Vertical travel", new Tile.TileType[] {
+				Tile.TileType.TYPE_RAMPUP, Tile.TileType.TYPE_RAMPDOWN,
+				Tile.TileType.TYPE_HOLE, Tile.TileType.TYPE_SHAFT });
+		g.put("Built walls & glazing", new Tile.TileType[] {
+				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_WALL_CONCRETE,
+				Tile.TileType.TYPE_WALL_STEEL, Tile.TileType.TYPE_WINDOW });
+		g.put("Facility floors", new Tile.TileType[] {
+				Tile.TileType.TYPE_PAVED, Tile.TileType.TYPE_PLATE,
+				Tile.TileType.TYPE_TREADPLATE, Tile.TileType.TYPE_LIGHTGRATE,
+				Tile.TileType.TYPE_CATWALK, Tile.TileType.TYPE_COLLAPSE,
+				Tile.TileType.TYPE_HAZARD });
+		g.put("Runs & lines", new Tile.TileType[] {
+				Tile.TileType.TYPE_RAIL, Tile.TileType.TYPE_PIPES, Tile.TileType.TYPE_COOLANT,
+				Tile.TileType.TYPE_CONVEYOR, Tile.TileType.TYPE_DUCT,
+				Tile.TileType.TYPE_AIRVENT });
+		g.put("Machines & fixtures", new Tile.TileType[] {
+				Tile.TileType.TYPE_SWITCH, Tile.TileType.TYPE_DOCK,
+				Tile.TileType.TYPE_EXCHANGER, Tile.TileType.TYPE_SERVER });
+		g.put("Furniture & remains", new Tile.TileType[] {
+				Tile.TileType.TYPE_DESK, Tile.TileType.TYPE_BUNK, Tile.TileType.TYPE_WRECK });
+
+		java.util.Set<Tile.TileType> seen = java.util.EnumSet.noneOf(Tile.TileType.class);
+		for (Tile.TileType[] members : g.values()) {
+			for (Tile.TileType t : members) {
+				if (!seen.add(t)) {
+					throw new IllegalStateException("/tiles lists " + t + " twice");
+				}
+			}
+		}
+		for (Tile.TileType t : Tile.TileType.values()) {
+			if (!seen.contains(t)) {
+				throw new IllegalStateException("/tiles is missing " + t
+						+ " — every tile type must choose a group");
+			}
+		}
+		return g;
+	}
+
+	private void tileCatalog() {
+		StringBuilder nav = new StringBuilder();
+		StringBuilder sections = new StringBuilder();
+		for (java.util.Map.Entry<String, Tile.TileType[]> e : tileGroups().entrySet()) {
+			String id = e.getKey().toLowerCase(java.util.Locale.ROOT)
+					.replaceAll("[^a-z]+", "-");
+			nav.append("<a href=\"#").append(id).append("\">")
+					.append(e.getKey()).append("</a>");
+			sections.append("<h2 id=\"").append(id).append("\">")
+					.append(e.getKey()).append("</h2>\n<div class=tgrid>\n");
+			for (Tile.TileType t : e.getValue()) {
+				sections.append(tileCard(t));
+			}
+			sections.append("</div>\n");
+		}
+		tilesHtml = "<!doctype html><html><head><meta charset=utf-8>"
+				+ "<meta name=viewport content=\"width=device-width, initial-scale=1\">"
+				+ "<title>tiles</title><style>"
+				+ "body{background:#14161a;color:#cfd3da;font:14px/1.5 system-ui,sans-serif;"
+				+ "margin:0 auto;max-width:1100px;padding:16px}"
+				+ "h1{font-size:22px}h2{margin-top:28px;border-bottom:1px solid #2a2e36;"
+				+ "padding-bottom:4px}"
+				+ "nav{position:sticky;top:0;background:#14161acc;backdrop-filter:blur(4px);"
+				+ "padding:8px 0;display:flex;flex-wrap:wrap;gap:4px 12px;z-index:2}"
+				+ "nav a{color:#8fb8e8;text-decoration:none;white-space:nowrap}"
+				+ ".note{color:#8b909a;max-width:70ch}"
+				+ ".tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));"
+				+ "gap:12px}"
+				+ ".tile{background:#191c22;border:1px solid #262a32;border-radius:6px;"
+				+ "padding:10px}"
+				+ ".tile b{font-size:15px}"
+				+ ".code{color:#7d828c;font:12px ui-monospace,monospace;margin:2px 0 6px}"
+				+ ".flags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}"
+				+ ".flag{background:#232833;border-radius:3px;padding:1px 6px;font-size:11.5px;"
+				+ "color:#aab2c0}"
+				+ ".flag.warn{background:#3a2a1a;color:#d8b028}"
+				+ ".vrow{display:flex;flex-wrap:wrap;gap:8px}"
+				+ "figure{margin:0;text-align:center}"
+				+ "figure img{width:96px;height:96px;image-rendering:pixelated;"
+				+ "border-radius:3px;background:#0d0e11}"
+				+ "figcaption{font-size:11px;color:#8b909a}"
+				+ "</style></head><body>"
+				+ "<h1>The tile catalog</h1>"
+				+ "<p class=note>Every ground type in the world, baked by the same layer "
+				+ "renderer that bakes the map a viewer sees. Each entry names the tile "
+				+ "(its display name, its code name, and its wire value), lists the flags "
+				+ "the engine derives from it, and shows its variants — fertility ends "
+				+ "for the ground that grows, the shapes an autotiled run can take, and "
+				+ "a lone fixture on the floor it lives on. A see-through swatch means "
+				+ "exactly what it means on the map: you are looking into an opening, "
+				+ "and the live client shows the level below through it.</p>"
+				+ "<nav>" + nav + "</nav>"
+				+ "<p class=note><b>Flags.</b> <i>walkable</i>: a body can stand here. "
+				+ "<i>solid</i>: it cannot. <i>see-through</i>: solid to a body, open to "
+				+ "the eye. <i>blocks sight</i>: cover or mass in the line of sight. "
+				+ "<i>drops</i>: an unsupported body falls to the level below. "
+				+ "<i>water</i>: open to flyers, closed to walkers. <i>slows</i>: drag on "
+				+ "whatever crosses (factor at reference body size). <i>wounds</i>: "
+				+ "standing here costs health. <i>grows</i>: hosts regrowing vegetation. "
+				+ "<i>small bodies only</i>: a clearance gate, not a wall.</p>"
+				+ sections
+				+ "</body></html>";
+	}
+
+	private String tileCard(Tile.TileType t) {
+		Tile probe = new Tile(0, 0, 0, t);
+		StringBuilder flags = new StringBuilder();
+		if (probe.isWalkable()) {
+			flag(flags, "walkable", false);
+		} else if (probe.isSolid()) {
+			flag(flags, "solid", false);
+		}
+		if (probe.isSolid() && !probe.blocksSight()) {
+			flag(flags, "see-through", false);
+		} else if (probe.blocksSight() && !probe.isSolid()) {
+			flag(flags, "blocks sight", false);
+		}
+		if (probe.isDrop()) {
+			flag(flags, "drops", true);
+		}
+		if (probe.isWater()) {
+			flag(flags, "water", false);
+		}
+		double drag = probe.speedFactorFor(8);
+		if (drag < 1.0) {
+			flag(flags, "slows \u00d7" + String.format(java.util.Locale.ROOT, "%.2f", drag),
+					drag < 0.35);
+		}
+		if (probe.isCorrosive()) {
+			flag(flags, "wounds", true);
+		}
+		if (probe.growsVegetation()) {
+			flag(flags, "grows", false);
+		}
+		if (t == Tile.TileType.TYPE_DUCT || t == Tile.TileType.TYPE_CRYSTAL_BED) {
+			flag(flags, "small bodies only", false);
+		}
+		if (t == Tile.TileType.TYPE_RAMPUP) {
+			flag(flags, "climbs a level", false);
+		}
+		if (t == Tile.TileType.TYPE_RAMPDOWN) {
+			flag(flags, "descends a level", false);
+		}
+
+		StringBuilder variants = new StringBuilder();
+		tileVariants(t, variants);
+		return "<div class=tile><b>" + t.label() + "</b>"
+				+ "<div class=code>" + t.name() + " \u00b7 " + t.getValue() + "</div>"
+				+ "<div class=flags>" + flags + "</div>"
+				+ "<div class=vrow>" + variants + "</div></div>\n";
+	}
+
+	private static void flag(StringBuilder out, String label, boolean warn) {
+		out.append("<span class=\"flag").append(warn ? " warn" : "").append("\">")
+				.append(label).append("</span>");
+	}
+
+
+	/**
+	 * Which variants a tile shows, and how each is staged. Fertility-driven
+	 * ground shows both ends of its range; autotiled runs show the shapes the
+	 * mask can take; fixtures stand alone on the floor they live on; walls
+	 * stand as a mass over open ground so the face and the raised read show;
+	 * everything else is a plain field swatch.
+	 */
+	private void tileVariants(Tile.TileType t, StringBuilder out) {
+		switch (t) {
+		case TYPE_FLOOR:
+			fieldVariant(out, t, "fertile", 1.0);
+			fieldVariant(out, t, "poor", 0.25);
+			return;
+		case TYPE_ROCKY:
+			fieldVariant(out, t, "fertile", 0.9);
+			fieldVariant(out, t, "poor", 0.3);
+			return;
+		case TYPE_FUNGUS:
+			fieldVariant(out, t, "rich bed", 0.8);
+			fieldVariant(out, t, "thin bed", 0.2);
+			return;
+		case TYPE_RAIL:
+		case TYPE_PIPES:
+		case TYPE_COOLANT:
+			runVariant(out, t, "straight", RUN_STRAIGHT);
+			runVariant(out, t, "elbow", RUN_ELBOW);
+			runVariant(out, t, "tee", RUN_TEE);
+			runVariant(out, t, "crossing", RUN_CROSS);
+			return;
+		case TYPE_CONVEYOR:
+		case TYPE_DUCT:
+			runVariant(out, t, "east-west", RUN_STRAIGHT);
+			runVariant(out, t, "north-south", RUN_VERT);
+			return;
+		case TYPE_WALL:
+			blockVariant(out, t, "mass over meadow", Tile.TileType.TYPE_FLOOR);
+			return;
+		case TYPE_MESA:
+			blockVariant(out, t, "mass over sand", Tile.TileType.TYPE_SAND);
+			return;
+		case TYPE_WALL_BUILT:
+		case TYPE_WALL_CONCRETE:
+		case TYPE_WALL_STEEL:
+		case TYPE_WINDOW:
+			blockVariant(out, t, "run over paving", Tile.TileType.TYPE_PAVED);
+			return;
+		case TYPE_SERVER:
+			blockVariant(out, t, "rack row on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_STALAGMITE:
+			fixtureVariant(out, t, "on cave stone", Tile.TileType.TYPE_STONE);
+			return;
+		case TYPE_CACTUS:
+			fixtureVariant(out, t, "on sand", Tile.TileType.TYPE_SAND);
+			return;
+		case TYPE_SWITCH:
+			fixtureVariant(out, t, "seat on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_DOCK:
+			fixtureVariant(out, t, "berth on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_DESK:
+			fixtureVariant(out, t, "on paving", Tile.TileType.TYPE_PAVED);
+			return;
+		case TYPE_BUNK:
+			fixtureVariant(out, t, "on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_WRECK:
+			fixtureVariant(out, t, "in its debris", Tile.TileType.TYPE_RUBBLE);
+			return;
+		case TYPE_RAMPUP:
+			rampVariant(out, t, "cut into rock, climbing west");
+			return;
+		case TYPE_RAMPDOWN:
+			rampVariant(out, t, "cut into rock, descending east");
+			return;
+		case TYPE_HOLE:
+			fieldVariant(out, t, "bottomless opening", 1.0);
+			return;
+		case TYPE_SHAFT:
+			fieldVariant(out, t, "open shaft", 1.0);
+			return;
+		default:
+			fieldVariant(out, t, t.label(), 1.0);
+		}
+	}
+
+	private static final int RUN_STRAIGHT = 0, RUN_ELBOW = 1, RUN_TEE = 2, RUN_CROSS = 3,
+			RUN_VERT = 4;
+
+	private void fieldVariant(StringBuilder out, Tile.TileType t, String cap, double fert) {
+		World w = stage(8, 8);
+		fill(w, t);
+		for (int x = 0; x < 8; x++) {
+			for (int y = 0; y < 8; y++) {
+				w.getTile(x, y, 0).setFertility(fert);
+			}
+		}
+		bakeVariant(out, w, t, cap);
+	}
+
+	private void runVariant(StringBuilder out, Tile.TileType t, String cap, int shape) {
+		World w = stage(8, 8);
+		fill(w, Tile.TileType.TYPE_PLATE);
+		if (shape == RUN_VERT) {
+			for (int y = 1; y <= 6; y++) {
+				w.setTile(3, y, 0, t);
+			}
+		} else {
+			if (shape != RUN_ELBOW) {
+				for (int x = 1; x <= 6; x++) {
+					w.setTile(x, 3, 0, t); // the through run
+				}
+			} else {
+				for (int x = 1; x <= 3; x++) {
+					w.setTile(x, 3, 0, t); // the arm that turns
+				}
+			}
+			if (shape != RUN_STRAIGHT) {
+				int y0 = shape == RUN_CROSS ? 1 : 3;
+				for (int y = y0; y <= 6; y++) {
+					w.setTile(3, y, 0, t); // the branch
+				}
+			}
+		}
+		bakeVariant(out, w, t, cap);
+	}
+
+	private void blockVariant(StringBuilder out, Tile.TileType t, String cap,
+			Tile.TileType base) {
+		World w = stage(8, 8);
+		fill(w, base);
+		for (int x = 2; x <= 5; x++) {
+			for (int y = 2; y <= 3; y++) {
+				w.setTile(x, y, 0, t); // two courses, so the face fronts open ground
+			}
+		}
+		bakeVariant(out, w, t, cap);
+	}
+
+	private void fixtureVariant(StringBuilder out, Tile.TileType t, String cap,
+			Tile.TileType base) {
+		World w = stage(8, 8);
+		fill(w, base);
+		w.setTile(3, 3, 0, t);
+		bakeVariant(out, w, t, cap);
+	}
+
+	private void rampVariant(StringBuilder out, Tile.TileType t, String cap) {
+		World w = stage(8, 8);
+		fill(w, Tile.TileType.TYPE_FLOOR);
+		for (int x = 1; x <= 3; x++) {
+			for (int y = 1; y <= 6; y++) {
+				w.setTile(x, y, 0, Tile.TileType.TYPE_WALL); // the mass the cut is in
+			}
+		}
+		w.setTile(3, 3, 0, t);
+		w.getTile(3, 3, 0).setRampUphill(3); // uphill west, into the rock
+		bakeVariant(out, w, t, cap);
+	}
+
+	/** Bakes the staged world and appends the variant figure. Every variant
+	 *  crops the same centre 4x4 so the swatches sit side by side honestly. */
+	private void bakeVariant(StringBuilder out, World w, Tile.TileType t, String cap) {
+		w.alignTiles();
+		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
+		int ts = ResourceManager.tileSize;
+		String file = "tile_" + t.name().toLowerCase(java.util.Locale.ROOT) + "_"
+				+ cap.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-")
+				+ ".png";
+		assets.put(file, png(img.getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts)));
+		out.append("<figure><img src=\"/tiles/").append(file)
+				.append("\" loading=lazy><figcaption>").append(cap)
+				.append("</figcaption></figure>");
 	}
 
 	// ---- page --------------------------------------------------------------
