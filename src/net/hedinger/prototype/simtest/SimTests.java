@@ -7447,6 +7447,85 @@ public class SimTests {
 	}
 
 	/**
+	 * The drone kills something that is walking away, not just something that
+	 * stands still for it.
+	 *
+	 * <p>The emitter needs {@code CHARGE_TICKS} of unbroken contact, and the
+	 * drone used to stop dead for all of them. Against anything that moves that
+	 * is a way of guaranteeing the charge never finishes: the machine plants
+	 * itself, the animal takes a step, contact breaks, the count goes back to
+	 * zero, and it closes again to start over. Measured over twelve thousand
+	 * ticks of the seeded world, of the 2115 separate approaches that got the
+	 * drone into reach only 420 — one in five — lasted long enough to fire.
+	 *
+	 * <p>Which is exactly what it looks like from outside: a machine hovering
+	 * beside an animal, plainly in range, plainly not shooting.
+	 *
+	 * <p>The parked case is the control, and it asserts the SEPARATION rather
+	 * than the timing. Timing does not control anything here: a drone that
+	 * simply closed every tick while charging — riding its quarry instead of
+	 * standing off it — kills a parked animal just as fast, so a stopwatch
+	 * cannot tell the two apart. It was written that way first and passed the
+	 * over-broad implementation happily. Distance can tell them apart: keeping
+	 * station leaves the drone half a tile off, closing every tick puts it
+	 * within a tenth of one.
+	 */
+	static class TheDroneKillsAQuarryThatKeepsWalking extends Scenario {
+		/** Separation between drone and quarry on the killing tick. */
+		private double gapAtTheKill;
+
+		/** Ticks for the drone to kill prey walking east at {@code preySpeed}. */
+		private int ticksToKill(double preySpeed) {
+			seed(523);
+			World w = room(120, 12);
+			w.setTile(5, 5, 0, Tile.TileType.TYPE_DOCK);
+			Genome g = new Genome();
+			g.size = 10;
+			Mind walk = (s, a) -> a[AgentIO.A_THROTTLE] = 1;
+			TestNPC prey = TestNPC.minded(8.5, 5.5, 0, g, walk)
+					.withSpeed(preySpeed).withHeading(0); // due east, and never stops
+			w.spawnEntity(prey);
+			Order order = new Order(w, "herbivore", 0);
+			net.hedinger.prototype.sim.StewardDrone drone =
+					new net.hedinger.prototype.sim.StewardDrone(5.5, 5.5, 0, order);
+			w.spawnEntity(drone);
+			w.think();
+			for (int t = 1; t <= 4000; t++) {
+				gapAtTheKill = Math.hypot(drone.getX() - prey.getX(),
+						drone.getY() - prey.getY());
+				tick(w, 1);
+				if (prey.isDead()) {
+					return t;
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			int parked = ticksToKill(0.0);
+			double parkedGap = gapAtTheKill;
+			int strolling = ticksToKill(0.05);
+			int quick = ticksToKill(0.12);
+
+			assertGreater("a parked quarry is killed at all", parked, 0);
+			assertLess("and promptly (" + parked + " ticks)", parked, 60);
+			// The control, and it is a distance rather than a clock: closing
+			// every tick would put the drone within a tenth of a tile of the
+			// body it is shooting.
+			assertLess("it holds station off a parked quarry rather than riding it"
+					+ " (gap " + String.format("%.3f", parkedGap) + ")",
+					0.3, parkedGap);
+
+			assertGreater("a strolling quarry is killed at all", strolling, 0);
+			assertLess("and without a long siege (" + strolling + " ticks)",
+					strolling, 300);
+			assertGreater("a brisk quarry is killed at all", quick, 0);
+			assertLess("and likewise (" + quick + " ticks)", quick, 300);
+		}
+	}
+
+	/**
 	 * A duct is a refuge even with the drone hovering at its mouth.
 	 *
 	 * <p>{@link DuctedBodyIsSafeFromTheDrone} puts the shelter three tiles deep
@@ -8854,6 +8933,7 @@ public class SimTests {
 				new TheDronePicksItsOwnFloorFirst(),
 				new TheEmitterDoesNotFireThroughAFloor(),
 				new TheEmitterFiresAtTheRangeItClaims(),
+				new TheDroneKillsAQuarryThatKeepsWalking(),
 				new GenomeSavefileRoundTrips(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
