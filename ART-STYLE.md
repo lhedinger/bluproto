@@ -447,6 +447,22 @@ The precedents, so nobody pays twice:
   renderer" is not one function**: check which entry point the server calls
   before asserting on it, or the test pins a picture nobody is shown. Exactly
   the bug it was written to catch, one level up.
+- **Grass from the wrong level, the second time** — the caves wore the meadow's
+  grass again, years of comments later, and nothing about the art was wrong:
+  the server's grid for the deep level was 311 fungus tiles and no grass, the
+  bake had none, and a fresh client drew none. It took **cycling** levels to
+  show. The GPU layer cache re-uploads a texture only when its *revision*
+  changes, but the vegetation layer rebuilds its chunk canvases and restarts
+  their revisions on every level change — so chunk `veg:37` was revision 1 on
+  the surface and revision 1 again underground, and the GPU kept showing the
+  meadow. The rule: **a cache keyed on a number the caller manages is only as
+  correct as the caller's discipline**, and discipline is invisible in a
+  screenshot. The fix moved the invariant inside the cache — it now compares
+  the source object's identity as well, so "a different canvas that happens to
+  reuse the key" can never be mistaken for "same canvas, unchanged". Note also
+  what made this findable: the sprite layer and the bake were separated by
+  measurement (turning the layer off changed nothing), which ruled out three
+  quarters of the code before any of it was read.
 
 ## 8. Conformance checklist
 
