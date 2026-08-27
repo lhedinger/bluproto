@@ -147,6 +147,10 @@ let groundCv: HTMLCanvasElement | null = null;
 // classic mobile fill cost a desktop GPU never shows.
 let groundLowCv: HTMLCanvasElement | null = null;
 let groundLevel = -1;
+/** The level whose layer textures are currently resident on the GPU, so the
+ *  set for a floor the viewer has left can be handed back (GLRenderer
+ *  .evictLevel). -1 until the first frame draws one. */
+let glLayerLevel = -1;
 // Chunks that had not streamed in when the layer was built. Retries fill
 // ONLY these holes and ship them as texture patches: the old path recomposed
 // the WHOLE layer and re-uploaded the whole texture once a second for as
@@ -1110,6 +1114,14 @@ export function renderGL(
   // cache — the quad samples the quarter-res mirror instead, exactly as the
   // Canvas2D path always has.
   const lowZoom = cam.scale < ART;
+  // Layer textures are keyed by level, so leaving a floor strands its set on
+  // the GPU. Hand them back the moment the viewer moves: a three-storey world
+  // otherwise holds three worlds' worth of layers, and a phone has no room
+  // for the two nobody is looking at.
+  if (glLayerLevel !== level) {
+    if (glLayerLevel >= 0) glr.evictLevel(glLayerLevel);
+    glLayerLevel = level;
+  }
   if (chunkTiles > 0 && tilePx > 0) {
     const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
     // The floor below goes down FIRST, under its own parallax, so the ground
@@ -1121,15 +1133,15 @@ export function renderGL(
     }
     if (ground) {
       if (lowZoom && groundLowCv) {
-        glr.layer('groundlo', groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
+        glr.layer('groundlo:' + level, groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
       } else {
-        glr.layer('ground', ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
+        glr.layer('ground:' + level, ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
       }
     }
     if (veg) {
       vegLayerUpdate(meta, chunkTiles, veg, vegRev, level, nowMs);
       if (lowZoom && vegLow) {
-        glr.layer('veglo', vegLow, vegLowRev, null, o0.x, o0.y, worldW, worldH);
+        glr.layer('veglo:' + level, vegLow, vegLowRev, null, o0.x, o0.y, worldW, worldH);
       } else {
         // Visible chunks only: a handful of small quads/textures near zoom,
         // and a repainted chunk re-uploads its own ~80KB texture wholesale —
@@ -1140,7 +1152,7 @@ export function renderGL(
           const oc = cam.worldToScreen(wx, wy);
           const wpx = chunkTiles * cam.scale;
           if (oc.x > cv.width || oc.y > cv.height || oc.x + wpx < 0 || oc.y + wpx < 0) continue;
-          glr.layer('veg:' + key, cvc, vegChunkRevs.get(key) ?? 0, null, oc.x, oc.y, wpx, wpx);
+          glr.layer('veg:' + level + ':' + key, cvc, vegChunkRevs.get(key) ?? 0, null, oc.x, oc.y, wpx, wpx);
         }
       }
     }
@@ -1302,9 +1314,9 @@ export function renderGL(
   if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
     const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
     if (lowZoom && canopyLow) {
-      glr.layer('canopylo', canopyLow, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+      glr.layer('canopylo:' + level, canopyLow, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
     } else {
-      glr.layer('canopy', canopy, canopyRev, canopyPatchRects, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+      glr.layer('canopy:' + level, canopy, canopyRev, canopyPatchRects, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
     }
     const lids = new Set<number>();
     for (const t of tracks) {
