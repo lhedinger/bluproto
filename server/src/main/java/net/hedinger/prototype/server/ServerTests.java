@@ -33,6 +33,7 @@ public final class ServerTests {
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
 		theDroneRankIsDronesAndOnlyDrones();
+		theTileCatalogListsEveryType();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -585,6 +586,26 @@ public final class ServerTests {
 			check("and they still carry a growth stage", markedButBare < marked);
 		}
 		check("the world has a level that grows fungus", fungusLevels > 0);
+	}
+
+	/**
+	 * The /tiles catalog claims to be complete, and the grouping method is
+	 * where that claim is enforced: it walks the whole TileType enum and
+	 * throws on any type that has not chosen a group, or has chosen two. This
+	 * puts the throw on the gate rather than on the first boot after a new
+	 * tile lands -- the difference between a red build and a red deploy.
+	 */
+	private static void theTileCatalogListsEveryType() {
+		try {
+			var groups = SpriteCatalog.tileGroups();
+			int listed = groups.values().stream().mapToInt(a -> a.length).sum();
+			check("every tile type has a group (" + listed + " of "
+					+ net.hedinger.prototype.engine.Tile.TileType.values().length + ")",
+					listed == net.hedinger.prototype.engine.Tile.TileType.values().length);
+			check("the catalog has its functional groups", groups.size() >= 8);
+		} catch (IllegalStateException e) {
+			check("tile catalog grouping: " + e.getMessage(), false);
+		}
 	}
 
 	private static void check(String what, boolean ok) {
