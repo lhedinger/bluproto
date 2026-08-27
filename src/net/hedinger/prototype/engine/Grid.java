@@ -1118,6 +1118,17 @@ public class Grid {
 	 *  included, overhangs a pit's mouth, because ground breaks off over a
 	 *  drop and nothing pours out of one). Structures, shafts and paving do
 	 *  not participate: their edges are their own. */
+
+	/**
+	 * The edge rank of a tile type, for anything documenting how terrains
+	 * meet ({@code /tiles} reads the lapping order off this rather than
+	 * transcribing it). Negative means the type takes hard edges: structures,
+	 * shafts and paving neither lap nor get lapped.
+	 */
+	public static int edgeRankOf(Tile.TileType t) {
+		return edgeRank(GroundTextures.groundClass(new Tile(0, 0, 0, t)));
+	}
+
 	private static int edgeRank(int cls) {
 		switch (cls) {
 		case GroundTextures.CLS_HOLE: return 0;
