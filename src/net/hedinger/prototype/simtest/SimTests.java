@@ -4325,8 +4325,13 @@ public class SimTests {
 	 * animal through the deck plate — the strike asks for sight, and sight said
 	 * yes.
 	 *
-	 * <p>The exception is that a slope joining two floors is a hole in the
-	 * ceiling, and you can see up and down one.
+	 * <p>The exceptions are the openings: a slope joining two floors is a gap in
+	 * the ceiling, and a pit is a gap that is nothing but gap.
+	 *
+	 * <p>Pits were left out when this first landed, which put the simulation at
+	 * odds with its own renderer — the chunk bake punches real transparency
+	 * through a pit and the client draws the floor below through it, so the
+	 * world was showing what it would not admit to seeing.
 	 *
 	 * <p>Movement looked like it depended on the exception too, since {@code
 	 * isValidMoveDestination} asks for sight of the tile a body is stepping onto
@@ -4337,7 +4342,7 @@ public class SimTests {
 	 * RampsRunWhicheverWayTheyAreLaid} keep passing — worth recording, because
 	 * the comment that says otherwise is the obvious one to write.
 	 */
-	static class AFloorBlocksSightUnlessAStairwellIsNear extends Scenario {
+	static class AFloorBlocksSightUnlessAnOpeningIsNear extends Scenario {
 		@Override
 		public void run() {
 			seed(520);
@@ -4377,6 +4382,28 @@ public class SimTests {
 			// nothing joins 0 to 2, so standing on it buys nothing.
 			assertTrue("two storeys apart is never in view, ramp or no ramp",
 					!w.hasLOS(4.5, 6.5, 2, 0, 4.5, 6.5, 0, range, all));
+
+			// A pit is the other opening, and it is cut in the UPPER deck.
+			w.setTile(24, 6, 1, Tile.TileType.TYPE_HOLE);
+			assertTrue("beside a pit, sight passes down through it",
+					w.hasLOS(25.5, 6.5, 1, 0, 25.5, 6.5, 0, range, all));
+			assertTrue("and up through it from underneath",
+					w.hasLOS(25.5, 6.5, 0, 0, 25.5, 6.5, 1, range, all));
+			// The radius applies to a pit as it does to a ramp. From x=10.5 the
+			// pit at x=24 is fourteen tiles off and the ramp at x=4 is six, both
+			// well outside a range of five, so there is nothing overhead but deck.
+			assertTrue("a pit outside the radius is not an opening either",
+					!w.hasLOS(10.5, 6.5, 0, 0, 10.5, 6.5, 1, range, all));
+			// A drop shaft is a pit with a hazard stripe round it.
+			w.setTile(24, 6, 1, Tile.TileType.TYPE_SHAFT);
+			assertTrue("a drop shaft opens the floor the same way",
+					w.hasLOS(25.5, 6.5, 1, 0, 25.5, 6.5, 0, range, all));
+			// And a pit in the floor BELOW does not open the floor above it:
+			// the gap has to be in the deck between them.
+			w.setTile(24, 6, 1, Tile.TileType.TYPE_PLATE);
+			w.setTile(24, 6, 0, Tile.TileType.TYPE_HOLE);
+			assertTrue("a pit in the lower deck is not a way through the upper one",
+					!w.hasLOS(25.5, 6.5, 1, 0, 25.5, 6.5, 0, range, all));
 		}
 	}
 
@@ -9138,7 +9165,7 @@ public class SimTests {
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
 				new RampsRunWhicheverWayTheyAreLaid(),
-				new AFloorBlocksSightUnlessAStairwellIsNear(),
+				new AFloorBlocksSightUnlessAnOpeningIsNear(),
 				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
