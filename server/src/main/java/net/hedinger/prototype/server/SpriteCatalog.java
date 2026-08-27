@@ -1061,9 +1061,11 @@ final class SpriteCatalog {
 				+ "into its neighbour in short hand-drawn scallops, so the slope "
 				+ "from water to rock always reads in the same order. The ranking, "
 				+ "read off the renderer itself, lowest first: <i>" + order
-				+ "</i>. Everything not in that list — paving, deck, walls, "
-				+ "openings — takes a hard edge and neither laps nor gets "
-				+ "lapped.</p><div class=vrow>");
+				+ "</i>. Note the pit at the very bottom: every terrain, water "
+				+ "included, overhangs a pit's mouth, because ground breaks off "
+				+ "over a drop and nothing pours out of one. Everything not in "
+				+ "the list — paving, deck, walls, shafts — takes a hard edge "
+				+ "and neither laps nor gets lapped.</p><div class=vrow>");
 		demo = new StringBuilder();
 		{
 			World w = stage(8, 8);
