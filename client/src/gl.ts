@@ -252,6 +252,25 @@ export class GLRenderer {
   }
 
   /**
+   * Drops every world-layer texture belonging to one level — called when the
+   * viewer leaves it. Layer keys carry their level (`family:level` or
+   * `family:level:chunk`) so two floors can never share a cache entry; without
+   * this they would also never share the MEMORY, and a three-storey world
+   * would hold three worlds' worth of layers on a phone GPU. Sprite atlases
+   * are untouched: they are level-agnostic and have their own LRU pools.
+   */
+  evictLevel(level: number): void {
+    const families = new Set(['ground', 'groundlo', 'veg', 'veglo', 'canopy', 'canopylo']);
+    const tag = String(level);
+    for (const key of [...this.textures.keys()]) {
+      const part = key.split(':');
+      if (part.length >= 2 && families.has(part[0]) && part[1] === tag) {
+        this.evict(key);
+      }
+    }
+  }
+
+  /**
    * A world-layer quad: like sprite(), but the texture has NO mipmaps (layers
    * barely minify — they live at art resolution) and a bumped revision can be
    * reconciled by PATCHING the changed tile rects instead of re-uploading the
