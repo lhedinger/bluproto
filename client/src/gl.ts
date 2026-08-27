@@ -56,7 +56,11 @@ void main() {
   outColor = vec4(c, 1.0) * (t.a * vCol.a);
 }`;
 
-interface TexEntry { tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number; }
+interface TexEntry {
+  tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number;
+  /** Identity of the source this texture was last uploaded from — see srcId. */
+  srcId: number;
+}
 
 export class GLRenderer {
   private gl: WebGL2RenderingContext;
@@ -215,7 +219,7 @@ export class GLRenderer {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
-      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0 };
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0, srcId: 0 };
       this.textures.set(key, e);
     }
     e.lastUse = this.frameNo;
@@ -257,22 +261,45 @@ export class GLRenderer {
    * repainted, so the GPU copy follows the same increments. A null patch
    * list, a size change, or a skipped revision falls back to a full upload.
    */
+  /** A stable id per source object, so a texture can tell "same canvas, new
+   *  content" (patch or re-upload) from "a different canvas that happens to
+   *  reuse the key". Weakly held: assigning an id never keeps a canvas alive. */
+  private srcIds = new WeakMap<object, number>();
+  private nextSrcId = 1;
+  private srcId(src: object): number {
+    let id = this.srcIds.get(src);
+    if (id === undefined) {
+      id = this.nextSrcId++;
+      this.srcIds.set(src, id);
+    }
+    return id;
+  }
+
   layer(key: string, src: TexImageSource & { width: number; height: number }, rev: number,
       patches: Array<[number, number, number, number]> | null,
       dx: number, dy: number, dw: number, dh: number, alpha = 1): void {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
-      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0 };
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0, srcId: 0 };
       this.textures.set(key, e);
     }
     e.lastUse = this.frameNo;
-    if (e.rev !== rev) {
+    // A cached texture is stale unless BOTH its revision and the object it was
+    // uploaded from still match. Revision alone is not enough: a caller that
+    // rebuilds its canvases and restarts their revisions — the vegetation layer
+    // does exactly that on every level change — hands back key/rev pairs this
+    // cache has already seen, and the GPU keeps showing the old level's art.
+    // That was "grass from the wrong level": cycle surface -> -2 and the caves
+    // wore the meadow's grass, because chunk `veg:37` was rev 1 on both.
+    const id = this.srcId(src);
+    if (e.rev !== rev || e.srcId !== id) {
       const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample
       gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      // Patching is only valid against the very same source, one revision on.
       const patchable = e.rev >= 0 && rev - e.rev === 1 && patches !== null
-        && e.w === src.width && e.h === src.height;
+        && e.srcId === id && e.w === src.width && e.h === src.height;
       if (patchable) {
         const pg = this.patchCv.getContext('2d')!;
         for (const [x, y, w, h] of patches) {
@@ -294,6 +321,7 @@ export class GLRenderer {
         e.h = src.height;
       }
       e.rev = rev;
+      e.srcId = id;
       this.boundKey = key; // the upload left it bound
       this.stats.uploadMs += performance.now() - t0;
     }
