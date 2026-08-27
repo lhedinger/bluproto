@@ -603,11 +603,24 @@ public class World {
 	 * through the deck plate: the strike asks for sight, sight said yes, and the
 	 * floor between them was never consulted by anything.
 	 *
-	 * <p>The exception is an opening, and a ramp is the opening this world has:
-	 * a slope joining two floors is a hole in the ceiling you can see up and
-	 * down through. So a cross-floor sighting needs a ramp joining exactly those
-	 * two floors within the same radius the sighting itself is bounded by. Far
-	 * from a stairwell that is a floor; beside one it is a stairwell.
+	 * <p>The exceptions are the openings, and this world has two: a ramp joining
+	 * the two floors, and a hole or drop-shaft cut through the upper one. A
+	 * slope between storeys is a gap in the ceiling you can see up and down; a
+	 * pit is a gap that is nothing but gap. Either has to be within the same
+	 * radius the sighting itself is bounded by — far from a stairwell that is a
+	 * floor, beside one it is a stairwell.
+	 *
+	 * <p>Holes were left out when floors were first made opaque, and the
+	 * omission put the simulation at odds with its own renderer: the chunk bake
+	 * punches real transparency through a pit and the client draws the floor
+	 * below through it, so the world was showing what it would not admit to
+	 * seeing. Read off the UPPER level, since that is the deck the hole is cut
+	 * in; from underneath you are looking up through the same gap.
+	 *
+	 * <p>{@code NPC.canTouch} draws the same distinction and draws it tighter:
+	 * reaching through a hole means standing at it, where seeing through one only
+	 * means being near it. Same openings, different distances, and the difference
+	 * is the point rather than drift.
 	 *
 	 * <p>Adjacent floors only. Ramps join a level to the one above or below, so
 	 * two storeys of separation is two floors and no amount of ramp helps.
@@ -647,19 +660,31 @@ public class World {
 	 */
 	private boolean openBetweenFloors(double x, double y, int z, int tz, double range) {
 		if (Math.abs(z - tz) != 1) {
-			return false; // a ramp reaches one floor, not two
+			return false; // an opening reaches one floor, not two
 		}
-		int[] joining = ramps(z, tz > z);
-		if (joining.length == 0) {
+		// A ramp on this floor whose far end is the other one...
+		if (near(openings(tz > z ? RAMP_UP : RAMP_DOWN, z), x, y, range)) {
+			return true;
+		}
+		// ...or a hole in the upper floor, which is the one place a floor is not
+		// there. Read off the UPPER level, because that is the deck the hole is
+		// cut in: from below you are looking up through the same gap.
+		return near(openings(DROP, Math.max(z, tz)), x, y, range);
+	}
+
+	/** Whether any of these packed tiles is within {@code range} of (x, y). A
+	 *  negative range means unbounded, as everywhere else here. */
+	private boolean near(int[] packed, double x, double y, double range) {
+		if (packed.length == 0) {
 			return false;
 		}
 		if (range < 0) {
-			return true; // unbounded sight: any ramp on this floor will do
+			return true;
 		}
 		double rr = range * range;
-		for (int packed : joining) {
-			double dx = (packed >>> 16) + 0.5 - x;
-			double dy = (packed & 0xffff) + 0.5 - y;
+		for (int p : packed) {
+			double dx = (p >>> 16) + 0.5 - x;
+			double dy = (p & 0xffff) + 0.5 - y;
 			if (dx * dx + dy * dy <= rr) {
 				return true;
 			}
@@ -667,8 +692,13 @@ public class World {
 		return false;
 	}
 
+	/** The kinds of opening a floor can hold: a ramp climbing to the level
+	 *  above, one descending to the level below, and a hole or drop-shaft cut
+	 *  through the deck itself. */
+	private static final int RAMP_UP = 0, RAMP_DOWN = 1, DROP = 2;
+
 	/**
-	 * Every ramp on level {@code l} that leads up (or down), packed
+	 * Every opening of one {@code kind} on level {@code l}, packed
 	 * {@code col<<16|row}.
 	 *
 	 * <p>Built lazily and dropped whenever a tile is written, which is the same
@@ -676,19 +706,25 @@ public class World {
 	 * moves once a world is generated, and the cost of being wrong about that
 	 * would be a stale answer about a staircase.
 	 */
-	private int[] ramps(int l, boolean up) {
-		if (rampsUp == null) {
-			rampsUp = new int[levels.length][];
-			rampsDown = new int[levels.length][];
+	private int[] openings(int kind, int l) {
+		if (openings == null) {
+			openings = new int[3][][];
+			for (int k = 0; k < openings.length; k++) {
+				openings[k] = new int[levels.length][];
+			}
 		}
-		int[][] cache = up ? rampsUp : rampsDown;
-		if (cache[l] == null) {
-			Tile.TileType want = up ? Tile.TileType.TYPE_RAMPUP : Tile.TileType.TYPE_RAMPDOWN;
+		if (openings[kind][l] == null) {
 			java.util.List<Integer> found = new java.util.ArrayList<Integer>();
 			for (int c = 0; c < cols; c++) {
 				for (int r = 0; r < rows; r++) {
 					Tile t = getTile(c, r, l);
-					if (t != null && t.getType() == want) {
+					if (t == null) {
+						continue;
+					}
+					boolean want = kind == DROP ? t.isDrop()
+							: t.getType() == (kind == RAMP_UP ? Tile.TileType.TYPE_RAMPUP
+									: Tile.TileType.TYPE_RAMPDOWN);
+					if (want) {
 						found.add((c << 16) | r);
 					}
 				}
@@ -697,14 +733,14 @@ public class World {
 			for (int i = 0; i < out.length; i++) {
 				out[i] = found.get(i);
 			}
-			cache[l] = out;
+			openings[kind][l] = out;
 		}
-		return cache[l];
+		return openings[kind][l];
 	}
 
-	/** Ramp tiles per level, for {@link #openBetweenFloors}. Null until asked
-	 *  for, and thrown away whenever a tile is written. */
-	private int[][] rampsUp, rampsDown;
+	/** Openings per kind per level, for {@link #openBetweenFloors}. Null until
+	 *  asked for, and thrown away whenever a tile is written. */
+	private int[][][] openings;
 
 	public boolean isOpen(double x, double y, double z) {
 		if (!isValid(x, y, z)) {
@@ -761,8 +797,7 @@ public class World {
 		if (!this.isValid(c, r, l)) {
 			return false;
 		}
-		rampsUp = null; // a written tile may have been, or become, a staircase
-		rampsDown = null;
+		openings = null; // a written tile may have been, or become, a way through
 		return levels[l].setTile(c, r, l, t);
 	}
 
