@@ -169,6 +169,13 @@ public final class StewardDrone extends NPC {
 	 *  the drone keeps falling out of. */
 	private static final double FINAL_APPROACH = 2.5;
 
+	/** How far into the emitter's reach the drone lets a charging quarry drift
+	 *  before it moves to keep up. Under one, so it closes before contact is
+	 *  actually lost; not near zero, or it would ride the animal's back and fly
+	 *  through it — a flyer no longer collides with a walker, so nothing else
+	 *  would stop it. */
+	private static final double HOLD_AT = 0.6;
+
 	/** Ticks the emitter spends charging on a held target before it fires.
 	 *  Short, but not nothing — it is what makes a kill an event with a
 	 *  beginning rather than a body blinking out on contact. */
@@ -506,8 +513,30 @@ public final class StewardDrone extends NPC {
 	 * it does not.
 	 */
 	private void zap() {
-		stop();
 		lockTarget(quarry);
+		// Hold the aim by keeping pace, not by standing still.
+		//
+		// This used to stop() dead for the whole charge, which against anything
+		// that runs is a way of guaranteeing the charge never finishes: the
+		// machine plants itself, the animal takes a step, contact breaks, and
+		// the count goes back to zero. Measured over twelve thousand ticks of
+		// the seeded world, the drone was in reach and in sight on 37% of the
+		// ticks it held a quarry, and of the 2115 separate approaches that got
+		// it into reach only 420 -- one in five -- lasted the eight ticks a kill
+		// needs. The other 1695 died at one, two, three or four ticks and were
+		// thrown away. That is the machine hovering next to an animal, plainly
+		// in range, plainly not shooting.
+		//
+		// So it follows while it charges, and closes only when the quarry drifts
+		// past the comfortable middle of the emitter's band. Closing on every
+		// tick instead would fly it through a body it no longer collides with
+		// and start the oscillation from the other side.
+		double reach = (getSize() + quarry.getSize()) / 2.0 + STRIKE_REACH;
+		if (distance(quarry.getX(), quarry.getY(), quarry.getZ()) > reach * HOLD_AT) {
+			steer(quarry.getX(), quarry.getY());
+		} else {
+			stop();
+		}
 		if (++charge < CHARGE_TICKS) {
 			return;
 		}
