@@ -29,6 +29,16 @@
     .nav { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .4rem 0 0; }
     .nav a { text-decoration: none; font-size: 13px; }
     .nav a:hover { text-decoration: underline; }
+    /* The page-level nav: sticky, translucent, one line per section — the
+       same masthead concept /tiles uses, so the two docs pages read as one
+       family. Spans inside it are invisible grouping (display: contents), so
+       the async-loaded mechanics links land BEFORE the art links whatever
+       order the network answers in. */
+    nav.nav { position: sticky; top: 0; background: #0f1115dd;
+              backdrop-filter: blur(4px); padding: .5rem 0; z-index: 5;
+              margin: .8rem 0 0; }
+    nav.nav span { display: contents; }
+    nav.nav a.ext { color: #d6b16a; }
     .scroll { overflow-x: auto; max-width: 100%; }
     table { border-collapse: collapse; font-size: 13px; margin: .8rem 0 0; }
     table.facts th { text-align: left; font-weight: 600; color: #b9c2d0; white-space: nowrap;
@@ -71,6 +81,8 @@
   Ground itself is catalogued separately: <a href="/tiles">/tiles</a> lists every tile type
   — names, flags, variants, and the rules of how tiles fit together — baked by the server,
   because for ground the bake is the live rendering.</p>
+  <nav class="nav" id="pagenav"><span id="nav-mech"></span><span id="nav-art"></span><a
+    class="ext" href="/tiles">the tile catalog →</a></nav>
   <div id="root"></div>
   <script type="module" src="/src/help.ts"></script>
 </body>
