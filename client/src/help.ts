@@ -59,9 +59,37 @@ function ent(partial: Partial<EntityState>): EntityState {
   };
 }
 
+/** Files a section into the sticky page nav — the art half and the async
+ *  mechanics half each own a grouping span, so the nav keeps page order no
+ *  matter which half finishes building first. */
+function navLink(title: string, id: string, group: 'nav-mech' | 'nav-art'): void {
+  const host = document.getElementById(group);
+  if (!host) return;
+  const a = document.createElement('a');
+  a.href = `#${id}`;
+  a.textContent = title;
+  host.append(a);
+  syncNavPad();
+}
+
+/** The nav wraps to however many rows its links need, so the anchor offset
+ *  can't be a constant — measure the real height and keep the scroll root's
+ *  padding in step with it. */
+function syncNavPad(): void {
+  const nav = document.getElementById('pagenav');
+  if (nav) document.documentElement.style.scrollPaddingTop = `${nav.offsetHeight + 8}px`;
+}
+window.addEventListener('resize', syncNavPad);
+
+function slug(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 function section(title: string, note: string): HTMLDivElement {
   const h = document.createElement('h2');
   h.textContent = title;
+  h.id = `art-${slug(title)}`;
+  navLink(title, h.id, 'nav-art');
   const p = document.createElement('p');
   p.className = 'note';
   p.textContent = note;
@@ -788,13 +816,11 @@ void (async () => {
     + 'states the answer can, and would never say so.';
   mechRoot.append(lead);
 
-  const nav = el('p', undefined, 'nav');
-  for (const m of secs) {
-    const a = el('a', m.title);
-    a.href = `#${m.id}`;
-    nav.append(a);
-  }
-  mechRoot.append(nav);
+  // The mechanics sections used to carry their own little nav paragraph,
+  // buried mid-page below the art links' reach; they now file into the same
+  // sticky page nav as everything else, in their own span so they land ahead
+  // of the art links whatever order the fetch resolves in.
+  for (const m of secs) navLink(m.title, m.id, 'nav-mech');
   for (const m of secs) mechSection(m, mechRoot);
 
   // The art half gets its own banner, now that it is no longer the whole page.
