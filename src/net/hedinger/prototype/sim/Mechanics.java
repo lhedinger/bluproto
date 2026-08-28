@@ -113,8 +113,10 @@ public final class Mechanics {
 				+ "is (hunger is its own book; see the needs). The tank's ceiling grows in "
 				+ "proportion to mass, anchored on the body a creature is growing INTO, so a "
 				+ "juvenile is not economically punished for being young. Food never fills the "
-				+ "tank directly: eating fills the stomach, and the body converts satiation "
-				+ "into energy over time, scaled by how healthy it is — an unhealthy body is "
+				+ "tank directly: eating fills the stomach, and regeneration converts the "
+				+ "stomach's contents into energy over time — draining the meal it is minted "
+				+ "from, one for one, so a body can never bank more energy than it actually "
+				+ "ate. The rate scales with how healthy the body is — an unhealthy body is "
 				+ "also a listless one. An empty tank is COLLAPSE, never death: below the crawl "
 				+ "reserve a body can only crawl — no biting, grabbing, breeding, or holding a "
 				+ "captive — and it recovers the moment food and water let regeneration run. "
@@ -126,7 +128,8 @@ public final class Mechanics {
 						"Fed, but under the breeding line."),
 				row("Regenerates", num(NPC.REGEN_RATE)
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
-						"satiation = 1 − the worse of hunger and thirst; vigor = health/100."),
+						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
+						+ "Every unit minted drains a unit from the stomach."),
 				row("Crawl reserve", pct(NPC.CRAWL_RESERVE), "of the tank",
 						"Below it: collapse. A crawl at " + pct(NPC.CRAWL_SPEED)
 						+ " of top speed, and nothing else."),
@@ -322,9 +325,11 @@ public final class Mechanics {
 				"Two clocks that rise on their own and fall only by acting. Thirst runs at "
 				+ "twice hunger's pace — the one rhythm anchor — so a body sated and slaked at "
 				+ "the same instant wants water in half the time it takes to want food, and a "
-				+ "sated hunter's appetite returns in twice the time its thirst does. Both "
-				+ "clocks stretch with mass^0.25 (big bodies cycle slower, Kleiber again) and "
-				+ "run faster for hot metabolisms.\n\n"
+				+ "sated hunter's appetite returns in twice the time its thirst does — at "
+				+ "rest. Thirst is a clock; hunger is not: appetite arrives as regeneration "
+				+ "drains the stomach, so it tracks what the body actually burns, and "
+				+ "exertion buys appetite on top. Both stretch with mass^0.25 (big bodies "
+				+ "cycle slower, Kleiber again) and run faster for hot metabolisms.\n\n"
 				+ "Eating and drinking are rates held over ticks, never instant refills: a "
 				+ "drink is seconds of standing at a shore, a meal is longer, and walking away "
 				+ "mid-act keeps exactly the partial refill so far. The needs are what drive "
@@ -338,11 +343,13 @@ public final class Mechanics {
 				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
 				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
-						"Twice thirst's period — the rhythm anchor."),
+						"At rest. Twice thirst's period — the rhythm anchor, held "
+						+ "by the stomach's sizing rather than a clock."),
 				row("A full drink", num((long) NPC.DRINK_TICKS), "ticks at water",
 						round(NPC.DRINK_TICKS / TPS, 1) + " s; any water/shallows in the 3×3."),
 				row("The stomach", num(NPC.STOMACH) + " × mass", "food units",
-						"A meal is what fits; a sated body strips no ground."),
+						"= resting burn × hunger period: a full stomach IS "
+						+ "a hunger period of fuel. A sated body strips no ground."),
 				row("Hunter hunts above", num(TestNPC.PRED_HUNT_HUNGER), "hunger",
 						"Appetite, not tank headroom, starts the chase."),
 				row("Cannibalism above", num(TestNPC.STARVE_HUNGER), "hunger",
