@@ -216,7 +216,16 @@ public final class ServerMain {
 		// renderer that bakes the served map. A page of record like /help, but
 		// server-rendered whole, because ground IS server-baked: for tiles the
 		// bake is the live rendering, not a picture of it.
-		app.get("/tiles", ctx -> ctx.html(catalog.tilesPage()));
+		app.get("/tiles", ctx -> {
+			// Never cached, for the same reason /help is not: a page of record
+			// that is out of date is worse than one that is missing, because it
+			// keeps answering with the old world's authority. This page is built
+			// from the enum and the boot-time bakes on every request, so the
+			// server's copy is always current -- caching it downstream is the
+			// only way it can go stale, and there is nothing here worth the hit.
+			ctx.header("Cache-Control", "no-store");
+			ctx.html(catalog.tilesPage());
+		});
 		app.get("/tiles/{file}", ctx -> {
 			String name = ctx.pathParam("file");
 			byte[] bytes = name.matches("[A-Za-z0-9_-]+\\.(png|gif)") ? catalog.asset(name) : null;
