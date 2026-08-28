@@ -37,14 +37,12 @@ root.append(artRoot);
 const GRASS = '#3f7a38'; // flat stand-in for the baked ground the viewer has
 const DECK = '#4a5058'; // ditto, for the underground base's steel plate
 
-{
-  const intro = document.getElementById('intro');
-  if (intro) {
-    intro.innerHTML = 'The art system as the <b>web client renders it</b>: every canvas '
-      + 'below is painted live by the viewer\'s own drawing code, driven by scripted '
-      + 'state — the pixels this very browser puts on the live world.';
-  }
-}
+// The intro is written once, in help.html, and this module does not touch it.
+// It used to overwrite #intro with a second copy of the same paragraph, which
+// worked for exactly as long as the two said the same thing: the moment the
+// page grew a link to /tiles, the HTML had it and the script's copy silently
+// painted over it on every load. A page cannot have two sources for one
+// sentence and stay true -- the same reason there is only one catalog route.
 
 /** A fixed pseudo-camera: `tiles * scale` px, origin at the canvas corner. */
 function fixedCam(scale: number): Camera {
