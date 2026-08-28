@@ -16,8 +16,9 @@ The premises, fixed up front:
 2. **Every action takes time to reach its impact.** Nothing refills or lands
    instantly; eating, drinking, courting are rates held over ticks, and any of
    them can be interrupted, keeping whatever partial effect had accrued.
-3. **Hunger, thirst, energy and health are four different things.** Hunger and
-   thirst are needs that rise with time; both influence energy and health.
+3. **Hunger, thirst, energy and health are four different things.** Thirst is a
+   need that rises with time; hunger rises with what the body actually burns
+   (see the §8 amendment); both influence energy and health.
    Energy drives what a body can *do*; health alone decides whether it lives.
 
 ---
@@ -43,7 +44,7 @@ bundle; there is no free knob.
 
 | vital | range | rises / falls | what it is |
 |---|---|---|---|
-| **hunger** | 0 (sated) → 1 (starving) | rises with time at `R·m^0.75 / m`; falls only by **eating** | the need for food |
+| **hunger** | 0 (sated) → 1 (starving) | rises as regeneration **drains the stomach** (no clock of its own — §8); falls only by **eating** | the need for food, and the fuel gauge |
 | **thirst** | 0 (slaked) → 1 (parched) | same shape, **twice the rate** of hunger; falls only by **drinking** | the need for water |
 | **energy** | 0 → capacity `∝ m` | spent by **actions**; **regenerates** from satiation | the action budget |
 | **health** | 0 → 100 | worn by wounds and deprivation; regenerates under low needs | the life gate |
@@ -51,9 +52,11 @@ bundle; there is no free knob.
 Invariants worth stating baldly:
 
 - **Food and water never touch energy directly.** Eating fills the stomach
-  (lowers hunger); the body then converts satiation into energy *over time*.
-  Today `graze()` deposits straight into the action budget — that shortcut is
-  what this design removes.
+  (lowers hunger); regeneration then converts the stomach's contents into
+  energy *over time*, draining the meal it is minted from, one for one — so
+  **energy is food-backed**: a body can never bank more than it actually ate
+  (§8). Today `graze()` deposits straight into the action budget — that
+  shortcut is what this design removes.
 - **Energy at zero is collapse, not death.** A drained body can barely move or
   act, and lies where it is while regeneration (if it is fed and watered) or
   deprivation (if it is not) decides what happens next. Rescue is possible.
@@ -93,8 +96,9 @@ Invariants worth stating baldly:
 In formulas, for review rather than for code:
 
 ```
-hunger'  = +  R · m^-0.25 / T_hunger                  (T_hunger = 2 · T_thirst)
-thirst'  = +  R · m^-0.25 / T_thirst
+hunger'  = +  minted energy / stomach                 (the drain; no clock — §8)
+             resting-only body: = R · m^-0.25 / T_hunger  by the stomach identity
+thirst'  = +  R · m^-0.25 / T_thirst                  (T_hunger = 2 · T_thirst)
 eating   = −  intake · m / stomach     while the act runs (grazers also patch-limited)
 drinking = −  intake · m / reserve     while at water
 
@@ -142,7 +146,7 @@ in twice the time its thirst does.** Everything else hangs off it.
 | clock | period | notes |
 |---|---|---|
 | thirst, slaked → parched | ~4.5 min (9 000 ticks) | today's hydration period, kept |
-| hunger, sated → starving | ~9 min (18 000 ticks) | 2 × thirst, the anchor |
+| hunger, sated → starving | ~9 min (18 000 ticks) | 2 × thirst, the anchor — at rest; exertion shortens it (§8) |
 | desire to drink returns (need ≥ 0.5) | ~2.2 min | seek thresholds at 0.5 |
 | desire to eat returns (need ≥ 0.5) | ~4.5 min | twice the drink interval ✔ |
 | full drink, uninterrupted | ~4 s | |
@@ -217,3 +221,36 @@ All five went as proposed, and are now what the code does:
    floor as designed — and the minded cohort now reaching its steward
    ceiling, since deprivation kills slower than the old energy-zero switch;
    whether to raise that ceiling is a question for the deployed world.
+
+## 8. Amendment — energy is food-backed
+
+The model above regenerated energy from the *state* of being fed: satiation
+gated the mint, but nothing drained the stomach as energy was minted. The
+constants made the exchange rate `REGEN · T_hunger / stomach = 12` — twelve
+units of tank energy per unit of food actually eaten — and the herd found the
+seam. Selection drove metabolism to triple the reference (net income scales
+linearly with `R`), collapsed mate choice, drifted lineages toward budding,
+and the population exploded on land it had visibly stripped, because a
+breeding's worth of energy cost a third of a vegetation unit of real grass.
+
+The repair is one mechanism and one identity:
+
+- **The mint drains the meal.** Every unit of energy regeneration adds
+  `minted / stomach` to hunger, so the tank can never bank more than the body
+  ate. Conversion that would overflow a full tank does not run (a sated body
+  does not burn its meal for nothing). Food, stomach and tank are now one
+  conserved ledger; grass prices what it says.
+- **Hunger needs no clock.** With the drain in place the resting burn alone
+  empties a stomach, so the old timed rise became a redundant proxy and was
+  removed. The stomach is sized to the anchor instead:
+  `stomach = base burn · T_hunger` (9 units at reference mass), which makes a
+  full stomach exactly one hunger period of resting fuel — the rhythm anchor
+  (§5) holds *by construction* for a resting body, and exertion now buys
+  appetite the clock could never price.
+
+Consequences worth stating baldly: a parching body stops digesting (the
+worse-need gate throttles the mint), so hunger stalls while thirst pegs; a
+hot metabolism pays for its pace in appetite rather than out-breeding the
+food supply; and reproduction is bounded by grazing income rather than by
+the cooldown alone. Pinned by the `EnergyIsFoodBacked` scenario, which fails
+against the satiation-state mint on both counts.

@@ -509,12 +509,13 @@ public abstract class NPC extends Entity {
 			}
 			double cap = energyCapacity();
 			double eff = metaEfficiency();
-			// Need clocks: capacity grows with m, the burn only with m^0.75, so a
-			// big body's needs rise slower per unit of reserve (Kleiber's fast).
-			// Thirst runs at twice hunger's rate — the rhythm anchor: a sated
-			// body's appetite returns in twice the time its thirst does.
+			// The thirst clock: capacity grows with m, the burn only with m^0.75,
+			// so a big body's needs rise slower per unit of reserve (Kleiber's
+			// fast). Hunger has no clock of its own any more — appetite arrives
+			// through the regeneration drain below, so it tracks what the body
+			// actually burns; the resting rhythm anchor (appetite returns in
+			// twice the time thirst does) survives as the STOMACH identity.
 			double pace = Math.pow(bodyMass(), -0.25) * eff;
-			hunger = Math.min(1.0, hunger + pace / HUNGER_PERIOD);
 			thirst = Math.min(1.0, thirst + pace / THIRST_PERIOD);
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
@@ -539,14 +540,21 @@ public abstract class NPC extends Entity {
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
 			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + carriedMass()) * lastStep * lastStep;
-			// Regeneration: the body converts satiation into energy over time —
-			// food never becomes energy directly (feed() fills the stomach). The
-			// worse need governs, and vigor makes health compound with the rest:
-			// an unhealthy body is also a listless one.
+			// Regeneration: the body converts the stomach's contents into energy
+			// over time — food never becomes energy directly (feed() fills the
+			// stomach), and the mint drains the meal it is minted from, 1:1 in
+			// energy units, so a body can never bank more than it actually ate.
+			// The worse need still governs the rate, and vigor makes health
+			// compound with the rest: an unhealthy body is also a listless one.
 			double satiation = 1.0 - Math.max(hunger, thirst);
 			double vigor = Math.max(0, health) / 100.0;
 			double regen = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * satiation * vigor;
-			energy = Math.min(cap, energy + regen - (base + grip + travel));
+			double out = base + grip + travel;
+			// Only conversion that lands in the books draws down the stomach: at
+			// a full tank the mint stops instead of burning the meal for nothing.
+			double minted = Math.min(regen, Math.max(0, cap - energy + out));
+			hunger = Math.min(1.0, hunger + minted / (STOMACH * adultMass()));
+			energy = Math.min(cap, energy + regen - out);
 			if (energy < 0) {
 				energy = 0; // collapse, never death — health is the only gate
 			}
@@ -577,17 +585,24 @@ public abstract class NPC extends Entity {
 	/** Ticks for thirst to rise slaked -> parched at the reference body
 	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
 	public static final double THIRST_PERIOD = 9000;
-	/** Ticks for hunger to rise sated -> starving at the reference body: twice
-	 *  {@link #THIRST_PERIOD}, so appetite returns in twice the time thirst
-	 *  does — the design's one rhythm anchor. */
+	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
+	 *  twice {@link #THIRST_PERIOD}, so appetite returns in twice the time
+	 *  thirst does — the design's one rhythm anchor. No longer a clock of its
+	 *  own: hunger rises only as regeneration drains the stomach, and this
+	 *  period holds because the stomach is sized to it (see {@link #STOMACH}).
+	 *  Exertion adds appetite on top, which the old clock could not price. */
 	public static final double HUNGER_PERIOD = 18000;
 	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
 	 *  with a duration, interruptible by simply walking away. */
 	public static final double DRINK_TICKS = 132;
 	/** Stomach of a reference body, in vegetation-energy units: eating
 	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
-	 *  to sated. */
-	public static final double STOMACH = 3.0;
+	 *  to sated. Not a free knob: it equals {@code BASE_METABOLISM *
+	 *  HUNGER_PERIOD} (0.0005 * 18000), which is what makes the resting burn
+	 *  drain a full stomach in exactly {@link #HUNGER_PERIOD} ticks — the
+	 *  rhythm anchor, preserved by construction now that hunger has no clock
+	 *  of its own. Change either factor and this must follow. */
+	public static final double STOMACH = 9.0;
 	/** Energy regenerated per tick by a fed, watered, healthy reference body —
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
 	 *  refills an empty tank in roughly a minute and a half. */
@@ -1873,10 +1888,12 @@ public abstract class NPC extends Entity {
 	 *
 	 * <p>Calibrated against the live world rather than chosen: the crop rate and this
 	 * figure multiply into a herbivore's income per tick, so they cannot be set
-	 * independently. Measured over 60k ticks with the crop rate at 0.003, the herd
-	 * needs at least 0.75 here — at 0.5 predators starve down to their floor on empty
-	 * tanks, and at 0.25 the herd itself stops breeding and only the steward's floor
-	 * keeps it alive. This is the poorest grass the food chain will carry.
+	 * independently. The floor was originally measured under the satiation-state
+	 * mint (60k ticks, crop rate 0.003: below 0.75 predators starved to their
+	 * floor, at 0.25 the herd itself stopped breeding); now that energy is
+	 * food-backed this figure prices grass for real, and the ecology scenarios —
+	 * herd growth, hunter survival, the seeded demo world — are the gate that
+	 * re-verifies 0.75 still carries the food chain.
 	 */
 	public static final double GRASS_ENERGY = 0.75;
 

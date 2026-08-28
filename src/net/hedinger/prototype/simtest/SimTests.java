@@ -3473,12 +3473,12 @@ public class SimTests {
 				slowFar.markers = new double[] { 0.5, 0.5, 0.5 };
 				slowFar.speed = 0.02;
 				slowFar.losRange = 20;
-				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).withEnergy(3.0));
+				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).withEnergy(4.4));
 				Genome fastNear = new Genome();
 				fastNear.markers = new double[] { 0.5, 0.5, 0.5 };
 				fastNear.speed = 0.08;
 				fastNear.losRange = 4;
-				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).withEnergy(3.0));
+				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).withEnergy(4.4));
 			}
 			colony.think();
 			int founders = colony.getAliveCount();
@@ -3492,10 +3492,10 @@ public class SimTests {
 			// rather than a test of crossover.
 			int peak = founders;
 			boolean sawRecombinant = false;
-			// 400 steps rather than 80: grass is bulk food now, so a pair takes far
-			// longer to bank the energy for a birth, and the recombinant draw needs
-			// several births to stop being a coin toss.
-			for (int step = 0; step < 400; step++) {
+			// 800 steps rather than 80: every birth is food-backed now — a pair
+			// re-banks a whole offspring cost from grazing between births — and the
+			// recombinant draw needs several births to stop being a coin toss.
+			for (int step = 0; step < 800; step++) {
 				tick(colony, 20);
 				peak = Math.max(peak, colony.getAliveCount());
 				sawRecombinant |= hasRecombinant(colony);
@@ -6887,31 +6887,44 @@ public class SimTests {
 	}
 
 	/**
-	 * The rhythm anchor (VITALS.md §5): thirst runs at twice hunger's rate, so
-	 * a body sated and slaked at the same instant wants water in half the time
-	 * it takes to want food. Measured by when each need crosses the seek line.
+	 * The rhythm anchor (VITALS.md §5): at rest, thirst runs at twice hunger's
+	 * rate, so a body sated and slaked at the same instant wants water in half
+	 * the time it takes to want food. "At rest" is now part of the statement:
+	 * hunger has no clock of its own — appetite arrives as regeneration drains
+	 * the stomach — so the ratio holds by the STOMACH identity only while the
+	 * body spends nothing but its resting burn. And because the worse need
+	 * gates regeneration, a parching body stops digesting and its hunger
+	 * stalls, so one dry body cannot measure both clocks any more: the hunger
+	 * leg is read off a watered body (thirst held at zero by the shore sip)
+	 * and the thirst leg off a dry one, both motionless with full tanks.
 	 */
 	static class AppetiteReturnsAtHalfThirstsPace extends Scenario {
 		@Override
 		public void run() {
 			seed(98);
-			World w = room(8, 8);
-			for (int x = 1; x < 7; x++) {
+			World w = room(10, 8);
+			for (int x = 1; x < 9; x++) {
 				for (int y = 1; y < 7; y++) {
-					w.getTile(x, y, 0).setFertility(0); // nothing to eat or drink
+					w.getTile(x, y, 0).setFertility(0); // nothing to eat
 				}
 			}
-			TestNPC g = TestNPC.breeder(4.5, 4.5, 0, new Genome())
-					.withEnergy(4.0).withReproCooldown(100_000_000);
-			w.spawnEntity(g);
+			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS); // the drinker's shore
+			// Brainless genomes -> inert minds: metabolic bodies that never move.
+			// Tanks full, so the mint only covers the resting burn.
+			TestNPC drinker = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
+					.withEnergy(4.5).withReproCooldown(100_000_000);
+			TestNPC dry = TestNPC.brainedBreeder(7.5, 3.5, 0, new Genome())
+					.withEnergy(4.5).withReproCooldown(100_000_000);
+			w.spawnEntity(drinker);
+			w.spawnEntity(dry);
 			w.think();
 			int thirstAt = -1, hungerAt = -1;
 			for (int t = 1; t <= 12000 && hungerAt < 0; t++) {
 				tick(w, 1);
-				if (thirstAt < 0 && g.getThirst() >= 0.5) {
+				if (thirstAt < 0 && dry.getThirst() >= 0.5) {
 					thirstAt = t;
 				}
-				if (hungerAt < 0 && g.getHunger() >= 0.5) {
+				if (hungerAt < 0 && drinker.getHunger() >= 0.5) {
 					hungerAt = t;
 				}
 			}
@@ -6919,6 +6932,88 @@ public class SimTests {
 			assertGreater("hunger crossed it too", hungerAt, 0);
 			assertNear("appetite returned in twice the time thirst did",
 					2.0, hungerAt / (double) thirstAt, 0.1);
+		}
+	}
+
+	/**
+	 * The conservation law: energy is food-backed. Regeneration converts the
+	 * stomach's contents 1:1, so a body can never bank more than it actually
+	 * ate — the mint drains the meal it is minted from. Before this held, the
+	 * tank refilled from the mere state of being fed at ~12 units of energy
+	 * per unit of food (REGEN_RATE * HUNGER_PERIOD / old stomach), and the
+	 * herd evolved straight into the seam: triple-pace metabolisms banked
+	 * surplus three times faster while grass stayed almost free, and the
+	 * population exploded on land it had visibly stripped. Two legs pin the
+	 * repair: a meal bounds the surplus it can ever become, and a fast
+	 * metabolism now buys appetite, not offspring.
+	 */
+	static class EnergyIsFoodBacked extends Scenario {
+		@Override
+		public void run() {
+			seed(101);
+
+			// 1) One meal, one body, nothing else: the tank may never rise by
+			// more than the meal. Motionless (inert mind), watered (shore sip
+			// keeps thirst from stalling digestion), starting hungry with a
+			// near-empty tank. Under the satiation-state mint this crossed the
+			// meal's worth within a few hundred ticks on its way to a full tank.
+			World w = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.getTile(x, y, 0).setFertility(0); // no grazing income
+				}
+			}
+			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			TestNPC g = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
+					.withHunger(1.0).withEnergy(0.5).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			w.think();
+			double meal = 2.0;
+			g.feed(meal);
+			double maxEnergy = g.getEnergy();
+			// 6000 ticks: the drain is satiation-gated, so the stomach empties on
+			// an exponential tail (~4200-tick time constant from this hunger).
+			for (int t = 0; t < 6000; t++) {
+				tick(w, 1);
+				maxEnergy = Math.max(maxEnergy, g.getEnergy());
+			}
+			assertTrue("the tank never banked more than the meal was worth",
+					maxEnergy < 0.5 + meal);
+			assertGreater("and the mint drained the meal it was minted from "
+					+ "(appetite returned as the stomach emptied)", g.getHunger(), 0.9);
+
+			// 2) The evolved exploit is dead: on the same lush grass, a
+			// triple-pace metabolism outruns what a stomach can digest, lands
+			// hungry past the breeding gate, and stalls — while a reference
+			// burner keeps its surplus real and multiplies. Under the old mint
+			// the fast burner was strictly better, and selection knew it.
+			World slowW = room(12, 12);
+			World fastW = room(12, 12);
+			Genome slow = new Genome();
+			slow.sexuality = 0.3; // budders: reproduction needs no partner
+			Genome fast = new Genome();
+			fast.sexuality = 0.3;
+			fast.metabolism = 0.06; // the herd's evolved triple pace
+			slowW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, slow));
+			fastW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, fast));
+			slowW.think();
+			fastW.think();
+			tick(slowW, 8000);
+			tick(fastW, 8000);
+			snapshot(slowW, "reference metabolism: a real, food-backed surplus");
+			snapshot(fastW, "triple pace: appetite, not offspring");
+			assertGreater("the reference burner multiplied past the fast one",
+					slowW.getAliveCount(), fastW.getAliveCount());
+			TestNPC f = null;
+			for (Entity e : fastW.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead()) {
+					f = t;
+					break;
+				}
+			}
+			assertTrue("a fast burner survives on grass", f != null);
+			assertGreater("but lives hungry, past the breeding gate — pace of "
+					+ "life now buys appetite, not offspring", f.getHunger(), NPC.NEED_LOW);
 		}
 	}
 
@@ -9367,6 +9462,7 @@ public class SimTests {
 				new DehydrationWearsABodyDown(),
 				new CollapseIsNotDeath(),
 				new AppetiteReturnsAtHalfThirstsPace(),
+				new EnergyIsFoodBacked(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new RockyGroundFeedsAGrazerPoorly(),
