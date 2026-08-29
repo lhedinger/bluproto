@@ -463,6 +463,26 @@ The precedents, so nobody pays twice:
   what made this findable: the sprite layer and the bake were separated by
   measurement (turning the layer off changed nothing), which ruled out three
   quarters of the code before any of it was read.
+- **The belt that could only point two ways** — a conveyor's art asked whether
+  the tiles north and south were also belts, and drew along whichever axis
+  answered. That reads like the autotiling the rails and the pipe gallery use,
+  and it is not: a **track is the same run travelled either way**, so its shape
+  really is a fact about its neighbours, but a **belt has a near end and a far
+  end**, and no arrangement of surrounding tiles can say which is which. The
+  neighbour test could name two axes; a belt needs four directions. So every
+  belt laid along a row pointed west and every belt down a column pointed
+  north — not as a decision, but because that is the way the arithmetic fell
+  out, and nobody could have turned one around. The rule: **autotile what the
+  neighbours genuinely determine; store what they cannot.** A shape is
+  neighbours' business, a heading is the builder's, and the tile carries it —
+  the same reason `rampUphill` is stored rather than guessed. Two tells that a
+  guess is standing in for a fact: the catalog can only show half the cases
+  (`/tiles` listed "east-west" and "north-south" because those were the only
+  two pictures that existed), and no caller anywhere can express the other
+  half. Note the near miss in the diagnosis, too — reaching for the rail's
+  four-bit mask because the belt "looked like" a rail. The mask would have
+  bought elbows and tees for a machine whose actual defect was that it could
+  not say which way it ran.
 
 ## 8. Conformance checklist
 
@@ -495,6 +515,10 @@ Before a new visual merges, ask:
     `bakeLevelImage` is served; `renderLevelImage` builds the desktop
     renderer's composited layers (§7, "the bake that was tested on the wrong
     renderer").
+13. If it has a **facing**, does the tile *carry* that facing rather than the
+    painter inferring it from the neighbours? Autotile what the neighbours
+    genuinely determine — a run's shape — and store what they cannot: which
+    way it runs (§7, "the belt that could only point two ways").
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.

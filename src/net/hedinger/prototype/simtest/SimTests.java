@@ -3202,6 +3202,22 @@ public class SimTests {
 			assertGreater("the residue line runs on a belt",
 					tiles(w, net.hedinger.prototype.sim.BlackMesa.WORKS,
 							Tile.TileType.TYPE_CONVEYOR), 20);
+			// And it runs SOMEWHERE. A belt carries one way; the direction is
+			// a fact about the works, so the works has to have stated it on
+			// every tile of the line rather than leaving the art to invent one.
+			int belts = 0, carryWest = 0;
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, net.hedinger.prototype.sim.BlackMesa.WORKS);
+					if (t.getType() == Tile.TileType.TYPE_CONVEYOR) {
+						belts++;
+						if (t.getBeltRun() == Tile.DIR_W) {
+							carryWest++;
+						}
+					}
+				}
+			}
+			assertEquals("every belt tile carries toward the dock", belts, carryWest);
 			assertEquals("the control room watches the bore through glass",
 					Tile.TileType.TYPE_WINDOW.getValue(),
 					w.getTile(92, 48, net.hedinger.prototype.sim.BlackMesa.LABS)

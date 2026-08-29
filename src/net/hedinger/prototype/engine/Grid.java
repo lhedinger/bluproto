@@ -847,11 +847,11 @@ public class Grid {
 								// Paint takes no shade -- the marking is the marking.
 								col = GroundTextures.hazardStripe(gx, gy);
 							} else if (cl == GroundTextures.CLS_CONVEYOR) {
-								boolean vertBelt = isType(x, y - 1, Tile.TileType.TYPE_CONVEYOR)
-										|| isType(x, y + 1, Tile.TileType.TYPE_CONVEYOR);
-								col = vertBelt
-										? GroundTextures.conveyor(gy, ai, gx, gy)
-										: GroundTextures.conveyor(gx, aj, gx, gy);
+								// The belt's own direction, not a sniff at its axis.
+								// Unlike the rail below it, a belt is not the same
+								// machine travelled either way, and no arrangement
+								// of neighbours can say which end is the far one.
+								col = GroundTextures.conveyor(t.getBeltRun(), ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_RAIL) {
 								// Autotiled from the sides the run continues into, so
 								// the track works out its own geometry: straights,
