@@ -46,6 +46,15 @@ public final class Tuning {
 			SimulationRunner.class,
 	};
 
+	/**
+	 * Constants that are NAMES, not quantities — enum-like codes whose number
+	 * is an arbitrary label (a direction is not "more" than another). The
+	 * registry is for values where more and less mean something, so these are
+	 * excluded from the survey rather than listed as frozen noise.
+	 */
+	private static final java.util.Set<String> CODES = java.util.Set.of(
+			"Tile.DIR_N", "Tile.DIR_E", "Tile.DIR_S", "Tile.DIR_W");
+
 	/** Key -> field, in survey order. Built once; the class list is fixed. */
 	private static final Map<String, Field> FIELDS = survey();
 
@@ -65,7 +74,10 @@ public final class Tuning {
 						&& t != boolean.class) {
 					continue;
 				}
-				out.put(c.getSimpleName() + "." + f.getName(), f);
+				String key = c.getSimpleName() + "." + f.getName();
+				if (!CODES.contains(key)) {
+					out.put(key, f);
+				}
 			}
 		}
 		return out;

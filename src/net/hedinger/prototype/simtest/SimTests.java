@@ -7217,6 +7217,8 @@ public class SimTests {
 						(Boolean) byKey.get("NPC.REF_SIZE").get("frozen"));
 				assertTrue("the regrow rate is frozen — tiles copied it at build",
 						(Boolean) byKey.get("Tile.VEG_REGROW").get("frozen"));
+				assertTrue("names are not quantities: the direction codes are "
+						+ "not listed at all", !byKey.containsKey("Tile.DIR_N"));
 
 				// A frozen constant refuses the command outright.
 				boolean refused = false;
