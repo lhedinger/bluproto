@@ -6989,6 +6989,9 @@ public class SimTests {
 			// the fast burner was strictly better, and selection knew it.
 			World slowW = room(12, 12);
 			World fastW = room(12, 12);
+			slowW.setTile(1, 1, 0, Tile.TileType.TYPE_SHALLOWS); // a shore each:
+			fastW.setTile(1, 1, 0, Tile.TileType.TYPE_SHALLOWS); // dying of thirst
+			// is not the thing under measurement, breeding on grass is
 			Genome slow = new Genome();
 			slow.sexuality = 0.3; // budders: reproduction needs no partner
 			Genome fast = new Genome();
@@ -7092,6 +7095,95 @@ public class SimTests {
 					kidWorth <= pa.reproCost() + pb.reproCost() + 0.01);
 			assertTrue("and a well-funded birth is still born below the breeding line",
 					kid.getEnergy() < TestNPC.REPRO_FRACTION * kid.energyCapacity());
+		}
+	}
+
+	/**
+	 * Growing up is paid for: new flesh is matter, bought from the tank at the
+	 * same {@link NPC#MEAT_ENERGY} an eater would collect for it — so rearing a
+	 * body and eating it can never mint energy between them, and a growing
+	 * child is hungrier than an adult of the same current size (the mint
+	 * refills what growth spends, and the mint drains the stomach). Three
+	 * legs, on motionless bodies so the books are pure: the flesh shows up as
+	 * energy leaving the grower's ledger; the grower eats through its reserves
+	 * far faster than a same-size grown body beside it; and a destitute
+	 * juvenile stops growing before it stops living — growth yields to
+	 * survival at the crawl reserve, so childhood stretches with scarcity
+	 * instead of starving its owner.
+	 */
+	static class GrowingUpIsPaidFor extends Scenario {
+		@Override
+		public void run() {
+			seed(103);
+			// Barren, shored rooms: no food income, no thirst in the books —
+			// every number below moves only by burn, mint and growth.
+			World gw = room(10, 8);
+			World aw = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					gw.getTile(x, y, 0).setFertility(0);
+					aw.getTile(x, y, 0).setFertility(0);
+				}
+			}
+			gw.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			aw.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+
+			// The grower: a size-16 genome caught mid-childhood at current size 6.
+			// The grown: a size-6 genome that IS its adult body. Same current
+			// size, same burn, same movement (none) — growth is the difference.
+			Genome big = new Genome();
+			big.size = 16;
+			TestNPC grower = TestNPC.brainedBreeder(2.5, 3.5, 0, big)
+					.withGrowth(16).withEnergy(7.2).withReproCooldown(100_000_000);
+			Genome same = new Genome(); // size 6
+			TestNPC grown = TestNPC.brainedBreeder(2.5, 3.5, 0, same)
+					.withEnergy(4.5).withReproCooldown(100_000_000);
+			gw.spawnEntity(grower);
+			aw.spawnEntity(grown);
+			gw.think();
+			aw.think();
+			double e0 = grower.getEnergy(), m0 = grower.maturity();
+			tick(gw, 3000);
+			tick(aw, 3000);
+
+			// 1) The ledger: what left the grower's books (starting energy plus
+			// everything minted from its stomach, less what it still holds) is
+			// at least the meat price of the flesh it put on.
+			double minted = grower.getHunger() * NPC.STOMACH * (16.0 / NPC.REF_SIZE);
+			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
+			assertGreater("it grew", grower.maturity(), m0 + 0.1);
+			assertGreater("and the flesh was paid for out of the books ("
+					+ String.format("%.2f", e0 + minted - grower.getEnergy())
+					+ " spent, flesh worth " + String.format("%.2f", flesh) + ")",
+					e0 + minted - grower.getEnergy(), flesh - 1e-6);
+
+			// 2) The appetite: the growing body drained far more of its stomach
+			// than the same-size grown body beside it — and is the hungrier.
+			double grownMinted = grown.getHunger() * NPC.STOMACH * (6.0 / NPC.REF_SIZE);
+			assertGreater("a growing child eats through its reserves more than "
+					+ "twice as fast as a grown body of the same size",
+					minted, 2 * grownMinted);
+			assertGreater("and is the hungrier of the two",
+					grower.getHunger(), grown.getHunger());
+
+			// 3) Growth yields to survival: a destitute juvenile — empty stomach,
+			// tank at the crawl floor — stops growing almost at once, and is
+			// still alive long after; scarcity stretches childhood, it does not
+			// kill through growth.
+			World pw = room(10, 8);
+			pw.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome pauperG = new Genome();
+			pauperG.size = 16;
+			TestNPC pauper = TestNPC.brainedBreeder(2.5, 3.5, 0, pauperG)
+					.withGrowth(16).withEnergy(0.7).withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			pw.spawnEntity(pauper);
+			pw.think();
+			tick(pw, 2000);
+			assertTrue("the destitute juvenile stopped growing near birth size",
+					pauper.maturity() < 0.4);
+			assertTrue("but starvation did not kill it through growth — it is "
+					+ "alive to eat its way out", !pauper.isDead());
 		}
 	}
 
@@ -9542,6 +9634,7 @@ public class SimTests {
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new EnergyIsFoodBacked(),
 				new NoFreeEnergyAtBirth(),
+				new GrowingUpIsPaidFor(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new RockyGroundFeedsAGrazerPoorly(),

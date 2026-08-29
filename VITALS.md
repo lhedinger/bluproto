@@ -268,3 +268,17 @@ eaten. The audit is the cannibal round trip: a parent eating its just-born
 child loses tank and stomach with the death, gets the body back at meat
 price, and can never profit. Pinned by `NoFreeEnergyAtBirth`, which fails
 against the old books at 9.5 conjured per 2.25 paid.
+
+**Growth is paid for too.** The flesh a juvenile puts on is the same matter
+an eater collects at the meat price, so each step of growth is bought from
+the tank at that price — `MEAT_ENERGY` per unit of mass grown — and rearing
+a body then eating it can never mint energy between them. The old fixed
+growth rate becomes a well-fed ceiling: growth slows to what the surplus
+above the crawl reserve affords, so childhood stretches with scarcity and a
+starving juvenile stops growing before it stops living. Because the mint
+refills what growth spends and the mint drains the stomach, a growing child
+is hungrier than an adult of the same current size — measured at over twice
+the reserve drain, motionless and side by side. `growthTicks` stays the
+NOMINAL childhood, which is still the right scale for the clocks derived
+from it (rot, breeding cadence). Pinned by `GrowingUpIsPaidFor`, which
+fails against free flesh at 2.18 spent for 3.25 grown.
