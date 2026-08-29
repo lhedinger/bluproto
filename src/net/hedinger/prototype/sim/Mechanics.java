@@ -125,7 +125,8 @@ public final class Mechanics {
 				row("Full tank", num(NPC.BASE_CAPACITY) + " × mass", "energy",
 						"Reference body: " + round(NPC.BASE_CAPACITY, 2)),
 				row("Born holding", pct(TestNPC.BORN_FRACTION), "of the tank",
-						"Fed, but under the breeding line."),
+						"World-seeded founders, and the ceiling on any birth "
+						+ "endowment — under the breeding line either way."),
 				row("Regenerates", num(NPC.REGEN_RATE)
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
 						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
@@ -307,8 +308,10 @@ public final class Mechanics {
 				row("Costs", pct(TestNPC.REPRO_COST_FRACTION), "of the tank, each parent",
 						"Reference body: "
 						+ round(TestNPC.REPRO_COST_FRACTION * NPC.BASE_CAPACITY, 2)),
-				row("Offspring starts at", pct(TestNPC.BORN_FRACTION), "of ITS OWN tank",
-						"Sized on the body it will grow into."),
+				row("Offspring is worth", "exactly what its parents paid", "",
+						"Tank + birth meal + meat-priced body = the payment; "
+						+ "born at " + pct(TestNPC.BORN_HUNGER) + " hunger, its "
+						+ "first act is to eat. No free energy at birth."),
 				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
 						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
 				row("Cooldown", "half the offspring's childhood, at least "
