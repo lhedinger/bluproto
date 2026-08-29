@@ -1542,26 +1542,48 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * A conveyor belt along one axis at art-pixel (along, across): the belt in
-	 * the rack's dark steel with lit chevron slats every 4 px pointing the way
-	 * the line runs, framed by tread-worn side rails. Paint, slats and rails
-	 * are all borrowed families -- the belt is the same steel as the racks it
-	 * feeds.
+	 * A conveyor belt carrying toward {@code dir} (0 N, 1 E, 2 S, 3 W), at
+	 * art-pixel (ai, aj) of the tile whose global art-pixel is (gx, gy): the
+	 * belt in the rack's dark steel with lit chevron slats every 4 px pointing
+	 * the way it carries, framed by tread-worn side rails. Paint, slats and
+	 * rails are all borrowed families -- the belt is the same steel as the
+	 * racks it feeds.
+	 *
+	 * <p>The direction is the tile's own ({@link Tile#getBeltRun}) rather than
+	 * a guess at which axis the run lies on. Guessing could name two axes but
+	 * never four directions, so a belt pointed whichever way the arithmetic
+	 * happened to run; asking the tile means a belt points where it was laid
+	 * to point, and can be turned around by saying so.
+	 *
+	 * <p>The slat phase is driven by the GLOBAL coordinate along the run, so
+	 * chevrons march unbroken across tile seams, while the belt's width is
+	 * measured in the tile's own, so the side rails land on the tile edges.
 	 */
-	public static int conveyor(int along, int across, int px, int py) {
+	public static int conveyor(int dir, int ai, int aj, int gx, int gy) {
+		boolean vertical = (dir & 1) == 0; // N and S run down the columns
+		int across = vertical ? ai : aj;
 		if (across <= 1 || across >= 10) {
 			return RAMP[CLS_TREADPLATE][1]; // the side rails
 		}
 		if (across == 2 || across == 9) {
 			return RAMP[CLS_CONVEYOR][0]; // the belt's shadowed lip
 		}
-		// Chevron slats: a lit diagonal every 4 px, mirrored about the belt's
-		// centreline so the arrows point along the run.
-		int phase = Math.floorMod(along - Math.abs(across - 6), 4);
-		if (phase == 0) {
-			return RAMP[CLS_CONVEYOR][2];
+		// The chevron's apex sits at the low end of `along`, so a belt carrying
+		// north or west takes the run coordinate as it lies and one carrying
+		// south or east takes it negated: the same arrow, mirrored.
+		int along = vertical ? gy : gx;
+		if (dir == Tile.DIR_S || dir == Tile.DIR_E) {
+			along = -along;
 		}
-		return RAMP[CLS_CONVEYOR][1];
+		// Depth out from the belt's centreline. The interior is 3..8, so the
+		// centre falls BETWEEN 5 and 6 and both sit at depth 0 -- a two-pixel
+		// apex with arms of equal length. Mirroring about a single column, as
+		// this did, put the apex off centre and left one arm a pixel longer
+		// than the other on a belt that is symmetrical everywhere else.
+		int depth = across <= 5 ? 5 - across : across - 6;
+		return Math.floorMod(along - depth, 4) == 0
+				? RAMP[CLS_CONVEYOR][2] // the lit slat
+				: RAMP[CLS_CONVEYOR][1];
 	}
 
 	/**

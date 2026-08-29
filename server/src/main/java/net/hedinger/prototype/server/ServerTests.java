@@ -34,6 +34,7 @@ public final class ServerTests {
 		machineryIsNotInspectedForFoodAndWater();
 		theDroneRankIsDronesAndOnlyDrones();
 		theTileCatalogListsEveryType();
+		theBeltPointsWhereItIsLaid();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -605,6 +606,78 @@ public final class ServerTests {
 			check("the catalog has its functional groups", groups.size() >= 8);
 		} catch (IllegalStateException e) {
 			check("tile catalog grouping: " + e.getMessage(), false);
+		}
+	}
+
+	/**
+	 * A belt points where it was told to point. The art used to infer its axis
+	 * from the neighbouring tiles, which could name two axes but never four
+	 * directions -- so a belt laid along a row always pointed west and one laid
+	 * down a column always north, and no belt in the world could be turned
+	 * around. This asserts the thing that was actually missing: that all four
+	 * cardinals draw differently, and that the chevron is symmetrical about the
+	 * belt rather than leaning to one side.
+	 */
+	private static void theBeltPointsWhereItIsLaid() {
+		// Every pair of directions must differ somewhere, or the stored
+		// direction is decoration.
+		int[][] pair = { { 0, 1 }, { 0, 2 }, { 0, 3 }, { 1, 2 }, { 1, 3 }, { 2, 3 } };
+		for (int[] p : pair) {
+			int diff = 0;
+			for (int gx = 0; gx < 24; gx++) {
+				for (int gy = 0; gy < 24; gy++) {
+					int a = net.hedinger.prototype.engine.GroundTextures
+							.conveyor(p[0], gx % 12, gy % 12, gx, gy);
+					int b = net.hedinger.prototype.engine.GroundTextures
+							.conveyor(p[1], gx % 12, gy % 12, gx, gy);
+					if (a != b) {
+						diff++;
+					}
+				}
+			}
+			check("belt " + p[0] + " and belt " + p[1] + " are drawn differently ("
+					+ diff + " art-pixels)", diff > 0);
+		}
+		// Opposite directions are the same belt with the arrow reversed: the
+		// body and rails must match, only the slats may move. If these came out
+		// wholly different the belt would have changed axis, not direction.
+		for (int[] p : new int[][] { { 0, 2 }, { 1, 3 } }) {
+			int diff = 0;
+			for (int gx = 0; gx < 24; gx++) {
+				for (int gy = 0; gy < 24; gy++) {
+					if (net.hedinger.prototype.engine.GroundTextures
+							.conveyor(p[0], gx % 12, gy % 12, gx, gy)
+							!= net.hedinger.prototype.engine.GroundTextures
+									.conveyor(p[1], gx % 12, gy % 12, gx, gy)) {
+						diff++;
+					}
+				}
+			}
+			check("belt " + p[0] + " reverses to " + p[1] + " without changing axis",
+					diff > 0 && diff < 24 * 24 / 4);
+		}
+		// The chevron's two arms are the same length. The old mirror was taken
+		// about a single column while the belt's interior spans 3..8, so one
+		// arm reached three pixels and the other two.
+		for (int dir = 0; dir < 4; dir++) {
+			boolean vertical = (dir & 1) == 0;
+			int lo = 99, hi = -1;
+			for (int across = 0; across < 12; across++) {
+				for (int run = 0; run < 4; run++) {
+					int c = vertical
+							? net.hedinger.prototype.engine.GroundTextures
+									.conveyor(dir, across, 0, across, run)
+							: net.hedinger.prototype.engine.GroundTextures
+									.conveyor(dir, 0, across, run, across);
+					// The lit slat is the conveyor ramp's top shade.
+					if (c == 0x3c434f) {
+						lo = Math.min(lo, across);
+						hi = Math.max(hi, across);
+					}
+				}
+			}
+			check("belt " + dir + " slats sit centred on the belt (" + lo + ".." + hi + ")",
+					lo == 3 && hi == 8);
 		}
 	}
 

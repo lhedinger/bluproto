@@ -120,6 +120,43 @@ public class Tile {
 		return type == TYPE_RAMPUP ? rampUphill : opposite(rampUphill);
 	}
 
+	// --- belt direction -----------------------------------------------------
+	/**
+	 * Which way a {@code CONVEYOR} carries what sits on it, as a cardinal (see
+	 * {@link #DIR_N}).
+	 *
+	 * <p>A belt is not a track. A rail run is the same run travelled either
+	 * way, so the track can work its shape out from the sides the run
+	 * continues into and never needs to be told anything. A belt has a near
+	 * end and a far end, and no arrangement of neighbouring tiles says which
+	 * is which — the same straight line of belt tiles is a different machine
+	 * depending on which way it moves.
+	 *
+	 * <p>So it is STORED, for the reason {@link #rampUphill} is stored. The
+	 * art used to ask whether the tiles north and south were belts and draw
+	 * along whichever axis answered. That can express two axes but not four
+	 * directions: every belt laid along a row pointed west and every belt laid
+	 * down a column pointed north, not because anyone chose it but because
+	 * that is the way the arithmetic happened to fall out. A belt that cannot
+	 * be turned around is a belt whose picture is a coincidence.
+	 *
+	 * <p>Defaults to WEST, which is exactly that old convention for a belt
+	 * laid along a row — a belt nobody gives a direction to keeps the one it
+	 * was drawn with before.
+	 */
+	private int beltRun = DIR_W;
+
+	/** Which way this belt carries (see {@link #beltRun}). */
+	public int getBeltRun() {
+		return beltRun;
+	}
+
+	/** Points this belt's travel at {@code dir}. Set by whoever lays the belt;
+	 *  the art takes its answer from here, never from the neighbours. */
+	public void setBeltRun(int dir) {
+		beltRun = dir & 3;
+	}
+
 	// Tall grass is a purely cosmetic overlay: blades drawn on top of the ground
 	// that bend aside as entities pass through. It has NO effect on movement,
 	// perception, vegetation, or anything the simulation reads -- it is only a

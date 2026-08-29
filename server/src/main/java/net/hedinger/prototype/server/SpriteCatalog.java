@@ -817,7 +817,16 @@ final class SpriteCatalog {
 			runVariant(out, t, "crossing", RUN_CROSS);
 			return;
 		case TYPE_CONVEYOR:
+			// Four, not two. A belt carries one way, and the catalog showed
+			// two entries only because the art could not draw the other two.
+			beltVariant(out, t, "carries north", Tile.DIR_N);
+			beltVariant(out, t, "carries east", Tile.DIR_E);
+			beltVariant(out, t, "carries south", Tile.DIR_S);
+			beltVariant(out, t, "carries west", Tile.DIR_W);
+			return;
 		case TYPE_DUCT:
+			// A duct stays two: it is a crawl-space, and a crawl-space is the
+			// same passage whichever way you go along it.
 			runVariant(out, t, "east-west", RUN_STRAIGHT);
 			runVariant(out, t, "north-south", RUN_VERT);
 			return;
@@ -911,6 +920,22 @@ final class SpriteCatalog {
 					w.setTile(3, y, 0, t); // the branch
 				}
 			}
+		}
+		bakeVariant(out, w, t, cap);
+	}
+
+	/** A straight belt laid on the axis it carries along, and told which way it
+	 *  carries — so the four entries differ by the one thing that makes a belt
+	 *  a belt rather than a track. */
+	private void beltVariant(StringBuilder out, Tile.TileType t, String cap, int dir) {
+		World w = stage(8, 8);
+		fill(w, Tile.TileType.TYPE_PLATE);
+		boolean vertical = (dir & 1) == 0;
+		for (int i = 1; i <= 6; i++) {
+			int bx = vertical ? 3 : i;
+			int by = vertical ? i : 3;
+			w.setTile(bx, by, 0, t);
+			w.getTile(bx, by, 0).setBeltRun(dir);
 		}
 		bakeVariant(out, w, t, cap);
 	}

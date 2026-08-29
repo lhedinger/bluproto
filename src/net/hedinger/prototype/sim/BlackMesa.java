@@ -767,6 +767,14 @@ public final class BlackMesa {
 	private static void residueProcessing(World w) {
 		fill(w, WORKS, 64, 83, 100, 94, Tile.TileType.TYPE_STONE);
 		fill(w, WORKS, 66, 84, 98, 84, Tile.TileType.TYPE_CONVEYOR);
+		// The line carries WEST, toward the loading dock on the works' west
+		// run: this is the waste side of the plant, and residue leaves by the
+		// same door the freight came in. Said here rather than left to the
+		// default, because which way a belt runs is a fact about the works and
+		// not about how its pixels happen to be indexed.
+		for (int x = 66; x <= 98; x++) {
+			w.getTile(x, 84, WORKS).setBeltRun(Tile.DIR_W);
+		}
 		for (int y : new int[] { 86, 89, 92 }) {
 			fill(w, WORKS, 66, y, 98, y, Tile.TileType.TYPE_SLUDGE);
 		}
