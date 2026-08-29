@@ -1100,8 +1100,148 @@ function reflect(): void {
   pauseBtn.classList.toggle('on', paused);
 }
 
+// ---- the constants panel (debug mode) --------------------------------------
+// Every simulation constant, live from GET /api/tuning: frozen ones (structural
+// anchors, values copied out at world build) render as read-only sliders; the
+// tunable ones become editable when the viewer holds the command token (the
+// same admin gate as spawn/reset/inject). "save & close" diffs the panel
+// against the values it loaded and POSTs only the changes — each lands as its
+// own logged tune command at a tick boundary, so replays re-tune themselves.
+const tuneBtn = document.getElementById('tuneBtn') as HTMLButtonElement;
+const tuningEl = document.getElementById('tuning')!;
+const tuneBody = document.getElementById('tuneBody')!;
+const tuneFoot = document.getElementById('tuneFoot')!;
+const tuneClose = document.getElementById('tuneClose')!;
+
+type TuneRow = { key: string; loaded: number; input: HTMLInputElement; row: HTMLElement };
+let tuneRows: TuneRow[] = [];
+
+function closeTuning(): void {
+  tuningEl.style.display = 'none';
+  tuneRows = [];
+}
+
+/** Slider bounds around the boot default: room to quadruple, floor at zero. */
+function tuneMax(def: number, value: number): number {
+  const base = Math.max(Math.abs(def) * 4, Math.abs(value) * 1.25, 1e-6);
+  return base;
+}
+
+async function openTuning(): Promise<void> {
+  tuningEl.style.display = 'block';
+  tuneBody.textContent = 'loading…';
+  tuneFoot.textContent = '';
+  tuneRows = [];
+  let constants: { key: string; value: number; def: number; type: string; frozen: boolean }[];
+  try {
+    const r = await fetch('/api/tuning');
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error();
+    constants = d.constants;
+  } catch {
+    tuneBody.textContent = 'failed to load /api/tuning';
+    return;
+  }
+  const editable = !net.readOnly;
+  tuneBody.textContent = '';
+  let group = '';
+  for (const c of constants) {
+    const cls = c.key.split('.')[0];
+    if (cls !== group) {
+      group = cls;
+      const g = document.createElement('div');
+      g.className = 'grp';
+      g.textContent = cls;
+      tuneBody.append(g);
+    }
+    const row = document.createElement('div');
+    row.className = 'trow';
+    const name = document.createElement('span');
+    name.className = 'tname';
+    name.textContent = c.key.split('.')[1];
+    name.title = `${c.key} — default ${c.def}`;
+    row.append(name);
+
+    const canEdit = editable && !c.frozen;
+    const num = document.createElement('input');
+    if (c.type === 'boolean') {
+      num.type = 'checkbox';
+      num.checked = c.value !== 0;
+      num.disabled = !canEdit;
+      row.append(num);
+    } else {
+      // The pair: a slider for the hand, a number for precision — same value.
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0';
+      slider.max = String(tuneMax(c.def, c.value));
+      slider.step = String(tuneMax(c.def, c.value) / 400);
+      slider.value = String(c.value);
+      slider.disabled = !canEdit;
+      num.type = 'number';
+      num.step = 'any';
+      num.value = String(c.value);
+      num.disabled = !canEdit;
+      const mark = () => row.classList.toggle('changed', Number(num.value) !== c.value);
+      slider.oninput = () => { num.value = slider.value; mark(); };
+      num.oninput = () => { slider.value = num.value; mark(); };
+      row.append(slider, num);
+    }
+    const lock = document.createElement('span');
+    lock.className = 'lock';
+    lock.textContent = c.frozen ? '🔒' : '';
+    lock.title = c.frozen ? 'structural — fixed at build, read-only' : '';
+    row.append(lock);
+    tuneBody.append(row);
+    if (canEdit) tuneRows.push({ key: c.key, loaded: c.value, input: num, row });
+  }
+  if (editable) {
+    const note = document.createElement('span');
+    note.className = 'note';
+    note.textContent = '🔒 = structural, read-only';
+    const save = document.createElement('button');
+    save.textContent = 'save & close';
+    save.onclick = saveTuning;
+    tuneFoot.append(note, save);
+  } else {
+    const note = document.createElement('span');
+    note.className = 'note';
+    note.textContent = 'read-only — a command token (#t=…) unlocks editing';
+    tuneFoot.append(note);
+  }
+}
+
+async function saveTuning(): Promise<void> {
+  const changes: Record<string, number> = {};
+  for (const r of tuneRows) {
+    const v = r.input.type === 'checkbox' ? (r.input.checked ? 1 : 0) : Number(r.input.value);
+    if (Number.isFinite(v) && v !== r.loaded) changes[r.key] = v;
+  }
+  if (Object.keys(changes).length === 0) { closeTuning(); toast('no changes'); return; }
+  try {
+    const r = await fetch('/api/tuning', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Command-Token': net.commandToken },
+      body: JSON.stringify(changes),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) { closeTuning(); toast(`tuned ${d.applied} constant${d.applied === 1 ? '' : 's'}`); }
+    else if (r.status === 403) toast('tuning refused: bad token');
+    else toast(`tuning failed: ${d.error ?? r.status}`);
+  } catch {
+    toast('tuning failed');
+  }
+}
+
+tuneBtn.onclick = () => {
+  if (tuningEl.style.display === 'block') closeTuning(); else void openTuning();
+};
+tuneClose.onclick = closeTuning;
+
 // Debug mode is a CLIENT-ONLY view: it changes what's rendered and how much a
-// selection reveals, never how the server behaves. Enable it by tapping the tick
+// selection reveals, never how the server behaves. (The constants panel it
+// reveals can change the world — but only through the token gate, which is the
+// admin boundary; debug alone still only looks.) Enable it by tapping the tick
 // readout three times, pressing "d" (desktop), or opening with ?debug=true. When
 // on: tapping a tile inspects it, and the inspect panel shows the full debug dump
 // for whatever is selected.
@@ -1110,6 +1250,8 @@ function applyDebug(): void {
   // Re-render whatever is open in the new context (simple card <-> full dump).
   if (selectedId !== null) refreshDetail();
   statsEl.title = debugOn ? 'debug on — tap 3× to turn off' : 'tap 3× for debug';
+  tuneBtn.style.display = debugOn ? '' : 'none';
+  if (!debugOn) closeTuning();
 }
 function setDebug(on: boolean): void {
   if (debugOn === on) return;
