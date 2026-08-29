@@ -58,19 +58,6 @@ public class TestNPC extends NPC {
 	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
 	private static final int FULL_BODY_HEALTH = 100;
 	/**
-	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
-	 * body is worth what it weighs, so the meal tracks the quarry rather than the
-	 * effort: an animal that takes twice as many bites to bring down is not twice
-	 * as nutritious, it is just slower to eat.
-	 *
-	 * <p>This replaces a flat per-bite payout, under which a mouse and an animal the
-	 * hunter's own size were worth exactly the same (measured: 2.49 either way). That
-	 * pointed selection at the smallest, easiest quarry and left no niche for a large
-	 * hunter — the one corner of the economy where mass did not appear, while
-	 * metabolism, movement and tank capacity all scale with it.
-	 */
-	public static final double MEAT_ENERGY = 2.5;
-	/**
 	 * Energy in a carcass, per unit of its mass. Meat is meat: a body is worth the
 	 * same whether the eater killed it or found it, so this is {@link #MEAT_ENERGY}
 	 * rather than a number of its own.
@@ -839,6 +826,13 @@ public class TestNPC extends NPC {
 	}
 
 	/** Sets the starting energy (for metabolic fixtures like the breeder/mater). */
+	/** Starts this body growing toward {@code adult} (see {@link #beginGrowth})
+	 *  — scaffolding for scenario bodies built outside the genome factories. */
+	public TestNPC withGrowth(double adult) {
+		beginGrowth(adult);
+		return this;
+	}
+
 	public TestNPC withEnergy(double e) {
 		energy = e;
 		return this;

@@ -266,18 +266,28 @@ public final class Mechanics {
 
 	private static Map<String, Object> growth() {
 		Map<String, Object> s = section("growth", "Growing up",
-				"Creatures are born a fraction of their adult body and grow into it at a FIXED "
-				+ "rate of radius per tick. Because the rate is fixed and the distance is not, "
-				+ "childhood length scales with how big the adult body is: a small grazer is "
-				+ "grown in seconds, the largest body the genome can express takes the longest "
-				+ "childhood the world can produce. Rot is pinned to the same figure, so a body "
-				+ "takes as long to return to the world as it took to build — one constant, not "
-				+ "two that can drift apart.");
+				"Creatures are born a fraction of their adult body and grow into it at a "
+				+ "CEILING rate of radius per tick. Because the ceiling is fixed and the "
+				+ "distance is not, the nominal childhood scales with how big the adult body "
+				+ "is: a small grazer is grown in seconds, the largest body the genome can "
+				+ "express takes the longest. New flesh is matter and matter is paid for — "
+				+ "each step of growth is bought from the tank at the same meat price an "
+				+ "eater would collect for it, so a growing child is hungrier than an adult "
+				+ "of its current size, and growth slows to what the surplus affords: "
+				+ "childhood stretches with scarcity, and a starving juvenile stops growing "
+				+ "before it stops living. Rot is pinned to the nominal figure, so a body "
+				+ "takes as long to return to the world as it took to build — one constant, "
+				+ "not two that can drift apart.");
 		rows(s,
 				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body", ""),
-				row("Growth", num(NPC.GROWTH_RATE), "size/tick", "Fixed, whatever the body."),
+				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
+						"The well-fed ceiling, not a guarantee."),
+				row("Flesh costs", num(NPC.MEAT_ENERGY) + " × mass grown", "energy",
+						"The price an eater would pay — rearing a body and "
+						+ "eating it can never mint energy between them."),
 				row("Childhood", "(1 − " + num(NPC.BIRTH_SIZE_FRACTION) + ") × adult size ÷ "
-						+ num(NPC.GROWTH_RATE), "ticks", "Also how long the corpse lasts."));
+						+ num(NPC.GROWTH_RATE), "ticks", "Nominal; also how long "
+						+ "the corpse lasts."));
 		List<List<String>> t = new ArrayList<>();
 		for (double size : SAMPLE_SIZES) {
 			int ticks = NPC.growthTicks(size);

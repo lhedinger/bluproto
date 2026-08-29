@@ -61,17 +61,37 @@ public abstract class NPC extends Entity {
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
 	public static final double META_REF = 0.02;
+	/**
+	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
+	 * body is worth what it weighs, so the meal tracks the quarry rather than the
+	 * effort: an animal that takes twice as many bites to bring down is not twice
+	 * as nutritious, it is just slower to eat.
+	 *
+	 * <p>This replaces a flat per-bite payout, under which a mouse and an animal the
+	 * hunter's own size were worth exactly the same (measured: 2.49 either way). That
+	 * pointed selection at the smallest, easiest quarry and left no niche for a large
+	 * hunter — the one corner of the economy where mass did not appear, while
+	 * metabolism, movement and tank capacity all scale with it.
+	 *
+	 * <p>Lives here rather than with the feeding arithmetic because it is the price
+	 * of FLESH, both ways: what an eater collects per unit of body mass, and what a
+	 * metabolic body pays per unit of mass it grows — the same figure, so rearing a
+	 * body and eating it can never mint energy between them.
+	 */
+	public static final double MEAT_ENERGY = 2.5;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
 	public static final double BIRTH_SIZE_FRACTION = 0.35;
 	/**
-	 * Growth in body radius per tick. A FIXED rate, so the distance to travel —
-	 * and therefore the length of childhood — scales with how big the adult body
-	 * is: a small grazer is grown in seconds, the largest possible body takes the
-	 * longest. At {@link Genome#SIZE_MAX} (20) the climb from birth size is 13
-	 * units, or ~1970 ticks — about one minute at 33 ticks/s, the longest
-	 * childhood the world can produce.
+	 * Growth in body radius per tick — the well-fed CEILING, not a guarantee. The
+	 * distance to travel, and therefore the length of the nominal childhood,
+	 * scales with how big the adult body is: a small grazer is grown in seconds,
+	 * the largest possible body takes the longest. At {@link Genome#SIZE_MAX}
+	 * (20) the climb from birth size is 13 units, or ~1970 ticks — about one
+	 * minute at 33 ticks/s, the shortest childhood such a body can have. A
+	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
+	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
 	public static final double GROWTH_RATE = 0.0066;
 
@@ -94,9 +114,13 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
-	 * Ticks a body of adult radius {@code adult} spends growing up: the climb from
-	 * birth size to full size at the fixed {@link #GROWTH_RATE}. Linear in adult
-	 * size, and therefore linear in mass, since {@link #bodyMass()} is just size
+	 * Ticks a body of adult radius {@code adult} spends growing up WHEN NOTHING
+	 * slows it: the climb from birth size to full size at the {@link #GROWTH_RATE}
+	 * ceiling. The NOMINAL childhood — a metabolic grower pays for its flesh and
+	 * stretches this when food is short — and still the right figure for the
+	 * clocks derived from it (rot, breeding cadence), which want the lineage's
+	 * intrinsic scale rather than one individual's luck. Linear in adult size,
+	 * and therefore linear in mass, since {@link #bodyMass()} is just size
 	 * normalised to {@link #REF_SIZE}.
 	 *
 	 * <p>Exposed because rotting is pinned to it — a body takes as long to return
@@ -486,12 +510,28 @@ public abstract class NPC extends Entity {
 			D += 2 * Math.PI;
 		}
 
-		// Growth: a juvenile creeps toward its adult body at a fixed rate, so the
-		// bigger the adult the longer the childhood. Everything size-derived — tank,
-		// resting burn, transport cost, collision reach, and whether a hunter can
-		// take it — follows the body it has right now, not the one it will have.
+		// Growth: a juvenile creeps toward its adult body at a fixed ceiling
+		// rate, so the bigger the adult the longer the childhood. New flesh is
+		// matter, and matter is paid for: a metabolic body buys each step at the
+		// meat price an eater would get for it, out of the tank — which the mint
+		// then refills from the stomach, so a growing child is hungrier than an
+		// adult of the same current size. Growth yields to survival: it slows to
+		// what the surplus above the crawl reserve affords, stretching childhood
+		// when food is poor — a starving juvenile stops growing before it stops
+		// living, and GROWTH_RATE becomes the well-fed pace rather than a
+		// guarantee. Non-metabolic growers keep no books and grow as before.
+		// Everything size-derived — tank, resting burn, transport cost,
+		// collision reach, and whether a hunter can take it — follows the body
+		// it has right now, not the one it will have.
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
-			grownSize = Math.min(adultSize, grownSize + GROWTH_RATE);
+			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
+			if (metabolic) {
+				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
+				double spare = energy - CRAWL_RESERVE * energyCapacity();
+				step = Math.max(0, Math.min(step, spare / price));
+				energy -= step * price;
+			}
+			grownSize = Math.min(adultSize, grownSize + step);
 			size = (int) Math.round(grownSize);
 		}
 
