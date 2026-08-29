@@ -173,9 +173,11 @@ public class TestNPC extends NPC {
 	/** Below this hunger a hunter stops killing altogether: the meal would not
 	 *  fit its stomach, so the prey would die for nothing. */
 	public static final double PRED_FULL_HUNGER = 0.05;
-	/** Fraction of its (adult-sized) tank a creature is born holding. Comfortably
-	 *  fed, but below the breeding line, so a new body has to make its own living
-	 *  before it can make another one. */
+	/** Fraction of its (adult-sized) tank a world-seeded FOUNDER starts holding,
+	 *  and the ceiling on what any birth can endow. Comfortably fed, but below
+	 *  the breeding line, so a new body has to make its own living before it can
+	 *  make another one. A BORN child holds less: its endowment is what its
+	 *  parents actually paid, minus the meat-priced body — see {@link #endow}. */
 	public static final double BORN_FRACTION = 0.6;
 	/** Fraction of the tank that has to be full before a creature will breed. A
 	 *  big body's tank is bigger, so a big creature must eat more, not merely as
@@ -2965,6 +2967,40 @@ public class TestNPC extends NPC {
 		child.withDeathspan(deathspan); // the lineage shares how long its dead lie about
 	}
 
+	/** The hunger a child is born at: as hungry as a body can be without the
+	 *  deprivation trickle (just under {@link NPC#DEPRIVED}), because every
+	 *  point of satiation below it is stomach contents the parents must pay
+	 *  for. A newborn's first act is to eat — which is what newborns do. */
+	public static final double BORN_HUNGER = 0.9;
+
+	/**
+	 * Opens a newborn's books so that birth conserves energy: everything the
+	 * child is worth — its tank, the small meal it is born digesting, and the
+	 * matter its body is made of ({@link #MEAT_ENERGY} at birth mass, the same
+	 * price any eater would get for it) — comes out of what its parents
+	 * actually paid. The hypothetical audit is a parent eating its own
+	 * just-born child: tank and stomach evaporate with the death, the corpse
+	 * returns its meat, and the round trip can never profit. Before the
+	 * stomach joined the ledger every birth conjured a full one — the child
+	 * minted it into a free childhood, and colonies compounded through their
+	 * newborns' unpaid honeymoons. The tank is clamped above by the founder
+	 * line (a sexual pair pays twice; the surplus is spent on the act, not
+	 * banked — born below the breeding line stays true) and below at zero (a
+	 * mutation toward a much bigger body makes the same payment buy a poorer
+	 * start, never a debt).
+	 */
+	private static void endow(TestNPC child, double paid) {
+		// Priced at exactly the body an eater would weigh: birth size carries
+		// beginGrowth's floor of 1 and the same rounding bodyMass() reads.
+		double birthSize = Math.round(Math.max(1,
+				NPC.BIRTH_SIZE_FRACTION * child.adultMass() * NPC.REF_SIZE));
+		double body = MEAT_ENERGY * birthSize / NPC.REF_SIZE;
+		double meal = (1 - BORN_HUNGER) * NPC.STOMACH * child.adultMass();
+		child.hunger = BORN_HUNGER;
+		child.energy = Math.max(0,
+				Math.min(paid - body - meal, BORN_FRACTION * child.energyCapacity()));
+	}
+
 	@Override
 	protected net.hedinger.prototype.entities.NPC spawnOffspring() {
 		if (genome == null) {
@@ -2982,6 +3018,7 @@ public class TestNPC extends NPC {
 			child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
 		}
 		passBodyTraitsTo(child);
+		endow(child, reproCost);
 		return child.withGeneration(generation + 1);
 	}
 
@@ -2996,6 +3033,7 @@ public class TestNPC extends NPC {
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
+		endow(child, reproCost + (partner instanceof TestNPC tp ? tp.reproCost : reproCost));
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {

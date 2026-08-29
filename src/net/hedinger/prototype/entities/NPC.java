@@ -248,6 +248,13 @@ public abstract class NPC extends Entity {
 		return BASE_CAPACITY * adultMass();
 	}
 
+	/** What this body pays per offspring — public because birth conservation is
+	 *  audited against it (a child's tank plus its meat-priced body can never
+	 *  exceed what its parents paid; the scenario suite holds the books). */
+	public double reproCost() {
+		return reproCost;
+	}
+
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again

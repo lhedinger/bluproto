@@ -6998,22 +6998,100 @@ public class SimTests {
 			fastW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, fast));
 			slowW.think();
 			fastW.think();
-			tick(slowW, 8000);
-			tick(fastW, 8000);
+			// 16000 ticks, not 8000: children are born holding what their parent
+			// paid less their body now, so a lineage compounds more slowly and
+			// the thrifty line needs the longer race to pull clearly ahead.
+			tick(slowW, 16000);
+			tick(fastW, 16000);
 			snapshot(slowW, "reference metabolism: a real, food-backed surplus");
 			snapshot(fastW, "triple pace: appetite, not offspring");
-			assertGreater("the reference burner multiplied past the fast one",
+			assertGreater("the reference burner multiplied past the fast one — "
+					+ "pace of life now buys appetite, not offspring",
 					slowW.getAliveCount(), fastW.getAliveCount());
-			TestNPC f = null;
-			for (Entity e : fastW.getEntities()) {
-				if (e instanceof TestNPC t && !t.isDead()) {
-					f = t;
-					break;
+		}
+	}
+
+	/**
+	 * Birth conserves energy: a child's tank endowment plus its meat-priced
+	 * body can never exceed what its parents paid for it. The audit is the
+	 * cannibal round trip — a parent that ate its own just-born child would
+	 * lose the tank and the stomach with the death and get the body back at
+	 * its meat price, so the loop can never profit. Before this held, a bud
+	 * was born holding 0.6 of a tank its parent paid 0.5 for, a full stomach
+	 * nobody paid for at all (a free childhood of mintable food, and the
+	 * bigger of the two grants), and a body on top; a lineage of budders was
+	 * a perpetual-motion machine. Also pins the sexual clamp: a pair
+	 * pays twice, and the surplus is spent on the act rather than banked —
+	 * a newborn still arrives below the breeding line, never fertile at birth.
+	 */
+	static class NoFreeEnergyAtBirth extends Scenario {
+		@Override
+		public void run() {
+			seed(102);
+
+			// Asexual: one budder on lush grass; read the firstborn's books on
+			// the tick it appears (at most one tick of its own living drifts
+			// them, inside the epsilon).
+			World w = room(12, 12);
+			Genome g = new Genome();
+			g.sexuality = 0.3; // a budder
+			TestNPC parent = TestNPC.breeder(6.5, 6.5, 0, g).withEnergy(4.5);
+			w.spawnEntity(parent);
+			w.think();
+			TestNPC bud = null;
+			for (int t = 0; t < 4000 && bud == null; t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC n && !n.isDead() && n.generation() == 1) {
+						bud = n;
+						break;
+					}
 				}
 			}
-			assertTrue("a fast burner survives on grass", f != null);
-			assertGreater("but lives hungry, past the breeding gate — pace of "
-					+ "life now buys appetite, not offspring", f.getHunger(), NPC.NEED_LOW);
+			assertTrue("a bud arrived", bud != null);
+			double budWorth = bud.getEnergy() + TestNPC.MEAT_ENERGY * bud.bodyMass()
+					+ (1 - bud.getHunger()) * NPC.STOMACH * (bud.getGenome().size / NPC.REF_SIZE);
+			assertTrue("the bud's tank, its birth meal and its meat-priced body ("
+					+ String.format("%.2f", budWorth) + ") is at most what the parent paid ("
+					+ String.format("%.2f", parent.reproCost()) + ")",
+					budWorth <= parent.reproCost() + 0.01);
+			assertGreater("and the bud is born viable, not bankrupt", bud.getEnergy(), 0.5);
+			assertGreater("born hungry — its first act is a meal, not a free childhood",
+					bud.getHunger(), 0.8);
+			assertTrue("but under the deprivation line, so being born does not hurt",
+					bud.getHunger() < NPC.DEPRIVED);
+
+			// Sexual: the pair pays twice, the child's books still balance, and
+			// the born-fed clamp keeps it below the breeding line.
+			World m = room(12, 12);
+			Genome ga = new Genome();
+			ga.markers = new double[] { 0.5, 0.5, 0.5 };
+			Genome gb = new Genome();
+			gb.markers = new double[] { 0.5, 0.5, 0.5 };
+			TestNPC pa = TestNPC.mater(6.3, 6.5, 0, ga).withEnergy(4.4);
+			TestNPC pb = TestNPC.mater(6.7, 6.5, 0, gb).withEnergy(4.4);
+			m.spawnEntity(pa);
+			m.spawnEntity(pb);
+			m.think();
+			TestNPC kid = null;
+			for (int t = 0; t < 4000 && kid == null; t++) {
+				tick(m, 1);
+				for (Entity e : m.getEntities()) {
+					if (e instanceof TestNPC n && !n.isDead() && n.generation() == 1) {
+						kid = n;
+						break;
+					}
+				}
+			}
+			assertTrue("the pair bred", kid != null);
+			double kidWorth = kid.getEnergy() + TestNPC.MEAT_ENERGY * kid.bodyMass()
+					+ (1 - kid.getHunger()) * NPC.STOMACH * (kid.getGenome().size / NPC.REF_SIZE);
+			assertTrue("the child's tank, its birth meal and its meat-priced body ("
+					+ String.format("%.2f", kidWorth) + ") is at most what both parents paid ("
+					+ String.format("%.2f", pa.reproCost() + pb.reproCost()) + ")",
+					kidWorth <= pa.reproCost() + pb.reproCost() + 0.01);
+			assertTrue("and a well-funded birth is still born below the breeding line",
+					kid.getEnergy() < TestNPC.REPRO_FRACTION * kid.energyCapacity());
 		}
 	}
 
@@ -9463,6 +9541,7 @@ public class SimTests {
 				new CollapseIsNotDeath(),
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new EnergyIsFoodBacked(),
+				new NoFreeEnergyAtBirth(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new RockyGroundFeedsAGrazerPoorly(),

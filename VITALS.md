@@ -254,3 +254,17 @@ hot metabolism pays for its pace in appetite rather than out-breeding the
 food supply; and reproduction is bounded by grazing income rather than by
 the cooldown alone. Pinned by the `EnergyIsFoodBacked` scenario, which fails
 against the satiation-state mint on both counts.
+
+**Birth conserves too.** Once food backs the tank, birth becomes the last
+door for free energy, and it had three: a bud arrived holding 0.6 of a tank
+its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
+full stomach of mintable food. A newborn is now worth exactly what its
+parents paid: tank + birth meal + meat-priced body = the payment, per
+parent share for a sexual pair (the pair's surplus is spent on the act, not
+banked — a newborn still arrives below the breeding line). It is born at
+0.9 hunger — as hungry as a body can be without the deprivation trickle —
+so its first act is a meal, and a lineage compounds only on food actually
+eaten. The audit is the cannibal round trip: a parent eating its just-born
+child loses tank and stomach with the death, gets the body back at meat
+price, and can never profit. Pinned by `NoFreeEnergyAtBirth`, which fails
+against the old books at 9.5 conjured per 2.25 paid.
