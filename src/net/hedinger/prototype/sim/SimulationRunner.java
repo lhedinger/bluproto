@@ -237,14 +237,22 @@ public final class SimulationRunner {
 	 * scenario suite pins this.
 	 */
 	public static void replay(World fresh, CommandLog log, long ticks) {
-		List<CommandLog.Entry> entries = log.entries();
-		int i = 0;
-		for (long t = 0; t < ticks; t++) {
-			while (i < entries.size() && entries.get(i).tick() == fresh.getTick()) {
-				entries.get(i).command().apply(fresh);
-				i++;
+		// Tunables are JVM-global: replay from defaults, hand the caller's
+		// tuning back afterwards (see Tuning).
+		var live = Tuning.snapshot();
+		Tuning.restoreDefaults();
+		try {
+			List<CommandLog.Entry> entries = log.entries();
+			int i = 0;
+			for (long t = 0; t < ticks; t++) {
+				while (i < entries.size() && entries.get(i).tick() == fresh.getTick()) {
+					entries.get(i).command().apply(fresh);
+					i++;
+				}
+				fresh.think();
 			}
-			fresh.think();
+		} finally {
+			Tuning.restore(live);
 		}
 	}
 }

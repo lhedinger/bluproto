@@ -431,6 +431,53 @@ public final class ServerMain {
 			ctx.json(Map.of("ok", true, "tick", tick, "x", x, "y", y, "z", z));
 		});
 
+		// The constants registry (see Tuning): every surveyed simulation
+		// constant with its live value, boot default, and whether it is
+		// frozen. Open to read — the debug panel is a viewer feature.
+		app.get("/api/tuning", ctx -> ctx.json(Map.of(
+				"ok", true,
+				"constants", net.hedinger.prototype.sim.Tuning.list())));
+
+		// Tuning writes (token-gated, like reset/spawn): body is a flat map of
+		// {"Class.CONSTANT": number}. All-or-nothing: every key is validated
+		// before anything is enqueued, so a typo cannot half-apply a batch.
+		// Each change rides the command queue as its own TuneCommand — applied
+		// at a tick boundary and recorded in the log, so replays re-tune
+		// themselves exactly as the live world did.
+		app.post("/api/tuning", ctx -> {
+			if (!token.isEmpty() && !token.equals(ctx.header("X-Command-Token"))) {
+				ctx.status(403).json(Map.of("ok", false, "error", "command token required"));
+				return;
+			}
+			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
+			var changes = new java.util.LinkedHashMap<String, Double>();
+			var bad = new java.util.ArrayList<String>();
+			body.fields().forEachRemaining(e -> {
+				double v = e.getValue().asDouble(Double.NaN);
+				if (!net.hedinger.prototype.sim.Tuning.tunable(e.getKey())
+						|| !Double.isFinite(v)) {
+					bad.add(e.getKey());
+				} else {
+					changes.put(e.getKey(), v);
+				}
+			});
+			if (!bad.isEmpty()) {
+				ctx.status(400).json(Map.of("ok", false,
+						"error", "not tunable: " + String.join(", ", bad)));
+				return;
+			}
+			if (changes.isEmpty()) {
+				ctx.status(400).json(Map.of("ok", false, "error", "no changes"));
+				return;
+			}
+			long tick = -1;
+			for (var e : changes.entrySet()) {
+				tick = host.enqueue(
+						new net.hedinger.prototype.sim.TuneCommand(e.getKey(), e.getValue()));
+			}
+			ctx.json(Map.of("ok", true, "applied", changes.size(), "tick", tick));
+		});
+
 		// Baked ground as map chunks: level z, chunk (cx, cy). Immutable per world
 		// -> cache hard. The client streams only the chunks in view.
 		// Live vegetation for the depletion overlay. With ?since=SEQ (the web

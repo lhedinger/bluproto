@@ -69,7 +69,7 @@ public class TestNPC extends NPC {
 	 * the rest walking between bodies. Those are the real costs, and they are
 	 * already charged, in energy and in time, everywhere else in the loop.
 	 */
-	public static final double CARRION_ENERGY = MEAT_ENERGY;
+	public static double CARRION_ENERGY = MEAT_ENERGY;
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
 	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
@@ -152,28 +152,28 @@ public class TestNPC extends NPC {
 	/** Hunger at which a hunter starts hunting in earnest (VITALS.md: appetite,
 	 *  not tank headroom, is what sends a predator after prey). Sits at the
 	 *  NEED_LOW seek line, so appetite returns in twice the time thirst does. */
-	public static final double PRED_HUNT_HUNGER = 0.5;
+	public static double PRED_HUNT_HUNGER = 0.5;
 	/** Hunger at or above which a predator is starving — desperate enough to
 	 *  break the taboo and hunt its own kind. A hunter only pegs this high when
 	 *  it has been failing to feed, so cannibalism stays a last resort. */
-	public static final double STARVE_HUNGER = 0.9;
+	public static double STARVE_HUNGER = 0.9;
 	/** Below this hunger a hunter stops killing altogether: the meal would not
 	 *  fit its stomach, so the prey would die for nothing. */
-	public static final double PRED_FULL_HUNGER = 0.05;
+	public static double PRED_FULL_HUNGER = 0.05;
 	/** Fraction of its (adult-sized) tank a world-seeded FOUNDER starts holding,
 	 *  and the ceiling on what any birth can endow. Comfortably fed, but below
 	 *  the breeding line, so a new body has to make its own living before it can
 	 *  make another one. A BORN child holds less: its endowment is what its
 	 *  parents actually paid, minus the meat-priced body — see {@link #endow}. */
-	public static final double BORN_FRACTION = 0.6;
+	public static double BORN_FRACTION = 0.6;
 	/** Fraction of the tank that has to be full before a creature will breed. A
 	 *  big body's tank is bigger, so a big creature must eat more, not merely as
 	 *  much, before it reproduces. */
-	public static final double REPRO_FRACTION = 0.75;
+	public static double REPRO_FRACTION = 0.75;
 	/** Fraction of the tank each parent spends on an offspring. Below
 	 *  {@link #REPRO_FRACTION}, so breeding leaves a parent alive and fed rather
 	 *  than emptied. */
-	public static final double REPRO_COST_FRACTION = 0.5;
+	public static double REPRO_COST_FRACTION = 0.5;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -204,7 +204,7 @@ public class TestNPC extends NPC {
 	 * tick, so slowing the crop without raising the energy per unit starves the herd
 	 * — measured, not assumed. See that constant for the calibration.
 	 */
-	private static final double GRAZE_DEMAND = 0.003;
+	public static double GRAZE_DEMAND = 0.003;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). A
@@ -2965,7 +2965,7 @@ public class TestNPC extends NPC {
 	 *  deprivation trickle (just under {@link NPC#DEPRIVED}), because every
 	 *  point of satiation below it is stomach contents the parents must pay
 	 *  for. A newborn's first act is to eat — which is what newborns do. */
-	public static final double BORN_HUNGER = 0.9;
+	public static double BORN_HUNGER = 0.9;
 
 	/**
 	 * Opens a newborn's books so that birth conserves energy: everything the
