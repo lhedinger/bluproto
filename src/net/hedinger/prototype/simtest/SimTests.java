@@ -826,6 +826,53 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A sound rings for as long as the constant says, and then stops.
+	 *
+	 * <p>{@code ViolenceIsAudibleThroughWalls} covers "it goes quiet eventually"
+	 * and gives it nine hundred ticks to do so, which passes at thirty-three
+	 * ticks and at eight hundred alike. So the duration itself was never
+	 * checked — and it was wrong: one second is long enough for a body to turn
+	 * toward a scream and nothing more, against sounds that arrive from a median
+	 * of five tiles away.
+	 *
+	 * <p>Asserted against {@link TestNPC#EARSHOT_MEMORY} rather than against a
+	 * number, so retuning the constant retunes the scenario with it. The window
+	 * is measured from the tick the sound actually lands, because a sound spends
+	 * {@code Sound.TRAVEL_TICKS} in flight first and timing from the spawn would
+	 * be timing the wrong thing.
+	 */
+	static class ASoundRingsForAsLongAsItSays extends Scenario {
+		@Override
+		public void run() {
+			seed(527);
+			World w = room(9, 9);
+			TestNPC ear = TestNPC.listener(4.5, 4.5, 0);
+			w.spawnEntity(ear);
+			w.spawnEntity(new Sound(4.5, 4.5, 0));
+
+			// Wait for it to land: it is in flight for TRAVEL_TICKS first.
+			int landed = -1;
+            for (int t = 0; t < net.hedinger.prototype.entities.Sound.TRAVEL_TICKS * 3
+					&& landed < 0; t++) {
+				tick(w, 1);
+				if (ear.hearsSomething()) {
+					landed = t;
+				}
+			}
+			assertGreater("the sound arrived at all", landed, -1);
+
+			// Just inside the window it is still ringing...
+			tick(w, TestNPC.EARSHOT_MEMORY - 2);
+			assertTrue("it is still ringing a tick short of the window",
+					ear.hearsSomething());
+
+			// ...and just past it, gone.
+			tick(w, 3);
+			assertTrue("and silent a tick past it", !ear.hearsSomething());
+		}
+	}
+
 	/** Standing on a hole: walkers fall through to the level below, flyers hover. */
 	static class HoleFallRespectsFlying extends Scenario {
 		@Override
@@ -9649,6 +9696,7 @@ public class SimTests {
 				new ScavengerCrossesToAMuchBetterCarcass(),
 				new CorpseRotsForAsLongAsItTookToGrow(),
 				new SoundWakesListener(),
+				new ASoundRingsForAsLongAsItSays(),
 				new HoleFallRespectsFlying(),
 				new CarryingAndRidingWearDifferentBadges(),
 				new GrabCarriesSmallerEntity(),
