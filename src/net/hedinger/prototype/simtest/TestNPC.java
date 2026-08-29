@@ -91,17 +91,33 @@ public class TestNPC extends NPC {
 	 * light and whichever way the scavenger happens to be facing.
 	 */
 	/**
-	 * How long a sound stays audible after it arrives, in ticks.
+	 * How long a sound stays audible after it arrives, in ticks — ten seconds at
+	 * {@code TICKS_PER_SECOND}.
 	 *
 	 * <p>A sound is an event, not a place: nothing keeps making it, so the channel
 	 * has to fall silent by itself or a creature would steer forever toward a
-	 * scream from five minutes ago. Short enough that acting on it is acting on
-	 * news, long enough that a body has time to turn and commit. Recency is NOT
-	 * folded into the proximity — that would conflate "close" with "just now" and
-	 * leave a mind unable to tell a distant shriek from an old one — so the
-	 * channel reads at full strength for this long and then goes to zero.
+	 * scream from five minutes ago. Recency is NOT folded into the proximity —
+	 * that would conflate "close" with "just now" and leave a mind unable to tell
+	 * a distant shriek from an old one — so the channel reads at full strength
+	 * for this long and then goes to zero.
+	 *
+	 * <p>It was one second, and the comment claimed that was "long enough that a
+	 * body has time to turn and commit". Measured over eight thousand ticks of
+	 * the seeded world, it was long enough to turn and nothing else: sounds
+	 * arrive from a median of 5.3 tiles away (p90 10.6), and in thirty-three
+	 * ticks a body covers a median of 0.49 of a tile. Under a tenth of the way,
+	 * and then silence. That is a startle reflex, not a beacon — and a beacon is
+	 * what {@link #KILL_LOUDNESS} just below says the channel is for, since the
+	 * loud events are the ones worth walking toward.
+	 *
+	 * <p>Ten seconds is the distance measurement turned back into time: enough
+	 * to cross the five tiles a sound typically comes from. The usual objection
+	 * to a long memory does not apply here, which is what makes it affordable —
+	 * holding a remembered position normally means steering at stale
+	 * information, but the position is where something DIED, and a carcass does
+	 * not move. The point stays true for as long as the body lies there.
 	 */
-	public static final int EARSHOT_MEMORY = 33;
+	public static final int EARSHOT_MEMORY = 330;
 	/**
 	 * How far a kill can be heard, in tiles, per unit of the dying body's mass.
 	 *
