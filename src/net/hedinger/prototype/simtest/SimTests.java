@@ -7188,6 +7188,74 @@ public class SimTests {
 	}
 
 	/**
+	 * The constants registry and the tune command: every public static
+	 * primitive on the surveyed classes is listed with its live value, and
+	 * the runtime-tunable ones change ONLY through a logged command — so
+	 * {@code seed + log} still reproduces a tuned world, a replayed log
+	 * re-tunes itself without leaking into the live world's JVM-global
+	 * statics, and frozen constants (structural anchors, values copied out
+	 * at build time) refuse to pretend they are editable.
+	 */
+	static class TuningRidesTheCommandLog extends Scenario {
+		@Override
+		public void run() {
+			seed(104);
+			try {
+				// The survey: a tunable, and two kinds of frozen — an anchor,
+				// and a value tiles copy out at construction.
+				var rows = net.hedinger.prototype.sim.Tuning.list();
+				java.util.Map<String, java.util.Map<String, Object>> byKey = new java.util.HashMap<>();
+				for (var r : rows) {
+					byKey.put((String) r.get("key"), r);
+				}
+				assertGreater("the survey is broad", rows.size(), 40);
+				assertTrue("grass is listed live and tunable",
+						byKey.containsKey("NPC.GRASS_ENERGY")
+						&& !(Boolean) byKey.get("NPC.GRASS_ENERGY").get("frozen")
+						&& (Double) byKey.get("NPC.GRASS_ENERGY").get("value") == NPC.GRASS_ENERGY);
+				assertTrue("the size anchor is frozen",
+						(Boolean) byKey.get("NPC.REF_SIZE").get("frozen"));
+				assertTrue("the regrow rate is frozen — tiles copied it at build",
+						(Boolean) byKey.get("Tile.VEG_REGROW").get("frozen"));
+
+				// A frozen constant refuses the command outright.
+				boolean refused = false;
+				try {
+					new net.hedinger.prototype.sim.TuneCommand("NPC.REF_SIZE", 1);
+				} catch (IllegalArgumentException e) {
+					refused = true;
+				}
+				assertTrue("a frozen constant cannot be tuned", refused);
+
+				// The command round-trips its logged form and takes effect.
+				World w = room(6, 6);
+				net.hedinger.prototype.sim.SimCommand c = net.hedinger.prototype.sim.SimCommands
+						.fromDescribe("tune NPC.GRASS_ENERGY 0.5");
+				assertTrue("the logged form parses back", c != null);
+				c.apply(w);
+				assertNear("and the constant moved", 0.5, NPC.GRASS_ENERGY, 1e-12);
+				assertTrue("its logged form is stable",
+						"tune NPC.GRASS_ENERGY 0.5".equals(c.describe()));
+
+				// Replay isolation: a recording that tunes grass to 0.25 replays
+				// under its own tuning, and hands the live world's back after.
+				net.hedinger.prototype.sim.Tuning.set("NPC.GRASS_ENERGY", 0.6);
+				var rec = new net.hedinger.prototype.sim.Recording(11, 3, java.util.List.of(
+						new net.hedinger.prototype.sim.Recording.Entry(1,
+								"tune NPC.GRASS_ENERGY 0.25")));
+				net.hedinger.prototype.sim.Replays.reconstruct(rec, 3);
+				assertNear("the replay's tuning did not leak into the live world",
+						0.6, NPC.GRASS_ENERGY, 1e-12);
+			} finally {
+				// Statics are global to the suite: leave exactly what we found.
+				net.hedinger.prototype.sim.Tuning.restoreDefaults();
+			}
+			assertNear("defaults restore the code-level value",
+					0.75, NPC.GRASS_ENERGY, 1e-12);
+		}
+	}
+
+	/**
 	 * Vigor: health scales energy regeneration, so a wounded body is also a
 	 * listless one — wounds and hunger compound instead of being independent
 	 * ledgers. Two identical fed bodies, one badly hurt; the healthy one
@@ -9635,6 +9703,7 @@ public class SimTests {
 				new EnergyIsFoodBacked(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
+				new TuningRidesTheCommandLog(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new RockyGroundFeedsAGrazerPoorly(),

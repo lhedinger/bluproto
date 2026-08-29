@@ -4,8 +4,8 @@ package net.hedinger.prototype.sim;
  * Reconstructs a {@link SimCommand} from the stable text form its {@code
  * describe()} produces — the inverse used when replaying a {@link Recording}.
  * Only world-mutating commands are ever logged (pacing verbs like pause/speed
- * do not change the world, so they are not recorded): {@link SpawnItemCommand}
- * and {@link SpawnMindedCommand}.
+ * do not change the world, so they are not recorded): {@link SpawnItemCommand},
+ * {@link SpawnMindedCommand} and {@link TuneCommand}.
  */
 public final class SimCommands {
 
@@ -21,6 +21,9 @@ public final class SimCommands {
 		}
 		// The genome is the last token (whitespace-free), so p[4] is the whole
 		// encoding regardless of its internal ; , | separators.
+		if (p[0].equals("tune") && p.length >= 3) {
+			return TuneCommand.parse(p[1], Double.parseDouble(p[2]));
+		}
 		if (p[0].equals("spawnMinded") && p.length >= 5) {
 			return SpawnMindedCommand.parse(p[4], Double.parseDouble(p[1]),
 					Double.parseDouble(p[2]), Double.parseDouble(p[3]));

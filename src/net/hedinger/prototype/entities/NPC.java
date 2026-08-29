@@ -53,14 +53,14 @@ public abstract class NPC extends Entity {
 	/** Body size the energy model is anchored on (size factor 1.0 here). */
 	public static final double REF_SIZE = 8.0;
 	/** Full energy reserve of a reference-size creature ("fully fed"). */
-	public static final double BASE_CAPACITY = 6.0;
+	public static double BASE_CAPACITY = 6.0;
 	/** Resting energy/tick a reference-size creature burns. At 33 t/s a full
 	 *  reference tank (6.0 / 0.0005 = 12000 ticks) lasts ~6 minutes unfed, so even
 	 *  a half-empty creature has a few minutes of reserve before it starves. */
-	public static final double BASE_METABOLISM = 0.0005;
+	public static double BASE_METABOLISM = 0.0005;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
-	public static final double META_REF = 0.02;
+	public static double META_REF = 0.02;
 	/**
 	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
 	 * body is worth what it weighs, so the meal tracks the quarry rather than the
@@ -78,11 +78,11 @@ public abstract class NPC extends Entity {
 	 * metabolic body pays per unit of mass it grows — the same figure, so rearing a
 	 * body and eating it can never mint energy between them.
 	 */
-	public static final double MEAT_ENERGY = 2.5;
+	public static double MEAT_ENERGY = 2.5;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
-	public static final double BIRTH_SIZE_FRACTION = 0.35;
+	public static double BIRTH_SIZE_FRACTION = 0.35;
 	/**
 	 * Growth in body radius per tick — the well-fed CEILING, not a guarantee. The
 	 * distance to travel, and therefore the length of the nominal childhood,
@@ -93,7 +93,7 @@ public abstract class NPC extends Entity {
 	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
 	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
-	public static final double GROWTH_RATE = 0.0066;
+	public static double GROWTH_RATE = 0.0066;
 
 	/** Adult body this creature is growing toward; 0 for a body that does not grow. */
 	protected double adultSize = 0;
@@ -184,7 +184,7 @@ public abstract class NPC extends Entity {
 	 * break-even the earlier flat model had — while a genuinely fast one now pays
 	 * several times over rather than merely proportionally.
 	 */
-	public static final double MOVE_ENERGY = 0.2;
+	public static double MOVE_ENERGY = 0.2;
 
 	/** This creature's clade ("herbivore", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick
@@ -282,7 +282,7 @@ public abstract class NPC extends Entity {
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
-	public static final int REPRO_COOLDOWN = 100;
+	public static int REPRO_COOLDOWN = 100;
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
 	 * <em>grabbed</em> captive — the cost of restraint itself, separate from the
@@ -297,7 +297,7 @@ public abstract class NPC extends Entity {
 	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
 	 * still costs its captor more than one hanging limp.
 	 */
-	public static final double GRIP_ENERGY = 0.10;
+	public static double GRIP_ENERGY = 0.10;
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
 	public static final double RIDER_METABOLISM = 0.5;
@@ -631,17 +631,17 @@ public abstract class NPC extends Entity {
 	// --- the four books (VITALS.md) ------------------------------------------
 	/** Ticks for thirst to rise slaked -> parched at the reference body
 	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
-	public static final double THIRST_PERIOD = 9000;
+	public static double THIRST_PERIOD = 9000;
 	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
 	 *  twice {@link #THIRST_PERIOD}, so appetite returns in twice the time
 	 *  thirst does — the design's one rhythm anchor. No longer a clock of its
 	 *  own: hunger rises only as regeneration drains the stomach, and this
 	 *  period holds because the stomach is sized to it (see {@link #STOMACH}).
 	 *  Exertion adds appetite on top, which the old clock could not price. */
-	public static final double HUNGER_PERIOD = 18000;
+	public static double HUNGER_PERIOD = 18000;
 	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
 	 *  with a duration, interruptible by simply walking away. */
-	public static final double DRINK_TICKS = 132;
+	public static double DRINK_TICKS = 132;
 	/** Stomach of a reference body, in vegetation-energy units: eating
 	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
 	 *  to sated. Not a free knob: it equals {@code BASE_METABOLISM *
@@ -649,31 +649,31 @@ public abstract class NPC extends Entity {
 	 *  drain a full stomach in exactly {@link #HUNGER_PERIOD} ticks — the
 	 *  rhythm anchor, preserved by construction now that hunger has no clock
 	 *  of its own. Change either factor and this must follow. */
-	public static final double STOMACH = 9.0;
+	public static double STOMACH = 9.0;
 	/** Energy regenerated per tick by a fed, watered, healthy reference body —
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
 	 *  refills an empty tank in roughly a minute and a half. */
-	public static final double REGEN_RATE = 0.002;
+	public static double REGEN_RATE = 0.002;
 	/** Fraction of the tank kept as a crawl reserve: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
-	public static final double CRAWL_RESERVE = 0.05;
+	public static double CRAWL_RESERVE = 0.05;
 	/** Fraction of the genome's top speed a collapsed body can still make. */
-	public static final double CRAWL_SPEED = 0.25;
+	public static double CRAWL_SPEED = 0.25;
 	/** A need at or above this is pegged, and starts eroding health. */
-	public static final double DEPRIVED = 0.95;
+	public static double DEPRIVED = 0.95;
 	/** Needs below this count as low: mending and breeding both require it. */
-	public static final double NEED_LOW = 0.5;
+	public static double NEED_LOW = 0.5;
 	/** Ticks between deprivation damage points: a pegged need kills through
 	 *  health in ~2.5 min, slow enough that rescue by a meal or a shore is a
 	 *  real possibility. */
-	public static final int DEPRIVATION_PERIOD = 50;
+	public static int DEPRIVATION_PERIOD = 50;
 	/** Ticks per mended health point (divided by metabolic efficiency): a bad
 	 *  wound takes minutes of fed, watered living to close. */
-	public static final int MEND_PERIOD = 160;
+	public static int MEND_PERIOD = 160;
 	/** Ticks a budding (asexual) birth must be held for before it completes —
 	 *  ~5 s of sustained commitment; breaking off resets the act. */
-	public static final int BREED_HOLD_TICKS = 165;
+	public static int BREED_HOLD_TICKS = 165;
 
 	/** The hunger need, 0 (sated) .. 1 (starving). Metabolic bodies only. */
 	protected double hunger = 0;
@@ -1942,7 +1942,7 @@ public abstract class NPC extends Entity {
 	 * herd growth, hunter survival, the seeded demo world — are the gate that
 	 * re-verifies 0.75 still carries the food chain.
 	 */
-	public static final double GRASS_ENERGY = 0.75;
+	public static double GRASS_ENERGY = 0.75;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from

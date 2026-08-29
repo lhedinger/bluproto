@@ -332,6 +332,9 @@ final class WorldHost {
 	void reset(long newSeed) {
 		synchronized (lock) {
 			runner.stop();
+			// A fresh recording is seed + log, and its log assumes the
+			// code-level constants: any live tuning dies with the old world.
+			net.hedinger.prototype.sim.Tuning.restoreDefaults();
 			buildWorld(newSeed);
 			forceFull = true; // every viewer resyncs on the next broadcast
 		}
@@ -663,6 +666,11 @@ final class WorldHost {
 		if (cmd == null) {
 			return -1;
 		}
+		return runner.enqueue(cmd);
+	}
+
+	/** Queues any world-mutating command; returns the tick it will land on. */
+	long enqueue(net.hedinger.prototype.sim.SimCommand cmd) {
 		return runner.enqueue(cmd);
 	}
 
