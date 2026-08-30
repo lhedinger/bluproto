@@ -294,6 +294,21 @@ public final class Worlds {
 	 */
 	static final int DEEP_Z = 0, CAVE_Z = 1, SURFACE_Z = 2;
 
+	/**
+	 * The open air above the ground. Adding it is the first time a floor sits
+	 * ABOVE the surface, which is why {@link World#getSurfaceZ()} had to become
+	 * a stored fact: with a sky in the array the top index is no longer the
+	 * ground, and every reader that derived "the surface" from {@code levels-1}
+	 * would quietly have renamed the world's floors by one.
+	 *
+	 * <p>It is almost entirely {@code TYPE_VOID}. What stands in it is what the
+	 * surface's own elevation says should stand there — the highland outcrops
+	 * and the mesa buttes, whose tops carry on up past the ground plane. A
+	 * viewer on this level sees a scatter of summits over an otherwise open
+	 * drop onto the surface below.
+	 */
+	static final int SKY_Z = 3;
+
 	/** How many drones the facility berths, and therefore how many charge pads
 	 *  are cut into its deck. They share one standing order rather than dividing
 	 *  the work: the steward recounts every tick and drops the order the moment
@@ -339,7 +354,11 @@ public final class Worlds {
 		Utils.seed(seed);
 		Perf.stopwatch = new StopWatch();
 
-		World w = new World(cols, rows, 3);
+		World w = new World(cols, rows, 4);
+		// Said, not inferred. The ground is no longer the top of the array —
+		// SKY_Z sits above it — so every reader that wants "the surface" has to
+		// be told which floor that is instead of taking the highest index.
+		w.setSurfaceZ(SURFACE_Z);
 
 		// ---- the surface: biomes inside a rocky boundary ----
 		for (int x = 0; x < cols; x++) {
@@ -535,7 +554,42 @@ public final class Worlds {
 				w.getTile(x, y, SURFACE_Z).setRegrowRate(0.0025);
 			}
 		}
+
+		// Last, so it reads the FINAL surface: every pass that could carve a
+		// hilltop away (the ravine, the installation's shell, both seals) has
+		// already run, and a summit is only raised where rock actually survived
+		// under it.
+		raiseSkyline(w, cols, rows);
 		return w;
+	}
+
+	/**
+	 * The skyline: what stands up into the open air above the ground.
+	 *
+	 * <p>The sky is {@code TYPE_VOID} everywhere except where the land is still
+	 * climbing at this height. The surface calls anything over 0.87 elevation a
+	 * highland outcrop; a summit is the core of that which is still rising at
+	 * 0.90, and the gap between the two thresholds is what gives a hill a wide
+	 * base and a narrow top rather than a column with vertical sides. The rim
+	 * carries up too — the world is bounded by cliffs, and a cliff does not
+	 * stop at the ground plane.
+	 *
+	 * <p>Nothing floats. A spire is the TOP of something, so it is raised only
+	 * where the tile directly below it is solid; where a later pass cut the
+	 * outcrop away, the air above it is air. That invariant is the one thing
+	 * worth asserting about this level, because a floating rock is exactly what
+	 * a second elevation opinion would produce and it would look deliberate.
+	 */
+	private static void raiseSkyline(World w, int cols, int rows) {
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
+				boolean summit = border || Utils.noise2(x, y, 0.055) > 0.90;
+				setBare(w, x, y, SKY_Z, summit && w.getTile(x, y, SURFACE_Z).isSolid()
+						? Tile.TileType.TYPE_WALL
+						: Tile.TileType.TYPE_VOID);
+			}
+		}
 	}
 
 	/**

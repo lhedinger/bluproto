@@ -422,7 +422,7 @@ public final class ServerMain {
 			var w = host.runner().world();
 			double x = body.path("x").asDouble(w.getColums() / 2.0);
 			double y = body.path("y").asDouble(w.getRows() / 2.0);
-			double z = body.path("z").asDouble(w.getLevels() - 1); // surface (top level)
+			double z = body.path("z").asDouble(w.getSurfaceZ()); // the ground, wherever it sits
 			long tick = host.injectGenome(encoded, x, y, z);
 			if (tick < 0) {
 				ctx.status(400).json(Map.of("ok", false, "error", "malformed genome"));

@@ -483,6 +483,26 @@ The precedents, so nobody pays twice:
   four-bit mask because the belt "looked like" a rail. The mask would have
   bought elbows and tees for a machine whose actual defect was that it could
   not say which way it ran.
+- **The sky that baked the world into itself** — a level of open air above the
+  ground came out a near-black sheet. Nothing was wrong with the air: the tiles
+  were `VOID`, and `VOID` is drawn by drawing nothing, which is exactly the
+  distinction it carries. **A pit is an opening cut in a floor, so it has a rim
+  and a shaded throat; open air was never a floor, so it has no edge of its
+  own** — what bounds it is the spire standing in it. What was wrong was
+  underneath. `World.render` composites the WHOLE stack, every floor drawn
+  bottom-up with a 59% black scrim after each one below the camera, because
+  that is what the desktop view is. The served chunks are not that: a chunk is
+  one level, its alpha means "you can see down here" and nothing else, and the
+  client draws the floor below at its own parallax. Baking the composite in
+  handed the client a second, unparallaxed copy to draw its own copy over.
+  That survived for as long as every level's own art was opaque — the stack was
+  painted over, and showed only through pits, where the pit's own 70% veil hid
+  it. Open air is what made it visible: with almost nothing painted over, three
+  scrims came through at `1-(1-150/255)³` = **alpha 237**. The rule: **when a
+  level is a layer in a composite somewhere else, bake it alone.** And note
+  what let it ship — the bake test asked for `alpha < 255`, which 237 satisfies.
+  A test for "see-through" must ask for *actually* see-through; "not fully
+  opaque" is a different and much weaker claim, and a 93% black sheet meets it.
 
 ## 8. Conformance checklist
 
@@ -519,6 +539,10 @@ Before a new visual merges, ask:
     painter inferring it from the neighbours? Autotile what the neighbours
     genuinely determine — a run's shape — and store what they cannot: which
     way it runs (§7, "the belt that could only point two ways").
+14. If it is an **absence**, is it drawn by drawing nothing — alpha 0, no rim,
+    no veil? A pit is an opening cut in a floor and gets an edge; open air was
+    never a floor and gets none. And nothing else may bake in behind it: a
+    served chunk is one level (§7, "the sky that baked the world into itself").
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.

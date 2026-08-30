@@ -628,7 +628,8 @@ final class SpriteCatalog {
 				Tile.TileType.TYPE_QUICKSAND, Tile.TileType.TYPE_SLUDGE });
 		g.put("Vertical travel", new Tile.TileType[] {
 				Tile.TileType.TYPE_RAMPUP, Tile.TileType.TYPE_RAMPDOWN,
-				Tile.TileType.TYPE_HOLE, Tile.TileType.TYPE_SHAFT });
+				Tile.TileType.TYPE_HOLE, Tile.TileType.TYPE_SHAFT,
+				Tile.TileType.TYPE_VOID });
 		g.put("Built walls & glazing", new Tile.TileType[] {
 				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_WALL_CONCRETE,
 				Tile.TileType.TYPE_WALL_STEEL, Tile.TileType.TYPE_WINDOW });
@@ -877,6 +878,14 @@ final class SpriteCatalog {
 			return;
 		case TYPE_SHAFT:
 			fieldVariant(out, t, "open shaft", 1.0);
+			return;
+		case TYPE_VOID:
+			// Drawn as nothing, on purpose, and the swatch says so by being
+			// empty. A pit's swatch has a rim and a shaded throat because a pit
+			// is an opening cut in a floor; open air was never a floor, so
+			// there is no edge to draw and the catalog would be lying if it
+			// invented one.
+			fieldVariant(out, t, "nothing at all — the level below shows through", 1.0);
 			return;
 		default:
 			fieldVariant(out, t, t.label(), 1.0);

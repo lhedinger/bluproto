@@ -106,7 +106,11 @@ final class LayerBaker {
 		g.setClip(0, 0, w, h);
 		View view = new View(terrain, lr);
 		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
-		view.renderWorld(g); // no clearScreen: see renderLevelImage
+		// This level's art alone. renderWorld composites the whole stack with a
+		// dimming scrim per floor, which is the DESKTOP view; a served chunk is
+		// one level, and its alpha means "you can see down" — the client draws
+		// the floor below itself, at parallax. See World.renderLevel.
+		view.renderLevelOnly(g, z); // no clearScreen: see renderLevelImage
 		view.renderEffects(g);
 		g.dispose();
 		return img;
@@ -188,7 +192,11 @@ final class LayerBaker {
 		g.setClip(x0 * ts, y0 * ts, wpx, hpx);
 		// Same passes and order as the whole-level bake, so the chunk is
 		// pixel-identical to the corresponding slice (grain/effects included).
-		view.renderWorld(g); // no clearScreen: see renderLevelImage
+		// This level's art alone. renderWorld composites the whole stack with a
+		// dimming scrim per floor, which is the DESKTOP view; a served chunk is
+		// one level, and its alpha means "you can see down" — the client draws
+		// the floor below itself, at parallax. See World.renderLevel.
+		view.renderLevelOnly(g, z); // no clearScreen: see renderLevelImage
 		view.renderEffects(g);
 		g.dispose();
 		// Encode at ART resolution, not render resolution. The bake draws

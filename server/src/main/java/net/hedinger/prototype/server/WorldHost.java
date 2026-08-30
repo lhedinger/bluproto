@@ -173,7 +173,7 @@ final class WorldHost {
 	}
 
 	private int surfaceLevel() {
-		return runner.world().getLevels() - 1;
+		return runner.world().getSurfaceZ();
 	}
 
 	/** Entities of the snapshot on one level (z rounds, matching the client). */
@@ -199,6 +199,7 @@ final class WorldHost {
 			var w = runner.world();
 			viewerLevel.put(ctx, surfaceLevel());
 			ctx.send(Protocol.write(Protocol.Hello.of(seed, w.getColums(), w.getRows(), w.getLevels(),
+					w.getSurfaceZ(),
 					net.hedinger.prototype.engine.ResourceManager.tileSize, LayerBaker.CHUNK_PX,
 					s.tick(), runner.isPaused(), runner.getSpeed(),
 					java.util.List.of(), CHUNK_TILES, String.valueOf(startedAt))));

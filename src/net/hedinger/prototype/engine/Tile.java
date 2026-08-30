@@ -715,9 +715,14 @@ public class Tile {
 	public static final float CRYSTAL_CLEARANCE = 13;
 
 	/** True where an unsupported body drops to the level below: natural
-	 *  holes and the facility's vertical shafts. */
+	 *  holes, the facility's vertical shafts, and the open air of a level
+	 *  above the ground. A pit and a void fall the same way -- the difference
+	 *  between them is that a pit is an opening in a floor and a void is the
+	 *  absence of one, which is a fact about the art and the map, not about
+	 *  what happens to a body that steps off. */
 	public boolean isDrop() {
-		return type == TileType.TYPE_HOLE || type == TileType.TYPE_SHAFT;
+		return type == TileType.TYPE_HOLE || type == TileType.TYPE_SHAFT
+				|| type == TileType.TYPE_VOID;
 	}
 
 	/** True if this tile blocks line of sight: walls (natural or built),
@@ -859,7 +864,16 @@ public class Tile {
 		TYPE_WINDOW(46, false, "window wall"), // glazing in a wall run: stops a body, not a look
 		TYPE_DESK(47, false, "desk"), // a workstation: solid furniture, below any eye line
 		TYPE_BUNK(48, false, "bunk"), // a made bed: someone sleeps here, or slept
-		TYPE_WRECK(49, false, "dead machine"); // a machine that stopped, and stayed
+		TYPE_WRECK(49, false, "dead machine"), // a machine that stopped, and stayed
+		// Open air on a level above the ground: not a floor with an opening in
+		// it, but the absence of any floor. A PIT is a cut in something and so
+		// has a rim and a shaded throat; a VOID was never anything, so it has
+		// no edge of its own -- what bounds it is the spire or hill standing in
+		// it. It draws nothing at all, which is why it needs no painter: the
+		// ground pass and the layer renderer both fall through to their default
+		// and leave the art-pixels untouched, and an untouched pixel in a served
+		// chunk already means "you can see down".
+		TYPE_VOID(50, true, "open air");
 
 		private int value;
 		private boolean open;

@@ -143,6 +143,12 @@ public class View {
 		world.render(g, this, layerRenderer);
 	}
 
+	/** One level's art alone, for the served chunk bake — see
+	 *  {@link World#renderLevel}. */
+	public void renderLevelOnly(Graphics g, int z) {
+		world.renderLevel(g, this, layerRenderer, z);
+	}
+
 	public int pixelX(double x, double z, float pixelOffset) {
 		return Utils.toPixelShift(pixelOffset, (float) x, (int) z, getCamX(), getCamZ(), windowX);
 	}
