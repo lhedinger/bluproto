@@ -190,7 +190,14 @@ public final class AgentIO {
 	 *  positive off the body's right hand (the same sense as a positive
 	 *  {@link #A_TURN}), negative off its left, 0 dead ahead or behind. */
 	public static final int S_SOUND_SIDE = 39;
-	public static final int NUM_SENSORS = 40;
+	/** WHAT was heard, as a signed hint (the {@link #S_ITEM_KIND} convention):
+	 *  {@code +1} a kill — a carcass now exists where the scream was, a dinner
+	 *  bell — and {@code -1} a bite the quarry survived — violence in
+	 *  progress, a warning. Presence rides in {@link #S_SOUND_PROX}, so 0 is
+	 *  unambiguously "nothing typed". Which sign a lineage walks toward is
+	 *  for selection to settle. */
+	public static final int S_SOUND_KIND = 40;
+	public static final int NUM_SENSORS = 41;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -200,7 +207,8 @@ public final class AgentIO {
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
-			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side" };
+			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
+			"sound_kind" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

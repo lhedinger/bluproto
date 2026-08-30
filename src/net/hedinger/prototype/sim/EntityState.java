@@ -134,6 +134,7 @@ public record EntityState(
 			kind = "sound";
 			rgb = 0xF2B84B;
 			aux = snd.travelProgress();
+			pheno = snd.getCode(); // what happened: plain 0, fight 1, kill 2
 		} else if (e instanceof NPC n) {
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;
