@@ -65,6 +65,13 @@ public class Sound extends Entity {
 		return radius;
 	}
 
+	/** How far along its travel this sound is, 0 (just made) .. 1 (reaching
+	 *  its listeners) — read by the observation seam so a viewer's overlay
+	 *  can draw the wavefront spreading toward earshot. */
+	public double travelProgress() {
+		return Math.min(1.0, age / (double) TRAVEL_TICKS);
+	}
+
 	@Override
 	public String getEntityTypeName() {
 		return "Bullet";
