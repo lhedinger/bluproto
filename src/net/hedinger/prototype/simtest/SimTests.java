@@ -7439,6 +7439,65 @@ public class SimTests {
 	}
 
 	/**
+	 * A scream says what happened: a landed bite the quarry survives screams
+	 * FIGHT, the killing one screams KILL, and the mind reads the difference
+	 * on the sound_kind channel as a signed hint — -1 violence in progress (a
+	 * warning), +1 a carcass now exists (a dinner bell). Staged live: a hunter
+	 * pinned beside big prey bites it once (FIGHT), the prey is then worn to
+	 * its last hit point and the next bite kills it (KILL); a listening mind
+	 * beside each scream reads the matching sign.
+	 */
+	static class AScreamSaysWhatHappened extends Scenario {
+		@Override
+		public void run() {
+			seed(107);
+			// A small arena, so the chase cannot wander out of the witness's
+			// earshot: the juvenile prey's screams carry ~5.2 tiles, and from
+			// the room's centre every corner of the 6x6 interior is within it.
+			World w = room(8, 8);
+			// Both spawn as juveniles; the prey's bigger body soaks several
+			// bites, so the fight screams come before the killing one.
+			Genome pg = new Genome();
+			pg.size = 16;
+			TestNPC hunter = TestNPC.predator(4.5, 3.5, 0, pg)
+					.withHunger(0.8).withReproCooldown(100_000_000);
+			Genome gg = new Genome();
+			gg.size = 20;
+			TestNPC prey = TestNPC.breeder(5.1, 3.5, 0, gg)
+					.withReproCooldown(100_000_000);
+			final double[] heard = new double[AgentIO.NUM_SENSORS];
+			Mind capture = (sn, a) -> System.arraycopy(sn, 0, heard, 0, sn.length);
+			// The witness wears the parasite clade so the hunter will not eat
+			// it mid-experiment — predators refuse parasites outright.
+			TestNPC ear = TestNPC.minded(4.0, 4.5, 0, new Genome(), capture)
+					.withClade(Genome.Clade.PARASITE);
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.spawnEntity(ear);
+			w.think();
+			// The whole fight is faster than a scream's 20-tick travel, so the
+			// signs arrive in a rush after the death: keep ticking past it and
+			// remember every sign the witness's channel took, in order.
+			double firstSign = 0;
+			boolean sawFight = false, sawKill = false;
+			for (int t = 0; t < 2000 && !(sawFight && sawKill); t++) {
+				tick(w, 1);
+				double k = heard[AgentIO.S_SOUND_KIND];
+				if (k != 0 && firstSign == 0) {
+					firstSign = k;
+				}
+				sawFight |= k < -0.5;
+				sawKill |= k > 0.5;
+			}
+			assertTrue("the prey was killed", prey.isDead());
+			assertNear("the first scream heard was a fight — the quarry "
+					+ "survived that bite", -1.0, firstSign, 1e-9);
+			assertTrue("and a kill was heard — a carcass exists where the "
+					+ "screaming stopped", sawKill);
+		}
+	}
+
+	/**
 	 * A sound rides the wire as itself: the snapshot names it (kind "sound"
 	 * rather than the anonymous "entity" it used to travel as), carries its
 	 * earshot in the size slot and its travel progress in aux — everything a
@@ -7463,6 +7522,8 @@ public class SimTests {
 			}
 			assertTrue("the snapshot names the sound", snd != null);
 			assertNear("its earshot rides in the size slot", 7.0, snd.size(), 1e-6);
+			assertTrue("a plain sound's code rides the pheno slot",
+					snd.pheno() == net.hedinger.prototype.entities.Sound.PLAIN);
 			assertGreater("its travel progress rides in aux", snd.aux(), 0.0);
 			assertTrue("and is still under way", snd.aux() < 1.0);
 		}
@@ -9994,6 +10055,7 @@ public class SimTests {
 				new EnergyIsFoodBacked(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
+				new AScreamSaysWhatHappened(),
 				new ASoundRidesTheWire(),
 				new MindHearsInBodyCoordinates(),
 				new TuningRidesTheCommandLog(),

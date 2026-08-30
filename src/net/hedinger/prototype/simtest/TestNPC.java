@@ -138,6 +138,7 @@ public class TestNPC extends NPC {
 	 *  {@link AgentIO#S_SOUND_PROX}. Held here rather than on Entity because only
 	 *  a body with a mind has anything to do with it. */
 	private double heardX, heardY;
+	private int heardCode;
 	private long heardAt = Long.MIN_VALUE;
 
 	@Unit("tiles")
@@ -1188,6 +1189,7 @@ public class TestNPC extends NPC {
 		}
 		heardX = sound.getX();
 		heardY = sound.getY();
+		heardCode = sound.getCode();
 		heardAt = getWorld() == null ? 0 : getWorld().getTick();
 	}
 
@@ -1223,11 +1225,23 @@ public class TestNPC extends NPC {
 		// and carries in proportion to how big the quarry is -- so a hunt tells the
 		// neighbourhood something is happening here, and roughly how big a
 		// something. This is the only event in the eco simulation that makes a
-		// noise, which is what gives the hearing channels anything to hear.
+		// noise, which is what gives the hearing channels anything to hear. The
+		// scream also says WHAT: a bite the quarry survived is a fight (violence
+		// in progress -- a warning), the killing one is a kill (a carcass now
+		// exists where the scream was -- a dinner bell). Which of those a
+		// listener treats it as is for selection to settle.
 		if (getWorld() != null) {
+			// Fatal is judged by the health this bite just exhausted, not by
+			// isDead(): the reaper runs at the tick boundary, so the flag still
+			// reads alive on the killing bite itself. Bites into what is
+			// already a carcass also say KILL — the fact a listener wants from
+			// that sign is "a carcass exists here", and it does.
+			boolean fatal = prey.isDead() || prey.getHealth() <= 0;
 			getWorld().spawnEntity(new net.hedinger.prototype.entities.Sound(
 					prey.getX(), prey.getY(), prey.getLvl(),
-					KILL_LOUDNESS * prey.bodyMass()));
+					KILL_LOUDNESS * prey.bodyMass(),
+					fatal ? net.hedinger.prototype.entities.Sound.KILL
+							: net.hedinger.prototype.entities.Sound.FIGHT));
 		}
 		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
 	}
@@ -1535,11 +1549,18 @@ public class TestNPC extends NPC {
 			// steady magnitude for steering however far the scream was.
 			s[AgentIO.S_SOUND_FWD] = Math.cos(rel);
 			s[AgentIO.S_SOUND_SIDE] = Math.sin(rel);
+			// What it heard, as a signed hint (the item-kind convention):
+			// +1 a kill -- a carcass now exists -- and -1 a fight -- violence
+			// still in progress. Presence rides in prox, so 0 is unambiguous.
+			s[AgentIO.S_SOUND_KIND] =
+					heardCode == net.hedinger.prototype.entities.Sound.KILL ? 1.0
+					: heardCode == net.hedinger.prototype.entities.Sound.FIGHT ? -1.0 : 0.0;
 		} else {
 			s[AgentIO.S_SOUND_PROX] = 0;
 			s[AgentIO.S_SOUND_BEARING] = 0;
 			s[AgentIO.S_SOUND_FWD] = 0;
 			s[AgentIO.S_SOUND_SIDE] = 0;
+			s[AgentIO.S_SOUND_KIND] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);

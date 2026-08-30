@@ -509,7 +509,12 @@ public final class Mechanics {
 								+ "program cannot unwrap an angle, so \"turn toward the "
 								+ "scream\" is a single multiply from this channel to the "
 								+ "steering actuator: the cheapest homing reflex evolution "
-								+ "could find.")),
+								+ "could find."),
+						sense(AgentIO.S_SOUND_KIND, "WHAT it heard, as a signed hint: +1 a "
+								+ "kill — a carcass now exists where the scream was — and −1 "
+								+ "a bite the quarry survived: violence still in progress. "
+								+ "Dinner bell and warning ride one channel, and which sign a "
+								+ "lineage walks toward is for selection to settle.")),
 				group("Places worth going",
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
@@ -729,9 +734,12 @@ public final class Mechanics {
 				+ "comes from the quarry rather than the hunter and carries in proportion to "
 				+ "how big the quarry is, so violence announces itself, and the loudest events "
 				+ "are the ones most worth walking toward — a big kill leaves a big carcass. "
-				+ "What any lineage does with that is not decided here. The same channel is a "
-				+ "warning to whatever else is prey and a dinner bell to whatever eats the "
-				+ "dead, and which of those a population becomes is for selection to settle.\n\n"
+				+ "The scream also says WHAT happened: a bite the quarry survived is a FIGHT "
+				+ "— violence in progress, a warning — and the killing one is a KILL, which "
+				+ "means a carcass now exists where the scream was. What any lineage does "
+				+ "with that is not decided here. The same channel is a warning to whatever "
+				+ "else is prey and a dinner bell to whatever eats the dead, and which of "
+				+ "those a population becomes is for selection to settle.\n\n"
 				+ "A sound is broadcast once and is then gone. It is not a field that lingers "
 				+ "like a smell, and the channel falls silent by itself — otherwise a creature "
 				+ "would steer forever toward a shriek from five minutes ago. Recency is "
