@@ -1,5 +1,6 @@
 package net.hedinger.prototype.simtest;
 
+import net.hedinger.prototype.engine.Unit;
 import java.util.TreeMap;
 
 import net.hedinger.prototype.entities.AgentIO;
@@ -69,6 +70,7 @@ public class TestNPC extends NPC {
 	 * the rest walking between bodies. Those are the real costs, and they are
 	 * already charged, in energy and in time, everywhere else in the loop.
 	 */
+	@Unit("energy per mass")
 	public static double CARRION_ENERGY = MEAT_ENERGY;
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
@@ -76,6 +78,7 @@ public class TestNPC extends NPC {
 	 * rate a body takes ~2 seconds to strip, long enough that two scavengers on one
 	 * corpse genuinely compete and short enough that it does not pin them in place.
 	 */
+	@Unit("of the body/tick")
 	public static final double CARRION_BITE = 0.015;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
 	private static final double CARRION_REACH = 0.6;
@@ -117,6 +120,7 @@ public class TestNPC extends NPC {
 	 * information, but the position is where something DIED, and a carcass does
 	 * not move. The point stays true for as long as the body lies there.
 	 */
+	@Unit("ticks")
 	public static final int EARSHOT_MEMORY = 330;
 	/**
 	 * How far a kill can be heard, in tiles, per unit of the dying body's mass.
@@ -127,6 +131,7 @@ public class TestNPC extends NPC {
 	 * channel worth reading: the loudest events are also the ones worth walking
 	 * toward, since a big kill leaves a big carcass.
 	 */
+	@Unit("tiles earshot")
 	public static final double KILL_LOUDNESS = 6.0;
 
 	/** The most recent sound to reach this body, and when — the sensed half of
@@ -135,6 +140,7 @@ public class TestNPC extends NPC {
 	private double heardX, heardY;
 	private long heardAt = Long.MIN_VALUE;
 
+	@Unit("tiles")
 	public static final double CARRION_SCENT_R = 10.0;
 	/**
 	 * How much faster a scavenger's top speed is than the body it was built from —
@@ -152,6 +158,7 @@ public class TestNPC extends NPC {
 	 * a scavenger burns more travel energy per carcass and eats the ones a slower
 	 * body never reaches at all.
 	 */
+	@Unit("x speed")
 	public static final double SCAVENGER_STRIDE = 2.5;
 	/**
 	 * What a scavenger pays to cover ground, as a share of an ordinary body's bill.
@@ -161,6 +168,7 @@ public class TestNPC extends NPC {
 	 * all, since travel is billed on the square of speed. Together they come to
 	 * roughly 2.5x the distance for the energy an ordinary body spends.
 	 */
+	@Unit("x travel cost")
 	public static final double SCAVENGER_TRAVEL = 0.16;
 	/** Fraction of top speed a predator patrols at while no prey is in sight — it
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
@@ -168,27 +176,33 @@ public class TestNPC extends NPC {
 	/** Hunger at which a hunter starts hunting in earnest (VITALS.md: appetite,
 	 *  not tank headroom, is what sends a predator after prey). Sits at the
 	 *  NEED_LOW seek line, so appetite returns in twice the time thirst does. */
+	@Unit("hunger level")
 	public static double PRED_HUNT_HUNGER = 0.5;
 	/** Hunger at or above which a predator is starving — desperate enough to
 	 *  break the taboo and hunt its own kind. A hunter only pegs this high when
 	 *  it has been failing to feed, so cannibalism stays a last resort. */
+	@Unit("hunger level")
 	public static double STARVE_HUNGER = 0.9;
 	/** Below this hunger a hunter stops killing altogether: the meal would not
 	 *  fit its stomach, so the prey would die for nothing. */
+	@Unit("hunger level")
 	public static double PRED_FULL_HUNGER = 0.05;
 	/** Fraction of its (adult-sized) tank a world-seeded FOUNDER starts holding,
 	 *  and the ceiling on what any birth can endow. Comfortably fed, but below
 	 *  the breeding line, so a new body has to make its own living before it can
 	 *  make another one. A BORN child holds less: its endowment is what its
 	 *  parents actually paid, minus the meat-priced body — see {@link #endow}. */
+	@Unit("of the tank")
 	public static double BORN_FRACTION = 0.6;
 	/** Fraction of the tank that has to be full before a creature will breed. A
 	 *  big body's tank is bigger, so a big creature must eat more, not merely as
 	 *  much, before it reproduces. */
+	@Unit("of the tank")
 	public static double REPRO_FRACTION = 0.75;
 	/** Fraction of the tank each parent spends on an offspring. Below
 	 *  {@link #REPRO_FRACTION}, so breeding leaves a parent alive and fed rather
 	 *  than emptied. */
+	@Unit("of the tank")
 	public static double REPRO_COST_FRACTION = 0.5;
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
@@ -203,6 +217,7 @@ public class TestNPC extends NPC {
 	private static final double PIN_MIN_MOVE = 0.1;
 	/** After a pin, drive straight off clear ground for this many ticks (ignoring
 	 *  prey) to break free. */
+	@Unit("ticks")
 	public static final int HUNT_GIVEUP_TICKS = 45;
 
 	/**
@@ -220,6 +235,7 @@ public class TestNPC extends NPC {
 	 * tick, so slowing the crop without raising the energy per unit starves the herd
 	 * — measured, not assumed. See that constant for the calibration.
 	 */
+	@Unit("vegetation/tick at mass 1")
 	public static double GRAZE_DEMAND = 0.003;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
@@ -235,8 +251,10 @@ public class TestNPC extends NPC {
 	private static final double HERD_R = 7.0;
 	/** Pheromone laid at the nest at each birth; >> per-tick evaporation, so a
 	 *  repeatedly-marked nest cloud builds a strong persistent peak. */
+	@Unit("pheromone")
 	public static final double NEST_DEPOSIT = 12.0;
 	/** How far a nester can smell its nest when homing to breed. */
+	@Unit("tiles")
 	public static final int NEST_SENSE_R = 8;
 	/** How close (tiles, on top of touching) a mater must be to a partner to breed. */
 	private static final double MATE_REACH = 0.5;
@@ -317,6 +335,7 @@ public class TestNPC extends NPC {
 	 * happens. That is what makes breeding a decision with a price rather than a
 	 * collision, and it gives the pending state something real to describe.
 	 */
+	@Unit("ticks")
 	public static final int MATING_TICKS = 100;
 	/** The partner this body is currently exchanging with; null when not mating. */
 	private NPC matingWith = null;
@@ -613,6 +632,7 @@ public class TestNPC extends NPC {
 	 * steward's reseeding floor died — see
 	 * {@code WorldSteward.hostPresent()}.
 	 */
+	@Unit("px radius")
 	public static final int PARASITE_MAX_SIZE_PX = 5;
 
 	@Override
@@ -775,14 +795,17 @@ public class TestNPC extends NPC {
  *  source of truth. */
 	// --- parasitism ---------------------------------------------------------
 	/** Ticks between a riding parasite's bites of its host. */
+	@Unit("ticks")
 	public static final int PARA_BITE_PERIOD = 30;
 	/** Health a parasite's bite takes off the host — a slow drain, not an
 	 *  attack: minutes to matter, so the host has every chance to buck it off
 	 *  or simply outlive it. The meal is the same meat arithmetic as a
 	 *  hunter's bite, so a bigger host is a richer ride. */
+	@Unit("hp per bite")
 	public static final int PARA_BITE = 1;
 	/** How far (tiles) a parasite senses warm bodies to ride — scent-like,
 	 *  through cover, the way carrion is smelled rather than seen. */
+	@Unit("tiles")
 	public static final double HOST_SENSE_R = 12.0;
 
 	public TestNPC withClade(Genome.Clade d) {
@@ -1824,6 +1847,7 @@ public class TestNPC extends NPC {
 	 * score rises as the walk shortens, so whatever is being approached gets harder
 	 * to displace the closer it gets, and a switch cannot immediately switch back.
 	 */
+	@Unit("x carrion score")
 	public static final double CARRION_SWITCH_GAIN = 2.0;
 
 	/**
@@ -2981,6 +3005,7 @@ public class TestNPC extends NPC {
 	 *  deprivation trickle (just under {@link NPC#DEPRIVED}), because every
 	 *  point of satiation below it is stomach contents the parents must pay
 	 *  for. A newborn's first act is to eat — which is what newborns do. */
+	@Unit("hunger level")
 	public static double BORN_HUNGER = 0.9;
 
 	/**

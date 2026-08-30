@@ -1,5 +1,6 @@
 package net.hedinger.prototype.sim;
 
+import net.hedinger.prototype.engine.Unit;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -35,6 +36,7 @@ import net.hedinger.prototype.engine.World;
 public final class SimulationRunner {
 
 	/** The project's canonical simulation rate (see Scenario.REALTIME_FPS). */
+	@Unit("ticks/s")
 	public static final int TICKS_PER_SECOND = 33;
 	private static final long TICK_NANOS = 1_000_000_000L / TICKS_PER_SECOND;
 

@@ -1132,7 +1132,7 @@ async function openTuning(): Promise<void> {
   tuneBody.textContent = 'loading…';
   tuneFoot.textContent = '';
   tuneRows = [];
-  let constants: { key: string; value: number; def: number; type: string; frozen: boolean }[];
+  let constants: { key: string; value: number; def: number; unit: string; type: string; frozen: boolean }[];
   try {
     const r = await fetch('/api/tuning');
     const d = await r.json();
@@ -1159,7 +1159,7 @@ async function openTuning(): Promise<void> {
     const name = document.createElement('span');
     name.className = 'tname';
     name.textContent = c.key.split('.')[1];
-    name.title = `${c.key} — default ${c.def}`;
+    name.title = `${c.key} — default ${c.def} ${c.unit}`;
     row.append(name);
 
     const canEdit = editable && !c.frozen;
@@ -1187,6 +1187,11 @@ async function openTuning(): Promise<void> {
       num.oninput = () => { slider.value = num.value; mark(); };
       row.append(slider, num);
     }
+    const unit = document.createElement('span');
+    unit.className = 'tunit';
+    unit.textContent = c.unit;
+    unit.title = c.unit;
+    row.append(unit);
     const lock = document.createElement('span');
     lock.className = 'lock';
     lock.textContent = c.frozen ? '🔒' : '';

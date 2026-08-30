@@ -1,5 +1,6 @@
 package net.hedinger.prototype.entities;
 
+import net.hedinger.prototype.engine.Unit;
 import java.awt.Color;
 
 import net.hedinger.prototype.engine.Utils;
@@ -27,6 +28,7 @@ import net.hedinger.prototype.engine.Utils;
  */
 public class Genome {
 
+	@Unit("marker genes")
 	public static final int MARKER_DIMS = 3; // mapped to RGB for the debug view
 
 	// --- phenotype (the body) ---
@@ -278,6 +280,7 @@ public class Genome {
 	 *  multiplicative, so an unbounded gene random-walks to extremes (dust-sized
 	 *  or giant) over a long-lived world. These keep every creature readable and
 	 *  the predator/prey scale meaningful. */
+	@Unit("px radius")
 	public static final double SIZE_MIN = 4, SIZE_MAX = 20;
 
 	/**
@@ -290,6 +293,7 @@ public class Genome {
 	 * cannot reach. Sits below MAX_STEP, so the fastest body a genome can express
 	 * is still inside the engine's per-tick step limit on its own.
 	 */
+	@Unit("tiles/tick")
 	public static final double SPEED_MAX = 0.3;
 
 	/** Mutates every gene by up to +/- rate (relative for magnitudes). */

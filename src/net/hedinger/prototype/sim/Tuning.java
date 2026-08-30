@@ -53,7 +53,9 @@ public final class Tuning {
 	 * excluded from the survey rather than listed as frozen noise.
 	 */
 	private static final java.util.Set<String> CODES = java.util.Set.of(
-			"Tile.DIR_N", "Tile.DIR_E", "Tile.DIR_S", "Tile.DIR_W");
+			"Tile.DIR_N", "Tile.DIR_E", "Tile.DIR_S", "Tile.DIR_W",
+			"NPC.STATUS_SLEEP", "NPC.STATUS_IDLE", "NPC.STATUS_ALERT",
+			"NPC.STATUS_THREAT");
 
 	/** Key -> field, in survey order. Built once; the class list is fixed. */
 	private static final Map<String, Field> FIELDS = survey();
@@ -75,9 +77,16 @@ public final class Tuning {
 					continue;
 				}
 				String key = c.getSimpleName() + "." + f.getName();
-				if (!CODES.contains(key)) {
-					out.put(key, f);
+				if (CODES.contains(key)) {
+					continue;
 				}
+				// A quantity without a unit is only half stated: refuse to
+				// survey it, so a new constant cannot land unreadable.
+				if (f.getAnnotation(net.hedinger.prototype.engine.Unit.class) == null) {
+					throw new IllegalStateException(
+							"constant lacks a @Unit annotation: " + key);
+				}
+				out.put(key, f);
 			}
 		}
 		return out;
@@ -158,6 +167,7 @@ public final class Tuning {
 					"key", e.getKey(),
 					"value", read(f),
 					"def", DEFAULTS.get(e.getKey()),
+					"unit", f.getAnnotation(net.hedinger.prototype.engine.Unit.class).value(),
 					"type", f.getType().getSimpleName(),
 					"frozen", Modifier.isFinal(f.getModifiers())));
 		}
