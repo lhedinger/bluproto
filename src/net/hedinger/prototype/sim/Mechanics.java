@@ -500,7 +500,16 @@ public final class Mechanics {
 						sense(AgentIO.S_SOUND_BEARING, "Which way that sound came from. Both "
 								+ "channels report an EVENT rather than a thing, and fall silent "
 								+ "on their own once it stops ringing — nothing keeps making the "
-								+ "noise, so a mind that means to act on it has to act now.")),
+								+ "noise, so a mind that means to act on it has to act now."),
+						sense(AgentIO.S_SOUND_FWD, "The same direction as body-frame "
+								+ "coordinates: how much of the way to the sound is straight "
+								+ "ahead (+1) or behind (−1)."),
+						sense(AgentIO.S_SOUND_SIDE, "And how much is off to the side — "
+								+ "positive to the right, matching a positive turn. A linear "
+								+ "program cannot unwrap an angle, so \"turn toward the "
+								+ "scream\" is a single multiply from this channel to the "
+								+ "steering actuator: the cheapest homing reflex evolution "
+								+ "could find.")),
 				group("Places worth going",
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
