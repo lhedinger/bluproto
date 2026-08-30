@@ -176,7 +176,21 @@ public final class AgentIO {
 	 * simulation.
 	 */
 	public static final int S_NEAR_CLADE = 37;
-	public static final int NUM_SENSORS = 38;
+	/**
+	 * The heard sound's direction as body-frame coordinates: the forward
+	 * component of the unit vector toward it (+1 dead ahead, -1 behind), with
+	 * {@link #S_SOUND_SIDE} carrying the sideways half. The same fact as
+	 * {@link #S_SOUND_BEARING} in Cartesian form, and that redundancy is the
+	 * point: a linear program cannot unwrap an angle, but "turn toward the
+	 * scream" is a single multiply from the side channel to {@link #A_TURN} —
+	 * the cheapest homing reflex evolution could possibly find.
+	 */
+	public static final int S_SOUND_FWD = 38;
+	/** The sideways component of the unit vector toward the heard sound:
+	 *  positive off the body's right hand (the same sense as a positive
+	 *  {@link #A_TURN}), negative off its left, 0 dead ahead or behind. */
+	public static final int S_SOUND_SIDE = 39;
+	public static final int NUM_SENSORS = 40;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -186,7 +200,7 @@ public final class AgentIO {
 			"forage_prox", "forage_bearing", "kin_prox", "waypoint_prox", "waypoint_bearing",
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
-			"sound_prox", "sound_bearing", "near_clade" };
+			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

@@ -7394,6 +7394,51 @@ public class SimTests {
 	}
 
 	/**
+	 * The sound coordinate channels: a heard scream reaches the mind not only
+	 * as proximity and a wrapped bearing but as body-frame Cartesian
+	 * coordinates — the forward and sideways components of the unit vector
+	 * toward it. The redundancy is deliberate: a linear program cannot unwrap
+	 * an angle, so "turn toward the scream" is a single multiply from the
+	 * side channel to the steering actuator. Pinned by geometry: the same
+	 * sound east of a body reads dead-ahead to an east-facing listener,
+	 * off the right hand to a north-facing one, and behind a west-facing one.
+	 */
+	static class MindHearsInBodyCoordinates extends Scenario {
+		private double[] listen(double heading) {
+			World w = room(12, 12);
+			final double[] heard = new double[AgentIO.NUM_SENSORS];
+			Mind capture = (sn, a) -> System.arraycopy(sn, 0, heard, 0, sn.length);
+			TestNPC ear = TestNPC.minded(5.5, 5.5, 0, new Genome(), capture)
+					.withHeading(heading);
+			w.spawnEntity(ear);
+			w.spawnEntity(new net.hedinger.prototype.entities.Sound(8.5, 5.5, 0, 6.0));
+			w.think();
+			tick(w, 30); // past the 20-tick travel: the scream has arrived
+			return heard;
+		}
+
+		@Override
+		public void run() {
+			seed(106);
+			double[] east = listen(0);
+			assertGreater("the scream was heard at all", east[AgentIO.S_SOUND_PROX], 0.1);
+			assertGreater("dead ahead of an east-facing body: forward reads full",
+					east[AgentIO.S_SOUND_FWD], 0.95);
+			assertNear("and sideways reads nothing", 0.0, east[AgentIO.S_SOUND_SIDE], 0.05);
+
+			double[] north = listen(-Math.PI / 2);
+			assertGreater("off the right hand of a north-facing body: side reads "
+					+ "full positive — one multiply into A_TURN homes on it",
+					north[AgentIO.S_SOUND_SIDE], 0.95);
+			assertNear("with nothing ahead or behind", 0.0, north[AgentIO.S_SOUND_FWD], 0.05);
+
+			double[] west = listen(Math.PI);
+			assertLess("behind a west-facing body: forward reads full negative",
+					west[AgentIO.S_SOUND_FWD], -0.95);
+		}
+	}
+
+	/**
 	 * A sound rides the wire as itself: the snapshot names it (kind "sound"
 	 * rather than the anonymous "entity" it used to travel as), carries its
 	 * earshot in the size slot and its travel progress in aux — everything a
@@ -9950,6 +9995,7 @@ public class SimTests {
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
 				new ASoundRidesTheWire(),
+				new MindHearsInBodyCoordinates(),
 				new TuningRidesTheCommandLog(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),

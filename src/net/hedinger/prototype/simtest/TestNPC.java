@@ -1528,10 +1528,18 @@ public class TestNPC extends NPC {
 		if (hearsSomething()) {
 			double hdx = heardX - X, hdy = heardY - Y;
 			s[AgentIO.S_SOUND_PROX] = 1.0 / (1.0 + Math.hypot(hdx, hdy));
-			s[AgentIO.S_SOUND_BEARING] = wrap(Math.atan2(hdy, hdx) - D) / Math.PI;
+			double rel = Math.atan2(hdy, hdx) - D;
+			s[AgentIO.S_SOUND_BEARING] = wrap(rel) / Math.PI;
+			// The same direction again as body-frame coordinates: distance
+			// already rides in prox, so these carry the unit vector only —
+			// steady magnitude for steering however far the scream was.
+			s[AgentIO.S_SOUND_FWD] = Math.cos(rel);
+			s[AgentIO.S_SOUND_SIDE] = Math.sin(rel);
 		} else {
 			s[AgentIO.S_SOUND_PROX] = 0;
 			s[AgentIO.S_SOUND_BEARING] = 0;
+			s[AgentIO.S_SOUND_FWD] = 0;
+			s[AgentIO.S_SOUND_SIDE] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
