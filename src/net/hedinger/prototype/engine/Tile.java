@@ -37,12 +37,15 @@ public class Tile {
 	// from the last-grazed tick (the logistic curve has a closed solution), so
 	// there is still no per-tick sweep over the map -- a tile costs nothing until
 	// something grazes or draws it.
+	@Unit("vegetation")
 	public static final double VEG_MAX = 1.0;
 	/** Default logistic growth rate (per tick): larger => faster recovery. */
+	@Unit("vegetation/tick")
 	public static final double VEG_REGROW = 0.002;
 	/** A tile grazed below {@link #DEPLETION_LEVEL} of its cap pauses this many
 	 *  ticks (~1 min at 33 t/s) before it starts to recover; a tile with grass to
 	 *  spare resumes at once. */
+	@Unit("ticks")
 	public static final long REGROW_DELAY = 2000;
 	/** Below this fraction of its cap a tile counts as "depleted" and takes the
 	 *  {@link #REGROW_DELAY} cooldown before recovering. */

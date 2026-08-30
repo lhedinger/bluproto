@@ -7266,6 +7266,11 @@ public class SimTests {
 						(Boolean) byKey.get("Tile.VEG_REGROW").get("frozen"));
 				assertTrue("names are not quantities: the direction codes are "
 						+ "not listed at all", !byKey.containsKey("Tile.DIR_N"));
+				assertTrue("nor are the status codes",
+						!byKey.containsKey("NPC.STATUS_IDLE"));
+				assertTrue("every row carries its unit",
+						"energy per vegetation".equals(byKey.get("NPC.GRASS_ENERGY").get("unit"))
+						&& "ticks".equals(byKey.get("NPC.THIRST_PERIOD").get("unit")));
 
 				// A frozen constant refuses the command outright.
 				boolean refused = false;

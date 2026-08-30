@@ -1,5 +1,6 @@
 package net.hedinger.prototype.entities;
 
+import net.hedinger.prototype.engine.Unit;
 import java.awt.Color;
 import java.util.Stack;
 import java.util.TreeMap;
@@ -51,15 +52,19 @@ public abstract class NPC extends Entity {
 	// — yet still need bigger meals to top up. Anchored so a reference creature
 	// lasts a few minutes on a full tank.
 	/** Body size the energy model is anchored on (size factor 1.0 here). */
+	@Unit("px radius")
 	public static final double REF_SIZE = 8.0;
 	/** Full energy reserve of a reference-size creature ("fully fed"). */
+	@Unit("energy at mass 1")
 	public static double BASE_CAPACITY = 6.0;
 	/** Resting energy/tick a reference-size creature burns. At 33 t/s a full
 	 *  reference tank (6.0 / 0.0005 = 12000 ticks) lasts ~6 minutes unfed, so even
 	 *  a half-empty creature has a few minutes of reserve before it starves. */
+	@Unit("energy/tick at mass 1")
 	public static double BASE_METABOLISM = 0.0005;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
+	@Unit("gene value = pace 1")
 	public static double META_REF = 0.02;
 	/**
 	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
@@ -78,10 +83,12 @@ public abstract class NPC extends Entity {
 	 * metabolic body pays per unit of mass it grows — the same figure, so rearing a
 	 * body and eating it can never mint energy between them.
 	 */
+	@Unit("energy per mass")
 	public static double MEAT_ENERGY = 2.5;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
+	@Unit("of adult size")
 	public static double BIRTH_SIZE_FRACTION = 0.35;
 	/**
 	 * Growth in body radius per tick — the well-fed CEILING, not a guarantee. The
@@ -93,6 +100,7 @@ public abstract class NPC extends Entity {
 	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
 	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
+	@Unit("px radius/tick")
 	public static double GROWTH_RATE = 0.0066;
 
 	/** Adult body this creature is growing toward; 0 for a body that does not grow. */
@@ -184,6 +192,7 @@ public abstract class NPC extends Entity {
 	 * break-even the earlier flat model had — while a genuinely fast one now pays
 	 * several times over rather than merely proportionally.
 	 */
+	@Unit("energy/tick at mass 1, speed 1")
 	public static double MOVE_ENERGY = 0.2;
 
 	/** This creature's clade ("herbivore", "predator", ...), or "" for
@@ -282,6 +291,7 @@ public abstract class NPC extends Entity {
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again
+	@Unit("ticks")
 	public static int REPRO_COOLDOWN = 100;
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
@@ -297,21 +307,25 @@ public abstract class NPC extends Entity {
 	 * <p>Sits below {@link #STRUGGLE_CARRIER_COST} so a captive that actively fights
 	 * still costs its captor more than one hanging limp.
 	 */
+	@Unit("energy/tick per px held")
 	public static double GRIP_ENERGY = 0.10;
 	/** Fraction of normal metabolism a voluntary rider pays while carried (its
 	 *  bonus for hitching a ride instead of walking). */
+	@Unit("x metabolism")
 	public static final double RIDER_METABOLISM = 0.5;
 	/** How far beyond touching a creature can reach to climb aboard a host, in
 	 *  tiles — the same margin biting, mating and grabbing already allow. */
 	protected static final double ATTACH_REACH = 0.5;
 	/** Extra energy a captor burns per tick per unit of (weight x struggle) -- the
 	 *  surcharge for hauling an unwilling captive over a consenting passenger. */
+	@Unit("energy/tick per weight x struggle")
 	public static final double STRUGGLE_CARRIER_COST = 0.35;
 	/** Energy a struggling captive burns itself per tick per unit of struggle --
 	 *  fighting is exhausting, so consenting conserves the captive's reserves. */
 	protected static final double STRUGGLE_SELF_COST = 0.02;
 	/** How much heavier a load counts while the carrier is flying: holding a body
 	 *  up through the air is far harder work than dragging it over the ground. */
+	@Unit("x carry cost")
 	public static final double FLIER_CARRY_MULTIPLIER = 5.0;
 	/** Energy a carrier burns per tick per unit of buck effort (shaking riders
 	 *  off is exhausting, just like a captive's struggle). */
@@ -434,6 +448,7 @@ public abstract class NPC extends Entity {
 	// Staggered-update period multiplier (1 = each NPC re-scans every
 	// SEARCH_FREQ ticks). Tunable via -Dblu.stagger=N for benchmarking the
 	// freshness/speed trade-off.
+	@Unit("x search period")
 	public static int STAGGER = Integer.getInteger("blu.stagger", 1);
 
 	public NPC(double x, double y, double z) {
@@ -631,6 +646,7 @@ public abstract class NPC extends Entity {
 	// --- the four books (VITALS.md) ------------------------------------------
 	/** Ticks for thirst to rise slaked -> parched at the reference body
 	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
+	@Unit("ticks")
 	public static double THIRST_PERIOD = 9000;
 	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
 	 *  twice {@link #THIRST_PERIOD}, so appetite returns in twice the time
@@ -638,9 +654,11 @@ public abstract class NPC extends Entity {
 	 *  own: hunger rises only as regeneration drains the stomach, and this
 	 *  period holds because the stomach is sized to it (see {@link #STOMACH}).
 	 *  Exertion adds appetite on top, which the old clock could not price. */
+	@Unit("ticks")
 	public static double HUNGER_PERIOD = 18000;
 	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
 	 *  with a duration, interruptible by simply walking away. */
+	@Unit("ticks")
 	public static double DRINK_TICKS = 132;
 	/** Stomach of a reference body, in vegetation-energy units: eating
 	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
@@ -649,30 +667,39 @@ public abstract class NPC extends Entity {
 	 *  drain a full stomach in exactly {@link #HUNGER_PERIOD} ticks — the
 	 *  rhythm anchor, preserved by construction now that hunger has no clock
 	 *  of its own. Change either factor and this must follow. */
+	@Unit("food energy at mass 1")
 	public static double STOMACH = 9.0;
 	/** Energy regenerated per tick by a fed, watered, healthy reference body —
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
 	 *  refills an empty tank in roughly a minute and a half. */
+	@Unit("energy/tick at mass 1")
 	public static double REGEN_RATE = 0.002;
 	/** Fraction of the tank kept as a crawl reserve: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
+	@Unit("of the tank")
 	public static double CRAWL_RESERVE = 0.05;
 	/** Fraction of the genome's top speed a collapsed body can still make. */
+	@Unit("of top speed")
 	public static double CRAWL_SPEED = 0.25;
 	/** A need at or above this is pegged, and starts eroding health. */
+	@Unit("need level")
 	public static double DEPRIVED = 0.95;
 	/** Needs below this count as low: mending and breeding both require it. */
+	@Unit("need level")
 	public static double NEED_LOW = 0.5;
 	/** Ticks between deprivation damage points: a pegged need kills through
 	 *  health in ~2.5 min, slow enough that rescue by a meal or a shore is a
 	 *  real possibility. */
+	@Unit("ticks per hp lost")
 	public static int DEPRIVATION_PERIOD = 50;
 	/** Ticks per mended health point (divided by metabolic efficiency): a bad
 	 *  wound takes minutes of fed, watered living to close. */
+	@Unit("ticks per hp mended")
 	public static int MEND_PERIOD = 160;
 	/** Ticks a budding (asexual) birth must be held for before it completes —
 	 *  ~5 s of sustained commitment; breaking off resets the act. */
+	@Unit("ticks")
 	public static int BREED_HOLD_TICKS = 165;
 
 	/** The hunger need, 0 (sated) .. 1 (starving). Metabolic bodies only. */
@@ -1942,6 +1969,7 @@ public abstract class NPC extends Entity {
 	 * herd growth, hunter survival, the seeded demo world — are the gate that
 	 * re-verifies 0.75 still carries the food chain.
 	 */
+	@Unit("energy per vegetation")
 	public static double GRASS_ENERGY = 0.75;
 
 	/**
