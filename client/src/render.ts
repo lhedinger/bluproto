@@ -510,6 +510,7 @@ export function render(
       g.imageSmoothingEnabled = false;
       continue;
     }
+    if (e.kind === 'sound') continue; // an event, not a body: the sense overlay draws it
 
     const r = Math.max(3.5, e.size * cam.scale);
 
@@ -665,7 +666,7 @@ export function render(
     const lids = new Set<number>();
     for (const t of tracks) {
       const e = t.curr;
-      if (e.kind === 'phero' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
       const ex = Math.floor(e.x), ey = Math.floor(e.y);
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -1202,6 +1203,7 @@ export function renderGL(
       glr.sprite('phero', puff, 1, 0, 0, puff.width, puff.height, s.x - r, s.y - r, r * 2, r * 2);
       continue;
     }
+    if (e.kind === 'sound') continue; // an event, not a body: the sense overlay draws it
 
     const r = Math.max(3.5, e.size * cam.scale);
 
@@ -1321,7 +1323,7 @@ export function renderGL(
     const lids = new Set<number>();
     for (const t of tracks) {
       const e = t.curr;
-      if (e.kind === 'phero' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
       const ex = Math.floor(e.x), ey = Math.floor(e.y);
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -2090,4 +2092,96 @@ export function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: num
       g.stroke();
       return;
   }
+}
+
+// ---- sense overlays ---------------------------------------------------------
+// Two heatmaps a viewer can switch on over the live world: smell (pheromone
+// clouds — a field that lingers) and sound (travelling events — a wavefront
+// that blooms and is gone). Both read the same entity stream the rest of the
+// renderer draws from; additive compositing makes overlapping sources read as
+// heat. Sounds die within a second of being made, too fast to read as a map,
+// so each one leaves a client-side echo that fades over a couple of seconds —
+// presentation memory only, nothing the sim knows about.
+
+const heatDots = new Map<string, HTMLCanvasElement>();
+function heatDot(color: string): HTMLCanvasElement {
+  let c = heatDots.get(color);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d')!;
+    const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    grad.addColorStop(0, color);
+    grad.addColorStop(0.55, color + '66');
+    grad.addColorStop(1, color + '00');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    heatDots.set(color, c);
+  }
+  return c;
+}
+
+const SMELL_HEAT = '#e628be';
+const SOUND_HEAT = '#f2b84b';
+const SOUND_ECHO_MS = 2200;
+const soundEchoes = new Map<number, { x: number; y: number; z: number; r: number; at: number }>();
+
+export function drawSenseHeat(g: CanvasRenderingContext2D, cam: Camera,
+    state: WorldState, renderTime: number, level: number,
+    smell: boolean, sound: boolean, now: number): void {
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.imageSmoothingEnabled = true;
+  for (const t of state.tracks.values()) {
+    const e = t.curr;
+    if (Math.round(e.z) !== level) continue;
+    if (smell && e.kind === 'phero') {
+      const p = state.sample(t, renderTime);
+      const s = cam.worldToScreen(p.x, p.y);
+      // The cloud's wire size is its drawn radius; the heat blooms wider so
+      // adjacent deposits merge into a field, and strength sets the glow.
+      const r = Math.max(8, e.size * cam.scale * 1.8);
+      if (s.x < -r || s.y < -r || s.x > g.canvas.width + r || s.y > g.canvas.height + r) continue;
+      g.globalAlpha = Math.min(0.35, 0.12 + Math.log1p(e.aux) * 0.08);
+      g.drawImage(heatDot(SMELL_HEAT), s.x - r, s.y - r, r * 2, r * 2);
+    }
+    if (sound && e.kind === 'sound' && !(e.flags & F_DEAD)) {
+      const s = cam.worldToScreen(e.x, e.y); // sounds never move: no sampling
+      const earshot = e.size * cam.scale;
+      const frac = Math.max(0, Math.min(1, e.aux));
+      const rr = earshot * (0.2 + 0.8 * frac); // the wavefront, spreading out
+      if (s.x >= -earshot && s.y >= -earshot
+          && s.x <= g.canvas.width + earshot && s.y <= g.canvas.height + earshot) {
+        // Gentle per-source alphas: heat is additive, and a feeding frenzy
+        // stacks many screams on one spot — hot should read hot, not white.
+        g.globalAlpha = 0.16 - 0.08 * frac;
+        g.drawImage(heatDot(SOUND_HEAT), s.x - rr, s.y - rr, rr * 2, rr * 2);
+        g.globalAlpha = 0.3 - 0.15 * frac;
+        g.strokeStyle = SOUND_HEAT;
+        g.lineWidth = Math.max(1, cam.scale * 0.05);
+        g.beginPath();
+        g.arc(s.x, s.y, rr, 0, Math.PI * 2);
+        g.stroke();
+      }
+      soundEchoes.set(e.id, { x: e.x, y: e.y, z: e.z, r: e.size, at: now });
+    }
+  }
+  if (sound) {
+    for (const [id, echo] of soundEchoes) {
+      const age = now - echo.at;
+      if (age > SOUND_ECHO_MS) {
+        soundEchoes.delete(id);
+        continue;
+      }
+      const live = state.tracks.get(id);
+      if (live && !(live.curr.flags & F_DEAD)) continue; // still drawn above
+      if (Math.round(echo.z) !== level) continue;
+      const s = cam.worldToScreen(echo.x, echo.y);
+      const r = echo.r * cam.scale;
+      if (s.x < -r || s.y < -r || s.x > g.canvas.width + r || s.y > g.canvas.height + r) continue;
+      g.globalAlpha = 0.1 * (1 - age / SOUND_ECHO_MS);
+      g.drawImage(heatDot(SOUND_HEAT), s.x - r, s.y - r, r * 2, r * 2);
+    }
+  }
+  g.restore();
 }

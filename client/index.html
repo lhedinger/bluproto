@@ -34,6 +34,13 @@
              touch-action: auto; }
     #popKey { display: flex; gap: 12px; margin-top: 4px;
               font: 11px/1.6 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    #ovl { position: fixed; right: max(8px, env(safe-area-inset-right));
+           top: 52px; z-index: 6; display: none;
+           background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
+           padding: 8px 12px; backdrop-filter: blur(4px); }
+    #ovl label { display: flex; align-items: center; gap: 8px; padding: 4px 0;
+                 font-size: 12px; cursor: pointer; user-select: none; }
+    #ovl .sw { width: 11px; height: 11px; border-radius: 50%; opacity: .85; }
     #tuning { position: fixed; right: max(8px, env(safe-area-inset-right));
               top: 52px; width: min(420px, calc(100vw - 16px)); z-index: 6; display: none;
               max-height: min(72vh, 640px); overflow-y: auto;
@@ -204,12 +211,19 @@
     <input id="injectFile" type="file" accept=".genome,.txt,text/plain" style="display:none" />
     <button id="popBtn" title="population by role over time (p)">population</button>
     <button id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
+    <button id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
     <span id="stats">connecting…</span>
   </div>
   <div id="pop">
     <h3>population by role<span class="win" id="popWin"></span></h3>
     <canvas id="popCv"></canvas>
     <div id="popKey"></div>
+  </div>
+  <div id="ovl">
+    <label><input type="checkbox" id="ovlSmell" />
+      <span class="sw" style="background:#e628be"></span>smell — pheromone clouds</label>
+    <label><input type="checkbox" id="ovlSound" />
+      <span class="sw" style="background:#f2b84b"></span>sound — events in earshot</label>
   </div>
   <div id="tuning">
     <h3>simulation constants<span class="x" id="tuneClose" title="close">✕</span></h3>
