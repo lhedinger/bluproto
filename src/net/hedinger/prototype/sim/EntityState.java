@@ -126,6 +126,14 @@ public record EntityState(
 			kind = "nest";
 			rgb = 0x8a6a3c;
 			aux = nest.getBroods();
+		} else if (e instanceof net.hedinger.prototype.entities.Sound snd) {
+			// A sound in flight is an event, not a body: the tag lets the
+			// viewer's sense overlay draw the wavefront, aux is how far along
+			// the travel it is (0 just made .. 1 reaching its listeners), and
+			// `size` below carries its earshot in tiles.
+			kind = "sound";
+			rgb = 0xF2B84B;
+			aux = snd.travelProgress();
 		} else if (e instanceof NPC n) {
 			kind = "npc." + n.getNpcTypeName().toLowerCase();
 			rgb = n.getColor().getRGB() & 0xFFFFFF;
@@ -164,7 +172,9 @@ public record EntityState(
 		// For a door, `size` is its doorway span in tiles; the raw entity size
 		// field stays zero so nothing in the sim mistakes a door for a body.
 		float size = e instanceof net.hedinger.prototype.entities.Door dr
-				? dr.getSpan() : e.getSize();
+				? dr.getSpan()
+				: e instanceof net.hedinger.prototype.entities.Sound snd
+				? (float) snd.getRadius() : e.getSize();
 		float sizeMax = !e.isDead() && e instanceof NPC np ? (float) np.getGrowthTarget() : 0;
 		return new EntityState(e.getID(), kind, e.getX(), e.getY(), e.getZ(),
 				e.getDirection(), size, sizeMax, rgb, flags, attachedTo, aux, pheno);

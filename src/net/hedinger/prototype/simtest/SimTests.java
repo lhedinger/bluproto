@@ -7235,6 +7235,36 @@ public class SimTests {
 	}
 
 	/**
+	 * A sound rides the wire as itself: the snapshot names it (kind "sound"
+	 * rather than the anonymous "entity" it used to travel as), carries its
+	 * earshot in the size slot and its travel progress in aux — everything a
+	 * viewer's sense overlay needs to draw the wavefront spreading, and
+	 * nothing the sim does not already know. Pheromone clouds have carried
+	 * their strength the same way since they were first drawn; this closes
+	 * the gap for the other sense.
+	 */
+	static class ASoundRidesTheWire extends Scenario {
+		@Override
+		public void run() {
+			seed(105);
+			World w = room(8, 8);
+			w.spawnEntity(new net.hedinger.prototype.entities.Sound(4.5, 4.5, 0, 7.0));
+			w.think();
+			tick(w, 5);
+			net.hedinger.prototype.sim.EntityState snd = null;
+			for (var e : net.hedinger.prototype.sim.WorldSnapshot.of(w).entities()) {
+				if ("sound".equals(e.kind())) {
+					snd = e;
+				}
+			}
+			assertTrue("the snapshot names the sound", snd != null);
+			assertNear("its earshot rides in the size slot", 7.0, snd.size(), 1e-6);
+			assertGreater("its travel progress rides in aux", snd.aux(), 0.0);
+			assertTrue("and is still under way", snd.aux() < 1.0);
+		}
+	}
+
+	/**
 	 * The constants registry and the tune command: every public static
 	 * primitive on the surveyed classes is listed with its live value, and
 	 * the runtime-tunable ones change ONLY through a logged command — so
@@ -9758,6 +9788,7 @@ public class SimTests {
 				new EnergyIsFoodBacked(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
+				new ASoundRidesTheWire(),
 				new TuningRidesTheCommandLog(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
