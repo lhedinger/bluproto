@@ -19,6 +19,8 @@ public class World {
 	int cols;
 	int rows;
 	int lvls;
+	/** Which level is the ground — see {@link #getSurfaceZ()}. */
+	int surfaceZ;
 	int spawnCounter = 0;
 
 	// Monotonic simulation clock, advanced once per think(). Drives lazy
@@ -45,6 +47,7 @@ public class World {
 		cols = c;
 		rows = r;
 		lvls = l;
+		surfaceZ = l - 1; // until told otherwise: the ground is the top floor
 
 		entities = new IntObjectMap<Entity>();
 
@@ -241,6 +244,32 @@ public class World {
 			}
 		}
 
+	}
+
+	/**
+	 * One level's art and nothing else — no floors beneath it, and none of the
+	 * black scrims {@link #render} lays between them.
+	 *
+	 * <p>{@link #render} composites the whole stack because that is what the
+	 * desktop view is: every floor drawn bottom-up, each one below the camera
+	 * dimmed by a 59% scrim so depth reads. The SERVED chunks are not that.
+	 * A chunk is one level, and its alpha channel carries a single meaning —
+	 * "you can see down here" — with the client compositing the floor below at
+	 * its own parallax. Baking the composite into the chunk gives the client a
+	 * second, unparallaxed copy of the lower floors to draw its own copy on top
+	 * of.
+	 *
+	 * <p>That went unnoticed for as long as every level's own art was opaque:
+	 * the stack underneath was painted over and only showed through pits, where
+	 * the pit's 70% veil hid it. Open air is what made it visible. On a level
+	 * that is mostly VOID almost nothing is painted over, so three stacked
+	 * scrims came through as the whole world at 93% black — {@code 1-(1-150/255)³}
+	 * — and a sky read as a nearly solid sheet.
+	 */
+	public void renderLevel(Graphics g, View view, LayerRenderer layerRenderer, int z) {
+		if (z >= 0 && z < lvls) {
+			levels[z].render(g, view, layerRenderer);
+		}
 	}
 
 	public void alignTiles() {
@@ -1177,6 +1206,40 @@ public class World {
 
 	public int getLevels() {
 		return lvls;
+	}
+
+	/**
+	 * Which level is the ground — the one a viewer opens on and the one every
+	 * other floor is named relative to ("level -1" is one below THIS, not one
+	 * below the top of the array).
+	 *
+	 * <p>It is STORED rather than taken as {@code lvls - 1}, which is what
+	 * every reader used to do. That worked only while the ground happened to be
+	 * the highest floor in the array, and it silently stops being true the
+	 * moment a world has open air above it: the top index would become "the
+	 * surface" and the actual ground would be renamed "level -1" without
+	 * anything failing. Which floor is the ground is a fact about the world,
+	 * the same kind of fact as which way a ramp climbs, so the world carries it
+	 * instead of every reader re-deriving it from the array's shape.
+	 *
+	 * <p>Defaults to the top level, which is exactly the old convention — a
+	 * world that never mentions a surface behaves as every world did before.
+	 */
+	public int getSurfaceZ() {
+		return surfaceZ;
+	}
+
+	/** Names the ground floor. Set by whoever generates the world, before
+	 *  anyone reads it; clamped, because a surface outside the array would
+	 *  make every level label nonsense rather than merely wrong. */
+	public void setSurfaceZ(int z) {
+		surfaceZ = Math.max(0, Math.min(lvls - 1, z));
+	}
+
+	/** How far {@code z} sits above (+) or below (-) the ground. The one place
+	 *  the world's vertical naming is written down. */
+	public int depthOf(int z) {
+		return z - surfaceZ;
 	}
 
 	/**

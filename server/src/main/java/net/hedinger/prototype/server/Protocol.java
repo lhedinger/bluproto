@@ -33,12 +33,14 @@ final class Protocol {
 	/** {@code chunkPx} is the pixels-per-tile of the served chunk PNGs (the
 	 *  art resolution), distinct from {@code tileSize} (the render/bake
 	 *  resolution some assets still use). */
-	record Hello(String type, long seed, int cols, int rows, int levels, int tileSize, int chunkPx,
-			long tick, boolean paused, double speed, List<String> layers, int chunkTiles, String build) {
-		static Hello of(long seed, int cols, int rows, int levels, int tileSize, int chunkPx,
-				long tick, boolean paused, double speed, List<String> layers, int chunkTiles, String build) {
-			return new Hello("hello", seed, cols, rows, levels, tileSize, chunkPx, tick, paused, speed,
-					layers, chunkTiles, build);
+	record Hello(String type, long seed, int cols, int rows, int levels, int surface, int tileSize,
+			int chunkPx, long tick, boolean paused, double speed, List<String> layers, int chunkTiles,
+			String build) {
+		static Hello of(long seed, int cols, int rows, int levels, int surface, int tileSize,
+				int chunkPx, long tick, boolean paused, double speed, List<String> layers,
+				int chunkTiles, String build) {
+			return new Hello("hello", seed, cols, rows, levels, surface, tileSize, chunkPx, tick,
+					paused, speed, layers, chunkTiles, build);
 		}
 	}
 

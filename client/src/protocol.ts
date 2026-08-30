@@ -44,6 +44,11 @@ export interface HelloMsg {
   cols: number;
   rows: number;
   levels: number;
+  /** Which level index is the ground. Not `levels - 1`: a world may carry open
+   *  air above the surface, and then the top index is sky. Optional so an
+   *  older server still parses — it falls back to the top, which is what that
+   *  server means. */
+  surface?: number;
   tileSize: number;
   /** Pixels per tile of the served chunk PNGs (the art resolution); falls
    *  back to tileSize against an older server. */

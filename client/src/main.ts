@@ -149,14 +149,25 @@ function getChunk(cx: number, cy: number, z: number): HTMLCanvasElement | null {
   return chunkImage(cx, cy, z);
 }
 
+/** Which index is the ground. The server says so; only a server too old to say
+ *  makes us guess, and for that server the guess is right by construction. */
+function surfaceZ(): number {
+  return hello ? hello.surface ?? hello.levels - 1 : 0;
+}
+
 function levelName(z: number): string {
-  // The surface is the top level (highest index); everything else is named by
-  // how far below it sits, not by its raw index -- a bare index reads "level 0"
-  // for the deepest floor of a 2-level world and "level 0" again for the
-  // deepest of a 3-level one, the same label for two different depths.
-  const top = hello ? hello.levels - 1 : 0;
-  const depth = top - z;
-  return depth === 0 ? 'surface' : `level -${depth}`;
+  // Floors are named by how far they sit from the GROUND, not by their raw
+  // index -- a bare index reads "level 0" for the deepest floor of a 2-level
+  // world and "level 0" again for the deepest of a 3-level one, the same label
+  // for two different depths.
+  //
+  // And the ground is not simply the top of the array. A world can carry open
+  // air above it, and when it does, calling the highest index "surface" renames
+  // every floor beneath by one -- the real ground would show as "level -1"
+  // with nothing anywhere failing.
+  const depth = z - surfaceZ();
+  if (depth === 0) return 'surface';
+  return depth > 0 ? `level +${depth}` : `level ${depth}`;
 }
 
 // ---- perf experiment toggles ----------------------------------------------
@@ -376,7 +387,10 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       const firstMeta = !seenMeta;
       seenMeta = true;
       if (firstMeta) {
-        currentLevel = Math.max(0, m.levels - 1); // open on the surface (top level)
+        // Open on the GROUND, which may not be the top of the array: a world
+        // with sky above it would otherwise open on an empty level, and the
+        // first thing a viewer saw would be a drop onto the world.
+        currentLevel = Math.max(0, Math.min(m.levels - 1, m.surface ?? m.levels - 1));
         cam.fit(m.cols, m.rows);
       } else {
         // Keep the viewer where it was, but never off the end of a world that
@@ -1026,10 +1040,12 @@ levelBtn.onclick = () => {
     cam.followId = null;
     reflect();
   }
-  // Step down one floor at a time and wrap back to the surface -- incrementing
+  // Step down one floor at a time and wrap back to the top -- incrementing
   // the index would do that for exactly two levels (index 0 IS the only floor
   // below the top) but skips the middle floor of a three-level world, jumping
-  // straight from the surface to the bottom.
+  // straight from the surface to the bottom. The wrap goes to the highest
+  // level, not to the surface: where a world has sky, that sky is a floor the
+  // cycle has to be able to reach.
   goToLevel(currentLevel === 0 ? hello.levels - 1 : currentLevel - 1);
 };
 // ---- the drone button ------------------------------------------------------

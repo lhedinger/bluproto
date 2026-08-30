@@ -939,10 +939,14 @@ public class SimTests {
 					}
 				}
 			}
-			// Asked of the world rather than named, so a floor added below does
-			// not make this a lie: the grass is on TOP, whatever that index is.
-			assertEquals("the grassy surface is the top level (everything else below it)",
-					w.getLevels() - 1, surface);
+			// Found by looking for grass, then checked against the level the
+			// world CALLS its surface. This used to compare against the top of
+			// the array, which held only while the ground was the highest floor
+			// and quietly stopped meaning anything once open air was added above
+			// it. Comparing the two independent answers is the stronger test: it
+			// catches a world that says one thing and grows grass somewhere else.
+			assertEquals("the grassy surface is the level the world calls its surface",
+					w.getSurfaceZ(), surface);
 
 			// Down-link: a walker on a surface hole falls into the cave, not the void.
 			int hx = -1, hy = -1;
@@ -6448,15 +6452,69 @@ public class SimTests {
 	 * is carved after connectLevels certified the world whole, and severed
 	 * banks would fail no audit that still runs.
 	 */
+	/**
+	 * There is open air above the ground, it is mostly empty, and nothing in it
+	 * floats.
+	 *
+	 * <p>The floating check is the one that matters. A summit is raised from the
+	 * surface's elevation field, but the surface is carved AFTER that field is
+	 * first read — by the ravine, by the installation, by two reachability
+	 * seals. Any of those can take away the rock a spire was going to stand on,
+	 * and a spire left hanging over open ground would not read as a bug: it
+	 * would read as a deliberate floating island, which is precisely why no
+	 * screenshot would ever catch it.
+	 */
+	static class TheSkyIsMostlyEmptyAndNothingFloats extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int cols = w.getColums(), rows = w.getRows();
+				int sky = w.getLevels() - 1, surf = w.getSurfaceZ();
+				assertTrue("seed " + s + ": the sky sits above the ground", sky > surf);
+				int voids = 0, standing = 0, floating = 0;
+				for (int x = 0; x < cols; x++) {
+					for (int y = 0; y < rows; y++) {
+						Tile t = w.getTile(x, y, sky);
+						if (t.getType() == Tile.TileType.TYPE_VOID) {
+							voids++;
+							continue;
+						}
+						standing++;
+						if (!w.getTile(x, y, surf).isSolid()) {
+							floating++;
+						}
+					}
+				}
+				assertEquals("seed " + s + ": nothing floats in the sky", 0, floating);
+				// Mostly empty, but not empty: a sky with no summits at all is a
+				// level with nothing to look at, and one that is mostly rock is
+				// a lid over the world. Measured 7%..12% rock across seeds.
+				assertTrue("seed " + s + ": the sky is mostly open air (" + voids + " void, "
+						+ standing + " rock)", voids > standing * 4L);
+				assertTrue("seed " + s + ": but something stands in it", standing > 200);
+			}
+		}
+	}
+
 	static class TheRavineIsCutButTheWorldHolds extends Scenario {
 		@Override
 		public void run() {
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
-				int z = w.getLevels() - 1;
+				int z = w.getSurfaceZ(); // the ravine is cut into the GROUND, not the top index
 				int cols = w.getColums(), rows = w.getRows();
 				java.util.List<int[]> gorge = largestHoleBlob(w, z);
-				assertLess("seed " + s + ": the surface has a ravine", 17, gorge.size());
+				// What this guards is the ravine coming apart into a scatter of
+				// corner-touching pits, which is how the first draft failed —
+				// and that failure leaves a largest blob of two or three tiles,
+				// not sixteen. Measured across nine seeds the blob runs 16..30,
+				// so the bar sits well under the observed floor on purpose: a
+				// threshold tuned to brush the current minimum breaks on the
+				// next change that shifts the random stream without anything
+				// actually being wrong, which is exactly what happened when the
+				// sky level was added.
+				assertLess("seed " + s + ": the surface has a ravine", 12, gorge.size());
 
 				// One bank tile on each side of some gorge tile, then a flood
 				// over surface walkables only: falling in is not a route.
@@ -9761,6 +9819,7 @@ public class SimTests {
 				new DemoWorldFullyConnected(),
 				new EveryCavernHasAStairOutOfIt(),
 				new TheRavineIsCutButTheWorldHolds(),
+				new TheSkyIsMostlyEmptyAndNothingFloats(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),
 				new ThePlantFloorIsTheRoomThatWasDrawn(),

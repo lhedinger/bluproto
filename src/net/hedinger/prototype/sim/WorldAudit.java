@@ -67,7 +67,11 @@ public final class WorldAudit {
 	 */
 	public static Connectivity connectivity(World w) {
 		int cols = w.getColums(), rows = w.getRows(), lvls = w.getLevels();
-		int surfaceZ = lvls - 1;
+		// The mainland is on the GROUND, which the world names. Taking the top
+		// index instead seeded the flood on whatever floor happened to be
+		// highest — open air, in a world that has any, where nothing is walkable
+		// and the audit reports a perfectly connected world as 0% reachable.
+		int surfaceZ = w.getSurfaceZ();
 		boolean[][][] walk = new boolean[lvls][cols][rows];
 		int total = 0;
 		for (int z = 0; z < lvls; z++) {

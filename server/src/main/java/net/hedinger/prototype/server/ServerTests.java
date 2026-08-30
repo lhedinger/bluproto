@@ -398,6 +398,15 @@ public final class ServerTests {
 			// One render per level: baking a whole level is the slow part here.
 			java.awt.image.BufferedImage img = LayerBaker.bakeLevelImage(terrain, lr, z);
 			check("level " + z + " leaves no art-pixel unpainted", opaqueBlack(img) == 0);
+			// A tile you can see down through must be REALLY see-through, not
+			// merely under 255. That weaker reading is what let the level stack
+			// bake itself into every chunk: the composite laid the floors below
+			// under a scrim per level, which on a mostly-open level came out at
+			// alpha 237 — "not opaque", and so acceptable to this check, while
+			// being a black sheet to look at.
+			String murk = murkyOpenTile(terrain, img, z);
+			check("level " + z + " does not bake the floors below into itself (" + murk + ")",
+					murk == null);
 			String stray = strayOpenTile(terrain, img, z);
 			check("level " + z + " is see-through only where a pit is (" + stray + ")",
 					stray == null);
@@ -458,7 +467,65 @@ public final class ServerTests {
 		net.hedinger.prototype.engine.Tile.TileType ty = t.getType();
 		return ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHAFT
-				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK;
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK
+				// Open air, on a level above the ground. The other three are
+				// openings IN a floor; this one is the absence of floor, and it
+				// is see-through for the same reason but by a different right.
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_VOID;
+	}
+
+	/**
+	 * The first open-air tile that is not honestly empty, or null.
+	 *
+	 * <p>Open air is the one tile drawn by drawing nothing, so its art-pixels
+	 * must be untouched — alpha 0, not merely "under 255". That distinction is
+	 * the whole point of this check: the level stack used to bake itself into
+	 * every chunk, and on a mostly-open level it came through at alpha 237,
+	 * which is not opaque and so satisfied every other assertion here while
+	 * being a black sheet to look at.
+	 *
+	 * <p>Only air with nothing standing next to it counts. Tile sprites are
+	 * drawn a padding wider than their cell on every side so their seams do not
+	 * crack apart — {@code tilePadding} 16 on a 64 tile, three art-pixels — so
+	 * air abutting a spire or the rim carries that skirt legitimately. It
+	 * belongs to the rock, not to the air. Measured on seed 42: 288 of 11,362
+	 * air tiles touch something standing, and every one of the remaining 11,074
+	 * is clean.
+	 */
+	private static String murkyOpenTile(net.hedinger.prototype.engine.World w,
+			java.awt.image.BufferedImage img, int z) {
+		int a = LayerBaker.CHUNK_PX;
+		for (int x = 1; x < w.getColums() - 1; x++) {
+			for (int y = 1; y < w.getRows() - 1; y++) {
+				if (!openAirWithRoom(w, x, y, z)) {
+					continue;
+				}
+				for (int aj = 0; aj < a; aj++) {
+					for (int ai = 0; ai < a; ai++) {
+						int px = artPixel(img, x, y, ai, aj);
+						if ((px >>> 24) != 0) {
+							return "(" + x + "," + y + ") open air at alpha " + (px >>> 24);
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	/** Open air with open air on all eight sides — far enough from anything
+	 *  standing that no sprite's padding skirt can reach it. */
+	private static boolean openAirWithRoom(net.hedinger.prototype.engine.World w,
+			int x, int y, int z) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (w.getTile(x + dx, y + dy, z).getType()
+						!= net.hedinger.prototype.engine.Tile.TileType.TYPE_VOID) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/** The first tile that is see-through without being a pit, or null. */
