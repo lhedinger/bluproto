@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { render, renderGL, type WorldMeta } from './render';
+import { drawSenseHeat, render, renderGL, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
@@ -1100,6 +1100,39 @@ function reflect(): void {
   pauseBtn.classList.toggle('on', paused);
 }
 
+// ---- sense overlays (open to everyone) --------------------------------------
+// Two heatmaps over the live world — smell (pheromone clouds) and sound
+// (events in earshot) — behind one toolbar button. Viewing only: they read
+// the entity stream every client already receives, so there is nothing to
+// gate. The choices stick in localStorage like any other viewer convenience.
+const ovlBtn = document.getElementById('ovlBtn') as HTMLButtonElement;
+const ovlEl = document.getElementById('ovl')!;
+const ovlSmellBox = document.getElementById('ovlSmell') as HTMLInputElement;
+const ovlSoundBox = document.getElementById('ovlSound') as HTMLInputElement;
+let ovlSmell = false;
+let ovlSound = false;
+try {
+  ovlSmell = localStorage.getItem('ovlSmell') === '1';
+  ovlSound = localStorage.getItem('ovlSound') === '1';
+} catch { /* storage may be unavailable; the toggles still work per-session */ }
+ovlSmellBox.checked = ovlSmell;
+ovlSoundBox.checked = ovlSound;
+function ovlApply(): void {
+  ovlSmell = ovlSmellBox.checked;
+  ovlSound = ovlSoundBox.checked;
+  ovlBtn.style.fontWeight = ovlSmell || ovlSound ? '600' : '';
+  try {
+    localStorage.setItem('ovlSmell', ovlSmell ? '1' : '0');
+    localStorage.setItem('ovlSound', ovlSound ? '1' : '0');
+  } catch { /* per-session only, then */ }
+}
+ovlSmellBox.onchange = ovlApply;
+ovlSoundBox.onchange = ovlApply;
+ovlApply();
+ovlBtn.onclick = () => {
+  ovlEl.style.display = ovlEl.style.display === 'block' ? 'none' : 'block';
+};
+
 // ---- the constants panel (debug mode) --------------------------------------
 // Every simulation constant, live from GET /api/tuning: frozen ones (structural
 // anchors, values copied out at world build) render as read-only sliders; the
@@ -1251,6 +1284,12 @@ tuneClose.onclick = closeTuning;
 // on: tapping a tile inspects it, and the inspect panel shows the full debug dump
 // for whatever is selected.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
+// Debug hands the console the two live objects everything renders from — the
+// world state and the camera — so a person (or a headless test) can ask "what
+// tracks exist and where would this one be on screen" instead of guessing.
+if (debugOn) {
+  (window as unknown as Record<string, unknown>).__dbg = { state, cam };
+}
 function applyDebug(): void {
   // Re-render whatever is open in the new context (simple card <-> full dump).
   if (selectedId !== null) refreshDetail();
@@ -1504,6 +1543,9 @@ function frame(now: number): void {
   } else {
     render(g, cam, state, meta, chunkTiles, chunkPx, getChunk,
       vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
+  }
+  if (ovlSmell || ovlSound) {
+    drawSenseHeat(g, cam, state, renderTime, currentLevel, ovlSmell, ovlSound, now);
   }
   hudFrame(now);
   // The minimap is ambient, not mission-critical: entity drift redraws at
