@@ -130,9 +130,15 @@ public class TestNPC extends NPC {
 	 * neighbourhood; something small is barely a rustle. That is what makes the
 	 * channel worth reading: the loudest events are also the ones worth walking
 	 * toward, since a big kill leaves a big carcass.
+	 *
+	 * <p>Doubled from 6: at 6 a reference-mass scream carried 6 tiles, within
+	 * sight range of anything that mattered — hearing mostly repeated what eyes
+	 * already knew. At 12 a typical kill reaches 12 tiles and the largest body
+	 * 30, well past line of sight and around walls, which is the regime where
+	 * a hearing-driven scavenger lineage has something sight cannot give it.
 	 */
 	@Unit("tiles earshot")
-	public static final double KILL_LOUDNESS = 6.0;
+	public static final double KILL_LOUDNESS = 12.0;
 
 	/** The most recent sound to reach this body, and when — the sensed half of
 	 *  {@link AgentIO#S_SOUND_PROX}. Held here rather than on Entity because only
