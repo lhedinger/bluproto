@@ -6546,6 +6546,98 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Every cavern worth the name has a stair out of it, not just a hole to
+	 * fall down.
+	 *
+	 * <p>The bottom level is carved from noise and then classified into stone,
+	 * pools, fungus and crystal — and the pools are the point. The underdark
+	 * never gets the shallows pass that gives the lakes above a wadeable
+	 * fringe (that loop runs {@code CAVE_Z..SURFACE_Z}), so its water is hard
+	 * edge, and 742 of the 3894 carved tiles being water cuts the level into
+	 * THIRTY-ONE separate caverns — seventeen of them twenty tiles or more,
+	 * between them holding 96% of the walkable rock.
+	 *
+	 * <p>Nothing noticed, because nothing looked. {@link DemoWorldFullyConnected}
+	 * certifies that every walkable tile is reachable, and it passed the whole
+	 * time: the reseal deletes what the stairs failed to tie in, so a cavern
+	 * that no stair reached stopped being walkable and stopped counting
+	 * against the audit. A world that quietly turns 44% of its bottom level
+	 * back into rock is perfectly connected by that measure.
+	 *
+	 * <p>So this counts caverns rather than tiles, and asks two things of each
+	 * seed that the tile audit cannot: that the underdark is linked in many
+	 * places rather than one or two, and that having a way out is the rule
+	 * among its caverns rather than the exception. Both fail on the two random
+	 * darts this replaced — five seeds gave 2, 1, 3, 2 and 2 linked caverns
+	 * where they now give 8, 7, 5, 7 and 7.
+	 *
+	 * <p>A ramp is what counts, deliberately, and a hole is not: the ravine
+	 * drops through to the underdark, which makes a cavern reachable and
+	 * therefore safe from the reseal while still being a place a body falls
+	 * into and starves. That is the trap {@link
+	 * net.hedinger.prototype.sim.Worlds#linkDeepCaverns} exists to prevent,
+	 * and only a stair prevents it.
+	 */
+	static class EveryCavernHasAStairOutOfIt extends Scenario {
+		/** Below this a cavern is a pocket, not a room, and worldgen leaves it
+		 *  to the reseal — the same floor Worlds uses to decide. */
+		private static final int WORTH_A_STAIR = 20;
+
+		@Override
+		public void run() {
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int cols = w.getColums(), rows = w.getRows();
+				boolean[][] seen = new boolean[cols][rows];
+				int withStair = 0, without = 0;
+				for (int x = 0; x < cols; x++) {
+					for (int y = 0; y < rows; y++) {
+						if (seen[x][y] || !w.getTile(x, y, 0).isWalkable()) {
+							continue;
+						}
+						int size = 0;
+						boolean stair = false;
+						java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
+						q.add(new int[] { x, y });
+						seen[x][y] = true;
+						while (!q.isEmpty()) {
+							int[] p = q.poll();
+							size++;
+							Tile.TileType t = w.getTile(p[0], p[1], 0).getType();
+							if (t == Tile.TileType.TYPE_RAMPUP
+									|| t == Tile.TileType.TYPE_RAMPDOWN) {
+								stair = true;
+							}
+							int[][] card = { { p[0] + 1, p[1] }, { p[0] - 1, p[1] },
+									{ p[0], p[1] + 1 }, { p[0], p[1] - 1 } };
+							for (int[] n : card) {
+								if (n[0] >= 0 && n[1] >= 0 && n[0] < cols && n[1] < rows
+										&& !seen[n[0]][n[1]]
+										&& w.getTile(n[0], n[1], 0).isWalkable()) {
+									seen[n[0]][n[1]] = true;
+									q.add(n);
+								}
+							}
+						}
+						if (size >= WORTH_A_STAIR) {
+							if (stair) {
+								withStair++;
+							} else {
+								without++;
+							}
+						}
+					}
+				}
+				assertGreater("seed " + s + ": the underdark is linked in many places"
+						+ " (" + withStair + " caverns with a stair)", withStair, 4);
+				assertGreater("seed " + s + ": a way out is the rule, not the exception"
+						+ " (" + withStair + " with a stair, " + without + " without)",
+						withStair, without);
+			}
+		}
+	}
+
 	static class DemoWorldFullyConnected extends Scenario {
 		@Override
 		public void run() {
@@ -9667,6 +9759,7 @@ public class SimTests {
 	static Scenario[] all() { // package: RecordScenario replays these by name
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
+				new EveryCavernHasAStairOutOfIt(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),
