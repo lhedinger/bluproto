@@ -1588,7 +1588,7 @@ public final class Worlds {
 				int bestX = -1, bestY = -1;
 				long best = Long.MAX_VALUE;
 				for (int[] p : cavern) {
-					if (!stairwellFits(w, p[0], p[1])) {
+					if (!stairwellFits(w, cols, rows, p[0], p[1])) {
 						continue;
 					}
 					long d = (p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy);
@@ -1650,8 +1650,11 @@ public final class Worlds {
 	 * not open through a wall or into a lake, and carved cavern floor below for
 	 * the landing and the climb.
 	 */
-	private static boolean stairwellFits(World w, int bx, int by) {
-		if (bx < 4 || by < 4 || bx >= COLS - 8 || by >= ROWS - 4) {
+	private static boolean stairwellFits(World w, int cols, int rows, int bx, int by) {
+		// The world's own size, not COLS/ROWS: demoTerrain builds 72x44 and
+		// 96x120 too, and the constants would wave the scan off the east edge
+		// of the small one and refuse the bottom third of the tall one.
+		if (bx < 4 || by < 4 || bx >= cols - 8 || by >= rows - 4) {
 			return false;
 		}
 		for (int dx = -1; dx <= 4; dx++) {
