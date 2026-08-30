@@ -949,10 +949,19 @@ public class SimTests {
 					w.getSurfaceZ(), surface);
 
 			// Down-link: a walker on a surface hole falls into the cave, not the void.
+			//
+			// The hole has to be one with a FLOOR under it. The gorge is cut
+			// through two storeys on purpose — surface and cave both — so a body
+			// that steps into it falls twice, correctly, and lands on the deep
+			// level. That is the feature working, not the link failing. Taking
+			// the first hole in scan order tested whichever kind the scan met
+			// first, which held only until the random stream shifted and handed
+			// it a gorge tile.
 			int hx = -1, hy = -1;
 			for (int x = 0; x < cols && hx < 0; x++) {
 				for (int y = 0; y < rows; y++) {
-					if (w.getTile(x, y, surface).getType() == HOLE) {
+					if (w.getTile(x, y, surface).getType() == HOLE
+							&& !w.getTile(x, y, surface - 1).isDrop()) {
 						hx = x;
 						hy = y;
 						break;
