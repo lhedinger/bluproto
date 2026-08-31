@@ -180,6 +180,7 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['sprites', 'creature sprites (off = dots)'],
   ['overlay', 'badges, rings & links'],
   ['minimap', 'minimap'],
+  ['parallax', 'below-floor parallax slide'],
   ['gl', 'webgl renderer (off = canvas2d)'],
 ];
 /**
