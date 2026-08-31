@@ -333,7 +333,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 	/** Spawns one minded parasite, under the same survivor-seeding as the rest
 	 *  of the cohort, on the surface where the herds are. */
 	private void seedParasite() {
-		Genome g = Worlds.mindedReseedGenome(getWorld());
+		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PARASITE);
 		double x = cols / 2.0, y = rows / 2.0;
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);
@@ -363,7 +363,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  creature alive where there is one (same survivor-seeding as the rest of the
 	 *  cohort), on the surface where the bodies mostly fall. */
 	private void seedScavenger() {
-		Genome g = Worlds.mindedReseedGenome(getWorld());
+		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.SCAVENGER);
 		double x = cols / 2.0, y = rows / 2.0;
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);
@@ -404,7 +404,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  creature currently alive (a mutated child, inheriting its brain); only a
 	 *  wiped-out cohort falls back to a fresh random lineage. */
 	private void seedMinded() {
-		Genome g = Worlds.mindedReseedGenome(getWorld());
+		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.HERBIVORE);
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
 		seedBelow = !seedBelow;
 		double x = cols / 2.0, y = rows / 2.0;

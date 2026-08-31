@@ -4848,7 +4848,7 @@ public class SimTests {
 			World w = room(20, 20);
 
 			// Empty cohort: the reseed falls back to a fresh random-brained genome.
-			Genome fresh = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			Genome fresh = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
 			assertTrue("a wiped-out cohort reseeds a fresh random-brained genome", fresh.brain != null);
 
 			// An older survivor (distinctive red-ish markers), then a younger one
@@ -4866,7 +4866,7 @@ public class SimTests {
 
 			// The reseed descends from the OLDER survivor: its markers track the
 			// red-ish lineage (mutated by <= the 0.08 rate), not the green-ish one.
-			Genome reseed = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			Genome reseed = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
 			assertTrue("the reseed inherits a brain (not a brain-less body)", reseed.brain != null);
 			assertLess("reseed marker 0 tracks the longest-lived survivor's",
 					Math.abs(reseed.markers[0] - 0.90), 0.2);
@@ -4874,6 +4874,100 @@ public class SimTests {
 					Math.abs(reseed.markers[1] - 0.10), 0.2);
 			assertGreater("the reseed did NOT descend from the younger survivor",
 					Math.abs(reseed.markers[1] - 0.90), 0.3);
+		}
+	}
+
+	/**
+	 * A reseed descends from its OWN clade's champion, not the world's.
+	 *
+	 * <p>All three minded seeders — forager, scavenger, parasite — used to call one
+	 * global argmax over every minded body alive, so whichever happened to be
+	 * oldest parented every reseed in the world. Measured over 100k ticks of the
+	 * live world that was a HERBIVORE, which means every scavenger and parasite
+	 * spawned in that time was handed a grazing brain with a different clade
+	 * stamped on top. The trait that kept the champion alive was competence at
+	 * grass; for a body whose food is carcasses that is not a qualification.
+	 *
+	 * <p>The mix was an accident of build order rather than a decision: when the
+	 * reseed was written "minded" was one cohort, the other clades were added to it
+	 * later, and {@code Genome.Clade} arrived after all of them.
+	 *
+	 * <p>The older survivor here is deliberately the herbivore, so a reseed that
+	 * still consulted the global champion would take its markers and fail. The
+	 * extinct-clade case is the other half: a clade with no survivors must restart
+	 * from a founder rather than borrow the herbivore, since borrowing is the whole
+	 * behaviour being removed. Mutation moves a marker by at most the 0.08 reseed
+	 * rate, so anything further than that from the grazer's 0.90 provably is not
+	 * its child.
+	 */
+	static class AReseedDescendsFromItsOwnClade extends Scenario {
+		private static final double[] GRAZER_MARKERS = { 0.90, 0.10, 0.10 };
+		private static final double[] SCAVENGER_MARKERS = { 0.10, 0.90, 0.10 };
+		/** The reseed's mutation rate; a marker moves by at most this per step. */
+		private static final double RESEED_RATE = 0.08;
+
+		private static Genome mindedWith(double[] m) {
+			Genome g = new Genome();
+			g.markers = m.clone();
+			g.size = 10;
+			g.speed = 0.05;
+			g.brain = Brain.random(16);
+			return g;
+		}
+
+		/**
+		 * Whether {@code g} could be a reseed child of a parent with these markers.
+		 * Mutation is additive and bounded by the rate, so a genuine child differs
+		 * on EVERY marker by at most that — which makes this a real test of
+		 * parentage rather than a distance that a stray founder can wander into.
+		 * The first cut of this scenario compared one marker and failed exactly
+		 * that way: a founder's random markers landed 0.061 from the grazer's, and
+		 * "far from the herbivore" could not tell that from descent.
+		 */
+		private static boolean couldBeChildOf(Genome g, double[] parent) {
+			for (int i = 0; i < parent.length; i++) {
+				if (Math.abs(g.markers[i] - parent[i]) > RESEED_RATE) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		@Override
+		public void run() {
+			seed(91);
+			World w = room(20, 20);
+
+			TestNPC grazer = TestNPC.mindedForager(5.5, 5.5, 0, mindedWith(GRAZER_MARKERS));
+			w.spawnEntity(grazer);
+			tick(w, 200); // the herbivore banks the age that used to win it everything
+			TestNPC eater = TestNPC.mindedScavenger(14.5, 14.5, 0, mindedWith(SCAVENGER_MARKERS));
+			w.spawnEntity(eater);
+			tick(w, 5);
+
+			assertTrue("both survivors are alive to seed from",
+					!grazer.isDead() && !grazer.isRemoved()
+							&& !eater.isDead() && !eater.isRemoved());
+			assertGreater("the older of the two really is the herbivore",
+					grazer.getAge(), eater.getAge());
+
+			Genome scav = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
+					w, Genome.Clade.SCAVENGER);
+			assertTrue("a scavenger reseed is a child of the scavenger",
+					couldBeChildOf(scav, SCAVENGER_MARKERS));
+			assertTrue("a scavenger reseed is NOT a child of the older herbivore",
+					!couldBeChildOf(scav, GRAZER_MARKERS));
+
+			Genome herb = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
+					w, Genome.Clade.HERBIVORE);
+			assertTrue("a herbivore reseed is still a child of the herbivore",
+					couldBeChildOf(herb, GRAZER_MARKERS));
+
+			Genome para = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
+					w, Genome.Clade.PARASITE);
+			assertTrue("an extinct clade still reseeds a brained genome", para.brain != null);
+			assertTrue("an extinct clade restarts from a founder, not the herbivore",
+					!couldBeChildOf(para, GRAZER_MARKERS));
 		}
 	}
 
@@ -4906,7 +5000,7 @@ public class SimTests {
 			tick(w, 1); // advance the clock so vegetation is defined
 			// A fresh starter-brained genome (empty cohort -> mindedReseedGenome yields
 			// the founder starter), on a body in the usual size band.
-			Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w);
+			Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
 			// Suppress breeding so we test one forager feeding itself, not a cohort:
 			// the starter mates whenever able, which in an unbounded room (no steward
 			// ceiling) would explode and overgraze. The live world's minded cap
@@ -10098,6 +10192,7 @@ public class SimTests {
 				new MindedBodyUnsticksFromWallJam(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
+				new AReseedDescendsFromItsOwnClade(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),

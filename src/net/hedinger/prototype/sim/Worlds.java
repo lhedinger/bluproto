@@ -226,25 +226,47 @@ public final class Worlds {
 	}
 
 	/**
-	 * The genome for the steward's next minded reseed, under survivor-seeding: a
-	 * mutated child of the longest-lived minded creature currently alive. Living
-	 * longest <em>is</em> the fitness — a metabolic creature that can't feed itself
-	 * starves, so the oldest one alive is the one coping best — so the cohort's
-	 * reseeds descend from the current survival champion and inherit its (mutated)
-	 * brain, rather than starting from scratch each death. Falls back to a fresh
-	 * random genome only when the whole cohort has died out, so a total wipe can't
-	 * stall on nothing to copy.
+	 * The genome for the steward's next minded reseed of one clade, under
+	 * survivor-seeding: a mutated child of the longest-lived creature of THAT
+	 * clade currently alive. Living longest <em>is</em> the fitness — a metabolic
+	 * creature that can't feed itself starves, so the oldest one alive is the one
+	 * coping best — so a lineage's reseeds descend from its own survival champion
+	 * and inherit its (mutated) brain, rather than starting from scratch each
+	 * death.
+	 *
+	 * <p>The clade used to be no part of this, and that was an accident of build
+	 * order rather than a decision: when this was written "minded" was a single
+	 * cohort, so one champion for it was the whole story. Scavengers were then
+	 * added as a variant of that cohort and reused this as-is, parasites followed,
+	 * and {@link net.hedinger.prototype.entities.Genome.Clade} — the concept that
+	 * would have separated them — only arrived afterwards. Nothing revisited who
+	 * the reseeds descend from.
+	 *
+	 * <p>What it cost is not subtle. All three minded seeders drew from one global
+	 * argmax, so whichever body happened to be oldest parented every reseed in the
+	 * world: measured over 100k ticks of the live world the champion was a
+	 * HERBIVORE, and every scavenger and parasite spawned in that time was handed
+	 * its grazing brain with a different clade stamped on top. A scavenger reseed
+	 * inheriting a forager's mind is not survivor-seeding at all — the trait that
+	 * kept the champion alive was competence at grass, which is not the job.
+	 *
+	 * <p>So a clade seeds from its own. When a clade has no survivors it restarts
+	 * from a founder rather than borrowing another clade's champion: a fresh
+	 * starter brain is a worse mind than a proven one but an honest ancestor for
+	 * the role, and borrowing is exactly the mixing this exists to stop.
 	 */
-	public static net.hedinger.prototype.entities.Genome mindedReseedGenome(World w) {
+	public static net.hedinger.prototype.entities.Genome mindedReseedGenome(World w,
+			net.hedinger.prototype.entities.Genome.Clade clade) {
 		TestNPC best = null;
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (e instanceof TestNPC t && t.isMinded() && !t.isDead() && !t.isRemoved()
-					&& t.getGenome() != null && (best == null || t.getAge() > best.getAge())) {
+					&& t.getGenome() != null && t.getGenome().clade == clade
+					&& (best == null || t.getAge() > best.getAge())) {
 				best = t;
 			}
 		}
 		if (best == null) {
-			return mindedGenome(); // cohort wiped out: start a fresh random lineage
+			return mindedGenome(); // this clade is gone: restart its line from a founder
 		}
 		return net.hedinger.prototype.entities.Genome.child(best.getGenome(), 0.08); // inherit + mutate
 	}
