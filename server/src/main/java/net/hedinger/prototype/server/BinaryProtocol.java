@@ -70,11 +70,15 @@ final class BinaryProtocol {
 	 * that ramped in ({@code prevZ} says they were elsewhere).
 	 */
 	static byte[] delta(long tick, List<EntityState> upsert, List<Integer> gone, int total,
-			Map<Integer, Integer> prevZ, int level) {
+			Map<Integer, Integer> prevZ, java.util.Set<Integer> watched) {
+		// A body is a BIRTH to this stream when its previous level was not
+		// among the levels the viewer watches — brand new, or walked in from
+		// a floor outside the subscription. With the floor-below cohort in
+		// the stream, "watched" is a set rather than the one level it was.
 		List<EntityState> births = new ArrayList<>();
 		for (EntityState e : upsert) {
 			Integer was = prevZ.get(e.id());
-			if (was == null || was != level) {
+			if (was == null || !watched.contains(was)) {
 				births.add(e);
 			}
 		}
