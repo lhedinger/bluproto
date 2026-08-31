@@ -98,6 +98,7 @@ final class WorldHost {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
 		popHistory = java.util.List.of(); // a new world starts its own series
+		linHistory = java.util.List.of(); // both lenses: old lineages are not this world's
 		boolean mesa = "blackmesa".equals(worldKind);
 		boolean sized = !mesa && worldCols > 0 && worldRows > 0; // the campus is authored at its own size
 		SimulationRunner r = new SimulationRunner(mesa
