@@ -357,9 +357,21 @@ public final class ServerTests {
 		for (int t = 0; t < 1000; t++) {
 			w.think();
 		}
+		// One guaranteed death. Whether a small world's thousand ticks happen to
+		// bury anyone is the random stream's business — an assertion on it broke
+		// the day an unrelated change shifted the stream and the interval came
+		// out quiet. Killing one body ourselves makes the died-flow (and, read
+		// backwards, the born-flow) a certainty instead of a bet.
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
+					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null) {
+				t.kill();
+				break;
+			}
+		}
 		WorldHost.StageSnap b = WorldHost.stageOf(w, 1000);
-		check("the interval did something (" + a.ids().length + " -> " + b.ids().length
-				+ " heads)", a.ids().length > 0 && b.ids().length > 0);
+		check("the interval has heads on both sides (" + a.ids().length + " -> "
+				+ b.ids().length + ")", a.ids().length > 0 && b.ids().length > 0);
 
 		java.util.Map<String, Integer> flows = WorldHost.flowsBetween(a, b);
 		java.util.TreeMap<String, Integer> outOf = new java.util.TreeMap<String, Integer>();
@@ -384,8 +396,15 @@ public final class ServerTests {
 				outOf.equals(beforeCounts));
 		check("every species' inflows sum to its later count",
 				into.equals(afterCounts));
-		check("a thousand ticks bred and buried somebody (born " + born
-				+ ", died " + died + ")", born > 0 || died > 0);
+		check("the kill shows as a died-flow (born " + born + ", died " + died + ")",
+				died >= 1);
+		// The same diff read backwards classifies that body as born — both open
+		// ends of the flow arithmetic exercised from one deterministic event.
+		boolean reverseBorn = false;
+		for (String k : WorldHost.flowsBetween(b, a).keySet()) {
+			reverseBorn |= k.startsWith("born->");
+		}
+		check("read backwards, it is a born-flow", reverseBorn);
 
 		// And an id that never moved is a continuation, not a birth plus a
 		// death: diffing a stage against itself must be pure self-flows.
