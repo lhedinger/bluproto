@@ -287,6 +287,73 @@ public class World {
 	 * @return if entity was spawned successfully
 	 */
 
+	// ---- the birth registry ------------------------------------------------
+	//
+	// Who came from whom. Ancestry is a fact that exists for exactly one tick —
+	// the tick a child is spawned, while both parents are known — and then it
+	// is gone unless somebody writes it down; no walk of the living can ever
+	// recover it, which is why the lineage Sankey can show flows between
+	// species but not a single creature's family line. Recorded here, by the
+	// breeding code, at the moment it is true.
+	//
+	// The registry is bounded: the oldest record is dropped past the cap, so a
+	// long-lived world's memory of its earliest families fades rather than
+	// growing without limit. A chain walked past the horizon ends with "records
+	// fade here", which is the truth.
+
+	/** One birth: who, from whom (parentB -1 for an asexual birth, both -1
+	 *  never — a spawn with no parents writes no record), when, and what the
+	 *  child was at birth. The species is stored because it is the one fact
+	 *  that can change afterwards: markers drift, and the label a creature
+	 *  DIED under is not always the one it was born under. */
+	public record Birth(int child, int parentA, int parentB, long tick, int generation,
+			String species) { }
+
+	/** How many births the world remembers. At the demo world's birth rate this
+	 *  is weeks of ancestry; the cap exists so it is not "forever". */
+	@Unit("births")
+	public static final int BIRTHS_KEPT = 100_000;
+
+	private final java.util.LinkedHashMap<Integer, Birth> births =
+			new java.util.LinkedHashMap<Integer, Birth>(1024, 0.75f, false) {
+				@Override
+				protected boolean removeEldestEntry(java.util.Map.Entry<Integer, Birth> e) {
+					return size() > BIRTHS_KEPT;
+				}
+			};
+
+	/** Writes one birth down. Called by the breeding code AFTER the child is
+	 *  spawned (ids are assigned at spawn). Pure bookkeeping: no RNG, no
+	 *  effect on the sim — the world just gains a memory. */
+	public void recordBirth(int child, int parentA, int parentB, int generation, String species) {
+		synchronized (births) {
+			births.put(child, new Birth(child, parentA, parentB, getTick(), generation, species));
+		}
+	}
+
+	/** The birth record of {@code id}, or null: never born (world-seeded, or a
+	 *  steward reseed), or the record has aged out of the registry. */
+	public Birth birthOf(int id) {
+		synchronized (births) {
+			return births.get(id);
+		}
+	}
+
+	/** Every remembered child of {@code id}, oldest first. A scan, on purpose:
+	 *  it runs when a viewer opens one creature's lineage, not per tick, and a
+	 *  second index would be a second thing that can disagree. */
+	public java.util.List<Birth> childrenOf(int id) {
+		java.util.ArrayList<Birth> out = new java.util.ArrayList<Birth>();
+		synchronized (births) {
+			for (Birth b : births.values()) {
+				if (b.parentA() == id || b.parentB() == id) {
+					out.add(b);
+				}
+			}
+		}
+		return out;
+	}
+
 	public boolean spawnEntity(Entity e) {
 		if (e == null) {
 			return false;

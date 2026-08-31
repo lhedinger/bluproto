@@ -2031,6 +2031,25 @@ public abstract class NPC extends Entity {
 		return null;
 	}
 
+	/** Writes the child's ancestry into the world's birth registry — AFTER the
+	 *  spawn, because ids are assigned there. This is the only tick on which
+	 *  "who came from whom" is knowable at all; see World.recordBirth. A spawn
+	 *  that failed (id still -1) writes nothing: there is no child to remember. */
+	private void noteBirth(NPC child, NPC a, NPC b) {
+		if (child.getID() == -1 || child.getGenome() == null) {
+			return;
+		}
+		getWorld().recordBirth(child.getID(),
+				a != null ? a.getID() : -1, b != null ? b.getID() : -1,
+				child.generation(), Species.of(child.getGenome()).key());
+	}
+
+	/** This body's lineage depth: 0 for a world-seeded creature, a child is one
+	 *  past its parent. Overridden where breeding actually tracks it. */
+	public int generation() {
+		return 0;
+	}
+
 	/** Tick of {@code age} the current budding hold began, or -1 when idle. */
 	private long breedHoldStart = -1;
 	/** The last {@code age} at which budding was attempted, to detect breaks. */
@@ -2065,6 +2084,7 @@ public abstract class NPC extends Entity {
 		reproCooldown = reproCooldownTicks();
 		breedHoldStart = -1;
 		getWorld().spawnEntity(child);
+		noteBirth(child, this, null);
 		return true;
 	}
 
@@ -2138,6 +2158,7 @@ public abstract class NPC extends Entity {
 		reproCooldown = reproCooldownTicks();
 		partner.reproCooldown = partner.reproCooldownTicks();
 		getWorld().spawnEntity(child);
+		noteBirth(child, this, partner);
 		return true;
 	}
 

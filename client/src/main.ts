@@ -654,10 +654,51 @@ function renderInspectSimple(d: Record<string, any>): void {
   showInspect();
 }
 
-// Debug context: everything the server will tell us, grouped and scrollable.
+// Debug context: the whole creature, as a full-screen panel of three tabs —
+// attributes (identity + status), genome, and lineage (its family line, from
+// the world's birth registry). The tab survives re-polls and re-selection, so
+// a viewer walking a family tree stays on the lineage tab from body to body.
+let inspectTab: 'attributes' | 'genome' | 'lineage' = 'attributes';
+let inspectDetail: Record<string, any> | null = null;
+let lineageData: Record<string, any> | null = null;
+let lineageFor = -1; // which entity lineageData describes
+
 function renderInspectDebug(d: Record<string, any>): void {
+  inspectDetail = d;
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const name = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
+  const tabs = (['attributes', 'genome', 'lineage'] as const).map(t =>
+    `<button data-tab="${t}" class="${t === inspectTab ? 'on' : ''}">${t}</button>`).join('');
+  let body = '';
+  if (inspectTab === 'attributes') body = attributesTab(d);
+  else if (inspectTab === 'genome') body = genomeTab(d);
+  else body = lineageTab(d);
+  const keep = inspectEl.classList.contains('halfsize') ? ' halfsize' : '';
+  inspectEl.className = 'dbg' + keep;
+  inspectEl.innerHTML = header(swatch, name, d.id, true)
+      + `<div class="tabs">${tabs}</div>` + body;
+  showInspect();
+  const sz = inspectEl.querySelector('[data-size]');
+  if (sz) sz.addEventListener('click', () => {
+    const half = inspectEl.classList.toggle('halfsize');
+    sz.textContent = half ? '⛶' : '⊟';
+    (sz as HTMLElement).title = half ? 'full screen' : 'half screen';
+  });
+  inspectEl.querySelectorAll('.tabs button').forEach(b =>
+    b.addEventListener('click', () => {
+      inspectTab = (b as HTMLElement).dataset.tab as typeof inspectTab;
+      if (inspectDetail) renderInspectDebug(inspectDetail);
+    }));
+  const ml = inspectEl.querySelector('.mindlink');
+  if (ml) ml.addEventListener('click', openMind);
+  // Any lineage node that is still in the world can be walked to: tapping it
+  // selects that body, and the tab stays on lineage — the tree is a path.
+  inspectEl.querySelectorAll('.lin .node.link').forEach(n =>
+    n.addEventListener('click', () =>
+      select(Number((n as HTMLElement).dataset.id), true)));
+}
+
+function attributesTab(d: Record<string, any>): string {
   const identity = [
     row('kind', d.kind),
     d.subtype ? row('subtype', d.subtype) : '',
@@ -670,8 +711,8 @@ function renderInspectDebug(d: Record<string, any>): void {
   status.push(row('age', d.age));
   // The four books (VITALS.md): health the life gate, energy the action
   // budget, hunger and thirst the needs that rise between meals and drinks.
-  // Inverted into satisfactions the same way the entity card does it, so the two
-  // panels never disagree about which way is up.
+  // Inverted into satisfactions the same way the entity card does it, so the
+  // two panels never disagree about which way is up.
   status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
@@ -692,34 +733,98 @@ function renderInspectDebug(d: Record<string, any>): void {
   if ('wiredTo' in d) status.push(row('wired to', `#${d.wiredTo}`));
   if ('strength' in d) status.push(row('strength', d.strength));
   if ('broods' in d) status.push(row('broods', d.broods));
-  const sections = [group('identity', identity), group('status', status)];
-  const gm = d.genome;
-  if (gm) {
-    sections.push(group('genome', [
-      row('size', gm.size), row('speed', gm.speed), row('turnRate', gm.turnRate),
-      row('los', `${gm.losRange} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
-      row('metabolism', gm.metabolism), row('maxAge', gm.maxAge),
-      row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')),
-      row('predatory', gm.predatory), row('xenophobia', gm.xenophobia),
-      row('gregarious', gm.gregariousness), row('boldness', gm.boldness),
-      row('mateThresh', gm.mateThreshold),
-      row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
-    ]));
-  }
-  // A doorway to the second inspector: the creature's evolvable program itself.
-  const mindlink = gm?.hasBrain
-    ? '<div class="mindlink" role="button">🧠 inspect mind →</div>'
-    : '';
-  inspectEl.className = 'dbg';
-  inspectEl.innerHTML = header(swatch, name, d.id) + sections.join('') + mindlink;
-  showInspect();
-  const ml = inspectEl.querySelector('.mindlink');
-  if (ml) ml.addEventListener('click', openMind);
+  return group('identity', identity) + group('status', status);
 }
 
-function header(swatch: number, label: string, id: unknown): string {
+function genomeTab(d: Record<string, any>): string {
+  const gm = d.genome;
+  if (!gm) return '<div class="lin end">no genome — this body was built, not born</div>';
+  const rows = group('genome', [
+    row('size', gm.size), row('speed', gm.speed), row('turnRate', gm.turnRate),
+    row('los', `${gm.losRange} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
+    row('metabolism', gm.metabolism), row('maxAge', gm.maxAge),
+    row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')),
+    row('predatory', gm.predatory), row('xenophobia', gm.xenophobia),
+    row('gregarious', gm.gregariousness), row('boldness', gm.boldness),
+    row('mateThresh', gm.mateThreshold),
+    row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
+  ]);
+  // A doorway to the second inspector: the creature's evolvable program itself.
+  const mindlink = gm.hasBrain
+    ? '<div class="mindlink" role="button">🧠 inspect mind →</div>'
+    : '';
+  return rows + mindlink;
+}
+
+/** The family line. Everything here is the world's birth registry speaking:
+ *  ancestry exists only because it was written down at each birth, so a chain
+ *  ends either at a true root (world-seeded, or the steward reseeding a
+ *  wiped-out niche) or where the registry's memory fades. */
+function lineageTab(d: Record<string, any>): string {
+  if (lineageFor !== d.id) {
+    lineageFor = d.id;
+    lineageData = null;
+    fetch(`/api/world/lineage/${d.id}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        if (j && lineageFor === d.id) {
+          lineageData = j;
+          if (inspectTab === 'lineage' && inspectDetail?.id === d.id) {
+            renderInspectDebug(inspectDetail!);
+          }
+        }
+      })
+      .catch(() => { /* the tab just keeps saying tracing */ });
+  }
+  const L = lineageData;
+  if (!L) return '<div class="lin end">tracing…</div>';
+  const out: string[] = ['<div class="lin">'];
+  const chain = L.chain as Array<Record<string, any>>;
+  chain.forEach((n2, i) => {
+    out.push(linNode(n2, i === 0 ? '●' : '↑', i === 0 ? 'this creature'
+        : i === 1 ? 'parent' : 'grand'.repeat(i - 1) + 'parent', L.tick));
+    if (n2.with !== undefined) {
+      out.push(`<div class="lin end">— with mate #${n2.with}</div>`);
+    }
+  });
+  out.push(`<div class="end">${L.rooted
+    ? 'first of its line — world-seeded, or a niche reseeded'
+    : 'records fade here'}</div>`);
+  const kids = L.children as Array<Record<string, any>>;
+  out.push(group('children' + (kids.length ? ` (${kids.length})` : ''), []));
+  if (!kids.length) {
+    out.push('<div class="end">none remembered</div>');
+  }
+  for (const k of kids) out.push(linNode(k, '↓', 'child', L.tick));
+  out.push('</div>');
+  return out.join('');
+}
+
+/** One lineage row: swatch, species, id, generation, age-at/born, status.
+ *  Alive and dead-but-present bodies are tappable — the walkable tree. */
+function linNode(n2: Record<string, any>, glyph: string, rel: string, nowTick: number): string {
+  const alive = n2.status === 'alive';
+  const present = n2.status !== 'gone';
+  const sw = `<span class="sw" style="background:#${Number(n2.rgb).toString(16).padStart(6, '0')}"></span>`;
+  const born = n2.born >= 0 && hello
+    ? `born ${fmtSpan((nowTick - n2.born) / (popData?.tps ?? 33))} ago` : '';
+  const gen = n2.generation >= 0 ? `gen ${n2.generation}` : '';
+  const meta = [gen, born, alive ? '' : n2.status].filter(Boolean).join(' · ');
+  return `<div class="node${present ? ' link' : ''}${alive ? '' : ' dead'}"`
+    + (present ? ` data-id="${n2.id}"` : '')
+    + `><span class="up">${glyph}</span>${sw}`
+    + `<span class="who">${rel} — ${String(n2.species).replace('/', ' · ')} `
+    + `<span class="mono">#${n2.id}</span></span>`
+    + `<span class="meta">${meta}</span></div>`;
+}
+
+function header(swatch: number, label: string, id: unknown, sizer = false): string {
+  // The ⊟ appears only on the debug panel: the plain card has no sizes to swap.
+  // Its own class, NOT "x": the close wiring grabs the first ".x" it finds,
+  // and a size toggle that closes the panel would be a trap.
+  const sz = sizer ? '<span class="szbtn" data-size title="half screen">⊟</span>' : '';
   return `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `${label} <span class="mono">#${id}</span><span class="x">✕</span></h3>`;
+    `${label} <span class="mono">#${id}</span>${sz}<span class="x"${sizer ? ' style="margin-left:8px"' : ''}>✕</span></h3>`;
 }
 function group(title: string, rows: string[]): string {
   const body = rows.filter(Boolean).join('');
