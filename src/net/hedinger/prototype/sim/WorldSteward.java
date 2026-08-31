@@ -330,8 +330,10 @@ public final class WorldSteward extends Entity implements CullOrders {
 		return false;
 	}
 
-	/** Spawns one minded parasite, under the same survivor-seeding as the rest
-	 *  of the cohort, on the surface where the herds are. */
+	/** Spawns one minded parasite on the surface where the herds are. Its genome
+	 *  comes from the parasite line's own reseed mix — see
+	 *  {@link Worlds#mindedReseedGenome}, which is the one place that describes
+	 *  what the mix is. */
 	private void seedParasite() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PARASITE);
 		double x = cols / 2.0, y = rows / 2.0;
@@ -359,9 +361,9 @@ public final class WorldSteward extends Entity implements CullOrders {
 		return false;
 	}
 
-	/** Spawns one minded scavenger, descending from the longest-lived minded
-	 *  creature alive where there is one (same survivor-seeding as the rest of the
-	 *  cohort), on the surface where the bodies mostly fall. */
+	/** Spawns one minded scavenger on the surface where the bodies mostly fall.
+	 *  Its genome comes from the scavenger line's own reseed mix — see
+	 *  {@link Worlds#mindedReseedGenome}. */
 	private void seedScavenger() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.SCAVENGER);
 		double x = cols / 2.0, y = rows / 2.0;
@@ -397,12 +399,17 @@ public final class WorldSteward extends Entity implements CullOrders {
 		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Spawns one minded creature at a random open tile. Reseeds alternate
+	/** Spawns one minded herbivore at a random open tile. Reseeds alternate
 	 *  between the surface and the underground (when the world has one), so the
-	 *  cave cohort persists instead of draining one-way to the surface. Under
-	 *  survivor-seeding the newcomer descends from the longest-lived minded
-	 *  creature currently alive (a mutated child, inheriting its brain); only a
-	 *  wiped-out cohort falls back to a fresh random lineage. */
+	 *  cave cohort persists instead of draining one-way to the surface. Its genome
+	 *  comes from the herbivore line's own reseed mix — see
+	 *  {@link Worlds#mindedReseedGenome}.
+	 *
+	 *  <p>This used to restate the seeding rule here, and both halves of the
+	 *  restatement went stale the moment the rule changed: it named the
+	 *  longest-lived minded creature of ANY clade, and it said a founder arrives
+	 *  only when the cohort is wiped out, when a founder is now a routine fifth of
+	 *  the mix. One description, in the method that implements it. */
 	private void seedMinded() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.HERBIVORE);
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
