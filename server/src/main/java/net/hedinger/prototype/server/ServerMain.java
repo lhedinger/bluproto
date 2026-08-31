@@ -563,7 +563,8 @@ public final class ServerMain {
 					if (cmd.equals("level")) {
 						// A view preference, not a mutation: read-only viewers
 						// switch levels too, so this sits before the token gate.
-						host.setViewerLevel(ctx, m.path("z").asInt(0));
+						host.setViewerLevel(ctx, m.path("z").asInt(0),
+								m.path("below").asBoolean(false));
 						return;
 					}
 					if (!token.isEmpty() && !token.equals(m.path("token").asText(""))) {

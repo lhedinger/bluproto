@@ -152,6 +152,19 @@ final class WorldHost {
 	private final java.util.concurrent.ConcurrentHashMap<WsContext, Integer> viewerLevel =
 			new java.util.concurrent.ConcurrentHashMap<>();
 
+	/** Viewers whose stream also carries the floor BELOW their level, so the
+	 *  client can render bodies moving under its pit mouths. Opt-in per
+	 *  viewer (the client's below toggle), because it roughly doubles the
+	 *  cohort a browser parses. */
+	private final java.util.Set<WsContext> viewerBelow =
+			java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** The levels a subscription watches: its own, plus the floor below when
+	 *  the viewer asked for it and one exists. */
+	private static java.util.Set<Integer> watchedOf(int z, boolean below) {
+		return below && z - 1 >= 0 ? java.util.Set.of(z, z - 1) : java.util.Set.of(z);
+	}
+
 	/** Viewers that connected with {@code ?bin=1}: their full/delta frames are
 	 *  {@link BinaryProtocol} bytes instead of JSON. The web client always opts
 	 *  in (it is served by this process, so the builds are in lockstep); plain
@@ -164,11 +177,13 @@ final class WorldHost {
 	}
 
 	private void sendFull(WsContext ctx, WorldSnapshot s, int z) {
+		var watched = watchedOf(z, viewerBelow.contains(ctx));
 		if (isBin(ctx)) {
 			ctx.send(java.nio.ByteBuffer.wrap(
-					BinaryProtocol.full(s.tick(), onLevel(s, z), s.entities().size())));
+					BinaryProtocol.full(s.tick(), onLevels(s, watched), s.entities().size())));
 		} else {
-			ctx.send(Protocol.write(Protocol.Full.of(s.tick(), onLevel(s, z), s.entities().size())));
+			ctx.send(Protocol.write(
+					Protocol.Full.of(s.tick(), onLevels(s, watched), s.entities().size())));
 		}
 	}
 
@@ -176,12 +191,13 @@ final class WorldHost {
 		return runner.world().getSurfaceZ();
 	}
 
-	/** Entities of the snapshot on one level (z rounds, matching the client). */
-	private static java.util.List<net.hedinger.prototype.sim.EntityState> onLevel(
-			WorldSnapshot s, int z) {
+	/** Entities of the snapshot on the watched levels (z rounds, matching the
+	 *  client): the viewer's own floor, plus the one below when subscribed. */
+	private static java.util.List<net.hedinger.prototype.sim.EntityState> onLevels(
+			WorldSnapshot s, java.util.Set<Integer> watched) {
 		java.util.List<net.hedinger.prototype.sim.EntityState> out = new java.util.ArrayList<>();
 		for (net.hedinger.prototype.sim.EntityState e : s.entities()) {
-			if ((int) Math.round(e.z()) == z) {
+			if (watched.contains((int) Math.round(e.z()))) {
 				out.add(e);
 			}
 		}
@@ -211,26 +227,42 @@ final class WorldHost {
 	void onClose(WsContext ctx) {
 		sessions.remove(ctx);
 		viewerLevel.remove(ctx);
+		viewerBelow.remove(ctx);
 		binViewers.remove(ctx);
 	}
 
-	/** A viewer switched levels: refilter its stream and resync it with a full
-	 *  snapshot of the new level (its old tracks are cleared by the full). */
-	void setViewerLevel(WsContext ctx, int z) {
+	/** A viewer switched levels (or its below preference): refilter its stream
+	 *  and resync it with a full snapshot (its old tracks are cleared by the
+	 *  full). */
+	void setViewerLevel(WsContext ctx, int z, boolean below) {
 		var w = runner.world();
 		int clamped = Math.max(0, Math.min(w.getLevels() - 1, z));
 		viewerLevel.put(ctx, clamped);
+		if (below) {
+			viewerBelow.add(ctx);
+		} else {
+			viewerBelow.remove(ctx);
+		}
 		synchronized (lock) {
 			sendFull(ctx, runner.snapshot(), clamped);
 		}
 	}
 
+	/** One viewer's subscription as a map key: level packed with the below
+	 *  flag, so two viewers on the same floor with different below settings
+	 *  get different (correct) frames. */
+	private int subKey(WsContext ctx) {
+		return (viewerLevel.getOrDefault(ctx, surfaceLevel()) << 1)
+				| (viewerBelow.contains(ctx) ? 1 : 0);
+	}
+
 	/** ~10 Hz: send what changed since the last broadcast to every viewer,
-	 *  filtered to the level each viewer watches. Messages are encoded once
-	 *  per DISTINCT level in use, not per viewer. */
+	 *  filtered to the levels each viewer watches. Messages are encoded once
+	 *  per DISTINCT subscription in use, not per viewer. */
 	private void broadcast() {
 		try {
-			// Encoded once per DISTINCT (level, format) in use, not per viewer.
+			// Encoded once per DISTINCT (level, below, format) in use, not per
+			// viewer: the key packs the level with the below flag.
 			java.util.Map<Integer, String> jsonByLevel = new java.util.HashMap<>();
 			java.util.Map<Integer, byte[]> binByLevel = new java.util.HashMap<>();
 			synchronized (lock) {
@@ -242,8 +274,7 @@ final class WorldHost {
 				java.util.Set<Integer> jsonLevels = new java.util.HashSet<>();
 				java.util.Set<Integer> binLevels = new java.util.HashSet<>();
 				for (WsContext ctx : sessions) {
-					int z = viewerLevel.getOrDefault(ctx, surfaceLevel());
-					(isBin(ctx) ? binLevels : jsonLevels).add(z);
+					(isBin(ctx) ? binLevels : jsonLevels).add(subKey(ctx));
 				}
 				java.util.Set<Integer> levels = new java.util.HashSet<>(jsonLevels);
 				levels.addAll(binLevels);
@@ -256,38 +287,41 @@ final class WorldHost {
 					prevZ.put(e.id(), (int) Math.round(e.z()));
 				}
 				if (forceFull) {
-					for (int z : levels) {
-						if (jsonLevels.contains(z)) {
-							jsonByLevel.put(z, Protocol.write(Protocol.Full.of(now.tick(), onLevel(now, z), total)));
+					for (int key : levels) {
+						var watched = watchedOf(key >> 1, (key & 1) != 0);
+						if (jsonLevels.contains(key)) {
+							jsonByLevel.put(key, Protocol.write(
+									Protocol.Full.of(now.tick(), onLevels(now, watched), total)));
 						}
-						if (binLevels.contains(z)) {
-							binByLevel.put(z, BinaryProtocol.full(now.tick(), onLevel(now, z), total));
+						if (binLevels.contains(key)) {
+							binByLevel.put(key, BinaryProtocol.full(now.tick(), onLevels(now, watched), total));
 						}
 					}
 					forceFull = false;
 				} else {
 					DeltaEncoder.Delta d = DeltaEncoder.diff(lastSent, now);
-					for (int z : levels) {
+					for (int key : levels) {
+						var watched = watchedOf(key >> 1, (key & 1) != 0);
 						java.util.List<net.hedinger.prototype.sim.EntityState> up = new java.util.ArrayList<>();
 						// gone-if-unknown is a no-op client-side, so globally
 						// vanished ids can go to every level unfiltered.
 						java.util.List<Integer> gone = new java.util.ArrayList<>(d.gone());
 						for (net.hedinger.prototype.sim.EntityState e : d.upsert()) {
 							int ez = (int) Math.round(e.z());
-							if (ez == z) {
+							if (watched.contains(ez)) {
 								up.add(e);
 							} else {
 								Integer was = prevZ.get(e.id());
-								if (was != null && was == z) {
-									gone.add(e.id()); // walked a ramp off this level
+								if (was != null && watched.contains(was)) {
+									gone.add(e.id()); // walked a ramp out of the watched floors
 								}
 							}
 						}
-						if (jsonLevels.contains(z)) {
-							jsonByLevel.put(z, Protocol.write(Protocol.Delta.of(now.tick(), up, gone, total)));
+						if (jsonLevels.contains(key)) {
+							jsonByLevel.put(key, Protocol.write(Protocol.Delta.of(now.tick(), up, gone, total)));
 						}
-						if (binLevels.contains(z)) {
-							binByLevel.put(z, BinaryProtocol.delta(now.tick(), up, gone, total, prevZ, z));
+						if (binLevels.contains(key)) {
+							binByLevel.put(key, BinaryProtocol.delta(now.tick(), up, gone, total, prevZ, watched));
 						}
 					}
 				}
@@ -297,14 +331,14 @@ final class WorldHost {
 				if (!ctx.session.isOpen()) {
 					continue;
 				}
-				int z = viewerLevel.getOrDefault(ctx, surfaceLevel());
+				int key = subKey(ctx);
 				if (isBin(ctx)) {
-					byte[] msg = binByLevel.get(z);
+					byte[] msg = binByLevel.get(key);
 					if (msg != null) {
 						ctx.send(java.nio.ByteBuffer.wrap(msg)); // wrap: fresh position per send
 					}
 				} else {
-					String msg = jsonByLevel.get(z);
+					String msg = jsonByLevel.get(key);
 					if (msg != null) {
 						ctx.send(msg);
 					}
