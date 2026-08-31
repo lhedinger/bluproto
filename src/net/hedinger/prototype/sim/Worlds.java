@@ -254,6 +254,20 @@ public final class Worlds {
 	 * from a founder rather than borrowing another clade's champion: a fresh
 	 * starter brain is a worse mind than a proven one but an honest ancestor for
 	 * the role, and borrowing is exactly the mixing this exists to stop.
+	 *
+	 * <p><b>The champion is a share of the reseeds, not all of them.</b> Copying
+	 * the single oldest survivor every time is the narrowest search there is: one
+	 * parent, one small step, and — because nothing ages out — an incumbent that
+	 * can only be displaced by dying rather than by being beaten. That ratchets a
+	 * cohort onto whatever first worked and holds it there. So a fifth of reseeds
+	 * come from the founder recipe instead, and another fifth from the champion at
+	 * {@link #WILD_RESEED_RATE}: the line keeps its incumbent most of the time, and
+	 * still gets a supply of genuinely different starting points to be beaten by.
+	 *
+	 * <p>The wild share is deliberately a big mutation of a working parent rather
+	 * than a fresh random mind. GENOME.md records what fully-random brains did when
+	 * they were tried: they never stumbled onto feeding, so selection had no
+	 * gradient to climb. Entropy is worth having; entropy that cannot eat is not.
 	 */
 	public static net.hedinger.prototype.entities.Genome mindedReseedGenome(World w,
 			net.hedinger.prototype.entities.Genome.Clade clade) {
@@ -266,9 +280,41 @@ public final class Worlds {
 			}
 		}
 		if (best == null) {
-			return mindedGenome(); // this clade is gone: restart its line from a founder
+			return founderReseed(); // this clade is gone: restart its line from a founder
 		}
-		return net.hedinger.prototype.entities.Genome.child(best.getGenome(), 0.08); // inherit + mutate
+		// The mix. Drawn before anything else is decided so the roll is one draw
+		// from the seeded stream whatever it selects, and the sim stays reproducible.
+		double roll = Utils.random();
+		if (roll < FOUNDER_SHARE) {
+			return founderReseed();
+		}
+		double rate = roll < FOUNDER_SHARE + WILD_SHARE ? WILD_RESEED_RATE : RESEED_RATE;
+		return net.hedinger.prototype.entities.Genome.child(best.getGenome(), rate);
+	}
+
+	/** How hard a routine reseed mutates its parent: the settled rate, a nudge. */
+	private static final double RESEED_RATE = 0.08;
+	/**
+	 * How hard a <em>wild</em> reseed mutates it — five times the nudge, which is a
+	 * jump rather than a step. Far enough to leave the champion's basin, near
+	 * enough to still be built on something that demonstrably feeds itself.
+	 */
+	private static final double WILD_RESEED_RATE = 0.4;
+	/** Share of reseeds that ignore the champion and start the line again from the
+	 *  founder recipe. */
+	private static final double FOUNDER_SHARE = 0.2;
+	/** Share that descend from the champion but at {@link #WILD_RESEED_RATE}. */
+	private static final double WILD_SHARE = 0.2;
+
+	/**
+	 * A founder-recipe genome for a reseed: exactly what the world seeds a minded
+	 * cohort with at tick zero — random dispositions and markers, a body inside the
+	 * sane band, and one of the two hand-written starter brains. The strategy is
+	 * drawn rather than fixed so the forager/hitch-hiker split arrives in roughly
+	 * the same one-in-three proportion the founding cohort has.
+	 */
+	private static net.hedinger.prototype.entities.Genome founderReseed() {
+		return mindedGenome((int) (Utils.random() * 3));
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
