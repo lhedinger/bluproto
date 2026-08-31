@@ -609,6 +609,21 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * The smallest body a hunting lineage founds at, in pixels — the mirror of the
+	 * parasite's size ceiling, and needed for the same reason: a clade whose food
+	 * is other bodies has a size its living depends on, and a founder drawn
+	 * outside it starves whatever its mind does.
+	 *
+	 * <p>The arithmetic is {@link #PRED_MAX_PREY_RATIO}. A hunter takes quarry up
+	 * to 1.5 times its own size, and the minded cohort is founded across 5..17, so
+	 * a hunter of 12 can take almost the whole of that range while one founded at
+	 * the bottom of it could take nothing but the very smallest. This is a floor
+	 * and not a fixed size: mutation is free to go bigger, and the reseed mix is
+	 * free to prefer whatever actually eats.
+	 */
+	private static final double PREDATOR_MIN_SIZE_PX = 12;
+
+	/**
 	 * A minded parasite: the same brains and forage intent as the rest of the
 	 * cohort, with a clade that makes a bigger living body its food. Its forage
 	 * channel points at the nearest host, the shared attach machinery latches it
@@ -617,6 +632,26 @@ public class TestNPC extends NPC {
 	 * IS eating. Kept small: a parasite must be smaller than its host to latch
 	 * at all, and small is what lets it cling too tight to buck off easily.
 	 */
+	/**
+	 * A minded hunter: the same brains and forage intent as the rest of the
+	 * cohort, with a clade that makes a smaller living body its food. Its forage
+	 * channel points at the nearest thing it could bring down, and arriving there
+	 * bites rather than grazes — so a starter forager brain is already a working
+	 * hunting policy, which is the same trick the scavenger and the parasite are
+	 * built on.
+	 *
+	 * <p>The genome is copied before the clade is written, for the reason
+	 * {@link #mindedScavenger} gives: founder pools are shared arrays and several
+	 * bodies are drawn from one instance.
+	 */
+	public static TestNPC mindedPredator(double x, double y, double z, Genome g) {
+		Genome own = g.copy();
+		own.size = Math.max(own.size, PREDATOR_MIN_SIZE_PX); // big enough to hunt with
+		TestNPC t = mindedForager(x, y, z, own);
+		t.withClade(Genome.Clade.PREDATOR); // writes through to the genome the body is drawn from
+		return t;
+	}
+
 	public static TestNPC mindedParasite(double x, double y, double z, Genome g) {
 		Genome own = g.copy();
 		own.size = Math.min(own.size, PARASITE_MAX_SIZE_PX); // small by nature
@@ -1742,6 +1777,26 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
 			return;
 		}
+		// A hunter's food is a smaller living body, so its forage channel points at
+		// the nearest thing it could bring down. Same remap the scavenger and the
+		// parasite get, and for the same reason: it is what lets a hunter inherit
+		// the forage behaviour every starter brain already has instead of needing a
+		// policy of its own. The candidate rule is nearestPrey's, unchanged, so an
+		// evolved hunter wants exactly what a scripted one wants — the size ratio,
+		// the no-rivals rule, the parasite and machine exclusions, and the
+		// line-of-sight requirement that makes cover a real refuge.
+		if (clade == Genome.Clade.PREDATOR) {
+			NPC quarry = nearestPrey(LOS_RANGE, false);
+			if (quarry == null) {
+				s[AgentIO.S_FORAGE_PROX] = 0;
+				s[AgentIO.S_FORAGE_BEARING] = 0;
+				return;
+			}
+			double qdx = quarry.getX() - X, qdy = quarry.getY() - Y;
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(qdx, qdy));
+			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(qdy, qdx) - D) / Math.PI;
+			return;
+		}
 		// A parasite's food is a bigger living body, so its forage channel points
 		// at the nearest host — sensed like scent (through cover, no facing),
 		// the way a scavenger smells carrion. Riding one, the channel reads "you
@@ -2402,10 +2457,18 @@ public class TestNPC extends NPC {
 		// requiring one meant a scavenger could steer to its food and then refuse to
 		// eat it. What the gate is really for is not acting on ground that was asked
 		// for as cover or as water, and that reasoning only concerns a grazer.
+		// A hunter's forage is a living body, so arriving at it is a bite and never
+		// a mouthful of grass — it is excluded here and answered by intentBite
+		// below. Without that a minded hunter walked its quarry down and then
+		// grazed the ground under it.
 		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE
+				&& clade != Genome.Clade.PREDATOR
 				&& (clade == Genome.Clade.SCAVENGER || tileWanted == AgentIO.TILE_FOOD);
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
-		boolean intentBite = chasing && seekClass == AgentIO.SEEK_PREY;
+		// Either way of naming a quarry ends in the same act: SEEK_PREY says it
+		// outright, and for a hunter SEEK_FORAGE means the same thing.
+		boolean intentBite = chasing && (seekClass == AgentIO.SEEK_PREY
+				|| (seekClass == AgentIO.SEEK_FORAGE && clade == Genome.Clade.PREDATOR));
 		// Seeking a fixture and reaching it presses it: arriving IS the act,
 		// so the intent carries through without the mind also having to hold
 		// A_INTERACT high. In-reach is read off the same sensed proximity the
@@ -2427,8 +2490,12 @@ public class TestNPC extends NPC {
 			// A parasite's mouth works on nothing here: it cannot graze and it
 			// does not scavenge — its whole living is the host drain reflex
 			// (parasiteFeed), which runs while it rides, hungry.
+			// A hunter takes nothing here either: its meal is the bite, paid out by
+			// attackNearest below, and letting it graze would hand it a second
+			// income the scripted hunter has never had.
 			eaten = clade == Genome.Clade.SCAVENGER ? scavenge()
-					: clade == Genome.Clade.PARASITE ? 0 : graze(grazeDemand());
+					: clade == Genome.Clade.PARASITE || clade == Genome.Clade.PREDATOR ? 0
+							: graze(grazeDemand());
 			totalIntake += eaten;
 		}
 		boolean ateItem = false;
