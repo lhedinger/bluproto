@@ -92,6 +92,9 @@ final class WorldHost {
 		// series is about the shape of an hour, not about this tick.
 		broadcaster.scheduleAtFixedRate(this::samplePopulation,
 				POP_SAMPLE_SEC, POP_SAMPLE_SEC, TimeUnit.SECONDS);
+		// The Sankey's stage snapshots. The first lands seconds after boot so a
+		// fresh world has a first column immediately, then the slow beat.
+		broadcaster.scheduleAtFixedRate(this::sampleStage, 5, STAGE_SEC, TimeUnit.SECONDS);
 	}
 
 	private void buildWorld(long newSeed) {
@@ -99,6 +102,7 @@ final class WorldHost {
 		startedAt = System.currentTimeMillis();
 		popHistory = java.util.List.of(); // a new world starts its own series
 		linHistory = java.util.List.of(); // both lenses: old lineages are not this world's
+		stageHistory = java.util.List.of(); // and the flow stages with them
 		boolean mesa = "blackmesa".equals(worldKind);
 		boolean sized = !mesa && worldCols > 0 && worldRows > 0; // the campus is authored at its own size
 		SimulationRunner r = new SimulationRunner(mesa
@@ -1043,6 +1047,144 @@ final class WorldHost {
 		}
 		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
 				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "species", out);
+	}
+
+	// ---- lineage flows (the Sankey) ----------------------------------------
+	//
+	// The counts ring says how many; it cannot say where they WENT. A Sankey
+	// needs flows — this species' heads continuing as themselves, drifting
+	// across a label boundary into another species, dying, or arriving newborn
+	// — and a flow is a fact about individuals, not about totals: two counts
+	// can stay equal while every body underneath is replaced. So the stage ring
+	// snapshots WHO exists (entity id -> species), and flows are exact diffs
+	// between the two snapshots actually drawn, never sums of intermediate
+	// steps.
+
+	/** Seconds between stage snapshots, and how many the ring keeps: a stage
+	 *  every five minutes for a little over eight hours — the Sankey is the
+	 *  census's long-exposure photograph, not its live feed. */
+	static final int STAGE_SEC = 300;
+	static final int STAGE_KEEP = 100;
+
+	/** Who existed, at one instant: ids sorted ascending, species parallel. */
+	record StageSnap(long tick, int[] ids, String[] species) { }
+
+	private volatile java.util.List<StageSnap> stageHistory = java.util.List.of();
+
+	/** Pure, like {@link #censusOf}: the living genomed bodies, by id. */
+	static StageSnap stageOf(net.hedinger.prototype.engine.World w, long tick) {
+		java.util.TreeMap<Integer, String> m = new java.util.TreeMap<Integer, String>();
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC tn
+					&& !tn.isDead() && !tn.isRemoved() && tn.getGenome() != null) {
+				m.put(e.getID(), net.hedinger.prototype.entities.Species.of(tn.getGenome()).key());
+			}
+		}
+		int[] ids = new int[m.size()];
+		String[] sp = new String[m.size()];
+		int i = 0;
+		for (java.util.Map.Entry<Integer, String> en : m.entrySet()) {
+			ids[i] = en.getKey();
+			sp[i] = en.getValue();
+			i++;
+		}
+		return new StageSnap(tick, ids, sp);
+	}
+
+	private void sampleStage() {
+		StageSnap s;
+		synchronized (runner) {
+			s = stageOf(runner.world(), runner.snapshot().tick());
+		}
+		java.util.List<StageSnap> prev = stageHistory;
+		java.util.ArrayList<StageSnap> next =
+				new java.util.ArrayList<StageSnap>(Math.min(prev.size() + 1, STAGE_KEEP));
+		int drop = Math.max(0, prev.size() + 1 - STAGE_KEEP);
+		next.addAll(prev.subList(drop, prev.size()));
+		next.add(s);
+		stageHistory = java.util.List.copyOf(next);
+	}
+
+	/**
+	 * Exact flows between two stages, by following each id: present in both is
+	 * a continuation (same species) or a drift (relabelled — a lineage actually
+	 * moving through marker space); only in the first died; only in the second
+	 * was born. Keys are {@code from -> to} with the pseudo-species
+	 * {@code "born"} and {@code "died"} at the open ends, so every head of
+	 * every node is accounted for on both sides — the conservation a Sankey is.
+	 */
+	static java.util.Map<String, Integer> flowsBetween(StageSnap a, StageSnap b) {
+		java.util.TreeMap<String, Integer> f = new java.util.TreeMap<String, Integer>();
+		int i = 0, j = 0;
+		while (i < a.ids().length || j < b.ids().length) {
+			int ai = i < a.ids().length ? a.ids()[i] : Integer.MAX_VALUE;
+			int bj = j < b.ids().length ? b.ids()[j] : Integer.MAX_VALUE;
+			String key;
+			if (ai == bj) {
+				key = a.species()[i] + "->" + b.species()[j];
+				i++;
+				j++;
+			} else if (ai < bj) {
+				key = a.species()[i] + "->died";
+				i++;
+			} else {
+				key = "born->" + b.species()[j];
+				j++;
+			}
+			f.merge(key, 1, Integer::sum);
+		}
+		return f;
+	}
+
+	/**
+	 * The Sankey series for {@code /api/lineage/flows}: up to {@code MAX_COLS}
+	 * stages chosen evenly across the ring (the first and the latest always
+	 * among them), each with its species headcounts, plus the exact flows
+	 * between each drawn pair. Diffed between the CHOSEN stages, so drawing
+	 * fewer columns never invents or loses a head.
+	 */
+	java.util.Map<String, Object> lineageFlows() {
+		final int maxCols = 12;
+		java.util.List<StageSnap> h = stageHistory;
+		java.util.List<StageSnap> cols = new java.util.ArrayList<StageSnap>();
+		int n = h.size();
+		if (n <= maxCols) {
+			cols.addAll(h);
+		} else {
+			for (int c = 0; c < maxCols; c++) {
+				cols.add(h.get(Math.round(c * (n - 1) / (float) (maxCols - 1))));
+			}
+		}
+		java.util.List<java.util.Map<String, Object>> stages =
+				new java.util.ArrayList<java.util.Map<String, Object>>();
+		for (StageSnap s : cols) {
+			java.util.TreeMap<String, Integer> counts = new java.util.TreeMap<String, Integer>();
+			for (String sp : s.species()) {
+				counts.merge(sp, 1, Integer::sum);
+			}
+			java.util.List<java.util.Map<String, Object>> species =
+					new java.util.ArrayList<java.util.Map<String, Object>>();
+			for (java.util.Map.Entry<String, Integer> en : counts.entrySet()) {
+				species.add(java.util.Map.of("key", en.getKey(),
+						"rgb", net.hedinger.prototype.entities.Species.rgbOf(en.getKey()),
+						"count", en.getValue()));
+			}
+			stages.add(java.util.Map.of("tick", s.tick(), "species", species));
+		}
+		java.util.List<java.util.Map<String, Object>> flows =
+				new java.util.ArrayList<java.util.Map<String, Object>>();
+		for (int c = 0; c + 1 < cols.size(); c++) {
+			for (java.util.Map.Entry<String, Integer> en
+					: flowsBetween(cols.get(c), cols.get(c + 1)).entrySet()) {
+				int arrow = en.getKey().indexOf("->");
+				flows.add(java.util.Map.of("stage", c,
+						"from", en.getKey().substring(0, arrow),
+						"to", en.getKey().substring(arrow + 2),
+						"n", en.getValue()));
+			}
+		}
+		return java.util.Map.of("tps", SimulationRunner.TICKS_PER_SECOND,
+				"stageSec", STAGE_SEC, "stages", stages, "flows", flows);
 	}
 
 	/** Adds a reading, dropping the oldest once the ring is full. */

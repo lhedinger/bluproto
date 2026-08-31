@@ -29,6 +29,7 @@ public final class ServerTests {
 		visitorLogReadsTheClientThroughTheProxy();
 		populationCensusCountsEveryLivingRole();
 		lineageCensusIsTheSameWorldFiner();
+		lineageFlowsConserveEveryHead();
 		fertilityCapsTheGrassSpriteStage();
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
@@ -338,6 +339,72 @@ public final class ServerTests {
 		}
 		check("a death moves exactly its own species (" + movedKey + " -" + movedBy + ")",
 				moved == 1 && movedBy == 1 && killedKey != null && killedKey.equals(movedKey));
+	}
+
+	/**
+	 * The Sankey's one law: every head is accounted for on both sides of every
+	 * stage boundary. For each species, flows out (continuations + drifts +
+	 * deaths) must sum to its count in the earlier stage, and flows in
+	 * (continuations + drifts + births) to its count in the later one. Checked
+	 * against a REAL interval — the world runs a thousand ticks between the two
+	 * snapshots, so births, deaths and whatever drift occurs are all in play,
+	 * not staged.
+	 */
+	static void lineageFlowsConserveEveryHead() {
+		net.hedinger.prototype.engine.Utils.seed(7);
+		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
+		WorldHost.StageSnap a = WorldHost.stageOf(w, 0);
+		for (int t = 0; t < 1000; t++) {
+			w.think();
+		}
+		WorldHost.StageSnap b = WorldHost.stageOf(w, 1000);
+		check("the interval did something (" + a.ids().length + " -> " + b.ids().length
+				+ " heads)", a.ids().length > 0 && b.ids().length > 0);
+
+		java.util.Map<String, Integer> flows = WorldHost.flowsBetween(a, b);
+		java.util.TreeMap<String, Integer> outOf = new java.util.TreeMap<String, Integer>();
+		java.util.TreeMap<String, Integer> into = new java.util.TreeMap<String, Integer>();
+		int born = 0, died = 0;
+		for (java.util.Map.Entry<String, Integer> en : flows.entrySet()) {
+			int arrow = en.getKey().indexOf("->");
+			String from = en.getKey().substring(0, arrow), to = en.getKey().substring(arrow + 2);
+			if (from.equals("born")) {
+				born += en.getValue();
+			} else {
+				outOf.merge(from, en.getValue(), Integer::sum);
+			}
+			if (to.equals("died")) {
+				died += en.getValue();
+			} else {
+				into.merge(to, en.getValue(), Integer::sum);
+			}
+		}
+		java.util.TreeMap<String, Integer> beforeCounts = countsOf(a), afterCounts = countsOf(b);
+		check("every species' outflows sum to its earlier count",
+				outOf.equals(beforeCounts));
+		check("every species' inflows sum to its later count",
+				into.equals(afterCounts));
+		check("a thousand ticks bred and buried somebody (born " + born
+				+ ", died " + died + ")", born > 0 || died > 0);
+
+		// And an id that never moved is a continuation, not a birth plus a
+		// death: diffing a stage against itself must be pure self-flows.
+		for (java.util.Map.Entry<String, Integer> en : WorldHost.flowsBetween(b, b).entrySet()) {
+			int arrow = en.getKey().indexOf("->");
+			if (!en.getKey().substring(0, arrow).equals(en.getKey().substring(arrow + 2))) {
+				check("a stage against itself has only self-flows (" + en.getKey() + ")", false);
+				return;
+			}
+		}
+		check("a stage against itself has only self-flows", true);
+	}
+
+	private static java.util.TreeMap<String, Integer> countsOf(WorldHost.StageSnap s) {
+		java.util.TreeMap<String, Integer> c = new java.util.TreeMap<String, Integer>();
+		for (String sp : s.species()) {
+			c.merge(sp, 1, Integer::sum);
+		}
+		return c;
 	}
 
 	static void populationCensusCountsEveryLivingRole() {
