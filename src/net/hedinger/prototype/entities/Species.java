@@ -112,6 +112,22 @@ public final class Species {
 		return clade.wireName() + "/" + NAMES[index];
 	}
 
+	/** The tint for a grouping key ("herbivore/ochre"), resolved by the species
+	 *  name after the slash — so a census that carries only keys can colour its
+	 *  legend without holding a genome. Unknown names get the last centroid's
+	 *  neutral grey rather than an exception: a legend with one wrong swatch
+	 *  beats a census endpoint that can be crashed by a label. */
+	public static int rgbOf(String key) {
+		int slash = key.indexOf('/');
+		String name = slash < 0 ? key : key.substring(slash + 1);
+		for (int i = 0; i < NAMES.length; i++) {
+			if (NAMES[i].equals(name)) {
+				return new Species(Genome.Clade.HERBIVORE, i).rgb();
+			}
+		}
+		return new Species(Genome.Clade.HERBIVORE, NAMES.length - 1).rgb();
+	}
+
 	/** The species' own tint, as 0xRRGGBB — its centroid rendered as a colour, so
 	 *  a legend swatch sits in the middle of the shades its members wear. For
 	 *  labels and legends only; a body is drawn in its individual marker colour. */

@@ -862,10 +862,17 @@ final class WorldHost {
 	 */
 	private void samplePopulation() {
 		PopSample s;
+		LinSample l;
+		// Both censuses under one lock: two beats would walk the entities twice
+		// and could disagree about a body born between them, and the two graphs
+		// are two lenses on the same population — they should never contradict.
 		synchronized (runner) {
-			s = censusOf(runner.world(), runner.snapshot().tick());
+			long tick = runner.snapshot().tick();
+			s = censusOf(runner.world(), tick);
+			l = lineageOf(runner.world(), tick);
 		}
 		append(s);
+		appendLineage(l);
 	}
 
 	/**
@@ -903,6 +910,104 @@ final class WorldHost {
 			}
 		}
 		return new PopSample(tick, herb, pred, scav, para);
+	}
+
+	// ---- lineage history ---------------------------------------------------
+	//
+	// The same idea one level finer: not "how many herbivores" but "how many of
+	// each SPECIES" — the emergent labels Species derives from marker space.
+	// This is the series that shows a lineage's whole story: the line sinking
+	// to zero is a die-out, and a fresh line rising where one just ended is the
+	// steward reseeding the niche with a new random lineage. The role graph
+	// cannot show either; a reseed leaves its herbivore count almost unmoved.
+
+	/**
+	 * One reading of who exists, by species. Keys sorted, and parallel to
+	 * counts — a compact pair rather than a map, because six thousand of these
+	 * sit in the ring.
+	 */
+	record LinSample(long tick, String[] keys, int[] counts) { }
+
+	private volatile java.util.List<LinSample> linHistory = java.util.List.of();
+
+	/**
+	 * Counts the living by species label. Pure, like {@link #censusOf}, and the
+	 * same population: every genomed body the role census counts falls in some
+	 * species, so the two series always sum to the same world.
+	 */
+	static LinSample lineageOf(net.hedinger.prototype.engine.World w, long tick) {
+		java.util.TreeMap<String, int[]> tally = new java.util.TreeMap<String, int[]>();
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (!(e instanceof net.hedinger.prototype.simtest.TestNPC tn)
+					|| tn.isDead() || tn.isRemoved() || tn.getGenome() == null) {
+				continue; // species is a genome label: a body without one has none
+			}
+			String key = net.hedinger.prototype.entities.Species.of(tn.getGenome()).key();
+			int[] n = tally.get(key);
+			if (n == null) {
+				tally.put(key, n = new int[1]);
+			}
+			n[0]++;
+		}
+		String[] keys = new String[tally.size()];
+		int[] counts = new int[tally.size()];
+		int i = 0;
+		for (java.util.Map.Entry<String, int[]> en : tally.entrySet()) {
+			keys[i] = en.getKey();
+			counts[i] = en.getValue()[0];
+			i++;
+		}
+		return new LinSample(tick, keys, counts);
+	}
+
+	private void appendLineage(LinSample sample) {
+		java.util.List<LinSample> prev = linHistory;
+		java.util.ArrayList<LinSample> next =
+				new java.util.ArrayList<LinSample>(Math.min(prev.size() + 1, POP_SAMPLES));
+		int drop = Math.max(0, prev.size() + 1 - POP_SAMPLES);
+		next.addAll(prev.subList(drop, prev.size()));
+		next.add(sample);
+		linHistory = java.util.List.copyOf(next);
+	}
+
+	/**
+	 * The lineage series for {@code /api/lineage}: one column per species that
+	 * appears ANYWHERE in the ring, zero-filled where it is absent. The zeros
+	 * are the point — a species that died out three hours ago keeps its column,
+	 * flat on the floor, because "the ochre herbivores are gone" is exactly the
+	 * reading this graph exists to give. Each column carries the species' own
+	 * centroid tint so every client colours a lineage the same way.
+	 */
+	java.util.Map<String, Object> lineage() {
+		java.util.List<LinSample> h = linHistory;
+		long[] ticks = new long[h.size()];
+		java.util.TreeMap<String, int[]> series = new java.util.TreeMap<String, int[]>();
+		for (int i = 0; i < h.size(); i++) {
+			LinSample s = h.get(i);
+			ticks[i] = s.tick();
+			for (int k = 0; k < s.keys().length; k++) {
+				int[] col = series.get(s.keys()[k]);
+				if (col == null) {
+					series.put(s.keys()[k], col = new int[h.size()]);
+				}
+				col[i] = s.counts()[k];
+			}
+		}
+		java.util.List<java.util.Map<String, Object>> out =
+				new java.util.ArrayList<java.util.Map<String, Object>>(series.size());
+		for (java.util.Map.Entry<String, int[]> en : series.entrySet()) {
+			String key = en.getKey();
+			int slash = key.indexOf('/');
+			// The tint is the species centroid's, resolved from the key's name so
+			// the label and the swatch can never disagree about who is who.
+			out.add(java.util.Map.of("key", key,
+					"clade", slash < 0 ? key : key.substring(0, slash),
+					"name", slash < 0 ? key : key.substring(slash + 1),
+					"rgb", net.hedinger.prototype.entities.Species.rgbOf(key),
+					"counts", en.getValue()));
+		}
+		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
+				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "species", out);
 	}
 
 	/** Adds a reading, dropping the oldest once the ring is full. */

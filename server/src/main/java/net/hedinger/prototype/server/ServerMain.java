@@ -127,6 +127,11 @@ public final class ServerMain {
 		// hours instead of starting from a blank chart.
 		app.get("/api/population", ctx -> ctx.json(host.population()));
 
+		// The same census one level finer: headcount by SPECIES over time, so a
+		// viewer can watch a lineage thin out, die, and the niche get reseeded
+		// with a fresh one — none of which the four role lines can show.
+		app.get("/api/lineage", ctx -> ctx.json(host.lineage()));
+
 		// Prometheus text exposition of the same numbers, for scraping.
 		app.get("/metrics", ctx -> {
 			StringBuilder b = new StringBuilder();
