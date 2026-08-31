@@ -144,7 +144,7 @@ public final class Worlds {
 	 * it — a better threat threshold, hunting, using the waypoint it never marks —
 	 * which is the whole experiment.
 	 */
-	static net.hedinger.prototype.entities.Brain starterBrain() {
+	public static net.hedinger.prototype.entities.Brain starterBrain() {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
 		final int ADD = net.hedinger.prototype.entities.Brain.ADD;

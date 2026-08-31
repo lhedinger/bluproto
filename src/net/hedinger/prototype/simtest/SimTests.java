@@ -5113,6 +5113,120 @@ public class SimTests {
 	}
 
 	/**
+	 * A minded hunter hunts: its forage channel points at living prey, arriving
+	 * bites, and it never grazes.
+	 *
+	 * <p>Predator was the one clade with no minded cohort. Herbivores, scavengers
+	 * and parasites all had one; hunting existed only as {@code thinkPredator}, a
+	 * hardcoded loop, so the role could be executed but never learned. Giving it a
+	 * mind is the same trick the other two food-is-a-body clades already use:
+	 * remap the forage channel to what this clade actually eats, and a starter
+	 * forager brain becomes a working policy for the role without needing a sensor
+	 * or a program of its own.
+	 *
+	 * <p>Three things have to hold together for that to be true, and the middle
+	 * one is the one that bites. The channel must SEE prey; arriving must BITE
+	 * rather than graze — a hunter that walked its quarry down and then cropped
+	 * the grass under it would look almost right and eat nothing; and the mouth
+	 * must stay shut on vegetation, or a hunter quietly has a second income the
+	 * scripted one never had, and the clade stops meaning anything.
+	 *
+	 * <p>The ground here is deliberately fertile, so "it does not graze" is a
+	 * claim about the body's rules and not about there being nothing to eat.
+	 */
+	static class AMindedHunterHuntsRatherThanGrazes extends Scenario {
+		@Override
+		public void run() {
+			seed(5);
+			World w = room(24, 24);
+			for (int x = 1; x < 23; x++) {
+				for (int y = 1; y < 23; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // a meadow it must ignore
+				}
+			}
+
+			Genome hg = new Genome();
+			hg.size = 14;
+			hg.speed = 0.06;
+			hg.markers = new double[] { 0.8, 0.2, 0.2 };
+			// The forager starter brain, which is the whole point: seek forage, walk
+			// to it, act on arrival. For a hunter the remap makes that a hunt. The
+			// hitch-hiker seed would prove nothing here — it seeks what is BIGGER
+			// than it, so it closes on threats and never hunts anything.
+			hg.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, hg);
+			w.spawnEntity(hunter);
+			assertEquals("the body really is a hunter",
+					Genome.Clade.PREDATOR.ordinal(), hunter.getGenome().clade.ordinal());
+
+			java.util.List<TestNPC> herd = new java.util.ArrayList<TestNPC>();
+			for (int i = 0; i < 8; i++) {
+				Genome pg = new Genome();
+				pg.size = 6;
+				pg.speed = 0.03;
+				pg.markers = new double[] { 0.2, 0.2, 0.8 };
+				TestNPC p = TestNPC.breeder(4.5 + i * 1.7, 12.5, 0, pg);
+				herd.add(p);
+				w.spawnEntity(p);
+			}
+
+			double[] sense = new double[AgentIO.NUM_SENSORS];
+			int sawPrey = 0;
+			for (int t = 0; t < 3000; t++) {
+				tick(w, 1);
+				hunter.senseInto(sense);
+				if (sense[AgentIO.S_FORAGE_PROX] > 0) {
+					sawPrey++;
+				}
+			}
+			int killed = 0;
+			for (TestNPC p : herd) {
+				if (p.isDead()) {
+					killed++;
+				}
+			}
+
+			assertGreater("the hunter's forage channel finds living prey",
+					sawPrey, 300);
+
+			// The check above is not by itself evidence of the remap: with the
+			// remap gone the channel falls through to the GRAZER scan, which on
+			// this meadow reads high everywhere, so it would pass on grass. Caught
+			// by mutation — removing the remap left that assertion green and only
+			// the kill count went to zero. A lone hunter on the same fertile ground
+			// separates them: to a hunter an empty meadow is nothing to eat, to a
+			// grazer it is a full larder.
+			World empty = room(24, 24);
+			for (int x = 1; x < 23; x++) {
+				for (int y = 1; y < 23; y++) {
+					empty.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			Genome lg = new Genome();
+			lg.size = 14;
+			lg.speed = 0.06;
+			lg.markers = new double[] { 0.8, 0.2, 0.2 };
+			lg.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+			TestNPC lone = TestNPC.mindedPredator(6.5, 6.5, 0, lg);
+			empty.spawnEntity(lone);
+			double[] loneSense = new double[AgentIO.NUM_SENSORS];
+			int sawSomething = 0;
+			for (int t = 0; t < 200; t++) {
+				tick(empty, 1);
+				lone.senseInto(loneSense);
+				if (loneSense[AgentIO.S_FORAGE_PROX] > 0) {
+					sawSomething++;
+				}
+			}
+			assertEquals("a hunter alone on a meadow has nothing to forage",
+					0, sawSomething);
+			assertGreater("and arriving at it kills", killed, 2);
+			assertEquals("while its mouth stays shut on the meadow it is standing in",
+					0, (long) Math.round(hunter.totalIntake() * 1000));
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10382,6 +10496,7 @@ public class SimTests {
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
 				new AReseedDescendsFromItsOwnClade(),
 				new AReseedIsAMixNotOnlyTheChampion(),
+				new AMindedHunterHuntsRatherThanGrazes(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
