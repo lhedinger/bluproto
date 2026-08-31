@@ -1626,15 +1626,7 @@ type LinData = {
 
 /** One drawable series, whichever lens produced it — the chart and the legend
  *  work on this shape and never ask which endpoint it came from. */
-type Series = { key: string; label: string; rgb: string; dash: number[]; vals: number[] };
-
-/** A lineage line is hue = species, dash = clade. The species centroids give
- *  the same "ochre" the same tint in every clade, so colour alone cannot say
- *  whether a line is the ochre herbivores or the ochre predators — the dash
- *  carries the clade instead of a second, made-up palette. */
-const CLADE_DASH: Record<string, number[]> = {
-  herbivore: [], predator: [6, 3], scavenger: [2, 3], parasite: [6, 3, 2, 3],
-};
+type Series = { key: string; label: string; rgb: string; vals: number[] };
 
 let popOn = /[?&]pop\b/.test(location.search);
 /** Which lens the panel shows: the four trophic roles, or one line per species
@@ -1660,7 +1652,7 @@ let popLastFetch = 0;
 function popSeriesNow(): Series[] {
   if (popMode === 'roles') {
     return popData
-      ? POP_SERIES.map(s => ({ key: s.key, label: s.label, rgb: s.rgb, dash: [], vals: popData![s.key] }))
+      ? POP_SERIES.map(s => ({ key: s.key, label: s.label, rgb: s.rgb, vals: popData![s.key] }))
       : [];
   }
   return linData
@@ -1668,7 +1660,6 @@ function popSeriesNow(): Series[] {
         key: s.key,
         label: `${s.name} ${s.clade}`,
         rgb: liftForDark(s.rgb),
-        dash: CLADE_DASH[s.clade] ?? [],
         vals: s.counts,
       }))
     : [];
@@ -1679,6 +1670,14 @@ function popSeriesNow(): Series[] {
  *  is a species the graph cannot show dying out. Dark tints are lifted toward
  *  white just enough to draw with; everything bright passes through. Display
  *  only: the world still paints bodies in their true marker colours. */
+/** Text colour that reads on a band of the given fill: the panel's own dark
+ *  ink on a bright band, off-white on a dark one. */
+function inkOn(fill: string): string {
+  const v = parseInt(fill.slice(1), 16);
+  const luma = (0.299 * ((v >> 16) & 0xff) + 0.587 * ((v >> 8) & 0xff) + 0.114 * (v & 0xff)) / 255;
+  return luma > 0.55 ? '#14161a' : '#e8ecf2';
+}
+
 function liftForDark(rgb: number): string {
   let r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
   const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
@@ -1697,10 +1696,11 @@ function popHiddenNow(): Set<string> {
 }
 
 function popApply(): void {
-  popEl.style.display = popOn ? 'block' : 'none';
+  popEl.classList.toggle('open', popOn);
   popBtn.classList.toggle('on', popOn);
   if (popOn) {
     popPoll(true);
+    popDraw(); // the panel may have been resized while closed
   }
 }
 
@@ -1760,12 +1760,22 @@ function popDraw(): void {
     return;
   }
 
-  // One shared vertical scale: every line is the same kind of quantity, and
-  // separate axes would hide that predators are a tenth of the herbivores.
+  // One shared vertical scale, whichever lens: every quantity is a headcount.
+  // The role lines scale to the tallest line; the lineage stream STACKS its
+  // bands, so it scales to the tallest total — its ceiling is the whole
+  // population, and the stream's outline doubles as the population curve.
   let max = 1;
-  for (const s of series) {
-    if (hidden.has(s.key)) continue;
-    for (const v of s.vals) if (v > max) max = v;
+  if (popMode === 'lineages') {
+    for (let i = 0; i < n; i++) {
+      let tot = 0;
+      for (const s of series) if (!hidden.has(s.key)) tot += s.vals[i];
+      if (tot > max) max = tot;
+    }
+  } else {
+    for (const s of series) {
+      if (hidden.has(s.key)) continue;
+      for (const v of s.vals) if (v > max) max = v;
+    }
   }
   max = niceCeil(max);
   const xAt = (i: number) => padL + (gw * i) / (n - 1);
@@ -1787,20 +1797,65 @@ function popDraw(): void {
   ctx.fillText('0', padL - 4 * dpr, yAt(0));
   ctx.textAlign = 'left';
 
-  for (const s of series) {
-    if (hidden.has(s.key)) continue;
-    ctx.strokeStyle = s.rgb;
-    ctx.lineWidth = 1.5 * dpr;
-    ctx.lineJoin = 'round';
-    ctx.setLineDash(s.dash.map(v => v * dpr));
-    ctx.beginPath();
-    for (let i = 0; i < n; i++) {
-      const x = xAt(i), y = yAt(s.vals[i]);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  if (popMode === 'lineages') {
+    // The stream: one filled band per species, stacked from zero, thickness =
+    // headcount — a Sankey stretched over continuous time. This is the shape
+    // extinction and reseeding actually have: a lineage dying out is its band
+    // pinching shut, and the steward reseeding the niche is a new band opening
+    // where the old one closed. Bands sit grouped by clade (the keys sort
+    // clade/name), so a clade reads as a family of adjacent ribbons.
+    const low = new Float64Array(n); // the running stack floor, in heads
+    for (const s of series) {
+      if (hidden.has(s.key)) continue;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = xAt(i), y = yAt(low[i] + s.vals[i]);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      for (let i = n - 1; i >= 0; i--) ctx.lineTo(xAt(i), yAt(low[i]));
+      ctx.closePath();
+      ctx.fillStyle = s.rgb;
+      ctx.fill();
+      // A seam in the panel's own ground, so two neighbouring shades of one
+      // species name (ochre herbivore over ochre parasite) stay two bands.
+      ctx.strokeStyle = '#1d2026';
+      ctx.lineWidth = 1 * dpr;
+      ctx.stroke();
+      // Name the band at its thickest point, if it can carry the text — the
+      // fill has no dash to say which clade a tint belongs to, so the band
+      // says so itself. Thin bands lean on the legend, as they always did.
+      let bi = -1, best = 0;
+      for (let i = 0; i < n; i++) {
+        if (s.vals[i] > best) { best = s.vals[i]; bi = i; }
+      }
+      if (bi >= 0 && (gh * best) / max >= 14 * dpr) {
+        ctx.font = `${9.5 * dpr}px ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = inkOn(s.rgb);
+        // Clamped by the text's own half-width, so a band whose thickest
+        // moment sits at the chart's edge keeps its whole name inside.
+        const half = ctx.measureText(s.label).width / 2 + 3 * dpr;
+        ctx.fillText(s.label,
+            Math.min(Math.max(xAt(bi), padL + half), padL + gw - half),
+            yAt(low[bi] + s.vals[bi] / 2) + 3.5 * dpr);
+        ctx.textAlign = 'left';
+      }
+      for (let i = 0; i < n; i++) low[i] += s.vals[i];
     }
-    ctx.stroke();
+  } else {
+    for (const s of series) {
+      if (hidden.has(s.key)) continue;
+      ctx.strokeStyle = s.rgb;
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = xAt(i), y = yAt(s.vals[i]);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
   }
-  ctx.setLineDash([]);
 
   // How much time the chart is showing, so the x axis needs no ticks of its own.
   const spanSec = (n - 1) * d.sampleSec;
@@ -1875,6 +1930,22 @@ function popSetMode(m: 'roles' | 'lineages'): void {
 }
 popModeRoles.onclick = () => popSetMode('roles');
 popModeLin.onclick = () => popSetMode('lineages');
+// Panels come in two sizes, half and full (see the #pop CSS): this button
+// swaps between them, and the chart redraws at whatever it was given.
+const popSizeBtn = document.getElementById('popSize') as HTMLButtonElement;
+popSizeBtn.onclick = () => {
+  const full = popEl.classList.toggle('full');
+  popSizeBtn.textContent = full ? '⊟' : '⛶';
+  popSizeBtn.title = full ? 'half screen' : 'full screen';
+  popDraw();
+};
+// The constants panel follows the same convention.
+const tuneSizeBtn = document.getElementById('tuneSize') as HTMLElement;
+tuneSizeBtn.onclick = () => {
+  const full = (document.getElementById('tuning') as HTMLElement).classList.toggle('full');
+  tuneSizeBtn.textContent = full ? '⊟' : '⛶';
+  tuneSizeBtn.title = full ? 'half screen' : 'full screen';
+};
 window.addEventListener('keydown', ev => {
   const tag = (ev.target as HTMLElement).tagName;
   if (ev.key !== 'p' && ev.key !== 'P') return;

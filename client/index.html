@@ -22,16 +22,27 @@
        is drawn at device resolution and CSS-scaled down, so the 1px series lines
        stay sharp on a phone -- unlike the world canvas it is a chart, not art,
        so `pixelated` would be exactly wrong here. */
+    /* Panels come in two sizes, half and full, and nothing else: a chart worth
+       opening is worth reading, and a postage-stamp card was neither. Half is a
+       right-hand column taking half the viewport's height; .full fills the
+       viewport under the toolbar. The canvas flexes to whatever the panel is
+       given and redraws at that size. New panels follow this convention. */
     #pop { position: fixed; right: max(8px, env(safe-area-inset-right));
-           top: 52px; width: min(360px, calc(100vw - 16px)); z-index: 5; display: none;
+           top: 52px; width: min(480px, calc(100vw - 16px)); height: 50vh;
+           z-index: 5; display: none; flex-direction: column;
            background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
            padding: 8px 10px 6px; backdrop-filter: blur(4px); }
+    #pop.open { display: flex; }
+    #pop.full { left: max(8px, env(safe-area-inset-left)); width: auto;
+                bottom: 8px; height: auto; }
+    #pop h3 .size { margin-left: 2px; opacity: .55; }
+    #pop h3 .size:hover { opacity: 1; }
     #pop h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; opacity: .85;
               display: flex; align-items: center; gap: 10px; }
     #pop h3 .win { margin-left: auto; opacity: .6; font-weight: 400;
                    font-variant-numeric: tabular-nums; }
-    #popCv { width: 100%; height: 120px; display: block; image-rendering: auto;
-             touch-action: auto; }
+    #popCv { width: 100%; flex: 1; min-height: 0; display: block;
+             image-rendering: auto; touch-action: auto; }
     /* Wraps: the lineage lens can carry a dozen-plus species where roles have
        four, and a legend that clips is a legend that lies by omission. */
     #popKey { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px;
@@ -46,9 +57,10 @@
     #ovl label { display: flex; align-items: center; gap: 8px; padding: 4px 0;
                  font-size: 12px; cursor: pointer; user-select: none; }
     #ovl .sw { width: 11px; height: 11px; border-radius: 50%; opacity: .85; }
+    /* Same two sizes as #pop: half by default, .full under the toolbar. */
     #tuning { position: fixed; right: max(8px, env(safe-area-inset-right));
               top: 52px; width: min(420px, calc(100vw - 16px)); z-index: 6; display: none;
-              max-height: min(72vh, 640px); overflow-y: auto;
+              max-height: 50vh; overflow-y: auto;
               -webkit-overflow-scrolling: touch;
               background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
               padding: 10px 12px; backdrop-filter: blur(4px); }
@@ -57,6 +69,8 @@
                  border-bottom: 1px solid #ffffff14; display: flex;
                  align-items: center; gap: 6px; }
     #tuning h3 .x { margin-left: auto; cursor: pointer; opacity: .7; }
+    #tuning.full { left: max(8px, env(safe-area-inset-left)); width: auto;
+                   bottom: 8px; max-height: none; }
     #tuning .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase;
                    letter-spacing: .06em; opacity: .5;
                    border-top: 1px solid #ffffff14; padding-top: 6px; }
@@ -223,7 +237,8 @@
     <h3>population by
       <button id="popModeRoles" class="on" title="headcount by trophic role">role</button>
       <button id="popModeLin" title="headcount by species — watch lineages die out and get reseeded">lineage</button>
-      <span class="win" id="popWin"></span></h3>
+      <span class="win" id="popWin"></span>
+      <button id="popSize" class="size" title="full screen">⛶</button></h3>
     <canvas id="popCv"></canvas>
     <div id="popKey"></div>
   </div>
@@ -234,7 +249,9 @@
       <span class="sw" style="background:#f2b84b"></span>sound — events in earshot</label>
   </div>
   <div id="tuning">
-    <h3>simulation constants<span class="x" id="tuneClose" title="close">✕</span></h3>
+    <h3>simulation constants<span class="x" id="tuneSize" title="full screen"
+      style="margin-left:auto;cursor:pointer;opacity:.55">⛶</span>
+      <span class="x" id="tuneClose" title="close" style="margin-left:8px">✕</span></h3>
     <div id="tuneBody"></div>
     <div class="foot" id="tuneFoot"></div>
   </div>
