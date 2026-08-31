@@ -156,17 +156,14 @@ function surfaceZ(): number {
 }
 
 function levelName(z: number): string {
-  // Floors are named by how far they sit from the GROUND, not by their raw
-  // index -- a bare index reads "level 0" for the deepest floor of a 2-level
-  // world and "level 0" again for the deepest of a 3-level one, the same label
-  // for two different depths.
-  //
-  // And the ground is not simply the top of the array. A world can carry open
-  // air above it, and when it does, calling the highest index "surface" renames
-  // every floor beneath by one -- the real ground would show as "level -1"
-  // with nothing anywhere failing.
+  // Floors are numbered FROM the ground, not by their raw index -- a bare
+  // index reads "level 0" for the deepest floor of a 2-level world and
+  // "level 0" again for the deepest of a 3-level one, the same label for two
+  // different depths. And the ground is not simply the top of the array: a
+  // world can carry open air above it, so the anchor is the surface the
+  // server names, not the highest index. The surface itself reads "level 0"
+  // rather than a word -- one scheme for every floor, above and below.
   const depth = z - surfaceZ();
-  if (depth === 0) return 'surface';
   return depth > 0 ? `level +${depth}` : `level ${depth}`;
 }
 
