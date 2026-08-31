@@ -56,6 +56,15 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  A/B seam from going extinct, and has no matching ceiling because minded
 	 *  creatures are capped by the role they belong to like any other animal. */
 	private final int mindedFloor;
+	/**
+	 * Floor for the minded HUNTING line specifically. Not a population bound
+	 * either: {@code predBounds} already governs how many predators the world
+	 * holds, minded or not. This keeps the evolving hunters from going extinct
+	 * inside that count — the scripted loop cannot die out, because it is reseeded
+	 * from a fixed pool forever, so without this the minded hunters are the only
+	 * predators that can be permanently lost.
+	 */
+	private final int mindedHunterFloor;
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private final int caveZ; // the underground level, or -1 for a one-level world
@@ -196,6 +205,11 @@ public final class WorldSteward extends Entity implements CullOrders {
 		this.herbBounds = herbBounds;
 		this.predBounds = predBounds;
 		this.mindedFloor = mindedFloor;
+		// Derived rather than passed: it is the same "keep the seam alive" quantity
+		// as mindedFloor and wants no separate dial, and a hunting line is small by
+		// nature -- a handful of hunters is a working predator guild, where a
+		// handful of grazers is a remnant.
+		this.mindedHunterFloor = Math.max(2, mindedFloor / 4);
 		this.scavBounds = scavBounds;
 		this.paraBounds = paraBounds;
 	}
@@ -205,13 +219,17 @@ public final class WorldSteward extends Entity implements CullOrders {
 		int herbMin = herbBounds[0];
 		int predMin = predBounds[0];
 
-		int herb = 0, pred = 0, scav = 0, para = 0, minded = 0;
+		int herb = 0, pred = 0, scav = 0, para = 0, minded = 0, mindedPred = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t) {
 				// Tallied alongside the cohorts, but NOT one of them: see the
 				// lineage guard below.
 				if (!t.isDead() && !t.isRemoved() && t.isMinded()) {
 					minded++;
+				}
+				if (!t.isDead() && !t.isRemoved() && t.isMinded() && t.getGenome() != null
+						&& t.getGenome().clade == Genome.Clade.PREDATOR) {
+					mindedPred++;
 				}
 				switch (cohortOf(t)) {
 				case "herbivore" -> herb++;
@@ -247,6 +265,18 @@ public final class WorldSteward extends Entity implements CullOrders {
 		// starve, and the corpse layer is the whole of its living.
 		if (scav < scavBounds[0] && carrionPresent()) {
 			seedScavenger();
+		}
+		// The minded hunting line. It is NOT a cohort of its own — a hunter with a
+		// brain competes for the same prey as one without and is counted under
+		// "predator" like any other, so predBounds still governs how many hunters
+		// the world holds. This floor governs only whether the LINE survives, the
+		// way the minded floor above does for the cohort at large: without it a run
+		// of bad luck ends the only evolving hunters in the world and nothing ever
+		// brings them back. Conditional on there being something to hunt, for the
+		// reason the scavenger's floor waits for carrion — a hunter reseeded into a
+		// world with no prey is spawned to starve.
+		if (mindedPred < mindedHunterFloor && pred < predBounds[1] && preyPresent()) {
+			seedMindedPredator();
 		}
 		// The parasite cohort. Its floor is conditional on there being a body
 		// worth riding — a parasite reseeded into an empty world starves on its
@@ -359,6 +389,41 @@ public final class WorldSteward extends Entity implements CullOrders {
 			}
 		}
 		return false;
+	}
+
+	/** Whether a live herbivore exists — the precondition for reseeding a hunter,
+	 *  the way carrion is for a scavenger. The herd is what a hunter lives on, and
+	 *  this asks the coarse question "is there a food supply at all" rather than
+	 *  re-deciding the size ratio: nearestPrey owns which bodies are actually
+	 *  takeable, and a second copy of that rule here would be one to keep in step
+	 *  for no gain. */
+	private boolean preyPresent() {
+		for (Entity e : getWorld().getEntities()) {
+			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+					&& t.getGenome() != null
+					&& t.getGenome().clade == Genome.Clade.HERBIVORE) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Spawns one minded hunter on the surface, from the predator line's own
+	 *  reseed mix — see {@link Worlds#mindedReseedGenome}. */
+	private void seedMindedPredator() {
+		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PREDATOR);
+		double x = cols / 2.0, y = rows / 2.0;
+		for (int tries = 0; tries < 40; tries++) {
+			double px = 3 + Utils.random() * (cols - 6);
+			double py = 3 + Utils.random() * (rows - 6);
+			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
+				x = px;
+				y = py;
+				break;
+			}
+		}
+		getWorld().spawnEntity(
+				TestNPC.mindedPredator(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Spawns one minded scavenger on the surface where the bodies mostly fall.
