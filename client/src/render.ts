@@ -263,6 +263,12 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // small, but a hole that is dark blue nothing until the third wheel-click
 // reads as a bug, not a hole.
 export const PARALLAX = 0.94;
+/** The factor actually applied: parallax=0 in the URL (or the ⚙ dialog) pins
+ *  it to 1.0 — the floors below still show through every pit, they just stop
+ *  sliding. A viewer preference as much as a perf experiment: the slide is a
+ *  depth cue some eyes read as the world coming apart. */
+const parallaxFactor = (): number =>
+  PARALLAX_OFF ? 1.0 : PARALLAX;
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
 // canvas itself: one getImageData per chunk for the life of the tab, and it
@@ -325,10 +331,11 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
       if (level - 2 >= 0 && hasHoles(below)) {
         const below2 = getChunk(cx, cy, level - 2);
         if (below2) {
-          out.push([key, level - 2, below2, ...rect(cx, cy, PARALLAX * PARALLAX)]);
+          out.push([key, level - 2, below2,
+              ...rect(cx, cy, parallaxFactor() * parallaxFactor())]);
         }
       }
-      out.push([key, level - 1, below, ...rect(cx, cy, PARALLAX)]);
+      out.push([key, level - 1, below, ...rect(cx, cy, parallaxFactor())]);
     }
   }
   return out;
@@ -351,6 +358,7 @@ const flagOff = (k: string): boolean =>
   typeof location !== 'undefined' && new RegExp('[?&]' + k + '=0\\b').test(location.search);
 const SPRITES_OFF = flagOff('sprites'); // creatures as dots only
 const PHERO_OFF = flagOff('phero');     // pheromone clouds
+const PARALLAX_OFF = flagOff('parallax'); // below-floor slide (floors still show)
 const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
 const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 
