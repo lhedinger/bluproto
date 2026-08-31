@@ -1619,65 +1619,36 @@ type PopData = {
   herbivore: number[]; predator: number[]; scavenger: number[]; parasite: number[];
 };
 
-type LinData = {
-  sampleSec: number; tps: number; tick: number[];
-  species: Array<{ key: string; clade: string; name: string; rgb: number; counts: number[] }>;
+/** The Sankey's feed: WHO existed at each stage and exactly where every head
+ *  went between one stage and the next — continued as itself, drifted across a
+ *  species boundary, died, or arrived newborn. Flows are per-individual diffs
+ *  between the two stages drawn, so the ribbons never invent or lose a head. */
+type FlowData = {
+  tps: number; stageSec: number;
+  stages: Array<{ tick: number; species: Array<{ key: string; rgb: number; count: number }> }>;
+  flows: Array<{ stage: number; from: string; to: string; n: number }>;
 };
 
-/** One drawable series, whichever lens produced it — the chart and the legend
- *  work on this shape and never ask which endpoint it came from. */
-type Series = { key: string; label: string; rgb: string; vals: number[] };
-
 let popOn = /[?&]pop\b/.test(location.search);
-/** Which lens the panel shows: the four trophic roles, or one line per species
- *  — the view that shows a lineage dying out and the niche being reseeded,
- *  which the role totals barely register. */
+/** Which lens the panel shows: the four trophic roles over time, or the
+ *  lineage Sankey — species as node columns with ribbons carrying each head to
+ *  where it actually went, which is the view that shows a lineage dying out
+ *  (its ribbon ends) and the niche being reseeded (a new one begins). */
 let popMode: 'roles' | 'lineages' = 'roles';
-/** Which series are drawn, per lens. Prey outnumber predators and scavengers
- *  by an order of magnitude, and on one shared axis — which is the honest way
- *  to show counts of the same kind — that squashes the small ones onto the
- *  floor. Rather than lie about the scale with a second axis, the legend lets
- *  a viewer drop the big series and let the others have the height. */
+/** Which ROLE series are drawn. Prey outnumber predators by an order of
+ *  magnitude on one shared axis, so the legend lets a viewer drop the big
+ *  series and give the rest the height. Roles only: the Sankey accounts for
+ *  every head by construction, and hiding a species would break exactly that. */
 const popHidden = new Set<string>();
-const linHidden = new Set<string>();
 let popData: PopData | null = null;
-let linData: LinData | null = null;
+let linData: FlowData | null = null;
 let popFetching = false;
 let popLastFetch = 0;
 
-/** The current lens's series, in the unified shape. Lineage columns arrive
- *  zero-filled for species that have died out — the server keeps their columns
- *  on purpose, and so does this: a flat line on the floor with its name still
- *  in the legend IS the extinction reading. */
-function popSeriesNow(): Series[] {
-  if (popMode === 'roles') {
-    return popData
-      ? POP_SERIES.map(s => ({ key: s.key, label: s.label, rgb: s.rgb, vals: popData![s.key] }))
-      : [];
-  }
-  return linData
-    ? linData.species.map(s => ({
-        key: s.key,
-        label: `${s.name} ${s.clade}`,
-        rgb: liftForDark(s.rgb),
-        vals: s.counts,
-      }))
-    : [];
-}
-
 /** A species tint, floored to chart-legible. The umbral centroid is honestly
- *  near-black — its creatures wear that — but a near-black line on this panel
- *  is a species the graph cannot show dying out. Dark tints are lifted toward
- *  white just enough to draw with; everything bright passes through. Display
- *  only: the world still paints bodies in their true marker colours. */
-/** Text colour that reads on a band of the given fill: the panel's own dark
- *  ink on a bright band, off-white on a dark one. */
-function inkOn(fill: string): string {
-  const v = parseInt(fill.slice(1), 16);
-  const luma = (0.299 * ((v >> 16) & 0xff) + 0.587 * ((v >> 8) & 0xff) + 0.114 * (v & 0xff)) / 255;
-  return luma > 0.55 ? '#14161a' : '#e8ecf2';
-}
-
+ *  near-black — its creatures wear that — but a near-black bar on this panel
+ *  is a species the chart cannot show. Lifted toward white just enough to
+ *  draw with; display only — the world paints bodies in their true colours. */
 function liftForDark(rgb: number): string {
   let r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
   const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
@@ -1691,8 +1662,10 @@ function liftForDark(rgb: number): string {
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
-function popHiddenNow(): Set<string> {
-  return popMode === 'roles' ? popHidden : linHidden;
+/** "ochre herbivore", from "herbivore/ochre". */
+function speciesLabel(key: string): string {
+  const slash = key.indexOf('/');
+  return slash < 0 ? key : key.slice(slash + 1) + ' ' + key.slice(0, slash);
 }
 
 function popApply(): void {
@@ -1704,42 +1677,32 @@ function popApply(): void {
   }
 }
 
-/** Fetches the current lens's series, at most once per sample interval —
- *  polling faster than the server samples would only re-draw the same
- *  numbers. */
+/** Fetches the current lens's data, at most once per its own cadence: the
+ *  role series changes every server sample, the Sankey only when a new stage
+ *  lands, minutes apart — polling it faster would re-draw the same ribbons. */
 function popPoll(force = false): void {
   const now = performance.now();
-  const have = popMode === 'roles' ? popData : linData;
-  const everyMs = (have ? have.sampleSec : 5) * 1000;
+  const everyMs = popMode === 'roles' ? (popData ? popData.sampleSec : 5) * 1000 : 30_000;
   if (popFetching || (!force && now - popLastFetch < everyMs)) return;
   popFetching = true;
   popLastFetch = now;
   const mode = popMode;
-  fetch(mode === 'roles' ? 'api/population' : 'api/lineage')
+  fetch(mode === 'roles' ? 'api/population' : 'api/lineage/flows')
     .then(r => (r.ok ? r.json() : null))
-    .then((d: (PopData & LinData) | null) => {
-      if (d && Array.isArray(d.tick)) {
-        if (mode === 'roles') popData = d; else linData = d;
-        popDraw();
-      }
+    .then((d: (PopData & FlowData) | null) => {
+      if (!d) return;
+      if (mode === 'roles' && Array.isArray(d.tick)) popData = d;
+      else if (mode === 'lineages' && Array.isArray(d.stages)) linData = d;
+      else return;
+      popDraw();
     })
     .catch(() => { /* a missing sample is not worth a toast */ })
     .finally(() => { popFetching = false; });
 }
 
 function popDraw(): void {
-  const d = popMode === 'roles' ? popData : linData;
-  const series = popSeriesNow();
-  const hidden = popHiddenNow();
   const ctx = popCv.getContext('2d');
   if (!ctx) return;
-  if (!d) {
-    // No data for this lens yet (first switch): a blank chart under the right
-    // heading, never the other lens's lines under this one's.
-    ctx.clearRect(0, 0, popCv.width, popCv.height);
-    popKeyDraw();
-    return;
-  }
   // Draw at device resolution and let CSS scale it back down, so hairlines and
   // text stay crisp on a phone.
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1748,34 +1711,29 @@ function popDraw(): void {
   if (popCv.width !== w || popCv.height !== h) { popCv.width = w; popCv.height = h; }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  if (popMode === 'lineages') {
+    sankeyDraw(ctx, w, h, dpr);
+  } else {
+    rolesDraw(ctx, w, h, dpr);
+  }
+  popKeyDraw();
+}
 
-  const n = d.tick.length;
+function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number): void {
+  const d = popData;
   const padL = 30 * dpr, padR = 4 * dpr, padT = 4 * dpr, padB = 12 * dpr;
   const gw = w - padL - padR, gh = h - padT - padB;
-  if (n < 2 || gw <= 0 || gh <= 0) {
-    ctx.fillStyle = '#8b93a3';
-    ctx.font = `${11 * dpr}px ui-monospace, monospace`;
-    ctx.fillText('gathering…', padL, padT + gh / 2);
-    popKeyDraw();
+  const n = d ? d.tick.length : 0;
+  if (!d || n < 2 || gw <= 0 || gh <= 0) {
+    gathering(ctx, dpr, padL, padT + gh / 2);
     return;
   }
-
-  // One shared vertical scale, whichever lens: every quantity is a headcount.
-  // The role lines scale to the tallest line; the lineage stream STACKS its
-  // bands, so it scales to the tallest total — its ceiling is the whole
-  // population, and the stream's outline doubles as the population curve.
+  // One shared vertical scale: every line is the same kind of quantity, and
+  // separate axes would hide that predators are a tenth of the herbivores.
   let max = 1;
-  if (popMode === 'lineages') {
-    for (let i = 0; i < n; i++) {
-      let tot = 0;
-      for (const s of series) if (!hidden.has(s.key)) tot += s.vals[i];
-      if (tot > max) max = tot;
-    }
-  } else {
-    for (const s of series) {
-      if (hidden.has(s.key)) continue;
-      for (const v of s.vals) if (v > max) max = v;
-    }
+  for (const s of POP_SERIES) {
+    if (popHidden.has(s.key)) continue;
+    for (const v of d[s.key]) if (v > max) max = v;
   }
   max = niceCeil(max);
   const xAt = (i: number) => padL + (gw * i) / (n - 1);
@@ -1797,101 +1755,233 @@ function popDraw(): void {
   ctx.fillText('0', padL - 4 * dpr, yAt(0));
   ctx.textAlign = 'left';
 
-  if (popMode === 'lineages') {
-    // The stream: one filled band per species, stacked from zero, thickness =
-    // headcount — a Sankey stretched over continuous time. This is the shape
-    // extinction and reseeding actually have: a lineage dying out is its band
-    // pinching shut, and the steward reseeding the niche is a new band opening
-    // where the old one closed. Bands sit grouped by clade (the keys sort
-    // clade/name), so a clade reads as a family of adjacent ribbons.
-    const low = new Float64Array(n); // the running stack floor, in heads
-    for (const s of series) {
-      if (hidden.has(s.key)) continue;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const x = xAt(i), y = yAt(low[i] + s.vals[i]);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      for (let i = n - 1; i >= 0; i--) ctx.lineTo(xAt(i), yAt(low[i]));
-      ctx.closePath();
-      ctx.fillStyle = s.rgb;
-      ctx.fill();
-      // A seam in the panel's own ground, so two neighbouring shades of one
-      // species name (ochre herbivore over ochre parasite) stay two bands.
-      ctx.strokeStyle = '#1d2026';
-      ctx.lineWidth = 1 * dpr;
-      ctx.stroke();
-      // Name the band at its thickest point, if it can carry the text — the
-      // fill has no dash to say which clade a tint belongs to, so the band
-      // says so itself. Thin bands lean on the legend, as they always did.
-      let bi = -1, best = 0;
-      for (let i = 0; i < n; i++) {
-        if (s.vals[i] > best) { best = s.vals[i]; bi = i; }
-      }
-      if (bi >= 0 && (gh * best) / max >= 14 * dpr) {
-        ctx.font = `${9.5 * dpr}px ui-monospace, monospace`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = inkOn(s.rgb);
-        // Clamped by the text's own half-width, so a band whose thickest
-        // moment sits at the chart's edge keeps its whole name inside.
-        const half = ctx.measureText(s.label).width / 2 + 3 * dpr;
-        ctx.fillText(s.label,
-            Math.min(Math.max(xAt(bi), padL + half), padL + gw - half),
-            yAt(low[bi] + s.vals[bi] / 2) + 3.5 * dpr);
-        ctx.textAlign = 'left';
-      }
-      for (let i = 0; i < n; i++) low[i] += s.vals[i];
+  for (const s of POP_SERIES) {
+    if (popHidden.has(s.key)) continue;
+    ctx.strokeStyle = s.rgb;
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = xAt(i), y = yAt(d[s.key][i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
-  } else {
-    for (const s of series) {
-      if (hidden.has(s.key)) continue;
-      ctx.strokeStyle = s.rgb;
-      ctx.lineWidth = 1.5 * dpr;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const x = xAt(i), y = yAt(s.vals[i]);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
+    ctx.stroke();
   }
-
-  // How much time the chart is showing, so the x axis needs no ticks of its own.
   const spanSec = (n - 1) * d.sampleSec;
   popWin.textContent = `${fmtSpan(spanSec)} · ${n} samples`;
-  popKeyDraw();
 }
 
-/** The legend doubles as the live readout — each series' latest count — and as
- *  the control: tap one to drop it out of the chart and give the rest the axis.
- *  On the lineage lens a "0" here is a reading, not an absence: that species
- *  existed inside the chart's window and is gone now. */
+/** One node's box, for ribbon anchoring: outCur/inCur walk down its right and
+ *  left edges as flows claim their spans. */
+type SankeyNode = { x: number; yTop: number; h: number; rgb: string; outCur: number; inCur: number };
+
+/**
+ * The lineage Sankey. Each stage is a column of species bars, bar height =
+ * headcount on ONE scale shared by every column, so the same thickness means
+ * the same number of heads everywhere. Ribbons between neighbouring columns
+ * carry each head to where it actually went — a species into itself, or into
+ * another species where its members drifted across a label boundary. Births
+ * taper in from nothing mid-gap; deaths taper out to nothing. Every bar's
+ * left edge is exactly covered by what arrived and its right edge by what
+ * left: the conservation IS the diagram, which is why the legend cannot hide
+ * a species here the way the role lens can hide a line.
+ */
+function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number): void {
+  const d = linData;
+  const padX = 6 * dpr, padT = 6 * dpr, padB = 16 * dpr;
+  const gw = w - 2 * padX, gh = h - padT - padB;
+  if (!d || d.stages.length < 2 || gw <= 0 || gh <= 0) {
+    gathering(ctx, dpr, padX + 4 * dpr, padT + gh / 2);
+    if (d && d.stages.length === 1) {
+      ctx.fillText(`first stage taken — the next lands in ~${fmtSpan(d.stageSec)}`,
+          padX + 4 * dpr, padT + gh / 2 + 14 * dpr);
+    }
+    return;
+  }
+  const K = d.stages.length;
+  const nodeW = 9 * dpr, gap = 3 * dpr;
+  // One heads-to-pixels scale for the whole diagram, set by the crowdest
+  // column: its bars plus its gaps must fit the height.
+  let perHead = Infinity;
+  for (const st of d.stages) {
+    let total = 0;
+    for (const sp of st.species) total += sp.count;
+    const room = gh - (st.species.length - 1) * gap;
+    if (total > 0) perHead = Math.min(perHead, room / total);
+  }
+  if (!isFinite(perHead)) perHead = 1;
+
+  const colX = (c: number) => padX + ((gw - nodeW) * c) / (K - 1);
+  const cols: Array<Map<string, SankeyNode>> = [];
+  for (let c = 0; c < K; c++) {
+    const m = new Map<string, SankeyNode>();
+    let y = padT + gh; // bottom-aligned, first key lowest — same order every column
+    for (const sp of d.stages[c].species) {
+      const bh = sp.count * perHead;
+      y -= bh;
+      m.set(sp.key, { x: colX(c), yTop: y, h: bh, rgb: liftForDark(sp.rgb), outCur: y, inCur: y });
+      y -= gap;
+    }
+    cols.push(m);
+  }
+
+  // Ribbons first, bars over them. Flows sorted by their source's vertical
+  // position then their destination's, so spans claim node edges top-down and
+  // ribbons cross as little as this data allows.
+  for (let c = 0; c + 1 < K; c++) {
+    const from = cols[c], to = cols[c + 1];
+    const order = (m: Map<string, SankeyNode>, k: string) =>
+      m.has(k) ? m.get(k)!.yTop : Number.MAX_VALUE;
+    const flows = d.flows.filter(f => f.stage === c).sort((a, b) =>
+      (order(from, a.from) - order(from, b.from)) || (order(to, a.to) - order(to, b.to)));
+    const x0 = colX(c) + nodeW, x1 = colX(c + 1), mx = (x0 + x1) / 2;
+    for (const f of flows) {
+      const hpx = f.n * perHead;
+      const src = from.get(f.from), dst = to.get(f.to);
+      if (src && dst) {
+        const sy = src.outCur, dy = dst.inCur;
+        src.outCur += hpx;
+        dst.inCur += hpx;
+        ctx.beginPath();
+        ctx.moveTo(x0, sy);
+        ctx.bezierCurveTo(mx, sy, mx, dy, x1, dy);
+        ctx.lineTo(x1, dy + hpx);
+        ctx.bezierCurveTo(mx, dy + hpx, mx, sy + hpx, x0, sy + hpx);
+        ctx.closePath();
+        ctx.fillStyle = src.rgb;
+        ctx.globalAlpha = 0.45; // a drift ribbon keeps its SOURCE tint, so a
+        ctx.fill();             // lineage crossing into another label is seen leaving
+        ctx.globalAlpha = 1;
+      } else if (dst) {
+        // Born: a ribbon from nothing, opening out of the gap.
+        const dy = dst.inCur;
+        dst.inCur += hpx;
+        const xb = x0 + (x1 - x0) * 0.45, ym = dy + hpx / 2;
+        ctx.beginPath();
+        ctx.moveTo(xb, ym);
+        ctx.bezierCurveTo(mx, dy, mx, dy, x1, dy);
+        ctx.lineTo(x1, dy + hpx);
+        ctx.bezierCurveTo(mx, dy + hpx, mx, dy + hpx, xb, ym);
+        ctx.closePath();
+        ctx.fillStyle = dst.rgb;
+        ctx.globalAlpha = 0.35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (src) {
+        // Died: the ribbon closes to nothing before the next stage.
+        const sy = src.outCur;
+        src.outCur += hpx;
+        const xd = x0 + (x1 - x0) * 0.55, ym = sy + hpx / 2;
+        ctx.beginPath();
+        ctx.moveTo(x0, sy);
+        ctx.bezierCurveTo(mx, sy, mx, sy, xd, ym);
+        ctx.bezierCurveTo(mx, sy + hpx, mx, sy + hpx, x0, sy + hpx);
+        ctx.closePath();
+        ctx.fillStyle = src.rgb;
+        ctx.globalAlpha = 0.35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  for (let c = 0; c < K; c++) {
+    for (const node of cols[c].values()) {
+      ctx.fillStyle = node.rgb;
+      ctx.fillRect(node.x, node.yTop, nodeW, Math.max(node.h, 1));
+    }
+  }
+
+  // Names beside the outer columns — the middle ones are readable by tint and
+  // by following the ribbon to an edge that is named. The latest column also
+  // carries counts: it is the live readout.
+  ctx.font = `${9.5 * dpr}px ui-monospace, monospace`;
+  for (const [c, align] of [[0, 'left'], [K - 1, 'right']] as Array<[number, CanvasTextAlign]>) {
+    ctx.textAlign = align;
+    for (const sp of d.stages[c].species) {
+      const node = cols[c].get(sp.key)!;
+      if (node.h < 9 * dpr) continue; // thin bars lean on the legend
+      ctx.fillStyle = '#c8cdd5';
+      const label = c === 0 ? speciesLabel(sp.key) : `${speciesLabel(sp.key)} ${sp.count}`;
+      ctx.fillText(label,
+          align === 'left' ? node.x + nodeW + 4 * dpr : node.x - 4 * dpr,
+          node.yTop + node.h / 2 + 3.5 * dpr);
+    }
+  }
+  ctx.textAlign = 'left';
+
+  // When each stage was, as time before now, under every column that has the
+  // room; a cramped chart names only its ends.
+  ctx.fillStyle = '#8b93a3';
+  ctx.font = `${8.5 * dpr}px ui-monospace, monospace`;
+  ctx.textAlign = 'center';
+  const lastTick = d.stages[K - 1].tick;
+  const roomy = (gw - nodeW) / (K - 1) >= 46 * dpr;
+  for (let c = 0; c < K; c++) {
+    if (!roomy && c !== 0 && c !== K - 1) continue;
+    const ago = (lastTick - d.stages[c].tick) / d.tps;
+    ctx.fillText(c === K - 1 ? 'now' : `-${fmtSpan(ago)}`,
+        colX(c) + nodeW / 2, padT + gh + 11 * dpr);
+  }
+  ctx.textAlign = 'left';
+  popWin.textContent =
+      `${fmtSpan((lastTick - d.stages[0].tick) / d.tps)} · ${K} stages`;
+}
+
+function gathering(ctx: CanvasRenderingContext2D, dpr: number, x: number, y: number): void {
+  ctx.fillStyle = '#8b93a3';
+  ctx.font = `${11 * dpr}px ui-monospace, monospace`;
+  ctx.fillText('gathering…', x, y);
+}
+
+/** The legend. On the role lens it doubles as the control — tap a series to
+ *  drop it from the chart and give the rest the axis. On the lineage lens it
+ *  is a readout only, of the LATEST stage: the Sankey accounts for every head
+ *  on both sides of every boundary, and hiding a species would break exactly
+ *  the conservation the diagram is. */
 function popKeyDraw(): void {
-  const series = popSeriesNow();
-  const hidden = popHiddenNow();
   popKey.innerHTML = '';
-  for (const s of series) {
-    const last = s.vals.length ? s.vals[s.vals.length - 1] : 0;
-    const off = hidden.has(s.key);
+  if (popMode === 'roles') {
+    const d = popData;
+    for (const s of POP_SERIES) {
+      const vals = d ? d[s.key] : [];
+      const last = vals.length ? vals[vals.length - 1] : 0;
+      const off = popHidden.has(s.key);
+      const el = document.createElement('span');
+      el.className = off ? 'off' : '';
+      el.title = off ? `show ${s.label}` : `hide ${s.label}`;
+      el.appendChild(keySwatch(off ? 'transparent' : s.rgb, s.rgb));
+      el.appendChild(document.createTextNode(`${s.label} ${last}`));
+      el.onclick = () => {
+        // Never hide the last one standing: an empty chart is not a view.
+        if (!off && popHidden.size >= POP_SERIES.length - 1) return;
+        if (off) popHidden.delete(s.key); else popHidden.add(s.key);
+        popDraw();
+      };
+      popKey.appendChild(el);
+    }
+    return;
+  }
+  const st = linData && linData.stages.length
+      ? linData.stages[linData.stages.length - 1] : null;
+  for (const sp of st ? st.species : []) {
     const el = document.createElement('span');
-    el.className = off ? 'off' : '';
-    el.title = off ? `show ${s.label}` : `hide ${s.label}`;
-    const dot = document.createElement('i');
-    dot.style.background = off ? 'transparent' : s.rgb;
-    // The faint outer ring is what keeps a dark swatch a swatch: without it a
-    // near-black species reads as a gap in the legend on this near-black panel.
-    dot.style.boxShadow = `inset 0 0 0 1px ${s.rgb}, 0 0 0 1px #ffffff2e`;
-    el.appendChild(dot);
-    el.appendChild(document.createTextNode(`${s.label} ${last}`));
-    el.onclick = () => {
-      // Never hide the last one standing: an empty chart is not a view.
-      if (!off && hidden.size >= series.length - 1) return;
-      if (off) hidden.delete(s.key); else hidden.add(s.key);
-      popDraw();
-    };
+    el.style.cursor = 'default';
+    el.title = sp.key;
+    const rgb = liftForDark(sp.rgb);
+    el.appendChild(keySwatch(rgb, rgb));
+    el.appendChild(document.createTextNode(`${speciesLabel(sp.key)} ${sp.count}`));
     popKey.appendChild(el);
   }
+}
+
+/** A legend swatch. The faint outer ring is what keeps a dark one a swatch:
+ *  without it a near-black species reads as a gap on this near-black panel. */
+function keySwatch(fill: string, ring: string): HTMLElement {
+  const dot = document.createElement('i');
+  dot.style.background = fill;
+  dot.style.boxShadow = `inset 0 0 0 1px ${ring}, 0 0 0 1px #ffffff2e`;
+  return dot;
 }
 
 /** Rounds an axis top up to something a person would have chosen.

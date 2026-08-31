@@ -132,6 +132,12 @@ public final class ServerMain {
 		// with a fresh one — none of which the four role lines can show.
 		app.get("/api/lineage", ctx -> ctx.json(host.lineage()));
 
+		// The Sankey behind the lineage panel: stage snapshots of WHO exists,
+		// with exact per-individual flows between them — continuations, drifts
+		// across a species boundary, births and deaths. Counts say how many; a
+		// flow says where the heads went, which no series of totals can.
+		app.get("/api/lineage/flows", ctx -> ctx.json(host.lineageFlows()));
+
 		// Prometheus text exposition of the same numbers, for scraping.
 		app.get("/metrics", ctx -> {
 			StringBuilder b = new StringBuilder();
