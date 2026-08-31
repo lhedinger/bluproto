@@ -6600,6 +6600,52 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Ancestry is written down at the only moment it exists. A birth's "who
+	 * came from whom" is knowable for exactly one tick; the registry is the
+	 * world remembering it, and this runs the REAL world until something is
+	 * actually born rather than staging a birth — the record must appear from
+	 * ordinary life, or the inspector's family tree is a feature only tests
+	 * ever see.
+	 */
+	static class TheWorldRemembersItsBirths extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
+			net.hedinger.prototype.engine.World.Birth birth = null;
+			for (int t = 0; t < 12000 && birth == null; t++) {
+				w.think();
+				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+					net.hedinger.prototype.engine.World.Birth b = w.birthOf(e.getID());
+					if (b != null) {
+						birth = b;
+						break;
+					}
+				}
+			}
+			assertTrue("ordinary life produced a recorded birth", birth != null);
+			assertTrue("the child knows a parent", birth.parentA() >= 0);
+			assertTrue("a child is deeper than a world-seeded root", birth.generation() >= 1);
+			assertTrue("the species label is clade/name", birth.species().indexOf('/') > 0);
+			boolean listed = false;
+			for (net.hedinger.prototype.engine.World.Birth b : w.childrenOf(birth.parentA())) {
+				listed |= b.child() == birth.child();
+			}
+			assertTrue("the parent's children include the child", listed);
+			// The chain walks: the parent either has its own record or is a root,
+			// and either way the walk terminates rather than looping.
+			int cur = birth.parentA(), steps = 0;
+			while (steps++ < 200) {
+				net.hedinger.prototype.engine.World.Birth b = w.birthOf(cur);
+				if (b == null || b.parentA() < 0) {
+					break;
+				}
+				cur = b.parentA();
+			}
+			assertLess("the ancestor chain terminates", steps, 200);
+		}
+	}
+
 	static class TheRavineIsCutButTheWorldHolds extends Scenario {
 		@Override
 		public void run() {
@@ -10029,6 +10075,7 @@ public class SimTests {
 				new EveryCavernHasAStairOutOfIt(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new TheSkyIsMostlyEmptyAndNothingFloats(),
+				new TheWorldRemembersItsBirths(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),
 				new ThePlantFloorIsTheRoomThatWasDrawn(),

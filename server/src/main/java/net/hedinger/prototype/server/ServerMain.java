@@ -411,6 +411,11 @@ public final class ServerMain {
 
 		// Genome export (read-only): a creature's whole heritable definition, brain
 		// included, as a portable savefile string — back it up, re-inject it below.
+		// One creature's family line: its chain of ancestors and its remembered
+		// children, from the world's birth registry. The inspector's lineage tab.
+		app.get("/api/world/lineage/{id}", ctx ->
+				ctx.json(host.entityLineage(Integer.parseInt(ctx.pathParam("id")))));
+
 		app.get("/api/world/genome/{id}", ctx -> {
 			var d = host.genomeExport(Integer.parseInt(ctx.pathParam("id")));
 			if (d == null) {

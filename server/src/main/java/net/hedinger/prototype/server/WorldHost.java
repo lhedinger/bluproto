@@ -454,6 +454,92 @@ final class WorldHost {
 		return out;
 	}
 
+	/**
+	 * One creature's family line, for the inspector's lineage tab: the chain of
+	 * ancestors (following parentA, the primary line, noting the other parent
+	 * on each link), and every remembered child. Read from the world's birth
+	 * registry — the counts and flows can say what happened to species; only a
+	 * record written at each birth can say what happened to THIS body's family.
+	 */
+	java.util.Map<String, Object> entityLineage(int id) {
+		synchronized (runner) {
+			var w = runner.world();
+			java.util.List<java.util.Map<String, Object>> chain =
+					new java.util.ArrayList<java.util.Map<String, Object>>();
+			int cur = id;
+			boolean faded = false;
+			// A generous cap, not a lie: past it the chain says it was cut. The
+			// registry itself bounds real chains long before this.
+			for (int depth = 0; depth < 128; depth++) {
+				chain.add(lineageNode(w, cur));
+				net.hedinger.prototype.engine.World.Birth b = w.birthOf(cur);
+				if (b == null) {
+					break; // a root: world-seeded, reseeded, or faded from the registry
+				}
+				if (b.parentB() >= 0) {
+					chain.get(chain.size() - 1).put("with", b.parentB());
+				}
+				if (b.parentA() < 0) {
+					break;
+				}
+				cur = b.parentA();
+				if (depth == 126) {
+					faded = true;
+				}
+			}
+			java.util.List<java.util.Map<String, Object>> children =
+					new java.util.ArrayList<java.util.Map<String, Object>>();
+			for (net.hedinger.prototype.engine.World.Birth b : w.childrenOf(id)) {
+				java.util.Map<String, Object> c = lineageNode(w, b.child());
+				c.put("tick", b.tick());
+				children.add(c);
+			}
+			// The chain's far end is a root only if a record proved it; a chain
+			// that ended because the registry no longer remembers says so.
+			boolean rooted = !chain.isEmpty()
+					&& w.birthOf((Integer) chain.get(chain.size() - 1).get("id")) == null && !faded;
+			return java.util.Map.of("id", id, "chain", chain, "children", children,
+					"rooted", rooted, "tick", runner.snapshot().tick());
+		}
+	}
+
+	/** One link of a lineage: identity, species (as born, if recorded; as it
+	 *  lives, if not), generation, when it was born, and whether it still is. */
+	private java.util.Map<String, Object> lineageNode(net.hedinger.prototype.engine.World w, int id) {
+		java.util.Map<String, Object> n = new java.util.LinkedHashMap<String, Object>();
+		n.put("id", id);
+		net.hedinger.prototype.engine.World.Birth b = w.birthOf(id);
+		String species = b != null ? b.species() : null;
+		int generation = b != null ? b.generation() : -1;
+		String status = "gone"; // no longer in the world at all
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e == null || e.getID() != id || e.isRemoved()) {
+				continue;
+			}
+			// Presence is a fact about ANY entity — the first thing clicked in
+			// testing was a corpse item, matched by nothing narrower and so
+			// reported "gone" while visibly on screen. Species and generation
+			// are creature facts and stay behind the NPC check.
+			status = e.isDead() ? "dead" : "alive";
+			if (e instanceof net.hedinger.prototype.entities.NPC tn) {
+				if (species == null && tn.getGenome() != null) {
+					species = net.hedinger.prototype.entities.Species.of(tn.getGenome()).key();
+				}
+				if (generation < 0) {
+					generation = tn.generation();
+				}
+			}
+			break;
+		}
+		n.put("species", species == null ? "unknown" : species);
+		n.put("rgb", species == null ? 0x888888
+				: net.hedinger.prototype.entities.Species.rgbOf(species));
+		n.put("generation", generation);
+		n.put("born", b != null ? b.tick() : -1);
+		n.put("status", status);
+		return n;
+	}
+
 	java.util.Map<String, Object> entityDetail(int id) {
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
 			if (e == null || e.getID() != id || e.isRemoved()) {
