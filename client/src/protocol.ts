@@ -76,4 +76,4 @@ export type Command =
   | { cmd: 'pause' }
   | { cmd: 'resume' }
   | { cmd: 'speed'; value: number }
-  | { cmd: 'level'; z: number }; // view preference: which level to stream
+  | { cmd: 'level'; z: number; below?: boolean }; // view preference: which level to stream, and whether the floor below rides along

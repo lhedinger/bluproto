@@ -359,6 +359,7 @@ const flagOff = (k: string): boolean =>
 const SPRITES_OFF = flagOff('sprites'); // creatures as dots only
 const PHERO_OFF = flagOff('phero');     // pheromone clouds
 const PARALLAX_OFF = flagOff('parallax'); // below-floor slide (floors still show)
+const BELOW_OFF = flagOff('below');       // bodies on the floor below the pits
 const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
 const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 
@@ -405,6 +406,7 @@ export function render(
           belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
         g.drawImage(img, bx, by, bw, bh);
       }
+      drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the ground next
       g.drawImage(layer, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
     }
   } else if (chunkTiles > 0) {
@@ -423,6 +425,7 @@ export function render(
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       g.drawImage(img, bx, by, bw, bh);
     }
+    drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the chunks next
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
         const img = getChunk(cx, cy, level); // lazily fetches + caches this chunk
@@ -1141,6 +1144,9 @@ export function renderGL(
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
     }
+    // Bodies on the floor below ride between the two layers: the batcher
+    // draws in submission order, so the ground quad occludes them next.
+    drawBelowBodiesGL(glr, cam, state, renderTime, level, cv.width, cv.height);
     if (ground) {
       if (lowZoom && groundLowCv) {
         glr.layer('groundlo:' + level, groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
@@ -2100,6 +2106,84 @@ export function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: num
       g.closePath();
       g.stroke();
       return;
+  }
+}
+
+// ---- bodies on the floor below ----------------------------------------------
+// The pit view is a real second level, and with the below cohort subscribed
+// (below=1, the default) the stream carries its bodies too. They are drawn
+// BETWEEN the two ground layers — after the floor below, before the level's
+// own ground — so the upper level's opaque pixels occlude them for free and
+// they show only through genuine openings. Drawn as dots, not sprites: through
+// a pit mouth a moving dot IS the fact worth showing, and the dot takes the
+// same centre-scaling the below ground does, so it sits on its floor as the
+// view slides. Dimmed to sit under the pit veil's darkness.
+
+type BelowBody = { x: number; y: number; px: number; col: string; dead: boolean };
+
+function belowBodies(cam: Camera, state: WorldState, renderTime: number,
+    level: number, w: number, h: number): BelowBody[] {
+  const out: BelowBody[] = [];
+  if (BELOW_OFF || level - 1 < 0) return out;
+  const f = PARALLAX_OFF ? 1.0 : PARALLAX;
+  const cx = w / 2, cy = h / 2;
+  for (const t of state.tracks.values()) {
+    const e = t.curr;
+    if (Math.round(e.z) !== level - 1) continue;
+    const k = e.kind;
+    if (!k.startsWith('npc.') && !k.startsWith('item.')) continue;
+    const p = state.sample(t, renderTime);
+    const s = cam.worldToScreen(p.x, p.y);
+    const sx = cx + (s.x - cx) * f, sy = cy + (s.y - cy) * f;
+    if (sx < -20 || sy < -20 || sx > w + 20 || sy > h + 20) continue;
+    out.push({
+      x: sx, y: sy,
+      px: Math.max(3, e.size * cam.scale * f * 1.6),
+      col: '#' + e.rgb.toString(16).padStart(6, '0'),
+      dead: (e.flags & F_DEAD) !== 0,
+    });
+  }
+  return out;
+}
+
+export function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
+    state: WorldState, renderTime: number, level: number): void {
+  const bodies = belowBodies(cam, state, renderTime, level, g.canvas.width, g.canvas.height);
+  if (bodies.length === 0) return;
+  g.save();
+  g.globalAlpha = 0.7; // under the veil's darkness, not competing with it
+  for (const b of bodies) {
+    drawDot(g, b.x, b.y, b.px, b.col, b.dead);
+  }
+  g.restore();
+}
+
+/** GL variant: the batcher draws in submission order, so these quads land
+ *  between the below layer and the ground layer exactly like the 2D path.
+ *  One tiny tinted square per colour, cached for the tab's life. */
+const belowDotCvs = new Map<string, HTMLCanvasElement>();
+function belowDot(col: string, dead: boolean): HTMLCanvasElement {
+  const key = dead ? 'dead' : col;
+  let c = belowDotCvs.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = 8;
+    const ctx = c.getContext('2d')!;
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = dead ? '#5a5f66' : col;
+    ctx.fillRect(0, 0, 8, 8);
+    belowDotCvs.set(key, c);
+  }
+  return c;
+}
+
+export function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
+    state: WorldState, renderTime: number, level: number,
+    w: number, h: number): void {
+  for (const b of belowBodies(cam, state, renderTime, level, w, h)) {
+    const cvd = belowDot(b.col, b.dead);
+    glr.sprite('bdot:' + (b.dead ? 'dead' : b.col), cvd, 1, 0, 0, 8, 8,
+        b.x - b.px / 2, b.y - b.px / 2, b.px, b.px);
   }
 }
 

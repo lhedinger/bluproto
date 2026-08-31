@@ -181,6 +181,7 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['overlay', 'badges, rings & links'],
   ['minimap', 'minimap'],
   ['parallax', 'below-floor parallax slide'],
+  ['below', 'creatures on the floor below'],
   ['gl', 'webgl renderer (off = canvas2d)'],
 ];
 /**
@@ -196,6 +197,9 @@ const VIEW_FLAGS: Array<[string, string]> = [
 ];
 const flagOff = (k: string): boolean => new RegExp('[?&]' + k + '=0\\b').test(location.search);
 const VEG_OFF = flagOff('veg');
+// Whether the stream should carry the floor below's cohort too (the pit-view
+// bodies). Sent with every level subscription; the server filters accordingly.
+const BELOW_BODIES = !flagOff('below');
 const MINIMAP_OFF = flagOff('minimap');
 // The HUD's one-line record of what this load has switched off, so every
 // screenshot documents its own experiment.
@@ -403,7 +407,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       // connection now, not only when someone taps: after a reconnect the two
       // ends have no other way to agree, and silence meant the server carried on
       // with whatever the previous session had asked for.
-      net.send({ cmd: 'level', z: currentLevel });
+      net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
       // Only offer the level switch when the world actually has more than one.
       levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
       levelBtn.textContent = levelName(currentLevel);
@@ -1025,7 +1029,7 @@ function goToLevel(z: number): void {
   fetchCover(); // cover mask is per-level
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.
-  net.send({ cmd: 'level', z: currentLevel });
+  net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
 }
 
 levelBtn.onclick = () => {
