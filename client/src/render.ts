@@ -243,10 +243,11 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // layer moves d while the floor below moves 0.90d, so the view down a hole
 // slides as you travel. That slide is the whole point — it is what separates
 // "there is a place down there" from "someone painted rock on the lid". The
-// factor is a storey read at arm's length, not surveyed geometry: 0.94 was
-// strictly nearer the truth for one storey under a far camera, and too subtle
-// to notice through an opening a few tiles wide — 0.90 trades a little
-// realism for a slide you can actually catch, which is the feature.
+// factor is a storey read at arm's length, not surveyed geometry: 0.90 made
+// the slide easy to catch but read as too much — pit floors visibly swimming
+// away from their mouths at the screen's edges — so this sits at the 0.94 a
+// far camera over a one-storey drop actually projects: subtler on purpose,
+// realism over showmanship.
 //
 // The dimming of what shows through is the bake's business, not this pass's:
 // the pit interior arrives as a flat black veil at RenderFx.holeDepth opacity
@@ -261,7 +262,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // past 12 px/tile was a feature nobody saw — at fit zoom the openings are
 // small, but a hole that is dark blue nothing until the third wheel-click
 // reads as a bug, not a hole.
-export const PARALLAX = 0.90;
+export const PARALLAX = 0.94;
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
 // canvas itself: one getImageData per chunk for the life of the tab, and it
