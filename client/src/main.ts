@@ -1617,16 +1617,82 @@ type PopData = {
   herbivore: number[]; predator: number[]; scavenger: number[]; parasite: number[];
 };
 
+type LinData = {
+  sampleSec: number; tps: number; tick: number[];
+  species: Array<{ key: string; clade: string; name: string; rgb: number; counts: number[] }>;
+};
+
+/** One drawable series, whichever lens produced it — the chart and the legend
+ *  work on this shape and never ask which endpoint it came from. */
+type Series = { key: string; label: string; rgb: string; dash: number[]; vals: number[] };
+
+/** A lineage line is hue = species, dash = clade. The species centroids give
+ *  the same "ochre" the same tint in every clade, so colour alone cannot say
+ *  whether a line is the ochre herbivores or the ochre predators — the dash
+ *  carries the clade instead of a second, made-up palette. */
+const CLADE_DASH: Record<string, number[]> = {
+  herbivore: [], predator: [6, 3], scavenger: [2, 3], parasite: [6, 3, 2, 3],
+};
+
 let popOn = /[?&]pop\b/.test(location.search);
-/** Which series are drawn. Prey outnumber predators and scavengers by an order
- *  of magnitude, and on one shared axis — which is the honest way to show three
- *  counts of the same kind — that squashes the two small ones onto the floor.
- *  Rather than lie about the scale with a second axis, the legend lets a viewer
- *  drop the big series and let the others have the height. */
+/** Which lens the panel shows: the four trophic roles, or one line per species
+ *  — the view that shows a lineage dying out and the niche being reseeded,
+ *  which the role totals barely register. */
+let popMode: 'roles' | 'lineages' = 'roles';
+/** Which series are drawn, per lens. Prey outnumber predators and scavengers
+ *  by an order of magnitude, and on one shared axis — which is the honest way
+ *  to show counts of the same kind — that squashes the small ones onto the
+ *  floor. Rather than lie about the scale with a second axis, the legend lets
+ *  a viewer drop the big series and let the others have the height. */
 const popHidden = new Set<string>();
+const linHidden = new Set<string>();
 let popData: PopData | null = null;
+let linData: LinData | null = null;
 let popFetching = false;
 let popLastFetch = 0;
+
+/** The current lens's series, in the unified shape. Lineage columns arrive
+ *  zero-filled for species that have died out — the server keeps their columns
+ *  on purpose, and so does this: a flat line on the floor with its name still
+ *  in the legend IS the extinction reading. */
+function popSeriesNow(): Series[] {
+  if (popMode === 'roles') {
+    return popData
+      ? POP_SERIES.map(s => ({ key: s.key, label: s.label, rgb: s.rgb, dash: [], vals: popData![s.key] }))
+      : [];
+  }
+  return linData
+    ? linData.species.map(s => ({
+        key: s.key,
+        label: `${s.name} ${s.clade}`,
+        rgb: liftForDark(s.rgb),
+        dash: CLADE_DASH[s.clade] ?? [],
+        vals: s.counts,
+      }))
+    : [];
+}
+
+/** A species tint, floored to chart-legible. The umbral centroid is honestly
+ *  near-black — its creatures wear that — but a near-black line on this panel
+ *  is a species the graph cannot show dying out. Dark tints are lifted toward
+ *  white just enough to draw with; everything bright passes through. Display
+ *  only: the world still paints bodies in their true marker colours. */
+function liftForDark(rgb: number): string {
+  let r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const floor = 0.3;
+  if (luma < floor) {
+    const t = (floor - luma) / (1 - luma); // exactly enough lift, no more
+    r = Math.round(r + (255 - r) * t);
+    g = Math.round(g + (255 - g) * t);
+    b = Math.round(b + (255 - b) * t);
+  }
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+function popHiddenNow(): Set<string> {
+  return popMode === 'roles' ? popHidden : linHidden;
+}
 
 function popApply(): void {
   popEl.style.display = popOn ? 'block' : 'none';
@@ -1636,19 +1702,22 @@ function popApply(): void {
   }
 }
 
-/** Fetches the series, at most once per sample interval — polling faster than
- *  the server samples would only re-draw the same numbers. */
+/** Fetches the current lens's series, at most once per sample interval —
+ *  polling faster than the server samples would only re-draw the same
+ *  numbers. */
 function popPoll(force = false): void {
   const now = performance.now();
-  const everyMs = (popData ? popData.sampleSec : 5) * 1000;
+  const have = popMode === 'roles' ? popData : linData;
+  const everyMs = (have ? have.sampleSec : 5) * 1000;
   if (popFetching || (!force && now - popLastFetch < everyMs)) return;
   popFetching = true;
   popLastFetch = now;
-  fetch('api/population')
+  const mode = popMode;
+  fetch(mode === 'roles' ? 'api/population' : 'api/lineage')
     .then(r => (r.ok ? r.json() : null))
-    .then((d: PopData | null) => {
+    .then((d: (PopData & LinData) | null) => {
       if (d && Array.isArray(d.tick)) {
-        popData = d;
+        if (mode === 'roles') popData = d; else linData = d;
         popDraw();
       }
     })
@@ -1657,9 +1726,18 @@ function popPoll(force = false): void {
 }
 
 function popDraw(): void {
-  const d = popData;
+  const d = popMode === 'roles' ? popData : linData;
+  const series = popSeriesNow();
+  const hidden = popHiddenNow();
   const ctx = popCv.getContext('2d');
-  if (!ctx || !d) return;
+  if (!ctx) return;
+  if (!d) {
+    // No data for this lens yet (first switch): a blank chart under the right
+    // heading, never the other lens's lines under this one's.
+    ctx.clearRect(0, 0, popCv.width, popCv.height);
+    popKeyDraw();
+    return;
+  }
   // Draw at device resolution and let CSS scale it back down, so hairlines and
   // text stay crisp on a phone.
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1680,12 +1758,12 @@ function popDraw(): void {
     return;
   }
 
-  // One shared vertical scale: the three roles are the same kind of quantity,
-  // and separate axes would hide that predators are a tenth of the herbivores.
+  // One shared vertical scale: every line is the same kind of quantity, and
+  // separate axes would hide that predators are a tenth of the herbivores.
   let max = 1;
-  for (const s of POP_SERIES) {
-    if (popHidden.has(s.key)) continue;
-    for (const v of d[s.key]) if (v > max) max = v;
+  for (const s of series) {
+    if (hidden.has(s.key)) continue;
+    for (const v of s.vals) if (v > max) max = v;
   }
   max = niceCeil(max);
   const xAt = (i: number) => padL + (gw * i) / (n - 1);
@@ -1707,19 +1785,20 @@ function popDraw(): void {
   ctx.fillText('0', padL - 4 * dpr, yAt(0));
   ctx.textAlign = 'left';
 
-  for (const s of POP_SERIES) {
-    if (popHidden.has(s.key)) continue;
-    const vals = d[s.key];
+  for (const s of series) {
+    if (hidden.has(s.key)) continue;
     ctx.strokeStyle = s.rgb;
     ctx.lineWidth = 1.5 * dpr;
     ctx.lineJoin = 'round';
+    ctx.setLineDash(s.dash.map(v => v * dpr));
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
-      const x = xAt(i), y = yAt(vals[i]);
+      const x = xAt(i), y = yAt(s.vals[i]);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
   }
+  ctx.setLineDash([]);
 
   // How much time the chart is showing, so the x axis needs no ticks of its own.
   const spanSec = (n - 1) * d.sampleSec;
@@ -1727,27 +1806,31 @@ function popDraw(): void {
   popKeyDraw();
 }
 
-/** The legend doubles as the live readout — each role's latest count — and as
- *  the control: tap one to drop it out of the chart and give the rest the axis. */
+/** The legend doubles as the live readout — each series' latest count — and as
+ *  the control: tap one to drop it out of the chart and give the rest the axis.
+ *  On the lineage lens a "0" here is a reading, not an absence: that species
+ *  existed inside the chart's window and is gone now. */
 function popKeyDraw(): void {
-  const d = popData;
+  const series = popSeriesNow();
+  const hidden = popHiddenNow();
   popKey.innerHTML = '';
-  for (const s of POP_SERIES) {
-    const vals = d ? d[s.key] : [];
-    const last = vals.length ? vals[vals.length - 1] : 0;
-    const off = popHidden.has(s.key);
+  for (const s of series) {
+    const last = s.vals.length ? s.vals[s.vals.length - 1] : 0;
+    const off = hidden.has(s.key);
     const el = document.createElement('span');
     el.className = off ? 'off' : '';
     el.title = off ? `show ${s.label}` : `hide ${s.label}`;
     const dot = document.createElement('i');
     dot.style.background = off ? 'transparent' : s.rgb;
-    dot.style.boxShadow = `inset 0 0 0 1px ${s.rgb}`;
+    // The faint outer ring is what keeps a dark swatch a swatch: without it a
+    // near-black species reads as a gap in the legend on this near-black panel.
+    dot.style.boxShadow = `inset 0 0 0 1px ${s.rgb}, 0 0 0 1px #ffffff2e`;
     el.appendChild(dot);
     el.appendChild(document.createTextNode(`${s.label} ${last}`));
     el.onclick = () => {
       // Never hide the last one standing: an empty chart is not a view.
-      if (!off && popHidden.size >= POP_SERIES.length - 1) return;
-      if (off) popHidden.delete(s.key); else popHidden.add(s.key);
+      if (!off && hidden.size >= series.length - 1) return;
+      if (off) hidden.delete(s.key); else hidden.add(s.key);
       popDraw();
     };
     popKey.appendChild(el);
@@ -1775,6 +1858,21 @@ function fmtSpan(sec: number): string {
 }
 
 popBtn.onclick = () => { popOn = !popOn; popApply(); };
+// The lens tabs. Switching draws whatever that lens already holds and forces a
+// fresh fetch, so the panel never shows one lens's numbers under the other's
+// heading while the request is in flight.
+const popModeRoles = document.getElementById('popModeRoles') as HTMLButtonElement;
+const popModeLin = document.getElementById('popModeLin') as HTMLButtonElement;
+function popSetMode(m: 'roles' | 'lineages'): void {
+  if (popMode === m) return;
+  popMode = m;
+  popModeRoles.classList.toggle('on', m === 'roles');
+  popModeLin.classList.toggle('on', m === 'lineages');
+  popDraw();
+  popPoll(true);
+}
+popModeRoles.onclick = () => popSetMode('roles');
+popModeLin.onclick = () => popSetMode('lineages');
 window.addEventListener('keydown', ev => {
   const tag = (ev.target as HTMLElement).tagName;
   if (ev.key !== 'p' && ev.key !== 'P') return;

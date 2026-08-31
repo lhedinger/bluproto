@@ -28,6 +28,7 @@ public final class ServerTests {
 		visitorLogCountsWithoutIdentifying();
 		visitorLogReadsTheClientThroughTheProxy();
 		populationCensusCountsEveryLivingRole();
+		lineageCensusIsTheSameWorldFiner();
 		fertilityCapsTheGrassSpriteStage();
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
@@ -270,6 +271,75 @@ public final class ServerTests {
 	 * are checked against an independent headcount of the live creatures, which
 	 * fails the moment they stop adding up.
 	 */
+	/**
+	 * The lineage census is the role census cut finer, and the two must always
+	 * describe the same world: every genomed body falls in exactly one species,
+	 * so the species counts sum to the role counts. If they ever disagree, one
+	 * of the two graphs is lying about the population.
+	 */
+	static void lineageCensusIsTheSameWorldFiner() {
+		net.hedinger.prototype.engine.Utils.seed(7);
+		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
+		WorldHost.PopSample roles = WorldHost.censusOf(w, 55);
+		WorldHost.LinSample lin = WorldHost.lineageOf(w, 55);
+
+		int roleTotal = roles.herbivore() + roles.predator() + roles.scavenger() + roles.parasite();
+		int linTotal = 0;
+		for (int c : lin.counts()) {
+			linTotal += c;
+		}
+		check("species counts sum to the role census (" + linTotal + " of " + roleTotal + ")",
+				linTotal == roleTotal && linTotal > 0);
+		check("a seeded world has more species than roles ("
+				+ lin.keys().length + ")", lin.keys().length > 4);
+
+		java.util.Set<String> clades = java.util.Set.of(
+				"herbivore", "predator", "scavenger", "parasite");
+		boolean keysSound = true, tintsSound = true;
+		String prev = "";
+		for (String key : lin.keys()) {
+			int slash = key.indexOf('/');
+			keysSound &= slash > 0 && clades.contains(key.substring(0, slash))
+					&& key.compareTo(prev) > 0; // sorted, so the legend order is stable
+			prev = key;
+			// Every key must resolve to its species' own tint: the legend colours
+			// from the key alone, without a genome in hand.
+			tintsSound &= net.hedinger.prototype.entities.Species.rgbOf(key) >= 0;
+		}
+		check("every species key is clade/name, sorted", keysSound);
+		check("every species key carries a resolvable tint", tintsSound);
+
+		// A death is one species' loss, nobody else's: kill one genomed body and
+		// exactly one column moves, down by exactly one.
+		String killedKey = null;
+		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
+					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null) {
+				killedKey = net.hedinger.prototype.entities.Species.of(t.getGenome()).key();
+				t.kill();
+				break;
+			}
+		}
+		WorldHost.LinSample after = WorldHost.lineageOf(w, 56);
+		int moved = 0, movedBy = 0;
+		String movedKey = null;
+		for (int i = 0; i < lin.keys().length; i++) {
+			int now = 0;
+			for (int k = 0; k < after.keys().length; k++) {
+				if (after.keys()[k].equals(lin.keys()[i])) {
+					now = after.counts()[k];
+				}
+			}
+			if (now != lin.counts()[i]) {
+				moved++;
+				movedBy = lin.counts()[i] - now;
+				movedKey = lin.keys()[i];
+			}
+		}
+		check("a death moves exactly its own species (" + movedKey + " -" + movedBy + ")",
+				moved == 1 && movedBy == 1 && killedKey != null && killedKey.equals(movedKey));
+	}
+
 	static void populationCensusCountsEveryLivingRole() {
 		net.hedinger.prototype.engine.Utils.seed(7);
 		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
