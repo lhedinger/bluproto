@@ -2603,6 +2603,25 @@ public final class Worlds {
 			}
 		}
 
+		// Founder minded hunters, so the predator clade has an evolving line of its
+		// own rather than only the scripted loop. It was the one clade left without
+		// one: herbivores, scavengers and parasites all had minded cohorts and
+		// predators had thinkPredator and nothing else, which meant the role could
+		// not be learned, only executed. Seeded as two lineages of siblings for the
+		// reason the other two are — a clade is a hard mate barrier, so a lone
+		// founder of a sexual line dies single.
+		int nHuntLines = 2;
+		int nHuntPerLine = Math.max(2, sc(2, scale));
+		net.hedinger.prototype.entities.Genome[] hunters = mindedSpecies(nHuntLines);
+		for (int line = 0; line < nHuntLines; line++) {
+			for (int i = 0; i < nHuntPerLine; i++) {
+				double[] p = openSpot(w);
+				net.hedinger.prototype.entities.Genome g =
+						net.hedinger.prototype.entities.Genome.child(hunters[line], 0.03);
+				w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
+			}
+		}
+
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < sc(10, scale); i++) {
 			double[] p = openSpot(w);
