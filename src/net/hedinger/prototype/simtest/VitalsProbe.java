@@ -47,16 +47,16 @@ public final class VitalsProbe {
 				if (!(e instanceof TestNPC n) || n.isDead() || n.isRemoved()) {
 					continue;
 				}
-				String r = n.ecoRole();
-				if ("scavenger".equals(r)) {
+				var r = n.ecoClade();
+				if (r == net.hedinger.prototype.entities.Genome.Clade.SCAVENGER) {
 					scav++;
-				} else if ("parasite".equals(r)) {
+				} else if (r == net.hedinger.prototype.entities.Genome.Clade.PARASITE) {
 					para++;
 				} else if (n.isMinded()) {
 					minded++;
-				} else if ("herbivore".equals(r)) {
+				} else if (r == net.hedinger.prototype.entities.Genome.Clade.HERBIVORE) {
 					prey++;
-				} else if ("predator".equals(r)) {
+				} else if (r == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
 					pred++;
 				}
 				if (!n.canExert()) {

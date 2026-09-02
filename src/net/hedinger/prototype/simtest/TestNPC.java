@@ -1430,7 +1430,7 @@ public class TestNPC extends NPC {
 			}
 			// Leave rival predators alone unless desperate: eating one's own kind is
 			// a starvation measure, not everyday hunting.
-			if (!cannibal && n instanceof TestNPC tn && tn.ecoRole().equals("predator")) {
+			if (!cannibal && n instanceof TestNPC tn && tn.ecoClade() == Genome.Clade.PREDATOR) {
 				continue;
 			}
 			// Parasites are ignored outright, at any hunger: too small and too
@@ -3339,13 +3339,24 @@ public class TestNPC extends NPC {
 		// roleless so the steward never counts or trims them. Deliberately not gated
 		// on `metabolic`: a scripted scavenger built for a test is still a
 		// scavenger, and asking whether it burns energy answers a different question.
+		var c = ecoClade();
+		return c == null ? "" : c.wireName();
+	}
+
+	/**
+	 * The same fact as {@link #ecoRole()} with its type still on: which clade
+	 * this body is counted under, or null for the roleless fixtures. The
+	 * string form exists for the wire (census payloads, cull orders); code
+	 * that COMPARES roles should compare clades, so the compiler checks the
+	 * name and a typo cannot silently empty a cohort.
+	 */
+	public Genome.Clade ecoClade() {
 		if (genome == null) {
-			return "";
+			return null;
 		}
 		// Behaviour is honoured as an override so the hardcoded hunting loop can
 		// never disagree with the bucket it is counted under, whatever its genome says.
-		return behavior == Behavior.PREDATOR
-				? Genome.Clade.PREDATOR.wireName() : clade.wireName();
+		return behavior == Behavior.PREDATOR ? Genome.Clade.PREDATOR : clade;
 	}
 
 	@Override
