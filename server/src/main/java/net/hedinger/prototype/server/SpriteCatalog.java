@@ -735,7 +735,7 @@ final class SpriteCatalog {
 	}
 
 	private String tileCard(Tile.TileType t) {
-		Tile probe = new Tile(0, 0, 0, t);
+		Tile probe = new Tile(0, 0, 0, t, 0); // no-draw: the bake runs beside the live sim
 		StringBuilder flags = new StringBuilder();
 		if (probe.isWalkable()) {
 			flag(flags, "walkable", false);

@@ -163,7 +163,13 @@ public final class GroundTextures {
 	 *  pixel pass adds is grassland's fertility potential (see {@link #sward}),
 	 *  fixed at world-gen and therefore bakeable. */
 	public static int groundClass(Tile t) {
-		switch (t.getType()) {
+		return groundClass(t.getType());
+	}
+
+	/** The class straight from the type — for callers that hold no tile
+	 *  (rank lookups, catalog probes), so asking never builds one. */
+	public static int groundClass(Tile.TileType type) {
+		switch (type) {
 		case TYPE_WATER:
 			return CLS_WATER;
 		case TYPE_MUD:
