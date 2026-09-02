@@ -31,7 +31,7 @@ final class PheromonePainter {
 		// The stipple is indexed by world-absolute art-pixel, so it holds
 		// still as the cloud decays.
 		double s = Math.min(1.0, cloud.getStrength() / 8.0);
-		int A = 12; // art-pixels per tile, matching the ground grid
+		int A = net.hedinger.prototype.engine.GroundTextures.ART;
 		double step = (v.pixelX(1, Z, 0) - v.pixelX(0, Z, 0)) / (double) A;
 		if (step <= 0) {
 			return;

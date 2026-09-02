@@ -187,7 +187,7 @@ public final class ProcTiles {
 		// Pixel-art slope, matching the ground's 12x12 art-pixel grid: the
 		// climb renders as four flat bands whose boundaries are Bayer-dithered,
 		// never a smooth gradient.
-		int A = 12, ap = TS / A + 1; // art-pixel size (rounded up to cover)
+		int A = GroundTextures.ART, ap = TS / A + 1; // art-pixel size (rounded up to cover)
 		Color mid = new Color(
 				(RAMP_LO.getRed() + RAMP_HI.getRed()) / 2,
 				(RAMP_LO.getGreen() + RAMP_HI.getGreen()) / 2,

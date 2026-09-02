@@ -143,7 +143,7 @@ public class Grid {
 			}
 		}
 		int ts = ResourceManager.tileSize;
-		int A = 12; // must match renderGroundPixel's art-pixel grid
+		int A = GroundTextures.ART;
 		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
 		// The design system's cover translucency: the whole veil draws at
 		// VEIL_ALPHA, so the body underneath always half-reads through it.
@@ -579,7 +579,7 @@ public class Grid {
 	 */
 	private void renderGroundPixel(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
-		int A = 12; // art-pixels per tile
+		int A = GroundTextures.ART;
 		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
 		for (int x = 0; x < world.cols; x++) {
 			for (int y = 0; y < world.rows; y++) {
@@ -1007,7 +1007,7 @@ public class Grid {
 	 * sprite, §4's sanctioned contact shadow.
 	 */
 	private void seatRamp(Graphics2D g2, int sx, int sy, int x, int y, int up) {
-		int A = 12, ts = ResourceManager.tileSize;
+		int A = GroundTextures.ART, ts = ResourceManager.tileSize;
 		int[] alpha = { 110, 70, 40 }; // grade out from the rock
 		java.awt.Color[] shade = new java.awt.Color[alpha.length];
 		for (int i = 0; i < alpha.length; i++) {
@@ -1171,7 +1171,7 @@ public class Grid {
 	 * noise. Ties (equal rank) keep the straight tile edge.
 	 */
 	private int resolveEdge(int x, int y, int ai, int aj, int cls) {
-		int A = 12;
+		int A = GroundTextures.ART;
 		int own = edgeRank(cls);
 		if (own < 0) {
 			return cls;

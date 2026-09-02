@@ -25,7 +25,7 @@ import net.hedinger.prototype.entities.Door;
 final class MachineStamp {
 
 	/** Art-pixels per tile — the lattice everything lands on. */
-	static final int A = 12;
+	static final int A = net.hedinger.prototype.engine.GroundTextures.ART;
 
 	/** Heading buckets, matching the creature atlases' eight. */
 	static final int DIRS = 8;
