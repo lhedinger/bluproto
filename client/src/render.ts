@@ -8,6 +8,7 @@ import {
   corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
+import { flagOff } from './flags';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_CARRY, ACT_FLEE, ACT_GRAZE, ACT_HUNT, ACT_MATE,
   ACT_NEST, ACT_RIDE, actionOf, F_CARRYING, F_DEAD, F_GRABBED,
@@ -354,8 +355,7 @@ export const DOT_LOD_SCALE = 8;
 
 // Perf experiment switches (the ⚙ dialog in main.ts writes these): each
 // disables one visual subsystem so its cost can be isolated on a device.
-const flagOff = (k: string): boolean =>
-  typeof location !== 'undefined' && new RegExp('[?&]' + k + '=0\\b').test(location.search);
+
 const SPRITES_OFF = flagOff('sprites'); // creatures as dots only
 const PHERO_OFF = flagOff('phero');     // pheromone clouds
 const PARALLAX_OFF = flagOff('parallax'); // below-floor slide (floors still show)
@@ -2125,7 +2125,7 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
     level: number, w: number, h: number): BelowBody[] {
   const out: BelowBody[] = [];
   if (BELOW_OFF || level - 1 < 0) return out;
-  const f = PARALLAX_OFF ? 1.0 : PARALLAX;
+  const f = parallaxFactor(); // the same factor the ground below slid by
   const cx = w / 2, cy = h / 2;
   for (const t of state.tracks.values()) {
     const e = t.curr;

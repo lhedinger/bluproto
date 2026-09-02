@@ -10,8 +10,9 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { drawSenseHeat, render, renderGL, type WorldMeta } from './render';
+import { VEG_KIND_MASK, drawSenseHeat, render, renderGL, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
+import { flagOff, flagOn } from './flags';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
 const fx = document.getElementById('fx') as HTMLCanvasElement;
@@ -195,7 +196,7 @@ const VIEW_FLAGS: Array<[string, string]> = [
   ['pop', 'population graph'],
   ['hud', 'performance HUD'],
 ];
-const flagOff = (k: string): boolean => new RegExp('[?&]' + k + '=0\\b').test(location.search);
+
 const VEG_OFF = flagOff('veg');
 // Whether the stream should carry the floor below's cohort too (the pit-view
 // bodies). Sent with every level subscription; the server filters accordingly.
@@ -214,7 +215,7 @@ const perfOffStr = PERF_FLAGS.filter(([k]) => k !== 'gl' && flagOff(k)).map(([k]
 // the renderer can tell "same array, new content" without an identity swap.
 /** High bit of a vegetation byte: this tile grows fungus, not grass. Set by the
  *  server in the full grid only — see VegFeed.KIND_FUNGUS. */
-const VEG_KIND_MASK = 0x80;
+
 let vegGrid: Uint8Array | null = null;
 let vegSeq = -1;
 let vegVersion = 0;
@@ -1469,7 +1470,7 @@ function toast(msg: string): void {
 
 // ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
 const hudEl = document.getElementById('hud') as HTMLElement;
-let hudOn = /[?&]hud\b/.test(location.search);
+let hudOn = flagOn('hud');
 let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0,
   secLayers: 0, secEnts: 0, secTail: 0 };
 let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
@@ -1516,7 +1517,7 @@ if (MINIMAP_OFF) mm.style.display = 'none';
 function viewFlagOn(k: string): boolean {
   if (k === 'pop') return popOn;
   if (k === 'hud') return hudOn;
-  return new RegExp('[?&]' + k + '\\b').test(location.search);
+  return flagOn(k);
 }
 
 const perfBtn = document.createElement('button');
@@ -1736,7 +1737,7 @@ type FlowData = {
   flows: Array<{ stage: number; from: string; to: string; n: number }>;
 };
 
-let popOn = /[?&]pop\b/.test(location.search);
+let popOn = flagOn('pop');
 /** Which lens the panel shows: the four trophic roles over time, or the
  *  lineage Sankey — species as node columns with ribbons carrying each head to
  *  where it actually went, which is the view that shows a lineage dying out
