@@ -58,20 +58,15 @@ public class TestNPC extends NPC {
 	 *  creature has consumed all of it. Health is flat across every body size, which
 	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
 	private static final int FULL_BODY_HEALTH = 100;
-	/**
-	 * Energy in a carcass, per unit of its mass. Meat is meat: a body is worth the
-	 * same whether the eater killed it or found it, so this is {@link #MEAT_ENERGY}
-	 * rather than a number of its own.
-	 *
-	 * <p>What separates the two trophic levels is not the price of the meat. A
-	 * hunter pays for its meal in the chase and the risk of taking on something
-	 * that fights back; a scavenger pays in search — measured across five seeds it
-	 * had a carcass within biting distance on 0.87 per cent of its ticks and spent
-	 * the rest walking between bodies. Those are the real costs, and they are
-	 * already charged, in energy and in time, everywhere else in the loop.
-	 */
-	@Unit("energy per mass")
-	public static double CARRION_ENERGY = MEAT_ENERGY;
+	// Carrion is priced at MEAT_ENERGY directly. It briefly had a constant of
+	// its own initialised to the same value — but "meat is meat: a body is
+	// worth the same whether the eater killed it or found it" is an identity,
+	// and once constants became runtime-tunable an alias was an identity that
+	// could be tuned apart. What separates the two trophic levels is not the
+	// price of the meat: a hunter pays in the chase and the risk, a scavenger
+	// pays in search (measured across five seeds it had a carcass within
+	// biting distance on 0.87 per cent of its ticks) — costs already charged,
+	// in energy and in time, everywhere else in the loop.
 	/**
 	 * How much of a carcass a scavenger can process in one tick, as a fraction of
 	 * the whole body. A carcass is a meal taken over time, not a pickup: at this
@@ -2837,7 +2832,7 @@ public class TestNPC extends NPC {
 			return 0;
 		}
 		double mass = carrion.bodyMass() * CARRION_BITE;
-		feed(mass * CARRION_ENERGY); // meat -> stomach; satiation powers the body
+		feed(mass * MEAT_ENERGY); // meat -> stomach; satiation powers the body
 		// Aged in ticks of its own remaining span: a bite takes the same FRACTION
 		// out of a mouse as out of an apex body, so a big carcass is genuinely more
 		// meals rather than merely a bigger number.
