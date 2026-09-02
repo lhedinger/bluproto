@@ -1969,13 +1969,18 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
         padX + 4 * dpr, padT + gh / 2 + 14 * dpr);
     return;
   }
-  perU = Math.min(perU, 26 * dpr);
+  perU = Math.min(perU, 32 * dpr);
 
   const colX = (c: number) => padX + ((gw - nodeW) * c) / (K - 1);
   const cols: Array<Map<string, SankeyNode>> = [];
   for (let c = 0; c < K; c++) {
     const m = new Map<string, SankeyNode>();
-    let y = padT + gh; // bottom-aligned, first key lowest — same order every column
+    // Columns centre on the panel's midline, first key lowest, same order
+    // every column. A filtered view of two species otherwise sat capped at
+    // the bottom of an empty chart, reading as a footer rather than a flow.
+    let colH = -gap;
+    for (const sp of specs[c]) colH += nodeUnits(c, sp.key, sp.count) * perU + gap;
+    let y = padT + gh - Math.max(0, (gh - colH) / 2);
     for (const sp of specs[c]) {
       const uIn = unitsIn[c].get(sp.key) ?? 0, uOut = unitsOut[c].get(sp.key) ?? 0;
       const bh = nodeUnits(c, sp.key, sp.count) * perU;
