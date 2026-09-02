@@ -316,14 +316,24 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
   const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
   const mx = cvW / 2, my = cvH / 2;
+  // Every chunk edge is computed as a SHARED grid line and rounded once, so
+  // two neighbours land on the identical device pixel. The obvious per-chunk
+  // rect (origin + width, both scaled) is continuous in float math but lets
+  // each drawImage rasterise its own edges — and adjacent edges at .28px
+  // round apart, leaving one-pixel background seams. Through a pit mouth
+  // nobody saw them; through a sky level the whole world is the below layer
+  // and the seams draw a grid across the map.
+  const edgeX = (wtx: number, factor: number): number =>
+    Math.round(mx + (cam.worldToScreen(wtx, 0).x - mx) * factor);
+  const edgeY = (wty: number, factor: number): number =>
+    Math.round(my + (cam.worldToScreen(0, wty).y - my) * factor);
   const rect = (cx: number, cy: number, factor: number):
       [number, number, number, number] => {
     const wx = cx * chunkTiles, wy = cy * chunkTiles;
     const cw = Math.min(chunkTiles, meta.cols - wx);
     const ch = Math.min(chunkTiles, meta.rows - wy);
-    const o = cam.worldToScreen(wx, wy);
-    return [mx + (o.x - mx) * factor, my + (o.y - my) * factor,
-      cw * cam.scale * factor, ch * cam.scale * factor];
+    const x0 = edgeX(wx, factor), y0 = edgeY(wy, factor);
+    return [x0, y0, edgeX(wx + cw, factor) - x0, edgeY(wy + ch, factor) - y0];
   };
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
