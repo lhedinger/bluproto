@@ -1740,6 +1740,15 @@ let popOn = /[?&]pop\b/.test(location.search);
  *  where it actually went, which is the view that shows a lineage dying out
  *  (its ribbon ends) and the niche being reseeded (a new one begins). */
 let popMode: 'roles' | 'lineages' = 'roles';
+/** Which clade the Sankey shows. One at a time is far more legible than all
+ *  twenty-odd species stacked into one diagram — and the cut is free of
+ *  charge: a clade is inherited and never mutated, so no flow ever crosses
+ *  clades and filtering can never sever a ribbon. */
+const LIN_CLADES = ['all', 'herbivore', 'predator', 'scavenger', 'parasite'] as const;
+let linClade: (typeof LIN_CLADES)[number] = 'all';
+function linCladeMatch(key: string): boolean {
+  return linClade === 'all' || key.startsWith(linClade + '/');
+}
 /** Which ROLE series are drawn. Prey outnumber predators by an order of
  *  magnitude on one shared axis, so the legend lets a viewer drop the big
  *  series and give the rest the height. Roles only: the Sankey accounts for
@@ -1881,15 +1890,23 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
 type SankeyNode = { x: number; yTop: number; h: number; rgb: string; outCur: number; inCur: number };
 
 /**
- * The lineage Sankey. Each stage is a column of species bars, bar height =
- * headcount on ONE scale shared by every column, so the same thickness means
- * the same number of heads everywhere. Ribbons between neighbouring columns
- * carry each head to where it actually went — a species into itself, or into
- * another species where its members drifted across a label boundary. Births
- * taper in from nothing mid-gap; deaths taper out to nothing. Every bar's
- * left edge is exactly covered by what arrived and its right edge by what
- * left: the conservation IS the diagram, which is why the legend cannot hide
- * a species here the way the role lens can hide a line.
+ * The lineage Sankey. Each stage is a column of species bars; ribbons carry
+ * each head to where it actually went — a species into itself, into another
+ * species where its members drifted across a label boundary, in from a birth,
+ * out to a death.
+ *
+ * <p>Widths are PSEUDO-LOGARITHMIC: a band of n heads is 1+log10(n) units
+ * wide, so one head is a visible sliver, ten are twice that, a hundred three
+ * times — the standard answer when magnitudes span orders and the small flows
+ * are the story (a lone predator's death matters as much as thirty grazing
+ * herbivores). The price is stated rather than hidden: log widths are not
+ * additive, so a bar no longer equals the sum of its ribbons, the diagram
+ * says so in its corner, and the outer columns print their true counts —
+ * where the scale stops being linear, the numbers go on the picture.
+ *
+ * <p>Filtered to one clade at a time when asked (the header's cycle button).
+ * The cut can never sever a ribbon: a clade is inherited and never mutated,
+ * so every flow — birth, death, continuation, drift — stays inside its clade.
  */
 function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number): void {
   const d = linData;
@@ -1904,27 +1921,67 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
     return;
   }
   const K = d.stages.length;
-  const nodeW = 9 * dpr, gap = 3 * dpr;
-  // One heads-to-pixels scale for the whole diagram, set by the crowdest
-  // column: its bars plus its gaps must fit the height.
-  let perHead = Infinity;
-  for (const st of d.stages) {
-    let total = 0;
-    for (const sp of st.species) total += sp.count;
-    const room = gh - (st.species.length - 1) * gap;
-    if (total > 0) perHead = Math.min(perHead, room / total);
+  const nodeW = 9 * dpr, gap = 4 * dpr;
+  const real = (k: string) => k !== 'born' && k !== 'died';
+
+  // The clade filter, applied to columns and flows alike.
+  const specs = d.stages.map(st => st.species.filter(sp => linCladeMatch(sp.key)));
+  const flowsAt: Array<FlowData['flows']> = [];
+  for (let c = 0; c + 1 < K; c++) {
+    flowsAt.push(d.flows.filter(f => f.stage === c
+        && (real(f.from) ? linCladeMatch(f.from)
+            : real(f.to) ? linCladeMatch(f.to) : false)));
   }
-  if (!isFinite(perHead)) perHead = 1;
+
+  // Width units: 1 head → 1 unit, 10 → 2, 100 → 3.
+  const uOf = (n: number) => (n <= 0 ? 0 : 1 + Math.log10(n));
+
+  // A node's height is the larger of what arrives and what leaves, in units —
+  // log widths are subadditive, so the two sides genuinely differ and the
+  // smaller side is centred on the bar rather than left ragged at the top.
+  const unitsIn = specs.map(() => new Map<string, number>());
+  const unitsOut = specs.map(() => new Map<string, number>());
+  for (let c = 0; c + 1 < K; c++) {
+    for (const f of flowsAt[c]) {
+      if (real(f.from)) unitsOut[c].set(f.from, (unitsOut[c].get(f.from) ?? 0) + uOf(f.n));
+      if (real(f.to)) unitsIn[c + 1].set(f.to, (unitsIn[c + 1].get(f.to) ?? 0) + uOf(f.n));
+    }
+  }
+  const nodeUnits = (c: number, key: string, count: number) =>
+    Math.max(unitsIn[c].get(key) ?? 0, unitsOut[c].get(key) ?? 0) || uOf(count);
+
+  // One units-to-pixels scale for the whole diagram, set by the crowdest
+  // column — and capped, so a filter that leaves one species does not balloon
+  // it into a slab.
+  let perU = Infinity;
+  let anything = false;
+  for (let c = 0; c < K; c++) {
+    let tot = 0;
+    for (const sp of specs[c]) tot += nodeUnits(c, sp.key, sp.count);
+    if (tot > 0) {
+      anything = true;
+      perU = Math.min(perU, (gh - (specs[c].length - 1) * gap) / tot);
+    }
+  }
+  if (!anything) {
+    gathering(ctx, dpr, padX + 4 * dpr, padT + gh / 2);
+    ctx.fillText(`no ${linClade === 'all' ? 'creatures' : linClade + 's'} in this window`,
+        padX + 4 * dpr, padT + gh / 2 + 14 * dpr);
+    return;
+  }
+  perU = Math.min(perU, 26 * dpr);
 
   const colX = (c: number) => padX + ((gw - nodeW) * c) / (K - 1);
   const cols: Array<Map<string, SankeyNode>> = [];
   for (let c = 0; c < K; c++) {
     const m = new Map<string, SankeyNode>();
     let y = padT + gh; // bottom-aligned, first key lowest — same order every column
-    for (const sp of d.stages[c].species) {
-      const bh = sp.count * perHead;
+    for (const sp of specs[c]) {
+      const uIn = unitsIn[c].get(sp.key) ?? 0, uOut = unitsOut[c].get(sp.key) ?? 0;
+      const bh = nodeUnits(c, sp.key, sp.count) * perU;
       y -= bh;
-      m.set(sp.key, { x: colX(c), yTop: y, h: bh, rgb: liftForDark(sp.rgb), outCur: y, inCur: y });
+      m.set(sp.key, { x: colX(c), yTop: y, h: bh, rgb: liftForDark(sp.rgb),
+        inCur: y + (bh - uIn * perU) / 2, outCur: y + (bh - uOut * perU) / 2 });
       y -= gap;
     }
     cols.push(m);
@@ -1937,11 +1994,11 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
     const from = cols[c], to = cols[c + 1];
     const order = (m: Map<string, SankeyNode>, k: string) =>
       m.has(k) ? m.get(k)!.yTop : Number.MAX_VALUE;
-    const flows = d.flows.filter(f => f.stage === c).sort((a, b) =>
+    const flows = flowsAt[c].slice().sort((a, b) =>
       (order(from, a.from) - order(from, b.from)) || (order(to, a.to) - order(to, b.to)));
     const x0 = colX(c) + nodeW, x1 = colX(c + 1), mx = (x0 + x1) / 2;
     for (const f of flows) {
-      const hpx = f.n * perHead;
+      const hpx = uOf(f.n) * perU;
       const src = from.get(f.from), dst = to.get(f.to);
       if (src && dst) {
         const sy = src.outCur, dy = dst.inCur;
@@ -1997,18 +2054,17 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
     }
   }
 
-  // Names beside the outer columns — the middle ones are readable by tint and
-  // by following the ribbon to an edge that is named. The latest column also
-  // carries counts: it is the live readout.
+  // Names and TRUE counts beside both outer columns. On a log scale the width
+  // cannot be read as a number, so the numbers are written where the eye
+  // lands; middle columns are read by tint and by following a ribbon home.
   ctx.font = `${9.5 * dpr}px ui-monospace, monospace`;
   for (const [c, align] of [[0, 'left'], [K - 1, 'right']] as Array<[number, CanvasTextAlign]>) {
     ctx.textAlign = align;
-    for (const sp of d.stages[c].species) {
+    for (const sp of specs[c]) {
       const node = cols[c].get(sp.key)!;
       if (node.h < 9 * dpr) continue; // thin bars lean on the legend
       ctx.fillStyle = '#c8cdd5';
-      const label = c === 0 ? speciesLabel(sp.key) : `${speciesLabel(sp.key)} ${sp.count}`;
-      ctx.fillText(label,
+      ctx.fillText(`${speciesLabel(sp.key)} ${sp.count}`,
           align === 'left' ? node.x + nodeW + 4 * dpr : node.x - 4 * dpr,
           node.yTop + node.h / 2 + 3.5 * dpr);
     }
@@ -2016,14 +2072,17 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   ctx.textAlign = 'left';
 
   // When each stage was, as time before now, under every column that has the
-  // room; a cramped chart names only its ends.
+  // room; a cramped chart names only its ends. The scale note sits in the
+  // same band: a non-linear width must say it is one.
   ctx.fillStyle = '#8b93a3';
   ctx.font = `${8.5 * dpr}px ui-monospace, monospace`;
-  ctx.textAlign = 'center';
   const lastTick = d.stages[K - 1].tick;
+  ctx.fillText('width ≈ 1+log₁₀ heads', padX, padT + gh + 11 * dpr);
+  ctx.textAlign = 'center';
   const roomy = (gw - nodeW) / (K - 1) >= 46 * dpr;
   for (let c = 0; c < K; c++) {
     if (!roomy && c !== 0 && c !== K - 1) continue;
+    if (c === 0) continue; // its slot holds the scale note
     const ago = (lastTick - d.stages[c].tick) / d.tps;
     ctx.fillText(c === K - 1 ? 'now' : `-${fmtSpan(ago)}`,
         colX(c) + nodeW / 2, padT + gh + 11 * dpr);
@@ -2069,7 +2128,7 @@ function popKeyDraw(): void {
   }
   const st = linData && linData.stages.length
       ? linData.stages[linData.stages.length - 1] : null;
-  for (const sp of st ? st.species : []) {
+  for (const sp of (st ? st.species : []).filter(x => linCladeMatch(x.key))) {
     const el = document.createElement('span');
     el.style.cursor = 'default';
     el.title = sp.key;
@@ -2120,11 +2179,19 @@ function popSetMode(m: 'roles' | 'lineages'): void {
   popMode = m;
   popModeRoles.classList.toggle('on', m === 'roles');
   popModeLin.classList.toggle('on', m === 'lineages');
+  popCladeBtn.style.display = m === 'lineages' ? '' : 'none';
   popDraw();
   popPoll(true);
 }
 popModeRoles.onclick = () => popSetMode('roles');
 popModeLin.onclick = () => popSetMode('lineages');
+const popCladeBtn = document.getElementById('popClade') as HTMLButtonElement;
+popCladeBtn.onclick = () => {
+  linClade = LIN_CLADES[(LIN_CLADES.indexOf(linClade) + 1) % LIN_CLADES.length];
+  popCladeBtn.textContent = linClade === 'all' ? 'all clades' : linClade + 's';
+  popCladeBtn.classList.toggle('on', linClade !== 'all');
+  popDraw();
+};
 // Panels come in two sizes, half and full (see the #pop CSS): this button
 // swaps between them, and the chart redraws at whatever it was given.
 const popSizeBtn = document.getElementById('popSize') as HTMLButtonElement;
