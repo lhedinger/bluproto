@@ -42,7 +42,7 @@ import net.hedinger.prototype.entities.NPC;
 public final class DronePainter {
 
 	/** Art-pixels per tile — the lattice everything here lands on. */
-	private static final int A = 12;
+	private static final int A = net.hedinger.prototype.engine.GroundTextures.ART;
 
 	/** The stamp grid, in art-pixels. Odd, so the body has a true centre to
 	 *  rotate about. */

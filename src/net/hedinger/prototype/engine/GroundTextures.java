@@ -25,6 +25,18 @@ import java.util.Random;
  */
 public final class GroundTextures {
 
+	/**
+	 * Art-pixels per tile — the 12px lattice every painter in the design
+	 * system lands on (ART-STYLE.md). This is the one number the ground pass,
+	 * the autotiler, ramp seating, concealment, and every stamp painter must
+	 * agree on to line up on screen, and it was inlined as a bare 12 in eight
+	 * of them with a comment pleading "must match". The web client keeps its
+	 * own copy (ART in render.ts) because the two languages cannot share a
+	 * constant — that copy's comment points back here.
+	 */
+	public static final int ART = 12;
+
+
 	/** Opaque earth under everything, so bare/grazed ground reads as soil. */
 	public static final Color SOIL = new Color(78, 64, 46);
 	/** Opaque grass ground the caller fills before the pattern overlay; it hides

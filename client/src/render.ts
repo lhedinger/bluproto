@@ -42,6 +42,9 @@ let vegLowDirty = false;
 let vegLowAt = 0;
 const VEG_CHUNKS_PER_FRAME = 2;
 const VEG_LOW_MIN_MS = 1500;
+// Art-pixels per tile. The Java engine owns this number as
+// GroundTextures.ART; the two languages cannot share a constant, so this copy
+// must move with it or every baked layer lands off-lattice.
 const ART = 12;
 
 function vegVariant(tx: number, ty: number): number {
