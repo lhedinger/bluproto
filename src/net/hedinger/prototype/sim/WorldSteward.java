@@ -147,18 +147,27 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 * minded cohort's floor and ceiling know nothing about.
 	 */
 	public static String cohortOf(TestNPC t) {
+		var c = cohortCladeOf(t);
+		return c == null ? "" : c.wireName();
+	}
+
+	/**
+	 * The typed form of {@link #cohortOf}: the clade a creature is governed
+	 * under, or null for a body outside the bookkeeping. The role, and only
+	 * the role. Whether a hardcoded loop or an evolved program is steering is
+	 * not an ecological fact about a creature and does not belong in a
+	 * population bound: a herbivore with a brain competes for the same grass,
+	 * is hunted by the same predators, and leaves the same carcass as one
+	 * without. Counting the minded apart made them a cohort with guardrails of
+	 * their own, so the same animal was governed one way with a brain and
+	 * another way without -- and every minded herbivore was missing from the
+	 * count that is supposed to describe the herd.
+	 */
+	public static Genome.Clade cohortCladeOf(TestNPC t) {
 		if (t == null || t.isDead() || t.isRemoved()) {
-			return "";
+			return null;
 		}
-		// The role, and only the role. Whether a hardcoded loop or an evolved
-		// program is steering is not an ecological fact about a creature and does
-		// not belong in a population bound: a herbivore with a brain competes for
-		// the same grass, is hunted by the same predators, and leaves the same
-		// carcass as one without. Counting the minded apart made them a cohort with
-		// guardrails of their own, so the same animal was governed one way with a
-		// brain and another way without -- and every minded herbivore was missing
-		// from the count that is supposed to describe the herd.
-		return t.ecoRole();
+		return t.ecoClade();
 	}
 
 	/**
@@ -231,15 +240,15 @@ public final class WorldSteward extends Entity implements CullOrders {
 						&& t.getGenome().clade == Genome.Clade.PREDATOR) {
 					mindedPred++;
 				}
-				switch (cohortOf(t)) {
-				case "herbivore" -> herb++;
-				case "predator" -> pred++;
-				case "scavenger" -> scav++;
-				case "parasite" -> para++;
-				default -> {
-					// outside the bookkeeping: the drone, hand-placed oddities,
+				var cohort = cohortCladeOf(t);
+				if (cohort != null) { // else: the drone, hand-placed oddities,
 					// anything whose role has not settled into a guild
-				}
+					switch (cohort) {
+					case HERBIVORE -> herb++;
+					case PREDATOR -> pred++;
+					case SCAVENGER -> scav++;
+					case PARASITE -> para++;
+					}
 				}
 			}
 		}
@@ -290,10 +299,12 @@ public final class WorldSteward extends Entity implements CullOrders {
 				new int[] { herbBounds[1], predBounds[1], scavBounds[1], paraBounds[1] });
 	}
 
-	/** The cohort keys, in the fixed order the ceilings are checked — so which
-	 *  cohort the drone is sent after when two overshoot at once is a fact
-	 *  about the world and not about iteration order. */
-	private static final String[] COHORTS = { "herbivore", "predator", "scavenger", "parasite" };
+	/** The cohort keys — the clades, whose declaration order is the fixed
+	 *  order the ceilings are checked in, so which cohort the drone is sent
+	 *  after when two overshoot at once is a fact about the world and not
+	 *  about iteration order. Deriving from the enum means a new clade can
+	 *  never be missing from the governor's books. */
+	private static final Genome.Clade[] COHORTS = Genome.Clade.values();
 
 	/**
 	 * Every cohort's ceiling, from this tick's fresh counts: republishes the
@@ -327,16 +338,16 @@ public final class WorldSteward extends Entity implements CullOrders {
 				continue; // no ceiling worth the name (the unbounded default)
 			}
 			int target = (int) Math.round(max * CULL_TO);
-			boolean keep = COHORTS[i].equals(running) && counts[i] > target;
+			boolean keep = COHORTS[i].wireName().equals(running) && counts[i] > target;
 			if (keep || (counts[i] > max && cullRole == null)) {
-				cullRole = COHORTS[i];
+				cullRole = COHORTS[i].wireName();
 				cullTarget = target;
 			}
 			if (counts[i] > max * BACKSTOP) {
 				// Far past the line: stop waiting for a machine that may never
 				// arrive and take the excess off by hand, a few at a time,
 				// exactly as the steward always did.
-				trim(COHORTS[i], Math.min(3, counts[i] - max));
+				trim(COHORTS[i].wireName(), Math.min(3, counts[i] - max));
 			}
 		}
 	}
@@ -353,7 +364,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
 					&& t.getPixelSize() > TestNPC.PARASITE_MAX_SIZE_PX
-					&& !t.ecoRole().equals("parasite")) {
+					&& t.ecoClade() != Genome.Clade.PARASITE) {
 				return true;
 			}
 		}
