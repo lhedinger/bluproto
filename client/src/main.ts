@@ -392,7 +392,9 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
         // Open on the GROUND, which may not be the top of the array: a world
         // with sky above it would otherwise open on an empty level, and the
         // first thing a viewer saw would be a drop onto the world.
-        currentLevel = Math.max(0, Math.min(m.levels - 1, m.surface ?? m.levels - 1));
+        // surfaceZ() reads the hello just assigned above; the min/max is a
+        // bounds clamp, not a second opinion about where the ground is.
+        currentLevel = Math.max(0, Math.min(m.levels - 1, surfaceZ()));
         cam.fit(m.cols, m.rows);
       } else {
         // Keep the viewer where it was, but never off the end of a world that
