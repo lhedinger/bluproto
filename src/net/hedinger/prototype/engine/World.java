@@ -1053,14 +1053,19 @@ public class World {
 
 	public Tile getTile(double x, double y, double z) {
 		if (!isValid(x, y, z)) {
-			return new Tile(toCol(x), toRow(y), toLvl(z), Tile.TileType.TYPE_WALL);
+			// Out of bounds reads as solid rock. Built with the no-draw
+			// constructor: this fallback fires inside perception scans and can
+			// be reached from server threads, and a query must not touch the
+			// seeded stream.
+			return new Tile(toCol(x), toRow(y), toLvl(z), Tile.TileType.TYPE_WALL, 0);
 		}
 		return getTile((int) x, (int) y, (int) z);
 	}
 
 	public Tile getTile(int c, int r, int l) {
 		if (!isValid(c, r, l)) {
-			return new Tile(c, r, l, Tile.TileType.TYPE_WALL);
+			// See the double-coordinate overload: a query draws nothing.
+			return new Tile(c, r, l, Tile.TileType.TYPE_WALL, 0);
 		}
 		return levels[l].getTile(c, r);
 	}

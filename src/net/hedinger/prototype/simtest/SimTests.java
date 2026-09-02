@@ -7834,6 +7834,41 @@ public class SimTests {
 	}
 
 	/**
+	 * A query leaves the RNG stream alone. The world has ONE seeded stream and
+	 * it is the whole determinism guarantee — yet the four-arg Tile
+	 * constructor rolls a cosmetic variant, and pure read paths used to build
+	 * throwaway tiles through it: the out-of-bounds getTile fallback (fired
+	 * inside perception scans, reachable from server threads), the edge-rank
+	 * lookup behind the /tiles catalog, and the catalog's flag probes — whose
+	 * boot-time bake runs BESIDE the already-ticking sim, racing the stream.
+	 * Two same-seed twins, one hammered with every query shape, must land on
+	 * the same next draw.
+	 */
+	static class AQueryLeavesTheStreamAlone extends Scenario {
+		@Override
+		public void run() {
+			seed(555);
+			room(8, 8);
+			int untouched = net.hedinger.prototype.engine.Utils.random(1_000_000);
+
+			seed(555);
+			World w = room(8, 8);
+			w.getTile(-3, -3, 0); // out of bounds, integer overload
+			w.getTile(500, 500, 2);
+			w.getTile(-1.5, -2.5, 0.0); // out of bounds, world-coordinate overload
+			for (Tile.TileType t : Tile.TileType.values()) {
+				net.hedinger.prototype.engine.Grid.edgeRankOf(t); // the catalog's rank lookup
+			}
+			new Tile(0, 0, 0, Tile.TileType.TYPE_CRYSTAL, 0); // the catalog's flag probe
+			int queried = net.hedinger.prototype.engine.Utils.random(1_000_000);
+
+			assertTrue("a hammered twin draws the same next number as an "
+					+ "untouched one — queries consumed nothing",
+					untouched == queried);
+		}
+	}
+
+	/**
 	 * A scream says what happened: a landed bite the quarry survives screams
 	 * FIGHT, the killing one screams KILL, and the mind reads the difference
 	 * on the sound_kind channel as a signed hint — -1 violence in progress (a
@@ -10451,6 +10486,7 @@ public class SimTests {
 				new EnergyIsFoodBacked(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
+				new AQueryLeavesTheStreamAlone(),
 				new AScreamSaysWhatHappened(),
 				new ASoundRidesTheWire(),
 				new MindHearsInBodyCoordinates(),

@@ -1126,7 +1126,7 @@ public class Grid {
 	 * shafts and paving neither lap nor get lapped.
 	 */
 	public static int edgeRankOf(Tile.TileType t) {
-		return edgeRank(GroundTextures.groundClass(new Tile(0, 0, 0, t)));
+		return edgeRank(GroundTextures.groundClass(t)); // by type: builds nothing, draws nothing
 	}
 
 	private static int edgeRank(int cls) {

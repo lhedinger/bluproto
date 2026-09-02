@@ -284,6 +284,24 @@ public class Tile {
 		}
 	}
 
+	/**
+	 * A tile whose variant the caller chooses: draws NO randomness. The
+	 * four-arg constructor above rolls a cosmetic variant off the seeded
+	 * simulation stream, which is right for world generation and wrong for
+	 * everything else — an out-of-bounds fallback, a catalog probe, a
+	 * ground-class lookup is a QUERY, and a query that advances the world's
+	 * one RNG both burns the stream on the sim thread and races it from any
+	 * other (the boot-time catalog bake runs beside the ticking world). Pure
+	 * readers construct through here and leave the stream exactly as found.
+	 */
+	public Tile(int x, int y, int z, TileType t, int variant) {
+		col = x;
+		row = y;
+		lvl = z;
+		type = t;
+		this.variant = variant;
+	}
+
 	public int getVariant() {
 		return variant;
 	}
