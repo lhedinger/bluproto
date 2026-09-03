@@ -2526,15 +2526,38 @@ public final class Worlds {
 		// the ecosystem for no reason anyone chose, so it is out of the seeded world
 		// until it earns its place. The behaviour and the fixture both still exist
 		// and stay covered by the scenario suite.
+		// The herd is minded. It keeps the species pool's BODY — the four warm
+		// barcodes, the sizes, the grazer's slow speed and neutral metabolism, all
+		// of which are what makes a herd read as a herd — and takes its behaviour
+		// from a brain instead of thinkBreeder. Nothing in the seeded world is
+		// scripted any more; the scripted behaviours stay in TestNPC for the
+		// scenario suite, which is the one place a fixed, known-good animal is
+		// worth more than an evolving one.
+		//
+		// The genome is copied per body because the pool is a shared array and
+		// mindedForager, unlike the other three minded builders, keeps the instance
+		// it is handed: writing a brain into the pool entry would hand the same
+		// mind to every founder drawn from it.
+		//
+		// No withHerding(): vigilance is read only by thinkBreeder, so on a minded
+		// body it is a flag nothing consults. Whether to flee a hunter or close up
+		// with kin is now the brain's to work out, which is the point.
 		for (int i = 0; i < sc(26, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.breeder(p[0], p[1], SURFACE_Z, herb[i % herb.length])
-					.withHerding()); // corpse span comes from its body -- see configureGenomeBody
+			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
+			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g));
 		}
-		// Founder predators (few: predation should track the prey, not cap it).
+		// Founder hunters (few: predation should track the prey, not cap it), on
+		// the predator species' big fast bodies. Always the forager seed and never
+		// the hitch-hiker: the hitch-hiker closes on what is BIGGER than it, which
+		// for a hunter is the wrong end of every encounter, while the forager seed
+		// is a working hunt once the forage channel means prey.
 		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = openSpot(w);
-			w.spawnEntity(TestNPC.predator(p[0], p[1], SURFACE_Z, pred[i % pred.length]));
+			net.hedinger.prototype.entities.Genome g = pred[i % pred.length].copy();
+			g.brain = starterBrain();
+			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
 		// competes inside the same world as the scripted species — the A/B seam
@@ -2653,7 +2676,7 @@ public final class Worlds {
 		// minded cap in particular is generous — predators hunt minded creatures
 		// like any other body their size or smaller, so that cohort is now held in
 		// check ecologically rather than by deletion.
-		WorldSteward steward = new WorldSteward(w, herb, pred, SURFACE_Z, CAVE_Z,
+		WorldSteward steward = new WorldSteward(w, SURFACE_Z, CAVE_Z,
 				// Every herbivore, scripted or minded, under one bound. The ceiling is
 				// the sum of the two it replaces (160 plain + 250 minded), measured at
 				// the settled world, so the merge changes WHO is counted rather than

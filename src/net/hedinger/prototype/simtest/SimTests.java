@@ -4781,12 +4781,23 @@ public class SimTests {
 	}
 
 	/**
-	 * The demo world seeds a small cohort of minded creatures alongside the scripted
-	 * species, and the steward keeps it from dying out: fully-random brains rarely
-	 * feed themselves, so without the reseed the lineage would starve to nothing and
-	 * the A/B seam with it. Pins that the cohort is present, is marked minded (apart
-	 * from the hardcoded creatures), stays alive over time, and does not crowd out
-	 * the scripted ecosystem it runs beside.
+	 * Every creature the world seeds has a mind, and the steward keeps it that way.
+	 *
+	 * <p>This used to assert the opposite half: that scripted herbivores persisted
+	 * alongside the minded cohort, because the world was an A/B seam with a
+	 * hardcoded ecosystem on one side and evolvable behaviour on the other. The
+	 * seam is gone — the herd, the hunters, the scavengers and the parasites are
+	 * all minded now — so the assertion is inverted rather than deleted. What was
+	 * "the scripted ones are still here" becomes "there are none".
+	 *
+	 * <p>Checking it at spawn only says the founders are minded, which is a fact
+	 * about one loop in Worlds. The steward is the other half, and the herd floor
+	 * is where the scripted bodies used to come back — two per tick, on every
+	 * crash. So the scenario clears the herd outright and watches what the floor
+	 * puts back. That is deliberate rather than fastidious: the first cut simply
+	 * ran the world and asserted, and it passed with the steward seeding scripted
+	 * breeders, because at this seed the herd never crosses its floor in eight
+	 * thousand ticks. An assertion that cannot fire proves nothing.
 	 */
 	static class MindedCohortSustainedBySteward extends Scenario {
 		private int countMinded(World w) {
@@ -4799,26 +4810,85 @@ public class SimTests {
 			return c;
 		}
 
-		private int countRole(World w, String role) {
+		/** Living creatures with a genome but no mind — what the world must never
+		 *  contain. A body without a genome is scenery (the drone, hand-placed
+		 *  props) and is not a creature this rule is about. */
+		private int countScripted(World w) {
 			int c = 0;
 			for (Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
-						&& !t.isMinded() && t.ecoRole().equals(role)) {
+						&& t.getGenome() != null && !t.isMinded()) {
 					c++;
 				}
 			}
 			return c;
 		}
 
+		private int countClade(World w, Genome.Clade clade) {
+			int c = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.getGenome() != null && t.getGenome().clade == clade) {
+					c++;
+				}
+			}
+			return c;
+		}
+
+		private int countHerbivores(World w) {
+			return countClade(w, Genome.Clade.HERBIVORE);
+		}
+
 		@Override
 		public void run() {
 			World w = net.hedinger.prototype.sim.Worlds.demo(7);
 			assertGreater("the demo world seeds a minded cohort", countMinded(w), 0);
-			// Long enough for the random-brained founders to starve and be reseeded.
+			assertEquals("and seeds no scripted creature at all", 0, countScripted(w));
+
 			tick(w, 8000);
 			assertGreater("the steward keeps the minded cohort from dying out", countMinded(w), 0);
-			assertGreater("the scripted herbivores persist alongside the minded cohort",
-					countRole(w, "herbivore"), 0);
+
+			// Now make the steward reseed, rather than hoping it does. The herd
+			// floor is where the scripted bodies used to come back — two per tick,
+			// on every crash — so the rule is only really tested with the floor
+			// actually firing. Left to chance it is not: this seed's herd never
+			// crosses the floor in eight thousand ticks, and a first cut of this
+			// scenario passed with the steward putting scripted breeders back.
+			java.util.List<TestNPC> doomed = new java.util.ArrayList<TestNPC>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.getGenome() != null
+						&& t.getGenome().clade == Genome.Clade.HERBIVORE) {
+					doomed.add(t);
+				}
+			}
+			for (TestNPC t : doomed) {
+				t.remove();
+			}
+			assertEquals("the herd is gone before the floor is asked to restore it",
+					0, countHerbivores(w));
+			tick(w, 400);
+			assertGreater("the steward restores the herd", countHerbivores(w), 0);
+			assertEquals("and every body it put back has a mind", 0, countScripted(w));
+
+			// The hunters' floor is the other seeder, and it needs its own turn:
+			// it only fires with a herd to hunt, so wiping the herd above cannot
+			// reach it. Clearing the hunters once the herd is back does — and
+			// without this the scenario passed with the predator floor still
+			// putting scripted hunters into the world.
+			java.util.List<TestNPC> hunters = new java.util.ArrayList<TestNPC>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.getGenome() != null
+						&& t.getGenome().clade == Genome.Clade.PREDATOR) {
+					hunters.add(t);
+				}
+			}
+			for (TestNPC t : hunters) {
+				t.remove();
+			}
+			tick(w, 400);
+			assertGreater("the steward restores the hunters too", countClade(w,
+					Genome.Clade.PREDATOR), 0);
+			assertEquals("and those have minds as well", 0, countScripted(w));
 		}
 	}
 
