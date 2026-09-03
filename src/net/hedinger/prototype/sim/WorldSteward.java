@@ -51,7 +51,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  population couples to host abundance and to nothing the other floors
 	 *  and ceilings watch. */
 	private final int[] paraBounds;
-	private final Genome[] herbSpecies, predSpecies;
 	/** Floor for the emergent-mind lineage. NOT a population bound: it keeps the
 	 *  A/B seam from going extinct, and has no matching ceiling because minded
 	 *  creatures are capped by the role they belong to like any other animal. */
@@ -68,7 +67,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 	private final int cols, rows;
 	private final int surfaceZ; // the open-air level the herd lives on
 	private final int caveZ; // the underground level, or -1 for a one-level world
-	private int n = 0; // rotates species / placement, deterministically
 	private boolean seedBelow = false; // alternates minded reseeds between the levels
 
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
@@ -189,19 +187,19 @@ public final class WorldSteward extends Entity implements CullOrders {
 		return t != null && !t.isHandPlaced() && cohortOf(t).equals(role);
 	}
 
-	WorldSteward(World w, Genome[] herbSpecies, Genome[] predSpecies, int surfaceZ,
+	WorldSteward(World w, int surfaceZ,
 			int[] herbBounds, int[] predBounds, int mindedFloor) {
-		this(w, herbSpecies, predSpecies, surfaceZ, -1, herbBounds, predBounds, mindedFloor);
+		this(w, surfaceZ, -1, herbBounds, predBounds, mindedFloor);
 	}
 
-	WorldSteward(World w, Genome[] herbSpecies, Genome[] predSpecies, int surfaceZ,
+	WorldSteward(World w, int surfaceZ,
 			int caveZ, int[] herbBounds, int[] predBounds, int mindedFloor) {
-		this(w, herbSpecies, predSpecies, surfaceZ, caveZ, herbBounds, predBounds,
+		this(w, surfaceZ, caveZ, herbBounds, predBounds,
 				mindedFloor, new int[] { 0, Integer.MAX_VALUE },
 				new int[] { 0, Integer.MAX_VALUE });
 	}
 
-	WorldSteward(World w, Genome[] herbSpecies, Genome[] predSpecies, int surfaceZ,
+	WorldSteward(World w, int surfaceZ,
 			int caveZ, int[] herbBounds, int[] predBounds, int mindedFloor,
 			int[] scavBounds, int[] paraBounds) {
 		super(w.getColums() / 2.0, w.getRows() / 2.0, surfaceZ, 0.0); // centre; direction ctor draws no RNG
@@ -209,8 +207,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 		this.rows = w.getRows();
 		this.surfaceZ = surfaceZ;
 		this.caveZ = caveZ;
-		this.herbSpecies = herbSpecies;
-		this.predSpecies = predSpecies;
 		this.herbBounds = herbBounds;
 		this.predBounds = predBounds;
 		this.mindedFloor = mindedFloor;
@@ -228,7 +224,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 		int herbMin = herbBounds[0];
 		int predMin = predBounds[0];
 
-		int herb = 0, pred = 0, scav = 0, para = 0, minded = 0, mindedPred = 0;
+		int herb = 0, pred = 0, scav = 0, para = 0, minded = 0, mindedPred = 0, mindedHerb = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t) {
 				// Tallied alongside the cohorts, but NOT one of them: see the
@@ -236,9 +232,12 @@ public final class WorldSteward extends Entity implements CullOrders {
 				if (!t.isDead() && !t.isRemoved() && t.isMinded()) {
 					minded++;
 				}
-				if (!t.isDead() && !t.isRemoved() && t.isMinded() && t.getGenome() != null
-						&& t.getGenome().clade == Genome.Clade.PREDATOR) {
-					mindedPred++;
+				if (!t.isDead() && !t.isRemoved() && t.isMinded() && t.getGenome() != null) {
+					if (t.getGenome().clade == Genome.Clade.PREDATOR) {
+						mindedPred++;
+					} else if (t.getGenome().clade == Genome.Clade.HERBIVORE) {
+						mindedHerb++;
+					}
 				}
 				var cohort = cohortCladeOf(t);
 				if (cohort != null) { // else: the drone, hand-placed oddities,
@@ -255,18 +254,32 @@ public final class WorldSteward extends Entity implements CullOrders {
 
 		// Floor: reseed a couple per tick until the minimum is restored, so a
 		// crash recovers as a bloom rather than an empty map.
+		//
+		// These used to seed SCRIPTED bodies from a fixed founder pool, and that
+		// was the quiet end of the minded herd. The herd oscillates and crosses
+		// this floor often; every crossing topped it back up with thinkBreeder
+		// animals, while the guard below that was supposed to restore minded ones
+		// could never fire (it counted every minded creature in the world against a
+		// floor of six, and the scavenger and parasite floors alone guarantee
+		// twelve). So each crash converted a little more of the herd to script and
+		// nothing ever converted it back — a ratchet, ending in a world of scripted
+		// grazers. Both floors now reseed through their clade's own survivor mix.
 		if (herb < herbMin) {
-			seed(herbSpecies, true);
-			seed(herbSpecies, true);
+			seedMinded();
+			seedMinded();
 		}
 		if (pred < predMin && herb > predMin * 4) {
-			seed(predSpecies, false);
+			seedMindedPredator();
 		}
-		// Keep the small minded cohort from vanishing: a fully-random mind rarely
-		// feeds itself, so the lineage would otherwise die out and the A/B seam with
-		// it. Reseed one fresh random-brained creature per tick until the floor is
-		// restored (fresh random, not inherited: pure emergence, per the design).
-		if (minded < mindedFloor) {
+		// Keep the minded herd's lineage from vanishing. Counts HERBIVORES, not
+		// every minded body in the world: the scavengers, parasites and hunters
+		// have floors of their own and their bodies used to satisfy this one on the
+		// herd's behalf, which is what made it dead. Largely subsumed now that the
+		// herd floor above seeds minded too — herbMin is the larger number, so it
+		// fires first — and kept because it costs a line and the two say different
+		// things: one is "the herd is thin", this is "the line that carries it is
+		// nearly gone".
+		if (mindedHerb < mindedFloor) {
 			seedMinded();
 		}
 		// The scavenger cohort. Its floor is conditional on there being anything to
@@ -454,25 +467,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 		}
 		getWorld().spawnEntity(
 				TestNPC.mindedScavenger(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
-	}
-
-	/** Spawns one creature of a rotating species at a random open surface tile. */
-	private void seed(Genome[] pool, boolean isPrey) {
-		Genome g = Genome.child(pool[n % pool.length], 0.08); // lineage flavour, slight drift
-		n++;
-		double x = cols / 2.0, y = rows / 2.0;
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
-				x = px;
-				y = py;
-				break;
-			}
-		}
-		TestNPC t = isPrey ? TestNPC.breeder(x, y, surfaceZ, g).withHerding() // born at its size-scaled reserve
-				: TestNPC.predator(x, y, surfaceZ, g);
-		getWorld().spawnEntity(t.withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Spawns one minded herbivore at a random open tile. Reseeds alternate
