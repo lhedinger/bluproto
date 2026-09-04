@@ -60,7 +60,6 @@ const speedSel = document.getElementById('speed') as HTMLSelectElement;
 const spawnSel = document.getElementById('spawn') as HTMLSelectElement;
 const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
-const mindEl = document.getElementById('mind') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
 const levelBtn = document.getElementById('level') as HTMLButtonElement;
 const droneBtn = document.getElementById('drone') as HTMLButtonElement;
@@ -553,7 +552,6 @@ function deselect(): void {
   clearInterval(mindTimer);
   inspectEl.style.display = 'none';
   inspectEl.className = '';
-  mindEl.style.display = 'none';
   reflect();
 }
 
@@ -657,25 +655,46 @@ function renderInspectSimple(d: Record<string, any>): void {
   showInspect();
 }
 
-// Debug context: the whole creature, as a full-screen panel of three tabs —
-// attributes (identity + status), genome, and lineage (its family line, from
-// the world's birth registry). The tab survives re-polls and re-selection, so
-// a viewer walking a family tree stays on the lineage tab from body to body.
-let inspectTab: 'attributes' | 'genome' | 'lineage' = 'attributes';
+// Debug context: the whole creature in ONE panel of tabs — attributes
+// (identity + status), genome, lineage (its family line, from the world's
+// birth registry), and mind (the evolvable program) for a creature that has a
+// brain. The tab survives re-polls and re-selection, so a viewer walking a
+// family tree stays on the lineage tab from body to body.
+//
+// The mind was a second panel that this one hid itself to open, with a "←
+// back" to undo that. Two panels for one creature meant the viewer had to
+// remember which one they were in, the tab bar stopped describing what was on
+// screen, and closing the mind had to reconstruct the state the card was in.
+// A tab is the same content under the rule the rest of the UI already follows.
+type InspectTab = 'attributes' | 'genome' | 'lineage' | 'mind';
+let inspectTab: InspectTab = 'attributes';
 let inspectDetail: Record<string, any> | null = null;
 let lineageData: Record<string, any> | null = null;
 let lineageFor = -1; // which entity lineageData describes
+
+/** The tabs this creature has. Mind appears only for a brained body: a tab
+ *  that says "no brain" is a tab that wastes the reader's click. */
+function inspectTabsFor(d: Record<string, any>): InspectTab[] {
+  const base: InspectTab[] = ['attributes', 'genome', 'lineage'];
+  return d.genome?.hasBrain ? [...base, 'mind'] : base;
+}
 
 function renderInspectDebug(d: Record<string, any>): void {
   inspectDetail = d;
   const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
   const name = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
-  const tabs = (['attributes', 'genome', 'lineage'] as const).map(t =>
+  const avail = inspectTabsFor(d);
+  // A body without a brain cannot show the mind tab; land on attributes rather
+  // than an empty panel when the viewer walks from a minded creature to one
+  // that is merely scripted.
+  if (!avail.includes(inspectTab)) inspectTab = 'attributes';
+  const tabs = avail.map(t =>
     `<button data-tab="${t}" class="${t === inspectTab ? 'on' : ''}">${t}</button>`).join('');
   let body = '';
   if (inspectTab === 'attributes') body = attributesTab(d);
   else if (inspectTab === 'genome') body = genomeTab(d);
-  else body = lineageTab(d);
+  else if (inspectTab === 'lineage') body = lineageTab(d);
+  else body = mindTab();
   const keep = inspectEl.classList.contains('halfsize') ? ' halfsize' : '';
   inspectEl.className = 'dbg' + keep;
   inspectEl.innerHTML = header(swatch, name, d.id, true)
@@ -689,11 +708,16 @@ function renderInspectDebug(d: Record<string, any>): void {
   });
   inspectEl.querySelectorAll('.tabs button').forEach(b =>
     b.addEventListener('click', () => {
-      inspectTab = (b as HTMLElement).dataset.tab as typeof inspectTab;
+      inspectTab = (b as HTMLElement).dataset.tab as InspectTab;
       if (inspectDetail) renderInspectDebug(inspectDetail);
+      syncMindPoll();
     }));
-  const ml = inspectEl.querySelector('.mindlink');
-  if (ml) ml.addEventListener('click', openMind);
+  const save = inspectEl.querySelector('.save');
+  if (save && selectedId !== null) {
+    const id = selectedId;
+    save.addEventListener('click', () => downloadGenome(id));
+  }
+  syncMindPoll();
   // Any lineage node that is still in the world can be walked to: tapping it
   // selects that body, and the tab stays on lineage — the tree is a path.
   inspectEl.querySelectorAll('.lin .node.link').forEach(n =>
@@ -752,11 +776,8 @@ function genomeTab(d: Record<string, any>): string {
     row('mateThresh', gm.mateThreshold),
     row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
   ]);
-  // A doorway to the second inspector: the creature's evolvable program itself.
-  const mindlink = gm.hasBrain
-    ? '<div class="mindlink" role="button">🧠 inspect mind →</div>'
-    : '';
-  return rows + mindlink;
+  // No doorway to a second panel here: the mind is a tab of this one.
+  return rows;
 }
 
 /** The family line. Everything here is the world's birth registry speaking:
@@ -863,55 +884,64 @@ function row(k: string, v: unknown): string {
   return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
 }
 
-// ---- mind inspector --------------------------------------------------------
-// A second panel focused on the creature's evolvable LGP program: its live
-// sensor/actuator vectors, the disassembled instructions with the program
-// counter marked, and the registers. One panel at a time — opening the mind
-// hides the entity card and stops its poll; "← back" reopens the card, "✕"
-// deselects entirely. Polls faster than the card so the PC and I/O feel live.
+// ---- mind tab ---------------------------------------------------------------
+// The creature's evolvable LGP program: live sensor/actuator vectors, the
+// disassembled instructions with the program counter marked, the registers.
+//
+// It is a TAB of the debug inspector, not a panel of its own. It keeps its own
+// poll because a program counter at the card's 1 Hz reads as frozen — but the
+// poll writes only into the tab's body, so the rest of the panel (and the
+// reader's scroll position in a long listing) survives a refresh.
 let mindTimer = 0;
+let mindData: Record<string, any> | null = null;
+let mindFor = -1; // which entity mindData describes
 
-function openMind(): void {
-  if (selectedId === null) return;
-  clearInterval(detailTimer); // the entity card yields the poll to the mind
-  inspectEl.style.display = 'none';
-  refreshMind();
+/** Starts the mind poll while its tab is open and stops it otherwise — called
+ *  wherever the tab, the selection, or the panel's existence can change. */
+function syncMindPoll(): void {
+  const want = inspectTab === 'mind' && selectedId !== null;
   clearInterval(mindTimer);
+  if (!want) return;
+  if (mindFor !== selectedId) {
+    mindData = null;
+    mindFor = selectedId!;
+  }
+  void refreshMind();
   mindTimer = window.setInterval(refreshMind, 500);
 }
 
-function closeMind(): void {
-  clearInterval(mindTimer);
-  mindEl.style.display = 'none';
-  if (selectedId === null) return;
-  refreshDetail(); // reopen the entity card and resume its slower poll
-  clearInterval(detailTimer);
-  detailTimer = window.setInterval(refreshDetail, 1000);
-}
-
 async function refreshMind(): Promise<void> {
-  if (selectedId === null) return;
+  if (selectedId === null || inspectTab !== 'mind') return;
+  const id = selectedId;
   try {
-    const r = await fetch(`/api/world/mind/${selectedId}`);
-    if (!r.ok) { deselect(); return; }
-    renderMind(await r.json());
+    const r = await fetch(`/api/world/mind/${id}`);
+    if (!r.ok) return; // a body that stopped answering is the card's business
+    const d = await r.json();
+    if (selectedId !== id || inspectTab !== 'mind') return; // moved on mid-flight
+    mindData = d;
+    mindFor = id;
+    // Only the tab's body, so the panel does not flicker and the scroll holds.
+    const host = inspectEl.querySelector('#mindBody');
+    if (host) {
+      host.innerHTML = mindBody(d);
+      wireSave();
+    }
   } catch {
-    /* transient; keep the last panel */
+    /* transient; keep what is on screen */
   }
 }
 
-function renderMind(d: Record<string, any>): void {
-  const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
-  const gen = 'generation' in d ? ` <span class="mono">· gen ${d.generation}</span>` : '';
-  const hd =
-    `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `mind <span class="mono">#${d.id}</span>${gen}` +
-    `<span class="back" role="button">← back</span><span class="x">✕</span></h3>`;
+/** The tab's shell. Empty until the first poll answers, then filled in place. */
+function mindTab(): string {
+  return `<div id="mindBody" class="mind">${
+    mindData && mindFor === selectedId ? mindBody(mindData) : '<div class="grp">reading…</div>'
+  }</div>`;
+}
+
+function mindBody(d: Record<string, any>): string {
   if (!d.hasBrain) {
-    mindEl.innerHTML = hd + '<div class="grp">no brain</div>' +
-      '<div class="mono">this creature is scripted, not minded.</div>';
-    showMind();
-    return;
+    return '<div class="grp">no brain</div>'
+      + '<div class="mono">this creature is scripted, not minded.</div>';
   }
   const sensors = (d.sensors as any[]) ?? [];
   const actuators = (d.actuators as any[]) ?? [];
@@ -940,14 +970,22 @@ function renderMind(d: Record<string, any>): void {
   const regChips = regs
     .map((v, i) => `<span class="reg">R${i} <b>${v.toFixed(2)}</b></span>`)
     .join('');
-  mindEl.innerHTML = hd + doing + intent + attn +
+  return doing + intent + attn +
     '<div class="grp">sensors — what it perceives</div>' + sIn +
     '<div class="grp">actuators — what it drives</div>' + aOut +
     `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>` +
     `<div class="prog">${prog}</div>` +
     `<div class="grp">registers</div><div class="regs">${regChips}</div>` +
     '<div class="save" role="button">⤓ save genome</div>';
-  showMind();
+}
+
+/** The save button is rewritten by every mind poll, so its handler is too. */
+function wireSave(): void {
+  const save = inspectEl.querySelector('.save');
+  if (save && selectedId !== null) {
+    const id = selectedId;
+    save.addEventListener('click', () => downloadGenome(id));
+  }
 }
 
 // Export this creature's whole genome (brain included) to a savefile you can
@@ -1088,17 +1126,6 @@ function insClass(ln: string): string {
   if (/\bact\b/.test(ln)) return 'out';
   if (/\bskip\b/.test(ln)) return 'ctl';
   return '';
-}
-
-function showMind(): void {
-  mindEl.style.display = 'block';
-  mindEl.querySelector('.back')!.addEventListener('click', closeMind);
-  mindEl.querySelector('.x')!.addEventListener('click', deselect);
-  const save = mindEl.querySelector('.save');
-  if (save && selectedId !== null) {
-    const id = selectedId;
-    save.addEventListener('click', () => downloadGenome(id));
-  }
 }
 
 function esc(s: string): string {
