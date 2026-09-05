@@ -50,6 +50,26 @@ that has a brain, because a tab that says "no brain" wastes the click. When the
 selection changes to something without that tab, fall back to the first tab
 rather than leaving the panel empty.
 
+### A sticky header owns the padding it covers
+
+A panel header that stays put while the body scrolls is `position: sticky; top:
+0`, and it must be **opaque** — the panel's own translucent fill lets rows show
+through as they pass under it.
+
+Give it the panel's TOP padding (`#inspect { padding: 0 12px 10px }`, header
+`padding: 10px 12px 6px`) and **no negative top margin**. Negative side margins
+for full-bleed are fine; a negative *top* margin is the trap. A sticky offset
+constrains the element's MARGIN box, so `margin-top: -10px` with `top: 0` parks
+the header ten pixels lower than flush the moment it sticks, and the panel's top
+padding becomes a window onto the text scrolling underneath. It looks correct at
+rest — which is why it shipped, twice, in `#inspect` and `#tuning` — and fails
+only while doing its job.
+
+Measure it rather than squinting: with the body scrolled, the header's
+`getBoundingClientRect().top` minus the panel's inner top edge must be **0**.
+Anything positive is that window. Prove the measurement works by re-injecting
+the old rule with `addStyleTag` and watching the number go to 10.
+
 ### The tab is state, and it survives
 
 Selecting a different creature keeps the tab. A viewer walking a family line
