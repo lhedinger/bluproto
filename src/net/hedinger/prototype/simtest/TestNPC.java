@@ -45,10 +45,36 @@ public class TestNPC extends NPC {
 	 *  concept that can disagree with itself. */
 	private Genome.Clade clade = Genome.Clade.HERBIVORE;
 
-	/** Damage a predator's bite does to prey of its own size or smaller (prey
-	 *  health 100 -> a few-second kill). Scaled down against bigger quarry — see
-	 *  {@link #biteDamage}. */
-	private static final int PRED_DAMAGE = 20;
+	/** Damage a predator's bite does to prey of its own size or smaller. Ten
+	 *  against a hundred health, one bite a second: a kill is ten seconds of
+	 *  holding on. Scaled down against bigger quarry — see {@link #biteDamage}. */
+	private static final int PRED_DAMAGE = 10;
+	/**
+	 * Ticks between a hunter's bites — one a second at {@code TICKS_PER_SECOND}.
+	 *
+	 * <p>There was no cooldown at all. A hunter bit on every tick it was in
+	 * reach, so twenty damage emptied a hundred health in five consecutive ticks:
+	 * a grazer went from healthy to dead in about a sixth of a second, which is
+	 * not a hunt, it is a deletion. Nothing could flee it, nothing could answer
+	 * it, and the drama the whole predation model is for happened between two
+	 * frames of the renderer.
+	 *
+	 * <p>Ten damage on a one-second period makes a kill ten seconds long and, more
+	 * to the point, gives the quarry ten separate moments to break away — the
+	 * bite only lands if the hunter is still in reach when the next one comes due.
+	 * A pursuit is now something that can be lost, escaped, or interrupted by a
+	 * third party, none of which was possible before.
+	 *
+	 * <p>The carcass is worth exactly what it was: {@link #biteFeeds} pays out
+	 * {@code MEAT_ENERGY * mass * damage/FULL_BODY_HEALTH}, which sums to the same
+	 * meal however the hundred health is divided. What changes is how long the
+	 * hunter must stay on it to collect, not what it collects.
+	 *
+	 * <p>Phase comes from the body's own age, the way {@link #PARA_BITE_PERIOD}
+	 * already does for a parasite, so two hunters on one animal are not
+	 * synchronised and neither has to carry a timer of its own.
+	 */
+	private static final int PRED_BITE_PERIOD = 33;
 	/** How much larger than itself a hunter will take on, as a multiple of its own
 	 *  body size. Above 1 so a smaller hunter can pick a fight it is not built to
 	 *  win quickly: it lands weaker bites and needs far more of them, which is the
@@ -1182,7 +1208,9 @@ public class TestNPC extends NPC {
 			lockTarget(prey);
 			setAction("attacking", true); // in reach: bite at any hunger short of full
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
-			feed(biteFeeds(prey));
+			if (biteDue()) {
+				feed(biteFeeds(prey));
+			}
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
 			setAction(starving ? "starving" : "hunting", false);
@@ -1253,6 +1281,11 @@ public class TestNPC extends NPC {
 	 * already chewed on gets only what is left of it. Damage past death feeds
 	 * nobody — you cannot eat more of an animal than there was.
 	 */
+	/** Whether this hunter's next bite is due — see {@link #PRED_BITE_PERIOD}. */
+	private boolean biteDue() {
+		return age % PRED_BITE_PERIOD == 0;
+	}
+
 	private double biteFeeds(NPC prey) {
 		int bite = biteDamage(prey);
 		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
@@ -2722,8 +2755,19 @@ public class TestNPC extends NPC {
 		// Only for a hunter, and only on flesh: a grazer lashing out is fighting,
 		// not eating, and keeps the generic bite it always had.
 		if (clade == Genome.Clade.PREDATOR && near.isOrganic()) {
+			if (!biteDue()) {
+				return false; // still between bites: the intent stays pending
+			}
 			feed(biteFeeds(near)); // damages, screams and pays, all in one
 			return true;
+		}
+		// The same period governs a plain bite. A mouth can only work so fast, and
+		// gating only the hunter's left a grazer lashing out killing in 27 ticks
+		// where a hunter needed 364 — the worst animal in the world at killing
+		// being the best at it. Four damage a second is a long, ineffectual gnaw,
+		// which is what a grazer's bite should be.
+		if (!biteDue()) {
+			return false;
 		}
 		near.damage(ATTACK_DAMAGE, "combat");
 		feed(BITE_ENERGY); // predation feeds the attacker — into the stomach
