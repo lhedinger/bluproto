@@ -5353,7 +5353,9 @@ public class SimTests {
 			w.spawnEntity(eater);
 			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(6, null));
 			w.spawnEntity(prey);
-			for (int t = 1; t <= 400; t++) {
+			// Room for the slow one: a grazer's four-damage bite on a one-second
+			// period needs about 825 ticks to work through a hundred health.
+			for (int t = 1; t <= 1200; t++) {
 				tick(w, 1);
 				if (prey.isDead()) {
 					return t;
@@ -5404,8 +5406,10 @@ public class SimTests {
 			int grazerKill = ticksToKill(false);
 			assertGreater("a hunter kills at all", hunterKill, 0);
 			assertGreater("a grazer lashing out kills at all, eventually", grazerKill, 0);
+			// Both are on the one-second bite period now, so this compares damage
+			// per bite and nothing else: ten against four, so about 2.5x.
 			assertGreater("a hunter kills far faster, because it bites as a hunter",
-					grazerKill, hunterKill * 3);
+					grazerKill, hunterKill * 2);
 
 			// The meal half. Compared against ITSELF on two sizes of quarry rather
 			// than against the grazer: what biteFeeds does that the flat constant
@@ -5701,7 +5705,10 @@ public class SimTests {
 			w.think();
 			snapshot(w, "before (attacker beside victim)");
 			assertTrue("victim starts alive", !victim.isDead());
-			tick(w, 120);
+			// A plain bite is four damage on the one-second period, so a hundred
+			// health is twenty-five seconds of gnawing — 120 ticks used to be
+			// plenty when every tick carried a bite.
+			tick(w, 900);
 			snapshot(w, "after (victim bitten to death)");
 			assertTrue("the mind's attack actuator killed the neighbour", victim.isDead());
 			assertTrue("the attacker survived", !attacker.isDead());
@@ -6837,7 +6844,12 @@ public class SimTests {
 			w.spawnEntity(prey);
 			w.think();
 			int kills = 0;
-			for (int i = 0; i < 150; i++) {
+			// Long enough for two kills at the hunter's pace. A kill is ten seconds
+			// of holding on now (PRED_BITE_PERIOD), where it used to be five
+			// consecutive ticks, so a 150-tick window could no longer contain one
+			// and this read "a hungry predator does not hunt" — which was a fact
+			// about the window, not about the predator.
+			for (int i = 0; i < 900; i++) {
 				if (prey.isDead() || prey.isRemoved()) {
 					kills++;
 					prey = TestNPC.breeder(9.5, 4.5, 0, preyG); // restock the lure
