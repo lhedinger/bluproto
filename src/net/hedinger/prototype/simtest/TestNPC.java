@@ -2703,6 +2703,28 @@ public class TestNPC extends NPC {
 		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
 			return false;
 		}
+		// A hunter bites as a hunter. ATTACK_DAMAGE and BITE_ENERGY are the
+		// generic "anything can lash out" constants, and routing a predator's
+		// hunting bite through them was the whole of why the guild starved:
+		// against a size-7 grazer they pay 0.03 food units where biteFeeds pays
+		// 0.4375, and they take 25 bites to a kill where PRED_DAMAGE takes 5.
+		// Fourteen times less per bite, five times longer to earn it, and the
+		// measured intake showed it exactly — hunters swallowed 0.074 units per
+		// thousand ticks against a grazer's 1.137, a fifteenfold gap that matches
+		// the per-bite ratio almost to the digit.
+		//
+		// It also made the meat constant unreadable from here: doubling
+		// MEAT_ENERGY moved predator intake from 0.074 to 0.075, because this path
+		// never consulted it. biteFeeds is where a carcass is priced by what it
+		// weighs, and a minded hunter is now paid out of the same till as the
+		// scripted one — same damage, same meal, same scream.
+		//
+		// Only for a hunter, and only on flesh: a grazer lashing out is fighting,
+		// not eating, and keeps the generic bite it always had.
+		if (clade == Genome.Clade.PREDATOR && near.isOrganic()) {
+			feed(biteFeeds(near)); // damages, screams and pays, all in one
+			return true;
+		}
 		near.damage(ATTACK_DAMAGE, "combat");
 		feed(BITE_ENERGY); // predation feeds the attacker — into the stomach
 		return true;

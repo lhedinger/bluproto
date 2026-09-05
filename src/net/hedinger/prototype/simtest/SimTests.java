@@ -5297,6 +5297,130 @@ public class SimTests {
 	}
 
 	/**
+	 * A minded hunter's bite is a hunter's bite: priced by what the quarry
+	 * weighs, not by the generic combat constant.
+	 *
+	 * <p>{@code attackNearest} paid every bite {@code BITE_ENERGY} (0.03) and dealt
+	 * {@code ATTACK_DAMAGE} (4). Those are the "anything can lash out" numbers, and
+	 * for a body whose whole living is flesh they are ruinous: against a size-7
+	 * grazer {@code biteFeeds} pays 0.4375, fourteen times more, and
+	 * {@code PRED_DAMAGE} kills in five bites where four damage needs
+	 * twenty-five — so a hunter earned a fraction of the meal and had to hold a
+	 * fleeing animal five times as long to earn it.
+	 *
+	 * <p>Measured in the seeded world, hunters swallowed 0.074 food units per
+	 * thousand ticks against a grazer's 1.137. That fifteenfold gap is the
+	 * per-bite ratio showing up in the population, and it is why the guild sat on
+	 * its steward floor with hunger pinned at 0.9 and never bred: the breeding
+	 * gate wants hunger under 0.5 and they never got close. It also hid the meat
+	 * constant completely — doubling MEAT_ENERGY moved intake from 0.074 to 0.075,
+	 * because this path never read it.
+	 *
+	 * <p>So the scenario asserts the two halves that were conflated: a hunter's
+	 * bite scales with the quarry (bigger prey, bigger mouthful), and a grazer's
+	 * bite does not — lashing out is fighting, not eating, and keeps the flat
+	 * constant it always had.
+	 */
+	static class AMindedHuntersBiteIsPricedByTheQuarry extends Scenario {
+		/** A mind that does one thing: bite whatever is in reach. */
+		private static Brain biter() {
+			int[][] code = {
+					{ Brain.SET, 0, 9, 0 }, // r0 = 1.0
+					{ Brain.WRITE, AgentIO.A_ATTACK, 0, 0 },
+			};
+			return new Brain(code);
+		}
+
+		private static Genome body(double size, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.01;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		/** Ticks for one biter to kill a 100-health grazer beside it, or -1. This
+		 *  is the damage half, and it separates the two paths cleanly: PRED_DAMAGE
+		 *  is 20 and kills in five bites, ATTACK_DAMAGE is 4 and needs
+		 *  twenty-five. */
+		private int ticksToKill(boolean hunter) {
+			seed(4);
+			World w = room(12, 12);
+			Genome g = body(16, biter());
+			TestNPC eater = hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
+					: TestNPC.mindedForager(5.5, 5.5, 0, g);
+			w.spawnEntity(eater);
+			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(6, null));
+			w.spawnEntity(prey);
+			for (int t = 1; t <= 400; t++) {
+				tick(w, 1);
+				if (prey.isDead()) {
+					return t;
+				}
+			}
+			return -1;
+		}
+
+		/**
+		 * Food a biter gets into an EMPTY stomach from one carcass's worth of
+		 * biting. The emptying matters: {@code feed} credits only what fits, and a
+		 * body spawns with a full stomach, so measuring a fresh one reads nearly
+		 * zero however well it eats. The first cut of this scenario did exactly
+		 * that and reported a hunter eating less than a grazer.
+		 */
+		private double swallowedWhenHungry(boolean hunter, double preySize) {
+			seed(4);
+			World w = room(12, 12);
+			Genome g = body(16, biter());
+			TestNPC eater = hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
+					: TestNPC.mindedForager(5.5, 5.5, 0, g);
+			w.spawnEntity(eater);
+			// Starve it first: nothing to bite, so hunger climbs and the stomach
+			// opens up. Without this every meal is thrown away as overflow.
+			for (int t = 0; t < 20000 && eater.getHunger() < 0.8; t++) {
+				tick(w, 1);
+			}
+			assertGreater("the eater is hungry before the meal is measured",
+					eater.getHunger(), 0.5);
+			double before = eater.totalSwallowed();
+			// ONE carcass, eaten to death, however many bites that takes. Counting
+			// over a fixed window instead would compare bite COUNT as much as bite
+			// value — the grazer needs twenty-five where the hunter needs five, so
+			// a window flatters whichever chews longest. Per carcass is the honest
+			// unit: it is the same animal either way.
+			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(preySize, null));
+			w.spawnEntity(prey);
+			for (int t = 0; t < 600 && !prey.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("the carcass was actually finished", prey.isDead());
+			return eater.totalSwallowed() - before;
+		}
+
+		@Override
+		public void run() {
+			int hunterKill = ticksToKill(true);
+			int grazerKill = ticksToKill(false);
+			assertGreater("a hunter kills at all", hunterKill, 0);
+			assertGreater("a grazer lashing out kills at all, eventually", grazerKill, 0);
+			assertGreater("a hunter kills far faster, because it bites as a hunter",
+					grazerKill, hunterKill * 3);
+
+			// The meal half. Compared against ITSELF on two sizes of quarry rather
+			// than against the grazer: what biteFeeds does that the flat constant
+			// cannot is scale with the animal being eaten, and an absolute
+			// comparison across two eaters drags in how much room each had in its
+			// stomach and how many bites each needed, neither of which is the
+			// claim. Twice the quarry, near twice the meal.
+			double small = swallowedWhenHungry(true, 6);
+			double big = swallowedWhenHungry(true, 12);
+			assertGreater("a hunter's meal is priced by the quarry it ate",
+					big, small * 1.5);
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10603,6 +10727,7 @@ public class SimTests {
 				new AReseedDescendsFromItsOwnClade(),
 				new AReseedIsAMixNotOnlyTheChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
+				new AMindedHuntersBiteIsPricedByTheQuarry(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
