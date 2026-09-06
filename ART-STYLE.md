@@ -503,6 +503,30 @@ The precedents, so nobody pays twice:
   what let it ship — the bake test asked for `alpha < 255`, which 237 satisfies.
   A test for "see-through" must ask for *actually* see-through; "not fully
   opaque" is a different and much weaker claim, and a 93% black sheet meets it.
+- **The floor that made every body one size** — zooming out, the parasites
+  did not get smaller; they seemed to grow against their hosts. Nothing drew
+  a parasite differently. Every body went through one line, `r = max(3.5,
+  size × zoom)`, and the floor was the whole story: it was put there so a
+  distant body never vanishes into the ground, and at 3.5 device pixels it
+  **binds the smallest bodies first**. A 5 px parasite pinned below 45 px per
+  tile, a 12 px grazer below 19, a 17 px host below 13 — and a fitted world sits
+  at about 9. So across the entire band the world is actually watched at,
+  every creature was one size, only the tiles scaled, and a parasite held at 7
+  px while its host shrank from 24 px down to meet it: measured, the ratio of
+  drawn to true radius ran 1.9 for the parasite and 1.0 for the host at 24 px
+  per tile, 4.5 against 2.5 at 10. The sizes are the one thing the bodies are
+  meant to show at a glance — which one is bigger is what the hunt, the latch
+  and the grip are all decided on — and a floor that flattens them lies about
+  exactly that. The rule: **a visibility floor sits barely above vanishing,
+  and is checked against the smallest body in the world, not the typical
+  one.** Lowered to 1.5 px (a dot's side to 2), the same measurement reads 1.0
+  for every role from 24 px per tile up, and only the parasite is still held
+  below 19 — where its true body is under a pixel and the choice is a speck or
+  nothing. Note what made this findable in one
+  pass rather than by staring: spy on the stamp itself — the atlas draw's
+  destination box IS the drawn radius — map it back to world space, and print
+  drawn over true per role at each zoom. A ratio above 1 is a floor, wherever
+  it hides.
 
 ## 8. Conformance checklist
 
@@ -543,6 +567,10 @@ Before a new visual merges, ask:
     no veil? A pit is an opening cut in a floor and gets an edge; open air was
     never a floor and gets none. And nothing else may bake in behind it: a
     served chunk is one level (§7, "the sky that baked the world into itself").
+15. If it has a **minimum on-screen size**, does the floor sit barely above
+    vanishing — and was it checked against the smallest body in the world? A
+    floor binds the smallest bodies first, and any band of zoom where it binds
+    is a band where sizes lie (§7, "the floor that made every body one size").
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.
