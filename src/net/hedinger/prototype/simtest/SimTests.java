@@ -5425,6 +5425,64 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter's bite is due when it arrives, not on a phase of its own age.
+	 *
+	 * <p>The cooldown was first written as {@code age % PRED_BITE_PERIOD == 0},
+	 * copied from the parasite's. That is harmless for a parasite, which is
+	 * latched on and still there whenever the window comes round. A hunter is not
+	 * latched on: it closes, touches its quarry for a few ticks, and is shaken
+	 * off. Instrumenting the hunt showed what the phase cost — hunters had prey in
+	 * the forage channel 62% of the time, were within biting reach on 4.76% of
+	 * ticks, and landed a bite on 0.07%, which is 4.76% x a one-in-thirty-three
+	 * chance the tick happened to be the right one. Nearly every approach ended
+	 * with a hunter in reach and its teeth not due.
+	 *
+	 * <p>So the scenario arranges exactly that: a hunter alone for a few ticks so
+	 * its age is off the phase, and only then something to bite. A cooldown
+	 * measured from the last bite pays immediately; a phase makes it wait for a
+	 * tick divisible by thirty-three. The rest of the period is unchanged — ten
+	 * bites and about ten seconds to a kill — because what wanted fixing was
+	 * which ticks a hunter may arrive on, not how fast it may chew.
+	 */
+	static class AHuntersBiteIsDueOnArrival extends Scenario {
+		@Override
+		public void run() {
+			seed(11);
+			World w = room(12, 12);
+			Genome g = new Genome();
+			g.size = 16;
+			g.speed = 0.01;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = new Brain(new int[][] {
+					{ Brain.SET, 0, 9, 0 },
+					{ Brain.WRITE, AgentIO.A_ATTACK, 0, 0 },
+			});
+			TestNPC hunter = TestNPC.mindedPredator(5.5, 5.5, 0, g);
+			w.spawnEntity(hunter);
+
+			// Age it off the phase. Five is not divisible by the period, so under
+			// the old gate the next permitted bite was twenty-eight ticks away.
+			tick(w, 5);
+			assertTrue("the hunter's age is deliberately off the bite phase",
+					hunter.getAge() % 33 != 0);
+
+			Genome pg = new Genome();
+			pg.size = 6;
+			pg.speed = 0.0;
+			pg.markers = new double[] { 0.5, 0.5, 0.5 };
+			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, pg);
+			w.spawnEntity(prey);
+			assertEquals("the quarry starts whole", 100, prey.getHealth());
+
+			// A handful of ticks: far less than a period, so only a cooldown that
+			// is already expired can pay out here.
+			tick(w, 4);
+			assertLess("a hunter in reach bites without waiting for a phase",
+					prey.getHealth(), 100);
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10740,6 +10798,7 @@ public class SimTests {
 				new AReseedIsAMixNotOnlyTheChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
+				new AHuntersBiteIsDueOnArrival(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
