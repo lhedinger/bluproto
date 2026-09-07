@@ -5483,6 +5483,100 @@ public class SimTests {
 	}
 
 	/**
+	 * Attacking and eating measurably sates a hunter — the outcome, not the
+	 * mechanism.
+	 *
+	 * <p>Every other hunting scenario here checks a step: the forage channel finds
+	 * prey, the bite is priced by the quarry, the bite is due on arrival. All of
+	 * them passed throughout the period when {@code attackNearest} paid a hunter
+	 * {@code BITE_ENERGY} — a flat 0.03 where the quarry was worth 0.4375 — and
+	 * the guild starved on its steward floor without a single scenario going red.
+	 * The bite landed, the prey died, and the hunter was no better fed. That is
+	 * the gap a step-by-step suite leaves, and this is the assertion that closes
+	 * it: killing has to show up in the books.
+	 *
+	 * <p>Two things make it an honest measurement rather than a hopeful one.
+	 *
+	 * <p>The hunter is starved first. {@link net.hedinger.prototype.entities.NPC#feed}
+	 * credits only what FITS, and a body spawns with a full stomach, so a fresh
+	 * hunter can eat a whole animal and register nothing — an earlier scenario
+	 * measured exactly that and reported a hunter eating less than a grazer. Six
+	 * thousand ticks opens about a third of the stomach while leaving thirst well
+	 * short of the 0.95 that starts doing harm.
+	 *
+	 * <p>And it runs against a control. Hunger falls only by comparison with the
+	 * same hunter given nothing to kill, because the claim is that EATING sates
+	 * it. Asserting a bare number would pass just as well if hunger happened to
+	 * plateau for some reason having nothing to do with the meal.
+	 */
+	static class AttackingAndEatingSatesAHunter extends Scenario {
+		/** A mind that does one thing: bite whatever is in reach. */
+		private static Brain biter() {
+			return new Brain(new int[][] {
+					{ Brain.SET, 0, 9, 0 }, // r0 = 1.0
+					{ Brain.WRITE, AgentIO.A_ATTACK, 0, 0 },
+			});
+		}
+
+		private static Genome body(double size, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.01;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		/** Hunger left in a hunter after a spell of hunting, with prey or without.
+		 *  Returns {hunger, carcasses killed}. */
+		private double[] hunt(boolean withPrey) {
+			seed(9);
+			World w = room(14, 14);
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(16, biter()));
+			w.spawnEntity(hunter);
+			// Open the stomach. A full one credits nothing, whatever it is fed.
+			tick(w, 6000);
+			double before = hunter.getHunger();
+			assertGreater("the hunter is hungry enough to have room for a meal",
+					before, 0.2);
+
+			int killed = 0;
+			if (withPrey) {
+				// Restocked as it dies, so the mouth never simply runs out — what is
+				// measured is what hunting does to the books, not how long one
+				// animal lasts.
+				for (int round = 0; round < 4; round++) {
+					TestNPC prey = TestNPC.breeder(6.9, 6.5, 0, body(7, null));
+					w.spawnEntity(prey);
+					for (int t = 0; t < 500 && !prey.isDead(); t++) {
+						tick(w, 1);
+					}
+					if (prey.isDead()) {
+						killed++;
+					}
+					prey.remove();
+				}
+			} else {
+				tick(w, 2000); // the same span of living, with nothing to kill
+			}
+			return new double[] { hunter.getHunger(), killed };
+		}
+
+		@Override
+		public void run() {
+			double[] fed = hunt(true);
+			double[] starved = hunt(false);
+
+			assertGreater("the hunter actually made kills", fed[1], 2);
+			assertLess("hunting leaves it better fed than not hunting", fed[0], starved[0]);
+			// A real dent, not a rounding difference: four carcasses at
+			// MEAT_ENERGY 2.5 against a size-16 stomach is worth about 0.4 of it.
+			assertGreater("and the meals are worth something on the hunger clock",
+					starved[0] - fed[0], 0.15);
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10799,6 +10893,7 @@ public class SimTests {
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
 				new AHuntersBiteIsDueOnArrival(),
+				new AttackingAndEatingSatesAHunter(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
