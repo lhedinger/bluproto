@@ -5577,6 +5577,104 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter's senses have to name its food. {@code nearestPrey} takes quarry up
+	 * to {@code PRED_MAX_PREY_RATIO} (1.5) times the hunter's own size, and the
+	 * hunting cohort is founded at size 12 against a cohort founded across 5..17
+	 * precisely so a hunter can reach above itself. If the prey channel splits at
+	 * the hunter's own size instead, every one of those larger bodies is absent
+	 * from {@code S_PREY_PROX} and present in {@code S_THREAT_PROX} — visible, but
+	 * only on a channel whose intent has no terminal act.
+	 *
+	 * <p>The outcome measured here is a kill, not a sensor reading. The mind
+	 * writes nothing but "seek prey" and "go" — no {@code A_ATTACK} — so the bite
+	 * can only come from the intent carrying through, and the intent can only
+	 * carry through if the body sees quarry on the channel the intent names. A
+	 * hunter that cannot see its dinner walks the pen and starves next to it.
+	 *
+	 * <p>The far leg is what keeps the ceiling honest: quarry at twice the
+	 * hunter's size is past the hunt ratio, stays out of the prey channel, and
+	 * must survive. Without it this scenario would pass just as well if the size
+	 * rule were deleted outright.
+	 */
+	static class AHunterSeesQuarryLargerThanItselfAsPrey extends Scenario {
+		/**
+		 * A mind that names prey and walks. It never raises A_ATTACK: the bite has
+		 * to come from the intent, which is the thing under test.
+		 *
+		 * <p>Padded to twelve instructions on purpose. Attention is rationed by
+		 * program length ({@code trackingSlots}), and a mind with one slot keeps
+		 * only the nearest tracked channel — which on a tie is forage, since that
+		 * is where it sits in {@code TRACKED_CHANNELS}. A four-instruction brain
+		 * therefore has its prey channel blanked and cannot act on what it just
+		 * asked for. Twelve buys the second slot, and the padding is inert: it
+		 * writes a spare register nothing reads.
+		 */
+		private static Brain preySeeker() {
+			int[][] p = new int[12][];
+			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
+			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
+			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
+			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
+			for (int i = 4; i < p.length; i++) {
+				p[i] = new int[] { Brain.SET, 2, 5, 0 }; // r2 = 0, read by nothing
+			}
+			return new Brain(p);
+		}
+
+		private static Genome body(double size, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005; // near enough to standing still: this is not a chase
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		/**
+		 * Health left in a quarry of the given size after a spell nose to nose with
+		 * a hunter whose only instruction is "seek prey".
+		 *
+		 * <p>The quarry is a body-only grazer: it is born at its adult size, it
+		 * does not breed, and it barely moves. All three matter. A growing quarry
+		 * would change the ratio under the measurement; a breeding one puts a
+		 * newborn between the two and the hunter eats that instead; a moving one
+		 * turns a sensing question into a chase. Only the hunter grows, so the
+		 * ratio falls monotonically from birth to adulthood and the sizes named
+		 * here are the ones that decide the outcome.
+		 */
+		private int quarryHealthAfter(double hunterSize, double quarrySize) {
+			seed(31);
+			World w = room(14, 14);
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker()));
+			TestNPC quarry = TestNPC.grazer(6.9, 6.5, 0, body(quarrySize, null));
+			w.spawnEntity(hunter);
+			w.spawnEntity(quarry);
+			int span = TestNPC.growthTicks(hunterSize) + 4000;
+			for (int t = 0; t < span && !quarry.isDead(); t++) {
+				tick(w, 1);
+			}
+			return quarry.isDead() ? 0 : quarry.getHealth();
+		}
+
+		@Override
+		public void run() {
+			// 17 against a hunter of 13: bigger than it, well inside the 1.5 ratio.
+			assertEquals("quarry larger than the hunter but inside the hunt ratio dies",
+					0, quarryHealthAfter(13, 17));
+			// A body under its own size was never in question; it is here so a
+			// failure on the leg above reads as "larger", not "at all".
+			assertEquals("and so does quarry smaller than the hunter",
+					0, quarryHealthAfter(13, 9));
+			// 20 against a hunter of 12 is 1.67x: past the ratio, off the menu,
+			// and it has to stay off it. The hunter is the only one growing, so
+			// the ratio only ever falls toward that 1.67 -- it is never briefly
+			// on the menu on the way up.
+			assertEquals("quarry past the hunt ratio is not prey and survives whole",
+					100, quarryHealthAfter(12, 20));
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10894,6 +10992,7 @@ public class SimTests {
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
 				new AHuntersBiteIsDueOnArrival(),
 				new AttackingAndEatingSatesAHunter(),
+				new AHunterSeesQuarryLargerThanItselfAsPrey(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),

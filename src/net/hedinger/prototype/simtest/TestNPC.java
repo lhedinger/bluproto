@@ -1715,6 +1715,27 @@ public class TestNPC extends NPC {
 	 *  whiskers -- the senses a hybrid mind needs that the short, facing-gated
 	 *  nearest-neighbour channel cannot give. One pass over perceivable neighbours
 	 *  feeds the prey, threat and kin gradients at once, at full sight range. */
+	/**
+	 * The size at which a neighbour stops being food and starts being danger.
+	 * For a hunter that is {@link #PRED_MAX_PREY_RATIO} times its own size --
+	 * exactly where {@link #nearestPrey} stops taking quarry -- and for everything
+	 * else it is simply its own size, which is all a grazer's senses can mean by
+	 * "bigger than me".
+	 *
+	 * <p>The two channels have to split on the same line the body acts on, or a
+	 * hunter's senses lie about its dinner. A hunter founds at
+	 * {@link #PREDATOR_MIN_SIZE_PX} against a cohort founded across 5..17
+	 * precisely so that quarry above its own size is still on the menu; splitting
+	 * the senses at its own size put every one of those bodies in the threat
+	 * channel and none in the prey channel. A mind can steer toward a threat --
+	 * the sign says approach or avoid -- but a threat has no terminal act, so a
+	 * lineage that found its food on that channel walked its quarry down, pressed
+	 * against it, and never bit. Naming the same line twice closes that trap.
+	 */
+	private double preyCeiling() {
+		return ecoClade() == Genome.Clade.PREDATOR ? getSize() * PRED_MAX_PREY_RATIO : getSize();
+	}
+
 	private void senseFieldAndBody(double[] s) {
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
@@ -1733,13 +1754,13 @@ public class TestNPC extends NPC {
 			// Parasites never enter the prey channel: predators ignore them (see
 			// nearestPrey), and the minded hunt sense agrees so evolution cannot
 			// quietly relearn a taste the scripted hunters are denied.
-			if (n.getSize() < getSize() && dist < preyD && n.isOrganic()
+			if (n.getSize() < preyCeiling() && dist < preyD && n.isOrganic()
 					&& !(n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE)) {
 				preyD = dist;
 				preyDx = dx;
 				preyDy = dy;
 			}
-			if (n.getSize() > getSize() && dist < threatD) {
+			if (n.getSize() > preyCeiling() && dist < threatD) {
 				threatD = dist;
 				threatDx = dx;
 				threatDy = dy;
