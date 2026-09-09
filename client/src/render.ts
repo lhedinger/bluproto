@@ -366,18 +366,17 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
  *  that is stable frame to frame and identical for every body. */
 export const DOT_LOD_SCALE = 8;
 
-/** The smallest a body is ever drawn, in device px: the radius through the
- *  sprite path, the side of a map-view dot. A floor exists so a distant body
- *  never vanishes into the ground — and it has to sit barely above vanishing,
- *  because it binds the SMALLEST bodies first. At 3.5 px a 5 px parasite was
- *  pinned below 45 px/tile and a 12 px grazer below 19, so across the band the
- *  world is actually watched at (a fitted world is ~9 px/tile) every creature
- *  was one size and only the tiles scaled: a parasite read as growing while
- *  its host shrank under it. Sizes are the one thing the bodies are meant to
- *  show at a glance; a floor that flattens them is worse than a speck (see
- *  ART-STYLE.md §7, "the floor that made every body one size"). */
-export const MIN_BODY_R = 1.5;
-export const MIN_DOT_PX = 2;
+// There is deliberately NO minimum on-screen body size, in either tier: a
+// body's drawn radius is its true radius times the zoom, at every zoom, so a
+// creature scales exactly as the tiles under it do. There used to be a floor
+// (3.5 px radius, 4 px dot) so a distant body never vanished into the ground,
+// and it bound the SMALLEST bodies first: a 5 px parasite was pinned below 45
+// px/tile and a 12 px grazer below 19, while a fitted world sits at ~9 — so
+// across the band the world is actually watched at every creature was one
+// size, only the tiles scaled, and a parasite read as growing while its host
+// shrank under it. Sizes are the one thing the bodies are meant to show at a
+// glance. What a 5 px body is at 9 px/tile is under a pixel, and that is the
+// picture (see ART-STYLE.md §7, "the floor that made every body one size").
 
 // Perf experiment switches (the ⚙ dialog in main.ts writes these): each
 // disables one visual subsystem so its cost can be isolated on a device.
@@ -392,7 +391,7 @@ const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 /** The map-view dot: a corpse is a spent grey block; a live body its colour. */
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
     bodyPx: number, col: string, dead: boolean): void {
-  const s = Math.max(MIN_DOT_PX, bodyPx);
+  const s = bodyPx;
   g.fillStyle = dead ? '#5a5f66' : col;
   g.fillRect(x - s / 2, y - s / 2, s, s);
 }
@@ -550,7 +549,7 @@ export function render(
     }
     if (e.kind === 'sound') continue; // an event, not a body: the sense overlay draws it
 
-    const r = Math.max(MIN_BODY_R, e.size * cam.scale);
+    const r = e.size * cam.scale;
 
     // Carry link under the bodies.
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
@@ -1246,7 +1245,7 @@ export function renderGL(
     }
     if (e.kind === 'sound') continue; // an event, not a body: the sense overlay draws it
 
-    const r = Math.max(MIN_BODY_R, e.size * cam.scale);
+    const r = e.size * cam.scale;
 
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
@@ -1290,7 +1289,7 @@ export function renderGL(
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
       if (dots) {
-        const sq = Math.max(MIN_DOT_PX, bodyPx);
+        const sq = bodyPx;
         glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, 0x5a / 255, 0x5f / 255, 0x66 / 255, 1);
         continue;
       }
@@ -1319,7 +1318,7 @@ export function renderGL(
     if (dots || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
       // block while the sprite streams in): solid quads, batched together.
-      const sq = Math.max(MIN_DOT_PX, dots ? bodyPx : r * 1.4);
+      const sq = dots ? bodyPx : r * 1.4;
       const rgb = e.rgb;
       glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
