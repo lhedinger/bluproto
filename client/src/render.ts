@@ -363,8 +363,16 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
  *  feedback loop on mid-range phones — degrading to dots made frames cheap
  *  enough to restore sprites, which made them slow enough to degrade again,
  *  so the whole herd blinked between the two tiers. Zoom is the one input
- *  that is stable frame to frame and identical for every body. */
-export const DOT_LOD_SCALE = 8;
+ *  that is stable frame to frame and identical for every body.
+ *
+ *  It is the SAME breakpoint the ground uses: below one screen pixel per
+ *  art-pixel the ground, vegetation and canopy layers all drop to their 3
+ *  px/tile mirrors (see `lowZoom`), and the bodies drop to dots with them.
+ *  The two used to differ (8 for bodies, 12 for tiles), which put a band of
+ *  zoom where the world had already gone to its far-view art while the
+ *  creatures on it were still stamped sprites at a couple of pixels across —
+ *  two levels of detail in one picture. One number, one far view. */
+export const DOT_LOD_SCALE = ART;
 
 // There is deliberately NO minimum on-screen body size, in either tier: a
 // body's drawn radius is its true radius times the zoom, at every zoom, so a
