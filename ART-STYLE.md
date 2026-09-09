@@ -519,10 +519,12 @@ The precedents, so nobody pays twice:
   and the grip are all decided on — and a floor that flattens them lies about
   exactly that. The rule: **a visibility floor sits barely above vanishing,
   and is checked against the smallest body in the world, not the typical
-  one.** Lowered to 1.5 px (a dot's side to 2), the same measurement reads 1.0
-  for every role from 24 px per tile up, and only the parasite is still held
-  below 19 — where its true body is under a pixel and the choice is a speck or
-  nothing. Note what made this findable in one
+  one.** Lowered to 1.5 px (a dot's side to 2), the same measurement read 1.0
+  for every role from 24 px per tile up and still held the parasite below 19 —
+  so the floor went altogether. **A body's drawn radius is its true radius
+  times the zoom, at every zoom, in both tiers**: a creature scales exactly as
+  the tiles under it do, and what a 5 px body is at 9 px per tile is under a
+  pixel, which is the picture. Note what made this findable in one
   pass rather than by staring: spy on the stamp itself — the atlas draw's
   destination box IS the drawn radius — map it back to world space, and print
   drawn over true per role at each zoom. A ratio above 1 is a floor, wherever
@@ -567,10 +569,11 @@ Before a new visual merges, ask:
     no veil? A pit is an opening cut in a floor and gets an edge; open air was
     never a floor and gets none. And nothing else may bake in behind it: a
     served chunk is one level (§7, "the sky that baked the world into itself").
-15. If it has a **minimum on-screen size**, does the floor sit barely above
-    vanishing — and was it checked against the smallest body in the world? A
-    floor binds the smallest bodies first, and any band of zoom where it binds
-    is a band where sizes lie (§7, "the floor that made every body one size").
+15. Does it **scale exactly as the tiles do**, with no minimum on-screen size?
+    A floor binds the smallest bodies first, and any band of zoom where it
+    binds is a band where sizes lie (§7, "the floor that made every body one
+    size"). If something must stay findable when small, that is a marker's
+    job, not the body's.
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.
