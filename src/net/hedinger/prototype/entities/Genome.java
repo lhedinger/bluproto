@@ -160,8 +160,9 @@ public class Genome {
 	 * world, and different in every one. Choosing a number here would be deciding
 	 * on selection's behalf what it is for selection to find out.
 	  *
-	  * <p>Carried, mutated and inherited from here; what reads it is the hunting
-	  * standard a mind names, which arrives with {@code AgentIO.A_PREY}.
+	  * <p>Read by the hunting standards a mind names on {@link
+	  * net.hedinger.prototype.entities.AgentIO#A_PREY}: it is what decides how
+	  * much a big animal is worth to THIS lineage.
 	 */
 	public double preyGreed = 1.0;
 

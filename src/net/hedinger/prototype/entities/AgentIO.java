@@ -285,6 +285,30 @@ public final class AgentIO {
 	 */
 	public static final int A_VERTICAL = 10;
 	/**
+	 * <b>What kind of quarry.</b> A hunter's standing preference, read the way
+	 * {@link #A_TILE} is read for ground: the mind names a KIND and the body finds
+	 * the best instance of it. Naming an individual is not on offer -- no sensor
+	 * carries a handle and no register could hold one -- so this is what "choosing
+	 * prey" can mean for a mind built like this one.
+	 *
+	 * <p>Takes over the retired vertical slot, exactly as {@link #A_TILE} took over
+	 * {@link #A_SPRINT}. Every genome already saved keeps its bytes; what changes
+	 * is that a write here, which used to fall on the floor, now says something.
+	 * Dormant variation in the standing population becomes live variation, which
+	 * for an evolving world is the point rather than the risk.
+	 *
+	 * <p>{@code 0}=nearest (the default, so a silent mind hunts exactly as the
+	 * world did before this existed), {@code 0.1}=nearest, {@code 0.25}=the
+	 * biggest meal, {@code 0.5}=the weakest -- whatever is closest to dying --
+	 * and {@code 1} or above=the easiest, best meal per bite. How hard SIZE is
+	 * weighed inside the last two is not this actuator's to say: that is
+	 * {@code Genome.preyGreed}, because how much a big animal is worth is a fact
+	 * about a lineage and its world rather than a decision made afresh each tick.
+	 *
+	 * @see #preyWanted(double)
+	 */
+	public static final int A_PREY = A_VERTICAL; // the retired vertical slot, put back to work
+	/**
 	 * <b>Intent steering.</b> Names a <i>kind of thing to head for</i> instead of a
 	 * turn rate: while this is set and that thing is in sight, the body steers
 	 * toward it and {@link #A_TURN} is ignored. The sign flips it — a negative
@@ -334,7 +358,7 @@ public final class AgentIO {
 	public static final int NUM_ACT = 14;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"tile", "vertical (retired)", "seek", "mark", "interact" };
+			"tile", "prey", "seek", "mark", "interact" };
 
 	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
 	public static final int SEEK_NONE = 0;
@@ -382,6 +406,36 @@ public final class AgentIO {
 			return TILE_SOLID;
 		}
 		return TILE_HAZARD;
+	}
+
+	// ---- prey preferences (the values of A_PREY) ---------------------------
+	/** Whatever is closest. The default, and what a hunter did before there was
+	 *  anything to say: crude, but it keeps a body among the food. */
+	public static final int PREY_NEAREST = 0;
+	/** The biggest meal going, discounted by the walk. */
+	public static final int PREY_BIGGEST = 1;
+	/** Whatever is nearest to dying -- fewest bites left in it, not most meat.
+	 *  A hunter that finishes wounded animals rather than starting fresh ones. */
+	public static final int PREY_WEAKEST = 2;
+	/** The best meal per bite: mass against the work of bringing it down, so
+	 *  punching up is priced rather than merely allowed. */
+	public static final int PREY_EASIEST = 3;
+
+	/** Decodes {@link #A_PREY} into a hunting preference, on the same
+	 *  geometric-midpoint bands {@link #tileWanted} and {@link #seekTarget} use,
+	 *  so each constant a brain can emit lands squarely inside its own band. */
+	public static int preyWanted(double v) {
+		double m = Math.abs(v);
+		if (m < 0.175) {
+			return PREY_NEAREST; // includes 0: what a silent mind gets
+		}
+		if (m < 0.375) {
+			return PREY_BIGGEST;
+		}
+		if (m < 0.75) {
+			return PREY_WEAKEST;
+		}
+		return PREY_EASIEST;
 	}
 
 	/** No intent is set; the mind is steering by hand or standing still. */
