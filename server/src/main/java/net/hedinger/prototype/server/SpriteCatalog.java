@@ -409,6 +409,25 @@ final class SpriteCatalog {
 			ph.form = f; // reach the plans the clade mapping cannot express
 			out.add(body("plan", "plan " + f + " — " + planNames[f], ph, worn[f], 0x9BB8A0));
 		}
+		// Every body each clade can wear: the eight variants of its plan, at the
+		// middle art radius, in one colour per clade so the only thing differing
+		// down a row is the outline. Reached through the genome, not by poking the
+		// phenotype: the third marker is what picks a variant in the world, and a
+		// reference that took a shortcut the world cannot would show bodies the
+		// world cannot grow.
+		Genome.Clade[] clades = { Genome.Clade.HERBIVORE, Genome.Clade.PREDATOR,
+				Genome.Clade.SCAVENGER, Genome.Clade.PARASITE };
+		int[] cladeRgb = { 0x8FD046, 0xE0507A, 0xA070D0, 0x54C0A0 };
+		for (int c = 0; c < clades.length; c++) {
+			String clade = clades[c].wireName();
+			for (int v = 0; v < ProcCreature.VARIANTS; v++) {
+				Genome g = sample(9, 0.06, false, clades[c] == Genome.Clade.PREDATOR ? 0.9 : 0,
+						clades[c], new double[] { 0.4, 0.5, (v + 0.5) / ProcCreature.VARIANTS });
+				ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
+				out.add(body("variant:" + clade, ProcCreature.variantName(ph.form, ph.variant),
+						ph, true, cladeRgb[c]));
+			}
+		}
 		addSample(out, "founder grazer", 6, false, Genome.Clade.HERBIVORE,
 				new double[] { 0.20, 0.50, 0.80 }, 0x5A9BD8);
 		addSample(out, "tiny darter", 3, false, Genome.Clade.HERBIVORE,
