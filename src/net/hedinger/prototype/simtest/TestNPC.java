@@ -1509,6 +1509,122 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * What a quarry is worth from here: the meal it will make, over the work of
+	 * taking it. The meal is the carcass, which is {@code bodyMass}; the work is
+	 * the walk to reach it and the bites to bring it down.
+	 *
+	 * <p>Deliberately the same shape as {@link #carrionScore} — value over
+	 * distance — with the one term a living animal adds. Because
+	 * {@link #biteDamage} weakens as the quarry grows, {@code bites} rises in
+	 * proportion to size for anything above the hunter, so punching up earns
+	 * nothing per unit of effort: a body half again the hunter's size is half
+	 * again the meal and half again the work. Below its own size the term is
+	 * constant and this is simply mass over distance.
+	 *
+	 * <p>What it does NOT price is the chase. A fast animal costs more to catch
+	 * than a slow one and nothing here says so, because closing time depends on
+	 * the throttle the mind chooses and the body cannot know it. Left out on
+	 * purpose rather than guessed at; if hunters are seen committing to quarry
+	 * they never catch, that is the term to add and there will be a measurement
+	 * to justify its shape.
+	 */
+	private double preyScore(NPC n) {
+		double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
+		return n.bodyMass()
+				/ (bites * (1.0 + distance(n.getX(), n.getY(), n.getZ())));
+	}
+
+	/**
+	 * How much better a rival quarry must be before a committed hunter will turn
+	 * off the one it is running down. The scavenger's number, for the scavenger's
+	 * reason (see {@link #CARRION_SWITCH_GAIN}): near-ties must not be able to
+	 * steal a target, or the creature turns toward a new one every few steps and
+	 * reaches none, while something genuinely worth crossing to still can.
+	 *
+	 * <p>It is self-damping in the same way, and a hunt gets a second helping of
+	 * that for free. The score rises as the walk shortens, so whatever is being
+	 * chased grows harder to displace the closer it gets; and quarry that is
+	 * outrunning the hunter recedes, so its own score decays and the commitment
+	 * lets go by itself. Giving up is not a rule here — it is what the arithmetic
+	 * does when a chase stops working.
+	 */
+	@Unit("x prey score")
+	public static final double PREY_SWITCH_GAIN = 2.0;
+
+	/**
+	 * The quarry this hunter has committed to running down, if that choice is
+	 * still worth keeping; null when it should look again.
+	 *
+	 * <p>Commitment is the whole of it, and the scavenger already paid for this
+	 * lesson: scoring every candidate afresh each tick sounds like keeping up to
+	 * date, but with scores as close as value over distance makes them, the winner
+	 * changes hands constantly and the creature walks between meals without
+	 * reaching any. Measured on the carrion path, that left a scavenger with a
+	 * target in view on 37% of its ticks and within biting distance on 0.87%. A
+	 * hunter was doing worse than that carrion path ever did — not merely
+	 * re-deciding every tick but re-deciding by DISTANCE ALONE, with no valuation
+	 * at all, so a lean animal underfoot always beat a fat one two steps further
+	 * off and any quarry that came closer stole the chase.
+	 *
+	 * <p>Dropped when it dies (the kill is finished, and a carcass is the
+	 * scavenger's business), when it is removed, when it goes up or down a floor,
+	 * when it stops being edible at all, and when it goes out of sight — cover is
+	 * a real refuge and a commitment must not see through it.
+	 */
+	private NPC heldPrey(boolean cannibal) {
+		NPC t = preyTarget;
+		if (t == null) {
+			return null;
+		}
+		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || !isInLOS(t)) {
+			preyTarget = null; // dead, gone, a floor away, inedible, or lost to cover
+			return null;
+		}
+		return t;
+	}
+
+	/** The quarry this hunter has committed to; see {@link #heldPrey}. */
+	private NPC preyTarget = null;
+
+	/** This tick's answer from {@link #scanPrey}, resolved once in
+	 *  {@code senseInto} and read by both the prey and the forage channel.
+	 *  Scratch, not memory: {@link #preyTarget} is what persists. */
+	private NPC huntPick = null;
+
+	/**
+	 * Points the hunt at the best quarry in sight and keeps it there: the held
+	 * target stands unless something clears its score times
+	 * {@link #PREY_SWITCH_GAIN}. With nothing held the bar is zero and the best
+	 * quarry in range simply wins.
+	 *
+	 * <p>Sweeps in id order and keeps the first strict maximum, so ties break
+	 * identically on every replay.
+	 */
+	private NPC scanPrey(boolean cannibal) {
+		NPC held = heldPrey(cannibal);
+		NPC best = null;
+		double bar = held == null ? 0 : preyScore(held) * PREY_SWITCH_GAIN;
+		// Census walk: live same-level non-item bodies only.
+		for (NPC n : getWorld().census().creatures(getLvl())) {
+			if (!edibleQuarry(n, cannibal)) {
+				continue;
+			}
+			if (distance(n.getX(), n.getY(), n.getZ()) > LOS_RANGE) {
+				continue;
+			}
+			double score = preyScore(n);
+			if (score > bar && isInLOS(n)) {
+				bar = score;
+				best = n;
+			}
+		}
+		if (best != null) {
+			preyTarget = best; // nothing held, or something worth turning for
+		}
+		return preyTarget;
+	}
+
+	/**
 	 * The nearest thing this hunter could bring down, or null.
 	 *
 	 * <p>Same level only (it cannot reach a floor away), and only prey actually
@@ -1728,6 +1844,13 @@ public class TestNPC extends NPC {
 		// What kind of ground to look for is the mind's standing choice, read before
 		// the scan so the channel answers the question actually being asked.
 		tileWanted = AgentIO.tileWanted(actuators[AgentIO.A_TILE]);
+		// The hunt is decided once, here, and both channels that speak for it read
+		// the same answer. A hunter has two names for its food -- SEEK_PREY and,
+		// because its forage IS a body, SEEK_FORAGE -- and if those resolve
+		// separately they are two hunting policies wearing one animal's face:
+		// whichever word a lineage happens to evolve decides whether it commits to
+		// a quarry or chases whatever drifted closest.
+		huntPick = clade == Genome.Clade.PREDATOR ? scanPrey(false) : null;
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
 		attentionDropped.clear();
 		limitAttention(s); // ...of which only as many as this mind can hold survive
@@ -1794,6 +1917,19 @@ public class TestNPC extends NPC {
 				kinX += sim * dx; // similarity-weighted pull toward kin
 				kinY += sim * dy;
 				kinWeight += sim;
+			}
+		}
+		// A hunter's prey channel is its hunt, not a proximity reading: it shows
+		// the quarry scanPrey settled on, the same body the forage channel points
+		// at. For everything else the channel keeps its plain meaning -- the
+		// nearest smaller body, which is all a grazer's senses can make of one.
+		if (clade == Genome.Clade.PREDATOR) {
+			if (huntPick != null) {
+				preyD = distance(huntPick.getX(), huntPick.getY(), huntPick.getZ());
+				preyDx = huntPick.getX() - X;
+				preyDy = huntPick.getY() - Y;
+			} else {
+				preyD = Double.MAX_VALUE;
 			}
 		}
 		if (preyD < Double.MAX_VALUE) {
@@ -1873,16 +2009,18 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
 			return;
 		}
-		// A hunter's food is a smaller living body, so its forage channel points at
-		// nearest thing it could bring down. Same remap the scavenger and the
+		// A hunter's food is a living body, so its forage channel points at the
+		// quarry it has committed to running down. Same remap the scavenger and the
 		// parasite get, and for the same reason: it is what lets a hunter inherit
 		// the forage behaviour every starter brain already has instead of needing a
 		// policy of its own. The candidate rule is edibleQuarry's, shared with the
 		// hunt and the prey channel, so an evolved hunter wants exactly what a
 		// scripted one wants — the size ratio, the no-rivals rule, the parasite and
 		// machine exclusions, and the line of sight that makes cover a real refuge.
+		// Which of those candidates it goes for is scanPrey's: the best by value
+		// over effort, held until something is worth turning for.
 		if (clade == Genome.Clade.PREDATOR) {
-			NPC quarry = nearestPrey(LOS_RANGE, false);
+			NPC quarry = huntPick; // resolved once in senseInto; both channels share it
 			if (quarry == null) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
 				s[AgentIO.S_FORAGE_BEARING] = 0;

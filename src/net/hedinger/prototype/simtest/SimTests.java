@@ -5749,6 +5749,90 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter goes for the better meal, not the closer one. Its forage channel
+	 * used to be {@code nearestPrey} — distance alone, re-decided every tick, with
+	 * no valuation whatever — so a lean animal underfoot always beat a fat one two
+	 * steps further off, and any body that wandered closer stole the chase. The
+	 * scavenger's carrion path had already been through this and out the other
+	 * side; {@code scanPrey} is that mechanism, scored for living quarry.
+	 *
+	 * <p>The outcome measured is which body dies FIRST, which is the only thing
+	 * that separates a choice from an accident: both are edible, both are in
+	 * range, and a hunter left alone long enough would eat either. The fat one is
+	 * the FURTHER of the two, so a channel that picks by distance picks the other.
+	 *
+	 * <p>The hunter is grown up before the quarry are put in front of it. Its size
+	 * ceiling rises as it grows, so a juvenile cannot see the larger body as food
+	 * at all — measuring during childhood would measure a hunter that had only one
+	 * option.
+	 */
+	static class AHunterPicksTheBetterMealNotTheNearer extends Scenario {
+		private static Brain preySeeker() {
+			int[][] p = new int[12][];
+			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
+			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
+			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
+			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
+			for (int i = 4; i < p.length; i++) {
+				p[i] = new int[] { Brain.SET, 2, 5, 0 };
+			}
+			return new Brain(p);
+		}
+
+		private static Genome body(double size, double speed, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = speed;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(23);
+			World w = room(30, 30);
+			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, body(13, 0.04, preySeeker()));
+			w.spawnEntity(hunter);
+			// Grow up alone: the ceiling on what counts as food rises with the body,
+			// so a juvenile is not being offered the same choice.
+			tick(w, TestNPC.growthTicks(13) + 200);
+			assertTrue("the hunter is grown before it is offered a choice",
+					!hunter.isJuvenile());
+
+			// Placed relative to where the hunter actually stands and pointed the
+			// way it is actually looking. It spends its childhood wandering, so
+			// fixed coordinates would put the pair at whatever range and bearing
+			// the seed happened to leave it at -- and a body it cannot see is not
+			// a choice it is making. Both go ahead of it, a tile either side of
+			// its heading, aimed back across the room so neither lands in a wall.
+			double hx = hunter.getX(), hy = hunter.getY();
+			double ahead = Math.atan2(15.0 - hy, 15.0 - hx);
+			hunter.withHeading(ahead);
+			double cx = Math.cos(ahead), cy = Math.sin(ahead);
+			// Both bodies are born adult, barely move, and never breed. The fat one
+			// is further away; by value over effort it is still the better meal.
+			TestNPC fatFar = TestNPC.grazer(hx + cx * 8 - cy, hy + cy * 8 + cx, 0,
+					body(12, 0.0005, null));
+			TestNPC leanNear = TestNPC.grazer(hx + cx * 5 + cy, hy + cy * 5 - cx, 0,
+					body(5, 0.0005, null));
+			w.spawnEntity(fatFar);
+			w.spawnEntity(leanNear);
+			assertGreater("the lean one really is the nearer",
+					hunter.distance(fatFar.getX(), fatFar.getY(), fatFar.getZ())
+							- hunter.distance(leanNear.getX(), leanNear.getY(), leanNear.getZ()),
+					2.0);
+
+			for (int t = 0; t < 12000 && !fatFar.isDead() && !leanNear.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("something was caught at all", fatFar.isDead() || leanNear.isDead());
+			assertTrue("the hunter walks past the nearer body for the better meal",
+					fatFar.isDead());
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -11068,6 +11152,7 @@ public class SimTests {
 				new AttackingAndEatingSatesAHunter(),
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
+				new AHunterPicksTheBetterMealNotTheNearer(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
