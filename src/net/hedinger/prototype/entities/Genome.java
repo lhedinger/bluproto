@@ -176,11 +176,21 @@ public class Genome {
 	 *
 	 * <p>Temperament rather than tactics. Dogged against opportunistic is a fact
 	 * about a lineage, not a choice made afresh each tick, which is why it lives
-	 * here and not on an actuator. Named generally because the trait is general:
-	 * the scavenger answers the same question with a constant
-	 * ({@code CARRION_SWITCH_GAIN}), and a carcass, a patch of grass and a
-	 * fleeing animal are all things a creature can either finish or think better
-	 * of.
+	 * here and not on an actuator. Named for the trait rather than for prey
+	 * because the trait is general: a carcass, a patch of grass and a fleeing
+	 * animal are all things a creature can either finish or think better of.
+	 *
+	 * <p><b>Two readers, not four.</b> Every clade answers "when do I
+	 * reconsider?", but only the hunter and the scavenger answer it with a bar --
+	 * they re-score their choice every tick, and this is what damps the switch.
+	 * The other two are not uncommitted; they are committed by another mechanism
+	 * entirely. A grazer answers with a clock: between forage scans it does not
+	 * reconsider AT ALL, which is total commitment for the window, and then
+	 * reconsiders with no loyalty whatever (see {@code FORAGE_SCAN_PERIOD}). A
+	 * parasite answers with its grip, which is commitment made physical. Putting
+	 * a bar on either would compound two answers to one question rather than
+	 * generalise one, so reaching them means replacing what they have, not adding
+	 * to it -- a redesign with its own measurement, and not this gene's business.
 	 *
 	 * <p>It defaults to 2, which is not a number chosen here: it is the value the
 	 * scavenger's carrion path was measured into. Re-deciding every tick left a
