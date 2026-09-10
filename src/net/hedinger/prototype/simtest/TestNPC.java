@@ -1463,49 +1463,71 @@ public class TestNPC extends NPC {
 		return best;
 	}
 
+	/**
+	 * Whether {@code n} is something this hunter would eat — everything except
+	 * line of sight, which every caller already has in hand and which costs a
+	 * raycast, so it is theirs to add rather than pay for twice.
+	 *
+	 * <p>One rule, in one place, because three copies of it disagreed. What a
+	 * hunter may eat, what its prey channel shows it, and what it commits to
+	 * chasing have to be the same set or its senses lie to it: the size line
+	 * alone once said edible in one place and dangerous in another, and the
+	 * no-rivals rule was in the hunt but not in the sense, so a mind that asked
+	 * for prey was pointed at another hunter on a sixth of its ticks.
+	 *
+	 * <p>The rules themselves:
+	 * <ul>
+	 * <li><b>Size.</b> Up to {@link #preyCeiling()} — its own weight class plus
+	 * quarry somewhat above it. Body size is clamped to {@code Genome.SIZE_MAX}
+	 * for every creature alike, so a strictly-smaller rule left the largest
+	 * creatures permanently un-huntable with no predator able to exist above
+	 * them. Punching up is not free: the bite lands weaker the bigger the quarry
+	 * (see {@link #biteDamage}), so the kill takes proportionally longer.</li>
+	 * <li><b>Rivals.</b> Left alone unless desperate — eating one's own kind is a
+	 * starvation measure, not everyday hunting.</li>
+	 * <li><b>Parasites.</b> Ignored outright, at any hunger: too small and too
+	 * foul to be worth a bite. Nothing preys on them — their checks are the
+	 * host's bucking and their own four books.</li>
+	 * <li><b>Machines.</b> Never quarry. The steward's drone is the size of a
+	 * grown animal and moves like one, so without this a hungry hunter would
+	 * spend its life closing on a body it cannot bite and cannot digest.
+	 * Inedibility is a property of the drone ({@code isOrganic}), not a rule
+	 * about drones, so anything mechanical added later is covered.</li>
+	 * </ul>
+	 */
+	private boolean edibleQuarry(NPC n, boolean cannibal) {
+		if (n == this || n.isDead() || n.isRemoved()) {
+			return false;
+		}
+		if (n.getSize() > preyCeiling() || !n.isOrganic()) {
+			return false;
+		}
+		if (n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE) {
+			return false;
+		}
+		return cannibal || !(n instanceof TestNPC tn && tn.ecoClade() == Genome.Clade.PREDATOR);
+	}
+
+	/**
+	 * The nearest thing this hunter could bring down, or null.
+	 *
+	 * <p>Same level only (it cannot reach a floor away), and only prey actually
+	 * in line of sight: a wall or a thicket (cover blocks sight) hides prey, and
+	 * the chase steering refuses to move toward a target it cannot see — so
+	 * locking onto unseen prey would just freeze the hunter against the obstacle.
+	 * Requiring LOS also lets prey use cover as a real refuge. The raycast runs
+	 * last, after the cheap tests have thrown most of the census out.
+	 */
 	private NPC nearestPrey(double radius, boolean cannibal) {
 		NPC best = null;
 		double bestD = radius;
+		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creatures(getLvl())) {
-			// A hunter takes anything up to PRED_MAX_PREY_RATIO times its own size —
-			// its own weight class, plus quarry somewhat above it. Body size is
-			// clamped to Genome.SIZE_MAX for every creature alike, so a strictly-
-			// smaller rule left the largest creatures permanently un-huntable with no
-			// predator able to exist above them; reaching past its own size closes
-			// that hole. Punching up is not free: the bite lands weaker the bigger the
-			// quarry (see biteDamage), so the kill takes proportionally longer.
-			// (Census walk: live same-level non-item bodies only.)
-			if (n == this || n.isDead() || n.isRemoved()
-					|| n.getSize() > getSize() * PRED_MAX_PREY_RATIO
-					|| !isInLOS(n)) {
-				// Same level only (can't reach a floor away), and only prey actually in
-				// line of sight: a wall or a thicket (cover blocks sight) hides prey, and
-				// the chase steering refuses to move toward a target it can't see — so
-				// locking onto unseen prey would just freeze the hunter against the
-				// obstacle. Requiring LOS also lets prey use cover as a real refuge.
-				continue;
-			}
-			// Leave rival predators alone unless desperate: eating one's own kind is
-			// a starvation measure, not everyday hunting.
-			if (!cannibal && n instanceof TestNPC tn && tn.ecoClade() == Genome.Clade.PREDATOR) {
-				continue;
-			}
-			// Parasites are ignored outright, at any hunger: too small and too
-			// foul to be worth a bite. Nothing preys on them — their checks are
-			// the host's bucking and their own four books.
-			if (n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE) {
-				continue;
-			}
-			// Nor is a machine ever quarry. The steward's drone is the size of a
-			// grown animal and moves like one, so without this a hungry hunter
-			// would spend its life closing on a body it cannot bite and cannot
-			// digest. Inedibility is a property of the drone (isOrganic), not a
-			// rule about drones, so anything mechanical added later is covered.
-			if (!n.isOrganic()) {
+			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
-			if (d < bestD) {
+			if (d < bestD && isInLOS(n)) {
 				bestD = d;
 				best = n;
 			}
@@ -1751,11 +1773,12 @@ public class TestNPC extends NPC {
 			if (dist > LOS_RANGE) {
 				continue;
 			}
-			// Parasites never enter the prey channel: predators ignore them (see
-			// nearestPrey), and the minded hunt sense agrees so evolution cannot
-			// quietly relearn a taste the scripted hunters are denied.
-			if (n.getSize() < preyCeiling() && dist < preyD && n.isOrganic()
-					&& !(n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE)) {
+			// The prey channel shows exactly what the hunt would take, by the same
+			// predicate: size, rivals, parasites and machines all answered once in
+			// edibleQuarry. LOS and range are already settled by the loop guard
+			// above, and cannibalism is off here because the forage channel asks
+			// the same way — a hunter's two views of its own food agree.
+			if (edibleQuarry(n, false) && dist < preyD) {
 				preyD = dist;
 				preyDx = dx;
 				preyDy = dy;
@@ -1851,13 +1874,13 @@ public class TestNPC extends NPC {
 			return;
 		}
 		// A hunter's food is a smaller living body, so its forage channel points at
-		// the nearest thing it could bring down. Same remap the scavenger and the
+		// nearest thing it could bring down. Same remap the scavenger and the
 		// parasite get, and for the same reason: it is what lets a hunter inherit
 		// the forage behaviour every starter brain already has instead of needing a
-		// policy of its own. The candidate rule is nearestPrey's, unchanged, so an
-		// evolved hunter wants exactly what a scripted one wants — the size ratio,
-		// the no-rivals rule, the parasite and machine exclusions, and the
-		// line-of-sight requirement that makes cover a real refuge.
+		// policy of its own. The candidate rule is edibleQuarry's, shared with the
+		// hunt and the prey channel, so an evolved hunter wants exactly what a
+		// scripted one wants — the size ratio, the no-rivals rule, the parasite and
+		// machine exclusions, and the line of sight that makes cover a real refuge.
 		if (clade == Genome.Clade.PREDATOR) {
 			NPC quarry = nearestPrey(LOS_RANGE, false);
 			if (quarry == null) {

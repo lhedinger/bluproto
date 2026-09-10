@@ -5675,6 +5675,80 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter's two views of its own food have to agree. What it may eat
+	 * ({@code nearestPrey}), what its prey channel shows it ({@code S_PREY_PROX})
+	 * and what it commits to are one predicate, {@code edibleQuarry}. They were
+	 * not: the hunt left rival predators alone unless starving, and the sense did
+	 * not, so a mind that asked for prey was steered at another hunter on 16.7%
+	 * of its sense-ticks on seed 7 and 4.1% on seed 13 — measured — while its
+	 * forage channel pointed somewhere else entirely.
+	 *
+	 * <p>The two targets here are the same animal twice: identical size, identical
+	 * body, identical distance behaviour, differing only in the clade they are
+	 * counted under. So nothing but the rival rule can decide the outcome. The
+	 * rival is the NEARER of the two, which is what makes this a test rather than
+	 * a coincidence — a channel that picks by distance alone picks the rival, and
+	 * a hunter steered onto a rival bites it, because the bite takes whatever is
+	 * nearest once the body arrives.
+	 */
+	static class AHunterIgnoresRivalsWhenSeekingPrey extends Scenario {
+		/** Names prey and walks; never raises A_ATTACK, and long enough to hold
+		 *  two tracked channels (see AHunterSeesQuarryLargerThanItselfAsPrey). */
+		private static Brain preySeeker() {
+			int[][] p = new int[12][];
+			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
+			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
+			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
+			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
+			for (int i = 4; i < p.length; i++) {
+				p[i] = new int[] { Brain.SET, 2, 5, 0 };
+			}
+			return new Brain(p);
+		}
+
+		private static Genome body(double size, double speed, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = speed;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(17);
+			World w = room(24, 24);
+			// Facing set deliberately, not left to the seed. The hunter starts
+			// looking straight at the rival, so the rival is what its senses offer
+			// it first and the herbivore is behind it: nothing here rests on which
+			// body a random heading happened to sweep past.
+			TestNPC hunter = TestNPC.mindedPredator(12.0, 12.0, 0, body(13, 0.04, preySeeker()))
+					.withHeading(0); // +x, toward the rival
+			// Body-only grazers: born adult, no growth, no breeding, near enough
+			// to still. The rival is one of them wearing a predator's clade.
+			TestNPC rival = TestNPC.grazer(13.5, 12.0, 0, body(9, 0.0005, null))
+					.withClade(Genome.Clade.PREDATOR);
+			TestNPC quarry = TestNPC.grazer(5.0, 12.0, 0, body(9, 0.0005, null));
+			w.spawnEntity(hunter);
+			w.spawnEntity(rival);
+			w.spawnEntity(quarry);
+			assertTrue("the rival is counted as a hunter",
+					rival.ecoClade() == Genome.Clade.PREDATOR);
+			assertTrue("and the quarry is not",
+					quarry.ecoClade() == Genome.Clade.HERBIVORE);
+
+			int span = TestNPC.growthTicks(13) + 6000;
+			for (int t = 0; t < span && !quarry.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("the hunter turns its back on the rival and kills the "
+					+ "herbivore behind it", quarry.isDead());
+			assertEquals("and never lays a tooth on the rival", 100, rival.getHealth());
+		}
+	}
+
+	/**
 	 * The warm-seed payoff: a minded creature carrying the hand-written starter
 	 * brain actually feeds itself. Placed on an all-grass meadow, it grazes, and so
 	 * survives far past the age it could ever reach on its birth reserve alone — the
@@ -10993,6 +11067,7 @@ public class SimTests {
 				new AHuntersBiteIsDueOnArrival(),
 				new AttackingAndEatingSatesAHunter(),
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
+				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),
