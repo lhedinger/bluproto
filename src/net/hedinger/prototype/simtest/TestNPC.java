@@ -1513,20 +1513,15 @@ public class TestNPC extends NPC {
 	 * taking it. The meal is the carcass, which is {@code bodyMass}; the work is
 	 * the walk to reach it and the bites to bring it down.
 	 *
-	 * <p>Deliberately the same shape as {@link #carrionScore} — value over
-	 * distance — with the one term a living animal adds. Because
+	 * <p>Deliberately the same shape as {@link #carrionScore} -- value over
+	 * distance -- with the one term a living animal adds. Because
 	 * {@link #biteDamage} weakens as the quarry grows, {@code bites} rises in
 	 * proportion to size for anything above the hunter, so punching up earns
-	 * nothing per unit of effort: a body half again the hunter's size is half
-	 * again the meal and half again the work. Below its own size the term is
-	 * constant and this is simply mass over distance.
+	 * nothing per unit of effort.
 	 *
 	 * <p>What it does NOT price is the chase. A fast animal costs more to catch
 	 * than a slow one and nothing here says so, because closing time depends on
-	 * the throttle the mind chooses and the body cannot know it. Left out on
-	 * purpose rather than guessed at; if hunters are seen committing to quarry
-	 * they never catch, that is the term to add and there will be a measurement
-	 * to justify its shape.
+	 * the throttle the mind chooses and the body cannot know it.
 	 */
 	private double preyScore(NPC n) {
 		double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
@@ -1535,21 +1530,21 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * How much better a rival quarry must be before a committed hunter will turn
-	 * off the one it is running down. The scavenger's number, for the scavenger's
-	 * reason (see {@link #CARRION_SWITCH_GAIN}): near-ties must not be able to
-	 * steal a target, or the creature turns toward a new one every few steps and
-	 * reaches none, while something genuinely worth crossing to still can.
+	 * How much better a rival quarry must be before this hunter turns off the one
+	 * it is running down. The scavenger answers this with a constant
+	 * ({@link #CARRION_SWITCH_GAIN}); a hunter answers it with a gene, because
+	 * unlike a carcass a quarry runs, and whether doggedness beats looking again
+	 * depends on how fast it runs relative to the hunter -- which differs by
+	 * lineage and by world.
 	 *
-	 * <p>It is self-damping in the same way, and a hunt gets a second helping of
-	 * that for free. The score rises as the walk shortens, so whatever is being
-	 * chased grows harder to displace the closer it gets; and quarry that is
-	 * outrunning the hunter recedes, so its own score decays and the commitment
-	 * lets go by itself. Giving up is not a rule here — it is what the arithmetic
-	 * does when a chase stops working.
+	 * <p>The default of 1 is no loyalty at all: re-decide every tick, ties to the
+	 * incumbent. That is deliberately the behaviour the live world was measured
+	 * on, so nothing changes for a population until selection finds a reason to
+	 * change it.
 	 */
-	@Unit("x prey score")
-	public static final double PREY_SWITCH_GAIN = 2.0;
+	private double preyLoyalty() {
+		return genome == null ? 1.0 : Math.max(1.0, genome.preyLoyalty);
+	}
 
 	/**
 	 * The quarry this hunter has committed to running down, if that choice is
@@ -1594,7 +1589,7 @@ public class TestNPC extends NPC {
 	/**
 	 * Points the hunt at the best quarry in sight and keeps it there: the held
 	 * target stands unless something clears its score times
-	 * {@link #PREY_SWITCH_GAIN}. With nothing held the bar is zero and the best
+	 * {@link #preyLoyalty()}. With nothing held the bar is zero and the best
 	 * quarry in range simply wins.
 	 *
 	 * <p>Sweeps in id order and keeps the first strict maximum, so ties break
@@ -1603,7 +1598,7 @@ public class TestNPC extends NPC {
 	private NPC scanPrey(boolean cannibal) {
 		NPC held = heldPrey(cannibal);
 		NPC best = null;
-		double bar = held == null ? 0 : preyScore(held) * PREY_SWITCH_GAIN;
+		double bar = held == null ? 0 : preyScore(held) * preyLoyalty();
 		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creatures(getLvl())) {
 			if (!edibleQuarry(n, cannibal)) {
