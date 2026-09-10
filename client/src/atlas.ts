@@ -10,7 +10,10 @@
 export const CELL = 96;
 export const DIRS = 8;
 export const ANIM = 8;
-export const ART_RADIUS = 0.22 * CELL;
+// 0.18 of the cell, down from 0.22 when the bodies grew variants: the smallest
+// body (r = 2) is baked at 9px per art-pixel, and the reach a horn or a halo
+// needs had to fit inside 48px. Moves only together with AtlasBaker.
+export const ART_RADIUS = 0.18 * CELL;
 
 /** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
  *  for pixel-art style partial coverage — the ground bake's dithers, the

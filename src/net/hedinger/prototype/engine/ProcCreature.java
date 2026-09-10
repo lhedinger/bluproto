@@ -27,10 +27,42 @@ public final class ProcCreature {
 	private ProcCreature() {
 	}
 
-	/** Heritable appearance: silhouette form + features + size, plus colour. */
+	/** Heritable appearance: silhouette form + variant + features + size, plus colour. */
 	public static final class Phenotype {
 		public int color, form, legs, core, pattern, r;
+		/** Which of the plan's {@link #VARIANTS} bodies this is (0..7). */
+		public int variant;
 		public boolean antennae, tail, flying;
+	}
+
+	/** Bodies per worn plan, not counting colour. */
+	public static final int VARIANTS = 8;
+
+	/**
+	 * The eight bodies of each plan, by name, indexed by {@link Phenotype#variant}.
+	 * Rows follow {@code form}. The two unworn plans (2 and 5) have no variants
+	 * and repeat their one name, so any index reads sensibly.
+	 *
+	 * <p>Every variant is an OUTLINE difference, because outline is the only
+	 * thing that survives being drawn at the size a creature is actually watched
+	 * (see form 4's comment below). Marks, leg counts and colour were all there
+	 * before this, and measured on a settled world they left a clade wearing what
+	 * read as one body: a herd of two hundred grazers was one shape in a dozen
+	 * greens. Eight silhouettes a clade is enough that a lineage looks like a
+	 * lineage rather than a colour.
+	 */
+	public static final String[][] VARIANT_NAMES = {
+			{ "grazer", "long", "round", "horned", "broad", "stub-tailed", "frilled", "waisted" },
+			{ "ciliate", "bare", "spiked", "oval", "hooked", "twin", "haloed", "flat" },
+			{ "wedge", "wedge", "wedge", "wedge", "wedge", "wedge", "wedge", "wedge" },
+			{ "segmented", "long", "short", "big-headed", "big-tailed", "pincered", "broad", "tailed" },
+			{ "hunter", "long", "brute", "fanged", "long-tailed", "forked", "snouted", "dart" },
+			{ "ragged", "ragged", "ragged", "ragged", "ragged", "ragged", "ragged", "ragged" },
+	};
+
+	/** The name of a plan's variant, for the catalog. */
+	public static String variantName(int form, int variant) {
+		return VARIANT_NAMES[clamp(form, 0, VARIANT_NAMES.length - 1)][clamp(variant, 0, VARIANTS - 1)];
 	}
 
 	/** A form-agnostic action envelope: squash/stretch, offset, rotation, tint,
@@ -86,6 +118,13 @@ public final class ProcCreature {
 		// markers' business. Together with the lift and the flattened shadow the
 		// draw already gives a flier, that is a silhouette rather than a hover.
 		p.legs = g.flying ? 1 : 2 + (int) (m1 * 3);
+		// The third marker picks which of the plan's eight bodies this lineage
+		// wears. Quantised from ONE marker rather than hashed from all three, so a
+		// mutation nudges a lineage across at most one boundary at a time and a
+		// species keeps its body the way it keeps its leg count (marker 1) and its
+		// mark (marker 0). This marker also feeds the blue of the colour, so body
+		// and hue co-vary within a clade -- which is what a lineage looks like.
+		p.variant = (int) (m2 * (VARIANTS - 0.001));
 		p.core = eco; // repeated in the core mark: still legible when the body is small
 		p.pattern = (int) (m0 * 2.999);
 		// The two features that read fastest at a distance, spent on the two roles
@@ -246,7 +285,7 @@ public final class ProcCreature {
 	 * still looking at the old body — the shape fixed on the server and wrong in the
 	 * browser, which is the most confusing way for a fix to fail.
 	 */
-	private static final int RENDER_VERSION = 2;
+	private static final int RENDER_VERSION = 3;
 
 	/** Packs everything about a phenotype that affects the pixels into a key. Public
 	 *  so the web layer can name a phenotype's atlas by the same stable id the live
@@ -262,6 +301,7 @@ public final class ProcCreature {
 		k = (k << 1) | (ph.tail ? 1 : 0);
 		k = (k << 1) | (ph.flying ? 1 : 0);
 		k = (k << 3) | (ph.r & 7);
+		k = (k << 3) | (ph.variant & 7);
 		return k;
 	}
 
@@ -286,6 +326,7 @@ public final class ProcCreature {
 		k = (k << 1) | (ph.tail ? 1 : 0);
 		k = (k << 1) | (ph.flying ? 1 : 0);
 		k = (k << 3) | (ph.r & 7);
+		k = (k << 3) | (ph.variant & 7);
 		return k;
 	}
 
@@ -308,6 +349,7 @@ public final class ProcCreature {
 		n.tail = ph.tail;
 		n.flying = ph.flying;
 		n.r = ph.r;
+		n.variant = ph.variant;
 		return n;
 	}
 
@@ -370,10 +412,10 @@ public final class ProcCreature {
 		}
 
 		HashSet<Integer> body = new HashSet<Integer>();
-		int rng = (int) ((r + 2) * Math.max(sA, sP)) + 1;
+		int rng = (int) ((r + 3) * Math.max(sA, sP)) + 1;
 		for (double la = -rng; la <= rng; la += 0.5) {
 			for (double pe = -rng; pe <= rng; pe += 0.5) {
-				if (inForm(ph.form, la / sA, pe / sP, r, seed, phase)) {
+				if (inForm(ph, la / sA, pe / sP, seed, phase)) {
 					body.add(key(w0(la, pe, ux, rx), w1(la, pe, uy, ry)));
 				}
 			}
@@ -385,24 +427,49 @@ public final class ProcCreature {
 				fill(g, ox, oy, px, dx, dy + 1, 0, 0, 0, (int) (56 * (1 - m.dissolve)));
 			}
 		}
-		// Appendages.
-		if (ph.form == 0 || ph.form == 4) { // bilateral legs
-			int pairs = ph.legs;
-			double half = (ph.form == 4 ? r - 1 : r - 0.2) * sP, len = (ph.form == 4 ? 2.4 : 1.4) * sP;
+		// Appendages, in the dark shade every limb wears.
+		int limb = shade(ph.color, 0.5);
+		if (ph.form == 0 || ph.form == 4) { // bilateral legs, along the body's flanks
+			int pairs = ph.legs, v = ph.variant;
+			double[] ext = extent(ph); // {back, front, half-width}
+			// Where a leg roots: a grazer's at its flank, a hunter's tucked under a
+			// body that is widest at the shoulder (a narrow hunter tucks them in
+			// further, a brute less). And how far along the body they may sit.
+			double half = (ph.form == 4
+					? Math.max(0.5, r - (v == 2 ? 0.5 : (v == 1 || v == 7) ? 1.3 : 1.0))
+					: ext[2] + 0.1) * sP;
+			double len = (ph.form == 4 ? 2.4 : v == 2 ? 0.9 : 1.4) * sP;
+			double inset = ph.form == 4 ? 0.9 : 1.4;
+			double la0 = -(ext[0] - inset) * sA, la1 = (ext[1] - inset) * sA;
 			for (int i = 0; i < pairs; i++) {
-				double la = (pairs == 1 ? 0 : lerp(-r + 0.6, r - 0.6, i / (double) (pairs - 1))) * sA;
+				double la = pairs == 1 ? (la0 + la1) / 2 : lerp(la0, la1, i / (double) (pairs - 1));
 				double drive = 0.55 + 0.45 * Math.sin(phase + i * 2.1);
 				for (double e = half; e <= half + len * drive; e += 0.7) {
-					stampMod(g, ox, oy, px, w0(la, e, ux, rx), w1(la, e, uy, ry), shade(ph.color, 0.5), m, seed);
-					stampMod(g, ox, oy, px, w0(la, -e, ux, rx), w1(la, -e, uy, ry), shade(ph.color, 0.5), m, seed);
+					stampMod(g, ox, oy, px, w0(la, e, ux, rx), w1(la, e, uy, ry), limb, m, seed);
+					stampMod(g, ox, oy, px, w0(la, -e, ux, rx), w1(la, -e, uy, ry), limb, m, seed);
 				}
 			}
-		} else if (ph.form == 1) { // radial cilia
+		} else if (ph.form == 1 && ph.variant == 2) { // four spikes, and no ring
+			for (int i = 0; i < 4; i++) {
+				double a = Math.PI / 4 + i * Math.PI / 2;
+				for (double d = r + 0.8; d <= r + 1.7; d += 0.8) {
+					double la = Math.cos(a) * d * sA, pe = Math.sin(a) * d * sP;
+					stampMod(g, ox, oy, px, w0(la, pe, ux, rx), w1(la, pe, uy, ry), limb, m, seed);
+				}
+			}
+		} else if (ph.form == 1 && ph.variant != 1) { // radial cilia, around whatever the body is
 			int n = ph.legs * 2 + 5;
-			double base = (r + 0.8) * ((sA + sP) / 2) + 0.35 * Math.sin(phase * 1.5);
-			for (int i = 0; i < n; i++) {
-				double a = 2 * Math.PI * i / n + phase * 0.25, la = Math.cos(a) * base, pe = Math.sin(a) * base;
-				stampMod(g, ox, oy, px, w0(la, pe, ux, rx), w1(la, pe, uy, ry), shade(ph.color, 0.5), m, seed);
+			double[] ring = ciliaRing(ph); // {centre along, radius along, radius across}
+			double wob = 0.35 * Math.sin(phase * 1.5);
+			int rings = ph.variant == 6 ? 2 : 1; // haloed: the cilia are two deep
+			for (int k = 0; k < rings; k++) {
+				double reach = 0.8 + k * 0.8 + wob;
+				for (int i = 0; i < n; i++) {
+					double a = 2 * Math.PI * i / n + phase * 0.25;
+					double la = (ring[0] + Math.cos(a) * (ring[1] + reach)) * sA;
+					double pe = Math.sin(a) * (ring[2] + reach) * sP;
+					stampMod(g, ox, oy, px, w0(la, pe, ux, rx), w1(la, pe, uy, ry), limb, m, seed);
+				}
 			}
 		}
 		// Body, lit from screen-north.
@@ -429,18 +496,32 @@ public final class ProcCreature {
 			}
 		}
 		if (ph.antennae) {
-			// Just beyond the front of THIS body plan. Pinned to r + 0.9 they landed
+			// Just beyond the front of THIS body. Pinned to r + 0.9 they landed
 			// inside a long body and vanished — the scavenger's one unmistakable
 			// feature, swallowed by the shape meant to carry it.
-			double nose = (noseOf(ph.form, r) + 0.9) * sA;
+			double nose = (extent(ph)[1] + 0.9) * sA;
 			stampMod(g, ox, oy, px, w0(nose, 0.9 * sP, ux, rx), w1(nose, 0.9 * sP, uy, ry),
 					shade(ph.color, 0.55), m, seed);
 			stampMod(g, ox, oy, px, w0(nose, -0.9 * sP, ux, rx), w1(nose, -0.9 * sP, uy, ry),
 					shade(ph.color, 0.55), m, seed);
 		}
 		if (ph.tail) {
-			stampMod(g, ox, oy, px, w0(-(r + 0.9) * sA, 0, ux, rx), w1(-(r + 0.9) * sA, 0, uy, ry),
-					shade(ph.color, 0.6), m, seed);
+			// Just behind THIS body, for the same reason the feelers sit just ahead
+			// of it. The hunter's tail variants are tails, so they are drawn here in
+			// the tail's shade rather than as outline: a broad paddle two long, or
+			// forked. The paddle was a plain two-pixel tail first, and on the
+			// silhouette count that differed from the hunter by ONE pixel.
+			double back = extent(ph)[0];
+			int tint = shade(ph.color, 0.6);
+			double[][] tail = ph.variant == 5
+					? new double[][] { { back + 0.9, 0.8 }, { back + 0.9, -0.8 }, { back + 1.6, 1.3 }, { back + 1.6, -1.3 } }
+					: ph.variant == 4 ? new double[][] { { back + 0.9, 0 }, { back + 0.9, 0.7 }, { back + 0.9, -0.7 },
+							{ back + 1.7, 0 } }
+					: new double[][] { { back + 0.9, 0 } };
+			for (double[] t : tail) {
+				double la = -t[0] * sA, pe = t[1] * sP;
+				stampMod(g, ox, oy, px, w0(la, pe, ux, rx), w1(la, pe, uy, ry), tint, m, seed);
+			}
 		}
 		if (m.ringT >= 0) {
 			drawRing(g, cx, cy, px, m.ringT * (r + 5), 1 - m.ringT);
@@ -451,34 +532,227 @@ public final class ProcCreature {
 	}
 
 	// ---- silhouette --------------------------------------------------------
+	//
+	// Every worn plan has eight bodies (VARIANT_NAMES), and each is described
+	// here twice: inForm() says which body-local art-pixels are body, and
+	// extent() says how far that body reaches, which is where its legs, feelers
+	// and tail hang from. The two have to agree. A feature pinned to `r` instead
+	// of to the body's own edge lands inside a long body and vanishes -- the
+	// scavenger's feelers already did that once.
+	//
+	// Reach is budgeted. The web atlas draws every body into a 96px cell at a
+	// fixed art radius, so the farthest art-pixel any variant may claim is set by
+	// the SMALLEST body: at r = 2 it is four art-pixels from the centre, at r = 3
+	// seven, at r = 4 eleven. Nothing here reaches past r + 2 -- a long body is
+	// r + 1.9, a two-pixel tail ends at r + 1.7 -- and EveryBodyStaysInItsCell
+	// pins it, because a body that crosses its cell edge is drawn into the next
+	// frame of the sheet.
 
-	/** How far forward a body plan reaches, for hanging things off its nose. */
-	private static double noseOf(int form, int r) {
-		switch (form) {
-		case 3:
-			return Math.max(1.2, r * 0.8) + Math.max(1, r - 1.2); // the leading segment's far edge
+	private static final double[][] NONE = {};
+
+	/** A body's reach in art-px, {back, front, half-width}: where its outline
+	 *  ends behind, ahead, and across. */
+	private static double[] extent(Phenotype ph) {
+		int r = ph.r, v = ph.variant;
+		switch (ph.form) {
+		case 1:
+			switch (v) {
+			case 1: return new double[] { r + 0.5, r + 0.5, r + 0.5 };
+			case 3: return new double[] { r + 0.9, r + 0.9, Math.max(0.9, r - 0.5) };
+			case 5: return new double[] { r * 1.30, r * 1.17, r * 0.85 };
+			case 7: return new double[] { Math.max(0.9, r - 0.5), Math.max(0.9, r - 0.5), r + 0.9 };
+			default: {
+				double rr = Math.sqrt(r * r + r * 0.5);
+				return new double[] { rr, rr, rr };
+			}
+			}
 		case 2:
+			return new double[] { r + 0.3, r + 0.3, r + 0.4 };
+		case 3: {
+			double[][] s = segments(ph);
+			double[] c = s[0], rad = s[1];
+			double w = 0;
+			for (double x : rad) {
+				w = Math.max(w, x * (v == 6 ? 1.4 : 1));
+			}
+			return new double[] { rad[0] - c[0], c[c.length - 1] + rad[rad.length - 1], w };
+		}
 		case 4:
-			return r + 0.3;
+			switch (v) {
+			case 1: return new double[] { r + 1.4, r + 1.0, (2 * r + 2.1) * 0.38 + 0.3 };
+			case 2: return new double[] { r + 0.3, r + 0.3, 2 * r * 0.7 + 0.6 };
+			case 7: return new double[] { r + 0.8, r + 0.6, (2 * r + 1.1) * 0.32 + 0.3 };
+			default: return new double[] { r + 0.3, r + 0.3, 2 * r * 0.5 + 0.4 };
+			}
+		case 5:
+			return new double[] { r + 0.6, r + 0.6, r + 0.6 };
 		default:
-			return r + 0.8;
+			switch (v) {
+			case 1: return new double[] { r + 1.9, r + 1.9, Math.max(0.7, r - 0.7) };
+			case 2: return new double[] { r + 0.3, r + 0.3, r + 0.3 };
+			case 4: return new double[] { Math.max(0.9, r - 0.4), Math.max(0.9, r - 0.4), r + 0.7 };
+			case 7: return new double[] { r * 1.34, r * 1.28, r * 0.72 };
+			default: return new double[] { r + 0.8, r + 0.8, Math.max(0.7, r - 0.3) };
+			}
 		}
 	}
 
-	private static boolean inForm(int form, double la, double pe, int r, int seed, double phase) {
-		switch (form) {
+	/** The scavenger's segments as {centres along, radii}, rear first. Drawn a
+	 *  little smaller than the body was born: at full size the three-segment
+	 *  form out-massed the grazer it stands next to, and a scavenger that dwarfs
+	 *  what it feeds on reads wrong. */
+	private static double[][] segments(Phenotype ph) {
+		int r = ph.r;
+		double d = Math.max(1.2, r * 0.8), r2 = Math.max(1, r - 1.2), small = Math.max(1, r2 - 0.2);
+		switch (ph.variant) {
+		case 1: { // long: four
+			double d4 = Math.max(1.1, r * 0.7), r4 = Math.max(1, r - 1.4);
+			return new double[][] { { -1.5 * d4, -0.5 * d4, 0.5 * d4, 1.5 * d4 }, { r4, r4, r4, r4 } };
+		}
+		case 2: { // short: two, each bigger
+			double r3 = Math.max(1.2, r - 0.7), d3 = r3 * 0.75;
+			return new double[][] { { -d3, d3 }, { r3, r3 } };
+		}
+		case 3: // the head carries the mass
+			return new double[][] { { -d, 0, d }, { small, small, r2 + 0.7 } };
+		case 4: // the tail does
+			return new double[][] { { -d, 0, d }, { r2 + 0.7, small, small } };
+		default:
+			return new double[][] { { -d, 0, d }, { r2, r2, r2 } };
+		}
+	}
+
+	/** Where a parasite's cilia ring sits: {centre along, radius along, radius
+	 *  across}, so the fringe follows an oval body and the twin's rear lobe
+	 *  rather than a circle the body no longer is. */
+	private static double[] ciliaRing(Phenotype ph) {
+		int r = ph.r;
+		switch (ph.variant) {
+		case 3: return new double[] { 0, r + 0.9, Math.max(0.9, r - 0.5) };
+		case 5: return new double[] { -r * 0.45, r * 0.85, r * 0.85 };
+		case 7: return new double[] { 0, Math.max(0.9, r - 0.5), r + 0.9 };
+		default: return new double[] { 0, r, r };
+		}
+	}
+
+	/**
+	 * A variant's fixed features as small discs in body-local art-px {along,
+	 * across, radius}: the horns, hooks, pincers, frill and stubs that are the
+	 * difference between two bodies of the same outline. They ARE outline --
+	 * {@link #inForm} unions them into the body, so they take its light and cast
+	 * its shadow -- and they hang off the body's own extent, never off {@code r}.
+	 *
+	 * <p>Discs rather than pixels, and sized to {@code r}: as single limb-dark
+	 * pixels they vanished into the ambient shadow at every size on the
+	 * comparison sheet. A feature has to thicken as the body does or a horn on a
+	 * big body is a speck. {@code t} is how far a feature may stand off, which
+	 * is nothing at r = 2 -- the smallest body has one art-pixel of reach past
+	 * its outline before it crosses its atlas cell -- so every centre + radius
+	 * here stays under r + 2.4.
+	 */
+	private static double[][] blobs(Phenotype ph) {
+		int r = ph.r, v = ph.variant;
+		double[] e = extent(ph);
+		double b = e[0], f = e[1], w = e[2];
+		double k = 0.35 + 0.15 * r; // a feature's radius, 0.65 .. 0.95
+		double t = (r - 2) * 0.45;  // its standoff, 0 .. 0.9
+		switch (ph.form) {
+		case 0:
+			switch (v) {
+			case 3: // horns: two prongs, splayed outward as they go
+				return new double[][] { { f + 0.2, r * 0.45, k }, { f + 0.2, -r * 0.45, k },
+						{ f + 0.9 + t, r * 0.45 + 0.5 + t * 0.5, k }, { f + 0.9 + t, -(r * 0.45 + 0.5 + t * 0.5), k } };
+			case 5: // a stub tail
+				return new double[][] { { -(b + 0.4), 0, k }, { -(b + 1.0 + t * 0.4), 0, k } };
+			case 6: // a frill: a bar across the nose
+				return new double[][] { { f + 0.5 + t * 0.3, 0, k },
+						{ f + 0.4 + t * 0.3, 0.9 + t * 0.5, k }, { f + 0.4 + t * 0.3, -(0.9 + t * 0.5), k } };
+			default:
+				return NONE;
+			}
 		case 1:
-			return la * la + pe * pe <= r * r + r * 0.5;
+			return v == 4 // hooks: two, curling outward
+					? new double[][] { { f + 0.3, 0.9, k }, { f + 0.3, -0.9, k },
+							{ f + 0.9 + t * 0.4, 1.3 + t * 0.4, k }, { f + 0.9 + t * 0.4, -(1.3 + t * 0.4), k } }
+					: NONE;
+		case 3:
+			switch (v) {
+			case 5: // pincers, outside the feelers. Their tips stand off with t: at
+				// r = 2 a tip any further out crossed the cell on the diagonal
+				// headings, where a corner's reach is the radial distance.
+				return new double[][] { { f + 0.4, w + 0.5, k }, { f + 0.4, -(w + 0.5), k },
+						{ f + 0.7 + t * 0.6, w + 0.6 + t * 0.6, k }, { f + 0.7 + t * 0.6, -(w + 0.6 + t * 0.6), k } };
+			case 7: // a tail behind the last segment
+				return new double[][] { { -(b + 0.4), 0, k }, { -(b + 1.0 + t * 0.4), 0, k } };
+			default:
+				return NONE;
+			}
+		case 4:
+			switch (v) {
+			case 3: // fangs
+				return new double[][] { { f + 0.5, 0.9, k }, { f + 0.5, -0.9, k },
+						{ f + 1.1 + t * 0.4, 1.3 + t * 0.4, k }, { f + 1.1 + t * 0.4, -(1.3 + t * 0.4), k } };
+			case 6: // a snout
+				return new double[][] { { f + 0.5, 0, k }, { f + 1.2 + t * 0.4, 0, k } };
+			default: // the tail variants (4, 5) are tails, drawn with the tail
+				return NONE;
+			}
+		default:
+			return NONE;
+		}
+	}
+
+	private static boolean inBlob(Phenotype ph, double la, double pe) {
+		for (double[] d : blobs(ph)) {
+			if (disc(la, pe, d[0], d[1], d[2])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean ellipse(double la, double pe, double a, double b) {
+		return sq(la / a) + sq(pe / b) <= 1.05;
+	}
+
+	private static boolean disc(double la, double pe, double cx, double cy, double rad) {
+		return sq(la - cx) + sq(pe - cy) <= rad * rad;
+	}
+
+	/** Broad at the front and tapering to the back: the hunter's outline. */
+	private static boolean wedge(double la, double pe, double back, double front, double taper, double tip) {
+		return la >= -back && la <= front && Math.abs(pe) <= (back - 0.3 + la) * taper + tip;
+	}
+
+	private static boolean inForm(Phenotype ph, double la, double pe, int seed, double phase) {
+		return inBody(ph, la, pe, seed, phase) || inBlob(ph, la, pe);
+	}
+
+	private static boolean inBody(Phenotype ph, double la, double pe, int seed, double phase) {
+		int r = ph.r, v = ph.variant;
+		switch (ph.form) {
+		case 1: // the parasite: round, and its variants are what round can become
+			switch (v) {
+			case 1: return disc(la, pe, 0, 0, r + 0.5);
+			case 3: return ellipse(la, pe, r + 0.9, Math.max(0.9, r - 0.5));
+			case 5: return disc(la, pe, r * 0.55, 0, r * 0.62) || disc(la, pe, -r * 0.45, 0, r * 0.85);
+			case 7: return ellipse(la, pe, Math.max(0.9, r - 0.5), r + 0.9);
+			default: return la * la + pe * pe <= r * r + r * 0.5;
+			}
 		case 2:
 			return la <= r + 0.3 && la >= -r - 0.3 && Math.abs(pe) <= (r - la) * 0.5 + 0.4;
-		case 3:
-			// Three segments that undulate on the gait clock. Drawn a little smaller
-			// than it was born: at full size it out-massed the grazer it stands next
-			// to, and a scavenger that dwarfs what it feeds on reads wrong.
-			double d = Math.max(1.2, r * 0.8), r2 = Math.max(1, r - 1.2), amp = 0.8;
-			double o0 = amp * Math.sin(phase + 1.3), o1 = amp * Math.sin(phase), o2 = amp * Math.sin(phase - 1.3);
-			return Math.min(sq(la - d) + sq(pe - o2),
-					Math.min(sq(la) + sq(pe - o1), sq(la + d) + sq(pe - o0))) <= r2 * r2;
+		case 3: { // segments that undulate on the gait clock, however many there are
+			double[][] s = segments(ph);
+			double[] c = s[0], rad = s[1];
+			double along = v == 6 ? 0.85 : 1, across = v == 6 ? 1.4 : 1, mid = (c.length - 1) / 2.0;
+			for (int i = 0; i < c.length; i++) {
+				double o = 0.8 * Math.sin(phase + (mid - i) * 1.3);
+				if (sq((la - c[i]) / (rad[i] * along)) + sq((pe - o) / (rad[i] * across)) <= 1) {
+					return true;
+				}
+			}
+			return false;
+		}
 		case 4:
 			// The hunter: broad across the shoulders and tapering to the back, the
 			// mirror of the scavenger's forward-pointing wedge and nothing like the
@@ -486,14 +760,26 @@ public final class ProcCreature {
 			// which meant a predator and a grazer differed only in leg length and a
 			// one-pixel tail -- true at the size a sprite sheet is baked, invisible
 			// at the size a creature is actually watched. Outline is the only thing
-			// that survives being drawn small, so the roles differ in outline.
-			return la >= -r - 0.3 && la <= r + 0.3 && Math.abs(pe) <= (r + la) * 0.5 + 0.4;
+			// that survives being drawn small, so the roles differ in outline -- and
+			// so do the variants: longer, wider, narrower, never just marked.
+			switch (v) {
+			case 1: return wedge(la, pe, r + 1.4, r + 1.0, 0.38, 0.3);
+			case 2: return wedge(la, pe, r + 0.3, r + 0.3, 0.7, 0.6);
+			case 7: return wedge(la, pe, r + 0.8, r + 0.6, 0.32, 0.3);
+			default: return wedge(la, pe, r + 0.3, r + 0.3, 0.5, 0.4);
+			}
 		case 5:
 			int q = (int) Math.floor((Math.atan2(pe, la) + Math.PI) / (2 * Math.PI) * 6);
 			double pr = r + 0.6 * (hash(q, seed, 4) - 0.5) * 2 + 0.5 * Math.sin(phase + q);
 			return la * la + pe * pe <= pr * pr;
-		default:
-			return sq(la / (r + 0.8)) + sq(pe / Math.max(0.7, r - 0.3)) <= 1.05;
+		default: // the grazer's ellipse, and what an ellipse can become
+			switch (v) {
+			case 1: return ellipse(la, pe, r + 1.9, Math.max(0.7, r - 0.7));
+			case 2: return ellipse(la, pe, r + 0.3, r + 0.3);
+			case 4: return ellipse(la, pe, Math.max(0.9, r - 0.4), r + 0.7);
+			case 7: return disc(la, pe, r * 0.62, 0, r * 0.66) || disc(la, pe, -r * 0.62, 0, r * 0.72);
+			default: return ellipse(la, pe, r + 0.8, Math.max(0.7, r - 0.3));
+			}
 		}
 	}
 

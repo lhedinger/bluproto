@@ -409,6 +409,141 @@ public class SimTests {
 	}
 
 	/**
+	 * Eight bodies a clade, and every one an outline of its own.
+	 *
+	 * <p>Marks, leg counts and colour were the whole of a clade's variety, and
+	 * measured on a settled world they did not read: a herd of two hundred
+	 * grazers was one shape in a dozen greens. This pins what the eye is meant to
+	 * catch -- the SILHOUETTE -- by rasterising each variant on its own art-pixel
+	 * grid and counting the pixels any two disagree on. Distinct shape keys would
+	 * be cheap and mean nothing: two bodies that differ in one pixel have
+	 * different keys too, and the first draft of the hunter's long tail was
+	 * exactly that, one pixel.
+	 *
+	 * <p>The bar is low on purpose and it is the measured floor: the smallest body
+	 * has one art-pixel of room past its outline, so at r = 2 two of the grazer's
+	 * bodies differ by two pixels (a horned head against a frilled one), and at
+	 * r = 3 and 4 nothing is closer than three. What matters is that no pair
+	 * collapses to the same body, at any radius a creature is drawn at.
+	 */
+	static class EveryCladeWearsEightBodies extends Scenario {
+		@Override
+		public void run() {
+			for (Genome.Clade clade : Genome.Clade.values()) {
+				for (int size : new int[] { 5, 9, 13 }) { // r = 2, 3, 4
+					java.util.List<java.util.Set<Long>> shapes = new java.util.ArrayList<>();
+					java.util.List<String> names = new java.util.ArrayList<>();
+					java.util.Set<Long> keys = new java.util.HashSet<>();
+					int r = -1;
+					for (int v = 0; v < ProcCreature.VARIANTS; v++) {
+						Genome g = Genome.phenotype(size, 0.05, 5, 6, Math.PI / 2, 100000);
+						g.clade = clade;
+						// The third marker is what picks a body in the world; the
+						// reference reaches every variant through it, not by poking
+						// the phenotype.
+						g.markers = new double[] { 0.4, 0.5, (v + 0.5) / ProcCreature.VARIANTS };
+						ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
+						assertEquals("marker 2 picks the variant, " + clade, v, ph.variant);
+						r = ph.r;
+						keys.add(ProcCreature.shapeKey(ph));
+						shapes.add(silhouette(ph));
+						names.add(ProcCreature.variantName(ph.form, v));
+					}
+					assertEquals(clade + " at r=" + r + " has eight shape keys", ProcCreature.VARIANTS, keys.size());
+					int floor = r == 2 ? 2 : 3;
+					for (int i = 0; i < shapes.size(); i++) {
+						for (int j = i + 1; j < shapes.size(); j++) {
+							java.util.Set<Long> a = new java.util.HashSet<>(shapes.get(i)), b = new java.util.HashSet<>(shapes.get(j));
+							a.removeAll(shapes.get(j));
+							b.removeAll(shapes.get(i));
+							int diff = a.size() + b.size();
+							assertTrue(clade + " r=" + r + ": " + names.get(i) + " and " + names.get(j)
+									+ " are different bodies (" + diff + " px apart, floor " + floor + ")", diff >= floor);
+						}
+					}
+				}
+			}
+		}
+
+		/** The opaque pixels of a body at one screen pixel per art-pixel, facing
+		 *  east, mid-gait. Shadows are translucent and so drop out. */
+		static java.util.Set<Long> silhouette(ProcCreature.Phenotype ph) {
+			java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(64, 64,
+					java.awt.image.BufferedImage.TYPE_INT_ARGB);
+			java.awt.Graphics2D g = img.createGraphics();
+			ProcCreature.draw(g, 32, 32, ph.r, ph, 0, 1.1);
+			g.dispose();
+			java.util.Set<Long> s = new java.util.HashSet<>();
+			for (int y = 0; y < 64; y++) {
+				for (int x = 0; x < 64; x++) {
+					if ((img.getRGB(x, y) >>> 24) == 255) {
+						s.add(y * 64L + x);
+					}
+				}
+			}
+			return s;
+		}
+	}
+
+	/**
+	 * Nothing a walking body draws reaches the edge of its atlas cell.
+	 *
+	 * <p>The web atlas is one sheet of 96px cells and the baker draws every cell
+	 * straight onto it, so a body that crosses its cell edge is drawn into the
+	 * next frame, and a viewer sees a stray piece of one pose in another. The
+	 * budget is set by the smallest body: at r = 2 the baker's art radius leaves
+	 * four art-pixels of reach from the centre, at r = 3 seven, at r = 4 eleven --
+	 * and on the diagonal headings a corner's reach is its radial distance, which
+	 * is how the pincered scavenger's tips first crossed the line while every
+	 * cardinal heading passed.
+	 *
+	 * <p>This draws every worn plan's every variant at every radius and heading,
+	 * at the baker's own art radius, through the same {@code draw} the baker
+	 * calls, and asserts nothing opaque lands in the eight cells around it.
+	 * Walking bodies only: an airborne body is lifted five art-pixels and has
+	 * crossed its cell at r <= 3 since before the variants existed, which is a
+	 * separate defect with its own fix (the lift, not the outline).
+	 */
+	static class EveryBodyStaysInItsCell extends Scenario {
+		@Override
+		public void run() {
+			final int cell = 96;
+			final double art = cell * 0.18; // AtlasBaker's radius; the client's ART_RADIUS mirrors it
+			for (Genome.Clade clade : Genome.Clade.values()) {
+				for (int size : new int[] { 5, 9, 13 }) {
+					for (int v = 0; v < ProcCreature.VARIANTS; v++) {
+						Genome g = Genome.phenotype(size, 0.05, 5, 6, Math.PI / 2, 100000);
+						g.clade = clade;
+						g.markers = new double[] { 0.4, 0.5, (v + 0.5) / ProcCreature.VARIANTS };
+						ProcCreature.Phenotype ph = ProcCreature.phenotype(g);
+						for (int dir = 0; dir < ProcCreature.DIRS; dir++) {
+							for (double phase : new double[] { 0.3, 1.1, 2.4, 4.0 }) {
+								java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(3 * cell, 3 * cell,
+										java.awt.image.BufferedImage.TYPE_INT_ARGB);
+								java.awt.Graphics2D gr = img.createGraphics();
+								ProcCreature.draw(gr, cell + cell / 2, cell + cell / 2, art, ph,
+										dir * Math.PI * 2 / ProcCreature.DIRS, phase);
+								gr.dispose();
+								int out = 0;
+								for (int y = 0; y < 3 * cell; y++) {
+									for (int x = 0; x < 3 * cell; x++) {
+										boolean inside = x >= cell && x < 2 * cell && y >= cell && y < 2 * cell;
+										if (!inside && (img.getRGB(x, y) >>> 24) == 255) {
+											out++;
+										}
+									}
+								}
+								assertEquals(clade + " " + ProcCreature.variantName(ph.form, v) + " r=" + ph.r
+										+ " heading " + dir + " phase " + phase + ": opaque px outside its cell", 0, out);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * A flyer and a walker do not shove each other; two of a kind do.
 	 *
 	 * <p>Flight in this world is not a height. Z is the level a body stands on,
@@ -10877,6 +11012,8 @@ public class SimTests {
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsWorthWhatAKillIsWorth(),
 				new ABodyIsShapedByWhatItEats(),
+				new EveryCladeWearsEightBodies(),
+				new EveryBodyStaysInItsCell(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
