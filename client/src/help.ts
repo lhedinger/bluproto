@@ -642,6 +642,24 @@ const plans = section('Body plans',
   + 'body. A creature\'s plan follows what its genome eats and there are four trophic '
   + 'levels, so two of these are worn by nothing — they are here because a reference '
   + 'to the space should show the whole space, not a census of what happens to be alive.');
+// Eight bodies a clade, not counting colour, each an OUTLINE difference: a
+// longer or broader body, horns, hooks, a waist, a forked tail. Marks and leg
+// counts existed before this and did not read at the size a creature is
+// watched; a clade was one shape in a dozen colours. One section per clade so
+// a row is read against its own plan, and one colour per row so nothing but
+// the body differs.
+const variantSections: Record<string, HTMLElement> = {};
+for (const [clade, blurb] of [
+  ['herbivore', 'The grazer\'s ellipse, and what an ellipse can become.'],
+  ['predator', 'The hunter\'s wedge: broad at the shoulder, tapering back — longer, wider, narrower, armed.'],
+  ['scavenger', 'The segmented body, in more or fewer segments and with the mass moved about.'],
+  ['parasite', 'The round ciliate, and the rounds that are not quite round.'],
+]) {
+  variantSections[clade] = section(`${clade[0].toUpperCase()}${clade.slice(1)} bodies`,
+    `${blurb} The third marker gene picks which of these a lineage wears, so a species `
+    + 'keeps its body the way it keeps its colour. Drawn at the middle art radius; the '
+    + 'smallest bodies carry the same outline with less room for it.');
+}
 const samples = section('Creatures',
   'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
   + 'strides on the long pair and carries a tail, a scavenger is the segmented body with '
@@ -681,7 +699,12 @@ void (async () => {
   } catch {
     /* offline: the sections below simply stay empty rather than lying */
   }
-  for (const b of bodies) refBody(b, b.group === 'plan' ? plans : samples);
+  for (const b of bodies) {
+    const into = b.group === 'plan' ? plans
+      : b.group.startsWith('variant:') ? variantSections[b.group.slice('variant:'.length)]
+      : samples;
+    refBody(b, into ?? samples);
+  }
 })();
 
 const rest = section('Server-baked art',
