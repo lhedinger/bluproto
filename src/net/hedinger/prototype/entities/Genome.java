@@ -182,12 +182,14 @@ public class Genome {
 	 * fleeing animal are all things a creature can either finish or think better
 	 * of.
 	 *
-	 * <p>The hunt is the only reader so far. It defaults to 1 because 1 is the
-	 * behaviour the live world was measured on, and whether holding on beats
-	 * looking again is precisely the question -- so it is left open rather than
-	 * answered by a number chosen here.
+	 * <p>It defaults to 2, which is not a number chosen here: it is the value the
+	 * scavenger's carrion path was measured into. Re-deciding every tick left a
+	 * scavenger with a carcass in reach on 0.87% of its ticks -- it walked between
+	 * bodies and arrived at none -- and 2 is what fixed that. No other reader has
+	 * evidence either way, so the one place that does gets to set the default, and
+	 * a lineage is free to drift off it.
 	 */
-	public double determination = 1.0;
+	public double determination = 2.0;
 	/**
 	 * Which way this lineage reproduces, 0..1, sexual at or above 0.5. A creature is
 	 * one or the other and never both: a sexual body courts a partner and waits if
