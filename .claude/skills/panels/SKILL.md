@@ -14,24 +14,70 @@ exists because it was broken first and looked wrong on a screenshot.
 
 ## The rules
 
-### Panels come in two sizes: half or full
+### There is one panel system, and everything floating is in it
 
-Nothing else. **Half** is a right-hand column at half the viewport's height;
-**full** fills the viewport under the toolbar. A ⛶/⊟ toggle in the panel's own
-header swaps them, and the content reflows and redraws at whatever size it was
-given — a canvas re-measures and repaints, a list re-wraps.
+`.panel` in `client/index.html` owns the chrome — fill, border, radius, blur,
+padding, the sticky header, `box-sizing: border-box`. A floating box gets that
+class plus exactly ONE anchor class, and the anchor is the only thing that
+differs between them:
 
-The population chart shipped as a 360×120 card. It was legible only as a
-sparkline, and the thing it was meant to show — a lineage thinning out over
-hours — could not be read at that size at all. A chart worth opening is worth
-reading. If a panel's content only makes sense small, it is a caption on the
-world (the plain entity card), not a panel.
+| anchor | where | sizes |
+|---|---|---|
+| `.card` | bottom left, sized to content | none |
+| `.menu` | under the toolbar at the right, sized to content | none |
+| `.half` | right-hand column, 480px × 50vh | ⛶ → full |
+| `.full` | everything under the toolbar | ⊟ → half |
 
-Write the sizes in `client/index.html` next to the panel's own rule, and give
-the panel exactly ONE positioning rule. Two rules that both set a panel's width
-is the bug that shipped: a later `#inspect.dbg { width: min(340px, 84vw) }`
-silently beat the full-screen rule added above it, and the panel stayed a card
-while the code that opened it believed otherwise.
+**A panel is half or full and nothing between.** The population chart shipped
+as a 360×120 card; it was legible only as a sparkline, and the lineage thinning
+out over hours that it existed to show could not be read at that size at all. A
+chart worth opening is worth reading.
+
+**A card is not a small panel, it is a different thing** — a caption on the
+world, like the plain entity card and the tile dump. Content that only makes
+sense small is a card, and content that needs room is a panel. Get this wrong
+in the other direction and you ship what the tile inspector shipped: four rows
+of ground facts opening at full screen, with no sizer to shrink them.
+
+Set the anchor through `openPanel(el, size)` in `main.ts`, which clears the
+other three first. Never hand-write a second positioning rule for a panel: a
+later `#inspect.dbg { width: min(340px, 84vw) }` silently beat the full-screen
+rule added above it, and the panel stayed a card while the code that opened it
+believed otherwise.
+
+### Visibility is a class, never an inline style
+
+`.open` shows a panel; removing it hides one. Three different mechanisms used
+to coexist — an `.open` class driven by a module boolean, `style.display`
+compared against the string `"block"`, and `style.display` plus a `className`
+reset that also wiped the size — and no two panels agreed.
+
+### One corner, one panel
+
+`.menu`, `.half` and `.full` all anchor to the same top-right point, so opening
+one closes the rest (`claimRightColumn`). A `.card` is exempt: it lives in the
+opposite corner and coexists with whatever is up.
+
+Register the close **function**, not the element. Putting a sibling away also
+has to unlight its toolbar button and stop its polling; dropping the class
+alone left a lit `population` button over a panel that was gone.
+
+### Every panel can be dismissed, two ways
+
+A ✕ in its own header, and Escape. Escape takes the corner panel first and the
+card second. Two panels used to have no dismissal of their own at all — the
+population chart could only be closed from the toolbar button that opened it —
+and none of them answered the key every other window on the machine answers.
+
+### A control's label is derived, never written down
+
+The ⛶/⊟ glyph and its tooltip come from the panel's current anchor every time
+it renders (`syncSizeBtn`), because a panel that re-renders will re-render the
+glyph too. Written out at build time, the inspector's came straight back from
+the 1 Hz detail poll offering "full screen" on a panel that was already half.
+
+The same reasoning applies to any control that describes state: read the state,
+do not remember what you last set it to.
 
 ### One panel per subject, tabs inside it
 
@@ -56,7 +102,7 @@ A panel header that stays put while the body scrolls is `position: sticky; top:
 0`, and it must be **opaque** — the panel's own translucent fill lets rows show
 through as they pass under it.
 
-Give it the panel's TOP padding (`#inspect { padding: 0 12px 10px }`, header
+Give it the panel's TOP padding (`.panel { padding: 0 12px 10px }`, header
 `padding: 10px 12px 6px`) and **no negative top margin**. Negative side margins
 for full-bleed are fine; a negative *top* margin is the trap. A sticky offset
 constrains the element's MARGIN box, so `margin-top: -10px` with `top: 0` parks
@@ -145,12 +191,22 @@ break the conservation that IS the diagram.
 5. **`p.on('pageerror')`** on every run. A panel that throws still looks fine in
    a screenshot.
 
-Two traps that cost real time here:
+Traps that cost real time here:
 
-- **The tile inspector also wears `.dbg`.** Testing for that class does not tell
-  you a creature is open; the presence of the tab bar does.
-- **Clicking blindly hits ground, not bodies.** In debug mode a tap on open
-  ground opens the tile inspector. To select a creature, compute its screen
-  position — `Camera.fit` centres the world and scales it to the canvas, so
-  `screen = canvas/2 + (world − centre) × scale`, divided by the DPR — and
-  click exactly there.
+- **The inspector is three surfaces in one element.** `#inspect` is the entity
+  card, the tile card and the creature panel, and only its anchor class says
+  which. Testing that it is open tells you nothing about what is in it: the
+  header text does (`tile …`), and the tab bar means a creature.
+- **Clicking blindly hits ground, not bodies.** To select a creature, compute
+  its screen position — `Camera.fit` centres the world and scales it to the
+  canvas, so `screen = canvas/2 + (world − centre) × scale`, divided by the DPR
+  — and click exactly there. A long press anywhere opens the tile card instead,
+  in every mode.
+- **`content-box` makes a width lie.** A panel declared 480px measured 506 once
+  the 12px sides and the border were added. `.panel` sets `border-box` so the
+  number in the CSS is the number on screen; anything you add inside it should
+  not reintroduce the gap.
+- **The toolbar wraps.** On a phone it is two rows, and it grows a row on any
+  screen when debug reveals the constants button. Panels open below
+  `--bar-h`, which a `ResizeObserver` measures from the toolbar itself; the
+  fixed 52px that preceded it put every panel on top of its own buttons.

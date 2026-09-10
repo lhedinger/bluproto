@@ -9,11 +9,83 @@
     html, body { margin: 0; height: 100%; background: #14161a; color: #cfd3da;
                  font: 14px system-ui, sans-serif; overflow: hidden;
                  overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    /* Every floating surface stacks on this scale rather than on a number
+       somebody picked in the moment. The panels all share one layer because
+       only one of them is ever open (see .panel below). */
+    :root { --z-bar: 2; --z-minimap: 3; --z-panel: 5; --z-toast: 10;
+            /* How far down a panel starts. Measured from the toolbar itself
+               (see syncBarHeight in main.ts) because the toolbar WRAPS: on a
+               phone it is two rows, and the 52px every panel used to assume
+               was one row's worth, so a panel opened over its own buttons. */
+            --bar-h: 52px; }
     #app { position: fixed; inset: 0; }
     /* The vector overlay the WebGL path draws rings/doors/badges onto; it
        tracks #cv exactly and never takes pointer events. */
     #fx { position: absolute; inset: 0; pointer-events: none; }
-    #hud { position: fixed; right: 8px; bottom: 8px; z-index: 5; display: none;
+
+    /* ---- the panel system ------------------------------------------------
+       Every box that floats over the world is one of four things, and they all
+       share the chrome below so they cannot drift apart. Only the ANCHOR
+       differs:
+
+         .card   a caption on the world — bottom left, sized to its content
+         .menu   a drop-down from a toolbar button — top right, sized to fit
+         .half   a panel: the right-hand column, half the viewport high
+         .full   a panel: everything under the toolbar
+
+       .half and .full are the two sizes a panel swaps between with the ⛶/⊟ in
+       its own header. A card and a menu have no sizes to swap: a thing that
+       only makes sense small is a caption on the world, not a panel over it,
+       and blowing four rows of tile facts up to full screen is how the tile
+       inspector used to open.
+
+       The menu and both panel sizes claim the same top-right anchor, so
+       opening one closes the others — see claimRightColumn() in main.ts. Two
+       open at once was two boxes fighting over one corner, with the winner
+       decided by a z-index nobody had chosen on purpose. */
+    /* border-box so a declared width is the width on screen: content-box quietly
+       added the 12px sides and the border, and the "480px" half column measured
+       506. Sizes that do not mean what they say are how two of them drifted
+       apart in the first place. */
+    .panel { position: fixed; z-index: var(--z-panel); box-sizing: border-box;
+             display: none; flex-direction: column; overflow-y: auto;
+             -webkit-overflow-scrolling: touch;
+             background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
+             padding: 0 12px 10px; backdrop-filter: blur(4px); }
+    .panel.open { display: flex; }
+    .panel.card { left: max(8px, env(safe-area-inset-left));
+                  bottom: max(8px, env(safe-area-inset-bottom));
+                  width: min(240px, 46vw); }
+    .panel.menu { top: var(--bar-h); right: max(8px, env(safe-area-inset-right)); }
+    .panel.half { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
+                  width: min(480px, calc(100vw - 16px)); height: 50vh; }
+    .panel.full { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
+                  left: max(8px, env(safe-area-inset-left)); bottom: 8px; }
+    /* The title stays put while the body scrolls under it. Opaque — not the
+       panel's translucent fill — so rows cannot show through as they pass, and
+       full-bleed sideways via negative SIDE margins against the panel's own
+       side padding.
+
+       It owns the panel's TOP padding rather than reaching back over it with a
+       negative top margin. A sticky offset constrains the MARGIN box, so
+       `margin-top: -10px` with `top: 0` parks the header ten pixels lower than
+       flush the moment it sticks, and the panel's top padding becomes a window
+       onto the text scrolling underneath. That looked right at rest and fought
+       the element only while doing its job, which is why it shipped twice. */
+    .panel > h3 { position: sticky; top: 0; z-index: 2; flex: 0 0 auto;
+                  margin: 0 -12px 6px; padding: 10px 12px 6px;
+                  background: #1d2026; border-bottom: 1px solid #ffffff14;
+                  font: 600 13px system-ui, sans-serif;
+                  display: flex; align-items: center; gap: 6px; }
+    .panel > h3 .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #0006; }
+    /* The size toggle sits hard right, the close after it. They wear DIFFERENT
+       classes on purpose: the close wiring takes the first `.x` it finds, and a
+       size toggle that closed the panel would be a trap. */
+    .panel > h3 .szbtn { margin-left: auto; cursor: pointer; opacity: .55; }
+    .panel > h3 .x { margin-left: 8px; cursor: pointer; opacity: .7; }
+    .panel > h3 .szbtn:hover, .panel > h3 .x:hover { opacity: 1; }
+    .panel > h3:not(:has(.szbtn)) .x { margin-left: auto; }
+    #hud { position: fixed; right: 8px; bottom: 8px; z-index: var(--z-panel); display: none;
            font: 11px/1.5 ui-monospace, monospace; color: #cfd6e4;
            background: rgba(10,12,16,0.75); padding: 6px 8px; border-radius: 6px;
            white-space: pre; pointer-events: none; }
@@ -22,25 +94,14 @@
        is drawn at device resolution and CSS-scaled down, so the 1px series lines
        stay sharp on a phone -- unlike the world canvas it is a chart, not art,
        so `pixelated` would be exactly wrong here. */
-    /* Panels come in two sizes, half and full, and nothing else: a chart worth
-       opening is worth reading, and a postage-stamp card was neither. Half is a
-       right-hand column taking half the viewport's height; .full fills the
-       viewport under the toolbar. The canvas flexes to whatever the panel is
-       given and redraws at that size. New panels follow this convention. */
-    #pop { position: fixed; right: max(8px, env(safe-area-inset-right));
-           top: 52px; width: min(480px, calc(100vw - 16px)); height: 50vh;
-           z-index: 5; display: none; flex-direction: column;
-           background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
-           padding: 8px 10px 6px; backdrop-filter: blur(4px); }
-    #pop.open { display: flex; }
-    #pop.full { left: max(8px, env(safe-area-inset-left)); width: auto;
-                bottom: 8px; height: auto; }
-    #pop h3 .size { margin-left: 2px; opacity: .55; }
-    #pop h3 .size:hover { opacity: 1; }
-    #pop h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; opacity: .85;
-              display: flex; align-items: center; gap: 10px; }
+    /* The chart flexes to whatever size the panel was given and redraws there.
+       The window readout already takes the free space, so the size toggle sits
+       next to it rather than claiming a second `margin-left: auto` and
+       splitting the gap with it. */
+    #pop h3 { gap: 10px; }
     #pop h3 .win { margin-left: auto; opacity: .6; font-weight: 400;
                    font-variant-numeric: tabular-nums; }
+    #pop h3 .win ~ .szbtn { margin-left: 0; }
     #popCv { width: 100%; flex: 1; min-height: 0; display: block;
              image-rendering: auto; touch-action: auto; }
     /* Wraps: the lineage lens can carry a dozen-plus species where roles have
@@ -50,34 +111,17 @@
     #pop h3 button { background: none; border: none; color: inherit; font: inherit;
                      padding: 0; cursor: pointer; opacity: .45; }
     #pop h3 button.on { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
-    #ovl { position: fixed; right: max(8px, env(safe-area-inset-right));
-           top: 52px; z-index: 6; display: none;
-           background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
-           padding: 8px 12px; backdrop-filter: blur(4px); }
+    /* Two checkboxes hanging off a toolbar button: a menu, sized by what it
+       holds. The round swatch is the colour that overlay paints the world. */
     #ovl label { display: flex; align-items: center; gap: 8px; padding: 4px 0;
                  font-size: 12px; cursor: pointer; user-select: none; }
     #ovl .sw { width: 11px; height: 11px; border-radius: 50%; opacity: .85; }
-    /* Same two sizes as #pop: half by default, .full under the toolbar. */
-    #tuning { position: fixed; right: max(8px, env(safe-area-inset-right));
-              top: 52px; width: min(420px, calc(100vw - 16px)); z-index: 6; display: none;
-              max-height: 50vh; overflow-y: auto;
-              -webkit-overflow-scrolling: touch;
-              background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
-              padding: 0 12px 10px; backdrop-filter: blur(4px); }
-    /* Same sticky rule as #inspect h3, and it had the same bug: see there. */
-    #tuning h3 { position: sticky; top: 0; z-index: 2; margin: 0 -12px 6px;
-                 padding: 10px 12px 6px; background: #1d2026; font-size: 13px;
-                 border-bottom: 1px solid #ffffff14; display: flex;
-                 align-items: center; gap: 6px; }
-    #tuning h3 .x { margin-left: auto; cursor: pointer; opacity: .7; }
-    #tuning.full { left: max(8px, env(safe-area-inset-left)); width: auto;
-                   bottom: 8px; max-height: none; }
     #tuning .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase;
                    letter-spacing: .06em; opacity: .5;
                    border-top: 1px solid #ffffff14; padding-top: 6px; }
     #tuning .trow { display: flex; align-items: center; gap: 8px; padding: 2px 0;
                     font-size: 11px; }
-    #tuning .trow .tname { flex: 0 0 118px; overflow: hidden; white-space: nowrap;
+    #tuning .trow .tname { flex: 0 1 118px; overflow: hidden; white-space: nowrap;
                            text-overflow: ellipsis; opacity: .8;
                            font: 11px ui-monospace, Menlo, Consolas, monospace; }
     #tuning .trow input[type=range] { flex: 1 1 auto; min-width: 60px; }
@@ -86,7 +130,7 @@
                                        border-radius: 5px; padding: 2px 4px;
                                        font: 11px ui-monospace, monospace; }
     #tuning .trow input:disabled { opacity: .45; }
-    #tuning .trow .tunit { flex: 0 0 96px; overflow: hidden; white-space: nowrap;
+    #tuning .trow .tunit { flex: 0 1 96px; overflow: hidden; white-space: nowrap;
                            text-overflow: ellipsis; opacity: .55; font-size: 10px; }
     #tuning .trow .lock { flex: 0 0 12px; opacity: .5; font-size: 10px; }
     #tuning .trow.changed .tname { color: #d6b16a; opacity: 1; }
@@ -107,7 +151,7 @@
              image-rendering: pixelated; }
     #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 6px;
            align-items: center; padding: max(6px, env(safe-area-inset-top)) 8px 6px;
-           background: linear-gradient(#14161ae0, #14161a00); z-index: 2; flex-wrap: wrap; }
+           background: linear-gradient(#14161ae0, #14161a00); z-index: var(--z-bar); flex-wrap: wrap; }
     #bar button, #bar select { background: #2a2e36cc; color: #cfd3da; border: 1px solid #3a3f4a;
            border-radius: 6px; padding: 6px 12px; font: inherit; backdrop-filter: blur(3px); }
     #bar button.on { background: #2f6b28; border-color: #3f8f35; }
@@ -116,16 +160,12 @@
     #toast { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
              transform: translateX(-50%); background: #2a2e36ee; border: 1px solid #3a3f4a;
              border-radius: 8px; padding: 8px 14px; opacity: 0; transition: opacity .25s;
-             pointer-events: none; z-index: 10; } /* above minimap (3), inspect (5), mind (6) */
-    #inspect { position: fixed; left: max(8px, env(safe-area-inset-left));
-               bottom: max(8px, env(safe-area-inset-bottom)); width: min(240px, 46vw);
-               background: #1d2026ee; border: 1px solid #3a3f4a; border-radius: 10px;
-               padding: 0 12px 10px; z-index: 5; display: none; backdrop-filter: blur(4px); }
-    /* The DEBUG inspector is a panel, so it takes a panel's two sizes (see
-       #pop): full screen under the toolbar by default — it is the place a
-       whole creature is studied — with the ⊟ in its header dropping it to the
-       half column. The plain entity card above keeps its small self: it is a
-       caption on the world, not a panel over it. */
+             pointer-events: none; z-index: var(--z-toast); } /* above every panel */
+    /* #inspect is three surfaces sharing one element, and which one it is at
+       any moment is the ANCHOR class it wears (see the panel system above):
+       the plain entity card and the tile dump are `.card`, the debug creature
+       inspector is a `.full`/`.half` panel. It used to wear one class, `.dbg`,
+       for all three — so four rows of tile facts opened full screen. */
     #inspect .tabs { display: flex; gap: 2px; margin: 0 0 8px;
                      border-bottom: 1px solid #ffffff14; }
     #inspect .tabs button { background: none; border: none; color: inherit;
@@ -141,39 +181,12 @@
     #inspect .lin .meta { opacity: .6; font-variant-numeric: tabular-nums; }
     #inspect .lin .dead { opacity: .55; }
     #inspect .lin .end { opacity: .5; font-style: italic; padding: 4px 0 2px 21px; }
-    /* The window title stays put while the body scrolls under it. Opaque (not
-       the panel's translucent fill) so rows cannot show through as they pass.
-       Full-bleed sideways, via negative side margins against the panel's own
-       side padding.
-       It owns the panel's TOP padding rather than reaching back over it with a
-       negative top margin. A sticky offset constrains the MARGIN box, so
-       `margin-top: -10px` with `top: 0` parks the header ten pixels lower than
-       flush once it sticks, and the panel's top padding becomes a window onto
-       the text scrolling underneath. The negative margin looked right at rest
-       and fought the element the moment it did its job. */
-    #inspect h3 { position: sticky; top: 0; z-index: 2;
-                            margin: 0 -12px 6px; padding: 10px 12px 6px;
-                            background: #1d2026; border-bottom: 1px solid #ffffff14; }
-    #inspect h3 { font-size: 13px; display: flex; align-items: center; gap: 6px; }
-    #inspect .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #0006; }
-    #inspect .x { margin-left: 8px; cursor: pointer; opacity: .7; }
-    #inspect .szbtn { margin-left: auto; cursor: pointer; opacity: .55; }
-    #inspect h3:not(:has(.szbtn)) .x { margin-left: auto; }
     #inspect table { width: 100%; border-collapse: collapse; font-size: 12px; }
     #inspect td { padding: 1px 0; }
     #inspect td.k { opacity: .6; }
     #inspect td.v { text-align: right; font-variant-numeric: tabular-nums;
                     word-break: break-word; max-width: 62%; }
     #inspect .mono { opacity: .7; font: 11px ui-monospace, Menlo, Consolas, monospace; }
-    /* Debug context: a panel, so it takes a panel's two sizes (see #pop) —
-       full screen under the toolbar by default, the ⊟ dropping it to the half
-       column. It used to be a 340px card; two rules then disagreed about its
-       width and the LATER one quietly won, which is why this is one rule. */
-    #inspect.dbg { top: 52px; right: max(8px, env(safe-area-inset-right));
-                   bottom: 8px; width: auto; max-height: none;
-                   overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    #inspect.dbg.halfsize { left: auto; width: min(480px, calc(100vw - 16px));
-                            height: 50vh; bottom: auto; }
     #inspect .grp { margin: 9px 0 2px; font-size: 10px; text-transform: uppercase;
                     letter-spacing: .06em; opacity: .5; border-top: 1px solid #ffffff14;
                     padding-top: 6px; }
@@ -230,7 +243,7 @@
     #inspect .bar { height: 5px; border-radius: 3px; background: #3a3f4a; overflow: hidden; margin-top: 2px; }
     #inspect .bar > i { display: block; height: 100%; background: #6fb6e0; }
     #minimap { position: fixed; right: max(8px, env(safe-area-inset-right));
-               bottom: max(8px, env(safe-area-inset-bottom)); z-index: 3;
+               bottom: max(8px, env(safe-area-inset-bottom)); z-index: var(--z-minimap);
                border: 1px solid #3a3f4a; border-radius: 6px; background: #10121688;
                width: 150px; height: auto; cursor: crosshair; }
   </style>
@@ -262,32 +275,32 @@
     <button id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
     <span id="stats">connecting…</span>
   </div>
-  <div id="pop">
+  <div id="pop" class="panel half">
     <h3>population by
       <button id="popModeRoles" class="on" title="headcount by trophic role">role</button>
       <button id="popModeLin" title="headcount by species — watch lineages die out and get reseeded">lineage</button>
       <button id="popClade" style="display:none"
         title="cycle which clade the diagram shows — one clade at a time is far more legible, and no ribbon ever crosses clades, so filtering loses nothing">all clades</button>
       <span class="win" id="popWin"></span>
-      <button id="popSize" class="size" title="full screen">⛶</button></h3>
+      <span class="szbtn" title="full screen">⛶</span><span class="x" title="close">✕</span></h3>
     <canvas id="popCv"></canvas>
     <div id="popKey"></div>
   </div>
-  <div id="ovl">
+  <div id="ovl" class="panel menu">
+    <h3>sense overlays<span class="x" title="close">✕</span></h3>
     <label><input type="checkbox" id="ovlSmell" />
       <span class="sw" style="background:#e628be"></span>smell — pheromone clouds</label>
     <label><input type="checkbox" id="ovlSound" />
       <span class="sw" style="background:#f2b84b"></span>sound — events in earshot</label>
   </div>
-  <div id="tuning">
-    <h3>simulation constants<span class="x" id="tuneSize" title="full screen"
-      style="margin-left:auto;cursor:pointer;opacity:.55">⛶</span>
-      <span class="x" id="tuneClose" title="close" style="margin-left:8px">✕</span></h3>
+  <div id="tuning" class="panel half">
+    <h3>simulation constants<span class="szbtn" title="full screen">⛶</span><span
+      class="x" title="close">✕</span></h3>
     <div id="tuneBody"></div>
     <div class="foot" id="tuneFoot"></div>
   </div>
   <div id="toast"></div>
-  <div id="inspect"></div>
+  <div id="inspect" class="panel"></div>
   <canvas id="minimap" width="150" height="90"></canvas>
   <script type="module" src="/src/main.ts"></script>
 </body>
