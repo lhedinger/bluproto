@@ -1591,17 +1591,17 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * How much better a rival quarry must be before this hunter turns off the one
-	 * it is running down. The scavenger answers this with a constant
-	 * ({@link #CARRION_SWITCH_GAIN}); a hunter answers it with a gene, because
-	 * unlike a carcass a quarry runs, and whether doggedness beats looking again
-	 * depends on how fast it runs relative to the hunter -- which differs by
-	 * lineage and by world.
+	 * How much better a rival must be before this body turns off the goal it is
+	 * already pursuing -- {@code Genome.determination}, floored at 1 so a bar can
+	 * never invite a switch to something worse.
 	 *
-	 * <p>The default of 1 is no determination at all: re-decide every tick, ties
-	 * to the incumbent. That is deliberately the behaviour the live world was
-	 * measured on, so nothing changes for a population until selection finds a
-	 * reason to change it.
+	 * <p>Shared with the scavenger's carrion path, which is where the number came
+	 * from: it held a constant of its own until this gene took the job over. The
+	 * two are the same question asked of different food, and a hunter's version
+	 * has the harder case, since unlike a carcass a quarry runs -- whether
+	 * doggedness beats looking again depends on how fast it runs relative to the
+	 * hunter, which differs by lineage and by world. That is the whole argument
+	 * for a gene rather than a number chosen here.
 	 */
 	private double determination() {
 		return genome == null ? 1.0 : Math.max(1.0, genome.determination);
@@ -2166,8 +2166,8 @@ public class TestNPC extends NPC {
 			return;
 		}
 		// A body already chosen keeps the channel unless something is a great deal
-		// better -- the bar it must clear is the held body's own score times
-		// CARRION_SWITCH_GAIN. With nothing held the bar is zero and the best
+		// better -- the bar it must clear is the held body's own score times this
+		// scavenger's determination. With nothing held the bar is zero and the best
 		// carcass in range simply wins, which is the same choice as before.
 		NPC held = heldCarrion();
 		NPC best = null;
