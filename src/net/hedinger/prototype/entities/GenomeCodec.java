@@ -55,8 +55,8 @@ public final class GenomeCodec {
 		b.append(";greg=").append(g.gregariousness);
 		b.append(";bold=").append(g.boldness);
 		b.append(";mate=").append(g.mateThreshold);
-		b.append(";greed=").append(g.preyGreed);
-		b.append(";loyal=").append(g.preyLoyalty);
+		b.append(";greed=").append(g.greed);
+		b.append(";det=").append(g.determination);
 		b.append(";sex=").append(g.sexuality);
 		b.append(";brain=");
 		if (g.brain != null) {
@@ -109,8 +109,10 @@ public final class GenomeCodec {
 				case "greg" -> g.gregariousness = Double.parseDouble(v);
 				case "bold" -> g.boldness = Double.parseDouble(v);
 				case "mate" -> g.mateThreshold = Double.parseDouble(v);
-				case "greed" -> g.preyGreed = Double.parseDouble(v);
-				case "loyal" -> g.preyLoyalty = Double.parseDouble(v);
+				case "greed" -> g.greed = Double.parseDouble(v);
+				// "loyal" is the key this gene shipped under for its first afternoon,
+				// accepted so a recording from that window does not silently lose it.
+				case "det", "loyal" -> g.determination = Double.parseDouble(v);
 				case "sex" -> g.sexuality = Double.parseDouble(v);
 				case "brain" -> g.brain = v.isEmpty() ? null : new Brain(codeMatrix(v));
 				default -> { /* forward-compatible: ignore unknown keys */ }
