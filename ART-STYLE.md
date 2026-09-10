@@ -223,6 +223,16 @@ One sun, straight overhead-north. The grammar:
   (squash/stretch/offset/tint/dissolve — lunge, hurt, eat, court, alarm,
   spawn, death). State changes are envelopes over the same body, never
   separate sprites.
+- **A clade is one plan in eight bodies.** The plan says what a creature eats;
+  the third marker gene picks which of the plan's eight variants a lineage
+  wears (`ProcCreature.VARIANT_NAMES`), and every variant is an **outline**
+  difference — longer, broader, waisted, horned, hooked, forked — because
+  outline is the only thing that survives being drawn at the size a creature
+  is actually watched. A feature is a small disc **sized to `r`** and hung
+  off the body's **own extent**, never off `r`: a horn on a big body that is
+  the same one pixel as on a small one is a speck, and a feeler pinned to `r`
+  lands inside a long body and vanishes. Reach is budgeted by the smallest
+  body's atlas cell (r + 2.4 art-px), and `EveryBodyStaysInItsCell` pins it.
 - **Corpses** keep the body and lose the colour (saturation stripped by
   luminance, then a dark drain) — what died and how big stays readable.
 - **Furniture** (doors, switches, nests) is built from tile-ramp materials on
@@ -530,6 +540,27 @@ The precedents, so nobody pays twice:
   drawn over true per role at each zoom. A ratio above 1 is a floor, wherever
   it hides.
 
+- **The clade that was one body in a dozen greens** — every clade had a body
+  plan, and within the plan a lineage could differ by leg count and a
+  one-pixel mark. Both were there, both were heritable, and neither read at
+  the size a creature is watched: a herd of grazers was one shape in a dozen
+  colours, and the ask was for eight bodies a clade. The first attempt drew
+  the new features — horns, hooks, pincers — as single limb-dark pixels, the
+  way the tail and the feelers already were, and on the comparison sheet they
+  vanished into the ambient shadow at every radius. The rule: **a variant is
+  an outline, and a feature is part of the body** — it joins the silhouette
+  before the light is applied, is a small disc sized to `r` rather than a
+  pixel, and hangs off the body's own extent. What made the fix a single pass
+  was the sheet itself: thirty-two bodies at three radii on two grounds in one
+  image, so the eight that did not read were obvious at a glance. And note
+  the constraint that shaped everything: the atlas cell. The smallest body had
+  one art-pixel of room past its outline before it drew into the next frame
+  of the sheet, so the art radius came down from 0.22 to 0.18 of the cell —
+  in both renderers, together — and a test now draws every body at every
+  heading into a three-by-three of cells and asserts the neighbours are empty.
+  The pincered scavenger failed it on the diagonals alone: a corner's reach
+  is its radial distance, and every cardinal heading had passed.
+
 ## 8. Conformance checklist
 
 Before a new visual merges, ask:
@@ -574,6 +605,11 @@ Before a new visual merges, ask:
     binds is a band where sizes lie (§7, "the floor that made every body one
     size"). If something must stay findable when small, that is a marker's
     job, not the body's.
+16. If it is meant to tell two bodies apart, is the difference an **outline**,
+    sized to the body, and does it survive on a comparison sheet at every
+    radius the body is drawn at? A one-pixel mark or a dark accent is not a
+    variant (§7, "the clade that was one body in a dozen greens"). And does
+    it stay inside its **atlas cell** at every heading?
 
 If the answer to any of these is "no", either the art changes or this
 document does — silently diverging is the only wrong move.

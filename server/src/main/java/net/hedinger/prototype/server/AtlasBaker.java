@@ -56,7 +56,14 @@ final class AtlasBaker {
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		// Art radius kept well under CELL/2 so appendages, an elongated body and a
 		// flyer's offset shadow all stay inside the cell (no bleed into neighbours).
-		double artRadius = CELL * 0.22;
+		// 0.18, down from 0.22, when every plan grew its eight variants: the budget
+		// is set by the SMALLEST body, and at r = 2 the old radius left it one
+		// art-pixel past its outline -- room for a cilia ring and nothing else, so
+		// a parasite could not have hooks or a halo without drawing into the next
+		// cell. Mirrored by ART_RADIUS in client/src/atlas.ts, which scales the
+		// cell so a body's on-screen radius matches its true one; the two must move
+		// together, and ProcCreature's EveryBodyStaysInItsCell pins the budget.
+		double artRadius = CELL * 0.18;
 		for (int d = 0; d < dirs; d++) {
 			double heading = d * (Math.PI * 2 / dirs);
 			for (int a = 0; a < anim; a++) {
