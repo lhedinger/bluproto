@@ -346,6 +346,18 @@ public final class Worlds {
 	 */
 	static final int COLS = 144, ROWS = 88;
 
+	/**
+	 * The reseed floor every clade shares: no niche is left standing with fewer
+	 * than this many bodies (scaled down with map area for the small worlds the
+	 * suite builds). One number on purpose — the floors are about the niche
+	 * existing at all, not about its natural headcount, and ten is enough of a
+	 * scatter to be a breeding population rather than a token occupant. The
+	 * predator, scavenger and parasite floors stay conditional on their food
+	 * being present (prey, carrion, hosts): a floor reseeds a cohort into a
+	 * world that can feed it, never one that starves it on arrival.
+	 */
+	private static final int CLADE_FLOOR = 10;
+
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
 	 *  open-air surface must sit ABOVE the cave: surface is the higher index. */
@@ -2681,7 +2693,7 @@ public final class Worlds {
 				// the sum of the two it replaces (160 plain + 250 minded), measured at
 				// the settled world, so the merge changes WHO is counted rather than
 				// how many the world carries.
-				new int[] { sc(25, scale), sc(410, scale) }, // prey  [floor, ceiling]
+				new int[] { sc(CLADE_FLOOR, scale), sc(410, scale) }, // prey  [floor, ceiling]
 				// Predators. Ceiling 12 -> 100. At 12 the cohort sat AT the line,
 				// sampled 12 or 13 every time it was looked at, which meant the
 				// warden was setting the predator population and grass, prey and
@@ -2695,7 +2707,7 @@ public final class Worlds {
 				// population one for one and the ceiling remains the control. That
 				// is a fact about the ecology, and the honest place to record it is
 				// beside the constant that is standing in for it.
-				new int[] { Math.max(2, sc(3, scale)), sc(100, scale) },
+				new int[] { Math.max(2, sc(CLADE_FLOOR, scale)), sc(100, scale) },
 				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
 				// long stretches, which meant the warden -- not grass, not predators --
 				// was setting the population, and a ceiling that binds is a governor
@@ -2713,12 +2725,12 @@ public final class Worlds {
 				// not: eating a body destroys it, so a scavenger bloom consumes its
 				// own larder and starves back without the steward touching it.
 				//
-				// The floor matches the seeded cohort rather than sitting under it. At
-				// three, a cohort held AT the floor was three animals scattered across
-				// the map, which with diet as a mate barrier is not a breeding
+				// The floor sits above the seeded cohort, not under it. At three, a
+				// cohort held AT the floor was three animals scattered across the
+				// map, which with diet as a mate barrier is not a breeding
 				// population -- the warden was keeping the niche occupied and extinct
 				// at the same time.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(100, sc(100, scale)) },
+				new int[] { Math.max(6, sc(CLADE_FLOOR, scale)), Math.max(100, sc(100, scale)) },
 				// Parasites. A floor so the niche survives its own learning curve
 				// (a mindless parasite that never latches starves), and a ceiling
 				// raised 30 -> 100 for the same reason as the other two.
@@ -2733,7 +2745,7 @@ public final class Worlds {
 				// to be. If a plague is what the herd actually produces, the herd
 				// should be what stops it; if nothing stops it, that is a finding
 				// about the ecology rather than a reason to hide it behind a cap.
-				new int[] { Math.max(6, sc(6, scale)), Math.max(100, sc(100, scale)) });
+				new int[] { Math.max(6, sc(CLADE_FLOOR, scale)), Math.max(100, sc(100, scale)) });
 		w.spawnEntity(steward);
 
 		// The warden's one machine, berthed in the buried base. It takes its
