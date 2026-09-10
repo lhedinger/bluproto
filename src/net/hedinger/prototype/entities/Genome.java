@@ -148,37 +148,46 @@ public class Genome {
 	public double mateThreshold = 0.85; // similarity above which mating is sought
 
 	/**
-	 * How much a hunter's appetite weighs the SIZE of a quarry against the work
-	 * of taking it -- the exponent on body mass in the hunt's score. At 1 a body
-	 * twice the mass is worth twice the walk; below 1 the lineage is an
-	 * opportunist that takes what is handy, above 1 a specialist that holds out
-	 * for something worth the trouble.
+	 * How much this creature weighs the SIZE of a prize against the work of
+	 * getting it -- an exponent, so at 1 a thing twice as valuable is worth twice
+	 * the effort, below 1 it is an opportunist that takes whatever is handy, and
+	 * above 1 a specialist that holds out for something worth the trouble.
+	 *
+	 * <p>Named for the appetite rather than for the one thing that reads it. A
+	 * hunter's standards are the first caller and today the only one, but "how
+	 * much is bigger worth to me" is not a question about prey: a forage patch
+	 * and a carcass ask it too, and both are already scored value over distance.
 	 *
 	 * <p>A gene rather than a constant because it is not knowable in advance.
 	 * Whether it pays to cross a field for a big animal depends on how thick the
 	 * herd is, how fast it runs and how hard it is to bring down -- facts about a
 	 * world, and different in every one. Choosing a number here would be deciding
 	 * on selection's behalf what it is for selection to find out.
-	  *
-	  * <p>Read by the hunting standards a mind names on {@link
-	  * net.hedinger.prototype.entities.AgentIO#A_PREY}: it is what decides how
-	  * much a big animal is worth to THIS lineage.
+	 *
+	 * @see net.hedinger.prototype.entities.AgentIO#A_PREY
 	 */
-	public double preyGreed = 1.0;
+	public double greed = 1.0;
 
 	/**
-	 * How much better a rival quarry must be before this hunter abandons the one
-	 * it is running down -- the multiplier on a held target's score.
+	 * How much better an alternative must be before this creature gives up the
+	 * goal it is already pursuing -- the multiplier a rival has to clear to take
+	 * over. 1 is no determination at all: decide again every tick, ties to
+	 * whatever is already held.
 	 *
-	 * <p>Temperament, not tactics: dogged against opportunistic is a fact about a
-	 * lineage rather than a choice made afresh each tick, which is why it lives
-	 * here and not on an actuator. 1 is no loyalty at all -- re-decide every tick,
-	 * incumbent wins ties -- and is deliberately the default, because that is the
-	 * behaviour the world was measured on. Whether holding on beats looking again
-	 * is exactly the question, so it is left open rather than answered by a
-	 * constant.
+	 * <p>Temperament rather than tactics. Dogged against opportunistic is a fact
+	 * about a lineage, not a choice made afresh each tick, which is why it lives
+	 * here and not on an actuator. Named generally because the trait is general:
+	 * the scavenger answers the same question with a constant
+	 * ({@code CARRION_SWITCH_GAIN}), and a carcass, a patch of grass and a
+	 * fleeing animal are all things a creature can either finish or think better
+	 * of.
+	 *
+	 * <p>The hunt is the only reader so far. It defaults to 1 because 1 is the
+	 * behaviour the live world was measured on, and whether holding on beats
+	 * looking again is precisely the question -- so it is left open rather than
+	 * answered by a number chosen here.
 	 */
-	public double preyLoyalty = 1.0;
+	public double determination = 1.0;
 	/**
 	 * Which way this lineage reproduces, 0..1, sexual at or above 0.5. A creature is
 	 * one or the other and never both: a sexual body courts a partner and waits if
@@ -230,8 +239,8 @@ public class Genome {
 		g.sexuality = Utils.random(); // an even split of strategies to start from
 		// Founders differ in appetite from the start, so selection has something to
 		// act on before mutation has had time to make any.
-		g.preyGreed = 0.5 + Utils.random() * 1.5;
-		g.preyLoyalty = 1.0 + Utils.random() * 2.0;
+		g.greed = 0.5 + Utils.random() * 1.5;
+		g.determination = 1.0 + Utils.random() * 2.0;
 		return g;
 	}
 
@@ -252,8 +261,8 @@ public class Genome {
 		g.gregariousness = gregariousness;
 		g.boldness = boldness;
 		g.mateThreshold = mateThreshold;
-		g.preyGreed = preyGreed;
-		g.preyLoyalty = preyLoyalty;
+		g.greed = greed;
+		g.determination = determination;
 		g.sexuality = sexuality;
 		g.brain = (brain == null) ? null : brain.copy();
 		return g;
@@ -297,8 +306,8 @@ public class Genome {
 		g.gregariousness = pick(a.gregariousness, b.gregariousness);
 		g.boldness = pick(a.boldness, b.boldness);
 		g.mateThreshold = pick(a.mateThreshold, b.mateThreshold);
-		g.preyGreed = pick(a.preyGreed, b.preyGreed);
-		g.preyLoyalty = pick(a.preyLoyalty, b.preyLoyalty);
+		g.greed = pick(a.greed, b.greed);
+		g.determination = pick(a.determination, b.determination);
 		g.sexuality = pick(a.sexuality, b.sexuality);
 		g.mutate(rate);
 		// Crossover the minds when both parents have one; otherwise inherit whichever
@@ -323,12 +332,12 @@ public class Genome {
 	 *  the predator/prey scale meaningful. */
 	@Unit("px radius")
 	public static final double SIZE_MIN = 4, SIZE_MAX = 20;
-	/** Bounds on the hunting appetite genes. Greed reaching 0 is a real strategy
-	 *  (take whatever is nearest, never mind what it is), so the floor is 0;
-	 *  loyalty floors at 1 because below it a hunter would abandon a target for
-	 *  something WORSE, which is not a policy but a bug. */
-	@Unit("greed exponent / x prey score")
-	public static final double PREY_GREED_MAX = 3.0, PREY_LOYALTY_MAX = 8.0;
+	/** Bounds on the two appetite genes. Greed reaching 0 is a real strategy --
+	 *  take whatever is nearest and never mind what it is -- so its floor is 0.
+	 *  Determination floors at 1 because below that a creature would abandon a
+	 *  goal for a WORSE one, which is not a policy but a bug. */
+	@Unit("value exponent / x incumbent score")
+	public static final double GREED_MAX = 3.0, DETERMINATION_MAX = 8.0;
 
 	/**
 	 * Ceiling on the speed gene (tiles/tick). Speed was the one magnitude with no
@@ -367,8 +376,8 @@ public class Genome {
 		mateThreshold = clamp(mateThreshold + jitter(rate), 0, 1);
 		// Additive for the same reason as the traits above: a lineage sitting at a
 		// bound could never drift back if the step were proportional to where it is.
-		preyGreed = clamp(preyGreed + jitter(rate), 0, PREY_GREED_MAX);
-		preyLoyalty = clamp(preyLoyalty + jitter(rate), 1, PREY_LOYALTY_MAX);
+		greed = clamp(greed + jitter(rate), 0, GREED_MAX);
+		determination = clamp(determination + jitter(rate), 1, DETERMINATION_MAX);
 	}
 
 	private static double jitter(double rate) {

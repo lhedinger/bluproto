@@ -1512,7 +1512,7 @@ public class TestNPC extends NPC {
 	 * What a quarry is worth from here, by the standard this hunter is currently
 	 * applying. The kind of quarry wanted is the mind's, read off {@link
 	 * AgentIO#A_PREY} into {@link #preyWanted}; how hard size weighs inside it is
-	 * the lineage's, {@code Genome.preyGreed}. Neither is a number chosen here,
+	 * the lineage's, {@code Genome.greed}. Neither is a number chosen here,
 	 * which is the whole point: whether it pays to cross a field for a big animal
 	 * depends on how thick the herd is and how hard it is to bring down, and those
 	 * are facts about a world rather than about hunting.
@@ -1544,7 +1544,7 @@ public class TestNPC extends NPC {
 	 */
 	private double preyScore(NPC n) {
 		double reach = 1.0 + distance(n.getX(), n.getY(), n.getZ());
-		double greed = genome == null ? 1.0 : genome.preyGreed;
+		double greed = genome == null ? 1.0 : genome.greed;
 		switch (preyWanted()) {
 		case AgentIO.PREY_BIGGEST:
 			return Math.pow(n.bodyMass(), greed) / reach;
@@ -1576,13 +1576,13 @@ public class TestNPC extends NPC {
 	 * depends on how fast it runs relative to the hunter -- which differs by
 	 * lineage and by world.
 	 *
-	 * <p>The default of 1 is no loyalty at all: re-decide every tick, ties to the
-	 * incumbent. That is deliberately the behaviour the live world was measured
-	 * on, so nothing changes for a population until selection finds a reason to
-	 * change it.
+	 * <p>The default of 1 is no determination at all: re-decide every tick, ties
+	 * to the incumbent. That is deliberately the behaviour the live world was
+	 * measured on, so nothing changes for a population until selection finds a
+	 * reason to change it.
 	 */
-	private double preyLoyalty() {
-		return genome == null ? 1.0 : Math.max(1.0, genome.preyLoyalty);
+	private double determination() {
+		return genome == null ? 1.0 : Math.max(1.0, genome.determination);
 	}
 
 	/**
@@ -1628,7 +1628,7 @@ public class TestNPC extends NPC {
 	/**
 	 * Points the hunt at the best quarry in sight and keeps it there: the held
 	 * target stands unless something clears its score times
-	 * {@link #preyLoyalty()}. With nothing held the bar is zero and the best
+	 * {@link #determination()}. With nothing held the bar is zero and the best
 	 * quarry in range simply wins.
 	 *
 	 * <p>Sweeps in id order and keeps the first strict maximum, so ties break
@@ -1637,7 +1637,7 @@ public class TestNPC extends NPC {
 	private NPC scanPrey(boolean cannibal) {
 		NPC held = heldPrey(cannibal);
 		NPC best = null;
-		double bar = held == null ? 0 : preyScore(held) * preyLoyalty();
+		double bar = held == null ? 0 : preyScore(held) * determination();
 		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creatures(getLvl())) {
 			if (!edibleQuarry(n, cannibal)) {

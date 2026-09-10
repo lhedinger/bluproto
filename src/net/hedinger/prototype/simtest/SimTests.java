@@ -5752,7 +5752,7 @@ public class SimTests {
 	 * What a hunter hunts is not decided here. The body finds the best instance;
 	 * WHICH standard "best" means is named by the mind on {@link AgentIO#A_PREY},
 	 * the way {@code A_TILE} names a kind of ground, and how hard that standard
-	 * weighs size is {@code Genome.preyGreed}, a gene. Naming an individual is not
+	 * weighs size is {@code Genome.greed}, a gene. Naming an individual is not
 	 * on offer -- no sensor carries a handle -- so a named preference over a body-
 	 * run argmax is what choosing prey can mean for a mind built like this one.
 	 *
@@ -5806,7 +5806,7 @@ public class SimTests {
 			seed(23);
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain(preyConst));
-			hg.preyGreed = greed;
+			hg.greed = greed;
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg);
 			w.spawnEntity(hunter);
 			// Grow up alone: the ceiling on what counts as food rises with the body,
@@ -5859,7 +5859,7 @@ public class SimTests {
 
 	/**
 	 * Doggedness is a gene, and it decides whether a hunter finishes what it
-	 * started. {@code preyLoyalty} is the multiplier a rival quarry must clear to
+	 * started. {@code determination} is the multiplier a rival quarry must clear to
 	 * take a committed hunter off its target -- the scavenger's
 	 * {@code CARRION_SWITCH_GAIN} idea, except that unlike a carcass a quarry
 	 * runs, so whether holding on beats looking again is a question about a
@@ -5901,11 +5901,11 @@ public class SimTests {
 
 		/** "first" if it finished the body it set out after, "newcomer" if it
 		 *  turned, "neither" if it caught nothing. */
-		private String outcome(double loyalty) {
+		private String outcome(double determination) {
 			seed(29);
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain());
-			hg.preyLoyalty = loyalty;
+			hg.determination = determination;
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg);
 			w.spawnEntity(hunter);
 			tick(w, TestNPC.growthTicks(13) + 200);
@@ -7969,8 +7969,8 @@ public class SimTests {
 			g.gregariousness = -0.4;
 			g.boldness = -0.2;
 			g.mateThreshold = 0.66;
-			g.preyGreed = 1.7;
-			g.preyLoyalty = 3.25;
+			g.greed = 1.7;
+			g.determination = 3.25;
 			g.brain = new Brain(new int[][] { { 1, 1, 9, 0 }, { 13, 1, 1, 0 }, { 14, 2, 8, 0 },
 					{ 3, 5, 2, 6 } });
 
@@ -7984,8 +7984,14 @@ public class SimTests {
 			assertTrue("predatory round-trips exactly", g.predatory == back.predatory);
 			assertTrue("boldness round-trips exactly", g.boldness == back.boldness);
 			assertTrue("mateThreshold round-trips exactly", g.mateThreshold == back.mateThreshold);
-			assertTrue("preyGreed round-trips exactly", g.preyGreed == back.preyGreed);
-			assertTrue("preyLoyalty round-trips exactly", g.preyLoyalty == back.preyLoyalty);
+			assertTrue("greed round-trips exactly", g.greed == back.greed);
+			assertTrue("determination round-trips exactly", g.determination == back.determination);
+			// Determination shipped under the key "loyal" for its first afternoon.
+			// A recording made in that window must not quietly lose the gene.
+			Genome legacy = net.hedinger.prototype.entities.GenomeCodec.decode(
+					enc.replace(";det=", ";loyal="));
+			assertTrue("the key it first shipped under still decodes",
+					legacy.determination == g.determination);
 			assertTrue("flying round-trips", back.flying);
 			assertEquals("maxAge round-trips", g.maxAge, back.maxAge);
 			assertEquals("turnRate round-trips", g.turnRate, back.turnRate);

@@ -302,7 +302,7 @@ public final class AgentIO {
 	 * biggest meal, {@code 0.5}=the weakest -- whatever is closest to dying --
 	 * and {@code 1} or above=the easiest, best meal per bite. How hard SIZE is
 	 * weighed inside the last two is not this actuator's to say: that is
-	 * {@code Genome.preyGreed}, because how much a big animal is worth is a fact
+	 * {@code Genome.greed}, because how much a big animal is worth is a fact
 	 * about a lineage and its world rather than a decision made afresh each tick.
 	 *
 	 * @see #preyWanted(double)
