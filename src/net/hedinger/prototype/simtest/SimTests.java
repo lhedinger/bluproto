@@ -5749,6 +5749,115 @@ public class SimTests {
 	}
 
 	/**
+	 * What a hunter hunts is not decided here. The body finds the best instance;
+	 * WHICH standard "best" means is named by the mind on {@link AgentIO#A_PREY},
+	 * the way {@code A_TILE} names a kind of ground, and how hard that standard
+	 * weighs size is {@code Genome.preyGreed}, a gene. Naming an individual is not
+	 * on offer -- no sensor carries a handle -- so a named preference over a body-
+	 * run argmax is what choosing prey can mean for a mind built like this one.
+	 *
+	 * <p>One world, one pair of animals, four hunters that differ ONLY in what
+	 * they want. The lean one is nearer and the fat one is bigger, so the two pull
+	 * opposite ways and whichever dies first says which standard was applied:
+	 *
+	 * <ul>
+	 * <li>naming nothing takes the near one -- the default has to be the old
+	 * behaviour, or a silent mind's hunting changes underneath it;</li>
+	 * <li>naming the easiest meal crosses the field for the fat one;</li>
+	 * <li>naming the easiest meal with a MISERLY greed gene takes the near one
+	 * again -- same instruction, different lineage, opposite outcome, which is
+	 * the gene doing work no actuator value could do;</li>
+	 * <li>naming the weakest takes a wounded animal that is neither nearest nor
+	 * biggest, on the strength of the bites left in it.</li>
+	 * </ul>
+	 */
+	static class AHuntersPreferenceDecidesItsQuarry extends Scenario {
+		/** Seeks prey, walks, and names a standard. Twelve instructions because
+		 *  attention is rationed by program length and a one-slot mind has its
+		 *  prey channel blanked (see AHunterSeesQuarryLargerThanItselfAsPrey). */
+		private static Brain hunterBrain(int preyConst) {
+			int[][] p = new int[12][];
+			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
+			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
+			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
+			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
+			p[4] = new int[] { Brain.SET, 2, preyConst, 0 };
+			p[5] = new int[] { Brain.WRITE, AgentIO.A_PREY, 2, 0 };
+			for (int i = 6; i < p.length; i++) {
+				p[i] = new int[] { Brain.SET, 3, 5, 0 }; // r3 = 0, read by nothing
+			}
+			return new Brain(p);
+		}
+
+		private static Genome body(double size, double speed, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = speed;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		/** Which of the two dies first: "fat", "lean", or "neither". The wounded
+		 *  flag starts the fat one at a fifth of its health without making it any
+		 *  nearer or any smaller, so only a standard that counts bites REMAINING
+		 *  can see the difference. */
+		private String firstToDie(int preyConst, double greed, boolean wounded) {
+			seed(23);
+			World w = room(30, 30);
+			Genome hg = body(13, 0.04, hunterBrain(preyConst));
+			hg.preyGreed = greed;
+			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg);
+			w.spawnEntity(hunter);
+			// Grow up alone: the ceiling on what counts as food rises with the body,
+			// so a juvenile is not being offered the same choice.
+			tick(w, TestNPC.growthTicks(13) + 200);
+			assertTrue("the hunter is grown before it is offered a choice",
+					!hunter.isJuvenile());
+
+			// Placed relative to where the hunter actually stands and pointed the
+			// way it is actually looking: it spends its childhood wandering, and a
+			// body it cannot see is not a choice it is making.
+			double hx = hunter.getX(), hy = hunter.getY();
+			double ahead = Math.atan2(15.0 - hy, 15.0 - hx);
+			hunter.withHeading(ahead);
+			double cx = Math.cos(ahead), cy = Math.sin(ahead);
+			TestNPC fatFar = TestNPC.grazer(hx + cx * 8 - cy, hy + cy * 8 + cx, 0,
+					body(12, 0.0005, null));
+			TestNPC leanNear = TestNPC.grazer(hx + cx * 5 + cy, hy + cy * 5 - cx, 0,
+					body(5, 0.0005, null));
+			if (wounded) {
+				fatFar.withHealth(20);
+			}
+			w.spawnEntity(fatFar);
+			w.spawnEntity(leanNear);
+			assertGreater("the lean one really is the nearer",
+					hunter.distance(fatFar.getX(), fatFar.getY(), fatFar.getZ())
+							- hunter.distance(leanNear.getX(), leanNear.getY(), leanNear.getZ()),
+					2.0);
+
+			for (int t = 0; t < 12000 && !fatFar.isDead() && !leanNear.isDead(); t++) {
+				tick(w, 1);
+			}
+			return fatFar.isDead() ? "fat" : leanNear.isDead() ? "lean" : "neither";
+		}
+
+		@Override
+		public void run() {
+			// 5 is the constant pool's 0.0, 9 is its 1.0, 8 its 0.5.
+			assertTrue("a mind that names no preference hunts as it always did: "
+					+ "the nearest body", firstToDie(5, 1.0, false).equals("lean"));
+			assertTrue("naming the easiest meal walks past the near one for the fat",
+					firstToDie(9, 1.0, false).equals("fat"));
+			assertTrue("and a miserly lineage naming the SAME thing takes the near "
+					+ "one: the gene decides what the instruction means",
+					firstToDie(9, 0.2, false).equals("lean"));
+			assertTrue("naming the weakest takes the wounded body, neither nearest "
+					+ "nor easiest", firstToDie(8, 1.0, true).equals("fat"));
+		}
+	}
+
+	/**
 	 * Doggedness is a gene, and it decides whether a hunter finishes what it
 	 * started. {@code preyLoyalty} is the multiplier a rival quarry must clear to
 	 * take a committed hunter off its target -- the scavenger's
@@ -5774,7 +5883,7 @@ public class SimTests {
 			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
 			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
 			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
-			p[4] = new int[] { Brain.SET, 3, 5, 0 };
+			p[4] = new int[] { Brain.WRITE, AgentIO.A_PREY, 1, 0 }; // 1.0 -> easiest meal
 			for (int i = 5; i < p.length; i++) {
 				p[i] = new int[] { Brain.SET, 3, 5, 0 };
 			}
@@ -7860,6 +7969,7 @@ public class SimTests {
 			g.gregariousness = -0.4;
 			g.boldness = -0.2;
 			g.mateThreshold = 0.66;
+			g.preyGreed = 1.7;
 			g.preyLoyalty = 3.25;
 			g.brain = new Brain(new int[][] { { 1, 1, 9, 0 }, { 13, 1, 1, 0 }, { 14, 2, 8, 0 },
 					{ 3, 5, 2, 6 } });
@@ -7874,6 +7984,7 @@ public class SimTests {
 			assertTrue("predatory round-trips exactly", g.predatory == back.predatory);
 			assertTrue("boldness round-trips exactly", g.boldness == back.boldness);
 			assertTrue("mateThreshold round-trips exactly", g.mateThreshold == back.mateThreshold);
+			assertTrue("preyGreed round-trips exactly", g.preyGreed == back.preyGreed);
 			assertTrue("preyLoyalty round-trips exactly", g.preyLoyalty == back.preyLoyalty);
 			assertTrue("flying round-trips", back.flying);
 			assertEquals("maxAge round-trips", g.maxAge, back.maxAge);
@@ -11153,6 +11264,7 @@ public class SimTests {
 				new AttackingAndEatingSatesAHunter(),
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
+				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),

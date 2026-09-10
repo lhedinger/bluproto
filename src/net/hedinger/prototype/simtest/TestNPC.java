@@ -1509,24 +1509,63 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * What a quarry is worth from here: the meal it will make, over the work of
-	 * taking it. The meal is the carcass, which is {@code bodyMass}; the work is
-	 * the walk to reach it and the bites to bring it down.
+	 * What a quarry is worth from here, by the standard this hunter is currently
+	 * applying. The kind of quarry wanted is the mind's, read off {@link
+	 * AgentIO#A_PREY} into {@link #preyWanted}; how hard size weighs inside it is
+	 * the lineage's, {@code Genome.preyGreed}. Neither is a number chosen here,
+	 * which is the whole point: whether it pays to cross a field for a big animal
+	 * depends on how thick the herd is and how hard it is to bring down, and those
+	 * are facts about a world rather than about hunting.
 	 *
-	 * <p>Deliberately the same shape as {@link #carrionScore} -- value over
-	 * distance -- with the one term a living animal adds. Because
-	 * {@link #biteDamage} weakens as the quarry grows, {@code bites} rises in
-	 * proportion to size for anything above the hunter, so punching up earns
-	 * nothing per unit of effort.
+	 * <p>Every standard divides by {@code 1 + distance}, so all four are value
+	 * over travel and a fat body across the map still loses to a fair one
+	 * underfoot -- the shape {@link #carrionScore} has always used.
 	 *
-	 * <p>What it does NOT price is the chase. A fast animal costs more to catch
+	 * <ul>
+	 * <li><b>Nearest</b> is proximity and nothing else. Crude, and the default,
+	 * because it is what the world was measured on and a silent mind should not
+	 * have its hunting quietly changed underneath it.</li>
+	 * <li><b>Biggest</b> is meat, discounted by the walk and by nothing else: a
+	 * lineage that will take on anything if it is large enough.</li>
+	 * <li><b>Weakest</b> counts the bites LEFT in a body rather than the meat in
+	 * it, so a hunter finishes what is already dying instead of starting
+	 * something fresh -- the standard that makes a wounded animal worth more to
+	 * the neighbourhood than a whole one.</li>
+	 * <li><b>Easiest</b> is meal over work: mass against the bites to bring it
+	 * down. Because {@link #biteDamage} weakens as quarry grows, the work rises
+	 * in proportion to size above the hunter, so punching up earns nothing per
+	 * unit of effort at greed 1 and is worth it only to a greedier lineage.</li>
+	 * </ul>
+	 *
+	 * <p>What none of them price is the chase. A fast animal costs more to catch
 	 * than a slow one and nothing here says so, because closing time depends on
-	 * the throttle the mind chooses and the body cannot know it.
+	 * the throttle the mind chooses and the body cannot know it. Left out rather
+	 * than guessed at.
 	 */
 	private double preyScore(NPC n) {
-		double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
-		return n.bodyMass()
-				/ (bites * (1.0 + distance(n.getX(), n.getY(), n.getZ())));
+		double reach = 1.0 + distance(n.getX(), n.getY(), n.getZ());
+		double greed = genome == null ? 1.0 : genome.preyGreed;
+		switch (preyWanted()) {
+		case AgentIO.PREY_BIGGEST:
+			return Math.pow(n.bodyMass(), greed) / reach;
+		case AgentIO.PREY_WEAKEST: {
+			double left = Math.max(1, Math.ceil(Math.max(1, n.getHealth())
+					/ (double) biteDamage(n)));
+			return 1.0 / (left * reach);
+		}
+		case AgentIO.PREY_EASIEST: {
+			double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
+			return Math.pow(n.bodyMass(), greed) / (bites * reach);
+		}
+		default:
+			return 1.0 / reach;
+		}
+	}
+
+	/** The kind of quarry this hunter is currently after -- the mind's standing
+	 *  choice, read from the actuator vector the same way {@code tileWanted} is. */
+	private int preyWanted() {
+		return AgentIO.preyWanted(actuators[AgentIO.A_PREY]);
 	}
 
 	/**
