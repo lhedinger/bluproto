@@ -1509,6 +1509,29 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * What a prize is worth from HERE: its value, weighed by this creature's
+	 * appetite, over the walk to reach it.
+	 *
+	 * <p>Every clade has always scored its food this way -- a grazer's patch of
+	 * grass, a scavenger's carcass, a hunter's quarry, and the mass over distance
+	 * each of them divides by. What differed was only what counted as value.
+	 * Naming the shape once puts {@code Genome.greed} into all of them at a
+	 * stroke: it is the exponent on value, so a lineage that cares little takes
+	 * whatever is handy and a greedy one crosses the field for something worth
+	 * the trouble, and that is a question about a creature rather than about
+	 * which kind of food it eats.
+	 *
+	 * <p>At greed 1 this is exactly {@code value / (1 + dist)}, which is what
+	 * every one of those scans computed before there was a gene -- so a lineage
+	 * that has not drifted forages, scavenges and hunts as it always did.
+	 */
+	private double prize(double value, double dist) {
+		double greed = genome == null ? 1.0 : genome.greed;
+		double v = greed == 1.0 ? value : Math.pow(value, greed);
+		return v / (1.0 + dist);
+	}
+
+	/**
 	 * What a quarry is worth from here, by the standard this hunter is currently
 	 * applying. The kind of quarry wanted is the mind's, read off {@link
 	 * AgentIO#A_PREY} into {@link #preyWanted}; how hard size weighs inside it is
@@ -1543,22 +1566,21 @@ public class TestNPC extends NPC {
 	 * than guessed at.
 	 */
 	private double preyScore(NPC n) {
-		double reach = 1.0 + distance(n.getX(), n.getY(), n.getZ());
-		double greed = genome == null ? 1.0 : genome.greed;
+		double dist = distance(n.getX(), n.getY(), n.getZ());
 		switch (preyWanted()) {
 		case AgentIO.PREY_BIGGEST:
-			return Math.pow(n.bodyMass(), greed) / reach;
+			return prize(n.bodyMass(), dist);
 		case AgentIO.PREY_WEAKEST: {
 			double left = Math.max(1, Math.ceil(Math.max(1, n.getHealth())
 					/ (double) biteDamage(n)));
-			return 1.0 / (left * reach);
+			return prize(1.0 / left, dist);
 		}
 		case AgentIO.PREY_EASIEST: {
 			double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
-			return Math.pow(n.bodyMass(), greed) / (bites * reach);
+			return prize(n.bodyMass() / bites, dist);
 		}
 		default:
-			return 1.0 / reach;
+			return prize(1.0, dist);
 		}
 	}
 
@@ -2149,7 +2171,7 @@ public class TestNPC extends NPC {
 		// carcass in range simply wins, which is the same choice as before.
 		NPC held = heldCarrion();
 		NPC best = null;
-		double bestScore = held == null ? 0 : carrionScore(held) * CARRION_SWITCH_GAIN;
+		double bestScore = held == null ? 0 : carrionScore(held) * determination();
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
 			if (n == this || !n.isDead() || n.isRemoved()) {
@@ -2184,29 +2206,10 @@ public class TestNPC extends NPC {
 	 * a stand-in for it.
 	 */
 	private double carrionScore(NPC n) {
-		return n.bodyMass() * (1.0 - n.decayProgress())
-				/ (1.0 + distance(n.getX(), n.getY(), n.getZ()));
+		return prize(n.bodyMass() * (1.0 - n.decayProgress()),
+				distance(n.getX(), n.getY(), n.getZ()));
 	}
 
-	/**
-	 * How much better a rival carcass must be before a committed scavenger will
-	 * cross to it.
-	 *
-	 * <p>Committing at all was the fix that made the niche viable: re-running the
-	 * argmax every tick handed the lead back and forth between bodies whose scores
-	 * sat within noise of each other, so the creature turned toward a new one every
-	 * few steps and reached none — a carcass within biting distance on 0.87 per cent
-	 * of its ticks. But committing outright is not free either: measured, a quarter
-	 * of held ticks had a body in range worth more than half again as much, and only
-	 * a third of commitments ended in a meal at all.
-	 *
-	 * <p>A wide band buys both. Near-ties cannot steal the target, so the thrashing
-	 * stays fixed; a body worth twice the walk can. It is also self-damping — the
-	 * score rises as the walk shortens, so whatever is being approached gets harder
-	 * to displace the closer it gets, and a switch cannot immediately switch back.
-	 */
-	@Unit("x carrion score")
-	public static final double CARRION_SWITCH_GAIN = 2.0;
 
 	/**
 	 * The carcass this body is already walking to, if that choice is still worth
@@ -2281,11 +2284,11 @@ public class TestNPC extends NPC {
 
 	private void scanForage(long now) {
 		forageScanAt = now;
+		double best = 0;
 		forageCol = -1;
 		forageRow = -1;
 		int r = (int) Math.ceil(LOS_RANGE);
 		int cx = (int) X, cy = (int) Y, lvl = getLvl();
-		double best = 0;
 		for (int ty = cy - r; ty <= cy + r; ty++) {
 			for (int tx = cx - r; tx <= cx + r; tx++) {
 				double dist = Math.hypot(tx + 0.5 - X, ty + 0.5 - Y);
@@ -2297,7 +2300,7 @@ public class TestNPC extends NPC {
 				// grows on it. Since the winner is decided by a strict >, skipping a
 				// tile that can only tie or lose leaves the choice bit-for-bit
 				// identical -- this is a speed-up, not an approximation.
-				if (net.hedinger.prototype.engine.Tile.VEG_MAX / (1.0 + dist) <= best) {
+				if (prize(net.hedinger.prototype.engine.Tile.VEG_MAX, dist) <= best) {
 					continue;
 				}
 				net.hedinger.prototype.engine.Tile t = getWorld().isValid(tx, ty, getLvl())
@@ -2306,7 +2309,7 @@ public class TestNPC extends NPC {
 				if (q <= 0) {
 					continue;
 				}
-				double score = q / (1.0 + dist);
+				double score = prize(q, dist);
 				// Reachability is checked ONLY for a tile that would take the lead,
 				// not for every candidate: the ray is the expensive part and the
 				// running maximum improves a handful of times per scan.
