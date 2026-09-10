@@ -66,6 +66,116 @@ const droneBtn = document.getElementById('drone') as HTMLButtonElement;
 const injectBtn = document.getElementById('inject') as HTMLButtonElement;
 const injectFile = document.getElementById('injectFile') as HTMLInputElement;
 
+// ---- panels ----------------------------------------------------------------
+// Every box that floats over the world obeys the same three rules (the CSS side
+// of them is the .panel block in index.html):
+//
+//   1. It is shown and hidden by the `open` class, never by an inline display.
+//   2. Its anchor is exactly ONE class — card, menu, half or full — and setting
+//      one clears the others, so two geometries can never both apply. They used
+//      to: a later `#inspect.dbg { width: … }` quietly beat the full-screen rule
+//      above it and the panel stayed a card while the code believed otherwise.
+//   3. The menu and both panel sizes share the top-right corner, so opening one
+//      closes the rest. Each registers its OWN close, because putting a sibling
+//      away also has to unlight its toolbar button and stop its polling —
+//      dropping the class alone left a lit button over a panel that was gone.
+//
+// A card is exempt from rule 3. It is a caption on the world in the opposite
+// corner, and it coexists with whatever is open.
+
+type PanelSize = 'card' | 'menu' | 'half' | 'full';
+const PANEL_SIZES: PanelSize[] = ['card', 'menu', 'half', 'full'];
+
+/** The panels that claim the top-right corner, each with how it puts itself
+ *  away. Also the order Escape considers them in. */
+const rightColumn: Array<{ el: HTMLElement; close: () => void }> = [];
+
+function claimRightColumn(mine: HTMLElement): void {
+  for (const p of rightColumn) {
+    if (p.el === mine || p.el.classList.contains('card')) continue;
+    if (p.el.classList.contains('open')) p.close();
+  }
+}
+
+/** Opens a panel, optionally re-anchoring it. Omit `size` to reopen at
+ *  whatever size it was last given — the anchor class survives closing, so a
+ *  panel the viewer made full screen comes back full screen. */
+function openPanel(el: HTMLElement, size?: PanelSize): void {
+  if (size) {
+    el.classList.remove(...PANEL_SIZES);
+    el.classList.add(size);
+  }
+  el.classList.add('open');
+  syncSizeBtn(el);
+  if (!el.classList.contains('card')) claimRightColumn(el);
+}
+
+function closePanel(el: HTMLElement): void {
+  el.classList.remove('open');
+}
+
+/** The ⛶/⊟ describes what the next click will DO, derived from the panel's
+ *  current anchor every time rather than written once. The inspector rebuilds
+ *  its header on each 1 Hz poll, and a hardcoded glyph came straight back
+ *  offering "full screen" on a panel that was already half. */
+function syncSizeBtn(el: HTMLElement): void {
+  const b = el.querySelector(':scope > h3 .szbtn') as HTMLElement | null;
+  if (!b) return;
+  const full = el.classList.contains('full');
+  b.textContent = full ? '⊟' : '⛶';
+  b.title = full ? 'half screen' : 'full screen';
+}
+
+/**
+ * Wires a panel's header: the ⛶/⊟ swaps half and full, the ✕ closes. Call it
+ * once for a panel whose header is static markup, and after every render for
+ * one that rebuilds its own — the handlers are assigned, not added, so a
+ * re-render cannot stack a second copy.
+ *
+ * `onResize` is for a panel that has to repaint at the new size (a chart on a
+ * canvas). Text reflows on its own and needs nothing.
+ */
+function wirePanelChrome(el: HTMLElement, close: () => void, onResize?: () => void): void {
+  const h = el.querySelector(':scope > h3');
+  if (!h) return;
+  const sz = h.querySelector('.szbtn') as HTMLElement | null;
+  if (sz) {
+    syncSizeBtn(el);
+    sz.onclick = () => {
+      const full = el.classList.contains('full');
+      el.classList.remove('half', 'full');
+      el.classList.add(full ? 'half' : 'full');
+      syncSizeBtn(el);
+      onResize?.();
+    };
+  }
+  const x = h.querySelector('.x') as HTMLElement | null;
+  if (x) x.onclick = close;
+}
+
+/** Publishes the toolbar's real height, which every panel opens below. The
+ *  toolbar wraps — on a phone it is two rows, and on a wide screen it grows a
+ *  row when debug mode reveals the constants button — so the 52px the panels
+ *  used to assume was one row's worth and a panel opened over its own buttons.
+ *  Observed rather than recomputed at call sites: wrapping is the browser's
+ *  decision, and it is the only thing that actually knows. */
+function syncBarHeight(): void {
+  const h = document.getElementById('bar')!.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--bar-h', `${Math.ceil(h) + 4}px`);
+}
+new ResizeObserver(syncBarHeight).observe(document.getElementById('bar')!);
+syncBarHeight();
+
+// Escape puts away whatever is open, the corner first and the card after it.
+// Two of these panels had no dismissal of their own at all, and none of them
+// answered the key every other window on the machine answers.
+window.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  const open = rightColumn.filter(p => p.el.classList.contains('open'));
+  const corner = open.find(p => !p.el.classList.contains('card'));
+  (corner ?? open[0])?.close();
+});
+
 const state = new WorldState();
 const cam = new Camera(cv);
 let meta: WorldMeta | null = null;
@@ -471,12 +581,11 @@ cam.attach(tap => {
   }
   const tx = Math.floor(tap.x), ty = Math.floor(tap.y);
   const inBounds = meta && tx >= 0 && ty >= 0 && tx < meta.cols && ty < meta.rows;
-  // In debug mode, tapping open ground inspects that tile (fertility + food)
-  // instead of spawning — so grazing and regrowth are observable.
-  if (debugOn && inBounds) {
-    selectTile(tx, ty, currentLevel);
-    return;
-  }
+  // A tap does the same thing in every mode. Debug mode used to steal it for
+  // tile inspection, so the gesture that spawns and deselects everywhere else
+  // meant something different the moment the flag was on — and the long press
+  // already inspects the ground, in every mode, which makes the tap version a
+  // second way to do one thing rather than the only way to do it.
   const kind = spawnSel.value;
   if (kind === 'genome' && inBounds) {
     injectGenomeAt(tap.x, tap.y, currentLevel); // drop the remembered genome here
@@ -486,10 +595,11 @@ cam.attach(tap => {
     deselect(); // tap on empty ground clears the selection
   }
 }, hold => {
-  // Long press inspects the ground, in any mode. Tile inspection used to be
-  // reachable only with debug on, which put the one thing that explains WHY a
-  // patch is bare — its fertility, its regrowth, what is standing on it —
-  // behind a flag most people watching the world never turn on.
+  // A long press inspects the ground, and it is the ONLY way to: one gesture,
+  // the same in every mode, debug or not. Tile inspection used to be reachable
+  // only with debug on, which put the one thing that explains WHY a patch is
+  // bare — its fertility, its regrowth, what is standing on it — behind a flag
+  // most people watching the world never turn on.
   //
   // Always the tile, never the creature standing on it: a tap already selects
   // creatures, and a gesture that returned one thing or the other depending on
@@ -550,10 +660,12 @@ function deselect(): void {
   cam.followId = null; // closing the inspector also stops following
   clearInterval(detailTimer);
   clearInterval(mindTimer);
-  inspectEl.style.display = 'none';
-  inspectEl.className = '';
+  closePanel(inspectEl);
   reflect();
 }
+// The inspector is in the corner group only while it is a panel; as a card it
+// is exempt, and claimRightColumn skips it (see there).
+rightColumn.push({ el: inspectEl, close: deselect });
 
 async function refreshDetail(): Promise<void> {
   if (selectedId === null) return;
@@ -588,7 +700,10 @@ async function refreshTileDetail(): Promise<void> {
   }
 }
 
-// Tile inspection is a debug-only action, so it always shows the full tile dump.
+// A tile's own facts. This is a CARD, not a panel: four rows of ground truth
+// are a caption on the world, and the same thing the plain entity card is. It
+// used to borrow the debug inspector's class and so opened at full screen,
+// with no way to shrink it and taking the corner from whatever was there.
 function renderTileInspect(d: Record<string, any>): void {
   const cap = Number(d.foodCap) || 0;
   const food = Number(d.food) || 0;
@@ -602,11 +717,11 @@ function renderTileInspect(d: Record<string, any>): void {
     row('fertility', Number(d.fertility).toFixed(3)),
     bar('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`, pct),
   ];
-  inspectEl.className = 'dbg';
   inspectEl.innerHTML =
-    `<h3>tile <span class="mono">${d.x},${d.y}</span> · L${d.z}<span class="x">✕</span></h3>` +
+    `<h3>tile <span class="mono">${d.x},${d.y}</span> · L${d.z}` +
+    `<span class="x" title="close">✕</span></h3>` +
     `<table>${rows.join('')}</table>`;
-  showInspect();
+  showInspect('card');
 }
 
 // Non-debug context: what you actually want while following a creature — what
@@ -650,9 +765,8 @@ function renderInspectSimple(d: Record<string, any>): void {
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
-  inspectEl.className = '';
   inspectEl.innerHTML = header(swatch, kind, d.id) + `<table>${rows.join('')}</table>`;
-  showInspect();
+  showInspect('card');
 }
 
 // Debug context: the whole creature in ONE panel of tabs — attributes
@@ -695,17 +809,12 @@ function renderInspectDebug(d: Record<string, any>): void {
   else if (inspectTab === 'genome') body = genomeTab(d);
   else if (inspectTab === 'lineage') body = lineageTab(d);
   else body = mindTab();
-  const keep = inspectEl.classList.contains('halfsize') ? ' halfsize' : '';
-  inspectEl.className = 'dbg' + keep;
   inspectEl.innerHTML = header(swatch, name, d.id, true)
       + `<div class="tabs">${tabs}</div>` + body;
-  showInspect();
-  const sz = inspectEl.querySelector('[data-size]');
-  if (sz) sz.addEventListener('click', () => {
-    const half = inspectEl.classList.toggle('halfsize');
-    sz.textContent = half ? '⛶' : '⊟';
-    (sz as HTMLElement).title = half ? 'full screen' : 'half screen';
-  });
+  // A whole creature is what this panel is for, so it opens full screen — but
+  // the size the viewer last chose survives the poll that rebuilds it, and
+  // survives walking from one creature to the next.
+  showInspect(inspectEl.classList.contains('half') ? 'half' : 'full');
   inspectEl.querySelectorAll('.tabs button').forEach(b =>
     b.addEventListener('click', () => {
       inspectTab = (b as HTMLElement).dataset.tab as InspectTab;
@@ -843,12 +952,14 @@ function linNode(n2: Record<string, any>, glyph: string, rel: string, nowTick: n
 }
 
 function header(swatch: number, label: string, id: unknown, sizer = false): string {
-  // The ⊟ appears only on the debug panel: the plain card has no sizes to swap.
-  // Its own class, NOT "x": the close wiring grabs the first ".x" it finds,
-  // and a size toggle that closes the panel would be a trap.
-  const sz = sizer ? '<span class="szbtn" data-size title="half screen">⊟</span>' : '';
+  // The ⛶/⊟ appears only on the debug panel: a card has no sizes to swap. It
+  // is left EMPTY here and filled by syncSizeBtn from the panel's own anchor —
+  // written out at render time it came back stale on every poll. Its own class
+  // too, not "x": the close wiring takes the first ".x" it finds, and a size
+  // toggle that closed the panel would be a trap.
+  const sz = sizer ? '<span class="szbtn"></span>' : '';
   return `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `${label} <span class="mono">#${id}</span>${sz}<span class="x"${sizer ? ' style="margin-left:8px"' : ''}>✕</span></h3>`;
+    `${label} <span class="mono">#${id}</span>${sz}<span class="x" title="close">✕</span></h3>`;
 }
 function group(title: string, rows: string[]): string {
   const body = rows.filter(Boolean).join('');
@@ -875,9 +986,11 @@ function bar(k: string, v: unknown, pct: number): string {
   return row(k, v) +
     `<tr><td colspan=2><div class="bar"><i style="width:${(pct * 100).toFixed(0)}%"></i></div></td></tr>`;
 }
-function showInspect(): void {
-  inspectEl.style.display = 'block';
-  inspectEl.querySelector('.x')!.addEventListener('click', deselect);
+/** Shows the inspector at one of its three anchors, and rewires the header the
+ *  render just replaced. */
+function showInspect(size: PanelSize): void {
+  openPanel(inspectEl, size);
+  wirePanelChrome(inspectEl, deselect);
 }
 
 function row(k: string, v: unknown): string {
@@ -1282,9 +1395,23 @@ function ovlApply(): void {
 ovlSmellBox.onchange = ovlApply;
 ovlSoundBox.onchange = ovlApply;
 ovlApply();
+// A menu, not a panel: two checkboxes, sized by what they are. The button
+// lights while the menu is open (as every toolbar button does) and goes bold
+// while an overlay is actually painting, which outlives the menu.
+function closeOvl(): void {
+  closePanel(ovlEl);
+  ovlBtn.classList.remove('on');
+}
 ovlBtn.onclick = () => {
-  ovlEl.style.display = ovlEl.style.display === 'block' ? 'none' : 'block';
+  if (ovlEl.classList.contains('open')) {
+    closeOvl();
+  } else {
+    openPanel(ovlEl);
+    ovlBtn.classList.add('on');
+  }
 };
+wirePanelChrome(ovlEl, closeOvl);
+rightColumn.push({ el: ovlEl, close: closeOvl });
 
 // ---- the constants panel (debug mode) --------------------------------------
 // Every simulation constant, live from GET /api/tuning: frozen ones (structural
@@ -1297,15 +1424,17 @@ const tuneBtn = document.getElementById('tuneBtn') as HTMLButtonElement;
 const tuningEl = document.getElementById('tuning')!;
 const tuneBody = document.getElementById('tuneBody')!;
 const tuneFoot = document.getElementById('tuneFoot')!;
-const tuneClose = document.getElementById('tuneClose')!;
 
 type TuneRow = { key: string; loaded: number; input: HTMLInputElement; row: HTMLElement };
 let tuneRows: TuneRow[] = [];
 
 function closeTuning(): void {
-  tuningEl.style.display = 'none';
+  closePanel(tuningEl);
+  tuneBtn.classList.remove('on');
   tuneRows = [];
 }
+wirePanelChrome(tuningEl, closeTuning);
+rightColumn.push({ el: tuningEl, close: closeTuning });
 
 /** Slider bounds around the boot default: room to quadruple, floor at zero. */
 function tuneMax(def: number, value: number): number {
@@ -1314,7 +1443,8 @@ function tuneMax(def: number, value: number): number {
 }
 
 async function openTuning(): Promise<void> {
-  tuningEl.style.display = 'block';
+  openPanel(tuningEl);
+  tuneBtn.classList.add('on');
   tuneBody.textContent = 'loading…';
   tuneFoot.textContent = '';
   tuneRows = [];
@@ -1425,17 +1555,17 @@ async function saveTuning(): Promise<void> {
 }
 
 tuneBtn.onclick = () => {
-  if (tuningEl.style.display === 'block') closeTuning(); else void openTuning();
+  if (tuningEl.classList.contains('open')) closeTuning(); else void openTuning();
 };
-tuneClose.onclick = closeTuning;
 
 // Debug mode is a CLIENT-ONLY view: it changes what's rendered and how much a
 // selection reveals, never how the server behaves. (The constants panel it
 // reveals can change the world — but only through the token gate, which is the
 // admin boundary; debug alone still only looks.) Enable it by tapping the tick
 // readout three times, pressing "d" (desktop), or opening with ?debug=true. When
-// on: tapping a tile inspects it, and the inspect panel shows the full debug dump
-// for whatever is selected.
+// on, the inspector opens as the full debug panel for whatever is selected
+// rather than the plain card. It does NOT change what the gestures mean: a tap
+// selects and a long press inspects the ground, in either mode.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
 // Debug hands the console the two live objects everything renders from — the
 // world state and the camera — so a person (or a headless test) can ask "what
@@ -1813,12 +1943,16 @@ function speciesLabel(key: string): string {
 }
 
 function popApply(): void {
-  popEl.classList.toggle('open', popOn);
+  if (popOn) openPanel(popEl); else closePanel(popEl);
   popBtn.classList.toggle('on', popOn);
   if (popOn) {
     popPoll(true);
     popDraw(); // the panel may have been resized while closed
   }
+}
+function closePop(): void {
+  popOn = false;
+  popApply();
 }
 
 /** Fetches the current lens's data, at most once per its own cadence: the
@@ -2227,22 +2361,11 @@ popCladeBtn.onclick = () => {
   popCladeBtn.classList.toggle('on', linClade !== 'all');
   popDraw();
 };
-// Panels come in two sizes, half and full (see the #pop CSS): this button
-// swaps between them, and the chart redraws at whatever it was given.
-const popSizeBtn = document.getElementById('popSize') as HTMLButtonElement;
-popSizeBtn.onclick = () => {
-  const full = popEl.classList.toggle('full');
-  popSizeBtn.textContent = full ? '⊟' : '⛶';
-  popSizeBtn.title = full ? 'half screen' : 'full screen';
-  popDraw();
-};
-// The constants panel follows the same convention.
-const tuneSizeBtn = document.getElementById('tuneSize') as HTMLElement;
-tuneSizeBtn.onclick = () => {
-  const full = (document.getElementById('tuning') as HTMLElement).classList.toggle('full');
-  tuneSizeBtn.textContent = full ? '⊟' : '⛶';
-  tuneSizeBtn.title = full ? 'half screen' : 'full screen';
-};
+// The chart is the one panel that has to repaint when it changes size: its
+// canvas is sized in device pixels, so reflowing alone would stretch the last
+// frame rather than draw a new one.
+wirePanelChrome(popEl, closePop, popDraw);
+rightColumn.push({ el: popEl, close: closePop });
 window.addEventListener('keydown', ev => {
   const tag = (ev.target as HTMLElement).tagName;
   if (ev.key !== 'p' && ev.key !== 'P') return;
