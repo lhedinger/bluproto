@@ -258,24 +258,14 @@ public class Genome {
 
 	public Genome copy() {
 		Genome g = new Genome();
-		g.size = size;
-		g.speed = speed;
-		g.turnRate = turnRate;
-		g.losRange = losRange;
-		g.losFov = losFov;
-		g.metabolism = metabolism;
-		g.maxAge = maxAge;
-		g.flying = flying;
-		g.markers = markers.clone();
+		// Every numeric gene, copied through the schema so a new gene is copied the
+		// moment it is declared — no field can be forgotten here again.
+		for (GeneSchema.Gene gene : GeneSchema.genes()) {
+			gene.set(g, gene.get(this));
+		}
+		// The non-numeric heritables the schema does not carry: the clade (a code,
+		// never mutated) and the mind (its own crossover machinery).
 		g.clade = clade;
-		g.predatory = predatory;
-		g.xenophobia = xenophobia;
-		g.gregariousness = gregariousness;
-		g.boldness = boldness;
-		g.mateThreshold = mateThreshold;
-		g.greed = greed;
-		g.determination = determination;
-		g.sexuality = sexuality;
 		g.brain = (brain == null) ? null : brain.copy();
 		return g;
 	}
@@ -285,7 +275,7 @@ public class Genome {
 	/** Asexual offspring: a copy with each gene mutated by up to +/- rate. */
 	public static Genome child(Genome parent, double rate) {
 		Genome g = parent.copy();
-		g.mutate(rate);
+		GeneSchema.mutate(g, rate);
 		if (g.brain != null) {
 			g.brain.mutate(rate); // mutate the inherited program (guarded: no brain -> no RNG)
 		}
@@ -299,29 +289,11 @@ public class Genome {
 	 */
 	public static Genome child(Genome a, Genome b, double rate) {
 		Genome g = new Genome();
-		g.size = pick(a.size, b.size);
-		g.speed = pick(a.speed, b.speed);
-		g.turnRate = (int) pick(a.turnRate, b.turnRate);
-		g.losRange = pick(a.losRange, b.losRange);
-		g.losFov = pick(a.losFov, b.losFov);
-		g.metabolism = pick(a.metabolism, b.metabolism);
-		g.maxAge = (int) pick(a.maxAge, b.maxAge);
-		g.flying = a.flying; // locomotion inherited (no RNG draw: keeps the sim stream stable)
-		for (int i = 0; i < MARKER_DIMS; i++) {
-			g.markers[i] = pick(a.markers[i], b.markers[i]);
-		}
-		// No draw and no pick: a pair only breeds inside its own clade, so both
-		// parents carry the same one and there is nothing to choose between.
+		GeneSchema.crossover(g, a, b);
+		// A pair only breeds inside its own clade, so both carry the same one and
+		// there is nothing to choose — no draw, no pick.
 		g.clade = a.clade;
-		g.predatory = pick(a.predatory, b.predatory);
-		g.xenophobia = pick(a.xenophobia, b.xenophobia);
-		g.gregariousness = pick(a.gregariousness, b.gregariousness);
-		g.boldness = pick(a.boldness, b.boldness);
-		g.mateThreshold = pick(a.mateThreshold, b.mateThreshold);
-		g.greed = pick(a.greed, b.greed);
-		g.determination = pick(a.determination, b.determination);
-		g.sexuality = pick(a.sexuality, b.sexuality);
-		g.mutate(rate);
+		GeneSchema.mutate(g, rate);
 		// Crossover the minds when both parents have one; otherwise inherit whichever
 		// exists. Guarded so brain-less pairs draw no extra RNG.
 		if (a.brain != null && b.brain != null) {
@@ -332,10 +304,6 @@ public class Genome {
 			g.brain = b.brain.copy();
 		}
 		return g;
-	}
-
-	private static double pick(double a, double b) {
-		return Utils.random() < 0.5 ? a : b;
 	}
 
 	/** Body size stays inside a sane band under mutation: the drift is
@@ -364,40 +332,14 @@ public class Genome {
 	@Unit("tiles/tick")
 	public static final double SPEED_MAX = 0.3;
 
-	/** Mutates every gene by up to +/- rate (relative for magnitudes). */
+	/**
+	 * Mutates every gene by up to +/- rate. Delegates to {@link GeneSchema}, the
+	 * one place a gene's drift mode and bounds are declared — so this method can
+	 * no longer disagree with the schema about how a gene moves, and cannot forget
+	 * a gene the schema knows about.
+	 */
 	public void mutate(double rate) {
-		size = clamp(size * (1 + jitter(rate)), SIZE_MIN, SIZE_MAX);
-		speed = clamp(speed * (1 + jitter(rate)), 0, SPEED_MAX);
-		turnRate = Math.max(1, (int) Math.round(turnRate * (1 + jitter(rate))));
-		losRange = pos(losRange * (1 + jitter(rate)));
-		losFov = clamp(losFov * (1 + jitter(rate)), 0, 2 * Math.PI);
-		// Additive, not multiplicative: a lineage sitting at 0 could never drift back
-		// across the boundary if the step were proportional to where it already is.
-		sexuality = clamp(sexuality + jitter(rate), 0, 1);
-		metabolism = pos(metabolism * (1 + jitter(rate)));
-		maxAge = Math.max(1, (int) Math.round(maxAge * (1 + jitter(rate))));
-		// flying is inherited as-is (no RNG draw here) so adding it does not shift
-		// the deterministic sim stream; evolvable flight can come later.
-		for (int i = 0; i < MARKER_DIMS; i++) {
-			markers[i] = clamp(markers[i] + jitter(rate), 0, 1);
-		}
-		predatory = pos(predatory + jitter(rate));
-		xenophobia = pos(xenophobia + jitter(rate));
-		gregariousness = pos(gregariousness + jitter(rate));
-		boldness = pos(boldness + jitter(rate));
-		mateThreshold = clamp(mateThreshold + jitter(rate), 0, 1);
-		// Additive for the same reason as the traits above: a lineage sitting at a
-		// bound could never drift back if the step were proportional to where it is.
-		greed = clamp(greed + jitter(rate), 0, GREED_MAX);
-		determination = clamp(determination + jitter(rate), 1, DETERMINATION_MAX);
-	}
-
-	private static double jitter(double rate) {
-		return (Utils.random() * 2 - 1) * rate;
-	}
-
-	private static double pos(double v) {
-		return v < 0 ? 0 : v;
+		GeneSchema.mutate(this, rate);
 	}
 
 	private static double clamp(double v, double lo, double hi) {
