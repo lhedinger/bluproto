@@ -66,6 +66,43 @@ public abstract class NPC extends Entity {
 	 *  average burner, and mutations above/below it scale efficiency. */
 	@Unit("gene value = pace 1")
 	public static double META_REF = 0.02;
+
+	// --- capability pricing ---------------------------------------------------
+	// Sight, agility and a big brain are all metabolic tissue, and until now they
+	// were free: a lineage could evolve keener eyes, a quicker turn or a longer
+	// program at no cost, so those genes random-walked with nothing to hold them
+	// and a "free" gene is a constant selection cannot move. Each is now a
+	// surcharge on the resting burn, priced AT THE MARGIN around a reference
+	// genome: a body at the defaults pays exactly the base rate, a keener/quicker/
+	// bigger-brained one pays more, and a myopic/sluggish/simple one pays less. So
+	// capability becomes a real trade a lineage can spend or save its living on,
+	// which is what makes the body's attributes a factor in optimisation rather
+	// than a free skin. All three scale with mass^0.75 like the base burn, because
+	// they are tissue a bigger body carries more of. The magnitudes are tunable.
+	/** Reference sight (the default genome's {@code losRange * losFov}); a body at
+	 *  it pays no perception surcharge. */
+	@Unit("tiles·rad")
+	public static final double REF_SIGHT = 10.0 * (Math.PI * 0.5);
+	/** Reference turn rate and program length — the founder defaults, where agility
+	 *  and thought cost nothing extra. */
+	@Unit("")
+	public static final double REF_TURN = 5, REF_BRAIN_LEN = 16;
+	/** Energy/tick per unit of sight area beyond the reference, at mass 1. */
+	@Unit("energy/tick per tile·rad")
+	public static double PERCEPTION_BURN = 5.0e-6;
+	/** Energy/tick per turn-rate step beyond the reference, at mass 1. */
+	@Unit("energy/tick per step")
+	public static double AGILITY_BURN = 5.0e-6;
+	/** Energy/tick per brain instruction beyond the reference, at mass 1 — so a
+	 *  longer program is a slower thought AND a hungrier body, pricing intelligence
+	 *  against food the way everything else in the economy is priced. */
+	@Unit("energy/tick per instruction")
+	public static double BRAIN_BURN = 3.0e-6;
+	/** The floor a body's total burn cannot drop below, as a fraction of its
+	 *  size-based base — so a blind, sluggish, brainless lineage still pays to
+	 *  exist and the capability savings cannot drive burn to zero. */
+	@Unit("of base burn")
+	public static double CAPABILITY_FLOOR = 0.5;
 	/**
 	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
 	 * body is worth what it weighs, so the meal tracks the quarry rather than the
@@ -389,8 +426,23 @@ public abstract class NPC extends Entity {
 		// Resting burn scales with mass^0.75 (Kleiber). The genome's metabolism is
 		// a heritable efficiency multiplier normalised to META_REF, so an average
 		// genome burns exactly the size-based rate and mutations nudge it.
+		double m34 = Math.pow(bodyMass(), 0.75);
 		double eff = genome != null ? genome.metabolism / META_REF : 1.0;
-		return BASE_METABOLISM * Math.pow(bodyMass(), 0.75) * eff;
+		double base = BASE_METABOLISM * m34 * eff;
+		if (genome == null) {
+			return base;
+		}
+		// Capability surcharges, priced at the margin around a reference genome
+		// (see the constants): keen sight, quick turns and a long brain each add to
+		// the burn, a myopic/sluggish/simple body saves — bounded below so nothing
+		// ever exists for free. All scale with mass^0.75, like the base.
+		double sight = genome.losRange * genome.losFov;
+		double perception = PERCEPTION_BURN * m34 * (sight - REF_SIGHT);
+		double agility = AGILITY_BURN * m34 * (genome.turnRate - REF_TURN);
+		int brainLen = genome.brain != null ? genome.brain.length() : (int) REF_BRAIN_LEN;
+		double thought = BRAIN_BURN * m34 * (brainLen - REF_BRAIN_LEN);
+		double burn = base + perception + agility + thought;
+		return Math.max(burn, base * CAPABILITY_FLOOR);
 	}
 
 	/** Heritable trait vector; null for species that do not use one (yet). */
