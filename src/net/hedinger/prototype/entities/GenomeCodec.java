@@ -33,9 +33,10 @@ public final class GenomeCodec {
 	 * names a creature that can no longer be reconstructed, and loading it would
 	 * produce a different animal wearing its name. (g1: 23 sensors / 11 actuators.
 	 * g2: 28 / 13, intent commands added. g3: 29 / 13, the intent-status channel
-	 * added. g4: schema-driven genes, markers split into m0..m2.)
+	 * added. g4: schema-driven genes, markers split into m0..m2. g5: life-history
+	 * genes added — reproF, reproC, mut, inst.)
 	 */
-	private static final String VERSION = "g4";
+	private static final String VERSION = "g5";
 
 	/** Keys accepted on decode that are no longer emitted, mapped to the gene key
 	 *  they now go by — so a recording made under an old name is not silently

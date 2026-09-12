@@ -336,6 +336,12 @@ public abstract class NPC extends Entity {
 		return reproCost;
 	}
 
+	/** The energy this body must bank before it breeds — its lineage's
+	 *  {@link Genome#reproFraction} of the tank (a probe for the scenario suite). */
+	public double reproThreshold() {
+		return reproThreshold;
+	}
+
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	protected int reproCooldown = 0; // ticks until able to reproduce again

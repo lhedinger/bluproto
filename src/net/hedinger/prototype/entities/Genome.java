@@ -211,6 +211,37 @@ public class Genome {
 	 */
 	public double sexuality = 0.5;
 
+	// --- life history (per-lineage reproductive strategy) ---------------------
+	// The r/K axis, made heritable. These used to be global constants — one
+	// reproductive strategy shared by every lineage in the world — but breeding
+	// conserves energy now (a child is worth exactly what its parents paid), so
+	// whatever values a lineage evolves, the books still balance and there is
+	// nothing to exploit. So they become genes: breed-early-and-cheap versus
+	// bank-and-invest is a strategy selection can explore, not a number chosen
+	// once. The defaults are the reference lineage's, matching the constants they
+	// replaced.
+	/** Fraction of the (size-scaled) tank that must be full before this lineage
+	 *  breeds. Low is an r-strategist — breed early, off a thin reserve; high is a
+	 *  K-strategist that banks a buffer first. */
+	public double reproFraction = 0.75;
+	/** Fraction of the tank this lineage spends per offspring — how much it invests
+	 *  in each child. Paired with {@link #reproFraction} this is the whole r/K
+	 *  trade: cheap-and-many against dear-and-few. */
+	public double reproCostFraction = 0.5;
+	/** How hard this lineage mutates its own offspring, per gene at birth — meta-
+	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
+	 *  at a huge rate. */
+	public double mutationRate = 0.1;
+	/**
+	 * A born-in drive to forage, 0..1: how hard a newborn seeks food before its
+	 * mind has decided anything. Seeded into the body's actuators at birth (the
+	 * forage intent at this throttle), the brain overrides it the moment it writes
+	 * — so a random-brained founder that would otherwise never stumble onto
+	 * feeding has a working instinct to build on, and an evolved mind is
+	 * unaffected. Instinct in the genome, deliberation in the mind.
+	 */
+	public double instinct = 0.0;
+
 	/** True if this genome reproduces sexually; false if it buds. */
 	public boolean isSexual() {
 		return sexuality >= 0.5;
@@ -253,6 +284,12 @@ public class Genome {
 		// act on before mutation has had time to make any.
 		g.greed = 0.5 + Utils.random() * 1.5;
 		g.determination = 1.0 + Utils.random() * 2.0;
+		// Life history spread across founders too, so the r/K axis, evolvability
+		// and the foraging instinct all vary from the first generation.
+		g.reproFraction = 0.6 + Utils.random() * 0.3;
+		g.reproCostFraction = 0.35 + Utils.random() * 0.3;
+		g.mutationRate = 0.05 + Utils.random() * 0.1;
+		g.instinct = 0.5 + Utils.random() * 0.5;
 		return g;
 	}
 

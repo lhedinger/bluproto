@@ -370,14 +370,17 @@ public final class Mechanics {
 				+ "else) resets it — the cost is paid on completion, not intent. The cooldown "
 				+ "scales with the childhood the offspring itself will spend growing, so big "
 				+ "slow-growing bodies are also slow breeders.");
+		double refReproF = new Genome().reproFraction;
+		double refReproC = new Genome().reproCostFraction;
 		rows(s,
-				row("Breeds above", pct(TestNPC.REPRO_FRACTION), "of the tank",
-						"Reference body: " + round(TestNPC.REPRO_FRACTION * NPC.BASE_CAPACITY, 2)),
+				row("Breeds above", pct(refReproF), "of the tank",
+						"A per-lineage gene; reference lineage "
+						+ round(refReproF * NPC.BASE_CAPACITY, 2) + " at a reference body."),
 				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
 						+ ", health at 60+", "", "Surplus across all four books."),
-				row("Costs", pct(TestNPC.REPRO_COST_FRACTION), "of the tank, each parent",
-						"Reference body: "
-						+ round(TestNPC.REPRO_COST_FRACTION * NPC.BASE_CAPACITY, 2)),
+				row("Costs", pct(refReproC), "of the tank, each parent",
+						"Also a gene — the r/K trade. Reference lineage "
+						+ round(refReproC * NPC.BASE_CAPACITY, 2) + " at a reference body."),
 				row("Offspring is worth", "exactly what its parents paid", "",
 						"Tank + birth meal + meat-priced body = the payment; "
 						+ "born at " + pct(TestNPC.BORN_HUNGER) + " hunger, its "
@@ -900,7 +903,19 @@ public final class Mechanics {
 						+ "courts and waits, an asexual one buds alone."),
 				row("Brain", "up to " + num(Brain.MAX_LEN) + " instructions", "",
 						"The mind's program rides in the genome and evolves with it; a genome "
-						+ "without one drives a scripted body instead."));
+						+ "without one drives a scripted body instead."),
+				row("Breeds above", pct(def.reproFraction) + " of the tank", "",
+						"Life history: how full a reserve this lineage breeds off — the r/K "
+						+ "axis, low is breed-early, high is bank-first."),
+				row("Spends per child", pct(def.reproCostFraction) + " of the tank", "",
+						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
+				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
+						"Evolvability, itself heritable — meta-evolution, bounded so a lineage "
+						+ "cannot fossilise or dissolve."),
+				row("Forage instinct", "0 – 1", "",
+						"A born-in drive to seek food, seeded into a newborn's steering; the "
+						+ "mind overrides it once it decides, so a random-brained founder still "
+						+ "has a working instinct to build on."));
 		return s;
 	}
 
@@ -953,9 +968,10 @@ public final class Mechanics {
 				+ "emerge inside a clade as markers drift apart; clades themselves are "
 				+ "authored, and nothing in the world can make a new one.");
 		rows(s,
-				row("Mutation", "± " + num(TestNPC.MUTATION_RATE), "per gene, at birth",
-						"The same rate for both ways of being born, and for the brain's "
-						+ "instruction fields."),
+				row("Mutation", "± " + num(new Genome().mutationRate), "per gene, at birth",
+						"A per-lineage gene now — evolvability itself is under selection. "
+						+ "The reference lineage's rate; the same for both ways of being born "
+						+ "and for the brain's instruction fields."),
 				row("Crossover", "a coin per gene", "",
 						"Sexual only. Assortative mating (mateThreshold) keeps the mixing "
 						+ "within a lineage, which is what lets species form."),
