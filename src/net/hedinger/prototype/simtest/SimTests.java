@@ -8379,6 +8379,81 @@ public class SimTests {
 	}
 
 	/**
+	 * The modulation layer: a lineage's dispositions scale what its mind hears.
+	 * The four disposition genes were dead weight on a minded body; now predatory
+	 * amplifies the prey channel, xenophobia the threat channel, boldness discounts
+	 * it, and gregariousness amplifies kin — a heritable gain the mind reads through
+	 * without spending an instruction on it. Two bodies identical but for one
+	 * disposition read the same neighbour at different loudness.
+	 */
+	static class DispositionsScaleWhatTheMindHears extends Scenario {
+		@Override
+		public void run() {
+			seed(144);
+			World w = room(30, 30);
+
+			// Five scenes, each a body beside one identical neighbour two tiles east,
+			// far enough apart that no scene reads another's. Bodies carry inert minds
+			// (null brain) so nothing moves and the reading is the pure sense.
+			Genome keenG = new Genome();
+			keenG.size = 10;
+			keenG.predatory = 1.5; // hears prey loud
+			Genome meekG = new Genome();
+			meekG.size = 10;
+			meekG.predatory = 0.0; // hears prey faint
+			Genome timidG = new Genome();
+			timidG.size = 10;
+			timidG.xenophobia = 1.0;
+			timidG.boldness = 0.0; // feels danger in full
+			Genome braveG = new Genome();
+			braveG.size = 10;
+			braveG.xenophobia = 1.0;
+			braveG.boldness = 1.0; // discounts danger
+			Genome neutralG = new Genome();
+			neutralG.size = 10;
+			neutralG.predatory = TestNPC.DISPOSITION_PIVOT; // the neutral point
+
+			TestNPC keen = TestNPC.minded(5.5, 5.5, 0, keenG).grown();
+			TestNPC meek = TestNPC.minded(5.5, 25.5, 0, meekG).grown();
+			TestNPC timid = TestNPC.minded(25.5, 5.5, 0, timidG).grown();
+			TestNPC brave = TestNPC.minded(25.5, 25.5, 0, braveG).grown();
+			TestNPC neutral = TestNPC.minded(15.5, 15.5, 0, neutralG).grown();
+			for (TestNPC b : new TestNPC[] { keen, meek, timid, brave, neutral }) {
+				w.spawnEntity(b);
+			}
+			// Prey (a smaller body) beside the prey-channel scenes; a larger body
+			// beside the threat scenes.
+			w.spawnEntity(TestNPC.inert(7.5, 5.5, 0).withSize(5));
+			w.spawnEntity(TestNPC.inert(7.5, 25.5, 0).withSize(5));
+			w.spawnEntity(TestNPC.inert(27.5, 5.5, 0).withSize(16));
+			w.spawnEntity(TestNPC.inert(27.5, 25.5, 0).withSize(16));
+			w.spawnEntity(TestNPC.inert(17.5, 15.5, 0).withSize(5));
+			// A couple of ticks: the first admits the spawns to the census, the next
+			// is the one the bodies actually sense on.
+			tick(w, 3);
+
+			double keenPrey = keen.sensorSnapshot()[AgentIO.S_PREY_PROX];
+			double meekPrey = meek.sensorSnapshot()[AgentIO.S_PREY_PROX];
+			assertGreater("both bodies sense the smaller neighbour", meekPrey, 0.0);
+			assertGreater("a high-predatory lineage hears prey louder than a meek one",
+					keenPrey, meekPrey * 1.2);
+
+			double timidThreat = timid.sensorSnapshot()[AgentIO.S_THREAT_PROX];
+			double braveThreat = brave.sensorSnapshot()[AgentIO.S_THREAT_PROX];
+			assertGreater("both bodies sense the larger neighbour", braveThreat, 0.0);
+			assertGreater("boldness discounts a threat a timid lineage feels in full",
+					timidThreat, braveThreat * 1.2);
+
+			// At the neutral pivot the gain is 1: a founder-average disposition reads
+			// its channel unscaled, so the layer changes nothing until drift moves it.
+			double neutralPrey = neutral.sensorSnapshot()[AgentIO.S_PREY_PROX];
+			double dist = 2.0; // the neighbour is two tiles east
+			assertNear("a neutral disposition reads its channel unscaled",
+					1.0 / (1.0 + dist), neutralPrey, 0.06);
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -11457,6 +11532,7 @@ public class SimTests {
 				new GeneSchemaOwnsHeredity(),
 				new ExpressionImposesTheCladeEveryGeneration(),
 				new TheNicheCardIsTheCladesData(),
+				new DispositionsScaleWhatTheMindHears(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
