@@ -162,19 +162,20 @@ public final class ServerMain {
 		// wrong answer looked like a real catalog. The java bakes are still served
 		// as ASSETS under /help/*.png -- the client page composites several of
 		// them -- they simply no longer have a page of their own.
-		java.io.File clientHelp = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"),
-				"help.html");
+		java.io.File clientDir = new java.io.File(cfg(args, "CLIENT_DIR", "client/dist"));
 		// What this running build is, for cache validation. deployedAt is the
 		// process start time, so this changes on every deploy AND every local
 		// restart -- which is what a catalog needs: the art it shows is rebuilt
 		// with the server, under filenames that never change.
 		String buildTag = commitShort + "@" + deployedAt;
 
-		io.javalin.http.Handler clientCatalog = ctx -> {
-			// Never cached. The catalog is the normative record of what the art
-			// system currently looks like (ART-STYLE.md), so a stale copy is worse
+		// One handler shape for every client documentation page (/help and its
+		// genome/body subpages), parameterised only by the built file it serves.
+		java.util.function.Function<String, io.javalin.http.Handler> clientPage = name -> ctx -> {
+			// Never cached. These are the normative record of what the art and the
+			// rules currently look like (ART-STYLE.md), so a stale copy is worse
 			// than no copy -- it asserts, with authority, something that is no
-			// longer true. The page is small and rebuilt on every deploy under the
+			// longer true. Each page is small and rebuilt on every deploy under the
 			// same URL, so there is nothing here worth a cache hit.
 			ctx.header("Cache-Control", "no-store");
 			ctx.contentType("text/html");
@@ -184,12 +185,13 @@ public final class ServerMain {
 			// stage copies just the server install and res/. Asking only the
 			// filesystem is what made this route serve something else entirely on
 			// every deploy for weeks.
-			if (clientHelp.isFile()) {
-				ctx.result(java.nio.file.Files.readAllBytes(clientHelp.toPath()));
+			java.io.File f = new java.io.File(clientDir, name);
+			if (f.isFile()) {
+				ctx.result(java.nio.file.Files.readAllBytes(f.toPath()));
 				return;
 			}
 			try (java.io.InputStream in =
-					ServerMain.class.getResourceAsStream("/public/help.html")) {
+					ServerMain.class.getResourceAsStream("/public/" + name)) {
 				if (in != null) {
 					ctx.result(in.readAllBytes());
 					return;
@@ -199,14 +201,23 @@ public final class ServerMain {
 			// page. Serving a plausible-looking stand-in is precisely how the missing
 			// catalog stayed invisible -- a 503 that names the cause is worth more
 			// than a page that answers a question nobody asked.
-			ctx.status(503).result("<h1>help unavailable</h1><p>No web client "
-					+ "build was found — neither <code>client/dist/help.html</code> nor "
-					+ "<code>public/help.html</code> in the server jar. Run "
+			ctx.status(503).result("<h1>page unavailable</h1><p>No web client "
+					+ "build was found — neither <code>client/dist/" + name + "</code> nor "
+					+ "<code>public/" + name + "</code> in the server jar. Run "
 					+ "<code>npm run build</code> in <code>client/</code>, or build the "
 					+ "server with <code>./gradlew :server:installDist</code>, which folds "
 					+ "the client in.</p>");
 		};
+		io.javalin.http.Handler clientCatalog = clientPage.apply("help.html");
 		app.get("/help", clientCatalog); // the one page: what a viewer sees
+		// The reference's two deep pages: what a lineage inherits, and what a body
+		// costs and forbids. Registered as exact paths, so they win over the
+		// /help/{file} asset route below; their data rides the *.json routes the
+		// same way the main page's mechanics do.
+		app.get("/help/genome", clientPage.apply("genome.html"));
+		app.get("/help/body", clientPage.apply("body.html"));
+		app.get("/help/genome.json", ctx -> ctx.json(Mechanics.genomePage()));
+		app.get("/help/body.json", ctx -> ctx.json(Mechanics.bodyPage()));
 		// It was /sprites while it was only a sprite catalog. It is growing into the
 		// place the world explains itself -- what a badge means, and in time what
 		// metabolism costs and where energy comes from -- and a URL that says

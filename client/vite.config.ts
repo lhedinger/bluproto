@@ -20,6 +20,8 @@ export default defineConfig({
       input: {
         main: 'index.html',
         help: 'help.html', // the client half of /help
+        genome: 'genome.html', // /help/genome — the heritable reference
+        body: 'body.html', // /help/body — the body's books and hard limits
       },
     },
   },
