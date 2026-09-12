@@ -1,5 +1,8 @@
 package net.hedinger.prototype.entities;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * A compact, lossless, single-line text encoding of a {@link Genome} — a
  * creature's whole heritable definition, brain included — so an evolved minded
@@ -13,20 +16,31 @@ package net.hedinger.prototype.entities;
  * its rows joined by {@code |}, each row's ints by {@code ,}. Doubles use
  * {@link Double#toString} (guaranteed to round-trip), so decode(encode(g))
  * reproduces the genome exactly.
+ *
+ * <p>The numeric genes are read straight off {@link GeneSchema}, so a gene added
+ * to the schema is serialized without touching this class — the same one-place
+ * property the rest of heredity now has. Only the two non-numeric heritables,
+ * the clade code and the brain, are written by hand.
  */
 public final class GenomeCodec {
 
 	/**
-	 * Bumped whenever the {@link AgentIO} vectors change size. {@code Brain} masks
-	 * operand indices modulo the live array length, so a genome encoded against 23
-	 * sensors reads <i>different</i> sensors once there are 28 — its wiring is
-	 * silently rewritten rather than merely extended. Rejecting the old tag is the
-	 * honest outcome: a stale token names a creature that can no longer be
-	 * reconstructed, and loading it would produce a different animal wearing its
-	 * name. (g1: 23 sensors / 11 actuators. g2: 28 / 13, intent commands added. g3: 29 / 13,
-	 * the intent-status channel added.)
+	 * Bumped whenever the {@link AgentIO} vectors change size OR the gene set
+	 * changes shape. {@code Brain} masks operand indices modulo the live array
+	 * length, so a genome encoded against 23 sensors reads <i>different</i>
+	 * sensors once there are 28 — its wiring is silently rewritten rather than
+	 * merely extended. Rejecting the old tag is the honest outcome: a stale token
+	 * names a creature that can no longer be reconstructed, and loading it would
+	 * produce a different animal wearing its name. (g1: 23 sensors / 11 actuators.
+	 * g2: 28 / 13, intent commands added. g3: 29 / 13, the intent-status channel
+	 * added. g4: schema-driven genes, markers split into m0..m2.)
 	 */
-	private static final String VERSION = "g3";
+	private static final String VERSION = "g4";
+
+	/** Keys accepted on decode that are no longer emitted, mapped to the gene key
+	 *  they now go by — so a recording made under an old name is not silently
+	 *  dropped. ("loyal" was determination's key for its first afternoon.) */
+	private static final Map<String, String> ALIASES = Map.of("loyal", "det");
 
 	private GenomeCodec() {
 	}
@@ -34,30 +48,10 @@ public final class GenomeCodec {
 	/** The genome as one whitespace-free line (see the class doc for the form). */
 	public static String encode(Genome g) {
 		StringBuilder b = new StringBuilder(VERSION);
-		b.append(";size=").append(g.size);
-		b.append(";speed=").append(g.speed);
-		b.append(";turn=").append(g.turnRate);
-		b.append(";los=").append(g.losRange);
-		b.append(";fov=").append(g.losFov);
-		b.append(";metab=").append(g.metabolism);
-		b.append(";maxAge=").append(g.maxAge);
-		b.append(";flying=").append(g.flying ? 1 : 0);
-		b.append(";markers=");
-		for (int i = 0; i < g.markers.length; i++) {
-			if (i > 0) {
-				b.append(',');
-			}
-			b.append(g.markers[i]);
+		for (GeneSchema.Gene gene : GeneSchema.genes()) {
+			b.append(';').append(gene.key).append('=').append(gene.get(g));
 		}
 		b.append(";diet=").append(g.clade.code()); // frozen wire code, not ordinal
-		b.append(";pred=").append(g.predatory);
-		b.append(";xeno=").append(g.xenophobia);
-		b.append(";greg=").append(g.gregariousness);
-		b.append(";bold=").append(g.boldness);
-		b.append(";mate=").append(g.mateThreshold);
-		b.append(";greed=").append(g.greed);
-		b.append(";det=").append(g.determination);
-		b.append(";sex=").append(g.sexuality);
 		b.append(";brain=");
 		if (g.brain != null) {
 			int[][] code = g.brain.code();
@@ -83,6 +77,10 @@ public final class GenomeCodec {
 			throw new IllegalArgumentException("empty genome");
 		}
 		try {
+			Map<String, GeneSchema.Gene> byKey = new LinkedHashMap<>();
+			for (GeneSchema.Gene gene : GeneSchema.genes()) {
+				byKey.put(gene.key, gene);
+			}
 			Genome g = new Genome();
 			boolean sawVersion = false;
 			for (String part : line.trim().split(";")) {
@@ -93,30 +91,16 @@ public final class GenomeCodec {
 				}
 				String k = part.substring(0, eq);
 				String v = part.substring(eq + 1);
-				switch (k) {
-				case "size" -> g.size = Double.parseDouble(v);
-				case "speed" -> g.speed = Double.parseDouble(v);
-				case "turn" -> g.turnRate = Integer.parseInt(v);
-				case "los" -> g.losRange = Double.parseDouble(v);
-				case "fov" -> g.losFov = Double.parseDouble(v);
-				case "metab" -> g.metabolism = Double.parseDouble(v);
-				case "maxAge" -> g.maxAge = Integer.parseInt(v);
-				case "flying" -> g.flying = v.equals("1");
-				case "markers" -> g.markers = doubles(v);
-				case "diet" -> g.clade = Genome.Clade.ofCode(Integer.parseInt(v));
-				case "pred" -> g.predatory = Double.parseDouble(v);
-				case "xeno" -> g.xenophobia = Double.parseDouble(v);
-				case "greg" -> g.gregariousness = Double.parseDouble(v);
-				case "bold" -> g.boldness = Double.parseDouble(v);
-				case "mate" -> g.mateThreshold = Double.parseDouble(v);
-				case "greed" -> g.greed = Double.parseDouble(v);
-				// "loyal" is the key this gene shipped under for its first afternoon,
-				// accepted so a recording from that window does not silently lose it.
-				case "det", "loyal" -> g.determination = Double.parseDouble(v);
-				case "sex" -> g.sexuality = Double.parseDouble(v);
-				case "brain" -> g.brain = v.isEmpty() ? null : new Brain(codeMatrix(v));
-				default -> { /* forward-compatible: ignore unknown keys */ }
+				k = ALIASES.getOrDefault(k, k);
+				GeneSchema.Gene gene = byKey.get(k);
+				if (gene != null) {
+					gene.setRaw(g, Double.parseDouble(v)); // lossless: no living clamp on transport
+				} else if (k.equals("diet")) {
+					g.clade = Genome.Clade.ofCode(Integer.parseInt(v));
+				} else if (k.equals("brain")) {
+					g.brain = v.isEmpty() ? null : new Brain(codeMatrix(v));
 				}
+				// else: forward-compatible — ignore an unknown key.
 			}
 			if (!sawVersion) {
 				throw new IllegalArgumentException("missing/unknown version tag");
@@ -125,18 +109,6 @@ public final class GenomeCodec {
 		} catch (NumberFormatException e) {
 			throw new IllegalArgumentException("malformed genome: " + e.getMessage(), e);
 		}
-	}
-
-	private static double[] doubles(String csv) {
-		if (csv.isEmpty()) {
-			return new double[0];
-		}
-		String[] p = csv.split(",");
-		double[] out = new double[p.length];
-		for (int i = 0; i < p.length; i++) {
-			out[i] = Double.parseDouble(p[i]);
-		}
-		return out;
 	}
 
 	private static int[][] codeMatrix(String v) {
