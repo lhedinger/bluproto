@@ -48,7 +48,8 @@ public class TestNPC extends NPC {
 	/** Damage a predator's bite does to prey of its own size or smaller. Ten
 	 *  against a hundred health, one bite a second: a kill is ten seconds of
 	 *  holding on. Scaled down against bigger quarry — see {@link #biteDamage}. */
-	private static final int PRED_DAMAGE = 10;
+	@Unit("hp per bite")
+	public static final int PRED_DAMAGE = 10;
 	/**
 	 * Ticks between a hunter's bites — one a second at {@code TICKS_PER_SECOND}.
 	 *
@@ -74,16 +75,19 @@ public class TestNPC extends NPC {
 	 * already does for a parasite, so two hunters on one animal are not
 	 * synchronised and neither has to carry a timer of its own.
 	 */
-	private static final int PRED_BITE_PERIOD = 33;
+	@Unit("ticks")
+	public static final int PRED_BITE_PERIOD = 33;
 	/** How much larger than itself a hunter will take on, as a multiple of its own
 	 *  body size. Above 1 so a smaller hunter can pick a fight it is not built to
 	 *  win quickly: it lands weaker bites and needs far more of them, which is the
 	 *  whole trade — a long, costly, interruptible kill instead of a clean one. */
-	private static final double PRED_MAX_PREY_RATIO = 1.5;
+	@Unit("x own size")
+	public static final double PRED_MAX_PREY_RATIO = 1.5;
 	/** Full health, and so the whole of a body: a bite that removes this much of a
 	 *  creature has consumed all of it. Health is flat across every body size, which
 	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
-	private static final int FULL_BODY_HEALTH = 100;
+	@Unit("hp")
+	public static final int FULL_BODY_HEALTH = 100;
 	// Carrion is priced at MEAT_ENERGY directly. It briefly had a constant of
 	// its own initialised to the same value — but "meat is meat: a body is
 	// worth the same whether the eater killed it or found it" is an identity,
@@ -102,7 +106,8 @@ public class TestNPC extends NPC {
 	@Unit("of the body/tick")
 	public static final double CARRION_BITE = 0.015;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
-	private static final double CARRION_REACH = 0.6;
+	@Unit("tiles beyond touching")
+	public static final double CARRION_REACH = 0.6;
 	/**
 	 * How far a scavenger can locate a carcass — smell, not sight, so it reaches
 	 * well past {@code LOS_RANGE} and through the dark.
@@ -288,13 +293,17 @@ public class TestNPC extends NPC {
 	private static final double MATE_REACH = 0.5;
 
 	/** Max steering per tick (radians) applied by the mind's turn actuator. */
-	private static final double MAX_TURN = 0.35;
+	@Unit("radians/tick")
+	public static final double MAX_TURN = 0.35;
 	/** Reach (tiles, beyond touching) of the mind's attack actuator. */
-	private static final double ATTACK_REACH = 0.5;
+	@Unit("tiles beyond touching")
+	public static final double ATTACK_REACH = 0.5;
 	/** Health removed per tick from a neighbour the mind attacks. */
-	private static final int ATTACK_DAMAGE = 4;
+	@Unit("hp per bite")
+	public static final int ATTACK_DAMAGE = 4;
 	/** Energy a successful bite feeds the attacker (predation payoff). */
-	private static final double BITE_ENERGY = 0.03;
+	@Unit("energy per bite")
+	public static final double BITE_ENERGY = 0.03;
 
 	private final Behavior behavior;
 	private double speed = 0.04;
@@ -388,7 +397,8 @@ public class TestNPC extends NPC {
 	/** How often a body re-scans for a forage patch. Grass regrows over ~a minute
 	 *  (Tile.REGROW_DELAY), so a target a second old is still a good target, and
 	 *  rescanning every tick would buy nothing for 33x the cost. */
-	private static final int FORAGE_SCAN_PERIOD = 33;
+	@Unit("ticks")
+	public static final int FORAGE_SCAN_PERIOD = 33;
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
@@ -642,7 +652,8 @@ public class TestNPC extends NPC {
 	 * and not a fixed size: mutation is free to go bigger, and the reseed mix is
 	 * free to prefer whatever actually eats.
 	 */
-	private static final double PREDATOR_MIN_SIZE_PX = 12;
+	@Unit("px radius")
+	public static final double PREDATOR_MIN_SIZE_PX = 12;
 
 	/**
 	 * A minded parasite: the same brains and forage intent as the rest of the
@@ -2362,9 +2373,11 @@ public class TestNPC extends NPC {
 	};
 
 	/** Smallest and largest number of things any mind can keep track of. */
-	private static final int TRACK_MIN = 1, TRACK_MAX = 5;
+	@Unit("targets")
+	public static final int TRACK_MIN = 1, TRACK_MAX = 5;
 	/** Instructions of brain per extra thing tracked, past the first. */
-	private static final int TRACK_PER_INSTR = 12;
+	@Unit("instructions per extra target")
+	public static final int TRACK_PER_INSTR = 12;
 
 	/**
 	 * How many targets this mind can hold at once, from the size of the brain
@@ -3416,6 +3429,13 @@ public class TestNPC extends NPC {
 	@Unit("hunger level")
 	public static double BORN_HUNGER = 0.9;
 
+	/** How far each gene drifts at birth: the {@code rate} both offspring paths
+	 *  hand {@link Genome#child} — one number, so the two ways of being born
+	 *  mutate alike. It was a literal at each call site, which is the quiet way
+	 *  for asexual and sexual lineages to end up evolving at different speeds. */
+	@Unit("± per gene at birth")
+	public static double MUTATION_RATE = 0.1;
+
 	/**
 	 * Opens a newborn's books so that birth conserves energy: everything the
 	 * child is worth — its tank, the small meal it is born digesting, and the
@@ -3451,7 +3471,7 @@ public class TestNPC extends NPC {
 		}
 		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
 		// genome carries a brain, Genome.child mutates the inherited program too.
-		Genome childG = Genome.child(genome, 0.1);
+		Genome childG = Genome.child(genome, MUTATION_RATE);
 		TestNPC child;
 		if (behavior == Behavior.MINDED) {
 			child = brainedBreeder(X, Y, Z, childG);
@@ -3473,7 +3493,7 @@ public class TestNPC extends NPC {
 		// Sexual: a mutated crossover of both parents' genomes (including their
 		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
-				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), 0.1);
+				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), MUTATION_RATE);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
 		endow(child, reproCost + (partner instanceof TestNPC tp ? tp.reproCost : reproCost));
