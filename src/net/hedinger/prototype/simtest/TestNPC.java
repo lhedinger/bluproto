@@ -8,6 +8,7 @@ import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Item;
 import net.hedinger.prototype.entities.LgpMind;
 import net.hedinger.prototype.entities.Mind;
+import net.hedinger.prototype.entities.MlpMind;
 import net.hedinger.prototype.entities.NPC;
 
 /**
@@ -824,6 +825,12 @@ public class TestNPC extends NPC {
 	};
 
 	private static Mind mindOf(Genome g) {
+		// One body, one substrate, behind one seam: an MLP network if the genome
+		// carries one, else the LGP program, else nothing. The two decision methods
+		// are interchangeable here — the body senses and acts the same either way.
+		if (g.mlp != null) {
+			return new MlpMind(g.mlp);
+		}
 		return g.brain != null ? new LgpMind(g.brain) : INERT_MIND;
 	}
 

@@ -842,18 +842,33 @@ public final class Mechanics {
 				+ "having, and the reason a reflex beats a deliberation. Registers persist "
 				+ "between ticks, so they are the creature's memory; a newborn starts with an "
 				+ "empty bank, so siblings with identical code still diverge as soon as their "
-				+ "histories do.");
+				+ "histories do.\n\n"
+				+ "There are TWO decision substrates, competing in the one world behind the "
+				+ "identical sensor/actuator seam. The sparse LGP program above is one; the "
+				+ "other is a fixed-topology neural network — a dense continuous policy that "
+				+ "reads the whole sensor vector and writes the whole actuator vector in one "
+				+ "forward pass every tick, its weights heritable exactly like the program is. "
+				+ "A genome carries at most one, and the world seeds and floors both, so "
+				+ "whether a dense network out-evolves a sparse program under this economy is a "
+				+ "question selection answers rather than the designer.");
 		rows(s,
+				row("Substrates", "2", "",
+						"An LGP program or an MLP network, interchangeable behind the seam."),
 				row("Program", "up to " + num(Brain.MAX_LEN), "instructions",
-						"Heritable, and mutable in length as well as content."),
+						"The LGP mind: heritable, and mutable in length as well as content."),
 				row("Executed", num(Brain.DEFAULT_STEPS_PER_TICK), "instruction/tick",
 						"Program length is thinking TIME, not thinking power."),
 				row("Registers", num(Brain.NUM_REG), "",
 						"Persist across ticks; this is the memory."),
 				row("Opcodes", num(Brain.NUM_OPS), "", String.join(", ", Brain.OP_NAMES)),
 				row("Constant pool", num(Brain.CONST.length), "values", pool()),
-				row("Invalid programs", "none", "",
-						"Operands are masked at execution, so every mutation runs."),
+				row("Network", AgentIO.NUM_SENSORS + "→"
+						+ net.hedinger.prototype.entities.MlpBrain.HIDDEN + "→" + AgentIO.NUM_ACT,
+						"MLP", "The other substrate: one hidden layer, tanh, linear out; "
+						+ "weights heritable and mutated like any magnitude."),
+				row("Invalid minds", "none", "",
+						"LGP operands are masked and every network is a valid policy, so every "
+						+ "mutation of either runs."),
 				row("Randomness", "none", "",
 						"A mind draws no dice: the world is deterministic, and a seed plus a "
 						+ "command log replays it exactly."));

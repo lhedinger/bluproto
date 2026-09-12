@@ -120,7 +120,18 @@ public final class Worlds {
 		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
 		g.speed = 0.04 + Utils.random() * 0.03;
 		g.metabolism = 0.02;
-		g.brain = (index % 3 == 2) ? hitchhikerBrain() : starterBrain();
+		// The founder's mind substrate, by index so the cohort does not all begin
+		// with the same idea AND both decision methods are in the world from tick
+		// zero. A quarter run the MLP network (its forage prior is its warm seed,
+		// the way the starter brain is the LGP cohort's); of the rest, a third are
+		// LGP hitch-hikers and the others LGP foragers. The two substrates then
+		// compete under one economy — the A/B the whole minded cohort exists for.
+		int pick = index % 4;
+		if (pick == 3) {
+			g.mlp = net.hedinger.prototype.entities.MlpBrain.random();
+		} else {
+			g.brain = (pick == 2) ? hitchhikerBrain() : starterBrain();
+		}
 		return g;
 	}
 
@@ -314,7 +325,17 @@ public final class Worlds {
 	 * the same one-in-three proportion the founding cohort has.
 	 */
 	private static net.hedinger.prototype.entities.Genome founderReseed() {
-		return mindedGenome((int) (Utils.random() * 3));
+		// 0..3, so a reseed can draw any of the four founder minds — including the
+		// MLP substrate, which keeps the network cohort topped up rather than
+		// letting it fade out of the mix as bodies die.
+		return mindedGenome((int) (Utils.random() * 4));
+	}
+
+	/** A founder genome carrying the MLP substrate — the steward's MLP floor seeds
+	 *  these to keep the second decision method in the world. Index 3 is the MLP
+	 *  slot in {@link #mindedGenome(int)}. */
+	public static net.hedinger.prototype.entities.Genome mlpFounderGenome() {
+		return mindedGenome(3);
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
