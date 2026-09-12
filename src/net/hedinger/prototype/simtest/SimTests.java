@@ -3973,7 +3973,7 @@ public class SimTests {
 					a[AgentIO.A_THROTTLE] = 1.0; // run it down at full speed
 				}
 			};
-			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt);
+			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt).grown();
 			TestNPC prey = TestNPC.inert(11.5, 4.5, 0); // size 6 < 12, seven tiles off
 			w.spawnEntity(pred);
 			w.spawnEntity(prey);
@@ -6289,7 +6289,8 @@ public class SimTests {
 				double x = 2.5 + (i % 10) * 2.0, y = 2.5 + (i / 10) * 2.4;
 				// Hungry throughout: appetite is what grazes now, and the empty
 				// stomach holds more grass than the best champion ever crops.
-				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET)).withHunger(1.0);
+				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET)).grown()
+					.withoutMetabolism().withHunger(1.0);
 				w.spawnEntity(ag[i]);
 			}
 			w.think();
@@ -6461,7 +6462,7 @@ public class SimTests {
 			// smaller inert cargo (body 4) just inside grab reach. Reach is the sum
 			// of half-body-radii (~0.078 tiles here), so they start ~0.05 apart.
 			Genome g = Genome.phenotype(6, 0.05, 5, 6, Math.PI * 2, 3000);
-			TestNPC grabber = TestNPC.minded(8.0, 8.0, 0, g, new LgpMind(new Brain(deepCopy(grab)), 2));
+			TestNPC grabber = TestNPC.minded(8.0, 8.0, 0, g, new LgpMind(new Brain(deepCopy(grab)), 2)).grown();
 			TestNPC cargo = TestNPC.inert(8.05, 8.0, 0).withSize(4);
 			w.spawnEntity(grabber);
 			w.spawnEntity(cargo);
@@ -6538,8 +6539,8 @@ public class SimTests {
 			Genome kg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			kg.metabolism = 0.02;
 			kg.brain = new Brain(deepCopy(idle));
-			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).withEnergy(6.0);
-			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).withEnergy(6.0);
+			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withEnergy(6.0);
+			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withEnergy(6.0);
 			TestNPC cargo = TestNPC.inert(6.05, 6.0, 0).withSize(6);
 			w.spawnEntity(carrier);
 			w.spawnEntity(control);
@@ -6572,12 +6573,12 @@ public class SimTests {
 			carrierG.brain = new Brain(deepCopy(hold));
 			Genome captiveG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			captiveG.brain = new Brain(deepCopy(graze));
-			TestNPC carrier = TestNPC.minded(4.0, 6.0, 0, carrierG);
-			TestNPC captive = TestNPC.minded(4.05, 6.0, 0, captiveG).withHunger(1.0);
+			TestNPC carrier = TestNPC.minded(4.0, 6.0, 0, carrierG).grown();
+			TestNPC captive = TestNPC.minded(4.05, 6.0, 0, captiveG).grown().withHunger(1.0);
 			// Pair 2 (far away): a grazer rider on a bigger, stationary host.
 			Genome riderG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			riderG.brain = new Brain(deepCopy(rideGraze));
-			TestNPC rider = TestNPC.minded(15.05, 6.0, 0, riderG).withHunger(1.0);
+			TestNPC rider = TestNPC.minded(15.05, 6.0, 0, riderG).grown().withHunger(1.0);
 			TestNPC host = TestNPC.roamer(15.0, 6.0, 0).withSize(16).withSpeed(0.0);
 			w.spawnEntity(carrier);
 			w.spawnEntity(captive);
@@ -6611,10 +6612,10 @@ public class SimTests {
 			// Both starving: satiation zero switches regeneration off, so the only
 			// thing moving either tank is the burn being compared.
 			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG)
-					.withEnergy(6.0).withHunger(1.0);
+					.grown().withEnergy(6.0).withHunger(1.0);
 			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
 			TestNPC control = TestNPC.brainedBreeder(10.0, 6.0, 0, ctrlG)
-					.withEnergy(6.0).withHunger(1.0);
+					.grown().withEnergy(6.0).withHunger(1.0);
 			w.spawnEntity(rider);
 			w.spawnEntity(host);
 			w.spawnEntity(control);
@@ -6651,16 +6652,16 @@ public class SimTests {
 			capAG.brain = new Brain(deepCopy(hold));
 			Genome vicAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicAG.brain = new Brain(deepCopy(fight));
-			TestNPC captorA = TestNPC.brainedBreeder(4.0, 6.0, 0, capAG).withEnergy(9.0);
-			TestNPC struggler = TestNPC.minded(4.05, 6.0, 0, vicAG).withEnergy(6.0);
+			TestNPC captorA = TestNPC.brainedBreeder(4.0, 6.0, 0, capAG).grown().withEnergy(9.0);
+			TestNPC struggler = TestNPC.minded(4.05, 6.0, 0, vicAG).grown().withEnergy(6.0);
 			// Pair B (far off): captor + a consenting (limp) captive.
 			Genome capBG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			capBG.metabolism = 0.02;
 			capBG.brain = new Brain(deepCopy(hold));
 			Genome vicBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicBG.brain = new Brain(deepCopy(limp));
-			TestNPC captorB = TestNPC.brainedBreeder(15.0, 6.0, 0, capBG).withEnergy(9.0);
-			TestNPC consenter = TestNPC.minded(15.05, 6.0, 0, vicBG).withEnergy(6.0);
+			TestNPC captorB = TestNPC.brainedBreeder(15.0, 6.0, 0, capBG).grown().withEnergy(9.0);
+			TestNPC consenter = TestNPC.minded(15.05, 6.0, 0, vicBG).grown().withEnergy(6.0);
 			w.spawnEntity(captorA);
 			w.spawnEntity(struggler);
 			w.spawnEntity(captorB);
@@ -6692,8 +6693,8 @@ public class SimTests {
 			capG.brain = new Brain(deepCopy(hold));
 			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicG.brain = new Brain(deepCopy(signal));
-			TestNPC captor = TestNPC.minded(6.0, 6.0, 0, capG);
-			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG);
+			TestNPC captor = TestNPC.minded(6.0, 6.0, 0, capG).grown();
+			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG).grown();
 			w.spawnEntity(captor);
 			w.spawnEntity(captive);
 			tick(w, 6);
@@ -6723,8 +6724,8 @@ public class SimTests {
 			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicG.brain = new Brain(deepCopy(limp));
 			TestNPC captor = TestNPC.brainedBreeder(6.0, 6.0, 0, capG)
-					.withEnergy(0.6).withHunger(1.0); // starving: no regeneration
-			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG);
+					.grown().withEnergy(0.6).withHunger(1.0); // starving: no regeneration
+			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG).grown();
 			w.spawnEntity(captor);
 			w.spawnEntity(captive);
 			tick(w, 4);
@@ -8202,6 +8203,130 @@ public class SimTests {
 	}
 
 	/**
+	 * The gene schema owns heredity. Mutation, crossover, the flat vector and its
+	 * inverse all run off {@link net.hedinger.prototype.entities.GeneSchema}, so
+	 * this pins the properties that used to be spread across four hand-maintained
+	 * copies: every gene stays inside its declared bounds, a {@code NONE}-drift
+	 * gene is inherited without a draw, and the vector round-trips.
+	 */
+	static class GeneSchemaOwnsHeredity extends Scenario {
+		@Override
+		public void run() {
+			seed(140);
+			var genes = net.hedinger.prototype.entities.GeneSchema.genes();
+			assertGreater("the schema surveys a real gene set", genes.size(), 12);
+
+			// Mutation keeps every gene inside the bounds the schema declares, over
+			// many generations of a random walk that would otherwise wander out.
+			Genome g = Genome.random();
+			for (int gen = 0; gen < 500; gen++) {
+				net.hedinger.prototype.entities.GeneSchema.mutate(g, 0.3);
+			}
+			double[] v = net.hedinger.prototype.entities.GeneSchema.values(g);
+			for (int i = 0; i < genes.size(); i++) {
+				var gene = genes.get(i);
+				assertTrue("gene " + gene.key + " stayed within [" + gene.lo + "," + gene.hi
+						+ "] under drift (was " + v[i] + ")", v[i] >= gene.lo && v[i] <= gene.hi);
+			}
+
+			// The flat vector round-trips: apply(values(g)) is g.
+			Genome h = new Genome();
+			net.hedinger.prototype.entities.GeneSchema.apply(h, v);
+			double[] v2 = net.hedinger.prototype.entities.GeneSchema.values(h);
+			for (int i = 0; i < v.length; i++) {
+				assertNear("gene " + genes.get(i).key + " round-trips through the vector",
+						v[i], v2[i], 1e-9);
+			}
+
+			// Determinism: the same seed and rate mutate identically — the schema
+			// draws one random per drifting gene, in declaration order. Each run
+			// re-seeds so the random()+mutate() draws line up from the same start.
+			seed(141);
+			Genome a2 = Genome.random();
+			net.hedinger.prototype.entities.GeneSchema.mutate(a2, 0.2);
+			seed(141);
+			Genome b2 = Genome.random();
+			net.hedinger.prototype.entities.GeneSchema.mutate(b2, 0.2);
+			assertNear("mutation is deterministic (size)", a2.size, b2.size, 0);
+			assertNear("mutation is deterministic (determination)", a2.determination,
+					b2.determination, 0);
+
+			// A NONE-drift gene (locomotion) is inherited, never jittered: crossover
+			// of two fliers stays flying, and mutation never flips it.
+			Genome flyA = new Genome();
+			flyA.flying = true;
+			Genome flyB = new Genome();
+			flyB.flying = true;
+			Genome kid = Genome.child(flyA, flyB, 0.5);
+			assertTrue("a NONE-drift gene is inherited by crossover", kid.flying);
+			boolean flipped = false;
+			for (int i = 0; i < 200; i++) {
+				net.hedinger.prototype.entities.GeneSchema.mutate(kid, 0.5);
+				flipped |= !kid.flying;
+			}
+			assertTrue("and mutation never flips it", !flipped);
+		}
+	}
+
+	/**
+	 * Expression is now the one place a clade's physics is imposed, and it is
+	 * imposed every generation rather than stamped onto a founder. This pins the
+	 * two leaks the unification closed: a scavenger's ranging stride is inherited
+	 * (its child ranges too), and a clade's size invariant holds whatever the
+	 * size gene drifts to (a parasite genome bred huge still expresses small).
+	 */
+	static class ExpressionImposesTheCladeEveryGeneration extends Scenario {
+		@Override
+		public void run() {
+			seed(142);
+
+			// A herbivore expresses its genome speed; a scavenger of the SAME genome
+			// expresses it scaled by the ranging stride — and the stride rides the
+			// clade, so it is present on any body of that clade, founder or child.
+			Genome base = new Genome();
+			base.speed = 0.05;
+			base.size = 10;
+			TestNPC herb = TestNPC.mindedForager(5.5, 5.5, 0, base.copy());
+			TestNPC scav = TestNPC.mindedScavenger(6.5, 5.5, 0, base.copy());
+			assertNear("a herbivore expresses its genome speed", 0.05, herb.bodySpeed(), 1e-9);
+			assertGreater("a scavenger of the same genome ranges faster",
+					scav.bodySpeed(), herb.bodySpeed() + 1e-6);
+			assertNear("by exactly the ranging stride",
+					0.05 * TestNPC.SCAVENGER_STRIDE, scav.bodySpeed(), 1e-9);
+
+			// A scavenger's CHILD (a fresh minded body built from the inherited
+			// genome, clade carried in it) ranges too — the leak was that only the
+			// founder did.
+			Genome childG = Genome.child(scav.getGenome(), 0.0); // no drift: isolate expression
+			TestNPC scavChild = TestNPC.mindedForager(7.5, 5.5, 0, childG);
+			assertNear("the scavenger's child inherits the ranging stride",
+					0.05 * TestNPC.SCAVENGER_STRIDE, scavChild.bodySpeed(), 1e-6);
+
+			// A parasite genome bred to a giant size still expresses a small body,
+			// every generation, because the cap is an expression invariant and not a
+			// one-time clamp on the founder's genome.
+			Genome giant = new Genome();
+			giant.size = Genome.SIZE_MAX; // 20 px: far above the parasite cap
+			TestNPC para = TestNPC.mindedParasite(10.5, 10.5, 0, giant).grown();
+			assertTrue("a parasite body stays under its size cap however big its gene is",
+					para.getPixelSize() <= TestNPC.PARASITE_MAX_SIZE_PX);
+			Genome paraChildG = Genome.child(para.getGenome(), 0.0);
+			assertTrue("the size gene it inherits is still huge (unclamped in the genome)",
+					paraChildG.size >= Genome.SIZE_MAX - 1e-6);
+			TestNPC paraChild = TestNPC.mindedParasite(11.5, 10.5, 0, paraChildG).grown();
+			assertTrue("yet the child's body is capped too — the invariant holds every "
+					+ "generation", paraChild.getPixelSize() <= TestNPC.PARASITE_MAX_SIZE_PX);
+
+			// A hunter is floored large the same way.
+			Genome tiny = new Genome();
+			tiny.size = Genome.SIZE_MIN; // 4 px: below the hunting floor
+			TestNPC hunter = TestNPC.mindedPredator(15.5, 15.5, 0, tiny).grown();
+			assertTrue("a hunter body is floored to its hunting size however small its gene",
+					hunter.getPixelSize() >= TestNPC.PREDATOR_MIN_SIZE_PX);
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -8387,9 +8512,9 @@ public class SimTests {
 			// Brainless genomes -> inert minds: metabolic bodies that never move.
 			// Tanks full, so the mint only covers the resting burn.
 			TestNPC drinker = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
-					.withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().withEnergy(4.5).withReproCooldown(100_000_000);
 			TestNPC dry = TestNPC.brainedBreeder(7.5, 3.5, 0, new Genome())
-					.withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().withEnergy(4.5).withReproCooldown(100_000_000);
 			w.spawnEntity(drinker);
 			w.spawnEntity(dry);
 			w.think();
@@ -8440,7 +8565,7 @@ public class SimTests {
 			}
 			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
 			TestNPC g = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
-					.withHunger(1.0).withEnergy(0.5).withReproCooldown(100_000_000);
+					.grown().withHunger(1.0).withEnergy(0.5).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
 			w.think();
 			double meal = 2.0;
@@ -11277,6 +11402,8 @@ public class SimTests {
 				new TheEmitterFiresAtTheRangeItClaims(),
 				new TheDroneKillsAQuarryThatKeepsWalking(),
 				new GenomeSavefileRoundTrips(),
+				new GeneSchemaOwnsHeredity(),
+				new ExpressionImposesTheCladeEveryGeneration(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),

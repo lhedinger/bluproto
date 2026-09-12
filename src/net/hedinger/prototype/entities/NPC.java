@@ -163,6 +163,17 @@ public abstract class NPC extends Entity {
 		return Math.min(1.0, -age / (double) deathspan);
 	}
 
+	/** Snaps a growing body to its adult size at once — no economy is charged, so
+	 *  this is a fixture convenience (a scenario that wants a grown body without
+	 *  ticking one up), NOT something the living world does: there, flesh is grown
+	 *  a priced step at a time. */
+	protected void finishGrowth() {
+		if (adultSize > 0) {
+			grownSize = adultSize;
+			size = (int) Math.round(grownSize);
+		}
+	}
+
 	/** True while this body is still growing into its adult size. */
 	public boolean isJuvenile() {
 		return adultSize > 0 && grownSize < adultSize;
