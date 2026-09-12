@@ -8,6 +8,7 @@
 // explains itself; /sprites still redirects here. Sections that document
 // mechanics rather than art belong here too.
 
+import './docs.css'; // the skin all three documentation pages share
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
   tintedFor,

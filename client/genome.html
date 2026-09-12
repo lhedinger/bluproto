@@ -14,9 +14,13 @@
   write. Each figure is read off the <b>running simulation's own constants</b>, never
   transcribed. What a body then <i>costs</i>, and the hard limits no mind can override,
   live on <a href="/help/body">the body page</a>.</p>
-  <nav class="nav" id="pagenav"><span id="nav-doc"></span><a class="ext"
-    href="/help">← help</a><a class="ext" href="/help/body">the body →</a><a class="ext"
-    href="/tiles">the tile catalog →</a></nav>
+  <nav class="nav" id="pagenav">
+    <button type="button" id="navtoggle" aria-expanded="false"
+      aria-controls="navlinks">contents</button>
+    <div class="links" id="navlinks"><span id="nav-doc"></span><a class="ext"
+      href="/help">← help</a><a class="ext" href="/help/body">the body →</a><a class="ext"
+      href="/tiles">the tile catalog →</a></div>
+  </nav>
   <div id="root"></div>
   <script type="module" src="/src/genome.ts"></script>
 </body>
