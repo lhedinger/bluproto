@@ -8454,6 +8454,67 @@ public class SimTests {
 	}
 
 	/**
+	 * Capability is priced. Keen sight, a quick turn and a long brain are metabolic
+	 * tissue, charged at the margin around a reference genome — so a body at the
+	 * defaults burns the base rate, a keener/bigger-brained one burns more, and a
+	 * myopic/simple one saves, bounded below so nothing exists for free. Measured
+	 * as energy drained from a resting, starving, motionless body (no movement, no
+	 * regeneration), so the drop is pure burn.
+	 */
+	static class CapabilityCostsMetabolism extends Scenario {
+		private double burnOver(World w, Genome g, int ticks) {
+			// Resting: an inert mind never moves. Starving (hunger 1) switches
+			// regeneration off, so energy only falls, by the resting burn.
+			TestNPC b = TestNPC.minded(5.5, 5.5, 0, g).grown().withEnergy(5.0).withHunger(1.0);
+			w.spawnEntity(b);
+			double e0 = b.getEnergy();
+			tick(w, ticks);
+			return e0 - b.getEnergy();
+		}
+
+		@Override
+		public void run() {
+			seed(145);
+			int T = 300;
+
+			// Sight: a keen body (wide range) burns more than a plain one of equal
+			// size and metabolism.
+			Genome plain = new Genome();
+			plain.size = 10;
+			Genome keen = new Genome();
+			keen.size = 10;
+			keen.losRange = 30; // far above the reference 10
+			double plainBurn = burnOver(room(12, 12), plain, T);
+			double keenBurn = burnOver(room(12, 12), keen, T);
+			assertGreater("both resting bodies burned something", plainBurn, 0.0);
+			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * 1.15);
+
+			// Brain: a long program burns more than a short one, same body.
+			Genome simple = new Genome();
+			simple.size = 10;
+			simple.brain = net.hedinger.prototype.entities.Brain.random(4);
+			Genome deep = new Genome();
+			deep.size = 10;
+			deep.brain = net.hedinger.prototype.entities.Brain.random(60);
+			double simpleBurn = burnOver(room(12, 12), simple, T);
+			double deepBurn = burnOver(room(12, 12), deep, T);
+			assertGreater("a long brain costs metabolism", deepBurn, simpleBurn * 1.1);
+
+			// The floor holds: a near-blind, tiny-brained, sluggish body still pays to
+			// exist — its burn does not collapse toward zero.
+			Genome frugal = new Genome();
+			frugal.size = 10;
+			frugal.losRange = 1;
+			frugal.losFov = 0.2;
+			frugal.turnRate = 1;
+			frugal.brain = net.hedinger.prototype.entities.Brain.random(1);
+			double frugalBurn = burnOver(room(12, 12), frugal, T);
+			assertGreater("even a frugal body pays the burn floor", frugalBurn, plainBurn * 0.4);
+			assertLess("but it does save against a reference body", frugalBurn, plainBurn);
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -11533,6 +11594,7 @@ public class SimTests {
 				new ExpressionImposesTheCladeEveryGeneration(),
 				new TheNicheCardIsTheCladesData(),
 				new DispositionsScaleWhatTheMindHears(),
+				new CapabilityCostsMetabolism(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
