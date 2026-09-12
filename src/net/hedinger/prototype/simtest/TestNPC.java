@@ -305,6 +305,36 @@ public class TestNPC extends NPC {
 	@Unit("energy per bite")
 	public static final double BITE_ENERGY = 0.03;
 
+	// --- the modulation layer: disposition genes as sensor gains ---------------
+	// The four disposition genes (predatory, xenophobia, gregariousness, boldness)
+	// were inherited and mutated but read by nothing on a minded body — dead
+	// weight the brain had quietly taken over. They come back here as HERITABLE
+	// SENSOR GAINS: a scale on the prey, threat and kin proximity channels applied
+	// between the body's senses and the mind's eyes. A high-predatory lineage sees
+	// prey as louder, a xenophobic one sees threats as nearer, a gregarious one
+	// feels its kin more strongly, and a bold one discounts danger. This is a
+	// gradient a lineage can climb by drift alone, without spending one of its
+	// scarce brain instructions on the same multiply — instinct in the genome,
+	// deliberation in the mind, and the mind still free to override by reading the
+	// raw channel and scaling it back.
+
+	/** How sharply a disposition gene bends its channel's gain. The gain is
+	 *  {@code exp(K*(gene - pivot))}, so at the pivot the gain is 1 (no change)
+	 *  and it moves multiplicatively either side — symmetric in log space, which
+	 *  is the honest shape for a "louder/quieter" knob. */
+	@Unit("gain exponent")
+	public static double SENSE_GAIN_K = 0.5;
+	/** The gain is clamped to this band, so no disposition, however far it has
+	 *  drifted, can blind a body to a channel or make one scream. */
+	@Unit("x channel")
+	public static double SENSE_GAIN_MIN = 0.5, SENSE_GAIN_MAX = 2.0;
+	/** The disposition value a founder averages, where the gain is neutral. The
+	 *  three broad drives are drawn uniformly on [0,1] (pivot 0.5); boldness is
+	 *  drawn narrower and low (pivot 0.15), so an average founder of either sort
+	 *  reads its world unscaled and only drift tips the balance. */
+	@Unit("gene value")
+	public static double DISPOSITION_PIVOT = 0.5, BOLDNESS_PIVOT = 0.15;
+
 	private final Behavior behavior;
 	private double speed = 0.04;
 	private int turn = 5;
@@ -1982,6 +2012,38 @@ public class TestNPC extends NPC {
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
 		attentionDropped.clear();
 		limitAttention(s); // ...of which only as many as this mind can hold survive
+		modulateSenses(s); // ...and the survivors scaled by this lineage's dispositions
+	}
+
+	/** A disposition gene's channel gain: {@code exp(K*(gene - pivot))} clamped to
+	 *  the gain band. At the pivot it is 1, so an average founder reads the channel
+	 *  unscaled; drift bends it up or down, bounded so nothing is ever blinded. */
+	private static double senseGain(double gene, double pivot) {
+		double g = Math.exp(SENSE_GAIN_K * (gene - pivot));
+		return g < SENSE_GAIN_MIN ? SENSE_GAIN_MIN : (g > SENSE_GAIN_MAX ? SENSE_GAIN_MAX : g);
+	}
+
+	/**
+	 * Scales the prey, threat and kin proximity channels by this body's
+	 * dispositions — the modulation layer that makes the four otherwise-dead
+	 * disposition genes live again for a minded body. Predatory amplifies prey,
+	 * xenophobia amplifies threat, boldness discounts it, and gregariousness
+	 * amplifies kin. Only the proximity (loudness) is scaled, never the bearing:
+	 * a disposition changes how urgent a thing feels, not which way it lies. The
+	 * gains are strictly positive, so a channel that carried a signal still does —
+	 * a body is never blinded, only made more or less attentive.
+	 */
+	private void modulateSenses(double[] s) {
+		if (genome == null) {
+			return;
+		}
+		double threat = senseGain(genome.xenophobia, DISPOSITION_PIVOT)
+				/ senseGain(genome.boldness, BOLDNESS_PIVOT);
+		threat = threat < SENSE_GAIN_MIN ? SENSE_GAIN_MIN
+				: (threat > SENSE_GAIN_MAX ? SENSE_GAIN_MAX : threat);
+		s[AgentIO.S_PREY_PROX] *= senseGain(genome.predatory, DISPOSITION_PIVOT);
+		s[AgentIO.S_THREAT_PROX] *= threat;
+		s[AgentIO.S_KIN_PROX] *= senseGain(genome.gregariousness, DISPOSITION_PIVOT);
 	}
 
 	/** Fills the wider-range hunt/flee/kin channels plus body-state and obstacle
