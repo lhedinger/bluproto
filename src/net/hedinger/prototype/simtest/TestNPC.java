@@ -227,16 +227,11 @@ public class TestNPC extends NPC {
 	 *  parents actually paid, minus the meat-priced body — see {@link #endow}. */
 	@Unit("of the tank")
 	public static double BORN_FRACTION = 0.6;
-	/** Fraction of the tank that has to be full before a creature will breed. A
-	 *  big body's tank is bigger, so a big creature must eat more, not merely as
-	 *  much, before it reproduces. */
-	@Unit("of the tank")
-	public static double REPRO_FRACTION = 0.75;
-	/** Fraction of the tank each parent spends on an offspring. Below
-	 *  {@link #REPRO_FRACTION}, so breeding leaves a parent alive and fed rather
-	 *  than emptied. */
-	@Unit("of the tank")
-	public static double REPRO_COST_FRACTION = 0.5;
+	// The breeding threshold and per-offspring cost were global constants here;
+	// they are now per-lineage genes (Genome.reproFraction / reproCostFraction),
+	// the r/K axis made heritable — see configureGenomeBody, which reads the
+	// genome. A default genome's values (0.75 / 0.5) are the reference lineage's,
+	// which is what the reference page reports.
 	/** Window (ticks) over which a hunter's NET displacement is measured to spot a
 	 *  pin. A trailing ring is sampled EVERY tick (not a free-running counter), so
 	 *  a pin is caught within one window rather than up to two — the difference
@@ -621,6 +616,7 @@ public class TestNPC extends NPC {
 		configureGenomeBody(t, g);
 		mindedPerception(t, g);
 		t.mind = mind;
+		t.seedInstinct(); // a born-in foraging drive the mind can override
 		return t;
 	}
 
@@ -874,9 +870,32 @@ public class TestNPC extends NPC {
 		// energyCapacity() is anchored on the adult body, so these are unchanged by
 		// the creature being born a juvenile — growth is physical, not economic.
 		t.energy = BORN_FRACTION * t.energyCapacity();
-		t.reproThreshold = REPRO_FRACTION * t.energyCapacity();
-		t.reproCost = REPRO_COST_FRACTION * t.energyCapacity();
+		// The reproductive strategy is the lineage's own now (see Genome life
+		// history), not one number shared by the whole world: how full a tank it
+		// breeds off and how much it spends per child are genes, so r- and
+		// K-strategists can both evolve. Birth conserves energy, so whatever a
+		// lineage picks, the books still balance.
+		t.reproThreshold = g.reproFraction * t.energyCapacity();
+		t.reproCost = g.reproCostFraction * t.energyCapacity();
 		t.col = g.toColor();
+	}
+
+	/** The forage-intent value seeded into a newborn's steering by its
+	 *  {@link Genome#instinct} — a magnitude squarely inside the SEEK_FORAGE band,
+	 *  so the born instinct is "look for food". */
+	private static final double INSTINCT_FORAGE = 0.1;
+
+	/** Seeds a minded newborn's actuators from its instinct gene, so a body with a
+	 *  born-in foraging drive starts seeking food before its mind decides anything.
+	 *  The brain overrides via the actuators' normal persistence the moment it
+	 *  writes, so an evolved mind is untouched and only a silent (random or blank)
+	 *  one keeps the instinct. Zero instinct seeds nothing — a default genome's
+	 *  body starts with the blank actuator vector it always had. */
+	private void seedInstinct() {
+		if (genome != null && genome.instinct > 0) {
+			actuators[AgentIO.A_SEEK] = INSTINCT_FORAGE;
+			actuators[AgentIO.A_THROTTLE] = genome.instinct;
+		}
 	}
 
 	/**
@@ -3552,12 +3571,10 @@ public class TestNPC extends NPC {
 	@Unit("hunger level")
 	public static double BORN_HUNGER = 0.9;
 
-	/** How far each gene drifts at birth: the {@code rate} both offspring paths
-	 *  hand {@link Genome#child} — one number, so the two ways of being born
-	 *  mutate alike. It was a literal at each call site, which is the quiet way
-	 *  for asexual and sexual lineages to end up evolving at different speeds. */
-	@Unit("± per gene at birth")
-	public static double MUTATION_RATE = 0.1;
+	// How hard a birth mutates its offspring is a per-lineage gene now
+	// (Genome.mutationRate), so evolvability is itself under selection — meta-
+	// evolution, bounded. Both offspring paths hand the parent's own rate to
+	// Genome.child, which keeps the two ways of being born mutating alike.
 
 	/**
 	 * Opens a newborn's books so that birth conserves energy: everything the
@@ -3594,7 +3611,7 @@ public class TestNPC extends NPC {
 		}
 		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
 		// genome carries a brain, Genome.child mutates the inherited program too.
-		Genome childG = Genome.child(genome, MUTATION_RATE);
+		Genome childG = Genome.child(genome, genome.mutationRate);
 		TestNPC child;
 		if (behavior == Behavior.MINDED) {
 			child = brainedBreeder(X, Y, Z, childG);
@@ -3616,7 +3633,7 @@ public class TestNPC extends NPC {
 		// Sexual: a mutated crossover of both parents' genomes (including their
 		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
-				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), MUTATION_RATE);
+				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), genome.mutationRate);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
 		endow(child, reproCost + (partner instanceof TestNPC tp ? tp.reproCost : reproCost));

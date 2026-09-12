@@ -2413,9 +2413,9 @@ public class SimTests {
 					Long.parseLong(food.get(0).get(4)), Long.parseLong(grow.get(0).get(2)));
 
 			// Percentages come from the fractions the founder setup actually applies.
-			assertTrue("the breeding threshold is the one the world uses",
+			assertTrue("the breeding threshold is the reference lineage's gene",
 					find(secs, "breeding", "Breeds above")
-					.startsWith(pctOf(TestNPC.REPRO_FRACTION)));
+					.startsWith(pctOf(new Genome().reproFraction)));
 			assertTrue("the born-at fraction is the one the world uses",
 					find(secs, "tank", "Born holding").startsWith(pctOf(TestNPC.BORN_FRACTION)));
 			assertTrue("the tick rate is the one the world runs at",
@@ -8515,6 +8515,87 @@ public class SimTests {
 	}
 
 	/**
+	 * Life history is a per-lineage strategy, not one number the whole world
+	 * shares. The r/K axis (how full a tank a lineage breeds off, how much it
+	 * spends per child), its evolvability (mutation rate), and a born-in foraging
+	 * instinct are all genes now — safe to free because birth conserves energy, so
+	 * whatever a lineage picks the books still balance.
+	 */
+	static class LifeHistoryIsAStrategy extends Scenario {
+		@Override
+		public void run() {
+			seed(146);
+
+			// r/K: a body that breeds off a thin reserve has a lower breeding
+			// threshold than one that banks a buffer, on an identical body.
+			Genome rG = new Genome();
+			rG.size = 10;
+			rG.reproFraction = 0.4; // breed early
+			Genome kG = new Genome();
+			kG.size = 10;
+			kG.reproFraction = 0.9; // bank first
+			TestNPC r = TestNPC.minded(3.5, 3.5, 0, rG).grown();
+			TestNPC k = TestNPC.minded(6.5, 3.5, 0, kG).grown();
+			assertGreater("a K-strategist breeds off a fuller tank than an r-strategist",
+					k.reproThreshold(), r.reproThreshold() * 1.5);
+			// And the per-offspring investment is the lineage's gene.
+			Genome cheapG = new Genome();
+			cheapG.size = 10;
+			cheapG.reproCostFraction = 0.2;
+			Genome dearG = new Genome();
+			dearG.size = 10;
+			dearG.reproCostFraction = 0.8;
+			assertGreater("a dear-investing lineage spends more per child",
+					TestNPC.minded(9.5, 3.5, 0, dearG).grown().reproCost(),
+					TestNPC.minded(12.5, 3.5, 0, cheapG).grown().reproCost() * 1.5);
+
+			// Evolvability: a high-mutation lineage scatters its children's genes
+			// wider than a placid one. (spawnOffspring hands Genome.child the
+			// parent's own rate; here we drive Genome.child the same way.)
+			seed(147);
+			Genome placid = new Genome();
+			placid.mutationRate = 0.02;
+			Genome volatile_ = new Genome();
+			volatile_.mutationRate = 0.4;
+			double placidSpread = sizeSpread(placid);
+			double volatileSpread = sizeSpread(volatile_);
+			assertGreater("a high-mutation lineage varies its children more",
+					volatileSpread, placidSpread * 3.0);
+
+			// Instinct: a body with a foraging drive is born seeking food; one with
+			// none starts with the blank actuator vector.
+			Genome eagerG = new Genome();
+			eagerG.instinct = 0.8;
+			Genome blankG = new Genome();
+			blankG.instinct = 0.0;
+			TestNPC eager = TestNPC.minded(3.5, 8.5, 0, eagerG);
+			TestNPC blank = TestNPC.minded(6.5, 8.5, 0, blankG);
+			double[] eagerAct = eager.actuatorSnapshot();
+			assertGreater("an instinct-driven newborn is already seeking",
+					Math.abs(eagerAct[AgentIO.A_SEEK]), 0.05);
+			assertNear("at a throttle set by the instinct gene", 0.8,
+					eagerAct[AgentIO.A_THROTTLE], 1e-9);
+			assertNear("a body with no instinct starts blank (seek)", 0.0,
+					blank.actuatorSnapshot()[AgentIO.A_SEEK], 1e-9);
+		}
+
+		/** The standard deviation of size across many mutated children of one
+		 *  parent, driven at the parent's own mutation rate — how widely the
+		 *  lineage scatters. */
+		private double sizeSpread(Genome parent) {
+			int n = 200;
+			double sum = 0, sumSq = 0;
+			for (int i = 0; i < n; i++) {
+				Genome c = Genome.child(parent, parent.mutationRate);
+				sum += c.size;
+				sumSq += c.size * c.size;
+			}
+			double mean = sum / n;
+			return Math.sqrt(Math.max(0, sumSq / n - mean * mean));
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -8881,8 +8962,8 @@ public class SimTests {
 					+ String.format("%.2f", kidWorth) + ") is at most what both parents paid ("
 					+ String.format("%.2f", pa.reproCost() + pb.reproCost()) + ")",
 					kidWorth <= pa.reproCost() + pb.reproCost() + 0.01);
-			assertTrue("and a well-funded birth is still born below the breeding line",
-					kid.getEnergy() < TestNPC.REPRO_FRACTION * kid.energyCapacity());
+			assertTrue("and a well-funded birth is still born below its own breeding line",
+					kid.getEnergy() < kid.getGenome().reproFraction * kid.energyCapacity());
 		}
 	}
 
@@ -11595,6 +11676,7 @@ public class SimTests {
 				new TheNicheCardIsTheCladesData(),
 				new DispositionsScaleWhatTheMindHears(),
 				new CapabilityCostsMetabolism(),
+				new LifeHistoryIsAStrategy(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
