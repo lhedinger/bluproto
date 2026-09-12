@@ -8327,6 +8327,58 @@ public class SimTests {
 	}
 
 	/**
+	 * The niche card carries a clade's ecosystem data, and it is the same data
+	 * the body acts on — so this checks the card against the constants it is built
+	 * from and against what a body of that clade actually expresses, closing the
+	 * gap the scattered {@code clade ==} branches left open (a stride in one place,
+	 * a diet dispatch in another, nothing checking they agreed).
+	 */
+	static class TheNicheCardIsTheCladesData extends Scenario {
+		@Override
+		public void run() {
+			seed(143);
+			// Each clade maps to a distinct diet, and the diet is what the forage
+			// sense and the terminal act are chosen by.
+			assertTrue("herbivore grazes",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.HERBIVORE).grazes());
+			assertTrue("predator hunts",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR).hunts());
+			assertTrue("scavenger scavenges",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.SCAVENGER).scavenges());
+			assertTrue("parasite drains",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PARASITE).drains());
+
+			// Only the parasite is off the menu; the size ratio a hunter reaches by
+			// is the card's, not a constant buried in a sense.
+			assertTrue("a parasite is not huntable",
+					!net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PARASITE).isHuntable());
+			assertTrue("a grazer is huntable",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.HERBIVORE).isHuntable());
+			assertNear("the hunter's prey-size reach is the card's ratio",
+					TestNPC.PRED_MAX_PREY_RATIO,
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR).preySizeRatio(), 0);
+
+			// The card's stride and size invariant are exactly what a body of that
+			// clade expresses (already pinned behaviourally in
+			// ExpressionImposesTheCladeEveryGeneration; here against the card).
+			var scav = net.hedinger.prototype.simtest.Niche.of(Genome.Clade.SCAVENGER);
+			assertNear("the scavenger card carries the ranging stride",
+					TestNPC.SCAVENGER_STRIDE, scav.strideFactor(), 0);
+			assertNear("and the discounted travel bill",
+					TestNPC.SCAVENGER_TRAVEL, scav.travelFactor(), 0);
+			assertTrue("a parasite card caps the body under its hosts",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PARASITE)
+							.expressedSize(Genome.SIZE_MAX) <= TestNPC.PARASITE_MAX_SIZE_PX);
+			assertTrue("a predator card floors the body large enough to hunt",
+					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR)
+							.expressedSize(Genome.SIZE_MIN) >= TestNPC.PREDATOR_MIN_SIZE_PX);
+			// A roleless fixture (null clade) grazes — the harmless default.
+			assertTrue("a null clade grazes",
+					net.hedinger.prototype.simtest.Niche.of(null).grazes());
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -11404,6 +11456,7 @@ public class SimTests {
 				new GenomeSavefileRoundTrips(),
 				new GeneSchemaOwnsHeredity(),
 				new ExpressionImposesTheCladeEveryGeneration(),
+				new TheNicheCardIsTheCladesData(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
