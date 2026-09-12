@@ -699,7 +699,7 @@ public class TestNPC extends NPC {
 	 */
 	public static TestNPC mindedPredator(double x, double y, double z, Genome g) {
 		// The hunting-size floor is now an EXPRESSION invariant (see
-		// cladeExpressedSize), imposed every generation rather than clamped once
+		// Niche.expressedSize), imposed every generation rather than clamped once
 		// into this founder's genome — so a hunter body is always big enough to
 		// hunt with, whatever its size gene has drifted to.
 		return mindedOfClade(x, y, z, g, Genome.Clade.PREDATOR);
@@ -731,7 +731,7 @@ public class TestNPC extends NPC {
 	@Override
 	protected void run_extended() {
 		super.run_extended(); // the four books first (needs, regen, health)
-		if (clade == Genome.Clade.PARASITE && !isDead()) {
+		if (niche().drains() && !isDead()) {
 			parasiteFeed();
 		}
 	}
@@ -801,41 +801,18 @@ public class TestNPC extends NPC {
 		return g.brain != null ? new LgpMind(g.brain) : INERT_MIND;
 	}
 
-	/**
-	 * How much faster than its genome a clade's body moves. A scavenger's living
-	 * is made by ranging, so it strides {@link #SCAVENGER_STRIDE} times its
-	 * genome speed; every other clade takes its speed as written.
-	 *
-	 * <p>Applied at <em>expression</em> — every time a body is built, founder and
-	 * child alike — rather than stamped into one founder's genome. That was the
-	 * leak: the stride lived in {@code mindedScavenger} only, so a reseeded
-	 * scavenger ranged fast and its own children reverted to plain genome speed,
-	 * and selection could never touch a trait no genome carried. Deriving it from
-	 * the clade at build time makes it true for the whole lineage. (Step 2 moves
-	 * this into {@link Genome.Clade} itself.)
-	 */
-	static double cladeStride(Genome.Clade clade) {
-		return clade == Genome.Clade.SCAVENGER ? SCAVENGER_STRIDE : 1.0;
+	/** This body's niche — the ecosystem card for its clade (diet, stride, size
+	 *  invariant, prey reach). The one place a body asks what its clade does,
+	 *  rather than testing the clade in a dozen branches. */
+	Niche niche() {
+		return Niche.of(clade);
 	}
 
-	/**
-	 * The adult body size a clade actually grows to, in pixels, given the genome
-	 * it carries — the clade's physical invariant imposed at expression rather
-	 * than clamped once into a founder's genome. A parasite's body is capped so it
-	 * stays smaller than its hosts; a hunter's is floored so the herd is on its
-	 * menu. The genome's own {@code size} gene is free to drift across the whole
-	 * band; what a given clade makes of it is bounded here, EVERY generation, so
-	 * the niche invariant cannot erode as the gene random-walks past the cap the
-	 * founder was clamped to. (Step 2 moves this onto the clade.)
-	 */
-	static double cladeExpressedSize(Genome.Clade clade, double genomeSize) {
-		if (clade == Genome.Clade.PARASITE) {
-			return Math.min(genomeSize, PARASITE_MAX_SIZE_PX);
-		}
-		if (clade == Genome.Clade.PREDATOR) {
-			return Math.max(genomeSize, PREDATOR_MIN_SIZE_PX);
-		}
-		return genomeSize;
+	/** The niche of another body, for the rules that read a neighbour's clade
+	 *  (what is quarry, what a parasite may ride). Non-{@link TestNPC} bodies
+	 *  (the drone) have no niche; they are never food and never a host. */
+	private static Niche nicheOf(NPC n) {
+		return n instanceof TestNPC t ? Niche.of(t.clade) : null;
 	}
 
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
@@ -846,7 +823,7 @@ public class TestNPC extends NPC {
 		// what this clade can physically be — a cap or a floor imposed here, at
 		// every birth, so the invariant holds for the whole lineage and not just
 		// the founder whose genome was once clamped.
-		double adult = cladeExpressedSize(g.clade, g.size);
+		double adult = Niche.of(g.clade).expressedSize(g.size);
 		t.beginGrowth(adult);
 		// A body takes as long to rot away as it took to build: the corpse span IS
 		// the childhood, read off the same two growth constants rather than a
@@ -858,7 +835,7 @@ public class TestNPC extends NPC {
 		t.deathspan = growthTicks(adult);
 		// Speed is the genome's, scaled by what the clade does with it — a ranging
 		// factor derived here so a lineage keeps it, not a founder-only stamp.
-		t.speed = g.speed * cladeStride(g.clade);
+		t.speed = g.speed * Niche.of(g.clade).strideFactor();
 		t.turn = g.turnRate;
 		t.metabolic = true;
 		// Energy scales are all derived from body size (see NPC's size-scaled model):
@@ -942,10 +919,10 @@ public class TestNPC extends NPC {
 	public TestNPC withClade(Genome.Clade d) {
 		clade = d;
 		if (genome != null) {
-			genome.clade = d == Genome.Clade.SCAVENGER ? net.hedinger.prototype.entities.Genome.Clade.SCAVENGER
-					: d == Genome.Clade.PREDATOR ? net.hedinger.prototype.entities.Genome.Clade.PREDATOR
-							: d == Genome.Clade.PARASITE ? net.hedinger.prototype.entities.Genome.Clade.PARASITE
-									: net.hedinger.prototype.entities.Genome.Clade.HERBIVORE;
+			// Genome.Clade IS net.hedinger.prototype.entities.Genome.Clade — the body
+			// and the genome name the same enum — so the clade writes straight
+			// through. This used to be a four-way map from the type to itself.
+			genome.clade = d;
 		}
 		return this;
 	}
@@ -1546,7 +1523,7 @@ public class TestNPC extends NPC {
 		for (NPC n : getWorld().census().creatures(getLvl())) {
 			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
 					|| !n.isOrganic() // no blood in a machine: nothing to ride and nothing to drink
-					|| (n instanceof TestNPC tn && tn.clade == Genome.Clade.PARASITE)) {
+					|| (nicheOf(n) != null && nicheOf(n).drains())) {
 				continue;
 			}
 			double d = distance(n.getX(), n.getY(), n.getZ());
@@ -1597,10 +1574,10 @@ public class TestNPC extends NPC {
 		if (n.getSize() > preyCeiling() || !n.isOrganic()) {
 			return false;
 		}
-		if (n instanceof TestNPC tp && tp.clade == Genome.Clade.PARASITE) {
-			return false;
+		if (nicheOf(n) != null && !nicheOf(n).isHuntable()) {
+			return false; // a parasite is not quarry: too small and too foul
 		}
-		return cannibal || !(n instanceof TestNPC tn && tn.ecoClade() == Genome.Clade.PREDATOR);
+		return cannibal || !(n instanceof TestNPC tn && Niche.of(tn.ecoClade()).hunts());
 	}
 
 	/**
@@ -2001,7 +1978,7 @@ public class TestNPC extends NPC {
 		// separately they are two hunting policies wearing one animal's face:
 		// whichever word a lineage happens to evolve decides whether it commits to
 		// a quarry or chases whatever drifted closest.
-		huntPick = clade == Genome.Clade.PREDATOR ? scanPrey(false) : null;
+		huntPick = niche().hunts() ? scanPrey(false) : null;
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
 		attentionDropped.clear();
 		limitAttention(s); // ...of which only as many as this mind can hold survive
@@ -2029,7 +2006,7 @@ public class TestNPC extends NPC {
 	 * against it, and never bit. Naming the same line twice closes that trap.
 	 */
 	private double preyCeiling() {
-		return ecoClade() == Genome.Clade.PREDATOR ? getSize() * PRED_MAX_PREY_RATIO : getSize();
+		return getSize() * Niche.of(ecoClade()).preySizeRatio();
 	}
 
 	private void senseFieldAndBody(double[] s) {
@@ -2074,7 +2051,7 @@ public class TestNPC extends NPC {
 		// the quarry scanPrey settled on, the same body the forage channel points
 		// at. For everything else the channel keeps its plain meaning -- the
 		// nearest smaller body, which is all a grazer's senses can make of one.
-		if (clade == Genome.Clade.PREDATOR) {
+		if (niche().hunts()) {
 			if (huntPick != null) {
 				preyD = distance(huntPick.getX(), huntPick.getY(), huntPick.getZ());
 				preyDx = huntPick.getX() - X;
@@ -2148,7 +2125,7 @@ public class TestNPC extends NPC {
 		// channel, same units, same intent: what changes is only what counts as food,
 		// which is exactly what a clade is. Rescanned every tick because a carcass can
 		// be eaten out from under it by another scavenger, unlike a tile of grass.
-		if (clade == Genome.Clade.SCAVENGER) {
+		if (niche().scavenges()) {
 			scanCarrion();
 			if (forageCol < 0) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
@@ -2170,7 +2147,7 @@ public class TestNPC extends NPC {
 		// machine exclusions, and the line of sight that makes cover a real refuge.
 		// Which of those candidates it goes for is scanPrey's: the best by value
 		// over effort, held until something is worth turning for.
-		if (clade == Genome.Clade.PREDATOR) {
+		if (niche().hunts()) {
 			NPC quarry = huntPick; // resolved once in senseInto; both channels share it
 			if (quarry == null) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
@@ -2187,7 +2164,7 @@ public class TestNPC extends NPC {
 		// the way a scavenger smells carrion. Riding one, the channel reads "you
 		// are on it", so the forage intent holds it in place instead of marching
 		// it off its own meal.
-		if (clade == Genome.Clade.PARASITE) {
+		if (niche().drains()) {
 			NPC host = nearestHost();
 			if (host == null) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
@@ -2830,13 +2807,13 @@ public class TestNPC extends NPC {
 		// below. Without that a minded hunter walked its quarry down and then
 		// grazed the ground under it.
 		boolean intentGraze = chasing && seekClass == AgentIO.SEEK_FORAGE
-				&& clade != Genome.Clade.PREDATOR
-				&& (clade == Genome.Clade.SCAVENGER || tileWanted == AgentIO.TILE_FOOD);
+				&& !niche().hunts()
+				&& (niche().scavenges() || tileWanted == AgentIO.TILE_FOOD);
 		boolean intentTake = chasing && seekClass == AgentIO.SEEK_ITEM;
 		// Either way of naming a quarry ends in the same act: SEEK_PREY says it
 		// outright, and for a hunter SEEK_FORAGE means the same thing.
 		boolean intentBite = chasing && (seekClass == AgentIO.SEEK_PREY
-				|| (seekClass == AgentIO.SEEK_FORAGE && clade == Genome.Clade.PREDATOR));
+				|| (seekClass == AgentIO.SEEK_FORAGE && niche().hunts()));
 		// Seeking a fixture and reaching it presses it: arriving IS the act,
 		// so the intent carries through without the mind also having to hold
 		// A_INTERACT high. In-reach is read off the same sensed proximity the
@@ -2861,8 +2838,8 @@ public class TestNPC extends NPC {
 			// A hunter takes nothing here either: its meal is the bite, paid out by
 			// attackNearest below, and letting it graze would hand it a second
 			// income the scripted hunter has never had.
-			eaten = clade == Genome.Clade.SCAVENGER ? scavenge()
-					: clade == Genome.Clade.PARASITE || clade == Genome.Clade.PREDATOR ? 0
+			eaten = niche().scavenges() ? scavenge()
+					: niche().drains() || niche().hunts() ? 0
 							: graze(grazeDemand());
 			totalIntake += eaten;
 		}
@@ -2945,7 +2922,7 @@ public class TestNPC extends NPC {
 		// the captor's call, via drop()).
 		if (a[AgentIO.A_ATTACH] > 0.5) {
 			attachToLarger();
-		} else if (chasing && seekClass == AgentIO.SEEK_FORAGE && clade == Genome.Clade.PARASITE) {
+		} else if (chasing && seekClass == AgentIO.SEEK_FORAGE && niche().drains()) {
 			// A parasite that reaches the host its forage intent names latches on:
 			// arriving IS the act, exactly as pressing is for a fixture, so the
 			// starter mind that merely forages can make this living at all. The
@@ -3028,7 +3005,7 @@ public class TestNPC extends NPC {
 			}
 			// Parasites do not stack: a parasite never rides another parasite
 			// (a chain of drains would bleed the bottom host through the pile).
-			if (clade == Genome.Clade.PARASITE && n instanceof TestNPC tn && tn.clade == Genome.Clade.PARASITE) {
+			if (niche().drains() && nicheOf(n) != null && nicheOf(n).drains()) {
 				continue;
 			}
 			if (n.getSize() > getSize() && attachTo(n)) {
@@ -3094,7 +3071,7 @@ public class TestNPC extends NPC {
 		//
 		// Only for a hunter, and only on flesh: a grazer lashing out is fighting,
 		// not eating, and keeps the generic bite it always had.
-		if (clade == Genome.Clade.PREDATOR && near.isOrganic()) {
+		if (niche().hunts() && near.isOrganic()) {
 			if (!biteDue()) {
 				return false; // still between bites: the intent stays pending
 			}
@@ -3262,7 +3239,7 @@ public class TestNPC extends NPC {
 	 */
 	@Override
 	protected double travelEfficiency() {
-		return clade == Genome.Clade.SCAVENGER ? SCAVENGER_TRAVEL : 1.0;
+		return niche().travelFactor();
 	}
 
 	@Override
