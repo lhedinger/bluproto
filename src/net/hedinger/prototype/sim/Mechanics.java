@@ -50,25 +50,67 @@ public final class Mechanics {
 	 *  (0.05) is the anchor the movement price was set against. */
 	private static final double[] SAMPLE_SPEEDS = {0.01, 0.025, 0.05, 0.1, 0.2, Genome.SPEED_MAX};
 
-	/** The documented sections, in reading order. */
+	/**
+	 * The main {@code /help} page: the world's shared rules — time, what food is
+	 * worth, and the two broadcast media (sound and smell). What a single BODY
+	 * costs to run lives on {@link #bodyPage()}, and what a lineage inherits —
+	 * genes, minds, senses and acts — on {@link #genomePage()}: three pages, one
+	 * subject each, cross-linked by the client.
+	 */
 	public static List<Map<String, Object>> sections() {
 		List<Map<String, Object>> out = new ArrayList<>();
 		out.add(time());
+		out.add(food());
+		out.add(hearing());
+		out.add(pheromones());
+		return out;
+	}
+
+	/**
+	 * The {@code /help/body} page: the body as physics — mass and the books it
+	 * scales, the prices of living and moving, and the hard constraints no mind
+	 * can override. The body is where the genome's numbers become matter, and
+	 * matter has a veto.
+	 */
+	public static List<Map<String, Object>> bodyPage() {
+		List<Map<String, Object>> out = new ArrayList<>();
 		out.add(mass());
 		out.add(tank());
 		out.add(resting());
 		out.add(moving());
-		out.add(food());
 		out.add(growth());
 		out.add(breeding());
 		out.add(thirst());
 		out.add(carrying());
+		out.add(veto());
+		return out;
+	}
+
+	/**
+	 * The {@code /help/genome} page: everything a lineage inherits — the trait
+	 * vector, its appetites and temperament, how heredity mixes it, the four
+	 * authored clades with their built-in reflexes, and the mind contract
+	 * (program, senses, acts, intents) the evolvable behaviour runs on.
+	 */
+	public static List<Map<String, Object>> genomePage() {
+		List<Map<String, Object>> out = new ArrayList<>();
+		out.add(genes());
+		out.add(dispositions());
+		out.add(heredity());
+		out.add(clades());
+		out.add(minds());
 		out.add(senses());
 		out.add(acts());
 		out.add(intents());
-		out.add(hearing());
-		out.add(pheromones());
-		out.add(minds());
+		return out;
+	}
+
+	/** Every documented section across the three pages, for the pin that checks
+	 *  completeness and arithmetic — the union is what must cover the surfaces. */
+	public static List<Map<String, Object>> allSections() {
+		List<Map<String, Object>> out = new ArrayList<>(sections());
+		out.addAll(bodyPage());
+		out.addAll(genomePage());
 		return out;
 	}
 
@@ -241,8 +283,9 @@ public final class Mechanics {
 						"Smelled, not seen — it reaches through walls that sight does not."),
 				row("A parasite's bite", num(TestNPC.PARA_BITE) + " health per "
 						+ num(TestNPC.PARA_BITE_PERIOD) + " ticks", "while riding, hungry",
-						"Worth " + pct(TestNPC.PARA_BITE / 100.0) + " of the host's carcass "
-						+ "value per bite; the host mends, bucks, or is bled."),
+						"Worth " + pct(TestNPC.PARA_BITE / (double) TestNPC.FULL_BODY_HEALTH)
+						+ " of the host's carcass value per bite; the host mends, "
+						+ "bucks, or is bled."),
 				row("A parasite smells hosts", num(TestNPC.HOST_SENSE_R), "tiles",
 						"Warm bodies bigger than itself; it must be the smaller one to latch."),
 				row("Hunt given up after", num(TestNPC.HUNT_GIVEUP_TICKS), "ticks",
@@ -793,6 +836,263 @@ public final class Mechanics {
 				row("Randomness", "none", "",
 						"A mind draws no dice: the world is deterministic, and a seed plus a "
 						+ "command log replays it exactly."));
+		return s;
+	}
+
+	// --- the genome page's own sections ---------------------------------------
+
+	private static Map<String, Object> genes() {
+		Genome def = new Genome();
+		Map<String, Object> s = section("genome", "The genome",
+				"Everything a lineage is travels in one heritable vector: the body's stats, a "
+				+ "recognition barcode, a handful of temperament weights, the clade, and — for "
+				+ "the evolving cohort — the mind's program itself. A creature never edits its "
+				+ "own genome; it is written once at birth, from the parents' copies, and read "
+				+ "for the rest of that body's life. The body is what the genome buys: every "
+				+ "gene below is expressed through physics that scales with it, so a bigger "
+				+ "size gene is not a free win — it is a bigger tank AND a bigger bill.\n\n"
+				+ "The bounds are part of the contract. Multiplicative drift random-walks to "
+				+ "extremes over a long world, so the magnitudes are clamped where readability "
+				+ "or the engine demands it — and a clamped gene is still honest: the fastest "
+				+ "body a genome can express stays inside the engine's own step ceiling, so "
+				+ "the inspector never advertises a speed the world would throw away.");
+		rows(s,
+				row("Size", num(Genome.SIZE_MIN) + " – " + num(Genome.SIZE_MAX), "px radius",
+						"The master gene: mass, tank, burn, meal worth, childhood and corpse "
+						+ "span all scale from it."),
+				row("Top speed", "0 – " + num(Genome.SPEED_MAX), "tiles/tick",
+						"Clamped under the engine's half-tile step; movement bills its square."),
+				row("Turn rate", "≥ 1", "",
+						"How sharply the body can steer; default " + num(def.turnRate) + "."),
+				row("Sight", num(def.losRange) + " tiles, "
+						+ round(Math.toDegrees(def.losFov), 0) + "°", "default",
+						"Both heritable. The minded cohort's bodies are built with "
+						+ "all-round vision, so for them the FOV gene is currently latent."),
+				row("Metabolic efficiency", "genome ÷ " + num(NPC.META_REF), "",
+						"A multiplier on every burn; 1.0 is an average body."),
+				row("Max age", num(def.maxAge) + " default", "ticks",
+						"Old age is a death nothing can dodge; heritable and drifting."),
+				row("Flying", "inherited, never mutated", "",
+						"Locomotion is a fact about a lineage; evolvable flight is future work."),
+				row("Markers", num(Genome.MARKER_DIMS), "genes",
+						"The neutral barcode: similarity in marker space is kinship, and the "
+						+ "first three map to the body's colour, so relatedness is visible."),
+				row("Sexuality", "0 – 1, sexual at " + num(0.5) + "+", "",
+						"Continuous so a lineage can drift across the boundary; a sexual body "
+						+ "courts and waits, an asexual one buds alone."),
+				row("Brain", "up to " + num(Brain.MAX_LEN) + " instructions", "",
+						"The mind's program rides in the genome and evolves with it; a genome "
+						+ "without one drives a scripted body instead."));
+		return s;
+	}
+
+	private static Map<String, Object> dispositions() {
+		Map<String, Object> s = section("dispositions", "Appetites and temperament",
+				"A second family of genes that are not body parts: weights that shape how the "
+				+ "built-in machinery values the world. They matter because not every decision "
+				+ "is the mind's — food is scored, targets are held, mates are judged by shared "
+				+ "code in the body, and these genes are that code's dials. The two appetite "
+				+ "genes are live for every clade; the four social drives below them steer only "
+				+ "the older scripted reaction model, so in today's all-minded live world they "
+				+ "are carried but not consulted — heritage the brain took over.\n\n"
+				+ "Both appetites default to values that were measured, not chosen: greed's "
+				+ "range gives selection something to act on from the first generation, and "
+				+ "determination's default is the number the scavenger's carrion path was "
+				+ "tuned into before the gene took the constant's job.");
+		rows(s,
+				row("greed", "0 – " + num(Genome.GREED_MAX), "value exponent",
+						"How much a BIG prize outranks a near one when food is scored value "
+						+ "over distance — 0 takes whatever is handy, above 1 holds out."),
+				row("determination", "1 – " + num(Genome.DETERMINATION_MAX), "× incumbent",
+						"How much better a rival target must score before the held one is "
+						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "
+						+ "clock (" + num(TestNPC.FORAGE_SCAN_PERIOD) + "-tick scans) and a "
+						+ "parasite by grip, so neither reads a bar."),
+				row("mateThreshold", "0 – 1", "similarity",
+						"How alike a partner must be before courtship: the gene that makes "
+						+ "species real, because drifted markers stop clearing it."),
+				row("predatory / xenophobia", "≥ 0", "",
+						"Attack-the-smaller and flee-the-bigger weights of the scripted "
+						+ "reaction model; inert for a minded body, whose brain decides."),
+				row("gregariousness / boldness", "≥ 0", "",
+						"The flocking pull and the flee damper of the same model — same "
+						+ "status: inherited, mutating, and awaiting a reader again."));
+		return s;
+	}
+
+	private static Map<String, Object> heredity() {
+		Map<String, Object> s = section("heredity", "Heredity",
+				"Two ways to be born, one mutation model. An asexual child is a copy of its "
+				+ "parent with every gene jittered; a sexual child takes each gene from one "
+				+ "parent or the other (a coin per gene), then jitters the result. Magnitude "
+				+ "genes drift multiplicatively — a step proportional to where they are — while "
+				+ "bounded traits drift additively, so a lineage parked at a boundary can "
+				+ "always walk back off it. Minds cross over as programs: an unequal two-point "
+				+ "splice of the parents' instruction lists, so brains grow and shrink under "
+				+ "selection rather than being fixed-size.\n\n"
+				+ "The clade is the exception to all of it: inherited, never mutated, and "
+				+ "unambiguous in a pair because clades cannot interbreed. Species are what "
+				+ "emerge inside a clade as markers drift apart; clades themselves are "
+				+ "authored, and nothing in the world can make a new one.");
+		rows(s,
+				row("Mutation", "± " + num(TestNPC.MUTATION_RATE), "per gene, at birth",
+						"The same rate for both ways of being born, and for the brain's "
+						+ "instruction fields."),
+				row("Crossover", "a coin per gene", "",
+						"Sexual only. Assortative mating (mateThreshold) keeps the mixing "
+						+ "within a lineage, which is what lets species form."),
+				row("Brain inheritance", "copy, or two-point splice", "",
+						"Asexual copies and mutates; sexual splices a slice of one parent's "
+						+ "program into the other's, length drifting freely up to "
+						+ num(Brain.MAX_LEN) + "."),
+				row("Clade", "inherited, never mutated", "",
+						"A grazer's grandchildren never wake up eating carrion: diet is "
+						+ "authored, species are emergent."),
+				row("A newborn's books", "exactly what its parents paid", "",
+						"Tank, birth meal and meat-priced body sum to the parents' spend — "
+						+ "see the breeding section on the body page."));
+		return s;
+	}
+
+	private static Map<String, Object> clades() {
+		Map<String, Object> s = section("clades", "The four clades",
+				"The one authored axis in an otherwise emergent world. A clade decides what a "
+				+ "body can digest, who it can breed with, and what silhouette it wears — and "
+				+ "nothing else: within a clade, every trait above is free to drift. Each clade "
+				+ "also carries a small set of built-in reflexes, listed here because they are "
+				+ "exactly the things a mind does NOT decide. The pattern behind all four: the "
+				+ "forage sense is re-aimed at whatever that clade's food IS, and arriving at "
+				+ "it performs the clade's one terminal act — so the same starter brain that "
+				+ "merely forages can make any of the four livings, and selection chooses the "
+				+ "policy, not the plumbing.");
+		rows(s,
+				row("Clades", num(Genome.Clade.values().length), "",
+						"Herbivore, predator, scavenger, parasite — frozen wire codes, so "
+						+ "saved genomes keep their meaning."),
+				row("Interbreeding", "never", "",
+						"The mate barrier is absolute; markers only speciate within."),
+				row("Recognition", "by body plan", "",
+						"Each clade wears its own silhouette, and minds read the "
+						+ "same-kind-or-not channel off it."));
+		groups(s,
+				group("herbivore — grazes the living substrate",
+						item("diet", "Vegetation underfoot: " + num(TestNPC.GRAZE_DEMAND)
+								+ " units/tick at mass 1, scaled by body mass and bounded by "
+								+ "stomach room — a sated body strips no ground."),
+						item("forage sense", "The richest patch in sight, scored density over "
+								+ "distance and re-chosen every "
+								+ num(TestNPC.FORAGE_SCAN_PERIOD) + " ticks — commitment by "
+								+ "clock rather than by bar."),
+						item("on arrival", "Grazes. The one clade whose terminal act works on "
+								+ "ground rather than on a body."),
+						item("defence", "Nothing built in beyond the senses: threat channels, "
+								+ "whiskers and the herd gradient are there to be read, and "
+								+ "running is a policy minds evolve.")),
+				group("predator — kills what it eats",
+						item("diet", "Living bodies up to " + num(TestNPC.PRED_MAX_PREY_RATIO)
+								+ "× its own size; the meal is the meat arithmetic — "
+								+ num(TestNPC.MEAT_ENERGY) + " × the prey's mass, paid out "
+								+ "bite by bite."),
+						item("the bite", num(TestNPC.PRED_DAMAGE) + " hp every "
+								+ num(TestNPC.PRED_BITE_PERIOD) + " ticks: a kill is ten "
+								+ "seconds of staying in reach, and every bite screams — the "
+								+ "quarry's scream, sized by the quarry's mass."),
+						item("the hunt", "One committed quarry, scored value over effort and "
+								+ "held until something clears its score × determination; a "
+								+ "chase pinned for " + num(TestNPC.HUNT_GIVEUP_TICKS)
+								+ " ticks is abandoned."),
+						item("appetite gates", "Hunts above " + num(TestNPC.PRED_HUNT_HUNGER)
+								+ " hunger, stops killing below " + num(TestNPC.PRED_FULL_HUNGER)
+								+ " (a full stomach wastes the prey), and only above "
+								+ num(TestNPC.STARVE_HUNGER) + " will it eat its own kind."),
+						item("taboos", "Parasites are never food (too small, too foul), rivals "
+								+ "only in desperation, machines never."),
+						item("founding floor", "Reseeded hunters start at "
+								+ num(TestNPC.PREDATOR_MIN_SIZE_PX) + " px so the herd is "
+								+ "actually on their menu; born ones may drift smaller and "
+								+ "live with the consequences."),
+						item("never grazes", "Its mouth works on prey alone — grass would be "
+								+ "a second income the niche was never priced around.")),
+				group("scavenger — eats what is already dead",
+						item("diet", "Carrion only: " + pct(TestNPC.CARRION_BITE)
+								+ " of a body per tick, from " + num(TestNPC.CARRION_REACH)
+								+ " tiles beyond touching. It has no way to kill — a living "
+								+ "body is not food to it."),
+						item("forage sense", "The best carcass smelled within "
+								+ num(TestNPC.CARRION_SCENT_R) + " tiles — scent, so it works "
+								+ "through walls and dark, rescanned every tick because "
+								+ "another scavenger can eat a find out from under it."),
+						item("the ranging trade", "Travel costs it " + pct(TestNPC.SCAVENGER_TRAVEL)
+								+ " of an ordinary body's bill, and steward-seeded founders "
+								+ "stride " + num(TestNPC.SCAVENGER_STRIDE) + "× faster — "
+								+ "covering ground is its whole living."),
+						item("on arrival", "Bites the carcass. Meat is meat: a found body is "
+								+ "worth exactly what a killed one is.")),
+				group("parasite — drinks a living body",
+						item("diet", "Rides a bigger living body and takes "
+								+ num(TestNPC.PARA_BITE) + " hp every "
+								+ num(TestNPC.PARA_BITE_PERIOD) + " ticks, digesting that "
+								+ "share of the host's carcass value — the slowest way to eat "
+								+ "an animal, and the only one that works far above its own "
+								+ "weight. It can neither graze nor scavenge."),
+						item("host sense", "Warm bodies bigger than itself within "
+								+ num(TestNPC.HOST_SENSE_R) + " tiles, scent-like; its forage "
+								+ "channel points at the nearest, and riding one reads "
+								+ "\"you are on it\"."),
+						item("on arrival", "Latches. The grip holds while the forage intent "
+								+ "does, so a mind that switches to water climbs off — and a "
+								+ "host that dies under it is let go: it drinks lives, not "
+								+ "corpses."),
+						item("size ceiling", "Capped at " + num(TestNPC.PARASITE_MAX_SIZE_PX)
+								+ " px: smaller than every plausible host, which is also what "
+								+ "makes its grip hard to buck."),
+						item("immunities", "Predators ignore it entirely and parasites never "
+								+ "stack on parasites; its checks are the host bucking, and "
+								+ "its own four books.")));
+		return s;
+	}
+
+	// --- the body page's closing section --------------------------------------
+
+	private static Map<String, Object> veto() {
+		Map<String, Object> s = section("constraints", "The body's veto",
+				"Actuators are intent, and intent is not physics. Between what a mind asks and "
+				+ "what happens sits the body, and the body clamps everything: no program, "
+				+ "however evolved, can steer harder, reach further, bite faster or breed "
+				+ "poorer than the flesh allows. These are the hard limits — the reason a "
+				+ "mind genome cannot override its body, and the reason a policy that works "
+				+ "must work WITH a body rather than around it.\n\n"
+				+ "The same veto is what makes the collapse state meaningful: an empty tank "
+				+ "takes the expensive verbs away wholesale, so \"too exhausted to fight\" is "
+				+ "enforced by the body rather than promised by the mind.");
+		rows(s,
+				row("Steering", "≤ " + num(TestNPC.MAX_TURN), "radians/tick",
+						"However hard A_TURN is held; an intent's auto-steer obeys the same "
+						+ "cap."),
+				row("Speed", "throttle × the genome's top speed", "",
+						"And never past the engine's " + num(net.hedinger.prototype.engine.Entity.MAX_STEP)
+						+ " tiles/tick step ceiling; a step into a wall moves nothing."),
+				row("Reach", num(TestNPC.ATTACK_REACH), "tiles beyond touching",
+						"Bites, grabs and latches all demand contact range; asking is not "
+						+ "touching."),
+				row("A mouth's pace", "one bite per " + num(TestNPC.PRED_BITE_PERIOD), "ticks",
+						"Holding the attack actuator high does not bite faster — for anyone. "
+						+ "A non-hunter's bite is a gnaw: " + num(TestNPC.ATTACK_DAMAGE)
+						+ " hp, fighting rather than feeding."),
+				row("Collapse", "below " + pct(NPC.CRAWL_RESERVE) + " of the tank", "",
+						"No biting, grabbing, breeding or holding a captive; a crawl at "
+						+ pct(NPC.CRAWL_SPEED) + " of top speed is all that is left."),
+				row("Grab and ride", "smaller only / larger only", "",
+						"A captor must out-size its captive; a rider must be the smaller "
+						+ "one. Nothing carries while being carried."),
+				row("Fertility", "all four books, not one", "",
+						"Energy above the breeding line AND both needs low AND sound health "
+						+ "— however hard A_MATE is held, a starving body does not court."),
+				row("Attention", num(TestNPC.TRACK_MIN) + " – " + num(TestNPC.TRACK_MAX),
+						"targets",
+						"One tracked thing per " + num(TestNPC.TRACK_PER_INSTR)
+						+ " instructions of brain past the first: a wider mind is a slower "
+						+ "one, and both ends of that trade are priced."));
 		return s;
 	}
 

@@ -2316,9 +2316,16 @@ public class SimTests {
 	static class MechanicsAreReadOffTheWorld extends Scenario {
 		@Override
 		public void run() {
+			// The union of all three documentation pages (/help, /help/body,
+			// /help/genome): completeness and arithmetic are claims about the
+			// whole reference, wherever a section happens to be filed.
 			java.util.List<java.util.Map<String, Object>> secs
-					= net.hedinger.prototype.sim.Mechanics.sections();
-			assertGreater("the reference documents a useful number of rules", secs.size(), 5);
+					= net.hedinger.prototype.sim.Mechanics.allSections();
+			assertGreater("the reference documents a useful number of rules", secs.size(), 15);
+			assertGreater("each page carries a real share of it",
+					Math.min(net.hedinger.prototype.sim.Mechanics.sections().size(),
+							Math.min(net.hedinger.prototype.sim.Mechanics.bodyPage().size(),
+									net.hedinger.prototype.sim.Mechanics.genomePage().size())), 2);
 
 			java.util.Set<String> ids = new java.util.HashSet<>();
 			for (java.util.Map<String, Object> sec : secs) {
