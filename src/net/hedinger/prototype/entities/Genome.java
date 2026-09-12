@@ -48,6 +48,13 @@ public class Genome {
 	 * and the deterministic sim stream is unchanged. */
 	public Brain brain = null;
 
+	/** The creature's decision NETWORK — the second mind substrate, a fixed-topology
+	 *  MLP whose weights are heritable exactly like {@link #brain}. A genome carries
+	 *  at most one substrate: when this is set the body runs it instead of the LGP
+	 *  brain, behind the same {@link AgentIO} seam, so the two compete in one world.
+	 *  Null on every LGP or brain-less lineage, so it draws no RNG there. */
+	public MlpBrain mlp = null;
+
 	// --- markers (neutral recognition barcode, each in [0,1]) ---
 	public double[] markers = new double[MARKER_DIMS];
 
@@ -301,9 +308,11 @@ public class Genome {
 			gene.set(g, gene.get(this));
 		}
 		// The non-numeric heritables the schema does not carry: the clade (a code,
-		// never mutated) and the mind (its own crossover machinery).
+		// never mutated) and the mind (its own crossover machinery), of which a
+		// genome carries at most one substrate.
 		g.clade = clade;
 		g.brain = (brain == null) ? null : brain.copy();
+		g.mlp = (mlp == null) ? null : mlp.copy();
 		return g;
 	}
 
@@ -315,6 +324,9 @@ public class Genome {
 		GeneSchema.mutate(g, rate);
 		if (g.brain != null) {
 			g.brain.mutate(rate); // mutate the inherited program (guarded: no brain -> no RNG)
+		}
+		if (g.mlp != null) {
+			g.mlp.mutate(rate); // mutate the inherited network (guarded: no net -> no RNG)
 		}
 		return g;
 	}
@@ -339,6 +351,16 @@ public class Genome {
 			g.brain = a.brain.copy();
 		} else if (b.brain != null) {
 			g.brain = b.brain.copy();
+		}
+		// The MLP substrate crosses the same way. A pair sharing a substrate breeds
+		// true to it; a mixed pair (one LGP, one MLP) hands the child whichever the
+		// clade-mate carries — the substrate is a lineage trait, not a per-birth coin.
+		if (a.mlp != null && b.mlp != null) {
+			g.mlp = MlpBrain.child(a.mlp, b.mlp, rate);
+		} else if (g.brain == null && a.mlp != null) {
+			g.mlp = a.mlp.copy();
+		} else if (g.brain == null && b.mlp != null) {
+			g.mlp = b.mlp.copy();
 		}
 		return g;
 	}

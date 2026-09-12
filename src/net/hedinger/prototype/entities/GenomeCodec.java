@@ -34,9 +34,10 @@ public final class GenomeCodec {
 	 * produce a different animal wearing its name. (g1: 23 sensors / 11 actuators.
 	 * g2: 28 / 13, intent commands added. g3: 29 / 13, the intent-status channel
 	 * added. g4: schema-driven genes, markers split into m0..m2. g5: life-history
-	 * genes added — reproF, reproC, mut, inst.)
+	 * genes added — reproF, reproC, mut, inst. g6: the MLP mind substrate — an
+	 * optional "mlp=" weight vector alongside the LGP "brain=".)
 	 */
-	private static final String VERSION = "g5";
+	private static final String VERSION = "g6";
 
 	/** Keys accepted on decode that are no longer emitted, mapped to the gene key
 	 *  they now go by — so a recording made under an old name is not silently
@@ -66,6 +67,16 @@ public final class GenomeCodec {
 					}
 					b.append(code[r][c]);
 				}
+			}
+		}
+		b.append(";mlp=");
+		if (g.mlp != null) {
+			double[] w = g.mlp.weights();
+			for (int i = 0; i < w.length; i++) {
+				if (i > 0) {
+					b.append(',');
+				}
+				b.append(w[i]);
 			}
 		}
 		return b.toString();
@@ -100,6 +111,8 @@ public final class GenomeCodec {
 					g.clade = Genome.Clade.ofCode(Integer.parseInt(v));
 				} else if (k.equals("brain")) {
 					g.brain = v.isEmpty() ? null : new Brain(codeMatrix(v));
+				} else if (k.equals("mlp")) {
+					g.mlp = v.isEmpty() ? null : MlpBrain.fromWeights(doubles(v));
 				}
 				// else: forward-compatible — ignore an unknown key.
 			}
@@ -110,6 +123,15 @@ public final class GenomeCodec {
 		} catch (NumberFormatException e) {
 			throw new IllegalArgumentException("malformed genome: " + e.getMessage(), e);
 		}
+	}
+
+	private static double[] doubles(String csv) {
+		String[] p = csv.split(",");
+		double[] out = new double[p.length];
+		for (int i = 0; i < p.length; i++) {
+			out[i] = Double.parseDouble(p[i]);
+		}
+		return out;
 	}
 
 	private static int[][] codeMatrix(String v) {

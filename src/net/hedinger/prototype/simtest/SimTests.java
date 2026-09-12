@@ -5098,8 +5098,8 @@ public class SimTests {
 			for (int i = 0; i < SAMPLES; i++) {
 				Genome reseed = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
 						w, Genome.Clade.HERBIVORE);
-				if (reseed.brain == null) {
-					brainless++;
+				if (reseed.brain == null && reseed.mlp == null) {
+					brainless++; // a reseed must carry SOME mind — LGP brain or MLP net
 				}
 				if (childOf(reseed, new double[] { 0.90, 0.10, 0.10 })) {
 					fromOlder++;
@@ -5108,7 +5108,7 @@ public class SimTests {
 					fromYounger++;
 				}
 			}
-			assertEquals("every reseed inherits a brain (not a brain-less body)", 0, brainless);
+			assertEquals("every reseed inherits a mind — an LGP brain or an MLP net", 0, brainless);
 			assertGreater("the bulk of reseeds descend from the LONGEST-LIVED survivor",
 					fromOlder, SAMPLES / 2);
 			// Bounded rather than zero for the same reason as the cross-clade
@@ -5236,14 +5236,14 @@ public class SimTests {
 			for (int i = 0; i < SAMPLES; i++) {
 				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
 						w, Genome.Clade.PARASITE);
-				if (g.brain == null) {
+				if (g.brain == null && g.mlp == null) {
 					paraBrainless++;
 				}
 				if (couldBeChildOf(g, GRAZER_MARKERS)) {
 					paraFromGrazer++;
 				}
 			}
-			assertEquals("an extinct clade still reseeds brained genomes", 0, paraBrainless);
+			assertEquals("an extinct clade still reseeds minded genomes (LGP or MLP)", 0, paraBrainless);
 			assertLess("an extinct clade does not borrow the herbivore's lineage",
 					paraFromGrazer, SAMPLES / 10);
 		}
@@ -8596,6 +8596,91 @@ public class SimTests {
 	}
 
 	/**
+	 * The second mind substrate: an MLP network drives a body through the very
+	 * same {@link AgentIO} seam the LGP brain does, is heritable the same way, and
+	 * survives the savefile round trip. This pins the substrate itself; whether it
+	 * out-evolves the LGP cohort is for selection, and the world seeds both.
+	 */
+	static class AnMlpMindCompetesThroughTheSameSeam extends Scenario {
+		@Override
+		public void run() {
+			seed(148);
+
+			// The forward pass writes the whole actuator vector, and a fresh network
+			// carries the forage prior: with no input signal it already asks to seek
+			// food at a moderate throttle — the warm seed that lets a random founder
+			// feed and live for selection to work on.
+			net.hedinger.prototype.entities.MlpBrain mlpNet =
+					net.hedinger.prototype.entities.MlpBrain.random();
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			double[] a = new double[AgentIO.NUM_ACT];
+			mlpNet.forward(s, a);
+			assertNear("a fresh network seeks food by prior (no input)", 0.1, a[AgentIO.A_SEEK], 1e-9);
+			assertNear("at a moderate throttle by prior", 0.3, a[AgentIO.A_THROTTLE], 1e-9);
+			// A real sensor signal moves the output off the prior — the weights are live.
+			s[AgentIO.S_PREY_BEARING] = 1.0;
+			s[AgentIO.S_THREAT_PROX] = 0.8;
+			double[] a2 = new double[AgentIO.NUM_ACT];
+			mlpNet.forward(s, a2);
+			boolean moved = false;
+			for (int i = 0; i < a2.length; i++) {
+				moved |= Math.abs(a2[i] - a[i]) > 1e-9;
+			}
+			assertTrue("input changes the network's output", moved);
+
+			// A body built from an MLP genome runs the network, not the LGP brain,
+			// and is counted among the minded cohort like any other.
+			Genome mg = new Genome();
+			mg.size = 10;
+			mg.mlp = mlpNet;
+			TestNPC body = TestNPC.minded(5.5, 5.5, 0, mg).grown();
+			assertTrue("an MLP body is a minded body", body.isMinded());
+			assertTrue("its mind is the network, so there is no LGP program to inspect",
+					body.lgpMind() == null);
+			World w = room(12, 12);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.spawnEntity(body);
+			tick(w, 20);
+			boolean acted = false;
+			for (double v : body.actuatorSnapshot()) {
+				acted |= v != 0;
+			}
+			assertTrue("the network drove the body through the seam", acted);
+
+			// Heredity: the substrate is a lineage trait. An MLP parent's child runs
+			// an MLP and no LGP brain, and mutation moves the weights.
+			Genome parent = new Genome();
+			parent.mlp = net.hedinger.prototype.entities.MlpBrain.random();
+			Genome child = Genome.child(parent, 0.2);
+			assertTrue("an MLP lineage breeds true to its substrate",
+					child.mlp != null && child.brain == null);
+			double[] pw = parent.mlp.weights(), cw = child.mlp.weights();
+			assertEquals("the child's network is the same shape", pw.length, cw.length);
+			boolean drifted = false;
+			for (int i = 0; i < pw.length; i++) {
+				drifted |= Math.abs(pw[i] - cw[i]) > 1e-9;
+			}
+			assertTrue("mutation moved the weights", drifted);
+
+			// The savefile round-trips an MLP genome losslessly.
+			Genome back = net.hedinger.prototype.entities.GenomeCodec.decode(
+					net.hedinger.prototype.entities.GenomeCodec.encode(parent));
+			assertTrue("an MLP survives the savefile", back.mlp != null);
+			double[] bw = back.mlp.weights();
+			assertEquals("every weight round-trips in count", pw.length, bw.length);
+			boolean same = true;
+			for (int i = 0; i < pw.length; i++) {
+				same &= pw[i] == bw[i];
+			}
+			assertTrue("and in value", same);
+		}
+	}
+
+	/**
 	 * Water as a need: a parched grazer drops everything, walks to the shore,
 	 * and drinks itself back above the thirst line — the scripted species'
 	 * water drive, plus the body's sip-by-adjacency refill.
@@ -11677,6 +11762,7 @@ public class SimTests {
 				new DispositionsScaleWhatTheMindHears(),
 				new CapabilityCostsMetabolism(),
 				new LifeHistoryIsAStrategy(),
+				new AnMlpMindCompetesThroughTheSameSeam(),
 				new InjectedCreatureSurvivesPopulationCeiling(),
 				new HerbivoreFleesPredator(),
 				new PredatorRunsDownFleeingPrey(),
