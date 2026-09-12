@@ -18,12 +18,42 @@ export interface MechSection {
 /** The nav wraps to however many rows its links need, so the anchor offset
  *  can't be a constant — measure the real height and keep the scroll root's
  *  padding in step with it. Every documentation page has the one sticky
- *  #pagenav, so the measurement lives with the renderer they share. */
+ *  #pagenav, so the measurement lives with the renderer they share.
+ *
+ *  Measured CLOSED even when it is open: following a link closes the menu, so
+ *  the nav an arriving heading has to clear is the collapsed one. Measuring it
+ *  open would push every anchor most of a screen too far down. */
 export function syncNavPad(): void {
   const nav = document.getElementById('pagenav');
-  if (nav) document.documentElement.style.scrollPaddingTop = `${nav.offsetHeight + 8}px`;
+  if (!nav) return;
+  const open = nav.classList.contains('open');
+  if (open) nav.classList.remove('open');
+  const h = nav.offsetHeight;
+  if (open) nav.classList.add('open');
+  document.documentElement.style.scrollPaddingTop = `${h + 8}px`;
 }
-if (typeof window !== 'undefined') window.addEventListener('resize', syncNavPad);
+
+/** Wires the narrow-screen "contents" disclosure. Runs on import, because all
+ *  three documentation pages import this module and all three carry the same
+ *  nav — a page that had to remember to call it is a page that will not. */
+function wireNav(): void {
+  const nav = document.getElementById('pagenav');
+  const btn = document.getElementById('navtoggle');
+  if (!nav || !btn) return;
+  const setOpen = (open: boolean) => {
+    nav.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  btn.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+  // Following a link puts the menu away: left open it covers the heading the
+  // link just scrolled to, which is the one thing the reader asked to see.
+  nav.addEventListener('click', ev => {
+    if ((ev.target as HTMLElement).closest('a')) setOpen(false);
+  });
+  window.addEventListener('resize', syncNavPad);
+  syncNavPad();
+}
+if (typeof window !== 'undefined') wireNav();
 
 /** Text into a fresh element, escaped by the DOM rather than by us. */
 export function el<K extends keyof HTMLElementTagNameMap>(

@@ -1,21 +1,55 @@
-/* The documentation subpages' shared skin (/help/genome, /help/body): the same
- * tones and table styles help.html carries inline, so the three pages read as
- * one reference. /help keeps its own copy because it also styles the art
- * galleries; these pages are tables and channel lists only. */
+/* The documentation pages' shared skin — /help, /help/genome, /help/body — so
+ * the three read as one reference.
+ *
+ * It used to be the subpages' sheet only, with /help carrying its own inline
+ * copy of the same rules "because it also styles the art galleries". Two
+ * sources for one look is the bug that shipped: a fix to the sticky nav landed
+ * in one of them and left the other page wrong. /help now imports this and
+ * keeps inline only what is genuinely its own — the galleries. */
 body { background: #0f1115; color: #cdd3de; font: 14px/1.5 system-ui, sans-serif;
        margin: 2rem auto; max-width: 1200px; padding: 0 1rem; }
 h1 { font-size: 1.4rem; }
 h2 { margin-top: 2.2rem; border-bottom: 1px solid #262b36; padding-bottom: .3rem; }
 .note { color: #8b93a3; max-width: 70ch; }
 a { color: #7aa2f7; }
-.nav { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .4rem 0 0; }
-.nav a { text-decoration: none; font-size: 13px; }
-.nav a:hover { text-decoration: underline; }
-nav.nav { position: sticky; top: 0; background: #0f1115dd;
-          backdrop-filter: blur(4px); padding: .5rem 0; z-index: 5;
-          margin: .8rem 0 0; }
-nav.nav span { display: contents; }
+/* The page nav: a table of contents that stays put while the page scrolls.
+ *
+ * OPAQUE, not translucent. It was #0f1115dd over a blur, and the 13% that came
+ * through was body text sliding between the rows — the same defect the viewer's
+ * panel headers were fixed for, on a different page.
+ *
+ * On a narrow screen it COLLAPSES to a single "contents" line. Flat and wrapped
+ * it grew a row per two or three sections: /help's twenty-two links stood 211px
+ * tall on a 390px phone, a quarter of the viewport before the browser's own
+ * chrome, and a table of contents that eats the screen it is meant to help you
+ * read is not a table of contents. Expanded it scrolls inside itself rather
+ * than growing without limit, and following a link closes it — on a phone the
+ * open menu covers the very heading it just jumped to.
+ *
+ * The breakpoint is where the longest of the three navs stops fitting in two
+ * rows, which is a property of that page's section count; if a page grows past
+ * it on desktop too, collapse it there rather than letting it creep. */
+nav.nav { position: sticky; top: 0; z-index: 5; margin: .8rem 0 0;
+          padding: .5rem 0; background: #0f1115;
+          border-bottom: 1px solid #1c212b; }
+nav.nav .links { display: flex; flex-wrap: wrap; gap: .35rem .9rem; }
+nav.nav span { display: contents; } /* invisible grouping: keeps page order */
+nav.nav a { text-decoration: none; font-size: 13px; }
+nav.nav a:hover { text-decoration: underline; }
 nav.nav a.ext { color: #d6b16a; }
+#navtoggle { display: none; }
+
+@media (max-width: 760px) {
+  #navtoggle { display: block; background: none; border: 0; padding: 0;
+               cursor: pointer; color: #7aa2f7;
+               font: 600 13px system-ui, sans-serif; }
+  #navtoggle::after { content: ' ▾'; }
+  nav.nav.open #navtoggle::after { content: ' ▴'; }
+  nav.nav .links { display: none; }
+  nav.nav.open .links { display: flex; padding-top: .55rem;
+                        max-height: 60vh; overflow-y: auto;
+                        -webkit-overflow-scrolling: touch; }
+}
 .scroll { overflow-x: auto; max-width: 100%; }
 table { border-collapse: collapse; font-size: 13px; margin: .8rem 0 0; }
 table.facts th { text-align: left; font-weight: 600; color: #b9c2d0; white-space: nowrap;
