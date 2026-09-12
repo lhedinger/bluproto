@@ -581,17 +581,26 @@ public class TestNPC extends NPC {
 	 */
 	public static TestNPC minded(double x, double y, double z, Genome g, Mind mind) {
 		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
-		t.genome = g;
-		adoptClade(t, g);
-		t.size = (int) Math.round(g.size);
-		t.speed = g.speed;
-		t.turn = g.turnRate;
-		t.col = g.toColor();
-		t.LOS_FOV = Math.PI * 2;
-		t.LOS_RANGE = Math.max(g.losRange, 3);
-		t.SEARCH_FREQ = 2;
+		// The one expression path, shared with every genome body: juvenile growth,
+		// size-scaled energy books, clade stride and the expressed-size invariant.
+		// A minded body used to be built here by hand — full-grown, with a flat
+		// energy tank and the default repro thresholds — so a founder (built through
+		// configureGenomeBody) and its own child (built here) were economically
+		// different animals. Routing both through configureGenomeBody makes a
+		// lineage consistent with itself.
+		configureGenomeBody(t, g);
+		mindedPerception(t, g);
 		t.mind = mind;
 		return t;
+	}
+
+	/** The omnidirectional, frequent perception every minded body shares — set
+	 *  apart from {@link #configureGenomeBody} so the scripted fixtures keep their
+	 *  own facing-gated senses. */
+	private static void mindedPerception(TestNPC t, Genome g) {
+		t.LOS_FOV = Math.PI * 2; // omnidirectional, like the other genome bodies
+		t.LOS_RANGE = Math.max(g.losRange, 3);
+		t.SEARCH_FREQ = 2;
 	}
 
 	/** A minded body whose mind is the genome's own evolvable {@link Brain} (an
@@ -603,12 +612,12 @@ public class TestNPC extends NPC {
 
 	/** A metabolic brained forager: runs its genome's brain, grazes and burns
 	 * energy, and buds mutated offspring that inherit (a crossed/mutated copy of)
-	 * the brain -- so the mind itself evolves. */
+	 * the brain -- so the mind itself evolves. Now just a minded body: the energy
+	 * economy it used to set by hand (metabolic, a flat unit tank) is exactly what
+	 * the shared expression already gives every genome body, so there is nothing
+	 * left to add. Offspring endowment still overrides the tank in {@link #endow}. */
 	public static TestNPC brainedBreeder(double x, double y, double z, Genome g) {
-		TestNPC t = minded(x, y, z, g, mindOf(g));
-		t.metabolic = true;
-		t.energy = 1.0;
-		return t;
+		return minded(x, y, z, g, mindOf(g));
 	}
 
 	/**
@@ -629,14 +638,26 @@ public class TestNPC extends NPC {
 	 * same bargain the rest of the minded cohort is on.
 	 */
 	public static TestNPC mindedScavenger(double x, double y, double z, Genome g) {
-		// Own the genome before writing a clade into it. Founder pools are shared
-		// arrays and callers hand the same instance to several bodies, so mutating
-		// what was passed in would quietly re-flavour creatures nobody was building.
-		// Copied BEFORE the mind is bound, so the two never point at different ones.
-		TestNPC t = mindedForager(x, y, z, g.copy());
-		t.withClade(Genome.Clade.SCAVENGER); // writes through to the genome the body is drawn from
-		t.speed *= SCAVENGER_STRIDE;
-		return t;
+		return mindedOfClade(x, y, z, g, Genome.Clade.SCAVENGER);
+	}
+
+	/**
+	 * A minded body of a named clade. The clade is written into a private copy of
+	 * the genome BEFORE the body is expressed, so expression sees the true clade
+	 * and derives its stride and its size invariant from it — a scavenger ranges
+	 * fast, a hunter is floored large, a parasite capped small, and every one of
+	 * those is a property the body's whole lineage keeps because it comes from the
+	 * clade at build time rather than being stamped onto one founder afterward.
+	 *
+	 * <p>The copy matters for the same reason it always did: founder pools are
+	 * shared arrays, so writing a clade into the instance handed in would quietly
+	 * re-flavour creatures nobody was building.
+	 */
+	private static TestNPC mindedOfClade(double x, double y, double z, Genome g,
+			Genome.Clade clade) {
+		Genome own = g.copy();
+		own.clade = clade;
+		return mindedForager(x, y, z, own);
 	}
 
 	/**
@@ -677,19 +698,17 @@ public class TestNPC extends NPC {
 	 * bodies are drawn from one instance.
 	 */
 	public static TestNPC mindedPredator(double x, double y, double z, Genome g) {
-		Genome own = g.copy();
-		own.size = Math.max(own.size, PREDATOR_MIN_SIZE_PX); // big enough to hunt with
-		TestNPC t = mindedForager(x, y, z, own);
-		t.withClade(Genome.Clade.PREDATOR); // writes through to the genome the body is drawn from
-		return t;
+		// The hunting-size floor is now an EXPRESSION invariant (see
+		// cladeExpressedSize), imposed every generation rather than clamped once
+		// into this founder's genome — so a hunter body is always big enough to
+		// hunt with, whatever its size gene has drifted to.
+		return mindedOfClade(x, y, z, g, Genome.Clade.PREDATOR);
 	}
 
 	public static TestNPC mindedParasite(double x, double y, double z, Genome g) {
-		Genome own = g.copy();
-		own.size = Math.min(own.size, PARASITE_MAX_SIZE_PX); // small by nature
-		TestNPC t = mindedForager(x, y, z, own);
-		t.withClade(Genome.Clade.PARASITE); // writes through to the genome the body is drawn from
-		return t;
+		// The size cap is likewise an expression invariant now: the body stays
+		// smaller than its hosts every generation, not just at founding.
+		return mindedOfClade(x, y, z, g, Genome.Clade.PARASITE);
 	}
 
 	/**
@@ -746,13 +765,7 @@ public class TestNPC extends NPC {
 	}
 
 	public static TestNPC mindedForager(double x, double y, double z, Genome g) {
-		TestNPC t = new TestNPC(x, y, z, Behavior.MINDED);
-		configureGenomeBody(t, g); // size-scaled reserve, burn and repro thresholds
-		t.LOS_FOV = Math.PI * 2; // omnidirectional, like the other genome bodies
-		t.LOS_RANGE = Math.max(g.losRange, 3);
-		t.SEARCH_FREQ = 2;
-		t.mind = mindOf(g);
-		return t;
+		return minded(x, y, z, g, mindOf(g));
 	}
 
 	/** True if this body's decisions come from a pluggable {@link Mind} (the hybrid
@@ -788,11 +801,53 @@ public class TestNPC extends NPC {
 		return g.brain != null ? new LgpMind(g.brain) : INERT_MIND;
 	}
 
+	/**
+	 * How much faster than its genome a clade's body moves. A scavenger's living
+	 * is made by ranging, so it strides {@link #SCAVENGER_STRIDE} times its
+	 * genome speed; every other clade takes its speed as written.
+	 *
+	 * <p>Applied at <em>expression</em> — every time a body is built, founder and
+	 * child alike — rather than stamped into one founder's genome. That was the
+	 * leak: the stride lived in {@code mindedScavenger} only, so a reseeded
+	 * scavenger ranged fast and its own children reverted to plain genome speed,
+	 * and selection could never touch a trait no genome carried. Deriving it from
+	 * the clade at build time makes it true for the whole lineage. (Step 2 moves
+	 * this into {@link Genome.Clade} itself.)
+	 */
+	static double cladeStride(Genome.Clade clade) {
+		return clade == Genome.Clade.SCAVENGER ? SCAVENGER_STRIDE : 1.0;
+	}
+
+	/**
+	 * The adult body size a clade actually grows to, in pixels, given the genome
+	 * it carries — the clade's physical invariant imposed at expression rather
+	 * than clamped once into a founder's genome. A parasite's body is capped so it
+	 * stays smaller than its hosts; a hunter's is floored so the herd is on its
+	 * menu. The genome's own {@code size} gene is free to drift across the whole
+	 * band; what a given clade makes of it is bounded here, EVERY generation, so
+	 * the niche invariant cannot erode as the gene random-walks past the cap the
+	 * founder was clamped to. (Step 2 moves this onto the clade.)
+	 */
+	static double cladeExpressedSize(Genome.Clade clade, double genomeSize) {
+		if (clade == Genome.Clade.PARASITE) {
+			return Math.min(genomeSize, PARASITE_MAX_SIZE_PX);
+		}
+		if (clade == Genome.Clade.PREDATOR) {
+			return Math.max(genomeSize, PREDATOR_MIN_SIZE_PX);
+		}
+		return genomeSize;
+	}
+
 	private static void configureGenomeBody(TestNPC t, net.hedinger.prototype.entities.Genome g) {
 		t.genome = g;
 		adoptClade(t, g); // heredity carries clade in the genome; the body follows it
-		// Born a juvenile and grow into the genome's body (see NPC.beginGrowth).
-		t.beginGrowth(g.size);
+		// Born a juvenile and grow into the clade's expressed body (see
+		// NPC.beginGrowth). The expressed size is the genome's size gene bounded by
+		// what this clade can physically be — a cap or a floor imposed here, at
+		// every birth, so the invariant holds for the whole lineage and not just
+		// the founder whose genome was once clamped.
+		double adult = cladeExpressedSize(g.clade, g.size);
+		t.beginGrowth(adult);
 		// A body takes as long to rot away as it took to build: the corpse span IS
 		// the childhood, read off the same two growth constants rather than a
 		// separate figure that could drift out of step. Both are linear in adult
@@ -800,8 +855,10 @@ public class TestNPC extends NPC {
 		// animal leaves a big body, lying there for a big scavenger's window.
 		// Measured from the body it will grow INTO, so a creature that dies young
 		// still leaves the corpse its species leaves.
-		t.deathspan = growthTicks(g.size);
-		t.speed = g.speed;
+		t.deathspan = growthTicks(adult);
+		// Speed is the genome's, scaled by what the clade does with it — a ranging
+		// factor derived here so a lineage keeps it, not a founder-only stamp.
+		t.speed = g.speed * cladeStride(g.clade);
 		t.turn = g.turnRate;
 		t.metabolic = true;
 		// Energy scales are all derived from body size (see NPC's size-scaled model):
@@ -946,6 +1003,16 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
+	/** Snaps this body to its adult size — a fixture convenience for the many
+	 *  scenarios that test a mechanic (grabbing, hunting, riding) on a grown body
+	 *  and do not want to tick a juvenile up first. Every genome body is now born a
+	 *  juvenile through the one expression path, so a test that needs an adult says
+	 *  so here rather than relying on a builder that happened to skip growth. */
+	public TestNPC grown() {
+		finishGrowth();
+		return this;
+	}
+
 	public TestNPC withEnergy(double e) {
 		energy = e;
 		return this;
@@ -1004,8 +1071,25 @@ public class TestNPC extends NPC {
 	/** Makes this body metabolic (burns energy, can starve) — lets a scenario put a
 	 *  hand-driven mind on an energy-bearing body to exercise the hunger/movement
 	 *  economy without the full breeder lifecycle. */
+	/** This body's expressed top speed (tiles/tick) — the genome's speed gene
+	 *  after the clade's stride factor, for scenarios that assert expression. */
+	public double bodySpeed() {
+		return speed;
+	}
+
 	public TestNPC withMetabolic() {
 		metabolic = true;
+		return this;
+	}
+
+	/** Turns the energy economy OFF for a fixture that measures behaviour rather
+	 *  than survival — a body that neither burns nor starves, so a probe can hold
+	 *  it at a fixed hunger and read what its mind does without the tank moving
+	 *  under the measurement. Every genome body is metabolic by default now (the
+	 *  living world's bodies all are), so a test that wants a bench specimen says
+	 *  so here. */
+	public TestNPC withoutMetabolism() {
+		metabolic = false;
 		return this;
 	}
 
