@@ -503,96 +503,174 @@ public final class Worlds {
 	}
 
 	/**
-	 * A region of the surface, as the handful of numbers that bend the one
-	 * terrain rule into somewhere with a character of its own.
+	 * A region of the surface: the numbers that bend the one terrain rule into
+	 * somewhere with a character of its own, and the few hard rules that make
+	 * the character unmistakable.
 	 *
-	 * <p>The surface used to be a single global blend: one elevation field, one
-	 * moisture field, one ladder of thresholds, everywhere. It produced variety
-	 * at the scale of a few tiles — a pond here, a thicket there — and none at
-	 * all at the scale of a journey, so every part of the map had the same
-	 * things in the same proportions and travelling across it told you nothing.
+	 * <p>The surface used to be a single global blend — one elevation field,
+	 * one moisture field, one ladder of thresholds — with variety at the scale
+	 * of a few tiles and none at the scale of a journey. The first cut at
+	 * regions only shifted the blend's inputs per region, and it read as a
+	 * patchwork: six tints of the same place, because every region could still
+	 * have a lake, a thicket and a sand pan wherever its noise said so.
 	 *
-	 * <p>Rather than write six terrain generators, this shifts the ONE
-	 * generator's inputs. A region that adds to moisture floods: its lakes are
-	 * bigger, its reed fringes wider, its meadows richer, all out of the rules
-	 * that were already there. A region that adds to elevation turns stony,
-	 * grows outcrops and scree, and carries more skyline above it. That keeps
-	 * the biomes from being six disjoint tile palettes stitched at a seam —
-	 * they share every threshold, so they blend where they meet, and a rule
-	 * added to the ladder reaches all of them at once.
+	 * <p>So a biome is now two things. The biases still bend the shared ladder,
+	 * which keeps the regions blending at their borders. And a handful of
+	 * per-biome thresholds decide what a region simply DOES NOT HAVE: the
+	 * badlands have no water and no thicket, the wetland has no sand and no
+	 * outcrops, the woodland is thicket first and clearing second. Absence is
+	 * what makes a place recognisable; a desert with a pond in it is a meadow
+	 * that happens to be dry.
 	 */
-	private static final class Biome {
+	static final class Biome {
 		final String name;
 		/** Added to the elevation field: up for uplands, down for basins. Also
-		 *  read by {@link #raiseSkyline}, so a stony region really does stand
-		 *  taller rather than only looking it from above. */
+		 *  read by {@link #raiseSkyline}, so a stony region carries a skyline
+		 *  and a marsh does not — one opinion about how high the land is. */
 		final double elevBias;
-		/** Added to the moisture field, which decides water, reeds, marsh,
-		 *  thicket and how green the pasture gets. */
+		/** Added to the moisture field. */
 		final double moistBias;
 		/** The meadow fertility line, {@code fertBase + fertGain * moisture}. */
 		final double fertBase, fertGain;
-		/** Detail-noise threshold for thickets: lower is more wooded. */
-		final double coverCut;
+		/** Thicket: detail noise above {@code coverCut} on ground moister than
+		 *  {@code coverMoist}. A cut above 1 means no thicket at all. */
+		final double coverCut, coverMoist;
+		/** Open water: moisture above {@code waterMoist} on ground lower than
+		 *  {@code waterElev}. Reed and marsh rings hang off the same numbers.
+		 *  A moisture above 1 means no water at all. */
+		final double waterMoist, waterElev;
+		/** Sand pans: ground higher than {@code sandElev} and drier than
+		 *  {@code sandMoist}. An elevation above 1 means no sand. */
+		final double sandElev, sandMoist;
+		/** Bare dirt: high ground drier than this grows nothing. */
+		final double dustMoist;
 
-		Biome(String name, double elevBias, double moistBias,
-				double fertBase, double fertGain, double coverCut) {
+		Biome(String name, double elevBias, double moistBias, double fertBase, double fertGain,
+				double coverCut, double coverMoist, double waterMoist, double waterElev,
+				double sandElev, double sandMoist, double dustMoist) {
 			this.name = name;
 			this.elevBias = elevBias;
 			this.moistBias = moistBias;
 			this.fertBase = fertBase;
 			this.fertGain = fertGain;
 			this.coverCut = coverCut;
+			this.coverMoist = coverMoist;
+			this.waterMoist = waterMoist;
+			this.waterElev = waterElev;
+			this.sandElev = sandElev;
+			this.sandMoist = sandMoist;
+			this.dustMoist = dustMoist;
 		}
 	}
 
-	/** The six regions, as a wet/dry axis crossed with a warm/cool one. The
-	 *  MEADOW row is the world as it was before regions existed, so the
-	 *  temperate middle of the map still reads exactly like the old one. */
-	private static final Biome MEADOW = new Biome("meadow", 0, 0, 0.15, 1.25, 0.62);
-	private static final Biome STEPPE = new Biome("steppe", 0.01, -0.09, 0.10, 1.00, 0.76);
-	private static final Biome BADLANDS = new Biome("badlands", 0.03, -0.17, 0.04, 0.70, 0.86);
-	private static final Biome UPLAND = new Biome("upland", 0.09, -0.05, 0.08, 0.85, 0.72);
-	private static final Biome WOODLAND = new Biome("woodland", -0.02, 0.06, 0.20, 1.20, 0.44);
-	private static final Biome WETLAND = new Biome("wetland", -0.07, 0.13, 0.26, 1.30, 0.56);
+	/** Never: a threshold no sample can clear. */
+	private static final double NEVER = 9;
+
+	/** The meadow is the world exactly as it was before regions existed, so
+	 *  the temperate parts of the map still read as the world these thresholds
+	 *  were tuned for. Everything else is defined by its distance from it. */
+	private static final Biome MEADOW = new Biome("meadow",
+			0, 0, 0.15, 1.25, 0.62, 0.55, 0.70, 0.45, 0.58, 0.30, 0.40);
+	/** Dry open grass: thin, few features, the odd copse and pond. */
+	private static final Biome STEPPE = new Biome("steppe",
+			0.01, -0.08, 0.10, 0.90, 0.86, 0.60, 0.84, 0.40, 0.62, 0.28, 0.42);
+	/** Sand pans, bare dust, quicksand and mesas. No water, no thicket. */
+	private static final Biome BADLANDS = new Biome("badlands",
+			0.05, -0.20, 0.03, 0.60, NEVER, NEVER, NEVER, 0, 0.50, 0.48, 0.62);
+	/** Rock, scree and rocky pasture; most of the skyline stands over it. */
+	private static final Biome UPLAND = new Biome("upland",
+			0.14, -0.04, 0.08, 0.80, 0.82, 0.60, 0.86, 0.35, NEVER, 0, 0.30);
+	/** Thicket first and clearing second: the one region that hides things. */
+	private static final Biome WOODLAND = new Biome("woodland",
+			-0.02, 0.08, 0.22, 1.10, 0.33, 0.30, 0.76, 0.45, NEVER, 0, 0.25);
+	/** Lakes, reed beds and marsh, on the richest ground there is. No sand,
+	 *  and it sits too low to carry outcrops. */
+	private static final Biome WETLAND = new Biome("wetland",
+			-0.08, 0.16, 0.28, 1.30, 0.62, 0.62, 0.60, 0.52, NEVER, 0, 0.20);
+
+	/** One region: a Voronoi site and the biome it carries. */
+	static final class Region {
+		final int x, y;
+		final Biome biome;
+
+		Region(int x, int y, Biome biome) {
+			this.x = x;
+			this.y = y;
+			this.biome = biome;
+		}
+	}
 
 	/**
-	 * Which region (x, y) belongs to.
+	 * The map's regions: a handful of sites on a jittered grid, each carrying a
+	 * biome, with every biome placed at least once.
 	 *
-	 * <p>Two very low-frequency fields, one wet/dry and one warm/cool, crossed
-	 * into a three-by-two table. The frequencies are the whole design here:
-	 * 0.035 puts a region's lattice about thirty tiles apart, which on the
-	 * default map is roughly ten regions across — small enough that a walk
-	 * crosses several, large enough that each one is somewhere rather than a
-	 * patch. Much lower and a single seed's map is two biomes and a rumour of a
-	 * third; much higher and the regions stop being regions.
+	 * <p>Voronoi cells rather than thresholds on a low-frequency field, and the
+	 * reason is control over SIZE. A field's regions are wherever its contours
+	 * happen to fall: at a frequency low enough for big regions a single seed's
+	 * map was two biomes and a rumour of a third, and at a frequency high
+	 * enough to show all six they were confetti. A site owns everything nearer
+	 * to it than to any other site, so there are exactly as many regions as
+	 * sites, each about a grid cell across — on the default map, eight regions
+	 * of roughly seventy by ninety tiles, which is what makes a badland a
+	 * badland rather than a scatter of dry patches.
 	 *
-	 * <p>The local detail noise is folded into both axes before the thresholds
-	 * are applied. Without it the borders are contours of a smooth field —
-	 * long, clean curves that no landscape has. With it they interlock at the
-	 * scale of a few tiles, so a wood thins into steppe through a scatter of
-	 * copses rather than along a line.
+	 * <p>Everything here comes off the noise lattice rather than the RNG, so
+	 * the layout is a fact of the seed and the entity stream is untouched.
 	 */
-	private static Biome biomeAt(int x, int y, double detail) {
-		double jitter = BIOME_JITTER * (detail - 0.5);
-		double wet = Utils.noise2(x + 1700, y + 1100, BIOME_FREQ) + jitter;
-		double warm = Utils.noise2(x + 2300, y + 90, BIOME_FREQ * 1.3) - jitter;
-		if (wet > 0.62) {
-			return warm > 0.5 ? WETLAND : WOODLAND;
+	static Region[] regionSites(int cols, int rows) {
+		int nx = Math.max(2, (int) Math.round(cols / 72.0));
+		int ny = Math.max(2, (int) Math.round(rows / 88.0));
+		Biome[] deck = { WETLAND, BADLANDS, UPLAND, WOODLAND, MEADOW, STEPPE };
+		// A per-seed shuffle of the deck, so which biomes neighbour which is
+		// the seed's business and not a fixed pattern every map repeats.
+		for (int i = deck.length - 1; i > 0; i--) {
+			int j = (int) (Utils.noise2(i * 41 + 7, 3, 0.37) * (i + 1)) % (i + 1);
+			Biome t = deck[i];
+			deck[i] = deck[j];
+			deck[j] = t;
 		}
-		if (wet > 0.38) {
-			return warm > 0.5 ? MEADOW : STEPPE;
+		Region[] out = new Region[nx * ny];
+		double cw = cols / (double) nx, ch = rows / (double) ny;
+		for (int j = 0; j < ny; j++) {
+			for (int i = 0; i < nx; i++) {
+				int k = j * nx + i;
+				// The site sits somewhere in the middle half of its cell, so
+				// neighbouring regions are never the same size twice.
+				double jx = 0.25 + 0.5 * Utils.noise2(i * 37 + 11, j * 53 + 7, 0.41);
+				double jy = 0.25 + 0.5 * Utils.noise2(i * 29 + 5, j * 47 + 13, 0.43);
+				// Past the six, the extras are the two temperate ones: a map
+				// with nine regions is not a map with a second badland.
+				Biome b = k < deck.length ? deck[k] : (k % 2 == 0 ? MEADOW : STEPPE);
+				out[k] = new Region((int) ((i + jx) * cw), (int) ((j + jy) * ch), b);
+			}
 		}
-		return warm > 0.5 ? BADLANDS : UPLAND;
+		return out;
 	}
 
-	/** How far apart a region's lattice points stand, as a noise frequency:
-	 *  1/0.035 is about thirty tiles. */
-	private static final double BIOME_FREQ = 0.035;
+	/**
+	 * Which region (x, y) belongs to: the nearest site, measured from a point
+	 * the low-frequency warp has pushed a dozen tiles or so off (x, y). The
+	 * warp is what turns straight Voronoi edges into coastlines; without it the
+	 * borders are the polygon edges of a diagram, which no landscape has.
+	 */
+	static Biome biomeAt(Region[] regions, int x, int y) {
+		double wx = x + BIOME_WARP * (Utils.noise2(x + 3100, y + 2200, 0.022) - 0.5) * 2;
+		double wy = y + BIOME_WARP * (Utils.noise2(x + 4300, y + 900, 0.022) - 0.5) * 2;
+		Region best = regions[0];
+		double bd = Double.MAX_VALUE;
+		for (Region r : regions) {
+			double d = (wx - r.x) * (wx - r.x) + (wy - r.y) * (wy - r.y);
+			if (d < bd) {
+				bd = d;
+				best = r;
+			}
+		}
+		return best.biome;
+	}
 
-	/** How much local detail is allowed to move a region's border. Enough to
-	 *  interlock the edges, far too little to put a lake in the badlands. */
-	private static final double BIOME_JITTER = 0.09;
+	/** How far the warp may move a region border, in tiles. Enough to make the
+	 *  edges wander, far too little to move a region somewhere else. */
+	private static final double BIOME_WARP = 14;
 
 	/** Clamps a biased noise sample back into the [0, 1] the thresholds
 	 *  ladder assumes. */
@@ -618,21 +696,22 @@ public final class Worlds {
 		// be told which floor that is instead of taking the highest index.
 		w.setSurfaceZ(SURFACE_Z);
 
-		// ---- the surface: regional biomes inside a rocky boundary ----
+		// ---- the surface: regions inside a rocky boundary ----
+		Region[] regions = regionSites(cols, rows);
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
 				double detail = Utils.noise2(x + 950, y + 640, 0.16);
-				Biome b = biomeAt(x, y, detail);
+				Biome b = biomeAt(regions, x, y);
 				double elev = clamp01(Utils.noise2(x, y, 0.055) + b.elevBias);
 				double moist = clamp01(Utils.noise2(x + 500, y + 300, 0.075) + b.moistBias);
 				Tile.TileType t;
 				double fert;
 				if (border || elev > 0.87) {
 					t = Tile.TileType.TYPE_WALL;
-					fert = 0; // rocky rim + occasional highland outcrops (the elevation
-					// noise means ~0.67, so this high threshold keeps highlands a rare
-					// accent instead of walling off half the map)
+					fert = 0; // rocky rim + highland outcrops (the elevation noise
+					// means ~0.67, so this high threshold keeps highlands an accent
+					// everywhere but the upland, whose bias is what earns it more)
 				} else if (elev > 0.845) {
 					t = Tile.TileType.TYPE_RUBBLE;
 					fert = 0; // scree collar hugging the outcrops
@@ -648,25 +727,26 @@ public final class Worlds {
 					// than a texture swap.
 					t = Tile.TileType.TYPE_ROCKY;
 					fert = 0.10 + 0.30 * moist;
-				} else if (moist > 0.70 && elev < 0.45) {
+				} else if (moist > b.waterMoist && elev < b.waterElev) {
 					t = Tile.TileType.TYPE_WATER;
 					fert = 0; // lakes in the low, wet ground
-				} else if (moist > 0.68 && elev < 0.46) {
+				} else if (moist > b.waterMoist - 0.03 && elev < b.waterElev + 0.01) {
 					t = Tile.TileType.TYPE_REEDS;
 					fert = 0; // reed beds fringing the water: slow, sight-blocking
-				} else if (moist > 0.60 && elev < 0.52) {
+				} else if (moist > b.waterMoist - 0.10 && elev < b.waterElev + 0.07) {
 					t = Tile.TileType.TYPE_MUD;
 					fert = 0.30; // marshy shore, slows movement
-				} else if (moist > 0.55 && detail > b.coverCut) {
+				} else if (moist > b.coverMoist && detail > b.coverCut) {
 					t = Tile.TileType.TYPE_COVER;
 					fert = 0.90; // thickets: lush, and they block line of sight
-				} else if (elev > 0.58 && moist < 0.30) {
-					// The badlands' driest core: a sand pan, with treacherous
-					// quicksand pockets where the detail noise peaks — and, in
-					// the band between, the thorn scrub that is the dry
-					// country's only cover. The desert had none at all: a
-					// hunter there had nowhere to wait, and the cactus is by
-					// its own description too narrow to hide behind.
+				} else if (elev > b.sandElev && moist < b.sandMoist) {
+					// A sand pan, with treacherous quicksand pockets where the
+					// detail noise peaks — and, in the band between, the thorn
+					// scrub that is the dry country's only cover. The desert
+					// had none at all: a hunter there had nowhere to wait, and
+					// the cactus is by its own description too narrow to hide
+					// behind. Which regions get a pan at all is theirs to say:
+					// the badlands are mostly this, and the wetland has none.
 					t = detail > 0.78 ? Tile.TileType.TYPE_QUICKSAND
 							: detail > 0.44 && detail < 0.58 ? Tile.TileType.TYPE_SCRUB
 							: Tile.TileType.TYPE_SAND;
@@ -690,9 +770,9 @@ public final class Worlds {
 						t = Tile.TileType.TYPE_CACTUS;
 					}
 					fert = 0;
-				} else if (elev > 0.58 && moist < 0.40) {
+				} else if (elev > 0.58 && moist < b.dustMoist) {
 					t = Tile.TileType.TYPE_FLOOR;
-					fert = 0.0; // dry badlands: bare dirt, no grass, no food
+					fert = 0.0; // dry high ground: bare dirt, no grass, no food
 				} else {
 					// Meadow, and its richness is the story the ground tells:
 					// fertility runs the whole band from thin scrub on the dry
@@ -873,14 +953,14 @@ public final class Worlds {
 	 * a second elevation opinion would produce and it would look deliberate.
 	 */
 	private static void raiseSkyline(World w, int cols, int rows) {
+		Region[] regions = regionSites(cols, rows);
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
 				// The same biased elevation the ground read, so a stony upland
 				// carries a skyline and a wetland does not -- one opinion about
 				// how high the land is, not two.
-				double n = clamp01(Utils.noise2(x, y, 0.055)
-						+ biomeAt(x, y, Utils.noise2(x + 950, y + 640, 0.16)).elevBias);
+				double n = clamp01(Utils.noise2(x, y, 0.055) + biomeAt(regions, x, y).elevBias);
 				boolean summit = border || n > SUMMIT_N;
 				setBare(w, x, y, SKY_Z, summit && w.getTile(x, y, SURFACE_Z).isSolid()
 						? Tile.TileType.TYPE_WALL
