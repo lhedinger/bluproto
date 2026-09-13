@@ -914,7 +914,7 @@ public final class Worlds {
 			int[] p = q.poll();
 			out.add(p);
 			for (int d = 0; d < 4; d++) {
-				int nx = p[0] + Tile.dirDx(d * 2), ny = p[1] + Tile.dirDy(d * 2);
+				int nx = p[0] + Tile.dirDx(d), ny = p[1] + Tile.dirDy(d);
 				if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || seen[nx][ny]) {
 					continue;
 				}
@@ -939,7 +939,7 @@ public final class Worlds {
 			int[] bestSite = null;
 			long best = Long.MIN_VALUE;
 			for (int[] p : table) {
-				for (int u = 0; u < 8; u += 2) {
+				for (int u = 0; u < 4; u++) {
 					int run = hillRun(w, cols, rows, p[0], p[1], u);
 					if (run < 0) {
 						continue;
