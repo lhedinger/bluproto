@@ -418,11 +418,17 @@ public final class Worlds {
 	 * ground, and every reader that derived "the surface" from {@code levels-1}
 	 * would quietly have renamed the world's floors by one.
 	 *
-	 * <p>It is almost entirely {@code TYPE_VOID}. What stands in it is what the
-	 * surface's own elevation says should stand there — the highland outcrops
-	 * and the mesa buttes, whose tops carry on up past the ground plane. A
-	 * viewer on this level sees a scatter of summits over an otherwise open
-	 * drop onto the surface below.
+	 * <p>It is mostly {@code TYPE_VOID}. What stands in it is what the surface's
+	 * own elevation says should stand there — the highland outcrops and the mesa
+	 * buttes, whose tops carry on up past the ground plane. A viewer on this
+	 * level sees a scatter of summits over an otherwise open drop onto the
+	 * surface below.
+	 *
+	 * <p>The tallest of those summits are TABLES rather than blocks: flat
+	 * ground, with a ramp cut up the hillside onto each. For a long time nothing
+	 * up here was walkable at all, which made the sky the one floor of the world
+	 * no animal could reach — a level that existed to be looked at. It is a
+	 * place now, thin pasture and all.
 	 */
 	static final int SKY_Z = 3;
 
@@ -813,11 +819,256 @@ public final class Worlds {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
-				boolean summit = border || Utils.noise2(x, y, 0.055) > 0.90;
-				setBare(w, x, y, SKY_Z, summit && w.getTile(x, y, SURFACE_Z).isSolid()
-						? Tile.TileType.TYPE_WALL
-						: Tile.TileType.TYPE_VOID);
+				// The same biased elevation the ground read, so a stony upland
+				// carries a skyline and a wetland does not -- one opinion about
+				// how high the land is, not two.
+				double n = clamp01(Utils.noise2(x, y, 0.055)
+						+ biomeAt(x, y, Utils.noise2(x + 950, y + 640, 0.16)).elevBias);
+				boolean summit = border || n > 0.90;
+				boolean solid = w.getTile(x, y, SURFACE_Z).isSolid();
+				Tile.TileType t = Tile.TileType.TYPE_VOID;
+				if (summit && solid) {
+					// The core of a summit is its TABLE — flat ground on top of
+					// the mass, with the rest of the summit standing round it as
+					// the rim. Below the plateau threshold a summit is all rim,
+					// which is the old behaviour and what most of them still are.
+					t = !border && n > PLATEAU_N
+							? Tile.TileType.TYPE_ROCKY : Tile.TileType.TYPE_WALL;
+				}
+				setBare(w, x, y, SKY_Z, t);
+				if (t == Tile.TileType.TYPE_ROCKY) {
+					w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
+				}
 			}
+		}
+		rampTheSkyline(w, cols, rows);
+	}
+
+	/** The thin sward a wind-scoured mesa top keeps — well under the meadows
+	 *  below, so the climb buys grazing that is real but never better than
+	 *  staying down. */
+	private static final double PLATEAU_FERTILITY = 0.45;
+
+	/** Where a summit stops being a wall and becomes a table you can stand on.
+	 *  The surface calls 0.87 an outcrop and 0.90 a summit; a third threshold
+	 *  above those is what gives a mesa a rim to look at from below and a top to
+	 *  walk on, instead of a plateau whose edge is the map's own noise. */
+	private static final double PLATEAU_N = 0.92;
+
+	/** The smallest table worth a climb. A handful of tiles up a ramp is a
+	 *  landing, not a place, and every one of them costs a ramp cut through the
+	 *  rim. */
+	private static final int MIN_PLATEAU = 12;
+
+	/**
+	 * Ramps from the surface up onto the plateaus, and the demolition of every
+	 * plateau that could not get one.
+	 *
+	 * <p>The sky was previously walls and void alone: there was nothing up
+	 * there to stand on, so the level existed only as the thing that cast the
+	 * skyline. Giving summits tables is half the change; this is the half that
+	 * makes them part of the world, because a table with no way onto it is
+	 * scenery with a floor texture. Any plateau that ends up without a ramp is
+	 * put back to rim stone rather than left hanging — an unreachable walkable
+	 * region is exactly what {@code WorldAudit.connectivity} exists to catch,
+	 * and it would be right to.
+	 */
+	private static void rampTheSkyline(World w, int cols, int rows) {
+		boolean[][] seen = new boolean[cols][rows];
+		for (int sx = 0; sx < cols; sx++) {
+			for (int sy = 0; sy < rows; sy++) {
+				if (seen[sx][sy] || w.getTile(sx, sy, SKY_Z).getType() != Tile.TileType.TYPE_ROCKY) {
+					continue;
+				}
+				java.util.ArrayList<int[]> table = new java.util.ArrayList<int[]>();
+				floodPlateau(w, seen, cols, rows, sx, sy, table);
+				int want = table.size() < MIN_PLATEAU ? 0
+						: Math.max(1, table.size() / TILES_PER_SKY_RAMP);
+				int cut = 0;
+				if (want > 0) {
+					cut = climbPlateau(w, cols, rows, seen, table, want);
+				}
+				if (cut == 0) {
+					// Too small, or walled in on every side by its own rim:
+					// back to the mass it was cut out of.
+					for (int[] p : table) {
+						setBare(w, p[0], p[1], SKY_Z, Tile.TileType.TYPE_WALL);
+					}
+				}
+			}
+		}
+	}
+
+	/** How much table buys another way up. A plateau is a destination rather
+	 *  than a corridor, so this is far more generous than the underdark's
+	 *  figure — two ramps onto a big mesa is enough for it not to be a trap. */
+	private static final int TILES_PER_SKY_RAMP = 45;
+
+	/** Collects one plateau's tiles, four-connected. */
+	private static void floodPlateau(World w, boolean[][] seen, int cols, int rows,
+			int sx, int sy, java.util.List<int[]> out) {
+		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
+		q.add(new int[] { sx, sy });
+		seen[sx][sy] = true;
+		while (!q.isEmpty()) {
+			int[] p = q.poll();
+			out.add(p);
+			for (int d = 0; d < 4; d++) {
+				int nx = p[0] + Tile.dirDx(d * 2), ny = p[1] + Tile.dirDy(d * 2);
+				if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || seen[nx][ny]) {
+					continue;
+				}
+				if (w.getTile(nx, ny, SKY_Z).getType() != Tile.TileType.TYPE_ROCKY) {
+					continue;
+				}
+				seen[nx][ny] = true;
+				q.add(new int[] { nx, ny });
+			}
+		}
+	}
+
+	/**
+	 * Cuts up to {@code want} ramps onto one plateau and returns how many
+	 * landed. Sites are taken farthest-apart-first, the same spreading rule the
+	 * underdark's stairs use, so two ways up a mesa are on two sides of it.
+	 */
+	private static int climbPlateau(World w, int cols, int rows, boolean[][] seen,
+			java.util.List<int[]> table, int want) {
+		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
+		while (cut.size() < want) {
+			int[] bestSite = null;
+			long best = Long.MIN_VALUE;
+			for (int[] p : table) {
+				for (int u = 0; u < 8; u += 2) {
+					int run = hillRun(w, cols, rows, p[0], p[1], u);
+					if (run < 0) {
+						continue;
+					}
+					long near = 0; // no climb yet: every site is equally far from none
+					for (int[] q : cut) {
+						long d = (long) (p[0] - q[0]) * (p[0] - q[0])
+								+ (long) (p[1] - q[1]) * (p[1] - q[1]);
+						near = cut.get(0) == q ? d : Math.min(near, d);
+					}
+					if (!cut.isEmpty() && near < (long) MIN_SKY_RAMP_GAP * MIN_SKY_RAMP_GAP) {
+						continue;
+					}
+					// Farthest from the climbs already cut; among equals, the
+					// shortest spur, so a mesa is entered where its hillside is
+					// thinnest rather than wherever the scan reached first.
+					long rank = near * 8 - run;
+					if (rank > best) {
+						best = rank;
+						bestSite = new int[] { p[0], p[1], u, run };
+					}
+				}
+			}
+			if (bestSite == null) {
+				break;
+			}
+			raiseStair(w, seen, bestSite[0], bestSite[1], bestSite[2], bestSite[3]);
+			cut.add(bestSite);
+		}
+		return cut.size();
+	}
+
+	/** The closest two ways up the same mesa may stand. */
+	private static final int MIN_SKY_RAMP_GAP = 8;
+
+	/**
+	 * How much hillside stands between the plateau tile (px, py) and walkable
+	 * ground along {@code -u}, or -1 where no climb can be cut arriving from
+	 * that direction.
+	 *
+	 * <p>What is measured is the run of SOLID SURFACE, not the run of sky wall,
+	 * and the difference matters. The surface calls anything over 0.87
+	 * elevation an outcrop while the sky only stands up over 0.90, so every
+	 * mesa sits on a skirt of solid rock that carries no skyline: measuring the
+	 * wall alone left the ramp's landing out on bare stone every time, and no
+	 * climb was ever cut. The run of solid ground is the hill, wall or no wall.
+	 *
+	 * <p>Past the hill there must be three tiles of open air over walkable
+	 * ground — the landing the drop lands on, the tile between, and the
+	 * climbing ramp itself. The hill has a depth limit because the climb cuts a
+	 * spur of walkable stone along it: a short one reads as a notch in the
+	 * mesa's edge, a long one as a causeway out across the plain.
+	 */
+	private static int hillRun(World w, int cols, int rows, int px, int py, int u) {
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
+		int run = 0;
+		while (run < MAX_HILL_RUN) {
+			int ex = px - (run + 1) * ax, ey = py - (run + 1) * ay;
+			if (ex < 4 || ey < 4 || ex >= cols - 4 || ey >= rows - 4) {
+				return -1;
+			}
+			if (!w.getTile(ex, ey, SURFACE_Z).isSolid()) {
+				break; // (ex, ey) is the first open ground: the hill ended one back
+			}
+			Tile.TileType sky = w.getTile(ex, ey, SKY_Z).getType();
+			if (sky != Tile.TileType.TYPE_WALL && sky != Tile.TileType.TYPE_VOID) {
+				return -1; // a climb already cut through here
+			}
+			run++;
+		}
+		if (run == 0 || run >= MAX_HILL_RUN) {
+			return -1;
+		}
+		for (int k = 1; k <= 3; k++) {
+			int qx = px - (run + k) * ax, qy = py - (run + k) * ay;
+			if (qx < 2 || qy < 2 || qx >= cols - 2 || qy >= rows - 2) {
+				return -1;
+			}
+			if (w.getTile(qx, qy, SKY_Z).getType() != Tile.TileType.TYPE_VOID) {
+				return -1;
+			}
+			Tile.TileType g = w.getTile(qx, qy, SURFACE_Z).getType();
+			if (!w.getTile(qx, qy, SURFACE_Z).isWalkable() || g == Tile.TileType.TYPE_RAMPUP
+					|| g == Tile.TileType.TYPE_RAMPDOWN || g == Tile.TileType.TYPE_HOLE) {
+				return -1;
+			}
+		}
+		return run;
+	}
+
+	/** The longest hillside a climb will run up. Past this the spur stops
+	 *  reading as a notch in the mesa's edge and starts reading as a causeway. */
+	private static final int MAX_HILL_RUN = 6;
+
+	/**
+	 * The climb from the ground up onto a plateau: {@link #sinkStairwell}'s cut
+	 * turned the other way up, with the surface as the lower floor and the sky
+	 * as the upper one.
+	 *
+	 * <p>Reading inward along {@code u} from the open plain: a hole in the sky
+	 * to drop back through, the descending ramp beside it, the climbing ramp on
+	 * the ground, and then the spur it steps out onto — the hillside between
+	 * the ramp's exit and the table, raised into walkable stone. The mesa's
+	 * edge overhangs its own stair, which is what the underdark's stairwells do
+	 * a level down and what makes the descent a walk rather than a jump.
+	 */
+	private static void raiseStair(World w, boolean[][] seen, int px, int py, int u, int run) {
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
+		int bx = px - (run + 3) * ax, by = py - (run + 3) * ay;
+		setBare(w, bx, by, SKY_Z, Tile.TileType.TYPE_HOLE);
+		setBare(w, bx + ax, by + ay, SKY_Z, Tile.TileType.TYPE_RAMPDOWN);
+		w.getTile(bx + ax, by + ay, SKY_Z).setRampUphill(u);
+		setBare(w, bx + 2 * ax, by + 2 * ay, SURFACE_Z, Tile.TileType.TYPE_RAMPUP);
+		w.getTile(bx + 2 * ax, by + 2 * ay, SURFACE_Z).setRampUphill(u);
+		// One past the hill: the tile the descending ramp is stepped onto from
+		// the spur, and the tile the climb exits beside. It stands over the
+		// climbing ramp rather than over solid ground -- the stair's own
+		// overhang, exactly as the underdark's stairwells overhang theirs a
+		// level down. Without it the descending ramp is stranded a tile off the
+		// spur and the mesa has a way up but no way down.
+		for (int k = 1; k <= run + 1; k++) {
+			int nx = px - k * ax, ny = py - k * ay;
+			setBare(w, nx, ny, SKY_Z, Tile.TileType.TYPE_ROCKY);
+			w.getTile(nx, ny, SKY_Z).setFertility(PLATEAU_FERTILITY);
+			// Claimed, so the sweep that is still running does not come back
+			// and flood the spur as a table of its own — which, being three
+			// tiles long, would fail the size test and be demolished, taking
+			// the only way onto the mesa with it.
+			seen[nx][ny] = true;
 		}
 	}
 
