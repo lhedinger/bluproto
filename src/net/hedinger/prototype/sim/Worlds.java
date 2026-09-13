@@ -824,24 +824,59 @@ public final class Worlds {
 				// how high the land is, not two.
 				double n = clamp01(Utils.noise2(x, y, 0.055)
 						+ biomeAt(x, y, Utils.noise2(x + 950, y + 640, 0.16)).elevBias);
-				boolean summit = border || n > 0.90;
-				boolean solid = w.getTile(x, y, SURFACE_Z).isSolid();
-				Tile.TileType t = Tile.TileType.TYPE_VOID;
-				if (summit && solid) {
-					// The core of a summit is its TABLE — flat ground on top of
-					// the mass, with the rest of the summit standing round it as
-					// the rim. Below the plateau threshold a summit is all rim,
-					// which is the old behaviour and what most of them still are.
-					t = !border && n > PLATEAU_N
-							? Tile.TileType.TYPE_ROCKY : Tile.TileType.TYPE_WALL;
+				boolean summit = border || n > SUMMIT_N;
+				setBare(w, x, y, SKY_Z, summit && w.getTile(x, y, SURFACE_Z).isSolid()
+						? Tile.TileType.TYPE_WALL
+						: Tile.TileType.TYPE_VOID);
+			}
+		}
+		flattenSummits(w, cols, rows);
+		rampTheSkyline(w, cols, rows);
+	}
+
+	/**
+	 * Cuts the top off every summit wide enough to have one: a mesa's TABLE is
+	 * its interior, and its rim is the ring of rock left standing round it.
+	 *
+	 * <p>Erosion rather than a third elevation threshold, and the difference is
+	 * the whole reason the sky is a place. A threshold asks "is this cell high
+	 * enough", so whether a summit gets a top depends on how high its own noise
+	 * peak happens to run — and measured across seeds that was one mesa in the
+	 * whole world with a top on it, an empty level with a single green patch on
+	 * it. Erosion asks "is this cell WIDE enough", which is the actual property
+	 * a mesa has and a spire does not: every summit broad enough to hold an
+	 * interior gets one, at whatever height it stands, and a narrow stack stays
+	 * a narrow stack.
+	 *
+	 * <p>Eroding by exactly one leaves a rim exactly one thick at the thinnest
+	 * point, which is what the climbs need to breach and what reads from below
+	 * as an edge rather than a slope.
+	 */
+	private static void flattenSummits(World w, int cols, int rows) {
+		boolean[][] table = new boolean[cols][rows];
+		for (int x = 3; x < cols - 3; x++) {
+			for (int y = 3; y < rows - 3; y++) {
+				if (w.getTile(x, y, SKY_Z).getType() != Tile.TileType.TYPE_WALL) {
+					continue;
 				}
-				setBare(w, x, y, SKY_Z, t);
-				if (t == Tile.TileType.TYPE_ROCKY) {
+				boolean inside = true;
+				for (int dx = -1; dx <= 1 && inside; dx++) {
+					for (int dy = -1; dy <= 1 && inside; dy++) {
+						inside = w.getTile(x + dx, y + dy, SKY_Z).getType()
+								!= Tile.TileType.TYPE_VOID;
+					}
+				}
+				table[x][y] = inside;
+			}
+		}
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				if (table[x][y]) {
+					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
 					w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
 				}
 			}
 		}
-		rampTheSkyline(w, cols, rows);
 	}
 
 	/** The thin sward a wind-scoured mesa top keeps — well under the meadows
@@ -849,16 +884,19 @@ public final class Worlds {
 	 *  staying down. */
 	private static final double PLATEAU_FERTILITY = 0.45;
 
-	/** Where a summit stops being a wall and becomes a table you can stand on.
-	 *  The surface calls 0.87 an outcrop and 0.90 a summit; a third threshold
-	 *  above those is what gives a mesa a rim to look at from below and a top to
-	 *  walk on, instead of a plateau whose edge is the map's own noise. */
-	private static final double PLATEAU_N = 0.92;
+	/** Where the land stops climbing and starts standing up into the open air.
+	 *
+	 *  <p>Just under the 0.87 the ground calls an outcrop, so an outcrop and the
+	 *  skyline over it are very nearly the same shape: a rocky hill has height,
+	 *  and the sky is the relief map of the ground rather than a second, smaller
+	 *  opinion about where the high country is. It was 0.90, which left the sky
+	 *  a scatter of stacks too narrow for any of them to have a top. */
+	private static final double SUMMIT_N = 0.875;
 
 	/** The smallest table worth a climb. A handful of tiles up a ramp is a
 	 *  landing, not a place, and every one of them costs a ramp cut through the
 	 *  rim. */
-	private static final int MIN_PLATEAU = 12;
+	private static final int MIN_PLATEAU = 8;
 
 	/**
 	 * Ramps from the surface up onto the plateaus, and the demolition of every
