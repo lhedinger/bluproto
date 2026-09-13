@@ -383,15 +383,31 @@ public final class Worlds {
 	/**
 	 * Default world size (tiles). Large enough for real biomes and a proper
 	 * underground network; {@link WorldAudit} verifies the whole space stays
-	 * connected and that the sim keeps far more than real-time headroom here. The
-	 * one-time startup bake of the ground layers fits the deploy VPS's small
-	 * ({@code -Xmx512m}) heap because the procedural tile sprites are shared/cached
-	 * (see {@code ProcTiles}) and each level is rendered once into a single image
-	 * then sliced (see {@code LayerBaker}) — so bake memory is bounded by distinct
-	 * tile shapes, not map area. {@code WORLD_COLS}/{@code WORLD_ROWS} (see
-	 * {@code ServerMain}) override this without a rebuild.
+	 * connected and that the sim keeps far more than real-time headroom here.
+	 * {@code WORLD_COLS}/{@code WORLD_ROWS} (see {@code ServerMain}) override
+	 * this without a rebuild.
+	 *
+	 * <p>The one-time startup bake of the ground layers fits the deploy VPS's
+	 * small ({@code -Xmx512m}) heap because the procedural tile sprites are
+	 * shared/cached (see {@code ProcTiles}) and each level is rendered one
+	 * chunk-row BAND at a time (see {@code LayerBaker}) -- so bake memory is
+	 * bounded by distinct tile shapes and map width, not map area. That is what
+	 * made this size affordable: a whole-level image here would be 830 MB.
 	 */
-	static final int COLS = 144, ROWS = 88;
+	static final int COLS = 288, ROWS = 176;
+
+	/**
+	 * The map area the founder counts and steward bounds below were tuned at.
+	 *
+	 * <p>Populations scale with map area, and the reference has to be a FIXED
+	 * area rather than {@code COLS * ROWS} -- otherwise growing the default map
+	 * silently divides its density by the growth, spreading the same headcount
+	 * over four times the ground and leaving a world that reads as empty
+	 * everywhere. Pinning it here means the same numbers mean the same density
+	 * at any size, and enlarging the map adds inhabitants instead of thinning
+	 * them.
+	 */
+	private static final double DENSITY_AREA = 144 * 88;
 
 	/**
 	 * The reseed floor the three consumer clades share: no niche is left standing
@@ -2706,7 +2722,7 @@ public final class Worlds {
 	 */
 	public static World demo(long seed, int cols, int rows) {
 		World w = demoTerrain(seed, cols, rows);
-		double scale = cols * (double) rows / (COLS * (double) ROWS);
+		double scale = cols * (double) rows / DENSITY_AREA;
 		net.hedinger.prototype.entities.Genome[] herb = herbivoreSpecies();
 		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
 

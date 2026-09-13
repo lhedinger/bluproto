@@ -205,10 +205,13 @@ public final class WorldAudit {
 
 	public static void main(String[] args) {
 		long seed = args.length > 0 ? Long.parseLong(args[0]) : 42L;
+		// Relative to the default, not to absolute numbers: the default has
+		// moved twice, and each time these rows quietly became a sweep of three
+		// sizes all smaller than the world actually shipped.
 		int[][] sizes = {
-				{ Worlds.COLS, Worlds.ROWS },   // current
-				{ 108, 66 },                    // 1.5x each dim (~2.25x area)
-				{ 144, 88 },                    // 2x each dim (~4x area)
+				{ Worlds.COLS / 2, Worlds.ROWS / 2 },             // half each dim
+				{ Worlds.COLS, Worlds.ROWS },                     // the world as shipped
+				{ Worlds.COLS * 3 / 2, Worlds.ROWS * 3 / 2 },     // 1.5x each dim (~2.25x area)
 		};
 		System.out.println("world audit (seed " + seed + ")");
 		System.out.printf("%-12s %-9s %-11s %-9s %-10s %s%n",
