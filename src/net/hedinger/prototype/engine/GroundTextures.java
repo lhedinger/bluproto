@@ -512,20 +512,46 @@ public final class GroundTextures {
 	 * self-shades (some crowns lit, lower rims dark) and the crevices between
 	 * caps drop to shadow, so the mass reads bumpy rather than flat.
 	 *
-	 * <p>Variety comes from two coarse world-space fields rather than
-	 * per-cell noise, so whole stands differ in character: a growth field
-	 * swings cap size between old-growth mounds and fine young scrub, and a
-	 * light field swings the share of lit crowns between airy bright stands
-	 * and dense dark ones. On top of that, the odd cell is an open gap, big
-	 * caps carry 2-px leaf flecks so they do not go flat, and the occasional
-	 * clump fruits (red berries) or flowers (cream blossoms) at its core --
-	 * the same accents the shrubs wear.
+	 * <p>Variety comes from coarse world-space fields rather than per-cell
+	 * noise, so whole stands differ in character: a growth field swings cap
+	 * size between old-growth mounds and fine young scrub, and a light field
+	 * swings the share of lit crowns between airy bright stands and dense dark
+	 * ones. Two more were added when the cover was given proper variety.
+	 *
+	 * <p>A CROWN field slides the cap from wide-and-low to tall-and-narrow, so
+	 * a stand reads either as a field of mounds or as leafy strands running
+	 * with the light. It is an ellipse rather than a second stamp because a
+	 * canopy is a FIELD — §5 sends discrete objects to authored stamps and
+	 * leaves texture procedural, and a leaf mass has no outline of its own to
+	 * author.
+	 *
+	 * <p>A FRUIT field decides whether a stand is in fruit at all. The accent
+	 * gate used to be one flat per-clump hash, so every thicket everywhere
+	 * carried the same scattering of berries and none was ever bare or heavy —
+	 * which is the opposite of what a stand of anything looks like. At the
+	 * bottom of the field nothing fruits; at the top roughly a quarter of the
+	 * clumps do. The accents themselves are unchanged and still §2's shared
+	 * flora red and cream, so a berry here is the berry the shrubs wear.
+	 *
+	 * <p>On top of that, the odd cell is an open gap and big caps carry 2-px
+	 * leaf flecks so they do not go flat.
 	 */
 	public static int canopy(double wx, double wy, int px, int py) {
 		int C = 4; // cap lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
 		double growth = Utils.noise2(wx + 41, wy + 83, 0.35); // stand character
 		double light = Utils.noise2(wx + 19, wy + 67, 0.3);
+		// Both new fields run an order of magnitude SLOWER than growth and light
+		// above them: Utils.noise2's lattice pitch is 1/frequency in TILES, so
+		// 0.3 changes character every three tiles, which is mottling within one
+		// patch rather than one patch differing from the next. At 0.07 a stand
+		// ten tiles across is in fruit or it is not.
+		double crown = Utils.noise2(wx + 71, wy + 13, 0.09);
+		double fruit = Utils.noise2(wx + 7, wy + 101, 0.07);
+		// Cap aspect: 0.66 wide-and-low .. 1.52 tall-and-narrow, reciprocal so a
+		// cap keeps roughly its mass as it changes shape rather than also
+		// changing size — growth is the field that owns size.
+		double ey = 0.66 + 0.86 * crown, ex = 1 / ey;
 		double bestD = 1e9, bestDy = 0, bestR = 1;
 		boolean bestLit = false;
 		int bestCx = 0, bestCy = 0;
@@ -538,7 +564,7 @@ public final class GroundTextures {
 				double jx = cx * C + 1 + hash01(cx, cy, 43) * (C - 2);
 				double jy = cy * C + 1 + hash01(cx, cy, 44) * (C - 2);
 				double r = 1.6 + 1.6 * growth + hash01(cx, cy, 45) * 1.2;
-				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
+				double dx = (px + 0.5 - jx) / ex, dy = (py + 0.5 - jy) / ey;
 				double d = Math.sqrt(dx * dx + dy * dy);
 				if (d - r < bestD - bestR) {
 					bestD = d;
@@ -553,8 +579,10 @@ public final class GroundTextures {
 		if (bestD < bestR) {
 			// The odd clump fruits or flowers at its core.
 			double accent = hash01(bestCx, bestCy, 52);
-			if (bestD < 0.7 && accent > 0.86) {
-				return accent > 0.95 ? BLOOM_CREAM : BLOOM_RED;
+			// Whether this STAND is in fruit, not just whether this clump is:
+			// the bare end of the field fruits nothing at all.
+			if (bestD < 0.7 && accent > 1 - 0.26 * fruit) {
+				return accent > 1 - 0.05 * fruit ? BLOOM_CREAM : BLOOM_RED;
 			}
 			if (bestLit && bestDy < -0.3 * bestR) {
 				return RAMP[CLS_COVER][2]; // lit crown of this clump
@@ -736,33 +764,125 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Reed beds from above, as stamped tufts rather than pixel noise: each
-	 * lattice cell holds (usually) one tuft -- a plus-shaped cluster of
-	 * stalks, some grown taller into a vertical run, its centre tip catching
-	 * the light -- over connected wet-dark ground showing between tufts. The
-	 * repeated-motif-varied-placement grammar of hand-drawn foliage.
+	 * The reed bed's five tuft forms, authored rather than computed.
+	 *
+	 * <p>Each is a 5x5 stamp anchored on its centre cell: {@code S} a stalk,
+	 * {@code T} a tip catching the light, {@code H} a brown cattail head,
+	 * {@code .} the wet ground showing through. The bed was one shape before
+	 * this — a plus drawn by testing {@code |dx|==1} and {@code |dy|<=tall} —
+	 * so every reed bed in the world was the same bed, and the only thing that
+	 * varied within one was whether a stalk stood one pixel taller.
+	 *
+	 * <p>Authored because these are MOTIFS, not a field: §3's motif-lattice
+	 * grammar is a cell grid that hash-picks a stamp and jitters its anchor,
+	 * and §5's "authored beats computed" is about exactly the distance tests
+	 * the old shape was built from. The forms are also what lets the bed have a
+	 * character at all — a mat and a cattail differ in outline, which is the
+	 * only thing that survives at the size a tile is actually seen.
+	 *
+	 * <p>Rejected on the comparison sheet: a six-pixel "broken stalk" form, and
+	 * a form whose tip sat off-centre. The first read as damage rather than as
+	 * a plant and the second broke the north-lit tip convention — a tip is lit
+	 * because it is the top of the stalk, so it has to sit on it.
 	 */
-	public static int reeds(int px, int py) {
+	/** How many tuft forms the bed can grow. */
+	public static final int REED_FORMS_N = 5;
+
+	/** One tuft form's 5x5 stamp rows, copied. Public so the scenario that pins
+	 *  the stamps can read the authored data rather than guess at it from
+	 *  pixels — the only mechanical check this art will ever get. */
+	public static String[] reedForm(int i) {
+		return REED_FORMS[i].clone();
+	}
+
+	private static final String[][] REED_FORMS = {
+			// mat — low and broad, the marsh grass of a shallow bed
+			{ ".....",
+			  ".....",
+			  "STSTS",
+			  ".S.S.",
+			  "....." },
+			// tuft — the plus that shipped, kept so old beds still read as reeds
+			{ ".....",
+			  "..T..",
+			  ".SSS.",
+			  "..S..",
+			  "....." },
+			// fan — two tips splaying off one stem, a young clump
+			{ ".T.T.",
+			  ".SSS.",
+			  "..S..",
+			  "..S..",
+			  "....." },
+			// stand — a tall stalk with arms, the deep-bed reed
+			{ "..T..",
+			  "..S..",
+			  ".SSS.",
+			  "..S..",
+			  "..S.." },
+			// cattail — one spike, brown head, no arms
+			{ "..H..",
+			  "..S..",
+			  "..S..",
+			  "..S..",
+			  "....." },
+	};
+
+	/**
+	 * Reed beds from above: stamped tufts over connected wet-dark ground.
+	 *
+	 * <p>Two coarse world-space fields give whole BEDS a character, the way the
+	 * canopy's growth and light fields do for stands of thicket — which the
+	 * reeds had no equivalent of, so a marsh fringe and a deep bed were drawn
+	 * identically. {@code stature} slides the form table from mats and small
+	 * tufts toward tall stalks and cattails; {@code openness} slides how much
+	 * water shows between them, from a choked bed to a sparse fringe.
+	 *
+	 * <p>Note what the sparse end does for free: the client's concealment veil
+	 * re-stamps every pixel that is not the bed's gap colour, and the Java
+	 * pass regenerates from this same function, so a thinner bed hides a body
+	 * less. The two renderers need no agreement beyond this function and that
+	 * one colour.
+	 */
+	public static int reeds(double wx, double wy, int px, int py) {
 		int C = 4; // tuft lattice pitch, art-px
 		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		// Bed-sized, not pixel-sized: noise2's lattice pitch is 1/frequency in
+		// tiles, so these change over eight to ten tiles and a whole fringe
+		// shares a character while the next one along differs.
+		double stature = Utils.noise2(wx + 13, wy + 29, 0.10);
+		double openness = Utils.noise2(wx + 57, wy + 7, 0.12);
+		double gap = 0.08 + 0.30 * openness;
 		for (int oy = -1; oy <= 1; oy++) {
 			for (int ox = -1; ox <= 1; ox++) {
 				int cx = cx0 + ox, cy = cy0 + oy;
-				if (hash01(cx, cy, 35) < 0.18) {
+				if (hash01(cx, cy, 35) < gap) {
 					continue; // open water gap in the bed
 				}
 				int tx = cx * C + 1 + (int) (hash01(cx, cy, 36) * (C - 2));
 				int ty = cy * C + 1 + (int) (hash01(cx, cy, 37) * (C - 2));
-				int dx = px - tx, dy = py - ty;
-				int tall = hash01(cx, cy, 38) > 0.55 ? 2 : 1; // some stalks stand taller
-				if (dx == 0 && dy == 0) {
-					// A share of the tall stalks carry a brown cattail head
-					// (the mud ramp's highlight, so no new colour).
-					return tall == 2 && hash01(cx, cy, 51) > 0.7
-							? RAMP[CLS_MUD][2] : RAMP[CLS_REEDS][2];
+				int dx = px - tx + 2, dy = py - ty + 2; // into the 5x5 stamp
+				if (dx < 0 || dy < 0 || dx > 4 || dy > 4) {
+					continue;
 				}
-				if ((Math.abs(dx) == 1 && dy == 0) || (dx == 0 && Math.abs(dy) <= tall)) {
-					return RAMP[CLS_REEDS][1]; // the tuft's arms
+				double f = hash01(cx, cy, 38);
+				// The bed's stature slides the whole table rather than picking
+				// between two shapes: at every point along it the bed is a mix,
+				// and what changes is which forms dominate it.
+				int form = f < 0.30 - 0.22 * stature ? 0
+						: f < 0.68 - 0.24 * stature ? 1
+						: f < 0.86 - 0.12 * stature ? 2
+						: f < 0.97 - 0.10 * stature ? 3
+						: 4;
+				char c = REED_FORMS[form][dy].charAt(dx);
+				if (c == 'S') {
+					return RAMP[CLS_REEDS][1];
+				}
+				if (c == 'T') {
+					return RAMP[CLS_REEDS][2];
+				}
+				if (c == 'H') {
+					return RAMP[CLS_MUD][2]; // the mud ramp's highlight, so no new colour
 				}
 			}
 		}

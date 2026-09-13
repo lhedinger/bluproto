@@ -1,6 +1,7 @@
 package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
+import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.ProcCreature;
 import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
@@ -540,6 +541,137 @@ public class SimTests {
 					}
 				}
 			}
+		}
+	}
+
+	/**
+	 * The cover vegetation has more than one look, and every look is legal.
+	 *
+	 * <p>Reed beds were ONE shape: a plus, drawn by testing {@code |dx|==1} and
+	 * {@code |dy|<=tall}, so every bed in every world was the same bed. Thicket
+	 * had two character fields but a flat accent gate, so no stand was ever bare
+	 * and none ever heavy. Both now carry world-space fields, and the reeds grow
+	 * five authored tuft forms.
+	 *
+	 * <p>What is pinned here is what a screenshot cannot tell you and what CI
+	 * otherwise would not check at all: that the palette stayed inside the ramps
+	 * (§2), that the accents stayed RARE (§2 — "if an accent is common enough to
+	 * read as a texture, it is a ramp colour now"), that the stamps are
+	 * well-formed, and that the variety is real rather than a field that swings
+	 * a number nothing reads.
+	 *
+	 * <p>The gap colour gets its own assertion because two renderers depend on
+	 * it: the web client's concealment veil re-stamps every baked pixel that is
+	 * not that exact colour, so a stalk painted in the gap's shade would be a
+	 * hole in the cover on the client and solid on the desktop.
+	 */
+	static class CoverVegetationHasVariety extends Scenario {
+		@Override
+		public void run() {
+			final int A = net.hedinger.prototype.engine.GroundTextures.ART;
+			int gap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
+			int stalk = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 1);
+			int tip = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 2);
+			int head = GroundTextures.rampColor(GroundTextures.CLS_MUD, 2);
+
+			// ---- the authored stamps -------------------------------------
+			assertEquals("the bed grows five tuft forms", 5, GroundTextures.REED_FORMS_N);
+			java.util.Set<String> shapes = new java.util.HashSet<>();
+			for (int i = 0; i < GroundTextures.REED_FORMS_N; i++) {
+				String[] f = GroundTextures.reedForm(i);
+				assertEquals("form " + i + " is five rows", 5, f.length);
+				int stalks = 0, tips = 0;
+				StringBuilder flat = new StringBuilder();
+				for (String row : f) {
+					assertEquals("form " + i + " is five wide", 5, row.length());
+					for (char c : row.toCharArray()) {
+						assertTrue("only authored marks, never a blend: " + c,
+								c == '.' || c == 'S' || c == 'T' || c == 'H');
+						if (c == 'S') {
+							stalks++;
+						}
+						if (c == 'T' || c == 'H') {
+							tips++;
+						}
+					}
+					flat.append(row);
+				}
+				assertGreater("form " + i + " has stalks", stalks, 2);
+				assertTrue("form " + i + " has a tip to catch the light", tips >= 1);
+				assertTrue("form " + i + " is a shape of its own", shapes.add(flat.toString()));
+			}
+
+			// ---- the bed, swept across its fields ------------------------
+			double gapMin = 1, gapMax = 0;
+			java.util.Set<Integer> reedPalette = new java.util.HashSet<>();
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int g = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							int c = GroundTextures.reeds(wx + (ai + 0.5) / A, wy + (aj + 0.5) / A,
+									wx * A + ai, wy * A + aj);
+							reedPalette.add(c);
+							if (c == gap) {
+								g++;
+							}
+						}
+					}
+					double f = g / (double) (A * A);
+					gapMin = Math.min(gapMin, f);
+					gapMax = Math.max(gapMax, f);
+				}
+			}
+			for (int c : reedPalette) {
+				assertTrue("the bed invents no colour: " + Integer.toHexString(c),
+						c == gap || c == stalk || c == tip || c == head);
+			}
+			assertTrue("the bed's wet ground is the reed ramp's shadow, which is what "
+					+ "both concealment veils key on", reedPalette.contains(gap));
+			// A choked bed and a sparse fringe are genuinely different beds.
+			assertLess("the thickest bed hides most of the water", gapMin, 0.65);
+			assertGreater("and the sparsest is mostly water", gapMax, 0.88);
+
+			// ---- the thicket, swept the same way -------------------------
+			int bloomRed = 0xE0455F, bloomCream = 0xF0E8C6;
+			double accSum = 0, accWorst = 0;
+			int tiles = 0, bare = 0, fruiting = 0;
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int acc = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							int c = GroundTextures.canopy(wx + (ai + 0.5) / A, wy + (aj + 0.5) / A,
+									wx * A + ai, wy * A + aj);
+							boolean ramp = c == GroundTextures.rampColor(GroundTextures.CLS_COVER, 0)
+									|| c == GroundTextures.rampColor(GroundTextures.CLS_COVER, 1)
+									|| c == GroundTextures.rampColor(GroundTextures.CLS_COVER, 2);
+							assertTrue("the canopy is cover ramp plus the shared flora accents: "
+									+ Integer.toHexString(c),
+									ramp || c == bloomRed || c == bloomCream);
+							if (c == bloomRed || c == bloomCream) {
+								acc++;
+							}
+						}
+					}
+					double f = acc / (double) (A * A);
+					accSum += f;
+					accWorst = Math.max(accWorst, f);
+					tiles++;
+					if (acc == 0) {
+						bare++;
+					} else {
+						fruiting++;
+					}
+				}
+			}
+			// §2: an accent common enough to read as a texture is a ramp colour
+			// now. A fruiting stand is allowed to be heavy; the world is not.
+			assertLess("accents stay rare across the world", accSum / tiles, 0.02);
+			assertLess("and no single tile turns into a berry texture", accWorst, 0.11);
+			// And the fruit field does something: both kinds of stand exist.
+			assertGreater("some stands are bare", bare, tiles / 10);
+			assertGreater("and some are in fruit", fruiting, tiles / 10);
 		}
 	}
 
@@ -11964,6 +12096,7 @@ public class SimTests {
 				new ABodyIsShapedByWhatItEats(),
 				new EveryCladeWearsEightBodies(),
 				new EveryBodyStaysInItsCell(),
+				new CoverVegetationHasVariety(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
