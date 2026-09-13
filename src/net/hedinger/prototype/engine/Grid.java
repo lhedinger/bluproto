@@ -239,8 +239,9 @@ public class Grid {
 		}
 
 		java.util.ArrayList<double[]> near = new java.util.ArrayList<double[]>();
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] span = tileSpan(g2, ox, oy);
+		for (int x = span[0]; x < span[1]; x++) {
+			for (int y = span[2]; y < span[3]; y++) {
 				Tile tile = tiles[x][y];
 				if (tile.getType() != Tile.TileType.TYPE_FLOOR) {
 					continue;
@@ -348,8 +349,9 @@ public class Grid {
 	 */
 	private void renderShrubs(Graphics2D g2, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] span = tileSpan(g2, ox, oy);
+		for (int x = span[0]; x < span[1]; x++) {
+			for (int y = span[2]; y < span[3]; y++) {
 				Tile tile = tiles[x][y];
 				if (tile.getType() != Tile.TileType.TYPE_FLOOR || tile.getFertility() < SHRUB_FERT) {
 					continue;
@@ -471,12 +473,47 @@ public class Grid {
 	/** Draws the base floor+wall sprites tile-by-tile (the chunked-bake
 	 *  substitute for blitting a precompiled whole-level image). Identical
 	 *  placement to LayerRenderer.compileLayer, so output matches. */
+	/**
+	 * The tile rectangle this pass actually has to draw, as
+	 * {@code {x0, x1, y0, y1\}} — the clip the caller set, widened to whole
+	 * tiles and then by a margin.
+	 *
+	 * <p>Every ground pass below used to walk the whole map, because for most
+	 * of this renderer's life every render WAS the whole map. The server now
+	 * bakes a level one chunk-row band at a time so peak heap stops scaling
+	 * with map area, and eleven bands each redrawing all fifty thousand tiles —
+	 * throwing fifteen sixteenths of that at the clip — turned a ten-second
+	 * bake into a hundred-second one. Java2D discards the DRAWING either way;
+	 * what it cannot discard is the per-tile work that decides what to draw,
+	 * and in the pixel-ground pass that is a hundred and forty-four art-pixels
+	 * of autotiling per tile.
+	 *
+	 * <p>The margin is two tiles rather than none because these passes paint
+	 * OUTSIDE their own tile: sprites carry a padding skirt, shrubs are
+	 * jittered off-centre, and the shoreline band straddles the water's edge.
+	 * A tile just beyond the clip can still put colour inside it.
+	 */
+	private int[] tileSpan(Graphics2D g2, int ox, int oy) {
+		java.awt.Rectangle c = g2.getClipBounds();
+		if (c == null) {
+			return new int[] { 0, world.cols, 0, world.rows };
+		}
+		int ts = ResourceManager.tileSize, m = 2;
+		return new int[] {
+				Math.max(0, Math.floorDiv(c.x - ox, ts) - m),
+				Math.min(world.cols, Math.floorDiv(c.x + c.width - ox, ts) + 1 + m),
+				Math.max(0, Math.floorDiv(c.y - oy, ts) - m),
+				Math.min(world.rows, Math.floorDiv(c.y + c.height - oy, ts) + 1 + m),
+		};
+	}
+
 	private void drawBaseTiles(Graphics2D g2, MapLayer ml, int ox, int oy) {
 		int ts = ResourceManager.tileSize;
 		int pad = ResourceManager.tilePadding;
 		int sz = ts + pad * 2;
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] span = tileSpan(g2, ox, oy);
+		for (int x = span[0]; x < span[1]; x++) {
+			for (int y = span[2]; y < span[3]; y++) {
 				int px = ox + x * ts - pad, py = oy + y * ts - pad;
 				if (ml.floorTiles[x][y] != null) {
 					g2.drawImage(ml.floorTiles[x][y], px, py, sz, sz, null);
@@ -503,8 +540,9 @@ public class Grid {
 		}
 		int ts = ResourceManager.tileSize;
 		long now = world.getTick();
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] span = tileSpan(g2, ox, oy);
+		for (int x = span[0]; x < span[1]; x++) {
+			for (int y = span[2]; y < span[3]; y++) {
 				Tile t = tiles[x][y];
 				int hash = (x * 73856093) ^ (y * 19349663);
 				int sx = ox + x * ts, sy = oy + y * ts;
@@ -565,8 +603,9 @@ public class Grid {
 		// Second pass: the shoreline band, drawn over the finished ground so it
 		// is one continuous organic band straddling the water/land boundary --
 		// not clipped per tile, which is what made it look tile-aligned.
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] shore = tileSpan(g2, ox, oy);
+		for (int x = shore[0]; x < shore[1]; x++) {
+			for (int y = shore[2]; y < shore[3]; y++) {
 				if (tiles[x][y].getType() == Tile.TileType.TYPE_WATER) {
 					drawShore(g2, x, y, ox + x * ts, oy + y * ts, ts);
 				}
@@ -601,8 +640,9 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		int A = GroundTextures.ART;
 		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
-		for (int x = 0; x < world.cols; x++) {
-			for (int y = 0; y < world.rows; y++) {
+		int[] span = tileSpan(g2, ox, oy);
+		for (int x = span[0]; x < span[1]; x++) {
+			for (int y = span[2]; y < span[3]; y++) {
 				Tile t = tiles[x][y];
 				int cls = GroundTextures.groundClass(t);
 				if (cls < 0) {
