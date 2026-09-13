@@ -8684,9 +8684,15 @@ public class SimTests {
 			// away, since only this one body is protected and its offspring are not.
 			// Bound is the configured cap plus the overshoot the 3-per-tick trim
 			// allows, NOT "no growth" — the cohort legitimately fills its headroom.
+			// 95 was measured on the 144x88 world these cohort ceilings were
+			// tuned at, and every one of them scales with map area — so the
+			// bound has to scale too, or the day the default map grows this
+			// stops being an assertion about the cull and becomes one about
+			// the map size.
+			int bound = (int) Math.ceil(95.0 * w.getColums() * w.getRows() / (144.0 * 88.0));
 			assertTrue("minded cohort stayed bounded after the injection ("
-					+ countMinded(w) + ", was " + mindedBefore + " before)",
-					countMinded(w) <= 95);
+					+ countMinded(w) + ", was " + mindedBefore + " before, bound "
+					+ bound + ")", countMinded(w) <= bound);
 		}
 
 		private static int countMinded(World w) {
