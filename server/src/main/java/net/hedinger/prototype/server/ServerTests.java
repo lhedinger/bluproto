@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.sim.EntityState;
 import net.hedinger.prototype.sim.SimulationRunner;
 import net.hedinger.prototype.sim.Worlds;
@@ -34,6 +35,7 @@ public final class ServerTests {
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
+		genomeDetailIsTheWholeGenome();
 		theDroneRankIsDronesAndOnlyDrones();
 		theTileCatalogListsEveryType();
 		theBeltPointsWhereItIsLaid();
@@ -82,6 +84,79 @@ public final class ServerTests {
 		}
 		check("the world actually contained machinery", machines > 0);
 		check("and creatures to contrast it with", creatures > 0);
+	}
+
+	/**
+	 * The inspector's "genome" is the whole genome.
+	 *
+	 * <p>It had stopped being that. Seven genes — the reproduction strategy,
+	 * greed, determination, the two r/K fractions, the mutation rate and the
+	 * newborn instinct — were added to {@link Genome} over time and never to the
+	 * detail map, so the panel labelled "genome" showed fourteen of twenty-one
+	 * heritable fields. That is the kind of wrong a reader cannot see: a subset
+	 * with a complete-sounding name looks complete, and the only way anyone found
+	 * out was by going looking for one particular gene and not finding it.
+	 *
+	 * <p>So this asks the class rather than a list written here: every public
+	 * instance field of {@code Genome} must reach the wire, and a gene added
+	 * tomorrow fails this until it does. Two are carried under other names and
+	 * are named here with the reason — a list of exceptions is only safe when it
+	 * is short and each entry says why it is on it.
+	 */
+	static void genomeDetailIsTheWholeGenome() {
+		// Carried, but not under their own name.
+		//   clade — the top-level "role", which is the clade and nothing else
+		//           (TestNPC.ecoRole); sending both would be one fact twice.
+		//   brain — "mind"/"mindSize", named by SUBSTRATE rather than by whether
+		//   mlp     one particular one is present; the thinking itself is thousands
+		//           of instructions or weights and has its own endpoint and tab.
+		java.util.Map<String, String> elsewhere = java.util.Map.of(
+				"clade", "role", "brain", "mind", "mlp", "mind");
+
+		WorldHost host = new WorldHost(11);
+		java.util.Map<String, Object> genome = null;
+		java.util.Map<String, Object> detail = null;
+		for (int id : host.liveCreatureIds()) {
+			java.util.Map<String, Object> d = host.entityDetail(id);
+			Object g = d == null ? null : d.get("genome");
+			if (g instanceof java.util.Map<?, ?> m) {
+				detail = d;
+				@SuppressWarnings("unchecked")
+				java.util.Map<String, Object> cast = (java.util.Map<String, Object>) m;
+				genome = cast;
+				break;
+			}
+		}
+		check("the world had a creature with a genome to inspect", genome != null);
+		if (genome == null) {
+			return;
+		}
+		int genes = 0;
+		for (java.lang.reflect.Field f : Genome.class.getFields()) {
+			if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+				continue;
+			}
+			genes++;
+			String name = f.getName();
+			if (elsewhere.containsKey(name)) {
+				check("the genome's " + name + " reaches the viewer as " + elsewhere.get(name),
+						detail.containsKey(elsewhere.get(name)) || genome.containsKey(elsewhere.get(name)));
+			} else {
+				check("the inspector's genome carries " + name, genome.containsKey(name));
+			}
+		}
+		check("and the genome really has that many genes", genes >= 20);
+		// The derived answer travels with the gene it is read from, so no viewer
+		// has to re-implement where the line between budding and courting sits.
+		check("sexual/asexual is answered, not left to be recomputed",
+				genome.containsKey("sexual") && genome.get("sexual") instanceof Boolean);
+		// Named by substrate, so a third one cannot hide behind a boolean about
+		// the first: "network"/"program"/"none", never "has a brain".
+		check("the mind is named by its substrate",
+				java.util.List.of("network", "program", "none").contains(genome.get("mind")));
+		// And the one book whose scale is per-body arrives with that scale.
+		check("energy arrives with the tank it is a fraction of",
+				detail.containsKey("energy") == detail.containsKey("energyCap"));
 	}
 
 	/**

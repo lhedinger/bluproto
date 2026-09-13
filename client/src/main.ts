@@ -759,7 +759,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   if ('health' in d && d.role) {
     rows.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   }
-  if ('energy' in d) rows.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  if ('energy' in d) rows.push(energyRow(d));
   if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
@@ -780,7 +780,12 @@ function renderInspectSimple(d: Record<string, any>): void {
 // remember which one they were in, the tab bar stopped describing what was on
 // screen, and closing the mind had to reconstruct the state the card was in.
 // A tab is the same content under the rule the rest of the UI already follows.
-type InspectTab = 'attributes' | 'genome' | 'lineage' | 'mind';
+// Order is the reading order: what it IS, what it inherited, what that
+// inheritance thinks with, and where it came from. Genome and mind sit next to
+// each other because the mind IS a gene — Genome.brain, copied and mutated with
+// the rest — and lineage had been wedged between the two, which put a family
+// tree in the middle of one creature's biology.
+type InspectTab = 'attributes' | 'genome' | 'mind' | 'lineage';
 let inspectTab: InspectTab = 'attributes';
 let inspectDetail: Record<string, any> | null = null;
 let lineageData: Record<string, any> | null = null;
@@ -789,8 +794,13 @@ let lineageFor = -1; // which entity lineageData describes
 /** The tabs this creature has. Mind appears only for a brained body: a tab
  *  that says "no brain" is a tab that wastes the reader's click. */
 function inspectTabsFor(d: Record<string, any>): InspectTab[] {
-  const base: InspectTab[] = ['attributes', 'genome', 'lineage'];
-  return d.genome?.hasBrain ? [...base, 'mind'] : base;
+  // Gated on there being a MIND, not on there being one particular substrate.
+  // It asked `hasBrain`, which meant the LGP program, so a network-minded
+  // creature was offered no mind tab and read as scripted.
+  const minded = d.genome?.mind && d.genome.mind !== 'none';
+  return minded
+    ? ['attributes', 'genome', 'mind', 'lineage']
+    : ['attributes', 'genome', 'lineage'];
 }
 
 function renderInspectDebug(d: Record<string, any>): void {
@@ -815,6 +825,14 @@ function renderInspectDebug(d: Record<string, any>): void {
   // the size the viewer last chose survives the poll that rebuilds it, and
   // survives walking from one creature to the next.
   showInspect(inspectEl.classList.contains('half') ? 'half' : 'full');
+  // The tab bar is chrome, so it stays put with the header rather than
+  // scrolling away with the content — on a full genome dump or a mind listing
+  // it used to leave the panel with no visible way out of the tab you were in.
+  // It sticks BELOW the header, whose height is whatever the title wraps to, so
+  // the offset is measured rather than guessed (the panel is open by now, so
+  // offsetHeight is real).
+  const head = inspectEl.querySelector(':scope > h3') as HTMLElement | null;
+  if (head) inspectEl.style.setProperty('--inspect-head', `${head.offsetHeight}px`);
   inspectEl.querySelectorAll('.tabs button').forEach(b =>
     b.addEventListener('click', () => {
       inspectTab = (b as HTMLElement).dataset.tab as InspectTab;
@@ -839,27 +857,38 @@ function attributesTab(d: Record<string, any>): string {
     row('kind', d.kind),
     d.subtype ? row('subtype', d.subtype) : '',
     d.role ? row('role', d.role) : '',
+    // Four things the compact card showed and the full dump did not: species,
+    // how grown a juvenile is, which way round an attachment goes, and who is
+    // being hauled. A debug panel that shows LESS than the caption it replaces
+    // is the wrong way round, and each of these was simply never carried over.
+    d.species ? row('species', d.species) : '',
     'minded' in d ? row('minded', d.minded ? 'yes' : 'no') : '',
   ];
   const status: string[] = [];
   if (d.action) status.push(row('action', d.action));
   if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
+  if (d.juvenile) status.push(row('grown', d.grown));
   // The four books (VITALS.md): health the life gate, energy the action
   // budget, hunger and thirst the needs that rise between meals and drinks.
   // Inverted into satisfactions the same way the entity card does it, so the
   // two panels never disagree about which way is up.
   status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
-  if ('energy' in d) status.push(bar('energy', Number(d.energy).toFixed(2), Math.max(0, Math.min(1, d.energy / 4))));
+  if ('energy' in d) status.push(energyRow(d));
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
   if (d.diedOf) status.push(row('died of', d.diedOf));
+  // Which way round the hold goes, the same way the card says it: `attachedTo`
+  // alone cannot tell a passenger from a captive, and folded into a flags blob
+  // as "attached→#12" it did not try to.
+  if (d.attachedTo >= 0) {
+    status.push(d.grabbed ? row('held by', `#${d.attachedTo}`) : row('riding', `#${d.attachedTo}`));
+  }
+  if ('hauling' in d) status.push(row('hauling', `#${d.hauling}`));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
   if (d.flying) fl.push('flying');
-  if (d.carrying) fl.push('carrying');
-  if (d.grabbed) fl.push('grabbed');
-  if (d.attachedTo >= 0) fl.push(`attached→#${d.attachedTo}`);
+  if (d.carrying) fl.push('carrying cargo');
   if (fl.length) status.push(row('flags', fl.join(', ')));
   if ('edible' in d) status.push(row('edible', d.edible ? 'yes' : 'no'));
   if ('durability' in d) status.push(row('durability', d.durability));
@@ -872,21 +901,74 @@ function attributesTab(d: Record<string, any>): string {
   return group('identity', identity) + group('status', status);
 }
 
+/**
+ * Everything heritable, grouped the way the genome itself is.
+ *
+ * This was one flat list of fourteen rows, and it had quietly stopped being the
+ * genome: seven genes — the reproduction strategy, greed, determination, the
+ * two r/K fractions, the mutation rate and the birth instinct — had been added
+ * to `Genome` over time and never to this tab, so a reader looking for how a
+ * lineage breeds found a mate threshold and nothing about whether it courts at
+ * all. Groups rather than a longer flat list because twenty rows of bare labels
+ * is a wall: these are the genome's own divisions, not invented ones.
+ */
 function genomeTab(d: Record<string, any>): string {
   const gm = d.genome;
   if (!gm) return '<div class="lin end">no genome — this body was built, not born</div>';
-  const rows = group('genome', [
-    row('size', gm.size), row('speed', gm.speed), row('turnRate', gm.turnRate),
-    row('los', `${gm.losRange} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
-    row('metabolism', gm.metabolism), row('maxAge', gm.maxAge),
-    row('markers', (gm.markers as number[]).map(m => m.toFixed(2)).join(', ')),
-    row('predatory', gm.predatory), row('xenophobia', gm.xenophobia),
-    row('gregarious', gm.gregariousness), row('boldness', gm.boldness),
-    row('mateThresh', gm.mateThreshold),
-    row('brain', gm.hasBrain ? `${gm.brainLen} instr` : 'none'),
+  // A gene the server did not send prints as an em dash rather than the word
+  // "undefined": the two ship together, but a missing figure should read as
+  // missing rather than as a value.
+  const g = (v: unknown) => (v === undefined || v === null ? '—' : String(v));
+  return group('identity', [
+    // The recognition barcode. Species and body variant are both read off it,
+    // which is why it sits here rather than among the body's measurements.
+    row('markers', Array.isArray(gm.markers)
+      ? (gm.markers as number[]).map(m => m.toFixed(2)).join(', ') : '—'),
+  ]) + group('body', [
+    row('size', g(gm.size)), row('speed', g(gm.speed)), row('turn rate', g(gm.turnRate)),
+    row('sight', `${g(gm.losRange)} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
+    row('metabolism', g(gm.metabolism)), row('max age', g(gm.maxAge)),
+    row('locomotion', gm.flying ? 'flying' : 'walking'),
+  ]) + group('temperament', [
+    row('predatory', g(gm.predatory)), row('xenophobia', g(gm.xenophobia)),
+    row('gregarious', g(gm.gregariousness)), row('boldness', g(gm.boldness)),
+    row('greed', g(gm.greed)), row('determination', g(gm.determination)),
+  ]) + group('breeding', [
+    // Sexual or asexual is the genome's own answer, arriving alongside the gene
+    // it is read from. Whether 0.5 is the line is Genome.isSexual's business;
+    // a threshold re-implemented here would be a second copy free to drift.
+    row('reproduction', gm.sexual === undefined ? '—'
+      : `${gm.sexual ? 'sexual' : 'asexual'} · ${gm.sexuality}`),
+    row('mate thresh', g(gm.mateThreshold)),
+    row('breeds at', g(gm.reproFraction)), row('spends', g(gm.reproCostFraction)),
+    row('mutation', g(gm.mutationRate)),
+  ]) + group('mind', [
+    // Instinct is in the genome and deliberation is in the mind, so the newborn
+    // forage drive belongs beside the program it is overridden by.
+    row('instinct', g(gm.instinct)),
+    // Which substrate, and how big. Two decision methods compete in this world
+    // behind one seam; "brain: none" was what a network-minded body used to say.
+    row('mind', gm.mind === undefined ? '—' : gm.mind === 'none' ? 'none'
+      : `${gm.mind} · ${gm.mindSize} ${gm.mind === 'network' ? 'weights' : 'instr'}`),
   ]);
-  // No doorway to a second panel here: the mind is a tab of this one.
-  return rows;
+}
+
+/**
+ * The energy book as a fraction of THIS body's tank.
+ *
+ * The tank is size-scaled (`NPC.energyCapacity`), so no constant here can stand
+ * in for it — and one did: a flat 4, which pinned every large body at full from
+ * a quarter tank and drew a small body's brimming tank as three-quarters. Both
+ * panels drew it, so both were wrong in the same way, which is what made it
+ * look right. Shared now so they cannot disagree again, and when the cap is
+ * missing the number is printed rather than a bar drawn against a guess.
+ */
+function energyRow(d: Record<string, any>): string {
+  const e = Number(d.energy);
+  const cap = Number(d.energyCap);
+  return cap > 0
+    ? bar('energy', `${e.toFixed(2)} / ${cap.toFixed(2)}`, Math.max(0, Math.min(1, e / cap)))
+    : row('energy', e.toFixed(2));
 }
 
 /** The family line. Everything here is the world's birth registry speaking:
@@ -1052,8 +1134,8 @@ function mindTab(): string {
 }
 
 function mindBody(d: Record<string, any>): string {
-  if (!d.hasBrain) {
-    return '<div class="grp">no brain</div>'
+  if (!d.hasMind) {
+    return '<div class="grp">no mind</div>'
       + '<div class="mono">this creature is scripted, not minded.</div>';
   }
   const sensors = (d.sensors as any[]) ?? [];
@@ -1083,12 +1165,21 @@ function mindBody(d: Record<string, any>): string {
   const regChips = regs
     .map((v, i) => `<span class="reg">R${i} <b>${v.toFixed(2)}</b></span>`)
     .join('');
+  // How much of the thinking can be listed depends on the substrate. A program
+  // disassembles instruction by instruction and holds registers between ticks;
+  // a network describes itself in a line and holds no state to print. The live
+  // channels above are identical for both, and they are most of what the tab is
+  // for — what it senses and what it drives.
+  const network = d.substrate === 'network';
+  const head = network
+    ? `<div class="grp">network · ${d.length} weights</div>`
+    : `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>`;
+  const regBlock = network ? ''
+    : `<div class="grp">registers</div><div class="regs">${regChips}</div>`;
   return doing + intent + attn +
     '<div class="grp">sensors — what it perceives</div>' + sIn +
     '<div class="grp">actuators — what it drives</div>' + aOut +
-    `<div class="grp">program · instruction ${d.pc + 1} of ${d.length} · ${d.stepsPerTick}/tick</div>` +
-    `<div class="prog">${prog}</div>` +
-    `<div class="grp">registers</div><div class="regs">${regChips}</div>` +
+    head + `<div class="prog">${prog}</div>` + regBlock +
     '<div class="save" role="button">⤓ save genome</div>';
 }
 

@@ -162,6 +162,37 @@ So the chart states the scale in its corner (`width ≈ 1+log₁₀ heads`) and 
 **true counts** on the labelled columns. Where a width stops being readable as a
 number, the number goes on the picture.
 
+### A panel shows the whole of what it names
+
+A section called "genome" is a promise that it is the genome. The inspector's
+was a hand-written list of fourteen rows, and seven genes had been added to
+`Genome` since without anyone coming back to it — so the reproduction strategy,
+the appetite, the r/K fractions and the mutation rate were all invisible under
+a heading that looked complete. **A subset with a complete-sounding name is the
+kind of wrong a reader cannot see**, because nothing on screen is missing;
+somebody has to go looking for one particular thing and fail to find it.
+
+Pin it against the source rather than against a list you also wrote:
+`GenomeDetailIsTheWholeGenome` reflects over `Genome`'s public fields and fails
+until each one reaches the wire. It found a gene on its first run — a second
+mind substrate the panel had never heard of, which is why network-minded
+creatures showed no mind tab at all. Exceptions are allowed (a field carried
+under another name) but the list of them must be short and each must say why.
+
+Two corollaries, both learned here:
+
+- **A bar needs the maximum it is a fraction of, from wherever that maximum
+  lives.** Energy was drawn as `value / 4`. The tank is size-scaled, so the bar
+  pinned every large body at full from a quarter tank and drew a small body's
+  brimming tank as three-quarters. Health was a percentage and the needs arrived
+  normalised; energy was the one book measured against a number that was not its
+  own. If the scale is not on the wire, print the number instead of drawing a
+  bar against a guess.
+- **A derived answer travels with the value it is derived from.** Whether 0.5 is
+  the line between budding and courting is `Genome.isSexual`'s business. Send
+  the gene *and* the answer; a threshold re-implemented in the viewer is a second
+  copy of a rule, free to drift.
+
 ### A filter must not be able to lie
 
 The Sankey filters to one clade at a time. That is safe for a specific reason
