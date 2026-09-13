@@ -828,6 +828,20 @@ final class SpriteCatalog {
 			fieldVariant(out, t, "rich bed", 0.8);
 			fieldVariant(out, t, "thin bed", 0.2);
 			return;
+		// The two cover tiles read off SLOW world-space fields, so what they look
+		// like depends on where in the world you are standing. One swatch would
+		// show one stand and quietly claim it was the tile — so each is staged at
+		// a place chosen for where those fields sit there. The coordinates are
+		// the catalog's own staged world, not a live one; the fields are pure
+		// functions of position, so the same place always bakes the same stand.
+		case TYPE_REEDS:
+			standVariant(out, t, "deep bed — tall stalks, cattails, little water showing", 33, 26);
+			standVariant(out, t, "marsh fringe — low mats, open water between", 10, 19);
+			return;
+		case TYPE_COVER:
+			standVariant(out, t, "a stand in fruit", 7, 13);
+			standVariant(out, t, "a stand bearing nothing", 22, 27);
+			return;
 		case TYPE_RAIL:
 		case TYPE_PIPES:
 		case TYPE_COOLANT:
@@ -923,6 +937,29 @@ final class SpriteCatalog {
 			}
 		}
 		bakeVariant(out, w, t, cap);
+	}
+
+	/**
+	 * A field swatch taken from a NAMED PLACE rather than from the origin.
+	 *
+	 * <p>{@link #fieldVariant} always stages an 8x8 world and crops the middle,
+	 * so every swatch samples the same corner of world space. That is fine for a
+	 * texture whose only variable is fertility, and wrong for one that reads a
+	 * world-space field: cover and reeds would each show whichever stand happens
+	 * to grow at the origin, labelled as the tile.
+	 */
+	private void standVariant(StringBuilder out, Tile.TileType t, String cap, int atX, int atY) {
+		World w = stage(atX + 6, atY + 6);
+		fill(w, t);
+		w.alignTiles();
+		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
+		int ts = ResourceManager.tileSize;
+		String file = "tile_" + t.name().toLowerCase(java.util.Locale.ROOT) + "_"
+				+ cap.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-") + ".png";
+		assets.put(file, png(img.getSubimage(atX * ts, atY * ts, 4 * ts, 4 * ts)));
+		out.append("<figure><img src=\"/tiles/").append(file)
+				.append("\" loading=lazy><figcaption>").append(cap)
+				.append("</figcaption></figure>");
 	}
 
 	private void runVariant(StringBuilder out, Tile.TileType t, String cap, int shape) {
