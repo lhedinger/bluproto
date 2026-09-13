@@ -175,7 +175,8 @@ One sun, straight overhead-north. The grammar:
   art-pixel steps, each block *tinting* the ground (shrub shadows, hollows);
   (3) pheromone haze blocks (chunky art-pixels at low alpha — structure stays
   pixelated, only the tint is soft); (4) the **concealment veil** — every
-  cover re-stamp (thicket canopy, reed stalks, duct lids) draws at a single
+  cover re-stamp (thicket canopy, reed stalks, duct lids, tall grass tips,
+  scrub thorns) draws at a single
   global **25% translucency** (`VEIL_ALPHA = 0.75`, defined once in
   `GroundTextures` and mirrored in the web client's `render.ts`), so a veiled
   body always half-reads through its cover. Smooth `fillOval`/`arc`/
@@ -341,6 +342,19 @@ The precedents, so nobody pays twice:
   overlay re-composites the bake, never repaints it (§6) — and `/sprites` is
   the catalog of record, so a client visual without an entry drawn by its own
   live code path does not merge.
+
+- **Open cover keeps, closed cover drops** — a concealment veil names the
+  baked pixels it re-stamps, and which way it names them is not a coding
+  taste. Closed cover (a thicket, a reed bed) is a canopy with holes: the veil
+  says *drop the ground colour* and everything else comes through. Open cover
+  (tall grass, desert scrub) is mostly ground with things standing in it: the
+  same drop rule would re-stamp the whole tile and turn an open sward into a
+  solid lid, so the veil says *keep these exact marks* — the lit blade tip,
+  the two thorn shades — and the body reads between them. The consequence is
+  that an open-cover painter must keep emitting its kept colour, because that
+  colour IS the cover; a scenario pins it (`TheTallAndTheDryAreOpenCover`),
+  since dropping it would leave a body standing in tall grass with nothing
+  drawn over it and no other check would notice.
 
 - **The rotated sentinel** — the drone's first glyph was polygons rotated by
   `ctx.rotate()` in three invented greys, with an anti-aliased `arc` for its
