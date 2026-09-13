@@ -1620,7 +1620,10 @@ public final class Worlds {
 	 *   T  loading deck    L  lit grating     B  shard bed      b  loose shards
 	 *   s  steel bulkhead  #  concrete wall   p  paved aisle    r  tram rail
 	 *   d  crawl duct      D  charge dock     E  server bank    H  drop shaft
-	 *   F  fungus bed      K  crystal cluster
+	 *   F  fungus bed      K  crystal cluster  t  turbine         c  control panel
+	 *   l  lift shaft      G  window wall      k  desk            u  bunk
+	 *   z  hazard stripe   v  conveyor         W  dead machine
+	 *   ~  water           M  mud              Y  reed bed        Q  thicket
 	 * </pre>
 	 *
 	 * <p>Drawn rather than computed, and that is the whole of the method. An
@@ -1944,6 +1947,32 @@ public final class Worlds {
 			return Tile.TileType.TYPE_CRYSTAL_SPARSE;
 		case 'K':
 			return Tile.TileType.TYPE_CRYSTAL;
+		case 't':
+			return Tile.TileType.TYPE_TURBINE;
+		case 'c':
+			return Tile.TileType.TYPE_CONSOLE;
+		case 'l':
+			return Tile.TileType.TYPE_LIFT;
+		case 'G':
+			return Tile.TileType.TYPE_WINDOW;
+		case 'k':
+			return Tile.TileType.TYPE_DESK;
+		case 'u':
+			return Tile.TileType.TYPE_BUNK;
+		case 'z':
+			return Tile.TileType.TYPE_HAZARD;
+		case 'v':
+			return Tile.TileType.TYPE_CONVEYOR;
+		case '~':
+			return Tile.TileType.TYPE_WATER;
+		case 'M':
+			return Tile.TileType.TYPE_MUD;
+		case 'Y':
+			return Tile.TileType.TYPE_REEDS;
+		case 'Q':
+			return Tile.TileType.TYPE_COVER;
+		case 'W':
+			return Tile.TileType.TYPE_WRECK;
 		case '.':
 			return null; // the shell pass already laid deck plate
 		default:

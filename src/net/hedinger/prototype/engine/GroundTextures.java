@@ -63,7 +63,8 @@ public final class GroundTextures {
 			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42,
 			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45,
 			CLS_DESK = 46, CLS_BUNK = 47, CLS_WRECK = 48,
-			CLS_TALLGRASS = 49, CLS_SCRUB = 50;
+			CLS_TALLGRASS = 49, CLS_SCRUB = 50,
+			CLS_TURBINE = 51, CLS_CONSOLE = 52, CLS_LIFT = 53;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -133,6 +134,9 @@ public final class GroundTextures {
 			// desert bush reads dry rather than lush).
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // tall grass: the grass ramp, verbatim
 			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // desert scrub: its ground IS sand, verbatim
+			{ 0x30343d, 0x4d535f, 0x6e7583 }, // turbine: the steel bulkhead's ramp, verbatim -- plant, not furniture
+			{ 0x14171d, 0x252a34, 0x3c434f }, // control panel: the rack's steel, verbatim -- the same cabinet family
+			{ 0x0a0b10, 0x16181f, 0x232630 }, // lift shaft: the shaft void's ramp, verbatim -- a drop is a drop
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -255,6 +259,12 @@ public final class GroundTextures {
 			return CLS_TALLGRASS;
 		case TYPE_SCRUB:
 			return CLS_SCRUB;
+		case TYPE_TURBINE:
+			return CLS_TURBINE;
+		case TYPE_CONSOLE:
+			return CLS_CONSOLE;
+		case TYPE_LIFT:
+			return CLS_LIFT;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -2068,6 +2078,114 @@ public final class GroundTextures {
 		default:
 			return rubble(px, py);
 		}
+	}
+
+	/**
+	 * A turbine: a generator set lying east-west on the deck -- the casing lit
+	 * along its north crown and sunk along its south, cooling fins as dark
+	 * ribs across it, the coolant inlet's flange at the west end in the run's
+	 * own rimed steel so the cold side is visibly the cold side. Contact
+	 * shadow south; deck plate around it.
+	 *
+	 * <p>Rejected first: a lamp on the casing. The exchanger beside it already
+	 * carries the plant's warm read, and a second warm mark on the same bench
+	 * is the drone's second eye again -- a turbine says what it is by its
+	 * shape, which is the one thing here the exchanger's flat grille does not
+	 * have.
+	 */
+	private static final String[] TURBINE_STAMP = {
+			"............",
+			"............",
+			".hhhhhhhhhh.",
+			".ckkkkkkkkb.",
+			".cbkkbkkbkb.",
+			".cbkkbkkbkb.",
+			".cbkkbkkbkb.",
+			".ckkkkkkkkb.",
+			".bbbbbbbbbb.",
+			"..xxxxxxxx..",
+			"............",
+			"............",
+	};
+
+	public static int turbine(int ai, int aj, int px, int py) {
+		char c = TURBINE_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			return RAMP[CLS_TURBINE][2];
+		case 'k':
+			return RAMP[CLS_TURBINE][1];
+		case 'b':
+			return RAMP[CLS_TURBINE][0];
+		case 'c':
+			return RAMP[CLS_COOLANT][1]; // the inlet flange: the cold side, in its own steel
+		case 'x':
+			return darken(plate(px, py), 0.65);
+		default:
+			return plate(px, py);
+		}
+	}
+
+	/**
+	 * A control panel: a bank of instruments in the rack's cabinet steel, its
+	 * sloped face lit along the top, a screen of indicator glass across the
+	 * upper half, a rank of lamps under it with a hash-gated few of them lit,
+	 * and the key strip in the desk's pale paper along the bottom. Contact
+	 * shadow south; deck plate around it. The lamps are the signal family
+	 * the desk's terminal already uses, at the desk's own gating, so a panel
+	 * and a terminal read as the same electronics at two sizes.
+	 */
+	private static final String[] CONSOLE_STAMP = {
+			"............",
+			".hhhhhhhhhh.",
+			".kssssssssb.",
+			".kssssssssb.",
+			".kkkkkkkkkb.",
+			".kmkmkmkmkb.",
+			".kppppppppb.",
+			".bbbbbbbbbb.",
+			"..xxxxxxxx..",
+			"............",
+			"............",
+			"............",
+	};
+
+	public static int console(int ai, int aj, int px, int py) {
+		char c = CONSOLE_STAMP[aj].charAt(ai);
+		switch (c) {
+		case 'h':
+			return RAMP[CLS_CONSOLE][2];
+		case 'k':
+			return RAMP[CLS_CONSOLE][1];
+		case 'b':
+			return RAMP[CLS_CONSOLE][0];
+		case 's':
+			return LAMP_DIM; // the screen: indicator glass, unlit
+		case 'm':
+			return hash01(px >> 1, py >> 1, 69) > 0.7 ? LAMP_LIT : LAMP_DIM;
+		case 'p':
+			return RAMP[CLS_CONCRETE][2]; // the key strip
+		case 'x':
+			return darken(plate(px, py), 0.65);
+		default:
+			return plate(px, py);
+		}
+	}
+
+	/**
+	 * The lift shaft's frame: the steel cage standing round the opening, in
+	 * the rack's dark cabinet steel with a bulkhead-bright rivet every third
+	 * pixel. Drawn by the ground pass on the rim cells of a lift the way a
+	 * drop shaft's hazard stripes are; the throat inside it is the pit's own
+	 * treatment.
+	 *
+	 * <p>Rejected first: the bulkhead's own mid steel for the frame. On the
+	 * sheet it was the deck's grey against the deck, and the lift read as a
+	 * bare square hole -- a frame has to be darker than what it stands on or
+	 * it is not there.
+	 */
+	public static int liftFrame(int px, int py) {
+		return (px + py) % 3 == 0 ? RAMP[CLS_STEELWALL][2] : RAMP[CLS_SERVER][1];
 	}
 
 	/** Side bits for the autotiled runs ({@link #rail}, {@link #pipes}): which
