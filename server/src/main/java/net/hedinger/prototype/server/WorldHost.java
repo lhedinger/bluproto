@@ -602,6 +602,14 @@ final class WorldHost {
 				// not to give it one.
 				if (n.isOrganic()) {
 					d.put("energy", round(n.getEnergy()));
+					// The tank this body's energy is a fraction OF. It is size-scaled,
+					// so no constant on the viewer's side can stand in for it: the bar
+					// divided by a flat 4, which pinned every large body at full from a
+					// quarter tank and drew a small body's brimming tank as
+					// three-quarters. Hunger and thirst arrive normalised and health is
+					// a percentage; energy was the one book shown against a number that
+					// was not its maximum.
+					d.put("energyCap", round(n.energyCapacity()));
 					d.put("hunger", round(n.getHunger()));
 					d.put("thirst", round(n.getThirst()));
 				}
@@ -658,9 +666,36 @@ final class WorldHost {
 					gm.put("xenophobia", round(g.xenophobia));
 					gm.put("gregariousness", round(g.gregariousness));
 					gm.put("boldness", round(g.boldness));
+					gm.put("greed", round(g.greed));
+					gm.put("determination", round(g.determination));
+					// Breeding. Seven genes were missing from this map — sexuality,
+					// greed, determination, the two r/K fractions, the mutation rate and
+					// instinct — not by decision but because each was added to the
+					// genome and nobody came back here. A "genome" that is a subset of
+					// the genome is the kind of wrong a reader cannot see: it looks
+					// complete. Everything heritable now goes on the wire, and
+					// GenomeDetailIsTheWholeGenome fails the moment a gene is added
+					// without one.
 					gm.put("mateThreshold", round(g.mateThreshold));
-					gm.put("hasBrain", g.brain != null);
-					gm.put("brainLen", g.brain != null ? g.brain.length() : 0);
+					gm.put("sexuality", round(g.sexuality));
+					// The derived answer travels with the gene. Whether 0.5 is the line
+					// between budding and courting is the genome's rule
+					// (Genome.isSexual), and a viewer that re-implemented the threshold
+					// would be a second copy of it, free to drift.
+					gm.put("sexual", g.isSexual());
+					gm.put("reproFraction", round(g.reproFraction));
+					gm.put("reproCostFraction", round(g.reproCostFraction));
+					gm.put("mutationRate", round(g.mutationRate));
+					gm.put("instinct", round(g.instinct));
+					// WHICH mind this lineage inherited, not whether it has the one the
+					// viewer happened to know about. There are two substrates behind one
+					// seam — an LGP program and an MLP network — and this said
+					// `hasBrain: g.brain != null`, so a network-minded creature reported
+					// no mind at all and the panel offered it no mind tab. Naming the
+					// substrate leaves nowhere for a third to hide.
+					boolean net = g.mlp != null;
+					gm.put("mind", net ? "network" : g.brain != null ? "program" : "none");
+					gm.put("mindSize", net ? g.mlp.size() : g.brain != null ? g.brain.length() : 0);
 					d.put("genome", gm);
 				}
 			}
@@ -724,27 +759,44 @@ final class WorldHost {
 			}
 			java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
 			d.put("id", id);
-			net.hedinger.prototype.entities.LgpMind lm =
-					e instanceof net.hedinger.prototype.simtest.TestNPC tn ? tn.lgpMind() : null;
-			if (lm == null || lm.brain() == null) {
-				d.put("hasBrain", false);
+			// Either substrate is a mind. This asked only for the LGP program, so a
+			// network-minded creature answered "no brain" — the panel then called it
+			// scripted, which it is not: it senses and acts every tick like any other
+			// evolved body. What differs is only how much of the thinking can be
+			// LISTED. The program disassembles instruction by instruction; the
+			// network describes itself in a line (MlpBrain.describe, written for this
+			// inspector and never wired to it). The live channels are the same for
+			// both, and they are most of what the tab is for.
+			net.hedinger.prototype.simtest.TestNPC tn =
+					e instanceof net.hedinger.prototype.simtest.TestNPC t ? t : null;
+			net.hedinger.prototype.entities.Genome g = tn == null ? null : tn.getGenome();
+			net.hedinger.prototype.entities.LgpMind lm = tn == null ? null : tn.lgpMind();
+			boolean program = lm != null && lm.brain() != null;
+			boolean network = g != null && g.mlp != null;
+			if (!program && !network) {
+				d.put("hasMind", false);
 				return d;
 			}
-			net.hedinger.prototype.simtest.TestNPC tn = (net.hedinger.prototype.simtest.TestNPC) e;
-			net.hedinger.prototype.entities.Brain b = lm.brain();
-			d.put("hasBrain", true);
+			d.put("hasMind", true);
+			d.put("substrate", network ? "network" : "program");
 			d.put("generation", tn.generation()); // lineage depth: 0 = world-seeded
-			d.put("length", b.length());
-			d.put("stepsPerTick", lm.budget());
-			d.put("pc", b.pc());
-			d.put("disasm", b.disassemble(net.hedinger.prototype.entities.AgentIO.SENSOR_NAMES,
-					net.hedinger.prototype.entities.AgentIO.ACT_NAMES));
-			double[] reg = b.registers();
-			double[] regs = new double[reg.length];
-			for (int i = 0; i < reg.length; i++) {
-				regs[i] = round(reg[i]);
+			if (program) {
+				net.hedinger.prototype.entities.Brain b = lm.brain();
+				d.put("length", b.length());
+				d.put("stepsPerTick", lm.budget());
+				d.put("pc", b.pc());
+				d.put("disasm", b.disassemble(net.hedinger.prototype.entities.AgentIO.SENSOR_NAMES,
+						net.hedinger.prototype.entities.AgentIO.ACT_NAMES));
+				double[] reg = b.registers();
+				double[] regs = new double[reg.length];
+				for (int i = 0; i < reg.length; i++) {
+					regs[i] = round(reg[i]);
+				}
+				d.put("registers", regs);
+			} else {
+				d.put("length", g.mlp.size());
+				d.put("disasm", g.mlp.describe());
 			}
-			d.put("registers", regs);
 			d.put("sensors", named(net.hedinger.prototype.entities.AgentIO.SENSOR_NAMES, tn.sensorSnapshot()));
 			d.put("actuators", named(net.hedinger.prototype.entities.AgentIO.ACT_NAMES, tn.actuatorSnapshot()));
 			return d;

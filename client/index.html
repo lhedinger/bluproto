@@ -166,7 +166,16 @@
        the plain entity card and the tile dump are `.card`, the debug creature
        inspector is a `.full`/`.half` panel. It used to wear one class, `.dbg`,
        for all three — so four rows of tile facts opened full screen. */
-    #inspect .tabs { display: flex; gap: 2px; margin: 0 0 8px;
+    /* The tab bar is the panel's chrome, so it stays with the header instead of
+       scrolling away with the content: a full genome dump or a mind listing is
+       taller than the panel, and losing the tabs left no visible way out of the
+       one you were in. It sticks BELOW the header — --inspect-head is that
+       header's measured height, set in main.ts, because a wrapped title is
+       taller than an unwrapped one. Opaque and full-bleed for the same reason
+       the header is: rows must not show through as they pass under it. */
+    #inspect .tabs { position: sticky; top: var(--inspect-head, 33px); z-index: 1;
+                     display: flex; gap: 2px; margin: 0 -12px 8px;
+                     padding: 0 12px; background: #1d2026;
                      border-bottom: 1px solid #ffffff14; }
     #inspect .tabs button { background: none; border: none; color: inherit;
                             font: 12px system-ui, sans-serif; padding: 4px 10px;
@@ -181,7 +190,15 @@
     #inspect .lin .meta { opacity: .6; font-variant-numeric: tabular-nums; }
     #inspect .lin .dead { opacity: .55; }
     #inspect .lin .end { opacity: .5; font-style: italic; padding: 4px 0 2px 21px; }
-    #inspect table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    /* A row is a label on the left and its value on the right, so the row has to
+       be narrow enough that the eye can carry one to the other. At 100% of a
+       full-screen panel the two ended up 1200px apart with nothing in between —
+       the layout was written when this was a 340px card and was never revisited
+       when it became a panel. The cap is the width it reads well at; the panel
+       keeps the rest of the space for the wide content (the mind's channels and
+       program listing, which set their own widths). */
+    #inspect table { width: 100%; max-width: 460px; border-collapse: collapse;
+                     font-size: 12px; }
     #inspect td { padding: 1px 0; }
     #inspect td.k { opacity: .6; }
     #inspect td.v { text-align: right; font-variant-numeric: tabular-nums;
