@@ -202,8 +202,12 @@ public class Tile {
 	 *  same logistic regrowth model, and differ only in how much they can hold
 	 *  (their fertility). */
 	public boolean growsVegetation() {
+		// Tall grass is grass: it feeds a grazer exactly as the meadow does, and
+		// it is carved out of the meadow band at the fertility that band would
+		// have given it, so adding it moved no food. A cover tile that starved
+		// the herd would be a balance change wearing a texture's clothes.
 		return type == TileType.TYPE_FLOOR || type == TileType.TYPE_ROCKY
-				|| type == TileType.TYPE_FUNGUS;
+				|| type == TileType.TYPE_FUNGUS || type == TileType.TYPE_TALLGRASS;
 	}
 
 	/** Current vegetation density [0, cap], regrown lazily to {@code now} along a
@@ -759,7 +763,8 @@ public class Tile {
 			return false;
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
-				|| type == TileType.TYPE_DUCT;
+				|| type == TileType.TYPE_DUCT || type == TileType.TYPE_TALLGRASS
+				|| type == TileType.TYPE_SCRUB;
 	}
 
 	public void updateTilecode(World world) {
@@ -891,7 +896,13 @@ public class Tile {
 		// ground pass and the layer renderer both fall through to their default
 		// and leave the art-pixels untouched, and an untouched pixel in a served
 		// chunk already means "you can see down".
-		TYPE_VOID(50, true, "open air");
+		TYPE_VOID(50, true, "open air"),
+		// The two cover tiles the world was missing. Concealment was three
+		// tiles — thicket, reeds, crawl duct — so the meadow had one step
+		// between open ground and a closed thicket, and the desert had nothing
+		// to hide in at all.
+		TYPE_TALLGRASS(51, true, "tall grass"), // standing sward: grazeable, and it hides a body
+		TYPE_SCRUB(52, true, "desert scrub"); // thorn clumps on sand: the dry country's only cover
 
 		private int value;
 		private boolean open;

@@ -637,7 +637,8 @@ final class SpriteCatalog {
 		g.put("Water", new Tile.TileType[] {
 				Tile.TileType.TYPE_WATER, Tile.TileType.TYPE_SHALLOWS, Tile.TileType.TYPE_REEDS });
 		g.put("Flora & cover", new Tile.TileType[] {
-				Tile.TileType.TYPE_COVER, Tile.TileType.TYPE_CACTUS });
+				Tile.TileType.TYPE_TALLGRASS, Tile.TileType.TYPE_COVER,
+				Tile.TileType.TYPE_SCRUB, Tile.TileType.TYPE_CACTUS });
 		g.put("Rock & caves", new Tile.TileType[] {
 				Tile.TileType.TYPE_WALL, Tile.TileType.TYPE_MESA, Tile.TileType.TYPE_STONE,
 				Tile.TileType.TYPE_FUNGUS, Tile.TileType.TYPE_CRYSTAL,

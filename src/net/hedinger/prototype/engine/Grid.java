@@ -145,6 +145,9 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		int A = GroundTextures.ART;
 		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
+		int bladeTip = GroundTextures.rampColor(GroundTextures.CLS_GRASS, 2);
+		int scrubWood = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 1);
+		int scrubThorn = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 0);
 		// The design system's cover translucency: the whole veil draws at
 		// VEIL_ALPHA, so the body underneath always half-reads through it.
 		java.awt.Composite oldComposite = g2.getComposite();
@@ -153,6 +156,8 @@ public class Grid {
 		for (int key : veiled) {
 			int x = key % world.cols, y = key / world.cols;
 			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
+			boolean tall = tiles[x][y].getType() == Tile.TileType.TYPE_TALLGRASS;
+			boolean scrub = tiles[x][y].getType() == Tile.TileType.TYPE_SCRUB;
 			boolean duct = tiles[x][y].getType() == Tile.TileType.TYPE_DUCT;
 			boolean ductVert = duct && (isType(x, y - 1, Tile.TileType.TYPE_DUCT)
 					|| isType(x, y + 1, Tile.TileType.TYPE_DUCT));
@@ -174,6 +179,21 @@ public class Grid {
 						col = GroundTextures.reeds(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
 						if (col == reedGap) {
 							continue; // the body shows between the stalks
+						}
+					} else if (tall) {
+						// Only the lit TIPS come back over the body — the loosest
+						// of the four veils, which is what makes tall grass cover
+						// you are partly visible in rather than hidden by.
+						col = GroundTextures.tallGrass(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
+						if (col != bladeTip) {
+							continue;
+						}
+					} else if (scrub) {
+						// The wood only: a stand of thorn is mostly sand, and it
+						// hides about as much as it looks like it does.
+						col = GroundTextures.scrub(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
+						if (col != scrubWood && col != scrubThorn) {
+							continue;
 						}
 					} else {
 						if (GroundTextures.hash01(gx >> 1, gy >> 1, 61) > 0.55) {
@@ -885,6 +905,10 @@ public class Grid {
 								col = GroundTextures.sand(gx, gy);
 							} else if (cl == GroundTextures.CLS_REEDS) {
 								col = GroundTextures.reeds(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_TALLGRASS) {
+								col = GroundTextures.tallGrass(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_SCRUB) {
+								col = GroundTextures.scrub(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_COVER) {
 								// Thicket: a canopy of self-shaded leaf clumps whose
 								// character varies stand by stand.
@@ -1149,6 +1173,10 @@ public class Grid {
 		case GroundTextures.CLS_VENT: return 12;
 		case GroundTextures.CLS_FUNGUS: return 13;
 		case GroundTextures.CLS_REEDS: return 14;
+		// Scrub laps over the sand it stands in; tall grass over the meadow it
+		// grows out of and under the thicket it thickens into.
+		case GroundTextures.CLS_SCRUB: return 6;
+		case GroundTextures.CLS_TALLGRASS: return 14;
 		case GroundTextures.CLS_COVER: return 15;
 		default: return -1; // structures, shafts, paving: no lapping
 		}
