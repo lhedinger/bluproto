@@ -1437,7 +1437,16 @@ export function hash01(x: number, y: number, s: number): number {
 // mask is hash01(gx>>1, gy>>1, 61) > 0.55, identical to the Java pass.
 // Reeds (cover 3): stalk-exact — every baked pixel EXCEPT the reed-bed's gap
 // colour is re-stamped, so a body shows between the stalks.
-const REED_GAP = 0x14301f; // GroundTextures.RAMP[CLS_REEDS][0]
+// Tall grass (cover 4): the lit TIPS only, which is the loosest veil of the
+// four — tall grass is cover you are partly visible in, and that ordering
+// (thicket hides most, then reeds, then grass, then scrub) is the reason a
+// third and fourth cover were worth drawing at all.
+// Scrub (cover 5): the wood only. A stand of thorn is mostly sand and hides
+// about as much as it looks like it does.
+const REED_GAP = 0x14301f;   // GroundTextures.RAMP[CLS_REEDS][0]
+const BLADE_TIP = 0x5f9850;  // RAMP[CLS_GRASS][2]
+const SCRUB_WOOD = 0x3f7a38; // RAMP[CLS_CACTUS][1]
+const SCRUB_THORN = 0x2a4d24; // RAMP[CLS_CACTUS][0]
 
 /** The design system's cover translucency: every concealment veil — canopy,
  *  reed stalks, duct lids — draws at 25% translucency, so a veiled body
@@ -1458,7 +1467,16 @@ VEIL_SCRATCH.height = 12;
 export function veilTile(ctx: CanvasRenderingContext2D, kind: number,
     tx: number, ty: number, dx: number, dy: number,
     src: CanvasImageSource, sx: number, sy: number, srcTilePx: number): void {
-  if (kind === 3) {
+  // The three colour-keyed veils. Each reads the tile's own baked pixels back
+  // and keeps a set of them, so the client never re-implements a texture — it
+  // only decides which of the Java renderer's own pixels come back over a body.
+  // The Java pass makes the same decision from the same functions (see
+  // Grid.renderConcealment), so the two agree with no shared literal but these.
+  const keep = kind === 3 ? (c: number) => c !== REED_GAP
+    : kind === 4 ? (c: number) => c === BLADE_TIP
+    : kind === 5 ? (c: number) => c === SCRUB_WOOD || c === SCRUB_THORN
+    : null;
+  if (keep) {
     const vg = VEIL_SCRATCH.getContext('2d', { willReadFrequently: true })!;
     vg.clearRect(0, 0, ART, ART);
     vg.imageSmoothingEnabled = false;
@@ -1466,7 +1484,7 @@ export function veilTile(ctx: CanvasRenderingContext2D, kind: number,
     const id = vg.getImageData(0, 0, ART, ART);
     const px = id.data;
     for (let i = 0; i < px.length; i += 4) {
-      if ((px[i] << 16 | px[i + 1] << 8 | px[i + 2]) === REED_GAP) px[i + 3] = 0;
+      if (!keep(px[i] << 16 | px[i + 1] << 8 | px[i + 2])) px[i + 3] = 0;
     }
     ctx.putImageData(id, dx, dy);
     return;
@@ -1692,7 +1710,7 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     canopyHoles = [];
     for (let i = 0; i < cover.length; i++) {
       const v = cover[i];
-      if (v !== 1 && v !== 3) continue;
+      if (v === 0 || v === 2) continue; // 2 is the duct, which lids itself
       if (!stamp(ctx, i)) canopyHoles.push(i);
     }
     canopySrc = cover;
