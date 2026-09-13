@@ -11194,8 +11194,8 @@ public class SimTests {
 	}
 
 	/**
-	 * The plant floor under the station is the room that was drawn, and not a
-	 * room some later feature wrote over.
+	 * The works under the station are the rooms that were drawn, and not rooms
+	 * some later feature wrote over.
 	 *
 	 * <p>This is the scenario the plant floor's own history asks for. The first
 	 * version of that room placed each feature by arithmetic off the room's
@@ -11216,14 +11216,14 @@ public class SimTests {
 	 * is not part of the plan precisely because only the builder above knows
 	 * which of its own rooms the stairs may come up in).
 	 */
-	static class ThePlantFloorIsTheRoomThatWasDrawn extends Scenario {
+	static class TheWorksAreTheRoomsThatWereDrawn extends Scenario {
 		@Override
 		public void run() {
-			String[] plan = net.hedinger.prototype.sim.Worlds.plantFloorPlan();
+			String[] plan = net.hedinger.prototype.sim.Worlds.worksPlan();
 			int floors = 0;
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demo(s);
-				int[] at = plantFloorOrigin(w);
+				int[] at = worksOrigin(w);
 				if (at == null) {
 					continue; // this seed's caves only had room for the annex
 				}
@@ -11251,13 +11251,13 @@ public class SimTests {
 			assertLess("some seed actually built a plant floor", 0, floors);
 		}
 
-		/** The room's interior north-west corner on the deep level, or null if
-		 *  this world got no plant floor. The first version boxed everything
+		/** The building's interior north-west corner on the deep level, or null
+		 *  if this world got no works. The first version boxed everything
 		 *  that was not rock — which was the room, while the room was the deep
 		 *  level's only carving. The underdark's caverns ended that; the pipe
 		 *  run is the landmark now, because the plan draws it down the room's
 		 *  west column from its first row and nothing natural grows pipe. */
-		static int[] plantFloorOrigin(World w) {
+		static int[] worksOrigin(World w) {
 			int minx = Integer.MAX_VALUE, miny = Integer.MAX_VALUE;
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
@@ -12368,7 +12368,7 @@ public class SimTests {
 				new TheWorldRemembersItsBirths(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),
-				new ThePlantFloorIsTheRoomThatWasDrawn(),
+				new TheWorksAreTheRoomsThatWereDrawn(),
 				new TheReactorLoopIsClosed(),
 				new TheLoaderStowsALooseCrate(),
 				new TheLoaderPicksItsOwnFloorFirst(),

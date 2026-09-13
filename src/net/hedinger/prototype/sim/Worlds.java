@@ -1253,9 +1253,7 @@ public final class Worlds {
 		if (!finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + 6)) {
 			return;
 		}
-		sinkPlantFloor(w, x0, y0, W, H);
-		// Two lanes, at the east end of the storage hall's tread-plate walk.
-		sinkStairwell(w, x0 + 15, y0 + 10, 2);
+		sinkWorks(w, cols, rows, x0, y0, W, H);
 
 		// Furnishing: the stack the loader marshals to, the vault's cache.
 		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
@@ -1269,18 +1267,20 @@ public final class Worlds {
 	}
 
 	/**
-	 * The plant floor's plan, in the room's own interior coordinates: sixteen
-	 * tiles wide by nine tall, with the shell added around it.
+	 * The works' plan, in its own interior coordinates: forty-four tiles wide
+	 * by twenty-six tall, with the concrete shell added around it.
 	 *
 	 * <pre>
-	 *   .  deck plate      C  coolant run    S  waste sump    P  pipe run
-	 *   X  heat exchanger  w  catwalk        R  collapsed deck
-	 *   T  loading deck    L  lit grating    B  shard bed     V  vent grille
-	 *   s  steel bulkhead
+	 *   .  deck plate      C  coolant run     S  waste sump     P  pipe run
+	 *   X  heat exchanger  w  catwalk         R  collapsed deck V  vent grille
+	 *   T  loading deck    L  lit grating     B  shard bed      b  loose shards
+	 *   s  steel bulkhead  #  concrete wall   p  paved aisle    r  tram rail
+	 *   d  crawl duct      D  charge dock     E  server bank    H  drop shaft
+	 *   F  fungus bed
 	 * </pre>
 	 *
-	 * <p>Drawn rather than computed, and that is the whole of the change. The
-	 * first version placed each feature by arithmetic off the room's centre —
+	 * <p>Drawn rather than computed, and that is the whole of the method. An
+	 * earlier version placed each feature by arithmetic off the room's centre —
 	 * exchangers at cx+-2, coolant at cy+-3, a sump four in from the corner —
 	 * and the features quietly wrote over one another in the order they
 	 * happened to be listed. The loading walk erased the coolant loop's entire
@@ -1288,73 +1288,200 @@ public final class Worlds {
 	 * its east end; the stairwell landed in the sump and cut it from three
 	 * tiles to one. None of that is visible in the source, all of it is
 	 * obvious in a render, and none of it could fail a test. ART-STYLE.md
-	 * section 5 already says authored beats computed for discrete things, and
-	 * a room is a discrete thing.
+	 * section 5 already says authored beats computed for discrete things, and a
+	 * building is a discrete thing. At this size it is also the only way the
+	 * drawing stays readable at all.
 	 *
-	 * <p>The room is one fixed size rather than the station's, because it is
-	 * cut into virgin rock and nothing up there constrains it. Every plan that
-	 * gets a floor beneath it is at least this big, so the plan is simply
-	 * centred under whichever shell it is handed.
+	 * <pre>
+	 *   rows  0..8    reactor hall | pump gallery | store and vault
+	 *   row   9       partition, with doorways and a crawl duct
+	 *   rows 10..17   the shaft bay | the crystal workings
+	 *   row  18       partition
+	 *   rows 19..25   the lower spine: tram run, drain, marshalling deck
+	 * </pre>
+	 *
+	 * <p>The building is one fixed size rather than the station's, because it
+	 * is cut into virgin rock and nothing up there constrains it — which is
+	 * also why it is far bigger than any station above it. The caves never
+	 * leave a rock pocket larger than about 26x17 whatever the map size, so the
+	 * shell up there cannot grow; down here there is no pocket to find and
+	 * nothing to displace, and the rooms that would not fit are simply here.
+	 * The plan is centred under whichever shell it is handed and pushed back
+	 * inside the map if that would hang it off an edge.
 	 *
 	 * <p>What is down here is the plant the rooms above keep referring to. The
-	 * machine wing has a coolant run and an exchanger dumping heat, and until
-	 * now they came from nowhere: the run started at a wall. Now it starts
-	 * somewhere. A closed loop of coolant around a block of exchangers, a
-	 * catwalk down its east face to walk the reactor from, a sump the floor
-	 * drains into, and a bay behind a bulkhead whose only way in is over the
-	 * fallen ceiling — which is also why the level reads as somewhere that
-	 * stopped being maintained.
+	 * machine wing has a coolant run and an exchanger dumping heat, and they
+	 * used to come from nowhere: the run started at a wall. Now it starts
+	 * somewhere, and the somewhere has a second stage — a condenser block on
+	 * its own closed loop, the settling sumps it drains through, and the
+	 * gallery walk between them. Past that, a shard-bed working lit from below,
+	 * a shaft bay crossed by gantries, and a tram run down the whole length of
+	 * the level tying the three halls together.
 	 *
-	 * <p>Every tile it uses already existed. The point of the new rooms is not
-	 * new terrain but somewhere for the terrain to mean something: the crystal
-	 * bed has been in the caves all along, and putting lit grating and a
-	 * walkway around one says a facility was studying it.
+	 * <p>Every tile it uses already existed. The point of the rooms is not new
+	 * terrain but somewhere for the terrain to mean something: the crystal bed
+	 * has been in the caves all along, and putting lit grating and a walkway
+	 * around one says a facility was studying it.
 	 */
-	static final String[] PLANT_FLOOR = {
-			"PV..CCCCCCCw.RRR",
-			"P...CXXXXXCw.RRR",
-			"P...CXXXXXCwsTTT",
-			"P...CXXXXXCwsTTT",
-			"P...CCCCCCCwsTTT",
-			"PLLL.......w....",
-			"PLBL.TTTTTTTT...",
-			"PLLL...SSS......",
-			"P..V...SSSV.....",
+	static final String[] WORKS = {
+			"PV..CCCCCCCw.RRR#PPPPPPPPPPPPPP#p...........",
+			"P...CXXXXXCw.RRR#......CCCCCCCC#pssssssssss.",
+			"P...CXXXXXCwsTTT#.SSwSSCXXXXXXC#ps....B...s.",
+			"P...CXXXXXCwsTTT#.SSwSSCXXXXXXC.p..EE.LEE.s.",
+			"P...CCCCCCCwsTTT..SSwSSCCCCCCCC#ps.EE..EE.s.",
+			"PLLL.......w....#.SSwSS........#ps....L...s.",
+			"PLBL.TTTTTTTT...#.V..........V.dpssssssssss.",
+			"PLLL...SSS......d.TTTTTTTTTTTT.#p..........V",
+			"P..V...SSSV.....#.......RR.....#p.DDDDDDDD..",
+			"##dddp######p#######p######p########p####p##",
+			"Vwwwwwwwwwwwwwwwwwwww#.LLLLwwLLLLww.....FFF.",
+			".HHHHwHHHHHHwHHHHHHHH#.BBBBwwBBBBwwbbbb.FFV.",
+			".HHHHwHHHHHHwHHHHHTTTd.BBBBwwBBBBwwbbbb.FFF.",
+			".wwwwwwwLLwwwwwwLLTTT..LLLLwwLLLLww.....FFF.",
+			".HHHHwHHHHHHwHHHHHTTT#.....ww....ww.........",
+			".HHHHwHHHHHHwHHHHHHHH#TTTTTTTTTTTTTTTTTTTTT.",
+			".HHHHwHHHHHHwHHHHHHHH#.S...ww....ww.........",
+			"Vwwwwwwwwwwwwwwwwwwww#.SS..ww....ww.........",
+			"#######p###ddd#p########p########p######p###",
+			".PPPPPPPP.V......................V..........",
+			".pppppppppppppppppppppppppppppppppppppppppp.",
+			".rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr.",
+			".pppppppppppppppppppppppppppppppppppppppppp.",
+			".........................EE..........HHHHH..",
+			"...SSSS..RRRR..TTTTTTTT..EE..LLLLLL.wwwwww..",
+			"...SSSS..RRRR..TTTTTTTT..EE..LLBLLL..HHHHH..",
 	};
 
 	/** The plan's interior extent, and the shell around it. */
-	static final int PLANT_W = 16 + 2, PLANT_H = 9 + 2;
+	static final int WORKS_W = 44 + 2, WORKS_H = 26 + 2;
 
-	/** The plant floor's plan, for the scenarios: the drawing the deep level is
+	/** The works' plan, for the scenarios: the drawing the deep level is
 	 *  supposed to be, so a scenario can ask whether it still is one. Copied,
-	 *  so nobody can edit the room in place. */
-	public static String[] plantFloorPlan() {
-		return PLANT_FLOOR.clone();
+	 *  so nobody can edit the rooms in place. */
+	public static String[] worksPlan() {
+		return WORKS.clone();
 	}
 
-	/** Cuts the plant floor into the rock under a station shell of W x H at
-	 *  (x0, y0), centred. The stairwell is NOT cut here: only the builder above
-	 *  knows which of its own rooms the stairs may come up in, and the two
-	 *  station plans do not agree — one has a storage hall where the other has
-	 *  a bottomless shaft. See {@link #sinkStairwell}. */
-	private static void sinkPlantFloor(World w, int x0, int y0, int W, int H) {
-		int px0 = x0 + (W - PLANT_W) / 2, py0 = y0 + (H - PLANT_H) / 2;
-		for (int x = px0; x < px0 + PLANT_W; x++) {
-			for (int y = py0; y < py0 + PLANT_H; y++) {
+	/**
+	 * Cuts the works into the virgin rock under a station shell of W x H at
+	 * (x0, y0), centred on it, and joins the two floors with stairwells.
+	 *
+	 * <p>Returns whether the works survived. It is un-carved back to rock when
+	 * no stairwell could be cut: a floor with no stairs is a thousand walkable
+	 * tiles nothing in the world can reach, and the connectivity audit is right
+	 * to call that a broken world rather than an empty room.
+	 *
+	 * <p>The works is far bigger than any station above it — that is the whole
+	 * design. The caves never leave a rock pocket larger than about 26x17, so
+	 * the building up there cannot grow; measured across eight seeds at the
+	 * doubled map size, not one offered a 30x20. Under it there is no pocket to
+	 * find and nothing to displace, so the rooms that would not fit are down
+	 * here and the station above is their entrance rather than their whole.
+	 */
+	private static boolean sinkWorks(World w, int cols, int rows, int x0, int y0, int W, int H) {
+		// Centred on the station, then pushed back inside the map: the works
+		// overhangs the shell above it on every side, so on a station near an
+		// edge the centred origin is off the map.
+		int px0 = clampTo(x0 + (W - WORKS_W) / 2, 1, cols - WORKS_W - 1);
+		int py0 = clampTo(y0 + (H - WORKS_H) / 2, 1, rows - WORKS_H - 1);
+		if (px0 < 1 || py0 < 1) {
+			return false; // a map too small to hold the works at all
+		}
+		for (int x = px0; x < px0 + WORKS_W; x++) {
+			for (int y = py0; y < py0 + WORKS_H; y++) {
 				boolean shell = x == px0 || y == py0
-						|| x == px0 + PLANT_W - 1 || y == py0 + PLANT_H - 1;
+						|| x == px0 + WORKS_W - 1 || y == py0 + WORKS_H - 1;
 				setBare(w, x, y, DEEP_Z, shell
 						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
 			}
 		}
-		for (int j = 0; j < PLANT_FLOOR.length; j++) {
-			for (int i = 0; i < PLANT_FLOOR[j].length(); i++) {
-				Tile.TileType t = plantTile(PLANT_FLOOR[j].charAt(i));
+		for (int j = 0; j < WORKS.length; j++) {
+			for (int i = 0; i < WORKS[j].length(); i++) {
+				Tile.TileType t = plantTile(WORKS[j].charAt(i));
 				if (t != null) {
 					setBare(w, px0 + 1 + i, py0 + 1 + j, DEEP_Z, t);
 				}
 			}
 		}
+		if (stairsIntoTheWorks(w, x0, y0, W, H) > 0) {
+			return true;
+		}
+		for (int x = px0; x < px0 + WORKS_W; x++) {
+			for (int y = py0; y < py0 + WORKS_H; y++) {
+				setBare(w, x, y, DEEP_Z, Tile.TileType.TYPE_WALL);
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Cuts every stairwell the station and the works can agree on, and returns
+	 * how many landed.
+	 *
+	 * <p>Searched rather than written down, which is the change that let the
+	 * works grow. The stair sites used to be two constants per station plan,
+	 * chosen by eye against a plant floor that was centred under the shell and
+	 * barely larger than it — so which room a stair came up in, and which deck
+	 * plate it came down on, were facts about two drawings that had to be kept
+	 * in step by hand. They were not, twice. A search asks the two floors
+	 * instead: open station deck above, blank works plate below, four tiles of
+	 * each in a row. Either drawing can then be redrawn freely, and the stairs
+	 * move to wherever the buildings still agree.
+	 */
+	private static int stairsIntoTheWorks(World w, int x0, int y0, int W, int H) {
+		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
+		for (int hy = y0 + 1; hy < y0 + H - 1 && cut.size() < STAIRS_PER_STATION; hy++) {
+			for (int hx = x0 + 1; hx < x0 + W - 4 && cut.size() < STAIRS_PER_STATION; hx++) {
+				if (!stationStairFits(w, hx, hy)) {
+					continue;
+				}
+				boolean crowded = false;
+				for (int[] q : cut) {
+					crowded |= Math.abs(q[0] - hx) < MIN_STATION_STAIR_GAP
+							&& Math.abs(q[1] - hy) < MIN_STATION_STAIR_GAP;
+				}
+				if (crowded) {
+					continue;
+				}
+				// Two lanes wherever the row below fits as well.
+				sinkStairwell(w, hx, hy, stationStairFits(w, hx, hy + 1) ? 2 : 1);
+				cut.add(new int[] { hx, hy });
+			}
+		}
+		return cut.size();
+	}
+
+	/** How many ways down the station offers into the works. One was the old
+	 *  number and it was the number for a room a tenth this size; the works is
+	 *  three floors' worth of building reached through one small station, and a
+	 *  single stair into it is a queue. */
+	private static final int STAIRS_PER_STATION = 4;
+
+	/** How far apart two of those stairs must stand, so four ways down are four
+	 *  places rather than one wide one. */
+	private static final int MIN_STATION_STAIR_GAP = 4;
+
+	/** Whether {@link #sinkStairwell} can cut one lane from the station deck at
+	 *  (hx, hy) down into the works: four tiles of walkable, man-made floor up
+	 *  here, and four of blank deck plate down there for the landing, the climb
+	 *  and its housing to occupy. */
+	private static boolean stationStairFits(World w, int hx, int hy) {
+		for (int k = 0; k <= 3; k++) {
+			Tile.TileType up = w.getTile(hx + k, hy, CAVE_Z).getType();
+			if (up != Tile.TileType.TYPE_PLATE && up != Tile.TileType.TYPE_PAVED
+					&& up != Tile.TileType.TYPE_TREADPLATE) {
+				return false;
+			}
+			if (w.getTile(hx + k, hy, DEEP_Z).getType() != Tile.TileType.TYPE_PLATE) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Keeps a coordinate inside {@code [lo, hi]}. */
+	private static int clampTo(int v, int lo, int hi) {
+		return v < lo ? lo : (v > hi ? hi : v);
 	}
 
 	private static Tile.TileType plantTile(char ch) {
@@ -1381,10 +1508,28 @@ public final class Worlds {
 			return Tile.TileType.TYPE_COLLAPSE;
 		case 'V':
 			return Tile.TileType.TYPE_AIRVENT;
+		case '#':
+			return Tile.TileType.TYPE_WALL_CONCRETE;
+		case 'p':
+			return Tile.TileType.TYPE_PAVED;
+		case 'r':
+			return Tile.TileType.TYPE_RAIL;
+		case 'd':
+			return Tile.TileType.TYPE_DUCT;
+		case 'D':
+			return Tile.TileType.TYPE_DOCK;
+		case 'E':
+			return Tile.TileType.TYPE_SERVER;
+		case 'H':
+			return Tile.TileType.TYPE_SHAFT;
+		case 'F':
+			return Tile.TileType.TYPE_FUNGUS;
+		case 'b':
+			return Tile.TileType.TYPE_CRYSTAL_SPARSE;
 		case '.':
 			return null; // the shell pass already laid deck plate
 		default:
-			throw new IllegalArgumentException("no such plant-floor tile: " + ch);
+			throw new IllegalArgumentException("no such works tile: " + ch);
 		}
 	}
 
@@ -1635,11 +1780,7 @@ public final class Worlds {
 		// hanging under a base that no longer exists is a hundred-odd walkable
 		// tiles nothing in the world can reach.
 		if (finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh)) {
-			sinkPlantFloor(w, x0, y0, W, H);
-			// One lane, and at the storage wing's WEST end: this plan's south-east
-			// quadrant is the shaft bay, and a stairwell head over a bottomless pit
-			// is a stairwell nothing can stand at the top of.
-			sinkStairwell(w, x0 + 3, y0 + 10, 1);
+			sinkWorks(w, cols, rows, x0, y0, W, H);
 		}
 	}
 
