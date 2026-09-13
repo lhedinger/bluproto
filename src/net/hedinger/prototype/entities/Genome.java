@@ -208,6 +208,21 @@ public class Genome {
 	 */
 	public double determination = 2.0;
 	/**
+	 * How long this creature keeps after a quarry that is not yielding, in ticks:
+	 * a chase that has run this long without a bite landing is let go, and the
+	 * animal that outlasted it is left off the menu for as long again, so the
+	 * next look finds something else. Intuition rather than tactics -- how long
+	 * a chase is worth is a fact about how fast the herd runs and how far the
+	 * hunter can see, facts about a world, and different in every one.
+	 *
+	 * <p>The size floor on the hunting clade is gone and its reach is its greed's,
+	 * so what a hunter goes after is now entirely the lineage's own choice; this
+	 * is the last of the three, deciding when a choice is given up on. Read by
+	 * the hunter's commitment alone: a carcass does not run, and a grazer's patch
+	 * does not either.
+	 */
+	public int patience = 600;
+	/**
 	 * Which way this lineage reproduces, 0..1, sexual at or above 0.5. A creature is
 	 * one or the other and never both: a sexual body courts a partner and waits if
 	 * there is none, an asexual one buds alone and never courts.
@@ -291,6 +306,7 @@ public class Genome {
 		// act on before mutation has had time to make any.
 		g.greed = 0.5 + Utils.random() * 1.5;
 		g.determination = 1.0 + Utils.random() * 2.0;
+		g.patience = (int) Math.round(200 + Utils.random() * 1800);
 		// Life history spread across founders too, so the r/K axis, evolvability
 		// and the foraging instinct all vary from the first generation.
 		g.reproFraction = 0.6 + Utils.random() * 0.3;
@@ -377,6 +393,11 @@ public class Genome {
 	 *  goal for a WORSE one, which is not a policy but a bug. */
 	@Unit("value exponent / x incumbent score")
 	public static final double GREED_MAX = 3.0, DETERMINATION_MAX = 8.0;
+	/** Bounds on patience. The floor is about one bite period, so the least
+	 *  patient hunter there is still gives a quarry the chance to be bitten; the
+	 *  ceiling is a few minutes, past which a chase is a career. */
+	@Unit("ticks")
+	public static final int PATIENCE_MIN = 30, PATIENCE_MAX = 6000;
 
 	/**
 	 * Ceiling on the speed gene (tiles/tick). Speed was the one magnitude with no

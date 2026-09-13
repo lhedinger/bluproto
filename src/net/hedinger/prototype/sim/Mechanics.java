@@ -958,6 +958,10 @@ public final class Mechanics {
 						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "
 						+ "clock (" + num(TestNPC.FORAGE_SCAN_PERIOD) + "-tick scans) and a "
 						+ "parasite by grip, so neither reads a bar."),
+				row("patience", num(Genome.PATIENCE_MIN) + " – " + num(Genome.PATIENCE_MAX), "ticks",
+						"How long a hunter keeps after a quarry with no bite landed before "
+						+ "it lets go; the animal it gave up on is off its menu for as long "
+						+ "again, so the next look finds something else."),
 				row("mateThreshold", "0 – 1", "similarity",
 						"How alike a partner must be before courtship: the gene that makes "
 						+ "species real, because drifted markers stop clearing it."),
@@ -1052,7 +1056,8 @@ public final class Mechanics {
 						item("the hunt", "One committed quarry, scored value over effort and "
 								+ "held until something clears its score × determination; a "
 								+ "chase pinned for " + num(TestNPC.HUNT_GIVEUP_TICKS)
-								+ " ticks is abandoned."),
+								+ " ticks is abandoned, and one that has run the lineage's patience "
+								+ "without a bite is let go."),
 						item("appetite gates", "Hunts above " + num(TestNPC.PRED_HUNT_HUNGER)
 								+ " hunger, stops killing below " + num(TestNPC.PRED_FULL_HUNGER)
 								+ " (a full stomach wastes the prey), and only above "

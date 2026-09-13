@@ -1740,6 +1740,15 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * How long a chase runs without a bite landing before this body lets the
+	 * quarry go -- {@code Genome.patience}. A body with no genome never gives up,
+	 * which is what every hunter did before the gene.
+	 */
+	private long patience() {
+		return genome == null ? Long.MAX_VALUE / 4 : Math.max(1, genome.patience);
+	}
+
+	/**
 	 * The quarry this hunter has committed to running down, if that choice is
 	 * still worth keeping; null when it should look again.
 	 *
@@ -1757,7 +1766,12 @@ public class TestNPC extends NPC {
 	 * <p>Dropped when it dies (the kill is finished, and a carcass is the
 	 * scavenger's business), when it is removed, when it goes up or down a floor,
 	 * when it stops being edible at all, and when it goes out of sight — cover is
-	 * a real refuge and a commitment must not see through it.
+	 * a real refuge and a commitment must not see through it. And dropped when
+	 * the chase has outrun the lineage's {@link #patience()} with no bite landed:
+	 * a quarry across water is in plain sight and out of reach forever, and a
+	 * hunter that never lets go starves at the shore. The animal it gives up on
+	 * is spurned for as long again, so the next look finds something else rather
+	 * than the same standoff.
 	 */
 	private NPC heldPrey(boolean cannibal) {
 		NPC t = preyTarget;
@@ -1768,11 +1782,23 @@ public class TestNPC extends NPC {
 			preyTarget = null; // dead, gone, a floor away, inedible, or lost to cover
 			return null;
 		}
+		if (age - Math.max(chaseSince, lastBiteAt) > patience()) {
+			spurned = t;
+			spurnedUntil = age + patience();
+			preyTarget = null; // going nowhere: let it go, and look elsewhere
+			return null;
+		}
 		return t;
 	}
 
 	/** The quarry this hunter has committed to; see {@link #heldPrey}. */
 	private NPC preyTarget = null;
+	/** When the chase of {@link #preyTarget} began; with {@link #lastBiteAt} the
+	 *  clock {@link #patience()} runs against. */
+	private long chaseSince = 0;
+	/** The quarry last given up on, and until when it stays off the menu. */
+	private NPC spurned = null;
+	private long spurnedUntil = Long.MIN_VALUE / 2;
 
 	/** This tick's answer from {@link #scanPrey}, resolved once in
 	 *  {@code senseInto} and read by both the prey and the forage channel.
@@ -1797,6 +1823,9 @@ public class TestNPC extends NPC {
 			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
+			if (n == spurned && age < spurnedUntil) {
+				continue; // given up on: off the menu until patience has run again
+			}
 			if (distance(n.getX(), n.getY(), n.getZ()) > LOS_RANGE) {
 				continue;
 			}
@@ -1807,6 +1836,9 @@ public class TestNPC extends NPC {
 			}
 		}
 		if (best != null) {
+			if (best != preyTarget) {
+				chaseSince = age; // a new chase starts the patience clock afresh
+			}
 			preyTarget = best; // nothing held, or something worth turning for
 		}
 		return preyTarget;
