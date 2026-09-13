@@ -410,20 +410,47 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  comes from the parasite line's own reseed mix — see
 	 *  {@link Worlds#mindedReseedGenome}, which is the one place that describes
 	 *  what the mix is. */
-	private void seedParasite() {
-		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PARASITE);
-		double x = cols / 2.0, y = rows / 2.0;
+	/**
+	 * Where a reseed of {@code clade} lands on level {@code z}: beside the oldest
+	 * living minded body of that clade on that level, or anywhere walkable when
+	 * there is none. The oldest because that is the reseed's parent -- most reseeds
+	 * are its mutated children (see {@link Worlds#mindedReseedGenome}) -- and a
+	 * birth lands beside the parent. It is also what gives a sexual line a mate it
+	 * is compatible with: a child of a small mutation is within a few hundredths of
+	 * its parent on every marker. Scattered across the map, that pair never met.
+	 */
+	private double[] seedSpot(Genome.Clade clade, int z) {
+		TestNPC anchor = null;
+		for (Entity e : getWorld().getEntities()) {
+			if (e instanceof TestNPC t && t.isMinded() && !t.isDead() && !t.isRemoved()
+					&& t.getLvl() == z && t.getGenome() != null && t.getGenome().clade == clade
+					&& (anchor == null || t.getAge() > anchor.getAge())) {
+				anchor = t;
+			}
+		}
+		boolean avoidDrops = z != surfaceZ;
+		if (anchor != null) {
+			double[] near = Worlds.spotNear(getWorld(), anchor.getX(), anchor.getY(), z, avoidDrops);
+			if (near != null) {
+				return near;
+			}
+		}
+		// Nobody of its kind on this level: the old scatter, anywhere walkable.
 		for (int tries = 0; tries < 40; tries++) {
 			double px = 3 + Utils.random() * (cols - 6);
 			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
-				x = px;
-				y = py;
-				break;
+			var t = getWorld().getTile(px, py, z);
+			if (t.isWalkable() && !(avoidDrops && t.isDrop())) {
+				return new double[] { px, py };
 			}
 		}
-		getWorld().spawnEntity(
-				TestNPC.mindedParasite(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
+		return new double[] { cols / 2.0, rows / 2.0 };
+	}
+
+	private void seedParasite() {
+		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PARASITE);
+		double[] p = seedSpot(Genome.Clade.PARASITE, surfaceZ);
+		getWorld().spawnEntity(TestNPC.mindedParasite(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Whether any carcass is lying about — the precondition for a scavenger
@@ -458,18 +485,8 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  reseed mix — see {@link Worlds#mindedReseedGenome}. */
 	private void seedMindedPredator() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PREDATOR);
-		double x = cols / 2.0, y = rows / 2.0;
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
-				x = px;
-				y = py;
-				break;
-			}
-		}
-		getWorld().spawnEntity(
-				TestNPC.mindedPredator(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
+		double[] p = seedSpot(Genome.Clade.PREDATOR, surfaceZ);
+		getWorld().spawnEntity(TestNPC.mindedPredator(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Spawns one minded scavenger on the surface where the bodies mostly fall.
@@ -477,18 +494,8 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  {@link Worlds#mindedReseedGenome}. */
 	private void seedScavenger() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.SCAVENGER);
-		double x = cols / 2.0, y = rows / 2.0;
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			if (getWorld().getTile(px, py, surfaceZ).isWalkable()) {
-				x = px;
-				y = py;
-				break;
-			}
-		}
-		getWorld().spawnEntity(
-				TestNPC.mindedScavenger(x, y, surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
+		double[] p = seedSpot(Genome.Clade.SCAVENGER, surfaceZ);
+		getWorld().spawnEntity(TestNPC.mindedScavenger(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Spawns one minded herbivore at a random open tile. Reseeds alternate
@@ -506,20 +513,8 @@ public final class WorldSteward extends Entity implements CullOrders {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.HERBIVORE);
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
 		seedBelow = !seedBelow;
-		double x = cols / 2.0, y = rows / 2.0;
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			var t = getWorld().getTile(px, py, z);
-			// Underground, never onto a drop: pits on the lowest level are
-			// bottomless, and a reseed into the void is a wasted creature.
-			if (t.isWalkable() && !(z != surfaceZ && t.isDrop())) {
-				x = px;
-				y = py;
-				break;
-			}
-		}
-		getWorld().spawnEntity(TestNPC.mindedForager(x, y, z, g).withDeathspan(ECO_DEATHSPAN));
+		double[] p = seedSpot(Genome.Clade.HERBIVORE, z);
+		getWorld().spawnEntity(TestNPC.mindedForager(p[0], p[1], z, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/** Seeds one MLP-minded founder — a fresh network with the forage-and-breed
@@ -530,18 +525,8 @@ public final class WorldSteward extends Entity implements CullOrders {
 		Genome g = Worlds.mlpFounderGenome();
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
 		seedBelow = !seedBelow;
-		double x = cols / 2.0, y = rows / 2.0;
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			var t = getWorld().getTile(px, py, z);
-			if (t.isWalkable() && !(z != surfaceZ && t.isDrop())) {
-				x = px;
-				y = py;
-				break;
-			}
-		}
-		getWorld().spawnEntity(TestNPC.mindedForager(x, y, z, g).withDeathspan(ECO_DEATHSPAN));
+		double[] p = seedSpot(Genome.Clade.HERBIVORE, z);
+		getWorld().spawnEntity(TestNPC.mindedForager(p[0], p[1], z, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
 	/**
