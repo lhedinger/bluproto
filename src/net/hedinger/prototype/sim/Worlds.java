@@ -497,6 +497,104 @@ public final class Worlds {
 	}
 
 	/**
+	 * A region of the surface, as the handful of numbers that bend the one
+	 * terrain rule into somewhere with a character of its own.
+	 *
+	 * <p>The surface used to be a single global blend: one elevation field, one
+	 * moisture field, one ladder of thresholds, everywhere. It produced variety
+	 * at the scale of a few tiles — a pond here, a thicket there — and none at
+	 * all at the scale of a journey, so every part of the map had the same
+	 * things in the same proportions and travelling across it told you nothing.
+	 *
+	 * <p>Rather than write six terrain generators, this shifts the ONE
+	 * generator's inputs. A region that adds to moisture floods: its lakes are
+	 * bigger, its reed fringes wider, its meadows richer, all out of the rules
+	 * that were already there. A region that adds to elevation turns stony,
+	 * grows outcrops and scree, and carries more skyline above it. That keeps
+	 * the biomes from being six disjoint tile palettes stitched at a seam —
+	 * they share every threshold, so they blend where they meet, and a rule
+	 * added to the ladder reaches all of them at once.
+	 */
+	private static final class Biome {
+		final String name;
+		/** Added to the elevation field: up for uplands, down for basins. Also
+		 *  read by {@link #raiseSkyline}, so a stony region really does stand
+		 *  taller rather than only looking it from above. */
+		final double elevBias;
+		/** Added to the moisture field, which decides water, reeds, marsh,
+		 *  thicket and how green the pasture gets. */
+		final double moistBias;
+		/** The meadow fertility line, {@code fertBase + fertGain * moisture}. */
+		final double fertBase, fertGain;
+		/** Detail-noise threshold for thickets: lower is more wooded. */
+		final double coverCut;
+
+		Biome(String name, double elevBias, double moistBias,
+				double fertBase, double fertGain, double coverCut) {
+			this.name = name;
+			this.elevBias = elevBias;
+			this.moistBias = moistBias;
+			this.fertBase = fertBase;
+			this.fertGain = fertGain;
+			this.coverCut = coverCut;
+		}
+	}
+
+	/** The six regions, as a wet/dry axis crossed with a warm/cool one. The
+	 *  MEADOW row is the world as it was before regions existed, so the
+	 *  temperate middle of the map still reads exactly like the old one. */
+	private static final Biome MEADOW = new Biome("meadow", 0, 0, 0.15, 1.25, 0.62);
+	private static final Biome STEPPE = new Biome("steppe", 0.01, -0.09, 0.10, 1.00, 0.76);
+	private static final Biome BADLANDS = new Biome("badlands", 0.03, -0.17, 0.04, 0.70, 0.86);
+	private static final Biome UPLAND = new Biome("upland", 0.09, -0.05, 0.08, 0.85, 0.72);
+	private static final Biome WOODLAND = new Biome("woodland", -0.02, 0.06, 0.20, 1.20, 0.44);
+	private static final Biome WETLAND = new Biome("wetland", -0.07, 0.13, 0.26, 1.30, 0.56);
+
+	/**
+	 * Which region (x, y) belongs to.
+	 *
+	 * <p>Two very low-frequency fields, one wet/dry and one warm/cool, crossed
+	 * into a three-by-two table. The frequencies are the whole design here:
+	 * 0.035 puts a region's lattice about thirty tiles apart, which on the
+	 * default map is roughly ten regions across — small enough that a walk
+	 * crosses several, large enough that each one is somewhere rather than a
+	 * patch. Much lower and a single seed's map is two biomes and a rumour of a
+	 * third; much higher and the regions stop being regions.
+	 *
+	 * <p>The local detail noise is folded into both axes before the thresholds
+	 * are applied. Without it the borders are contours of a smooth field —
+	 * long, clean curves that no landscape has. With it they interlock at the
+	 * scale of a few tiles, so a wood thins into steppe through a scatter of
+	 * copses rather than along a line.
+	 */
+	private static Biome biomeAt(int x, int y, double detail) {
+		double jitter = BIOME_JITTER * (detail - 0.5);
+		double wet = Utils.noise2(x + 1700, y + 1100, BIOME_FREQ) + jitter;
+		double warm = Utils.noise2(x + 2300, y + 90, BIOME_FREQ * 1.3) - jitter;
+		if (wet > 0.62) {
+			return warm > 0.5 ? WETLAND : WOODLAND;
+		}
+		if (wet > 0.38) {
+			return warm > 0.5 ? MEADOW : STEPPE;
+		}
+		return warm > 0.5 ? BADLANDS : UPLAND;
+	}
+
+	/** How far apart a region's lattice points stand, as a noise frequency:
+	 *  1/0.035 is about thirty tiles. */
+	private static final double BIOME_FREQ = 0.035;
+
+	/** How much local detail is allowed to move a region's border. Enough to
+	 *  interlock the edges, far too little to put a lake in the badlands. */
+	private static final double BIOME_JITTER = 0.09;
+
+	/** Clamps a biased noise sample back into the [0, 1] the thresholds
+	 *  ladder assumes. */
+	private static double clamp01(double v) {
+		return v < 0 ? 0 : (v > 1 ? 1 : v);
+	}
+
+	/**
 	 * The demo terrain at an arbitrary size. Biomes are sampled from the same
 	 * coordinate noise (so a bigger map is more of the same world, not a
 	 * different one), and the two levels are wired together by
@@ -514,13 +612,14 @@ public final class Worlds {
 		// be told which floor that is instead of taking the highest index.
 		w.setSurfaceZ(SURFACE_Z);
 
-		// ---- the surface: biomes inside a rocky boundary ----
+		// ---- the surface: regional biomes inside a rocky boundary ----
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
-				double elev = Utils.noise2(x, y, 0.055);
-				double moist = Utils.noise2(x + 500, y + 300, 0.075);
 				double detail = Utils.noise2(x + 950, y + 640, 0.16);
+				Biome b = biomeAt(x, y, detail);
+				double elev = clamp01(Utils.noise2(x, y, 0.055) + b.elevBias);
+				double moist = clamp01(Utils.noise2(x + 500, y + 300, 0.075) + b.moistBias);
 				Tile.TileType t;
 				double fert;
 				if (border || elev > 0.87) {
@@ -552,7 +651,7 @@ public final class Worlds {
 				} else if (moist > 0.60 && elev < 0.52) {
 					t = Tile.TileType.TYPE_MUD;
 					fert = 0.30; // marshy shore, slows movement
-				} else if (moist > 0.55 && detail > 0.62) {
+				} else if (moist > 0.55 && detail > b.coverCut) {
 					t = Tile.TileType.TYPE_COVER;
 					fert = 0.90; // thickets: lush, and they block line of sight
 				} else if (elev > 0.58 && moist < 0.30) {
@@ -602,7 +701,7 @@ public final class Worlds {
 					// Kept mean-neutral against the old narrow band, so the
 					// world holds as much food as before — just spread far more
 					// unevenly, which is what makes a habitat worth choosing.
-					fert = 0.15 + 1.25 * moist + 0.08 * (detail - 0.5);
+					fert = b.fertBase + b.fertGain * moist + 0.08 * (detail - 0.5);
 					fert = fert < 0 ? 0 : (fert > 1 ? 1 : fert);
 					// The damp, rank end of the meadow stands up into tall
 					// grass: the step the surface was missing between open
