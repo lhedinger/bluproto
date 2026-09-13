@@ -28,10 +28,11 @@ public enum Niche {
 	/** Grazes the living substrate; no size constraint, ordinary locomotion. */
 	HERBIVORE(Diet.GRAZE, 1.0, 1.0, 0, Double.POSITIVE_INFINITY, 1.0),
 	/** Kills what it eats; no size floor — how small a hunter can live is the
-	 *  lineage's to find out — and takes quarry up to
-	 *  {@link TestNPC#PRED_MAX_PREY_RATIO} times its own size. */
+	 *  lineage's to find out — and can take quarry up to
+	 *  {@link TestNPC#PRED_PREY_RATIO_CAP} times its own size, greed deciding how
+	 *  much of that room a body uses. */
 	PREDATOR(Diet.HUNT, 1.0, 1.0, 0, Double.POSITIVE_INFINITY,
-			TestNPC.PRED_MAX_PREY_RATIO),
+			TestNPC.PRED_PREY_RATIO_CAP),
 	/** Eats the dead; ranges far and cheap — the vulture's living is distance
 	 *  covered, not speed, so a big stride bought at a discounted travel bill. */
 	SCAVENGER(Diet.SCAVENGE, TestNPC.SCAVENGER_STRIDE, TestNPC.SCAVENGER_TRAVEL, 0,
@@ -124,9 +125,11 @@ public enum Niche {
 		return travelFactor;
 	}
 
-	/** How far above its own size this clade takes quarry: {@code 1} is nothing
-	 *  bigger than itself, a hunter's is more. Multiplies the body's size to give
-	 *  the ceiling on what counts as prey (and, above it, as a threat). */
+	/** The most a body of this clade can reach above its own size for quarry:
+	 *  {@code 1} is nothing bigger than itself, a hunter's is more. A physical
+	 *  cap on the body's own greed-set reach, not the reach itself; the two
+	 *  together give the ceiling on what counts as prey (and, above it, as a
+	 *  threat). */
 	public double preySizeRatio() {
 		return preySizeRatio;
 	}

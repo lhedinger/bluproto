@@ -78,12 +78,12 @@ public class TestNPC extends NPC {
 	 */
 	@Unit("ticks")
 	public static final int PRED_BITE_PERIOD = 33;
-	/** How much larger than itself a hunter will take on, as a multiple of its own
-	 *  body size. Above 1 so a smaller hunter can pick a fight it is not built to
-	 *  win quickly: it lands weaker bites and needs far more of them, which is the
-	 *  whole trade — a long, costly, interruptible kill instead of a clean one. */
+	/** The physical limit on how much larger than itself a hunter can take on, as
+	 *  a multiple of its own body size. Nothing above twice a hunter's size is
+	 *  huntable by any hunter; how much of the room below that a lineage actually
+	 *  uses is its own greed's business -- see {@link #preyReach}. */
 	@Unit("x own size")
-	public static final double PRED_MAX_PREY_RATIO = 1.5;
+	public static final double PRED_PREY_RATIO_CAP = 2.0;
 	/** Full health, and so the whole of a body: a bite that removes this much of a
 	 *  creature has consumed all of it. Health is flat across every body size, which
 	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
@@ -2082,7 +2082,7 @@ public class TestNPC extends NPC {
 	 *  feeds the prey, threat and kin gradients at once, at full sight range. */
 	/**
 	 * The size at which a neighbour stops being food and starts being danger.
-	 * For a hunter that is {@link #PRED_MAX_PREY_RATIO} times its own size --
+	 * For a hunter that is {@link #preyReach} times its own size --
 	 * exactly where {@link #nearestPrey} stops taking quarry -- and for everything
 	 * else it is simply its own size, which is all a grazer's senses can mean by
 	 * "bigger than me".
@@ -2097,7 +2097,28 @@ public class TestNPC extends NPC {
 	 * against it, and never bit. Naming the same line twice closes that trap.
 	 */
 	private double preyCeiling() {
-		return getSize() * Niche.of(ecoClade()).preySizeRatio();
+		return getSize() * Math.min(Niche.of(ecoClade()).preySizeRatio(), preyReach());
+	}
+
+	/**
+	 * How far above its own size this body will take quarry, as a multiple of
+	 * that size: half a body more than its greed, held between 1 (nothing bigger
+	 * than itself) and the clade's physical cap. A lineage of default greed (1)
+	 * reaches 1.5, which is what every hunter reached when the number was a
+	 * constant; one of greed 1.5 or more reaches the cap, and nothing reaches
+	 * past it.
+	 *
+	 * <p>Tied to greed rather than given a gene of its own because they are one
+	 * disposition seen from two sides. Greed is how much a big prize outranks a
+	 * near one when food is scored; the reach is how big a prize the body is
+	 * willing to name food at all. A lineage that holds out for the fat animal
+	 * is the one that will pick a fight above its weight, and a lineage that
+	 * takes whatever is handy has no use for a menu it never orders from. One
+	 * gene drifting moves both, so selection is not asked to co-ordinate two.
+	 */
+	private double preyReach() {
+		double greed = genome == null ? 1.0 : genome.greed;
+		return Math.max(1.0, Math.min(PRED_PREY_RATIO_CAP, 0.5 + greed));
 	}
 
 	private void senseFieldAndBody(double[] s) {
