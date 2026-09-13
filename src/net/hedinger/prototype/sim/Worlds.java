@@ -504,8 +504,14 @@ public final class Worlds {
 					fert = 0.90; // thickets: lush, and they block line of sight
 				} else if (elev > 0.58 && moist < 0.30) {
 					// The badlands' driest core: a sand pan, with treacherous
-					// quicksand pockets where the detail noise peaks.
-					t = detail > 0.78 ? Tile.TileType.TYPE_QUICKSAND : Tile.TileType.TYPE_SAND;
+					// quicksand pockets where the detail noise peaks — and, in
+					// the band between, the thorn scrub that is the dry
+					// country's only cover. The desert had none at all: a
+					// hunter there had nowhere to wait, and the cactus is by
+					// its own description too narrow to hide behind.
+					t = detail > 0.78 ? Tile.TileType.TYPE_QUICKSAND
+							: detail > 0.44 && detail < 0.58 ? Tile.TileType.TYPE_SCRUB
+							: Tile.TileType.TYPE_SAND;
 					fert = 0;
 				} else if (elev > 0.58 && moist < 0.40) {
 					t = Tile.TileType.TYPE_FLOOR;
@@ -524,9 +530,16 @@ public final class Worlds {
 					// Kept mean-neutral against the old narrow band, so the
 					// world holds as much food as before — just spread far more
 					// unevenly, which is what makes a habitat worth choosing.
-					t = Tile.TileType.TYPE_FLOOR;
 					fert = 0.15 + 1.25 * moist + 0.08 * (detail - 0.5);
 					fert = fert < 0 ? 0 : (fert > 1 ? 1 : fert);
+					// The damp, rank end of the meadow stands up into tall
+					// grass: the step the surface was missing between open
+					// ground and a closed thicket. It keeps the fertility this
+					// band would have given it and grazes exactly like the
+					// meadow, so the herd's food is where it was — only now
+					// some of it is somewhere a body can lie down.
+					t = moist > 0.48 && detail > 0.56
+							? Tile.TileType.TYPE_TALLGRASS : Tile.TileType.TYPE_FLOOR;
 				}
 				w.setTile(x, y, SURFACE_Z, t);
 				w.getTile(x, y, SURFACE_Z).setFertility(fert);
@@ -1859,6 +1872,8 @@ public final class Worlds {
 		case TYPE_MUD:
 		case TYPE_COVER:
 		case TYPE_REEDS:
+		case TYPE_TALLGRASS:
+		case TYPE_SCRUB:
 			break;
 		default:
 			return false;
