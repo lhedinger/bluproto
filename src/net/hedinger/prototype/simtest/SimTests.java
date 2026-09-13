@@ -1706,7 +1706,7 @@ public class SimTests {
 
 	/**
 	 * A hunter can punch above its weight, but pays for it in time. Quarry up to
-	 * {@code PRED_MAX_PREY_RATIO} times a hunter's own size is fair game, and the
+	 * its greed-set reach (1.5 times its own size at default greed) is fair game, and the
 	 * bite scales down with the size ratio — so an undersized hunter still brings
 	 * the animal down, it just needs far more bites to do it.
 	 *
@@ -5852,7 +5852,7 @@ public class SimTests {
 
 	/**
 	 * A hunter's senses have to name its food. {@code nearestPrey} takes quarry up
-	 * to {@code PRED_MAX_PREY_RATIO} (1.5) times the hunter's own size, and the
+	 * to its reach (1.5 times the hunter's own size at default greed), and the
 	 * cohort is founded across 5..17 precisely so a hunter can reach above
 	 * itself. If the prey channel splits at
 	 * the hunter's own size instead, every one of those larger bodies is absent
@@ -5896,7 +5896,14 @@ public class SimTests {
 		}
 
 		static Genome body(double size, Brain brain) {
+			return body(size, brain, 1.0);
+		}
+
+		/** As {@link #body}, with the lineage's greed set -- which for a hunter
+		 *  also sets how far above its own size it takes quarry. */
+		static Genome body(double size, Brain brain, double greed) {
 			Genome g = new Genome();
+			g.greed = greed;
 			g.size = size;
 			g.speed = 0.0005; // near enough to standing still: this is not a chase
 			g.markers = new double[] { 0.5, 0.5, 0.5 };
@@ -5917,9 +5924,14 @@ public class SimTests {
 		 * here are the ones that decide the outcome.
 		 */
 		int quarryHealthAfter(double hunterSize, double quarrySize) {
+			return quarryHealthAfter(hunterSize, quarrySize, 1.0);
+		}
+
+		/** As {@link #quarryHealthAfter(double, double)} for a hunter of the given greed. */
+		int quarryHealthAfter(double hunterSize, double quarrySize, double greed) {
 			seed(31);
 			World w = room(14, 14);
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker()));
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker(), greed));
 			TestNPC quarry = TestNPC.grazer(6.9, 6.5, 0, body(quarrySize, null));
 			w.spawnEntity(hunter);
 			w.spawnEntity(quarry);
@@ -5972,6 +5984,32 @@ public class SimTests {
 					0, quarryHealthAfter(5, 4));
 			assertEquals("and a 9 px animal, past its 1.5x reach, survives whole",
 					100, quarryHealthAfter(5, 9));
+		}
+	}
+
+	/**
+	 * How far above its weight a hunter punches is its lineage's to decide, not a
+	 * constant's. The reach used to be one number for every hunter, 1.5 times its
+	 * own size; now it is half a body more than the lineage's greed, held to a
+	 * physical cap of twice its size. A hunter of default greed keeps the 1.5 it
+	 * always had, a greedy one reaches the cap, and nothing reaches past it.
+	 *
+	 * <p>The legs are chosen so each rule has a leg that only it can fail: 1.9
+	 * against a greedy hunter proves the reach grew; 1.9 against a default one
+	 * proves it grew with greed rather than for everyone; 1.4 against the default
+	 * proves the default lost nothing; 2.1 against the greediest proves the cap.
+	 */
+	static class GreedDecidesHowFarUpAHunterPunches extends AHunterSeesQuarryLargerThanItselfAsPrey {
+		@Override
+		public void run() {
+			assertEquals("a greedy hunter (reach 2x) takes quarry 1.9x its size",
+					0, quarryHealthAfter(10, 19, 2.0));
+			assertEquals("a hunter of default greed (reach 1.5x) leaves the same quarry whole",
+					100, quarryHealthAfter(10, 19, 1.0));
+			assertEquals("and still takes quarry 1.4x its size, as it always did",
+					0, quarryHealthAfter(10, 14, 1.0));
+			assertEquals("the greediest hunter there is cannot take quarry 2.1x its size",
+					100, quarryHealthAfter(10, 21, Genome.GREED_MAX));
 		}
 	}
 
@@ -8695,8 +8733,8 @@ public class SimTests {
 					!net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PARASITE).isHuntable());
 			assertTrue("a grazer is huntable",
 					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.HERBIVORE).isHuntable());
-			assertNear("the hunter's prey-size reach is the card's ratio",
-					TestNPC.PRED_MAX_PREY_RATIO,
+			assertNear("the hunter's prey-size cap is the card's ratio",
+					TestNPC.PRED_PREY_RATIO_CAP,
 					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR).preySizeRatio(), 0);
 
 			// The card's stride and size invariant are exactly what a body of that
@@ -12242,6 +12280,7 @@ public class SimTests {
 				new AttackingAndEatingSatesAHunter(),
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
 				new ASmallHunterLivesOnSmallQuarry(),
+				new GreedDecidesHowFarUpAHunterPunches(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),

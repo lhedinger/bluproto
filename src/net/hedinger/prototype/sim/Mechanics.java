@@ -950,7 +950,9 @@ public final class Mechanics {
 		rows(s,
 				row("greed", "0 – " + num(Genome.GREED_MAX), "value exponent",
 						"How much a BIG prize outranks a near one when food is scored value "
-						+ "over distance — 0 takes whatever is handy, above 1 holds out."),
+						+ "over distance — 0 takes whatever is handy, above 1 holds out. For a "
+						+ "hunter it also sets the reach: quarry up to 0.5 + greed times its own "
+						+ "size, capped at " + num(TestNPC.PRED_PREY_RATIO_CAP) + "×."),
 				row("determination", "1 – " + num(Genome.DETERMINATION_MAX), "× incumbent",
 						"How much better a rival target must score before the held one is "
 						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "
@@ -1038,8 +1040,9 @@ public final class Mechanics {
 								+ "whiskers and the herd gradient are there to be read, and "
 								+ "running is a policy minds evolve.")),
 				group("predator — kills what it eats",
-						item("diet", "Living bodies up to " + num(TestNPC.PRED_MAX_PREY_RATIO)
-								+ "× its own size; the meal is the meat arithmetic — "
+						item("diet", "Living bodies up to half a body more than its greed times "
+								+ "its own size (a default hunter reaches 1.5×), never past "
+								+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×; the meal is the meat arithmetic — "
 								+ num(TestNPC.MEAT_ENERGY) + " × the prey's mass, paid out "
 								+ "bite by bite."),
 						item("the bite", num(TestNPC.PRED_DAMAGE) + " hp every "
