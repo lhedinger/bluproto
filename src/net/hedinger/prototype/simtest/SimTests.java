@@ -6090,6 +6090,120 @@ public class SimTests {
 	}
 
 	/**
+	 * Seeding lands in clusters, not a scatter. A founder species arrives as a
+	 * herd, a founder pack as a pack; and when the steward reseeds a clade, the
+	 * body lands beside the oldest living member of that clade -- a reseed is a
+	 * birth the steward performs, and a birth lands beside its parent. Most
+	 * reseeds are that body's mutated children, within a few hundredths of it on
+	 * every marker, so the pair is a compatible mate by any threshold a lineage is
+	 * likely to carry. Scattered across 144x88, the pair never met: measured on
+	 * the live world, no hunter reached a second generation in 2.3 million ticks.
+	 *
+	 * <p>Three outcomes. At tick zero nearly every herbivore founder has a
+	 * same-species founder within the cluster radius, and so does every hunter.
+	 * When the hunting line is cut to one and the steward restores it, the
+	 * newcomer appears within the radius of the survivor -- measured the tick it
+	 * appears, before either has walked. And with the line wiped out entirely the
+	 * reseed still lands somewhere walkable: clustering is where a body goes when
+	 * it has kin, not a precondition for having a body at all.
+	 */
+	static class SeedingLandsInClusters extends Scenario {
+		private static java.util.List<TestNPC> living(World w, Genome.Clade clade) {
+			java.util.List<TestNPC> out = new java.util.ArrayList<>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.getGenome() != null && t.getGenome().clade == clade) {
+					out.add(t);
+				}
+			}
+			return out;
+		}
+
+		private static boolean sameSpecies(TestNPC a, TestNPC b) {
+			return java.util.Arrays.equals(a.getGenome().markers, b.getGenome().markers);
+		}
+
+		/** Share of {@code bodies} that have a same-species body within {@code r}
+		 *  -- among those that have a same-species body at all. */
+		private static double clustered(java.util.List<TestNPC> bodies, double r) {
+			int withKin = 0, near = 0;
+			for (TestNPC a : bodies) {
+				boolean kin = false, close = false;
+				for (TestNPC b : bodies) {
+					if (a == b || !sameSpecies(a, b)) {
+						continue;
+					}
+					kin = true;
+					if (a.distance(b.getX(), b.getY(), b.getZ()) <= r) {
+						close = true;
+					}
+				}
+				if (kin) {
+					withKin++;
+					if (close) {
+						near++;
+					}
+				}
+			}
+			return withKin == 0 ? 1.0 : near / (double) withKin;
+		}
+
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(11);
+			// The corner of the cluster box: a member sits within R on each axis of
+			// its anchor, so within R*sqrt(2) of it in the plane.
+			double r = net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
+
+			// Founding: herds and packs, not a scatter. Not every last one -- a box
+			// with no walkable ground in it falls back to open ground by design.
+			assertGreater("herbivore founders arrive as herds of their own species",
+					clustered(living(w, Genome.Clade.HERBIVORE), r), 0.9);
+			assertGreater("hunter founders arrive as a pack",
+					clustered(living(w, Genome.Clade.PREDATOR), r), 0.9);
+
+			// Reseed: cut the hunting line to one and let the steward restore it.
+			java.util.List<TestNPC> hunters = living(w, Genome.Clade.PREDATOR);
+			TestNPC survivor = hunters.get(0);
+			for (TestNPC t : hunters) {
+				if (t != survivor) {
+					t.remove();
+				}
+			}
+			assertEquals("one hunter left", 1, living(w, Genome.Clade.PREDATOR).size());
+			TestNPC newcomer = null;
+			for (int t = 0; t < 2000 && newcomer == null; t++) {
+				tick(w, 1); // one at a time: the gap is measured before anyone walks
+				for (TestNPC h : living(w, Genome.Clade.PREDATOR)) {
+					if (h != survivor) {
+						newcomer = h;
+					}
+				}
+			}
+			assertTrue("the steward restores the hunting line", newcomer != null);
+			assertTrue("and the newcomer lands beside the survivor ("
+					+ String.format("%.1f", survivor.distance(newcomer.getX(), newcomer.getY(), newcomer.getZ()))
+					+ " tiles)", survivor.distance(newcomer.getX(), newcomer.getY(), newcomer.getZ()) <= r);
+
+			// Fallback: nobody of its kind anywhere -- the reseed still lands.
+			for (TestNPC t : living(w, Genome.Clade.PREDATOR)) {
+				t.remove();
+			}
+			TestNPC alone = null;
+			for (int t = 0; t < 2000 && alone == null; t++) {
+				tick(w, 1);
+				java.util.List<TestNPC> now = living(w, Genome.Clade.PREDATOR);
+				if (!now.isEmpty()) {
+					alone = now.get(0);
+				}
+			}
+			assertTrue("with no kin to land beside, a hunter is still reseeded", alone != null);
+			assertTrue("on walkable ground",
+					w.getTile(alone.getX(), alone.getY(), alone.getLvl()).isWalkable());
+		}
+	}
+
+	/**
 	 * A bigger mouth finishes a smaller animal sooner. {@code biteDamage} scales
 	 * with the ratio of the two bodies in both directions, so bites-to-kill
 	 * scales with the quarry's size: a hunter takes down an animal a third its
@@ -11969,6 +12083,7 @@ public class SimTests {
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),
+				new SeedingLandsInClusters(),
 				new ABiggerMouthFinishesSmallerQuarrySooner(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),

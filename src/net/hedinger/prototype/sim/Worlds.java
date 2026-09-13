@@ -2496,6 +2496,27 @@ public final class Worlds {
 	/** A random open cave tile, for seeding the underground cohort onto stone or
 	 *  fungus — never into rock, and never onto a pit or shaft (a drop on the
 	 *  lowest level is bottomless, and a founder should not spawn into the void). */
+	/**
+	 * A founder's place in its cluster: the first member under {@code key} picks
+	 * open ground and becomes the anchor, every later member lands within
+	 * {@link #SEED_CLUSTER_RADIUS} of it -- or, if nothing walkable is that close,
+	 * wherever it can. Keyed by species template for herds and packs, by a single
+	 * key for a cohort that should arrive together.
+	 */
+	private static double[] clusterSpot(World w, java.util.Map<Integer, double[]> anchors,
+		int key, int z, boolean avoidDrops) {
+		double[] anchor = anchors.get(key);
+		if (anchor != null) {
+			double[] near = spotNear(w, anchor[0], anchor[1], z, avoidDrops);
+			if (near != null) {
+				return near;
+			}
+		}
+		double[] p = avoidDrops ? caveSpot(w) : openSpot(w);
+		anchors.putIfAbsent(key, p);
+		return p;
+	}
+
 	private static double[] caveSpot(World w) {
 		for (int tries = 0; tries < 60; tries++) {
 			double x = 2 + Utils.random() * (w.getColums() - 4);
@@ -2510,6 +2531,43 @@ public final class Worlds {
 
 	/** A random open (walkable) surface tile, for scattering founders and items
 	 *  onto meadow rather than into water or rock. */
+	/**
+	 * How far from its anchor a seeded body lands. Seeding happens in clusters,
+	 * not a scatter: founders of one species arrive as a herd, a pack or a brood,
+	 * and a steward reseed lands beside the oldest living body of its own clade --
+	 * a reseed is a birth the steward performs, so it lands where a birth would.
+	 *
+	 * <p>This is what gives a sexual lineage anyone to breed with. Most reseeds are
+	 * mutated children of the clade's champion, and a child of a small mutation
+	 * sits within a few hundredths of its parent on every marker -- a compatible
+	 * mate by any threshold a lineage is likely to carry. Scattered across a
+	 * 144x88 world, that pair never met; measured on the live world, no hunter
+	 * reached a second generation in 2.3 million ticks.
+	 */
+	@net.hedinger.prototype.engine.Unit("tiles")
+	public static final double SEED_CLUSTER_RADIUS = 4.0;
+
+	/**
+	 * A walkable spot within {@link #SEED_CLUSTER_RADIUS} of {@code (ax, ay)} on
+	 * level {@code z}, or null when a fair number of tries finds none -- the caller
+	 * then falls back to scattering. Underground, never onto a drop: pits on the
+	 * lowest level are bottomless and a body seeded into one is wasted.
+	 */
+	public static double[] spotNear(World w, double ax, double ay, int z, boolean avoidDrops) {
+		for (int tries = 0; tries < 40; tries++) {
+			double x = ax + (Utils.random() * 2 - 1) * SEED_CLUSTER_RADIUS;
+			double y = ay + (Utils.random() * 2 - 1) * SEED_CLUSTER_RADIUS;
+			if (x < 2 || y < 2 || x >= w.getColums() - 2 || y >= w.getRows() - 2) {
+				continue;
+			}
+			Tile t = w.getTile(x, y, z);
+			if (t.isWalkable() && !(avoidDrops && t.isDrop())) {
+				return new double[] { x, y };
+			}
+		}
+		return null;
+	}
+
 	private static double[] openSpot(World w) {
 		for (int tries = 0; tries < 60; tries++) {
 			double x = 2 + Utils.random() * (w.getColums() - 4);
@@ -2575,8 +2633,11 @@ public final class Worlds {
 		// No withHerding(): vigilance is read only by thinkBreeder, so on a minded
 		// body it is a flag nothing consults. Whether to flee a hunter or close up
 		// with kin is now the brain's to work out, which is the point.
+		// Founders arrive as herds, packs and broods: the first of a species picks the
+		// ground, the rest of that species land beside it (see SEED_CLUSTER_RADIUS).
+		java.util.Map<Integer, double[]> herds = new java.util.HashMap<>();
 		for (int i = 0; i < sc(26, scale); i++) {
-			double[] p = openSpot(w);
+			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g));
@@ -2586,8 +2647,9 @@ public final class Worlds {
 		// the hitch-hiker: the hitch-hiker closes on what is BIGGER than it, which
 		// for a hunter is the wrong end of every encounter, while the forager seed
 		// is a working hunt once the forage channel means prey.
+		java.util.Map<Integer, double[]> packs = new java.util.HashMap<>();
 		for (int i = 0; i < sc(4, scale); i++) {
-			double[] p = openSpot(w);
+			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = pred[i % pred.length].copy();
 			g.brain = starterBrain();
 			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
@@ -2598,8 +2660,9 @@ public final class Worlds {
 		// baseline. The steward keeps this cohort topped up as it dies off.
 		int nMinded = Math.max(5, sc(5, scale));
 		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(nMinded);
+		java.util.Map<Integer, double[]> brood = new java.util.HashMap<>();
 		for (int i = 0; i < nMinded; i++) {
-			double[] p = openSpot(w);
+			double[] p = clusterSpot(w, brood, 0, SURFACE_Z, false);
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]));
 		}
 		// The underground gets its own minded seed group — separate founder
@@ -2608,8 +2671,9 @@ public final class Worlds {
 		// are theirs to discover.
 		int nCaveMinded = Math.max(3, sc(3, scale));
 		net.hedinger.prototype.entities.Genome[] caveMinded = mindedSpecies(nCaveMinded);
+		java.util.Map<Integer, double[]> caveBrood = new java.util.HashMap<>();
 		for (int i = 0; i < nCaveMinded; i++) {
-			double[] p = caveSpot(w);
+			double[] p = clusterSpot(w, caveBrood, 0, CAVE_Z, true);
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]));
 		}
 
