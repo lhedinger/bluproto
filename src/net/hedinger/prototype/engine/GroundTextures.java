@@ -62,7 +62,8 @@ public final class GroundTextures {
 			CLS_COOLANT = 37, CLS_EXCHANGER = 38, CLS_MESA = 39,
 			CLS_STALAGMITE = 40, CLS_CACTUS = 41, CLS_BONES = 42,
 			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45,
-			CLS_DESK = 46, CLS_BUNK = 47, CLS_WRECK = 48;
+			CLS_DESK = 46, CLS_BUNK = 47, CLS_WRECK = 48,
+			CLS_TALLGRASS = 49, CLS_SCRUB = 50;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -125,6 +126,13 @@ public final class GroundTextures {
 			{ 0x53565d, 0x767a83, 0x9aa0ab }, // desk: concrete's greys a step up -- worn pale laminate
 			{ 0x36505c, 0x5b8698, 0x9ecad8 }, // bunk: the facility-issue blanket is coolant blue, verbatim
 			{ 0x14171d, 0x252a34, 0x3c434f }, // wreck: dead machinery is rack steel, verbatim
+			// The two cover tiles borrow rather than invent, the way the cactus
+			// and the bone field already do. Tall grass IS the meadow's grass,
+			// standing up; scrub's ground IS sand, and its wood is drawn from
+			// the flora green the cactus wears (its lower two shades only, so a
+			// desert bush reads dry rather than lush).
+			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // tall grass: the grass ramp, verbatim
+			{ 0x6e5f42, 0x98865c, 0xc0aa7e }, // desert scrub: its ground IS sand, verbatim
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -238,6 +246,10 @@ public final class GroundTextures {
 			return CLS_BUNK;
 		case TYPE_WRECK:
 			return CLS_WRECK;
+		case TYPE_TALLGRASS:
+			return CLS_TALLGRASS;
+		case TYPE_SCRUB:
+			return CLS_SCRUB;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -827,6 +839,186 @@ public final class GroundTextures {
 			  "..S..",
 			  "....." },
 	};
+
+	/**
+	 * Tall grass, as authored blade clumps on a fine lattice.
+	 *
+	 * <p>Three forms — a single stem, a pair, and a splayed three — each a 5x5
+	 * stamp anchored on its centre cell. {@code B} is a blade, {@code T} the lit
+	 * tip, {@code .} the sward showing through. Authored for the same reason the
+	 * reed tufts are: §3's motif lattice is a cell grid that hash-picks a stamp,
+	 * and blades drawn by a distance test are the computed-object mistake §5
+	 * names.
+	 *
+	 * <p>Rejected: a form with a bent head, which at one art-pixel of bend read
+	 * as a mistake rather than as a droop, and a four-blade form, which at this
+	 * lattice pitch closed the tile completely and made tall grass look like the
+	 * thicket it is supposed to sit below.
+	 */
+	/** How many blade clumps the sward can grow. */
+	public static final int BLADE_FORMS_N = 3;
+
+	/** One blade form's 5x5 stamp rows, copied — same contract as
+	 *  {@link #reedForm}: the scenario pins the authored data, not pixels. */
+	public static String[] bladeForm(int i) {
+		return BLADE_FORMS[i].clone();
+	}
+
+	private static final String[][] BLADE_FORMS = {
+			// one stem
+			{ "..T..",
+			  "..B..",
+			  "..B..",
+			  "..B..",
+			  "..B.." },
+			// a pair, leaning apart
+			{ ".T.T.",
+			  ".B.B.",
+			  ".B.B.",
+			  "..B..",
+			  "..B.." },
+			// a splayed three
+			{ "T...T",
+			  ".B.B.",
+			  ".B.B.",
+			  "..B..",
+			  "..B.." },
+	};
+
+	/**
+	 * Tall grass: the standing sward a body can lie down in.
+	 *
+	 * <p>The meadow had exactly one step between open ground and a closed
+	 * thicket, and this is the step between them — grass, drawn standing. It
+	 * keeps the meadow's own ramp verbatim rather than taking a third green,
+	 * because it is the same plant at a different height.
+	 *
+	 * <p>The concealment veil re-stamps only the lit TIPS, which is a rule of
+	 * its own: the thicket re-stamps clustered blocks at half coverage and the
+	 * reeds re-stamp every stalk, so a body reads most strongly through this and
+	 * least through the thicket. That ordering is the whole point of a third
+	 * cover — it is cover you are partly visible in.
+	 */
+	public static int tallGrass(double wx, double wy, int px, int py) {
+		int C = 4; // blade lattice pitch, art-px
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		// Stand height, bed-scale like the reeds' fields: a wind-flattened sward
+		// against a stand you lose a grazer in.
+		double stature = Utils.noise2(wx + 5, wy + 37, 0.09);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				// Open enough that the sward reads between the stems. A first pass
+				// at pitch 3 with a sixth of the cells empty closed the tile
+				// completely and made tall grass look like the thicket it is
+				// meant to sit below -- the whole point of it is being the middle
+				// step, so it has to LOOK like the middle step.
+				if (hash01(cx, cy, 71) < 0.34 + 0.26 * (1 - stature)) {
+					continue; // a trodden gap where the sward shows
+				}
+				int tx = cx * C + (int) (hash01(cx, cy, 72) * C);
+				int ty = cy * C + (int) (hash01(cx, cy, 73) * C);
+				int dx = px - tx + 2, dy = py - ty + 2;
+				if (dx < 0 || dy < 0 || dx > 4 || dy > 4) {
+					continue;
+				}
+				double f = hash01(cx, cy, 74);
+				int form = f < 0.46 - 0.20 * stature ? 0 : f < 0.82 - 0.14 * stature ? 1 : 2;
+				char c = BLADE_FORMS[form][dy].charAt(dx);
+				if (c == 'B') {
+					return RAMP[CLS_GRASS][1];
+				}
+				if (c == 'T') {
+					return RAMP[CLS_GRASS][2]; // the lit tip — and the veil's whole rule
+				}
+			}
+		}
+		return RAMP[CLS_GRASS][0]; // the sward between the stems
+	}
+
+	/**
+	 * The desert scrub's thorn clumps, authored like every other motif here.
+	 *
+	 * <p>{@code W} is woody stem, {@code D} a thorn, {@code .} the sand. Both
+	 * marks come from the flora green the cactus already wears, and from its
+	 * LOWER TWO shades only — the highlight is what makes a plant look watered,
+	 * and nothing in the badlands is.
+	 *
+	 * <p>Rejected: clumps with a lit crown, which read as a healthy bush parked
+	 * in a desert, and a form built from a single 3x3 block, which at tile scale
+	 * was indistinguishable from the bone field's debris.
+	 */
+	/** How many clump forms the scrub can grow. */
+	public static final int SCRUB_FORMS_N = 3;
+
+	/** One clump form's 5x5 stamp rows, copied. */
+	public static String[] scrubForm(int i) {
+		return SCRUB_FORMS[i].clone();
+	}
+
+	private static final String[][] SCRUB_FORMS = {
+			// a low thorn bush
+			{ ".....",
+			  ".DWD.",
+			  ".WWW.",
+			  ".DWD.",
+			  "....." },
+			// a spray, taller than wide
+			{ "..D..",
+			  ".DWD.",
+			  "D.W.D",
+			  "..W..",
+			  "..D.." },
+			// twiggy and lopsided, the half-dead one
+			{ ".D...",
+			  "..W..",
+			  ".DWD.",
+			  "..W.D",
+			  "....." },
+	};
+
+	/**
+	 * Desert scrub: thorn clumps on a sand pan.
+	 *
+	 * <p>The badlands were the one biome with no cover at all — a hunter there
+	 * had nowhere to wait and nothing to lose you behind, and the cactus is
+	 * explicitly too narrow to hide behind. The ground is the desert's own sand,
+	 * drawn by the same {@link #sand} the pan uses, so the scrub is the pan with
+	 * bushes standing in it rather than a new terrain.
+	 *
+	 * <p>Sparse by nature: a stand of these is mostly sand, which is honest
+	 * about how much it hides. Its veil re-stamps the wood, so a body in scrub
+	 * reads through it almost completely — cover for a stalk, not a hiding
+	 * place.
+	 */
+	public static int scrub(double wx, double wy, int px, int py) {
+		int C = 5; // clump lattice pitch, art-px: sparse, unlike the grass
+		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
+		// How much the stand has taken hold: bare pan against a thicket of thorn.
+		double take = Utils.noise2(wx + 91, wy + 23, 0.08);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int cx = cx0 + ox, cy = cy0 + oy;
+				if (hash01(cx, cy, 81) > 0.30 + 0.55 * take) {
+					continue; // bare pan between the bushes
+				}
+				int tx = cx * C + 1 + (int) (hash01(cx, cy, 82) * (C - 2));
+				int ty = cy * C + 1 + (int) (hash01(cx, cy, 83) * (C - 2));
+				int dx = px - tx + 2, dy = py - ty + 2;
+				if (dx < 0 || dy < 0 || dx > 4 || dy > 4) {
+					continue;
+				}
+				char c = SCRUB_FORMS[(int) (hash01(cx, cy, 84) * 2.999)][dy].charAt(dx);
+				if (c == 'W') {
+					return RAMP[CLS_CACTUS][1];
+				}
+				if (c == 'D') {
+					return RAMP[CLS_CACTUS][0]; // thorns, in the plant's own shadow shade
+				}
+			}
+		}
+		return sand(px, py); // the pan itself, drawn by the pan's own texture
+	}
 
 	/**
 	 * Reed beds from above: stamped tufts over connected wet-dark ground.

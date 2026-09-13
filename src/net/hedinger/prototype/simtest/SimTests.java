@@ -676,6 +676,139 @@ public class SimTests {
 	}
 
 	/**
+	 * The two cover tiles the world was missing: tall grass and desert scrub.
+	 *
+	 * <p>Pinned for the same reasons the reed bed is, plus one that is specific
+	 * to these two. Both veils are KEEP rules rather than drop rules — tall
+	 * grass keeps only the lit blade tip, scrub only its two flora shades — so
+	 * the veil is exactly as thin as the painter's use of those colours. If a
+	 * painter ever stopped emitting the tip, the client would draw a body in
+	 * tall grass with no cover over it at all and nothing else would notice.
+	 *
+	 * <p>The density bounds are the other half. Tall grass exists to be the
+	 * step between open ground and a thicket, so it has to stay open enough
+	 * that the sward reads between the stems; scrub exists to put cover in a
+	 * desert that had none, so it has to be sparse enough to still read as
+	 * desert. Both were drawn too dense on the first pass and the sheet caught
+	 * it; these bounds are what keeps that from coming back silently.
+	 */
+	static class TheTallAndTheDryAreOpenCover extends Scenario {
+		@Override
+		public void run() {
+			final int A = net.hedinger.prototype.engine.GroundTextures.ART;
+
+			// ---- the authored stamps -------------------------------------
+			checkForms("blade", GroundTextures.BLADE_FORMS_N, "BT", i -> GroundTextures.bladeForm(i));
+			checkForms("clump", GroundTextures.SCRUB_FORMS_N, "WD", i -> GroundTextures.scrubForm(i));
+
+			// Every blade form carries a tip, because the tip IS the veil.
+			for (int i = 0; i < GroundTextures.BLADE_FORMS_N; i++) {
+				int tips = 0;
+				for (String row : GroundTextures.bladeForm(i)) {
+					for (char c : row.toCharArray()) {
+						if (c == 'T') {
+							tips++;
+						}
+					}
+				}
+				assertTrue("blade form " + i + " has a lit tip, which is all the veil keeps",
+						tips >= 1);
+			}
+
+			// ---- tall grass, swept across its field ----------------------
+			int sward = GroundTextures.rampColor(GroundTextures.CLS_GRASS, 0);
+			int blade = GroundTextures.rampColor(GroundTextures.CLS_GRASS, 1);
+			int tip = GroundTextures.rampColor(GroundTextures.CLS_GRASS, 2);
+			double openMin = 1, openMax = 0, tipTotal = 0;
+			int tiles = 0;
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int open = 0, tipped = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							int c = GroundTextures.tallGrass(wx + (ai + 0.5) / A,
+									wy + (aj + 0.5) / A, wx * A + ai, wy * A + aj);
+							assertTrue("the sward is three shades of grass and nothing else: "
+									+ Integer.toHexString(c),
+									c == sward || c == blade || c == tip);
+							if (c == sward) {
+								open++;
+							}
+							if (c == tip) {
+								tipped++;
+							}
+						}
+					}
+					openMin = Math.min(openMin, open / (double) (A * A));
+					openMax = Math.max(openMax, open / (double) (A * A));
+					tipTotal += tipped / (double) (A * A);
+					tiles++;
+				}
+			}
+			// Open cover, not a closed one: even the tallest sward shows ground.
+			assertGreater("the thickest sward still shows the ground between stems",
+					openMin, 0.20);
+			assertGreater("and a trodden patch is mostly open", openMax, 0.70);
+			assertGreater("tips are common enough to veil a body", tipTotal / tiles, 0.03);
+
+			// ---- scrub, swept the same way -------------------------------
+			int wood = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 1);
+			int thorn = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 0);
+			int lit = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 2);
+			double brushMin = 1, brushMax = 0;
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int brush = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							int c = GroundTextures.scrub(wx + (ai + 0.5) / A,
+									wy + (aj + 0.5) / A, wx * A + ai, wy * A + aj);
+							assertTrue("nothing in the badlands is watered: the scrub never "
+									+ "reaches for the flora highlight", c != lit);
+							if (c == wood || c == thorn) {
+								brush++;
+							}
+						}
+					}
+					brushMin = Math.min(brushMin, brush / (double) (A * A));
+					brushMax = Math.max(brushMax, brush / (double) (A * A));
+				}
+			}
+			// The pan is the point: a desert with cover is still a desert.
+			assertLess("even the thickest thorn patch leaves half the pan bare", brushMax, 0.50);
+			assertLess("and somewhere the pan is bare outright", brushMin, 0.02);
+			assertGreater("but the clumps are dense enough somewhere to hide in",
+					brushMax, 0.12);
+		}
+
+		/** Every authored stamp table obeys the same shape rules. */
+		private void checkForms(String what, int n, String marks,
+				java.util.function.IntFunction<String[]> form) {
+			java.util.Set<String> shapes = new java.util.HashSet<>();
+			for (int i = 0; i < n; i++) {
+				String[] f = form.apply(i);
+				assertEquals(what + " form " + i + " is five rows", 5, f.length);
+				int ink = 0;
+				StringBuilder flat = new StringBuilder();
+				for (String row : f) {
+					assertEquals(what + " form " + i + " is five wide", 5, row.length());
+					for (char c : row.toCharArray()) {
+						assertTrue("only authored marks, never a blend: " + c,
+								c == '.' || marks.indexOf(c) >= 0);
+						if (c != '.') {
+							ink++;
+						}
+					}
+					flat.append(row);
+				}
+				assertGreater(what + " form " + i + " is actually drawn", ink, 3);
+				assertTrue(what + " form " + i + " is a shape of its own",
+						shapes.add(flat.toString()));
+			}
+		}
+	}
+
+	/**
 	 * A flyer and a walker do not shove each other; two of a kind do.
 	 *
 	 * <p>Flight in this world is not a height. Z is the level a body stands on,
@@ -12269,6 +12402,7 @@ public class SimTests {
 				new EveryCladeWearsEightBodies(),
 				new EveryBodyStaysInItsCell(),
 				new CoverVegetationHasVariety(),
+				new TheTallAndTheDryAreOpenCover(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
