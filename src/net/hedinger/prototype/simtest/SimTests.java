@@ -11226,7 +11226,7 @@ public class SimTests {
 			int floors = 0;
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demo(s);
-				int[] at = worksOrigin(w);
+				int[] at = net.hedinger.prototype.sim.Worlds.facilityOrigin(w);
 				if (at == null) {
 					continue; // a map too small for the facility
 				}
@@ -11248,7 +11248,11 @@ public class SimTests {
 					if (ch == '.') {
 						continue;
 					}
-					int got = w.getTile(at[0] + i, at[1] + j, z).getType().getValue();
+					Tile.TileType got0 = w.getTile(at[0] + i, at[1] + j, z).getType();
+					if (preserved(got0)) {
+						continue; // a link the building was put up around
+					}
+					int got = got0.getValue();
 					Integer want = type.put(ch, got);
 					assertTrue("seed " + s + " " + name + ": every '" + ch + "' is the same tile"
 							+ " (" + (at[0] + i) + "," + (at[1] + j) + " is " + got
@@ -11259,6 +11263,15 @@ public class SimTests {
 			java.util.Set<Integer> seen = new java.util.HashSet<Integer>(type.values());
 			assertEquals("seed " + s + " " + name + ": every drawn feature is still its own tile",
 					type.size(), seen.size());
+		}
+
+		/** A tile no plan draws, so finding one where a plan drew something
+		 *  means the building was put up around a link between floors that was
+		 *  there first (see Worlds.stampPlan's preserve). Those cells are not
+		 *  the drawing's business and this scenario passes over them. */
+		static boolean preserved(Tile.TileType t) {
+			return t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN
+					|| t == Tile.TileType.TYPE_HOLE || t == Tile.TileType.TYPE_SWITCH;
 		}
 
 		/** The building's interior north-west corner on the deep level, or null

@@ -1195,7 +1195,8 @@ public final class Worlds {
 
 	/**
 	 * The facility: a two-storey installation buried in the rock, with tram
-	 * lines running out of it across both underground levels to outposts.
+	 * lines running out of it across both underground levels through the
+	 * other sectors.
 	 *
 	 * <p>Two authored floors on one origin. The HALLS on the cave level are the
 	 * entrance — a concourse behind a blast door, the drone rank, the vault,
@@ -1227,7 +1228,7 @@ public final class Worlds {
 			return null;
 		}
 		int x0 = site[0], y0 = site[1], W = FACILITY_W, H = FACILITY_H;
-		stampPlan(w, CAVE_Z, x0, y0, HALLS);
+		stampPlan(w, CAVE_Z, x0, y0, HALLS, true);
 
 		// The vault's steel ring in the halls' plan, and the mouth row: the
 		// concourse's second row, so the blast door opens onto the platform.
@@ -1255,11 +1256,12 @@ public final class Worlds {
 		// can agree on.
 		sinkWorks(w, cols, rows, x0, y0, W, H);
 
-		// The upper line: out of the tram shed through both end walls, west to
-		// the depot and east to the pump house.
+		// The upper line: out of the tram shed through both end walls. West to
+		// the warehouse and on to administration; east to the coolant reserve
+		// and on to the biodome.
 		int ry = y0 + 1 + 21;
-		layLine(w, cols, rows, CAVE_Z, x0, ry, -1, DEPOT);
-		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, 1, PUMPHOUSE);
+		layLine(w, cols, rows, CAVE_Z, x0, ry, -1, new String[][] { WAREHOUSE, ADMIN }, null);
+		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, 1, new String[][] { COOLANT, BIODOME }, null);
 		return site;
 	}
 
@@ -1274,51 +1276,55 @@ public final class Worlds {
 	 * <p>Scored rather than required. The old search demanded solid rock and
 	 * so could only ever find a pocket the caves happened to leave; this asks
 	 * what a site would cost and takes the cheapest, so the building can be as
-	 * big as its drawing. The one thing it will not do is stand on a link
-	 * station's ramps: a buried ramp is a surface hole that lands on a wall.
+	 * big as its drawing. Links between floors inside the footprint are built
+	 * round rather than refused -- see
+	 * {@link #stampPlan(World, int, int, int, String[], boolean)}.
 	 */
 	private static int[] findFacilitySite(World w, int cols, int rows) {
 		int W = FACILITY_W, H = FACILITY_H;
 		if (cols < W + 6 || rows < H + 6) {
 			return null;
 		}
+		// The middle two thirds of the map first, so there is always a side for
+		// a line to leave by -- scoring alone put the building on the rim on
+		// one seed in six, and the rim is solid rock, which buries nothing.
+		// Then the whole map, because a band that HAS no site is worse than a
+		// site out at the edge: measured, the band alone left half the small
+		// maps with no facility at all, which is not a building on the rim, it
+		// is no building.
+		int[] best = siteIn(w, cols, rows, W, H,
+				Math.max(3, cols / 6), Math.min(cols - 3 - W, cols * 5 / 6 - W),
+				Math.max(3, rows / 6), Math.min(rows - 3 - H, rows * 5 / 6 - H));
+		return best != null ? best
+				: siteIn(w, cols, rows, W, H, 3, cols - 3 - W, 3, rows - 3 - H);
+	}
+
+	/** The cheapest site in a window, or null if nothing in it can hold the
+	 *  building. Cost is walkable tiles buried; distance from the middle is
+	 *  half a tile each, so a site has to save a good deal of cavern to be
+	 *  worth being far out. */
+	private static int[] siteIn(World w, int cols, int rows, int W, int H,
+			int xLo, int xHi, int yLo, int yHi) {
 		int[] best = null;
 		double bestScore = Double.MAX_VALUE;
-		// The middle two thirds of the map, so there is always a side for a
-		// line to leave by. Scoring alone put it on the rim on one seed in
-		// six: the rim is solid rock, and solid rock buries nothing.
-		int xLo = Math.max(3, cols / 6), xHi = Math.min(cols - 3 - W, cols * 5 / 6 - W);
-		int yLo = Math.max(3, rows / 6), yHi = Math.min(rows - 3 - H, rows * 5 / 6 - H);
-		if (xHi < xLo) {
-			xLo = 3;
-			xHi = cols - 3 - W;
-		}
-		if (yHi < yLo) {
-			yLo = 3;
-			yHi = rows - 3 - H;
-		}
-		for (int x0 = xLo; x0 <= xHi; x0 += 2) {
-			for (int y0 = yLo; y0 <= yHi; y0 += 2) {
+		for (int x0 = Math.max(3, xLo); x0 <= xHi; x0 += 2) {
+			for (int y0 = Math.max(3, yLo); y0 <= yHi; y0 += 2) {
 				int cost = 0;
-				scan: for (int x = x0; x < x0 + W; x++) {
+				for (int x = x0; x < x0 + W; x++) {
 					for (int y = y0; y < y0 + H; y++) {
 						Tile.TileType t = w.getTile(x, y, CAVE_Z).getType();
-						if (isRampOrDrop(t)) {
-							cost = -1;
-							break scan;
-						}
+						// A link station inside the footprint is built ROUND,
+						// not refused. Refusing left a quarter of maps with no
+						// facility at all: a forty-six by twenty-eight window
+						// laid anywhere on the cave level covers one of the
+						// link stations more often than not, whatever the map
+						// size, because the stations scale with the map too.
+						// A station surfacing inside the building is a way in.
 						if (t != Tile.TileType.TYPE_WALL) {
 							cost++;
 						}
 					}
 				}
-				if (cost < 0) {
-					continue;
-				}
-				// Half a buried tile per tile of distance from the centre: a
-				// site out on the rim would need to save a great deal of
-				// cavern to win, and one on the rim has no room for a line to
-				// leave it on that side.
 				double d = Math.hypot(x0 + W * 0.5 - cols * 0.5, y0 + H * 0.5 - rows * 0.5);
 				double score = cost + d * 0.5;
 				if (score < bestScore) {
@@ -1343,9 +1349,31 @@ public final class Worlds {
 	 * around it, deck plate under it, and the plan's own tiles over that.
 	 */
 	private static void stampPlan(World w, int z, int x0, int y0, String[] plan) {
+		stampPlan(w, z, x0, y0, plan, false);
+	}
+
+	/**
+	 * As above, optionally BUILDING ROUND whatever was already there that has
+	 * to stay: the ends of links between floors, and anything wired.
+	 *
+	 * <p>For the second floor of a two-storey stop. The cave level carries
+	 * fifty-odd link stations, and a twenty-six by eighteen footprint laid
+	 * anywhere on it covers one about seven times in eight -- so a floor that
+	 * refused to stand over one never stood at all, and Lambda came out a
+	 * basement on every seed measured. Preserving them instead costs a tile
+	 * here and there out of the drawing and buys the building back, and it is
+	 * the same thing the doorways already say: the facility is something the
+	 * caves pass through. A ramp to the surface coming up inside the complex
+	 * is a way in, not a defect.
+	 */
+	private static void stampPlan(World w, int z, int x0, int y0, String[] plan,
+			boolean preserve) {
 		int W = plan[0].length() + 2, H = plan.length + 2;
 		for (int x = x0; x < x0 + W; x++) {
 			for (int y = y0; y < y0 + H; y++) {
+				if (preserve && isRampOrDrop(w.getTile(x, y, z).getType())) {
+					continue;
+				}
 				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
 				setBare(w, x, y, z, shell
 						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
@@ -1353,9 +1381,25 @@ public final class Worlds {
 		}
 		for (int j = 0; j < plan.length; j++) {
 			for (int i = 0; i < plan[j].length(); i++) {
+				if (preserve && isRampOrDrop(w.getTile(x0 + 1 + i, y0 + 1 + j, z).getType())) {
+					continue;
+				}
 				Tile.TileType t = plantTile(plan[j].charAt(i));
 				if (t != null) {
 					setBare(w, x0 + 1 + i, y0 + 1 + j, z, t);
+					// The biodome's habitats are the one LIVING ground a plan
+					// lays, and they have to grow what the same ground grows
+					// outside or they are a picture of a habitat. setBare
+					// zeroes fertility, because built ground grows nothing --
+					// so these three put it back.
+					Tile laid = w.getTile(x0 + 1 + i, y0 + 1 + j, z);
+					if (t == Tile.TileType.TYPE_FUNGUS) {
+						laid.setFertility(0.6);
+					} else if (t == Tile.TileType.TYPE_COVER) {
+						laid.setFertility(0.9);
+					} else if (t == Tile.TileType.TYPE_MUD) {
+						laid.setFertility(0.3);
+					}
 				}
 			}
 		}
@@ -1409,32 +1453,58 @@ public final class Worlds {
 	 * A tram line out of a portal in a building's wall: rails on the centre
 	 * and paved shoulders either side, tunnelled through rock, laid straight
 	 * across whatever floor it meets and carried over water and shafts on
-	 * grated trestle. It stops short of the map's rim, or where it meets
-	 * another building, and where there is room it ends at an outpost.
+	 * grated trestle. It runs THROUGH its stops in order -- each a sector
+	 * stamped across the line with a portal in both end walls, so the track
+	 * enters one side and leaves by the other -- and ends when it runs out of
+	 * stops, of room, or of reach.
 	 *
 	 * <p>Lines are what make the underground a network rather than a set of
 	 * rooms. The caves were carved and linked long before there was a
 	 * facility, and a building sitting in them was a place the caves happened
 	 * to reach; a line that runs sixty tiles out through three caverns and a
-	 * lake to a pump house is the facility reaching out into the caves, which
-	 * is a different thing to look at and a different thing to live beside.
+	 * lake to the coolant reserve is the facility reaching into the caves,
+	 * which is a different thing to look at and to live beside.
+	 *
+	 * <p>They run through their stops rather than ending at one because that
+	 * is the difference between a network and three sidings. A line that
+	 * terminates at its outpost says the outpost is the end of the world; a
+	 * line that carries on out the far wall says there is somewhere else.
 	 *
 	 * <p>A jog every so often, one tile at a time, so the run is a line
 	 * somebody surveyed and not a ruler laid across the map. The bend is two
 	 * tiles of rail, so the track stays joined through it.
 	 *
-	 * <p>The line ends where its outpost can stand: past a minimum run, at
-	 * the first place the outpost's footprint is inside the map and clear of
-	 * anything that must not be built over. A fixed length ended on top of a
-	 * link station's hole two times in three — the cave level has fifty-odd
-	 * of them — and an outpost that will not fit is an outpost that is not
-	 * there, which left the line running to the rim and stopping at nothing.
+	 * <p>A stop goes at the first point past a minimum run where its footprint
+	 * is inside the map and clear of anything that must not be built over. A
+	 * fixed length landed on a link station's hole two times in three -- the
+	 * cave level has fifty-odd of them -- and a stop that will not fit is a
+	 * stop that is not there. Where the map runs out before the stops do, the
+	 * later ones simply do not exist on that seed.
+	 *
+	 * <p>{@code above}, when given, is a second plan stamped on the level over
+	 * each stop on the same origin -- Lambda's upper floor -- and joined to it
+	 * by every stairwell the two plans can agree on. It is taken back down if
+	 * none can be cut.
 	 */
 	private static void layLine(World w, int cols, int rows, int z, int px, int py,
-			int dir, String[] outpost) {
+			int dir, String[][] stops, String[] above) {
+		if (walkLine(w, cols, rows, z, px, py, dir, stops, above) == 0 && above != null) {
+			// Nowhere along the whole line could hold both floors, so take the
+			// one. A two-storey Lambda is the better building and a Lambda is
+			// better than none: insisting on the pair left three seeds in
+			// eight with no complex at all, because its upper floor may not
+			// stand on another building and the cave line's stops get first
+			// call on the ground above.
+			walkLine(w, cols, rows, z, px, py, dir, stops, null);
+		}
+	}
+
+	/** One pass of the line, returning how many stops it managed to place. */
+	private static int walkLine(World w, int cols, int rows, int z, int px, int py,
+			int dir, String[][] stops, String[] above) {
 		setBare(w, px, py, z, Tile.TileType.TYPE_RAIL); // the portal through the shell
 		int x = px, y = py;
-		int laid = 0;
+		int laid = 0, next = 0;
 		for (int i = 1; i <= LINE_REACH; i++) {
 			int nx = x + dir;
 			if (nx < 4 || nx >= cols - 4) {
@@ -1456,21 +1526,25 @@ public final class Worlds {
 			layShoulder(w, z, nx, y + 1);
 			x = nx;
 			laid++;
-			if (outpost != null && laid >= LINE_MIN_RUN
-					&& outpostFits(w, cols, rows, z, x, y, dir)) {
-				stampOutpost(w, cols, rows, z, x, y, dir, outpost);
-				return;
+			if (next < stops.length && laid >= LINE_MIN_RUN
+					&& stopFits(w, cols, rows, z, x, y, dir, stops[next], above)) {
+				x = stampStop(w, cols, rows, z, x, y, dir, stops[next], above);
+				next++;
+				laid = 0;
+				if (next == stops.length) {
+					return next;
+				}
 			}
 		}
+		return next;
 	}
 
-	/** How far a line will run before it simply ends, outpost or no. */
-	private static final int LINE_REACH = 110;
+	/** How far a line runs past its last stop before it simply ends. */
+	private static final int LINE_REACH = 220;
 
-	/** The least a line will run before it is allowed to end at its outpost:
-	 *  an outpost is somewhere the line goes TO, and forty tiles is about the
-	 *  shortest journey that reads as one. */
-	private static final int LINE_MIN_RUN = 40;
+	/** The least a line runs between stops. A stop is somewhere the line goes
+	 *  TO, and thirty tiles is about the shortest journey that reads as one. */
+	private static final int LINE_MIN_RUN = 30;
 
 	/**
 	 * One tile of track, or false where track cannot go. Rock is tunnelled;
@@ -1507,21 +1581,104 @@ public final class Worlds {
 		}
 	}
 
-	/** An outpost's shell: the 12x8 plans plus one. */
-	static final int OUTPOST_W = 12 + 2, OUTPOST_H = 8 + 2;
+	/** The row of a plan its track runs along: the one row that is nothing but
+	 *  rail. Every stop has one, and it is how the line knows where to meet
+	 *  it -- read off the drawing rather than written down beside it, so a
+	 *  sector redrawn with its track one row up still meets its line. */
+	private static int railRow(String[] plan) {
+		for (int j = 0; j < plan.length; j++) {
+			if (plan[j].chars().allMatch(ch -> ch == 'r')) {
+				return j;
+			}
+		}
+		throw new IllegalArgumentException("a stop needs a row of rail");
+	}
 
-	/** Whether an outpost could stand at the end of a line that has reached
-	 *  (ex, ey) heading {@code dir}: inside the map, and on nothing that must
-	 *  not be built over. */
-	private static boolean outpostFits(World w, int cols, int rows, int z, int ex, int ey, int dir) {
-		int x0 = dir > 0 ? ex + 1 : ex - OUTPOST_W;
-		int y0 = ey - 4;
-		if (x0 < 2 || y0 < 2 || x0 + OUTPOST_W > cols - 2 || y0 + OUTPOST_H > rows - 2) {
+	/** Whether a stop could stand where a line has reached (ex, ey) heading
+	 *  {@code dir}: inside the map, and on nothing that must not be built
+	 *  over. */
+	private static boolean stopFits(World w, int cols, int rows, int z, int ex, int ey, int dir,
+			String[] plan, String[] above) {
+		int sw = plan[0].length() + 2, sh = plan.length + 2;
+		int x0 = dir > 0 ? ex + 1 : ex - sw;
+		int y0 = ey - 1 - railRow(plan);
+		if (x0 < 2 || y0 < 2 || x0 + sw > cols - 2 || y0 + sh > rows - 2) {
 			return false;
 		}
-		for (int x = x0; x < x0 + OUTPOST_W; x++) {
-			for (int y = y0; y < y0 + OUTPOST_H; y++) {
+		for (int x = x0; x < x0 + sw; x++) {
+			for (int y = y0; y < y0 + sh; y++) {
 				if (isRampOrDrop(w.getTile(x, y, z).getType())) {
+					return false;
+				}
+			}
+		}
+		// A two-floor stop has to fit on BOTH floors, and the test belongs
+		// HERE rather than after the lower floor is stamped. Checked
+		// afterwards, the line commits to a position the upper floor cannot
+		// use and Lambda comes out a basement: measured across eight seeds,
+		// the cave level over a twenty-six by eighteen footprint holds one of
+		// the fifty-odd link stations about seven times in eight, so the
+		// upper floor landed exactly never. Asked here, the line simply walks
+		// on until it finds somewhere both floors can stand.
+		return above == null || !matched(plan, above)
+				|| upperFits(w, z + 1, x0, y0, sw, sh);
+	}
+
+	/** Whether a paired plan is drawn to the same extent as the one it sits
+	 *  over -- the two floors share an origin, so a mismatch is a drawing
+	 *  error rather than something to accommodate. */
+	private static boolean matched(String[] plan, String[] above) {
+		return above.length == plan.length && above[0].length() == plan[0].length();
+	}
+
+	/**
+	 * A stop across the line: the plan stamped so its track row meets the rail
+	 * where the line arrived, a portal through each end wall, and doors
+	 * wherever a cavern meets it. Returns the x of the far portal, which is
+	 * where the line resumes. The caller has already checked it fits.
+	 */
+	private static int stampStop(World w, int cols, int rows, int z, int ex, int ey, int dir,
+			String[] plan, String[] above) {
+		// The plan's OWN size, not one figure for every stop: the sectors are
+		// twenty by twelve, the mine head twelve by eight and Lambda
+		// twenty-four by sixteen, and a portal placed at a fixed width lands
+		// outside the smaller ones' walls -- which is a stop the line enters
+		// and never leaves.
+		int sw = plan[0].length() + 2, sh = plan.length + 2;
+		int x0 = dir > 0 ? ex + 1 : ex - sw;
+		int y0 = ey - 1 - railRow(plan);
+		stampPlan(w, z, x0, y0, plan);
+		setBare(w, x0, ey, z, Tile.TileType.TYPE_RAIL);
+		setBare(w, x0 + sw - 1, ey, z, Tile.TileType.TYPE_RAIL);
+		punchDoors(w, z, x0, y0, sw, sh);
+		if (above != null && matched(plan, above) && z + 1 < w.getLevels()) {
+			stampPlan(w, z + 1, x0, y0, above, true);
+			punchDoors(w, z + 1, x0, y0, sw, sh);
+			if (stairsBetween(w, x0, y0, sw, sh, z + 1, z) == 0) {
+				// An upper floor no stair reaches is a room nothing can enter:
+				// back to rock, and the lower floor stands on its own.
+				for (int x = x0; x < x0 + sw; x++) {
+					for (int y = y0; y < y0 + sh; y++) {
+						setBare(w, x, y, z + 1, Tile.TileType.TYPE_WALL);
+					}
+				}
+			}
+		}
+		return dir > 0 ? x0 + sw - 1 : x0;
+	}
+
+	/** Whether a paired upper floor can stand over a stop: on no OTHER
+	 *  building. Links between floors are built round rather than refused --
+	 *  see {@link #stampPlan(World, int, int, int, String[], boolean)}. */
+	private static boolean upperFits(World w, int z, int x0, int y0, int sw, int sh) {
+		if (z >= w.getLevels()) {
+			return false;
+		}
+		for (int x = x0; x < x0 + sw; x++) {
+			for (int y = y0; y < y0 + sh; y++) {
+				Tile.TileType t = w.getTile(x, y, z).getType();
+				if (t == Tile.TileType.TYPE_WALL_CONCRETE
+						|| t == Tile.TileType.TYPE_WALL_STEEL || t == Tile.TileType.TYPE_PLATE) {
 					return false;
 				}
 			}
@@ -1530,27 +1687,27 @@ public final class Worlds {
 	}
 
 	/**
-	 * An outpost at the end of a line, its track row meeting the rail where
-	 * the line stopped. The caller has already checked it fits.
-	 */
-	private static void stampOutpost(World w, int cols, int rows, int z, int ex, int ey,
-			int dir, String[] plan) {
-		int x0 = dir > 0 ? ex + 1 : ex - OUTPOST_W;
-		int y0 = ey - 4;
-		stampPlan(w, z, x0, y0, plan);
-		// The portal: the shell tile the line runs into.
-		setBare(w, dir > 0 ? x0 : x0 + OUTPOST_W - 1, y0 + 4, z, Tile.TileType.TYPE_RAIL);
-		punchDoors(w, z, x0, y0, OUTPOST_W, OUTPOST_H);
-	}
-
-	/**
-	 * The lower line: out of the works' east wall and across the underdark to
-	 * the mine head. Laid after the underdark's caverns are carved and linked,
-	 * so it crosses them rather than being carved around, and so the mine head
-	 * can stand among them.
+	 * The lower line: out of the works' east wall and across the underdark,
+	 * through the mine head to the Lambda complex at the end. Laid after the
+	 * underdark's caverns are carved and linked, so it crosses them rather
+	 * than being carved around, and so its stops can stand among them.
+	 *
+	 * <p>Two lines, one each way. Lambda's upper floor is stamped on the CAVE
+	 * level over its lower one -- the only sector besides the halls with two
+	 * floors -- and may not stand on another building, so it goes west, away
+	 * from the cave line's own stops. The mine head, which has no upper floor
+	 * to place, goes east.
 	 */
 	private static void layDeepLine(World w, int cols, int rows, int x0, int y0) {
-		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, y0 + 1 + 21, 1, MINEHEAD);
+		// Lambda goes WEST and the mine head east, so the two floors' lines do
+		// not chase each other: Lambda's upper floor may not stand on another
+		// building, and the cave line's own stops run east of the halls -- sent
+		// that way it spent its whole reach walking out from under them and
+		// arrived nowhere on half the seeds.
+		int ry = y0 + 1 + 21;
+		layLine(w, cols, rows, DEEP_Z, x0, ry, -1, new String[][] { LAMBDA_LOWER }, LAMBDA_UPPER);
+		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, ry, 1,
+				new String[][] { MINEHEAD }, null);
 	}
 
 	/**
@@ -1626,8 +1783,8 @@ public final class Worlds {
 			"##dddp######p#######p#########p######p###p##",
 			"..LLLLLLLLLLLLLLLLLLLLLLLL.#.LLLLww.LLLL.FF.",
 			".VLCCCCCCCCCCCCLLTTLLLSSLL.d.BBBBww.BBBB.FFV",
-			"..LCXXXXXXXXXXCLLTTLLLSSLL.#.BBBBww.BBBB.FF.",
-			"..LCXXXXXXXXXXCLLTTLLLLLLV...LLLLww.LLLL.FF.",
+			"..LCBBBBBBBBBBCLLTTLLLSSLL.#.BBBBww.BBBB.FF.",
+			"..LCBBBBBBBBBBCLLTTLLLLLLV...LLLLww.LLLL.FF.",
 			"..LCCCCCCCCCCCCLLTTLLLLLLL.#.....ww.........",
 			".VLLLLLLLLLLLLLLLLLLLLLLLL.#TTTTTTTTTTTTTTT.",
 			"..LLLLLLLLLLLLLLLLLLLLLLLL.#.Sb..ww.........",
@@ -1637,7 +1794,7 @@ public final class Worlds {
 			".pppppppppppppppppppppppppppppppppppppppppp.",
 			"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
 			".pppppppppppppppppppppppppppppppppppppppppp.",
-			".........................EE..........HHHHH..",
+			"...vvvvvvvvvv............EE..........HHHHH..",
 			"...SSSS..RRRR..TTTTTTTT..EE..LLLLLL.wwwwww..",
 			"...SSSS..RRRR..TTTTTTTT..EE..LLBLLL..HHHHH..",
 	};
@@ -1680,13 +1837,13 @@ public final class Worlds {
 			"..................................ssssdssss.",
 			".TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
 			"#####p#######p#######p##ddd###p#######p#####",
-			".wwwwwwwwwwwwwwwwwwwwwwwwww#.PPPPPPPPPPPPPP.",
-			".wHHHHHHHHHHHwHHHHHHHHHHHHw#.CCCCCCC.....V..",
-			".wHHHHHHHHHHHLHHHHHHHHHHHHwd.CXXXXXC..EE....",
-			".wHHHHHHHHHHTTTHHHHHHHHHHHw#.CXXXXXC..EE....",
-			".wwwwwwLwwwwTTTwwwwLwwwwwww..CCCCCCC.....SS.",
-			".wHHHHHHHHHHTTTHHHHHHHHHHHw#.............SS.",
-			".wHHHHHHHHHHHLHHHHHHHHHHHHw#.RR.............",
+			".wwwwwwwwwwwwwwwwwwwwwwwwww#.....G.PPPPPPPP.",
+			".wHHHHHHHHHHHwHHHHHHHHHHHHwGc.cc.G.CCCCCCV..",
+			".wHHHHHHHHHHHLHHHHHHHHHHHHwGc......CttttC...",
+			".wHHHHHHHHHHTTTHHHHHHHHHHHwGc.kk.G.CttttC...",
+			".wwwwwwLwwwwTTTwwwwLwwwwwww........CCCCCCSS.",
+			".wHHHHHHHHHHTTTHHHHHHHHHHHw#.EE..........SS.",
+			".wHHHHHHHHHHHLHHHHHHHHHHHHwd.RR.............",
 			".wHHHHHHHHHHHwHHHHHHHHHHHHw#.RR.TTTTTTTTTV..",
 			".wwwwwwwwwwwwwwwwwwwwwwwwww#................",
 			"###p####ddd##p#########p#######p########p###",
@@ -1699,30 +1856,76 @@ public final class Worlds {
 			".SSS...RRR.......TTTTTTTT...EE...LLBLLL.....",
 	};
 
-	/** The three outposts, one to a line: a depot at the end of the western
-	 *  line, a pump house at the end of the eastern, and a mine head at the end
-	 *  of the lower line, out in the underdark. Twelve by eight inside, with
-	 *  the track on their fourth row, which is where the line arrives. */
-	static final String[] DEPOT = {
-			"....EE......",
-			"TTTTTTTTTT..",
-			"pppppppppppp",
-			"rrrrrrrrrrrr",
-			"pppppppppppp",
-			"TTTTTTTTTT..",
-			".SS.V...LLL.",
-			".SS.....LBL.",
+	/**
+	 * The sectors, one to a stop on the lines, in the same legend as the halls
+	 * and the works. Each is twenty by twelve inside with the track across its
+	 * sixth row, which is the row the line arrives on and leaves by.
+	 *
+	 * <p>Lettered after a certain New Mexico facility's, and built on the same
+	 * plan: a transit system strung between sectors that each do one thing.
+	 * B the coolant reserve, C the test labs (the halls and the works
+	 * themselves), D administration and the dormitories, E the biodome and its
+	 * freight warehouse, F the Lambda complex at the end of the lower line. A
+	 * training facility and a hydro plant are the two left for later.
+	 */
+	static final String[] COOLANT = {
+			"PPPPPPPPPPPPPPPPPPPP",
+			".CCCCCCC..ssssssss..",
+			".CXXXXXC..s~~~~~~s..",
+			".CXXXXXC..wwwwwwws..",
+			".CCCCCCC..ssssssss..",
+			"rrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppp",
+			".SS..tt..VV...cc....",
+			".SS..tt.......cc....",
+			"...LLLL...ssssssss..",
+			"...LLLL...w~~~~~~s..",
+			"..........ssssssss..",
 	};
-	static final String[] PUMPHOUSE = {
-			".CCCCCCPPPPP",
-			".CXXXXC.SS..",
-			".CCCCCC.SS..",
-			"rrrrrrrrrrrr",
-			"pppppppppppp",
-			"pppppppppppp",
-			".SSS..V.TTT.",
-			".SSS....TTTV",
+	static final String[] ADMIN = {
+			"kk.kk.kk.G.uu.uu.uu.",
+			"kk.kk.kk.G.uu.uu.uu.",
+			".........G..........",
+			"GGGGGGGGGG.GGGGGGGGG",
+			"..cc.........EE.....",
+			"rrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppp",
+			".kk.kk..GG..kk.kk...",
+			".kk.kk..GG..kk.kk...",
+			"........GG..........",
+			".uu.uu.uu...EE..cc..",
+			".uu.uu.uu...........",
 	};
+	static final String[] BIODOME = {
+			"GGGGGGGGGGGGGGGGGGGG",
+			"GFFFFGQQQQQG~~~~YYYG",
+			"GFFFFGQQQQQG~~~~YYYG",
+			"GFFFFGQQQQQGMM~~YYYG",
+			"G....G.....G.......G",
+			"rrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppp",
+			"wwwwwwwwwwwwwwwwwwww",
+			"GFFFFGYYYYYG.cc....G",
+			"GFFFFGYYYYYGMMMM...G",
+			"GFFFFGYYMMYG~~~~...G",
+			"GGGGGGGGGGGGGGGGGGGG",
+	};
+	static final String[] WAREHOUSE = {
+			"TTTTTTTTTTTTTTTTTTTT",
+			"...vvvvvvvvvvvv...E.",
+			"...............vv.E.",
+			"..EE.EE.EE.....vv...",
+			"..EE.EE.EE.....vv...",
+			"rrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppp",
+			".vvvvvvvvvvvvvv.....",
+			"....................",
+			".TTTTTTTT..cc..WW...",
+			".TTTTTTTT.....SS....",
+			".TTTTTTTT.....SS....",
+	};
+	/** The mine head: the small stop on the lower line before Lambda, where
+	 *  the shards the teleport chamber runs on were cut. */
 	static final String[] MINEHEAD = {
 			"LLLL.BBBB.FF",
 			".BB..BKKB.FF",
@@ -1732,6 +1935,52 @@ public final class Worlds {
 			"pppppppppppp",
 			"bbbb.LLLL.KK",
 			"bbbb.LBBL.KK",
+	};
+
+	/**
+	 * Sector F, the Lambda complex: two floors on one origin at the end of the
+	 * lower line, the way the halls stand over the works. Below, the reactor
+	 * core -- generator sets inside their own coolant loop -- and the teleport
+	 * chamber, a shard floor under lit grating. Above, a control room behind
+	 * glass, and an opening ringed by catwalk directly over the chamber with a
+	 * lift shaft down its middle: the way into the chamber that is not the
+	 * stairs.
+	 */
+	static final String[] LAMBDA_LOWER = {
+			"PPPPPPPPPPPPPPPPPPPPPPPP",
+			".CCCCCCCCCC.LLLLLLLLLLL.",
+			".CttttttttC.LLLLLLLLLLL.",
+			".CttttttttC.LLLLBBBLLLL.",
+			".CCCCCCCCCC.LLLLBBBLLLL.",
+			".cc......cc.LLLLLLLLLLL.",
+			"............LLLLLLLLLLL.",
+			"........................",
+			"rrrrrrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppppppp",
+			".ttt.ttt.ttt.ccc........",
+			".ttt.ttt.ttt............",
+			".SSS....VV...LLLLLLL....",
+			".SSS.........LLLLLLL....",
+			"..........EE.LLLLLLL....",
+			"..........EE............",
+	};
+	static final String[] LAMBDA_UPPER = {
+			"........................",
+			".cccccccc...wwwwwwwwwww.",
+			".kk.kk.kk...wHHHHHHHHHw.",
+			".kk.kk.kk...wHHHllHHHHw.",
+			".GGGGGGGG...wHHHllHHHHw.",
+			".cccccccc...wHHHHHHHHHw.",
+			"............wwwwwwwwwww.",
+			"........................",
+			"........................",
+			"..EE..EE..EE............",
+			"..EE..EE..EE..cc..cc....",
+			"........................",
+			".ttt.ttt................",
+			".ttt.ttt....LLLLLLL.....",
+			"............LLLLLLL.....",
+			"........................",
 	};
 
 	/** The halls' plan, for the scenarios. Copied, like the works'. */
@@ -1764,7 +2013,7 @@ public final class Worlds {
 	 */
 	private static boolean sinkWorks(World w, int cols, int rows, int x0, int y0, int W, int H) {
 		int px0 = x0, py0 = y0; // the same origin as the halls above: see HALLS
-		stampPlan(w, DEEP_Z, px0, py0, WORKS);
+		stampPlan(w, DEEP_Z, px0, py0, WORKS, true);
 		if (stairsIntoTheWorks(w, x0, y0, W, H) > 0) {
 			return true;
 		}
@@ -1791,10 +2040,16 @@ public final class Worlds {
 	 * move to wherever the buildings still agree.
 	 */
 	private static int stairsIntoTheWorks(World w, int x0, int y0, int W, int H) {
+		return stairsBetween(w, x0, y0, W, H, CAVE_Z, DEEP_Z);
+	}
+
+	/** As above, between any two adjacent floors: {@code upper} is the floor
+	 *  the stairs come down from, {@code lower} the one they land on. */
+	private static int stairsBetween(World w, int x0, int y0, int W, int H, int upper, int lower) {
 		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
 		for (int hy = y0 + 1; hy < y0 + H - 1 && cut.size() < STAIRS_PER_STATION; hy++) {
 			for (int hx = x0 + 1; hx < x0 + W - 4 && cut.size() < STAIRS_PER_STATION; hx++) {
-				if (!stationStairFits(w, hx, hy)) {
+				if (!stationStairFits(w, hx, hy, upper, lower)) {
 					continue;
 				}
 				boolean crowded = false;
@@ -1806,7 +2061,8 @@ public final class Worlds {
 					continue;
 				}
 				// Two lanes wherever the row below fits as well.
-				sinkStairwell(w, hx, hy, stationStairFits(w, hx, hy + 1) ? 2 : 1);
+				sinkStairwell(w, hx, hy, stationStairFits(w, hx, hy + 1, upper, lower) ? 2 : 1,
+						upper, lower);
 				cut.add(new int[] { hx, hy });
 			}
 		}
@@ -1826,15 +2082,15 @@ public final class Worlds {
 	/** Whether {@link #sinkStairwell} can cut one lane from the halls at
 	 *  (hx, hy) down into the works: four tiles of blank deck plate on each
 	 *  floor for the landing, the climb and its housing to occupy. */
-	private static boolean stationStairFits(World w, int hx, int hy) {
+	private static boolean stationStairFits(World w, int hx, int hy, int upper, int lower) {
 		for (int k = 0; k <= 3; k++) {
 			// Blank deck plate on BOTH floors: the halls are a drawing too now,
 			// and a stair cut through a drawn tile is a drawn tile that is not
 			// there any more.
-			if (w.getTile(hx + k, hy, CAVE_Z).getType() != Tile.TileType.TYPE_PLATE) {
+			if (w.getTile(hx + k, hy, upper).getType() != Tile.TileType.TYPE_PLATE) {
 				return false;
 			}
-			if (w.getTile(hx + k, hy, DEEP_Z).getType() != Tile.TileType.TYPE_PLATE) {
+			if (w.getTile(hx + k, hy, lower).getType() != Tile.TileType.TYPE_PLATE) {
 				return false;
 			}
 		}
@@ -1942,6 +2198,11 @@ public final class Worlds {
 	 * enters it.
 	 */
 	private static void sinkStairwell(World w, int hx, int hy, int lanes) {
+		sinkStairwell(w, hx, hy, lanes, CAVE_Z, DEEP_Z);
+	}
+
+	/** As above, between any two adjacent floors. */
+	private static void sinkStairwell(World w, int hx, int hy, int lanes, int upper, int lower) {
 		// u = 1 is east in Tile's direction order, so the slope climbs east and
 		// a body steps off its west foot to come down.
 		final int u = 1;
@@ -1952,13 +2213,13 @@ public final class Worlds {
 			int ux = bx + 2 * ax, uy = by + 2 * ay;      // the climbing ramp
 			int lx = bx + 3 * ax, ly = by + 3 * ay;      // the upper landing
 
-			setBare(w, bx, by, CAVE_Z, Tile.TileType.TYPE_HOLE);
-			setBare(w, dx1, dy1, CAVE_Z, Tile.TileType.TYPE_RAMPDOWN);
-			w.getTile(dx1, dy1, CAVE_Z).setRampUphill(u);
-			setBare(w, bx, by, DEEP_Z, Tile.TileType.TYPE_PLATE); // landing below
+			setBare(w, bx, by, upper, Tile.TileType.TYPE_HOLE);
+			setBare(w, dx1, dy1, upper, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(dx1, dy1, upper).setRampUphill(u);
+			setBare(w, bx, by, lower, Tile.TileType.TYPE_PLATE); // landing below
 
-			setBare(w, ux, uy, DEEP_Z, Tile.TileType.TYPE_RAMPUP);
-			w.getTile(ux, uy, DEEP_Z).setRampUphill(u);
+			setBare(w, ux, uy, lower, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(ux, uy, lower).setRampUphill(u);
 			// Under the upper landing stands the mass the climb rises into.
 			// This has flipped twice, so the reasoning in full: the first
 			// version walled it as "rock under", the second removed it as "a
@@ -1971,8 +2232,8 @@ public final class Worlds {
 			// it abuts, and mid-room it reads as the masonry core the stair
 			// wraps, which is what real stairwells have. The engine never
 			// walks it — the climb exits one level up, on the landing.
-			setBare(w, lx, ly, DEEP_Z, Tile.TileType.TYPE_WALL_CONCRETE);
-			setBare(w, lx, ly, CAVE_Z, Tile.TileType.TYPE_PLATE); // landing above
+			setBare(w, lx, ly, lower, Tile.TileType.TYPE_WALL_CONCRETE);
+			setBare(w, lx, ly, upper, Tile.TileType.TYPE_PLATE); // landing above
 		}
 	}
 
@@ -3589,6 +3850,42 @@ public final class Worlds {
 
 		w.think(); // and admit the loader
 		return w;
+	}
+
+	/**
+	 * The facility's INTERIOR north-west corner on the cave level -- the tile
+	 * the plans' (0, 0) is stamped on, one inside the shell -- or null if this
+	 * map got none. Found as the drone rank on the map, offset by where the
+	 * rank is drawn in the plan.
+	 *
+	 * <p>Located by the rank because the rank is unique -- one building in the
+	 * world berths drones. The obvious landmark, the pipe run, stopped being
+	 * one the day the sectors arrived: Lambda draws a pipe run too, and it
+	 * stands west of the halls, so "the first pipe tile on the deep level" was
+	 * suddenly Lambda's and every coordinate derived from it was wrong by
+	 * ninety tiles. Derived from the drawing rather than written down beside
+	 * it, so moving the rank in the plan moves this with it.
+	 */
+	public static int[] facilityOrigin(World w) {
+		int px = -1, py = -1;
+		for (int j = 0; j < HALLS.length && px < 0; j++) {
+			int i = HALLS[j].indexOf('D');
+			if (i >= 0) {
+				px = i;
+				py = j;
+			}
+		}
+		if (px < 0) {
+			throw new IllegalStateException("the halls draw no drone rank");
+		}
+		for (int y = 0; y < w.getRows(); y++) {
+			for (int x = 0; x < w.getColums(); x++) {
+				if (w.getTile(x, y, CAVE_Z).getType() == Tile.TileType.TYPE_DOCK) {
+					return new int[] { x - px, y - py };
+				}
+			}
+		}
+		return null;
 	}
 
 	/**
