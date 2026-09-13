@@ -32,10 +32,12 @@ final class WorldHost {
 	private static final long BROADCAST_MS = 100;
 
 	/** Ground is baked and served as fixed-size map chunks (google-maps style):
-	 *  each level is rendered once, then sliced into CHUNK_TILES-square PNGs the
-	 *  client streams on demand. Bounds per-request size and lets the client
-	 *  fetch only the region in view. */
-	private static final int CHUNK_TILES = 16;
+	 *  each level is rendered one chunk-row at a time, then sliced into
+	 *  CHUNK_TILES-square PNGs the client streams on demand. Bounds per-request
+	 *  size and lets the client fetch only the region in view. Package-visible
+	 *  because it is also the bake's band height, which the bake's own
+	 *  assertions have to know. */
+	static final int CHUNK_TILES = 16;
 
 	private final Object lock = new Object();
 	private long seed;
