@@ -438,13 +438,28 @@ public final class ServerTests {
 		// the day an unrelated change shifted the stream and the interval came
 		// out quiet. Killing one body ourselves makes the died-flow (and, read
 		// backwards, the born-flow) a certainty instead of a bet.
+		//
+		// It has to be a body that was ALREADY IN the earlier snapshot. A
+		// died-flow is an id present in `a` and absent from `b`, so killing
+		// whichever body the entity map happens to yield first proves nothing
+		// when that body was born during the interval — it was never on the
+		// earlier side to leave it. That is the second time this kill has been
+		// a bet on iteration order; checking the id closes it for good.
+		java.util.HashSet<Integer> earlier = new java.util.HashSet<Integer>();
+		for (int id : a.ids()) {
+			earlier.add(id);
+		}
+		boolean killed = false;
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
-					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null) {
+					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null
+					&& earlier.contains(t.getID())) {
 				t.kill();
+				killed = true;
 				break;
 			}
 		}
+		check("a body from the earlier stage was still alive to kill", killed);
 		WorldHost.StageSnap b = WorldHost.stageOf(w, 1000);
 		check("the interval has heads on both sides (" + a.ids().length + " -> "
 				+ b.ids().length + ")", a.ids().length > 0 && b.ids().length > 0);
