@@ -5882,6 +5882,103 @@ public class SimTests {
 	}
 
 	/**
+	 * How long a hunter keeps after a quarry that is not yielding is its
+	 * lineage's intuition, not a constant's -- and before the gene it was not
+	 * even a constant: a commitment held for as long as the quarry stayed edible
+	 * and in sight, which across water is forever. A fat animal on the far bank
+	 * is in plain sight, out of reach, and the best-scoring body in the world,
+	 * so a hunter that never lets go stands at the shore until it starves, with
+	 * a smaller animal grazing behind it the whole time.
+	 *
+	 * <p>Patience is the clock that ends that. A chase that has run the
+	 * lineage's patience with no bite landed is given up, the animal that
+	 * outlasted it is off the menu for as long again, and the next look finds
+	 * the reachable one. Both legs are needed: the patient hunter proves the
+	 * standoff is real (nothing else would have turned it from the far bank),
+	 * and the impatient one proves the clock turns it and the spurning sticks
+	 * long enough to walk to something else and eat it.
+	 */
+	static class PatienceIsWhenAHunterLetsGo extends Scenario {
+		/** A mind that hunts the biggest thing in sight and walks. */
+		private static Brain fatSeeker() {
+			int[][] p = new int[12][];
+			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
+			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
+			p[2] = new int[] { Brain.SET, 1, 9, 0 }; // r1 = 1.0
+			p[3] = new int[] { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 };
+			p[4] = new int[] { Brain.SET, 2, 7, 0 }; // r2 = 0.25 -> BIGGEST
+			p[5] = new int[] { Brain.WRITE, AgentIO.A_PREY, 2, 0 };
+			for (int i = 6; i < p.length; i++) {
+				p[i] = new int[] { Brain.SET, 3, 5, 0 }; // inert padding
+			}
+			return new Brain(p);
+		}
+
+		private static Genome body(double size, double speed, Brain brain) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = speed;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.brain = brain;
+			return g;
+		}
+
+		/**
+		 * Health left in the reachable animal after a hunter of the given patience
+		 * has spent a spell with a fatter one in sight across the water.
+		 *
+		 * <p>The hunter grows up in a walled cell so it is where the geometry
+		 * expects it when the cell is opened; the water is a channel the full
+		 * height of the room, so there is no way round. The far animal is bigger
+		 * and nearer, so under BIGGEST it is the pick by every measure; the near
+		 * one is smaller and further, and the only thing that can be eaten.
+		 */
+		private int reachableHealthAfter(int patience) {
+			seed(37);
+			World w = room(30, 26);
+			for (int y = 1; y < 25; y++) {
+				w.setTile(12, y, 0, Tile.TileType.TYPE_WATER);
+				w.setTile(13, y, 0, Tile.TileType.TYPE_WATER);
+			}
+			for (int x = 5; x <= 7; x++) {
+				for (int y = 11; y <= 13; y++) {
+					if (x != 6 || y != 12) {
+						w.setTile(x, y, 0, Tile.TileType.TYPE_WALL); // the cell
+					}
+				}
+			}
+			Genome hg = body(13, 0.04, fatSeeker());
+			hg.patience = patience;
+			hg.determination = 4.0; // dogged, so only the clock can turn it
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg);
+			w.spawnEntity(hunter);
+			tick(w, TestNPC.growthTicks(13) + 200);
+			for (int x = 5; x <= 7; x++) {
+				for (int y = 11; y <= 13; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR); // the cell opens
+				}
+			}
+			TestNPC far = TestNPC.grazer(15.5, 12.5, 0, body(16, 0.0005, null)); // 9 tiles, over water
+			TestNPC near = TestNPC.grazer(9.5, 20.5, 0, body(8, 0.0005, null)); // 8.5 tiles, on foot
+			w.spawnEntity(far);
+			w.spawnEntity(near);
+			for (int t = 0; t < 3000 && !near.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertEquals("the animal across the water is never touched", 100, far.getHealth());
+			return near.isDead() ? 0 : near.getHealth();
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a hunter of endless patience stands at the shore and eats nothing",
+					100, reachableHealthAfter(Genome.PATIENCE_MAX));
+			assertEquals("one that lets go turns and eats what it can reach",
+					0, reachableHealthAfter(300));
+		}
+	}
+
+	/**
 	 * A hunter's two views of its own food have to agree. What it may eat
 	 * ({@code nearestPrey}), what its prey channel shows it ({@code S_PREY_PROX})
 	 * and what it commits to are one predicate, {@code edibleQuarry}. They were
@@ -6355,9 +6452,16 @@ public class SimTests {
 				}
 			}
 			tick(w, 1); // advance the clock so vegetation is defined
-			// A fresh starter-brained genome (empty cohort -> mindedReseedGenome yields
-			// the founder starter), on a body in the usual size band.
+			// A fresh founder-recipe genome (empty cohort -> mindedReseedGenome yields
+			// the founder recipe), on a body in the usual size band -- with its mind
+			// pinned to the starter brain. The recipe draws one of four founder minds,
+			// and one of those is the MLP with random weights, which may or may not
+			// feed itself; which mind the draw lands on moves with every gene added
+			// to the genome's random stream. The claim here is the starter brain's,
+			// so the starter brain is what the body gets.
 			Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
+			g.mlp = null;
+			g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
 			// Suppress breeding so we test one forager feeding itself, not a cohort:
 			// the starter mates whenever able, which in an unbounded room (no steward
 			// ceiling) would explode and overgraze. The live world's minded cap
@@ -8360,6 +8464,7 @@ public class SimTests {
 			g.mateThreshold = 0.66;
 			g.greed = 1.7;
 			g.determination = 3.25;
+			g.patience = 777;
 			g.brain = new Brain(new int[][] { { 1, 1, 9, 0 }, { 13, 1, 1, 0 }, { 14, 2, 8, 0 },
 					{ 3, 5, 2, 6 } });
 
@@ -8375,6 +8480,7 @@ public class SimTests {
 			assertTrue("mateThreshold round-trips exactly", g.mateThreshold == back.mateThreshold);
 			assertTrue("greed round-trips exactly", g.greed == back.greed);
 			assertTrue("determination round-trips exactly", g.determination == back.determination);
+			assertEquals("patience round-trips", g.patience, back.patience);
 			// Determination shipped under the key "loyal" for its first afternoon.
 			// A recording made in that window must not quietly lose the gene.
 			Genome legacy = net.hedinger.prototype.entities.GenomeCodec.decode(
@@ -12148,6 +12254,7 @@ public class SimTests {
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
 				new ASmallHunterLivesOnSmallQuarry(),
 				new GreedDecidesHowFarUpAHunterPunches(),
+				new PatienceIsWhenAHunterLetsGo(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),

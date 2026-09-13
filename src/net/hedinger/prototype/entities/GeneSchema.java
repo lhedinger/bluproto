@@ -161,6 +161,8 @@ public final class GeneSchema {
 				g -> g.mutationRate, (g, v) -> g.mutationRate = v);
 		add("inst", "forage drive", Drift.ADD, 0, 1, false,
 				g -> g.instinct, (g, v) -> g.instinct = v);
+		add("patience", "ticks", Drift.MULT, Genome.PATIENCE_MIN, Genome.PATIENCE_MAX, true,
+				g -> g.patience, (g, v) -> g.patience = (int) v);
 	}
 
 	/** The genes, in declaration (and mutation-draw) order. */

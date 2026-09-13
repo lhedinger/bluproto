@@ -933,6 +933,7 @@ function genomeTab(d: Record<string, any>): string {
     row('predatory', g(gm.predatory)), row('xenophobia', g(gm.xenophobia)),
     row('gregarious', g(gm.gregariousness)), row('boldness', g(gm.boldness)),
     row('greed', g(gm.greed)), row('determination', g(gm.determination)),
+    row('patience', g(gm.patience)),
   ]) + group('breeding', [
     // Sexual or asexual is the genome's own answer, arriving alongside the gene
     // it is read from. Whether 0.5 is the line is Genome.isSexual's business;
