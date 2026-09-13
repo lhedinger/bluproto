@@ -312,7 +312,7 @@ final class SpriteCatalog {
 				Tile.TileType.TYPE_QUICKSAND, Tile.TileType.TYPE_SLUDGE });
 		g.put("Vertical travel", new Tile.TileType[] {
 				Tile.TileType.TYPE_RAMPUP, Tile.TileType.TYPE_RAMPDOWN,
-				Tile.TileType.TYPE_HOLE, Tile.TileType.TYPE_SHAFT,
+				Tile.TileType.TYPE_HOLE, Tile.TileType.TYPE_SHAFT, Tile.TileType.TYPE_LIFT,
 				Tile.TileType.TYPE_VOID });
 		g.put("Built walls & glazing", new Tile.TileType[] {
 				Tile.TileType.TYPE_WALL_BUILT, Tile.TileType.TYPE_WALL_CONCRETE,
@@ -328,7 +328,8 @@ final class SpriteCatalog {
 				Tile.TileType.TYPE_AIRVENT });
 		g.put("Machines & fixtures", new Tile.TileType[] {
 				Tile.TileType.TYPE_SWITCH, Tile.TileType.TYPE_DOCK,
-				Tile.TileType.TYPE_EXCHANGER, Tile.TileType.TYPE_SERVER });
+				Tile.TileType.TYPE_EXCHANGER, Tile.TileType.TYPE_SERVER,
+				Tile.TileType.TYPE_TURBINE, Tile.TileType.TYPE_CONSOLE });
 		g.put("Furniture & remains", new Tile.TileType[] {
 				Tile.TileType.TYPE_DESK, Tile.TileType.TYPE_BUNK, Tile.TileType.TYPE_WRECK });
 
@@ -577,6 +578,15 @@ final class SpriteCatalog {
 			return;
 		case TYPE_WRECK:
 			fixtureVariant(out, t, "in its debris", Tile.TileType.TYPE_RUBBLE);
+			return;
+		case TYPE_TURBINE:
+			fixtureVariant(out, t, "on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_CONSOLE:
+			fixtureVariant(out, t, "on deck", Tile.TileType.TYPE_PLATE);
+			return;
+		case TYPE_LIFT:
+			fieldVariant(out, t, "open lift shaft, no car", 1.0);
 			return;
 		case TYPE_RAMPUP:
 			rampVariant(out, t, "cut into rock, climbing west");
