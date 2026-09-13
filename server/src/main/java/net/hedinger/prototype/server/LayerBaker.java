@@ -98,14 +98,51 @@ final class LayerBaker {
 	 */
 	static BufferedImage bakeLevelImage(World terrain,
 			net.hedinger.prototype.engine.LayerRenderer lr, int z) {
+		return bakeRegionImage(terrain, lr, z, 0, terrain.getRows());
+	}
+
+	/**
+	 * Renders a horizontal BAND of level {@code z} — tile rows
+	 * {@code [y0Tile, y0Tile + hTiles)} — into an image whose pixel (0,0) is
+	 * world tile {@code (0, y0Tile)}.
+	 *
+	 * <p>This exists because peak heap must not be a function of map area. The
+	 * whole-level bake allocates {@code cols * rows * tileSize^2} ARGB pixels:
+	 * about 207 MB at 144x88, and about 830 MB once the map's sides double —
+	 * past the deploy VPS's 512 MB heap, so the world could not grow without
+	 * the bake growing with it. A band caps the allocation at
+	 * {@code cols * hTiles * tileSize^2} whatever the map's height, which is
+	 * the one dimension that was unbounded.
+	 *
+	 * <p>It renders through the SAME path as the whole-level bake (which now
+	 * delegates here for the full extent), so a band and a full image cannot
+	 * drift apart: the clip is set to the whole level while the view sets its
+	 * camera up — so overlays that bleed across tile boundaries stay seamless
+	 * at the seam — and only then is the drawing translated and clipped to the
+	 * band, exactly as {@link #renderChunk} does for a single chunk.
+	 */
+	static BufferedImage bakeBandImage(World terrain,
+			net.hedinger.prototype.engine.LayerRenderer lr, int z, int y0Tile, int hTiles) {
+		return bakeRegionImage(terrain, lr, z, y0Tile, hTiles);
+	}
+
+	private static BufferedImage bakeRegionImage(World terrain,
+			net.hedinger.prototype.engine.LayerRenderer lr, int z, int y0Tile, int hTiles) {
 		int ts = ResourceManager.tileSize;
-		int w = terrain.getColums() * ts, h = terrain.getRows() * ts;
+		int cols = terrain.getColums(), rows = terrain.getRows();
+		int band = Math.min(hTiles, rows - y0Tile);
+		int w = cols * ts, h = band * ts;
 		BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D g = img.createGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g.setClip(0, 0, w, h);
+		// Full-level clip while the view sets up, so its camera aligns tile (0,0)
+		// to pixel (0,0) exactly as a whole-level bake does; the translate below
+		// then moves the band's top-left onto the image origin.
+		g.setClip(0, 0, w, rows * ts);
 		View view = new View(terrain, lr);
 		view.think(g, 0, 0, z - view.getCamZ(), 0, 0);
+		g.translate(0, -y0Tile * ts);
+		g.setClip(0, y0Tile * ts, w, h);
 		// This level's art alone. renderWorld composites the whole stack with a
 		// dimming scrim per floor, which is the DESKTOP view; a served chunk is
 		// one level, and its alpha means "you can see down" — the client draws

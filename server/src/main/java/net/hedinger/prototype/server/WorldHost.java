@@ -115,24 +115,28 @@ final class WorldHost {
 		int cxN = (cols + CHUNK_TILES - 1) / CHUNK_TILES;
 		int cyN = (rows + CHUNK_TILES - 1) / CHUNK_TILES;
 		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
-		// Bake each level once into a single image (bounded by the shared tile-sprite
-		// cache — see ProcTiles), then slice it into chunk PNGs and drop it before the
-		// next level. One render pass per level (not one per chunk) keeps the bake
-		// fast, and only one level image is ever live, so peak memory stays well
-		// within the deploy heap even for a large map.
+		// Bake each level one BAND at a time — a band being exactly one row of
+		// chunks — then slice that band into chunk PNGs and drop it before the
+		// next. Baking a whole level at once was simpler, but its image is
+		// cols*rows*ts*ts*4 bytes: 207 MB at the old 144x88 and 830 MB once the
+		// map doubled, well past the deploy heap. A band is a fixed 16 tiles
+		// tall, so peak memory now scales with map WIDTH alone and a taller map
+		// costs nothing. It is still one render pass per band rather than per
+		// chunk (11 passes a level, not 198), so the bake stays fast.
 		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
 		java.util.Map<String, byte[]> baked = new java.util.HashMap<String, byte[]>();
 		for (int z = 0; z < r.world().getLevels(); z++) {
-			java.awt.image.BufferedImage level = LayerBaker.bakeLevelImage(terrain, lr, z);
 			for (int cy = 0; cy < cyN; cy++) {
+				java.awt.image.BufferedImage band =
+						LayerBaker.bakeBandImage(terrain, lr, z, cy * CHUNK_TILES, CHUNK_TILES);
 				for (int cx = 0; cx < cxN; cx++) {
-					int x0 = cx * CHUNK_TILES * ts, y0 = cy * CHUNK_TILES * ts;
+					int x0 = cx * CHUNK_TILES * ts;
 					int cw = Math.min(CHUNK_TILES * ts, cols * ts - x0);
-					int ch = Math.min(CHUNK_TILES * ts, rows * ts - y0);
-					baked.put(z + "/" + cx + "_" + cy, LayerBaker.chunkPng(level, x0, y0, cw, ch));
+					baked.put(z + "/" + cx + "_" + cy,
+							LayerBaker.chunkPng(band, x0, 0, cw, band.getHeight()));
 				}
+				band = null; // free this band before baking the next
 			}
-			level = null; // free this level's image before baking the next
 		}
 		// The bake is free of LIVE state by construction — ground pixels read
 		// only tile type and the static fertility potential (grassland's

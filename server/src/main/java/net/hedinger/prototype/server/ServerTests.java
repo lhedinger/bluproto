@@ -641,6 +641,8 @@ public final class ServerTests {
 			String stray = strayOpenTile(terrain, img, z);
 			check("level " + z + " is see-through only where a pit is (" + stray + ")",
 					stray == null);
+			check("level " + z + " bakes the same band-by-band as whole",
+					bandMatchesLevel(terrain, lr, img, z));
 
 			int[] p = findPit(terrain, z);
 			if (p == null) {
@@ -659,6 +661,39 @@ public final class ServerTests {
 		}
 		check("the demo world has a pit over another level", deep > 0);
 		check("the demo world has a pit over nothing", bottom == 0);
+	}
+
+	/**
+	 * Whether one band of a level bakes to exactly the pixels the whole-level
+	 * bake puts there.
+	 *
+	 * <p>WorldHost bakes band by band so that peak heap stops scaling with map
+	 * area, while this suite's other bake assertions — and the desktop path —
+	 * still ask for whole levels. Two ways to produce the same pixels is two
+	 * ways for them to disagree: a clip or translate off by one band would
+	 * shift every chunk the server serves below the first band, and nothing
+	 * else here would notice. So the two paths share one renderer, and this
+	 * pins that they agree.
+	 *
+	 * <p>Checks the band that straddles the middle of the map: the first band
+	 * is the one case where the translate is a no-op and so proves nothing.
+	 */
+	static boolean bandMatchesLevel(net.hedinger.prototype.engine.World terrain,
+			net.hedinger.prototype.engine.LayerRenderer lr,
+			java.awt.image.BufferedImage full, int z) {
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
+		int bandTiles = 16;
+		int rows = terrain.getRows();
+		int y0 = Math.min((rows / 2 / bandTiles) * bandTiles, Math.max(0, rows - bandTiles));
+		java.awt.image.BufferedImage band = LayerBaker.bakeBandImage(terrain, lr, z, y0, bandTiles);
+		for (int y = 0; y < band.getHeight(); y++) {
+			for (int x = 0; x < band.getWidth(); x++) {
+				if (band.getRGB(x, y) != full.getRGB(x, y0 * ts + y)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**
