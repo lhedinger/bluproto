@@ -171,7 +171,7 @@ public class Grid {
 						}
 						col = lid;
 					} else if (reedBed) {
-						col = GroundTextures.reeds(gx, gy);
+						col = GroundTextures.reeds(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
 						if (col == reedGap) {
 							continue; // the body shows between the stalks
 						}
@@ -884,7 +884,7 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_SAND) {
 								col = GroundTextures.sand(gx, gy);
 							} else if (cl == GroundTextures.CLS_REEDS) {
-								col = GroundTextures.reeds(gx, gy);
+								col = GroundTextures.reeds(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_COVER) {
 								// Thicket: a canopy of self-shaded leaf clumps whose
 								// character varies stand by stand.
