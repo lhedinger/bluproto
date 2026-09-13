@@ -5905,13 +5905,20 @@ public class SimTests {
 	 * <ul>
 	 * <li>naming nothing takes the near one -- the default has to be the old
 	 * behaviour, or a silent mind's hunting changes underneath it;</li>
-	 * <li>naming the easiest meal crosses the field for the fat one;</li>
-	 * <li>naming the easiest meal with a MISERLY greed gene takes the near one
+	 * <li>naming the biggest meal crosses the field for the fat one;</li>
+	 * <li>naming the biggest meal with a MISERLY greed gene takes the near one
 	 * again -- same instruction, different lineage, opposite outcome, which is
 	 * the gene doing work no actuator value could do;</li>
 	 * <li>naming the weakest takes a wounded animal that is neither nearest nor
 	 * biggest, on the strength of the bites left in it.</li>
 	 * </ul>
+	 *
+	 * <p>Biggest rather than easiest, deliberately. A bite scales with the size
+	 * ratio in both directions ({@code biteDamage}), so meal per bite is the same
+	 * for any quarry up to the hunter's own size -- the prey's size cancels out of
+	 * {@code 2.5 * mass * damage/100}. Below parity "easiest" and "nearest" agree
+	 * and cannot tell these two bodies apart; biggest still can, and it is the
+	 * standard the greed gene actually bends.
 	 */
 	static class AHuntersPreferenceDecidesItsQuarry extends Scenario {
 		/** Seeks prey, walks, and names a standard. Twelve instructions because
@@ -5986,14 +5993,14 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			// 5 is the constant pool's 0.0, 9 is its 1.0, 8 its 0.5.
+			// 5 is the constant pool's 0.0, 7 its 0.25 (biggest), 8 its 0.5 (weakest).
 			assertTrue("a mind that names no preference hunts as it always did: "
 					+ "the nearest body", firstToDie(5, 1.0, false).equals("lean"));
-			assertTrue("naming the easiest meal walks past the near one for the fat",
-					firstToDie(9, 1.0, false).equals("fat"));
+			assertTrue("naming the biggest meal walks past the near one for the fat",
+					firstToDie(7, 1.0, false).equals("fat"));
 			assertTrue("and a miserly lineage naming the SAME thing takes the near "
 					+ "one: the gene decides what the instruction means",
-					firstToDie(9, 0.2, false).equals("lean"));
+					firstToDie(7, 0.2, false).equals("lean"));
 			assertTrue("naming the weakest takes the wounded body, neither nearest "
 					+ "nor easiest", firstToDie(8, 1.0, true).equals("fat"));
 		}
@@ -6079,6 +6086,66 @@ public class SimTests {
 					outcome(1.0).equals("newcomer"));
 			assertTrue("a dogged lineage finishes what it started",
 					outcome(6.0).equals("first"));
+		}
+	}
+
+	/**
+	 * A bigger mouth finishes a smaller animal sooner. {@code biteDamage} scales
+	 * with the ratio of the two bodies in both directions, so bites-to-kill
+	 * scales with the quarry's size: a hunter takes down an animal a third its
+	 * size in a third of the bites it needs for one its own size.
+	 *
+	 * <p>It used to scale one way only. The bite shrank for bigger quarry and was
+	 * capped at parity for smaller, and since every body has 100 health whatever
+	 * its size, a 4px animal cost a 12px hunter the same ten bites as a 12px one
+	 * and paid a third of the meat. The herd, selecting for the cheapest body,
+	 * evolved to exactly 4px -- 386 of 427 creatures on the live world -- and the
+	 * hunting guild took in a fifth to a half of what it burned and never reached
+	 * a second generation. This is the asymmetry that starved it.
+	 *
+	 * <p>Same hunter, same distance, two parked victims: one its own size, one a
+	 * third of it. Both die; the small one dies materially sooner. Under the old
+	 * cap they died in the same ten bites and this scenario fails on the second
+	 * assertion, which is the point of it.
+	 */
+	static class ABiggerMouthFinishesSmallerQuarrySooner extends Scenario {
+		/** Ticks for a size-15 hunter to kill a parked victim of {@code victimSize}
+		 *  in reach; -1 if it never does. Bite rate only: no chase, no perception. */
+		private int ticksToKill(double victimSize) {
+			seed(5);
+			World w = room(20, 12);
+			Genome predG = new Genome();
+			predG.size = 15;
+			predG.speed = 0.04;
+			predG.losFov = Math.PI * 2;
+			predG.losRange = 12;
+			Genome victimG = new Genome();
+			victimG.size = victimSize;
+			victimG.speed = 0; // parked: isolate the bite rate from the chase
+			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG).withHunger(0.8);
+			TestNPC victim = TestNPC.breeder(5.4, 5.0, 0, victimG); // adjacent, in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(victim);
+			w.think();
+			for (int t = 0; t < 3000; t++) {
+				w.think();
+				if (victim.isDead()) {
+					return t;
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			int even = ticksToKill(15); // its own size: ten bites
+			int small = ticksToKill(5); // a third of it: three or four
+			assertGreater("a hunter kills quarry its own size", even, -1);
+			assertGreater("and kills quarry a third its size", small, -1);
+			// Ten bites against three or four, on the same bite period: the kill
+			// should take well under half the time, not the same time.
+			assertTrue("the small animal dies materially sooner (" + small + " ticks vs "
+					+ even + ")", small * 2 < even);
 		}
 	}
 
@@ -11902,6 +11969,7 @@ public class SimTests {
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),
+				new ABiggerMouthFinishesSmallerQuarrySooner(),
 				new StarterBrainedForagerFeedsItself(),
 				new BrainInheritedThroughReproduction(),
 				new BrainedPopulationDiversifies(),

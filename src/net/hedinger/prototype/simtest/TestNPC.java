@@ -1394,10 +1394,31 @@ public class TestNPC extends NPC {
 		return getWorld().getTick() - heardAt < EARSHOT_MEMORY;
 	}
 
+	/**
+	 * How hard this hunter's bite lands on a given quarry: {@link #PRED_DAMAGE}
+	 * scaled by the ratio of the two bodies, so a bite is as big as the mouth that
+	 * makes it relative to the animal it lands on. Twice the quarry's size, twice
+	 * the damage; two-thirds its size, two-thirds. Bites to kill therefore scale
+	 * with the quarry's size in both directions -- above parity a hunter punches
+	 * up and pays in time, below it a big hunter finishes a small animal in a few.
+	 *
+	 * <p>This used to be capped at parity: a bite never grew for smaller prey, only
+	 * shrank for bigger. Health is 100 for every body whatever its size, so under
+	 * that cap a 4px animal cost a 12px hunter the same ten bites as a 12px one
+	 * and paid a third of the meat -- and the herd, selecting for the cheapest
+	 * body, evolved to exactly 4px. Measured on the live world at 2.3M ticks: 386
+	 * of 427 creatures at SIZE_MIN, hunters taking in a fifth to a half of what
+	 * they burned, and no hunter ever reaching a second generation. Meal per bite
+	 * is now flat for anything up to the hunter's own size ({@code 2.5 * mass *
+	 * damage/100} -- the size cancels), which is what makes small prey worth
+	 * catching at all.
+	 *
+	 * <p>At least one, and never more than a whole body's health.
+	 */
 	private int biteDamage(NPC prey) {
 		double ratio = getSize() / Math.max(1e-6, prey.getSize());
-		double scale = Math.min(1.0, ratio);
-		return Math.max(1, (int) Math.round(PRED_DAMAGE * scale));
+		int dmg = (int) Math.round(PRED_DAMAGE * ratio);
+		return Math.max(1, Math.min(FULL_BODY_HEALTH, dmg));
 	}
 
 	/**
