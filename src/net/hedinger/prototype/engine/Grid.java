@@ -659,7 +659,8 @@ public class Grid {
 				// drawn shape, not a staircase of tile edges. Shafts and
 				// catwalks stay tight; machine-cut openings are square.
 				boolean ownTight = GroundTextures.isStructure(cls)
-						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK;
+						|| cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK
+						|| cls == GroundTextures.CLS_LIFT;
 				boolean wallN = wallSideFor(x, y - 1, x, y);
 				boolean wallS = wallSideFor(x, y + 1, x, y);
 				boolean wallE = wallSideFor(x + 1, y, x, y);
@@ -683,7 +684,8 @@ public class Grid {
 						double wx = x + (ai + 0.5) / A, wy = y + (aj + 0.5) / A;
 						int cl;
 						if (ownTight) {
-							if (cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK) {
+							if (cls == GroundTextures.CLS_SHAFT || cls == GroundTextures.CLS_CATWALK
+									|| cls == GroundTextures.CLS_LIFT) {
 								cl = cls; // facility geometry: dead straight, no jitter
 							} else {
 								// Structures keep a whisper of jitter so rock edges
@@ -754,6 +756,10 @@ public class Grid {
 							col = GroundTextures.bunk(ai, aj, gx, gy);
 						} else if (cl == GroundTextures.CLS_WRECK) {
 							col = GroundTextures.wreck(ai, aj, gx, gy);
+						} else if (cl == GroundTextures.CLS_TURBINE) {
+							col = GroundTextures.turbine(ai, aj, gx, gy);
+						} else if (cl == GroundTextures.CLS_CONSOLE) {
+							col = GroundTextures.console(ai, aj, gx, gy);
 						} else if (cl == GroundTextures.CLS_STALAGMITE) {
 							// A cave column is a fixture like a crystal prism: it
 							// shades itself and casts its own contact shadow.
@@ -801,17 +807,35 @@ public class Grid {
 								}
 								col = pit;
 							}
-						} else if (cl == GroundTextures.CLS_SHAFT) {
+						} else if (cl == GroundTextures.CLS_SHAFT || cl == GroundTextures.CLS_LIFT) {
 							// Vertical shaft: a hazard-striped lip on every side that
 							// meets standing ground, then the industrial void -- read
 							// the same way as a natural pit, so a drop-shaft shows the
-							// base floor it drops onto.
-							boolean vN = isVoidish(x, y - 1), vS = isVoidish(x, y + 1);
-							boolean vW = isVoidish(x - 1, y), vE = isVoidish(x + 1, y);
+							// base floor it drops onto. A lift shaft is the same
+							// opening with a steel cage frame round it instead of
+							// paint: the frame is what says a car once ran here.
+							// A drop shaft paints its lip where it meets standing
+							// ground, so open air on the far side needs none. A
+							// LIFT is a cage: its frame is its own boundary, drawn
+							// wherever the next tile is not also lift, open air or
+							// not. Asked the shaft's question, a lift cut in the
+							// middle of an opening had every side answered "void"
+							// and drew no frame at all -- which is not a lift, it
+							// is a slightly different patch of the same hole.
+							boolean lift = cl == GroundTextures.CLS_LIFT;
+							boolean vN = lift ? !isType(x, y - 1, Tile.TileType.TYPE_LIFT)
+									: !isVoidish(x, y - 1);
+							boolean vS = lift ? !isType(x, y + 1, Tile.TileType.TYPE_LIFT)
+									: !isVoidish(x, y + 1);
+							boolean vW = lift ? !isType(x - 1, y, Tile.TileType.TYPE_LIFT)
+									: !isVoidish(x - 1, y);
+							boolean vE = lift ? !isType(x + 1, y, Tile.TileType.TYPE_LIFT)
+									: !isVoidish(x + 1, y);
 							int band = 2;
-							if ((!vN && aj < band) || (!vS && aj >= A - band)
-									|| (!vW && ai < band) || (!vE && ai >= A - band)) {
-								col = GroundTextures.hazardStripe(gx, gy);
+							if ((vN && aj < band) || (vS && aj >= A - band)
+									|| (vW && ai < band) || (vE && ai >= A - band)) {
+								col = lift ? GroundTextures.liftFrame(gx, gy)
+										: GroundTextures.hazardStripe(gx, gy);
 							} else {
 								Integer pit = pitFloor(x, y, cl);
 								if (pit == null) {
@@ -1423,6 +1447,7 @@ public class Grid {
 	 *  shaft, a natural hole, or under a catwalk. */
 	private boolean isVoidish(int nx, int ny) {
 		return isType(nx, ny, Tile.TileType.TYPE_SHAFT)
+				|| isType(nx, ny, Tile.TileType.TYPE_LIFT)
 				|| isType(nx, ny, Tile.TileType.TYPE_HOLE)
 				|| isType(nx, ny, Tile.TileType.TYPE_CATWALK);
 	}

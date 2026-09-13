@@ -113,6 +113,8 @@ public class LayerRenderer {
 		case TYPE_DESK:
 		case TYPE_BUNK:
 		case TYPE_WRECK:
+		case TYPE_TURBINE:
+		case TYPE_CONSOLE:
 		case TYPE_RAIL:
 		case TYPE_SERVER:
 		case TYPE_VENT:
@@ -125,7 +127,7 @@ public class LayerRenderer {
 		case TYPE_WALL_STEEL:
 		case TYPE_DUCT:
 			return ResourceManager.getFloorTile(tilecode);
-		// TYPE_SHAFT and TYPE_CATWALK are intentionally omitted, like
+		// TYPE_SHAFT, TYPE_LIFT and TYPE_CATWALK are intentionally omitted, like
 		// TYPE_HOLE: they bake to nothing, so the level below shows (and
 		// parallaxes) through the shaft void and the catwalk grating.
 		// TYPE_HOLE is intentionally omitted: a hole bakes to nothing so it is a

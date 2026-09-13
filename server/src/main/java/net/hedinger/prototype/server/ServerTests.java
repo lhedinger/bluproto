@@ -757,6 +757,7 @@ public final class ServerTests {
 		net.hedinger.prototype.engine.Tile.TileType ty = t.getType();
 		return ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHAFT
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_LIFT
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK
 				// Open air, on a level above the ground. The other three are
 				// openings IN a floor; this one is the absence of floor, and it

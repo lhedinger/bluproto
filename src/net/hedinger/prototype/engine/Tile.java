@@ -744,7 +744,7 @@ public class Tile {
 	 *  what happens to a body that steps off. */
 	public boolean isDrop() {
 		return type == TileType.TYPE_HOLE || type == TileType.TYPE_SHAFT
-				|| type == TileType.TYPE_VOID;
+				|| type == TileType.TYPE_LIFT || type == TileType.TYPE_VOID;
 	}
 
 	/** True if this tile blocks line of sight: walls (natural or built),
@@ -759,7 +759,7 @@ public class Tile {
 		if (type == TileType.TYPE_CRYSTAL || type == TileType.TYPE_SERVER
 				|| type == TileType.TYPE_CACTUS || type == TileType.TYPE_WINDOW
 				|| type == TileType.TYPE_DESK || type == TileType.TYPE_BUNK
-				|| type == TileType.TYPE_WRECK) {
+				|| type == TileType.TYPE_WRECK || type == TileType.TYPE_CONSOLE) {
 			return false;
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
@@ -902,7 +902,10 @@ public class Tile {
 		// between open ground and a closed thicket, and the desert had nothing
 		// to hide in at all.
 		TYPE_TALLGRASS(51, true, "tall grass"), // standing sward: grazeable, and it hides a body
-		TYPE_SCRUB(52, true, "desert scrub"); // thorn clumps on sand: the dry country's only cover
+		TYPE_SCRUB(52, true, "desert scrub"), // thorn clumps on sand: the dry country's only cover
+		TYPE_TURBINE(53, false, "turbine"), // a generator set: solid machinery, the plant's hot shape
+		TYPE_CONSOLE(54, false, "control panel"), // a bank of instruments: solid furniture, below any eye line
+		TYPE_LIFT(55, true, "lift shaft"); // an elevator's shaft with no car in it: drops like a hole, for now
 
 		private int value;
 		private boolean open;
