@@ -810,7 +810,7 @@ public final class Worlds {
 		connectLevels(w, cols, rows);
 
 		// ---- a buried installation: someone built down here, once ----
-		buryInstallation(w, cols, rows);
+		int[] facility = buryInstallation(w, cols, rows);
 
 		// ---- the underdark: natural caverns on the bottom level, so the rock
 		// under the caves is a place and not a backstop. Carved only from
@@ -819,6 +819,9 @@ public final class Worlds {
 		// stairwells wherever cave floor sits over cavern floor ----
 		carveDeepCaverns(w, cols, rows);
 		linkDeepCaverns(w, cols, rows);
+		if (facility != null) {
+			layDeepLine(w, cols, rows, facility[0], facility[1]);
+		}
 
 		// ---- the ravine: a gorge torn through the surface, with the caves
 		// showing through it -- carved last so it can keep clear of everything
@@ -1191,197 +1194,363 @@ public final class Worlds {
 	}
 
 	/**
-	 * Carve a buried installation into the cave level: a concrete-shelled
-	 * facility hall with plate decking, a pipe run and air vents, a steel
-	 * inner vault, and a crawl duct punched through the vault wall as the
-	 * small-body shortcut -- the man-made counterweight to the caves' grown
-	 * terrain, sunk into solid rock and reached through a paved entrance
-	 * gallery tunnelled to the nearest cavern.
+	 * The facility: a two-storey installation buried in the rock, with tram
+	 * lines running out of it across both underground levels to outposts.
 	 *
-	 * <p>Runs after {@link #connectLevels}, so the gallery attaches to ground
-	 * that is already part of the world's single connected region — the new
-	 * rooms extend that region rather than gambling on surviving the seal.
-	 * The doorway mouths are left open (no {@code Door} entities yet): doors
-	 * are not shipped to the web client, and a door it cannot see would read
-	 * as an invisible barrier there. When door state joins the client
-	 * protocol, the blast door belongs in the 2-wide mouth.
+	 * <p>Two authored floors on one origin. The HALLS on the cave level are the
+	 * entrance — a concourse behind a blast door, the drone rank, the vault,
+	 * and an atrium whose floor is open void crossed by gantries, looking down
+	 * onto the WORKS on the level below. The works are the plant the halls
+	 * keep referring to: the reactor and its coolant loop, the condensers, the
+	 * turbine hall under the atrium, the shard workings, and the tram run.
+	 * Reading the building means walking it in three dimensions, which is the
+	 * one thing a drawing of a floor cannot show.
 	 *
-	 * <p>Skipped quietly when no rock pocket fits the footprint (only a
-	 * concern on very small maps); everything it carves is deterministic and
-	 * draws no RNG.
+	 * <p>This replaced three plans chosen by pocket size — a 22x15 station, an
+	 * 18x13 base and a 15x9 annex, each placed arithmetically off its corner
+	 * and each requiring a rectangle of solid rock. The rock never offers one
+	 * bigger than about 26x17 whatever the map size, so the building could not
+	 * grow that way; and a building that may only stand where nothing else is
+	 * is a building that stands in the least interesting place. The facility
+	 * is sited where it buries the LEAST, and where it does bury a cavern it
+	 * lets the cavern in: every stretch of wall a cavern touches gets a
+	 * doorway. The buildings are hubs the caves pass through, not obstacles
+	 * they stop at.
+	 *
+	 * <p>Returns the origin, or null on a map too small to hold it. Runs after
+	 * {@link #connectLevels}, so the entrance gallery attaches to ground that
+	 * is already part of the connected world.
 	 */
-	private static void buryInstallation(World w, int cols, int rows) {
-		// The full three-band plan wants an 18x13 pocket. A cave too riddled
-		// with caverns to host one (commonly the mid sizes) gets the compact
-		// single-hall annex instead; only a truly tiny map gets nothing.
-		int[] site = findRockPocket(w, cols, rows, DEEP_W, DEEP_H);
-		if (site != null) {
-			buildDeepStation(w, cols, rows, site[0], site[1]);
-			return;
+	private static int[] buryInstallation(World w, int cols, int rows) {
+		int[] site = findFacilitySite(w, cols, rows);
+		if (site == null) {
+			return null;
 		}
-		site = findRockPocket(w, cols, rows, 18, 13);
-		if (site != null) {
-			buildFullBase(w, cols, rows, site[0], site[1]);
-			return;
+		int x0 = site[0], y0 = site[1], W = FACILITY_W, H = FACILITY_H;
+		stampPlan(w, CAVE_Z, x0, y0, HALLS);
+
+		// The vault's steel ring in the halls' plan, and the mouth row: the
+		// concourse's second row, so the blast door opens onto the platform.
+		int vx = x0 + 1 + 34, vy = y0 + 1 + 1, vh = 6;
+		if (!finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + 3)) {
+			return null; // un-carved: no way out through the rock
 		}
-		site = findRockPocket(w, cols, rows, 15, 9);
-		if (site != null) {
-			buildCompactBase(w, cols, rows, site[0], site[1]);
+		punchDoors(w, CAVE_Z, x0, y0, W, H);
+
+		// Furnishing: the stack the loader marshals to, on the marshalling
+		// deck; the vault's cache, and the hazard standing guard over it.
+		for (int i = 0; i < 4; i++) {
+			w.spawnEntity(Item.crate(x0 + 1 + 18 + i + 0.5, y0 + 1 + 24 + 0.5, CAVE_Z));
 		}
+		w.spawnEntity(Item.crate(x0 + 1 + 19 + 0.5, y0 + 1 + 23 + 0.5, CAVE_Z));
+		w.spawnEntity(Item.food(x0 + 1 + 36 + 0.5, y0 + 1 + 2 + 0.5, CAVE_Z));
+		w.spawnEntity(Item.food(x0 + 1 + 41 + 0.5, y0 + 1 + 4 + 0.5, CAVE_Z));
+		w.spawnEntity(Item.hazard(x0 + 1 + 39 + 0.5, y0 + 1 + 4 + 0.5, CAVE_Z));
+
+		// The ceiling: a ventilation shaft from the surface over the concourse,
+		// so gravity is the building's third entrance.
+		dropShaft(w, x0 + 2, x0 + 28, y0 + 2, y0 + 7);
+
+		// The floor below, joined to this one by every stairwell the two plans
+		// can agree on.
+		sinkWorks(w, cols, rows, x0, y0, W, H);
+
+		// The upper line: out of the tram shed through both end walls, west to
+		// the depot and east to the pump house.
+		int ry = y0 + 1 + 21;
+		layLine(w, cols, rows, CAVE_Z, x0, ry, -1, DEPOT);
+		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, 1, PUMPHOUSE);
+		return site;
 	}
 
-	/** The expanded station's shell: the largest pocket the caves reliably
-	 *  leave, measured rather than wished for. */
-	static final int DEEP_W = 22, DEEP_H = 15;
+	/** The facility's shell, both floors: the plans' interior plus one. */
+	static final int FACILITY_W = 44 + 2, FACILITY_H = 26 + 2;
 
 	/**
-	 * The expanded station: three bands on the cave level over a plant floor cut
-	 * into the rock beneath, joined by a stairwell.
+	 * Where the facility stands: the window on the cave level that buries the
+	 * fewest tiles anyone can walk on, nearest the middle of the map among
+	 * equals.
 	 *
-	 * <p>The old plan was three bands in an 18x13 shell and it had run out of
-	 * room in the most literal way — a rank of four charge pads did not fit in a
-	 * machine wing three rows tall, and putting them in anyway walked them
-	 * through a partition wall and out into the spine. The building is the
-	 * constraint the drones ran into, so the building is what changed.
-	 *
-	 * <pre>
-	 *   rows  1..3   machine wing   plate, pipe run, vents, racks, drone rank
-	 *   row   4      partition
-	 *   rows  5..7   central spine  paved, blast mouth west, tram run, vault east
-	 *   row   8      partition
-	 *   rows  9..13  storage hall   plate, crates, the waste sump, the stairwell
-	 * </pre>
-	 *
-	 * <p>Three bands and not four, and the shell is 22x15 rather than the 26x17
-	 * this started as, because the caves do not leave room for more. Measured
-	 * across seeds, a 26x17 rock pocket never appears and a 24x15 one appears
-	 * about half the time — the site is riddled with caverns by the time this
-	 * runs, which is the point of running it after the caves rather than before.
-	 *
-	 * <p>That constraint is what sent the expansion DOWNWARD, and the design is
-	 * better for it. Rock under the station is virgin: there is no pocket to
-	 * find, nothing to displace, and the plant floor can be laid out to suit
-	 * itself. The rooms that would not fit up here are down there, and the
-	 * building now has to be walked through in three dimensions to be seen.
-	 *
+	 * <p>Scored rather than required. The old search demanded solid rock and
+	 * so could only ever find a pocket the caves happened to leave; this asks
+	 * what a site would cost and takes the cheapest, so the building can be as
+	 * big as its drawing. The one thing it will not do is stand on a link
+	 * station's ramps: a buried ramp is a surface hole that lands on a wall.
 	 */
-	private static void buildDeepStation(World w, int cols, int rows, int x0, int y0) {
-		final int W = DEEP_W, H = DEEP_H;
+	private static int[] findFacilitySite(World w, int cols, int rows) {
+		int W = FACILITY_W, H = FACILITY_H;
+		if (cols < W + 6 || rows < H + 6) {
+			return null;
+		}
+		int[] best = null;
+		double bestScore = Double.MAX_VALUE;
+		// The middle two thirds of the map, so there is always a side for a
+		// line to leave by. Scoring alone put it on the rim on one seed in
+		// six: the rim is solid rock, and solid rock buries nothing.
+		int xLo = Math.max(3, cols / 6), xHi = Math.min(cols - 3 - W, cols * 5 / 6 - W);
+		int yLo = Math.max(3, rows / 6), yHi = Math.min(rows - 3 - H, rows * 5 / 6 - H);
+		if (xHi < xLo) {
+			xLo = 3;
+			xHi = cols - 3 - W;
+		}
+		if (yHi < yLo) {
+			yLo = 3;
+			yHi = rows - 3 - H;
+		}
+		for (int x0 = xLo; x0 <= xHi; x0 += 2) {
+			for (int y0 = yLo; y0 <= yHi; y0 += 2) {
+				int cost = 0;
+				scan: for (int x = x0; x < x0 + W; x++) {
+					for (int y = y0; y < y0 + H; y++) {
+						Tile.TileType t = w.getTile(x, y, CAVE_Z).getType();
+						if (isRampOrDrop(t)) {
+							cost = -1;
+							break scan;
+						}
+						if (t != Tile.TileType.TYPE_WALL) {
+							cost++;
+						}
+					}
+				}
+				if (cost < 0) {
+					continue;
+				}
+				// Half a buried tile per tile of distance from the centre: a
+				// site out on the rim would need to save a great deal of
+				// cavern to win, and one on the rim has no room for a line to
+				// leave it on that side.
+				double d = Math.hypot(x0 + W * 0.5 - cols * 0.5, y0 + H * 0.5 - rows * 0.5);
+				double score = cost + d * 0.5;
+				if (score < bestScore) {
+					bestScore = score;
+					best = new int[] { x0, y0 };
+				}
+			}
+		}
+		return best;
+	}
 
+	/** A tile that must never be built over: it is one end of a link between
+	 *  two floors, or a control that something is wired to. */
+	private static boolean isRampOrDrop(Tile.TileType t) {
+		return t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN
+				|| t == Tile.TileType.TYPE_HOLE || t == Tile.TileType.TYPE_SWITCH
+				|| t == Tile.TileType.TYPE_DOCK;
+	}
+
+	/**
+	 * Stamps a drawn plan onto level {@code z} at (x0, y0): a concrete shell
+	 * around it, deck plate under it, and the plan's own tiles over that.
+	 */
+	private static void stampPlan(World w, int z, int x0, int y0, String[] plan) {
+		int W = plan[0].length() + 2, H = plan.length + 2;
 		for (int x = x0; x < x0 + W; x++) {
 			for (int y = y0; y < y0 + H; y++) {
 				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
-				boolean partition = y == y0 + 4 || y == y0 + 8;
-				setBare(w, x, y, CAVE_Z, shell || partition
+				setBare(w, x, y, z, shell
 						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
 			}
 		}
-
-		// The spine, paved from the mouth to the vault's step.
-		for (int x = x0 + 1; x < x0 + 15; x++) {
-			for (int y = y0 + 5; y <= y0 + 7; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_PAVED);
+		for (int j = 0; j < plan.length; j++) {
+			for (int i = 0; i < plan[j].length(); i++) {
+				Tile.TileType t = plantTile(plan[j].charAt(i));
+				if (t != null) {
+					setBare(w, x0 + 1 + i, y0 + 1 + j, z, t);
+				}
 			}
 		}
-		// Doorways through the partitions: two per wall, paved thresholds, and
-		// crawl ducting through the west end of each so a small body can move
-		// the whole height of the station inside the walls.
-		for (int dy : new int[] { 4, 8 }) {
-			setBare(w, x0 + 7, y0 + dy, CAVE_Z, Tile.TileType.TYPE_PAVED);
-			setBare(w, x0 + 13, y0 + dy, CAVE_Z, Tile.TileType.TYPE_PAVED);
-			for (int x = x0 + 2; x <= x0 + 4; x++) {
-				setBare(w, x, y0 + dy, CAVE_Z, Tile.TileType.TYPE_DUCT);
+	}
+
+	/**
+	 * Doorways wherever the world outside a building's wall is walkable and so
+	 * is the room inside — one every few tiles along such a stretch, so a
+	 * cavern the building landed across is reconnected through it rather than
+	 * cut in two.
+	 *
+	 * <p>This is what lets a building stand anywhere. The old plans could only
+	 * stand in solid rock because a shell dropped across a cavern severed it,
+	 * and the severed half was quietly resealed for want of a way in; with a
+	 * door at every contact the shell severs nothing. It also happens to be
+	 * how a facility that was actually used would look — cut into the caves,
+	 * with the caves coming in.
+	 */
+	private static void punchDoors(World w, int z, int x0, int y0, int W, int H) {
+		int[][] walls = {
+				{ x0, y0 + 1, 0, 1, 1, 0, H - 2 },          // west wall, walking south; outside is x-1
+				{ x0 + W - 1, y0 + 1, 0, 1, -1, 0, H - 2 }, // east wall; outside is x+1
+				{ x0 + 1, y0, 1, 0, 0, 1, W - 2 },          // north wall, walking east; outside is y-1
+				{ x0 + 1, y0 + H - 1, 1, 0, 0, -1, W - 2 }, // south wall; outside is y+1
+		};
+		for (int[] wall : walls) {
+			int x = wall[0], y = wall[1], dx = wall[2], dy = wall[3];
+			int ix = wall[4], iy = wall[5]; // inward
+			int since = DOOR_SPACING;
+			for (int k = 0; k < wall[6]; k++, x += dx, y += dy, since++) {
+				Tile shell = w.getTile(x, y, z);
+				if (shell.getType() != Tile.TileType.TYPE_WALL_CONCRETE) {
+					since = 0; // an opening already: a mouth, a portal, a duct
+					continue;
+				}
+				Tile out = w.getTile(x - ix, y - iy, z), in = w.getTile(x + ix, y + iy, z);
+				if (out == null || in == null || !out.isWalkable() || !in.isWalkable()
+						|| since < DOOR_SPACING) {
+					continue;
+				}
+				setBare(w, x, y, z, Tile.TileType.TYPE_PAVED);
+				since = 0;
 			}
 		}
+	}
 
-		// The tram run, the length of the spine.
-		for (int x = x0 + 1; x < x0 + 15; x++) {
-			setBare(w, x, y0 + 6, CAVE_Z, Tile.TileType.TYPE_RAIL);
-		}
+	/** The closest two punched doorways stand along one wall. */
+	private static final int DOOR_SPACING = 5;
 
-		// ---- machine wing -------------------------------------------------
-		for (int x = x0 + 2; x < x0 + W - 2; x++) {
-			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		}
-		setBare(w, x0 + 5, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 11, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		for (int y = y0 + 2; y <= y0 + 3; y++) {
-			setBare(w, x0 + 8, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
-			setBare(w, x0 + 9, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
-		}
-		for (int x = x0 + 2; x <= x0 + 6; x++) {
-			setBare(w, x, y0 + 2, CAVE_Z, Tile.TileType.TYPE_COOLANT);
-		}
-		setBare(w, x0 + 12, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
-		setBare(w, x0 + 12, y0 + 3, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
-
-		// The drone rank: four pads at the wing's east end, as two columns of
-		// two rather than a line of four. A line was the first try and it does
-		// not fit — the wing is three rows tall, and pads spaced along it walk
-		// straight out through the partition and into the spine, which is how
-		// three of the four quietly became doorways. Blocked up, they fit any
-		// wing that fits the wing.
-		for (int i = 0; i < DRONE_RANK; i++) {
-			setBare(w, x0 + 15 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
-					Tile.TileType.TYPE_DOCK);
-		}
-
-		// ---- storage wing --------------------------------------------------
-		setBare(w, x0 + 12, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		setBare(w, x0 + 12, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		setBare(w, x0 + 4, y0 + 12, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 9, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		for (int x = x0 + 1; x <= x0 + 2; x++) {
-			for (int y = y0 + 10; y <= y0 + 12; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
+	/**
+	 * A tram line out of a portal in a building's wall: rails on the centre
+	 * and paved shoulders either side, tunnelled through rock, laid straight
+	 * across whatever floor it meets and carried over water and shafts on
+	 * grated trestle. It stops short of the map's rim, or where it meets
+	 * another building, and where there is room it ends at an outpost.
+	 *
+	 * <p>Lines are what make the underground a network rather than a set of
+	 * rooms. The caves were carved and linked long before there was a
+	 * facility, and a building sitting in them was a place the caves happened
+	 * to reach; a line that runs sixty tiles out through three caverns and a
+	 * lake to a pump house is the facility reaching out into the caves, which
+	 * is a different thing to look at and a different thing to live beside.
+	 *
+	 * <p>A jog every so often, one tile at a time, so the run is a line
+	 * somebody surveyed and not a ruler laid across the map. The bend is two
+	 * tiles of rail, so the track stays joined through it.
+	 *
+	 * <p>The line ends where its outpost can stand: past a minimum run, at
+	 * the first place the outpost's footprint is inside the map and clear of
+	 * anything that must not be built over. A fixed length ended on top of a
+	 * link station's hole two times in three — the cave level has fifty-odd
+	 * of them — and an outpost that will not fit is an outpost that is not
+	 * there, which left the line running to the rim and stopping at nothing.
+	 */
+	private static void layLine(World w, int cols, int rows, int z, int px, int py,
+			int dir, String[] outpost) {
+		setBare(w, px, py, z, Tile.TileType.TYPE_RAIL); // the portal through the shell
+		int x = px, y = py;
+		int laid = 0;
+		for (int i = 1; i <= LINE_REACH; i++) {
+			int nx = x + dir;
+			if (nx < 4 || nx >= cols - 4) {
+				break;
+			}
+			if (i % 13 == 0) {
+				double turn = Utils.noise2(nx * 3 + 5000, y * 7 + 1200, 0.31);
+				int ny = y + (turn > 0.6 ? 1 : turn < 0.4 ? -1 : 0);
+				if (ny >= 4 && ny < rows - 4 && ny != y && layRail(w, z, nx, y)) {
+					layShoulder(w, z, nx, y - 1);
+					layShoulder(w, z, nx, y + 1);
+					y = ny;
+				}
+			}
+			if (!layRail(w, z, nx, y)) {
+				break; // another building: the line stops at its wall
+			}
+			layShoulder(w, z, nx, y - 1);
+			layShoulder(w, z, nx, y + 1);
+			x = nx;
+			laid++;
+			if (outpost != null && laid >= LINE_MIN_RUN
+					&& outpostFits(w, cols, rows, z, x, y, dir)) {
+				stampOutpost(w, cols, rows, z, x, y, dir, outpost);
+				return;
 			}
 		}
-		// Tread-plate down the hall's spine: the walk the stairwell is at the
-		// end of, and the one piece of floor here that says people used it.
-		for (int x = x0 + 4; x <= x0 + 16; x++) {
-			setBare(w, x, y0 + 11, CAVE_Z, Tile.TileType.TYPE_TREADPLATE);
-		}
+	}
 
-		// ---- the steel vault, closing the spine's east end -------------------
-		int vx = x0 + 15, vy = y0 + 4, vw = 6, vh = 5;
-		for (int x = vx; x < vx + vw; x++) {
-			for (int y = vy; y < vy + vh; y++) {
-				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
-				setBare(w, x, y, CAVE_Z, rim
-						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
+	/** How far a line will run before it simply ends, outpost or no. */
+	private static final int LINE_REACH = 110;
+
+	/** The least a line will run before it is allowed to end at its outpost:
+	 *  an outpost is somewhere the line goes TO, and forty tiles is about the
+	 *  shortest journey that reads as one. */
+	private static final int LINE_MIN_RUN = 40;
+
+	/**
+	 * One tile of track, or false where track cannot go. Rock is tunnelled;
+	 * open floor is crossed; water and shafts are bridged on catwalk; the
+	 * ends of links between floors and anything wired are left exactly as
+	 * they are, because a rail laid over a ramp is a ramp that no longer
+	 * climbs. A built wall stops the line.
+	 */
+	private static boolean layRail(World w, int z, int x, int y) {
+		Tile t = w.getTile(x, y, z);
+		Tile.TileType ty = t.getType();
+		if (ty == Tile.TileType.TYPE_WALL_CONCRETE || ty == Tile.TileType.TYPE_WALL_STEEL) {
+			return false;
+		}
+		if (isRampOrDrop(ty) || ty == Tile.TileType.TYPE_DUCT) {
+			return true; // left alone, and the line carries on past it
+		}
+		if (ty == Tile.TileType.TYPE_WATER || ty == Tile.TileType.TYPE_SHAFT) {
+			setBare(w, x, y, z, Tile.TileType.TYPE_CATWALK);
+			return true;
+		}
+		setBare(w, x, y, z, Tile.TileType.TYPE_RAIL);
+		return true;
+	}
+
+	/** The shoulder beside the track: paved through rock, trestle over water,
+	 *  and whatever it already was where it was already ground. */
+	private static void layShoulder(World w, int z, int x, int y) {
+		Tile.TileType ty = w.getTile(x, y, z).getType();
+		if (ty == Tile.TileType.TYPE_WALL || ty == Tile.TileType.TYPE_CRYSTAL) {
+			setBare(w, x, y, z, Tile.TileType.TYPE_PAVED);
+		} else if (ty == Tile.TileType.TYPE_WATER || ty == Tile.TileType.TYPE_SHAFT) {
+			setBare(w, x, y, z, Tile.TileType.TYPE_CATWALK);
+		}
+	}
+
+	/** An outpost's shell: the 12x8 plans plus one. */
+	static final int OUTPOST_W = 12 + 2, OUTPOST_H = 8 + 2;
+
+	/** Whether an outpost could stand at the end of a line that has reached
+	 *  (ex, ey) heading {@code dir}: inside the map, and on nothing that must
+	 *  not be built over. */
+	private static boolean outpostFits(World w, int cols, int rows, int z, int ex, int ey, int dir) {
+		int x0 = dir > 0 ? ex + 1 : ex - OUTPOST_W;
+		int y0 = ey - 4;
+		if (x0 < 2 || y0 < 2 || x0 + OUTPOST_W > cols - 2 || y0 + OUTPOST_H > rows - 2) {
+			return false;
+		}
+		for (int x = x0; x < x0 + OUTPOST_W; x++) {
+			for (int y = y0; y < y0 + OUTPOST_H; y++) {
+				if (isRampOrDrop(w.getTile(x, y, z).getType())) {
+					return false;
+				}
 			}
 		}
-		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // doorway
-		// The duct through the vault's north wall opens at vx+3 and not vx+2,
-		// which is the drone rank's east pad. The vault's grate answers only its
-		// buttons, so this duct is the whole of the other way in -- and a berth
-		// laid across its approach makes a parked machine the doorman.
-		setBare(w, vx + 3, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct from the wing
+		return true;
+	}
 
-		// ---- the way in, and only then the way down --------------------------
-		// The mouth is cut on the spine (rows 5..7), not at the shell's
-		// midpoint: with four bands the midpoint is a partition wall, and a
-		// mouth there opens the storage wing straight onto the rock.
-		//
-		// The plant floor is sunk only if the station survives. A site with no
-		// way out through the rock is un-carved back to wall, and a second
-		// floor left hanging under a base that no longer exists is a hundred-odd
-		// walkable tiles nothing can reach — which is exactly how this was
-		// found, as a connectivity failure rather than as anything visible.
-		if (!finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + 6)) {
-			return;
-		}
-		sinkWorks(w, cols, rows, x0, y0, W, H);
+	/**
+	 * An outpost at the end of a line, its track row meeting the rail where
+	 * the line stopped. The caller has already checked it fits.
+	 */
+	private static void stampOutpost(World w, int cols, int rows, int z, int ex, int ey,
+			int dir, String[] plan) {
+		int x0 = dir > 0 ? ex + 1 : ex - OUTPOST_W;
+		int y0 = ey - 4;
+		stampPlan(w, z, x0, y0, plan);
+		// The portal: the shell tile the line runs into.
+		setBare(w, dir > 0 ? x0 : x0 + OUTPOST_W - 1, y0 + 4, z, Tile.TileType.TYPE_RAIL);
+		punchDoors(w, z, x0, y0, OUTPOST_W, OUTPOST_H);
+	}
 
-		// Furnishing: the stack the loader marshals to, the vault's cache.
-		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 6.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 12.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 8.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 11.5, y0 + 6.5, CAVE_Z)); // one left on the tram run
-		w.spawnEntity(Item.food(vx + 2.5, vy + 1.5, CAVE_Z));
-		w.spawnEntity(Item.food(vx + 3.5, vy + 2.5, CAVE_Z));
-		w.spawnEntity(Item.hazard(vx + 2.5, vy + 3.5, CAVE_Z));
+	/**
+	 * The lower line: out of the works' east wall and across the underdark to
+	 * the mine head. Laid after the underdark's caverns are carved and linked,
+	 * so it crosses them rather than being carved around, and so the mine head
+	 * can stand among them.
+	 */
+	private static void layDeepLine(World w, int cols, int rows, int x0, int y0) {
+		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, y0 + 1 + 21, 1, MINEHEAD);
 	}
 
 	/**
@@ -1394,7 +1563,7 @@ public final class Worlds {
 	 *   T  loading deck    L  lit grating     B  shard bed      b  loose shards
 	 *   s  steel bulkhead  #  concrete wall   p  paved aisle    r  tram rail
 	 *   d  crawl duct      D  charge dock     E  server bank    H  drop shaft
-	 *   F  fungus bed
+	 *   F  fungus bed      K  crystal cluster
 	 * </pre>
 	 *
 	 * <p>Drawn rather than computed, and that is the whole of the method. An
@@ -1413,7 +1582,7 @@ public final class Worlds {
 	 * <pre>
 	 *   rows  0..8    reactor hall | pump gallery | store and vault
 	 *   row   9       partition, with doorways and a crawl duct
-	 *   rows 10..17   the shaft bay | the crystal workings
+	 *   rows 10..17   the turbine hall, under the halls' atrium | the workings
 	 *   row  18       partition
 	 *   rows 19..25   the lower spine: tram run, drain, marshalling deck
 	 * </pre>
@@ -1451,19 +1620,19 @@ public final class Worlds {
 			"PLBL.TTTTTTTT...#.V..........V.dpssssssssss.",
 			"PLLL...SSS......d.TTTTTTTTTTTT.#p..........V",
 			"P..V...SSSV.....#.......RR.....#p.DDDDDDDD..",
-			"##dddp######p#######p######p########p####p##",
-			"Vwwwwwwwwwwwwwwwwwwww#.LLLLwwLLLLww.....FFF.",
-			".HHHHwHHHHHHwHHHHHHHH#.BBBBwwBBBBwwbbbb.FFV.",
-			".HHHHwHHHHHHwHHHHHTTTd.BBBBwwBBBBwwbbbb.FFF.",
-			".wwwwwwwLLwwwwwwLLTTT..LLLLwwLLLLww.....FFF.",
-			".HHHHwHHHHHHwHHHHHTTT#.....ww....ww.........",
-			".HHHHwHHHHHHwHHHHHHHH#TTTTTTTTTTTTTTTTTTTTT.",
-			".HHHHwHHHHHHwHHHHHHHH#.S...ww....ww.........",
-			"Vwwwwwwwwwwwwwwwwwwww#.SS..ww....ww.........",
+			"##dddp######p#######p#########p######p###p##",
+			"..LLLLLLLLLLLLLLLLLLLLLLLL.#.LLLLww.LLLL.FF.",
+			".VLCCCCCCCCCCCCLLTTLLLSSLL.d.BBBBww.BBBB.FFV",
+			"..LCXXXXXXXXXXCLLTTLLLSSLL.#.BBBBww.BBBB.FF.",
+			"..LCXXXXXXXXXXCLLTTLLLLLLV...LLLLww.LLLL.FF.",
+			"..LCCCCCCCCCCCCLLTTLLLLLLL.#.....ww.........",
+			".VLLLLLLLLLLLLLLLLLLLLLLLL.#TTTTTTTTTTTTTTT.",
+			"..LLLLLLLLLLLLLLLLLLLLLLLL.#.Sb..ww.........",
+			"...........................#.Sb..ww.........",
 			"#######p###ddd#p########p########p######p###",
 			".PPPPPPPP.V......................V..........",
 			".pppppppppppppppppppppppppppppppppppppppppp.",
-			".rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr.",
+			"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
 			".pppppppppppppppppppppppppppppppppppppppppp.",
 			".........................EE..........HHHHH..",
 			"...SSSS..RRRR..TTTTTTTT..EE..LLLLLL.wwwwww..",
@@ -1471,7 +1640,101 @@ public final class Worlds {
 	};
 
 	/** The plan's interior extent, and the shell around it. */
-	static final int WORKS_W = 44 + 2, WORKS_H = 26 + 2;
+	static final int WORKS_W = FACILITY_W, WORKS_H = FACILITY_H;
+
+	/**
+	 * The halls' plan: the facility's upper floor, on the cave level, in the
+	 * same interior coordinates as the works beneath it and on the same origin.
+	 *
+	 * <pre>
+	 *   rows  0..7    the concourse, the platform, the drone rank, the vault
+	 *   row   8       partition
+	 *   rows  9..17   the ATRIUM | the machine wing
+	 *   row  18       partition
+	 *   rows 19..25   the tram shed: the line wall to wall, and the stores
+	 * </pre>
+	 *
+	 * <p>The atrium is the reason the two floors share an origin. Its floor is
+	 * open void — {@code H}, the same drop shaft the storage bay below used to
+	 * be — crossed by a ring of gantries and a cross of them meeting at a
+	 * landing, and what you see through the grating is the turbine hall of the
+	 * works directly beneath, whose floor is deliberately nothing but deck,
+	 * coolant and grille so that a body stepping off a gantry lands on
+	 * something. It is the one room in the world that has to be walked on two
+	 * floors to be understood, and the client draws the floor below through
+	 * every opening at parallax, so from above it reads as depth.
+	 *
+	 * <p>What the drone rank, the vault, the stores and the tram shed are for,
+	 * the works' plan explains. Same legend.
+	 */
+	static final String[] HALLS = {
+			".PPPPPPPPPPPPPPPPPPPPPPPPPPP................",
+			"....EE...EE...........V.......DD..sssssssss.",
+			"....EE...EE...V.........LLLL..DD..s..EE.B.s.",
+			"........................LLLL......s..EE.L.s.",
+			"..........................................s.",
+			".TTTTTTTTTTTTTTTTTTTTTTTTTTT......s.......s.",
+			"..................................ssssdssss.",
+			".TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+			"#####p#######p#######p##ddd###p#######p#####",
+			".wwwwwwwwwwwwwwwwwwwwwwwwww#.PPPPPPPPPPPPPP.",
+			".wHHHHHHHHHHHwHHHHHHHHHHHHw#.CCCCCCC.....V..",
+			".wHHHHHHHHHHHLHHHHHHHHHHHHwd.CXXXXXC..EE....",
+			".wHHHHHHHHHHTTTHHHHHHHHHHHw#.CXXXXXC..EE....",
+			".wwwwwwLwwwwTTTwwwwLwwwwwww..CCCCCCC.....SS.",
+			".wHHHHHHHHHHTTTHHHHHHHHHHHw#.............SS.",
+			".wHHHHHHHHHHHLHHHHHHHHHHHHw#.RR.............",
+			".wHHHHHHHHHHHwHHHHHHHHHHHHw#.RR.TTTTTTTTTV..",
+			".wwwwwwwwwwwwwwwwwwwwwwwwww#................",
+			"###p####ddd##p#########p#######p########p###",
+			"..........V......................V..........",
+			"pppppppppppppppppppppppppppppppppppppppppppp",
+			"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+			"pppppppppppppppppppppppppppppppppppppppppppp",
+			".SSS.............TTTTTTTT...EE..............",
+			".SSS...RRR.......TTTTTTTT...EE...LLLLwwwww..",
+			".SSS...RRR.......TTTTTTTT...EE...LLBLLL.....",
+	};
+
+	/** The three outposts, one to a line: a depot at the end of the western
+	 *  line, a pump house at the end of the eastern, and a mine head at the end
+	 *  of the lower line, out in the underdark. Twelve by eight inside, with
+	 *  the track on their fourth row, which is where the line arrives. */
+	static final String[] DEPOT = {
+			"....EE......",
+			"TTTTTTTTTT..",
+			"pppppppppppp",
+			"rrrrrrrrrrrr",
+			"pppppppppppp",
+			"TTTTTTTTTT..",
+			".SS.V...LLL.",
+			".SS.....LBL.",
+	};
+	static final String[] PUMPHOUSE = {
+			".CCCCCCPPPPP",
+			".CXXXXC.SS..",
+			".CCCCCC.SS..",
+			"rrrrrrrrrrrr",
+			"pppppppppppp",
+			"pppppppppppp",
+			".SSS..V.TTT.",
+			".SSS....TTTV",
+	};
+	static final String[] MINEHEAD = {
+			"LLLL.BBBB.FF",
+			".BB..BKKB.FF",
+			"LLLL.BBBB.FF",
+			"rrrrrrrrrrrr",
+			"pppppppppppp",
+			"pppppppppppp",
+			"bbbb.LLLL.KK",
+			"bbbb.LBBL.KK",
+	};
+
+	/** The halls' plan, for the scenarios. Copied, like the works'. */
+	public static String[] hallsPlan() {
+		return HALLS.clone();
+	}
 
 	/** The works' plan, for the scenarios: the drawing the deep level is
 	 *  supposed to be, so a scenario can ask whether it still is one. Copied,
@@ -1497,30 +1760,8 @@ public final class Worlds {
 	 * here and the station above is their entrance rather than their whole.
 	 */
 	private static boolean sinkWorks(World w, int cols, int rows, int x0, int y0, int W, int H) {
-		// Centred on the station, then pushed back inside the map: the works
-		// overhangs the shell above it on every side, so on a station near an
-		// edge the centred origin is off the map.
-		int px0 = clampTo(x0 + (W - WORKS_W) / 2, 1, cols - WORKS_W - 1);
-		int py0 = clampTo(y0 + (H - WORKS_H) / 2, 1, rows - WORKS_H - 1);
-		if (px0 < 1 || py0 < 1) {
-			return false; // a map too small to hold the works at all
-		}
-		for (int x = px0; x < px0 + WORKS_W; x++) {
-			for (int y = py0; y < py0 + WORKS_H; y++) {
-				boolean shell = x == px0 || y == py0
-						|| x == px0 + WORKS_W - 1 || y == py0 + WORKS_H - 1;
-				setBare(w, x, y, DEEP_Z, shell
-						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
-			}
-		}
-		for (int j = 0; j < WORKS.length; j++) {
-			for (int i = 0; i < WORKS[j].length(); i++) {
-				Tile.TileType t = plantTile(WORKS[j].charAt(i));
-				if (t != null) {
-					setBare(w, px0 + 1 + i, py0 + 1 + j, DEEP_Z, t);
-				}
-			}
-		}
+		int px0 = x0, py0 = y0; // the same origin as the halls above: see HALLS
+		stampPlan(w, DEEP_Z, px0, py0, WORKS);
 		if (stairsIntoTheWorks(w, x0, y0, W, H) > 0) {
 			return true;
 		}
@@ -1579,15 +1820,15 @@ public final class Worlds {
 	 *  places rather than one wide one. */
 	private static final int MIN_STATION_STAIR_GAP = 4;
 
-	/** Whether {@link #sinkStairwell} can cut one lane from the station deck at
-	 *  (hx, hy) down into the works: four tiles of walkable, man-made floor up
-	 *  here, and four of blank deck plate down there for the landing, the climb
-	 *  and its housing to occupy. */
+	/** Whether {@link #sinkStairwell} can cut one lane from the halls at
+	 *  (hx, hy) down into the works: four tiles of blank deck plate on each
+	 *  floor for the landing, the climb and its housing to occupy. */
 	private static boolean stationStairFits(World w, int hx, int hy) {
 		for (int k = 0; k <= 3; k++) {
-			Tile.TileType up = w.getTile(hx + k, hy, CAVE_Z).getType();
-			if (up != Tile.TileType.TYPE_PLATE && up != Tile.TileType.TYPE_PAVED
-					&& up != Tile.TileType.TYPE_TREADPLATE) {
+			// Blank deck plate on BOTH floors: the halls are a drawing too now,
+			// and a stair cut through a drawn tile is a drawn tile that is not
+			// there any more.
+			if (w.getTile(hx + k, hy, CAVE_Z).getType() != Tile.TileType.TYPE_PLATE) {
 				return false;
 			}
 			if (w.getTile(hx + k, hy, DEEP_Z).getType() != Tile.TileType.TYPE_PLATE) {
@@ -1644,6 +1885,8 @@ public final class Worlds {
 			return Tile.TileType.TYPE_FUNGUS;
 		case 'b':
 			return Tile.TileType.TYPE_CRYSTAL_SPARSE;
+		case 'K':
+			return Tile.TileType.TYPE_CRYSTAL;
 		case '.':
 			return null; // the shell pass already laid deck plate
 		default:
@@ -1702,278 +1945,6 @@ public final class Worlds {
 			setBare(w, lx, ly, DEEP_Z, Tile.TileType.TYPE_WALL_CONCRETE);
 			setBare(w, lx, ly, CAVE_Z, Tile.TileType.TYPE_PLATE); // landing above
 		}
-	}
-
-	/** The full station plan, in an 18x13 shell. */
-	private static void buildFullBase(World w, int cols, int rows, int x0, int y0) {
-		final int W = 18, H = 13;
-
-		// The plan is three bands under one concrete shell, each floored in
-		// its own material so the rooms read at a glance:
-		//
-		//   rows 1..3   machine wing  -- plate deck, pipe run, vents
-		//   rows 5..7   central spine -- paved, fed by the 2-wide blast mouth
-		//   rows 9..11  storage wing  -- plate deck, a pipe drop, vents
-		//
-		// Concrete partition walls at rows 4 and 8 separate the bands, each
-		// pierced by two open doorways; the steel vault closes the spine's
-		// east end, answering only its buttons (and the crawl duct through
-		// its north wall, from the machine wing).
-		for (int x = x0; x < x0 + W; x++) {
-			for (int y = y0; y < y0 + H; y++) {
-				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
-				boolean partition = (y == y0 + 4 || y == y0 + 8);
-				setBare(w, x, y, CAVE_Z, shell || partition
-						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
-			}
-		}
-		// The spine, paved from the mouth to the vault's step.
-		for (int x = x0 + 1; x < x0 + 12; x++) {
-			for (int y = y0 + 5; y <= y0 + 7; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_PAVED);
-			}
-		}
-		// Doorways through the partitions: two per wall, paved thresholds.
-		setBare(w, x0 + 5, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		setBare(w, x0 + 11, y0 + 4, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		setBare(w, x0 + 5, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		setBare(w, x0 + 11, y0 + 8, CAVE_Z, Tile.TileType.TYPE_PAVED);
-
-		// The ventilation runs: crawl ducting laid through both partitions'
-		// west sections, so a small body can move machine wing -> spine ->
-		// storage wing entirely inside the walls, concealed -- the base's
-		// second circulation system, parallel to the doorways.
-		for (int x = x0 + 2; x <= x0 + 4; x++) {
-			setBare(w, x, y0 + 4, CAVE_Z, Tile.TileType.TYPE_DUCT);
-			setBare(w, x, y0 + 8, CAVE_Z, Tile.TileType.TYPE_DUCT);
-		}
-
-		// The tram run: track laid the length of the spine, from the blast
-		// mouth to the vault's step. It is how the facility was supplied, and
-		// it is ordinary ground to walk on -- the tile earns its place by
-		// explaining the room rather than by changing anyone's speed, which
-		// makes it the one piece of terrain here that is frankly scenery.
-		for (int x = x0 + 1; x < x0 + 12; x++) {
-			setBare(w, x, y0 + 6, CAVE_Z, Tile.TileType.TYPE_RAIL);
-		}
-
-		// Machine wing: a pipe run the room's whole width, vents in the deck.
-		for (int x = x0 + 2; x < x0 + W - 2; x++) {
-			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		}
-		setBare(w, x0 + 4, y0 + 2, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 9, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		// Two rack rows in the machine wing, aisled so a body can walk between
-		// them. Solid, so they are cover; clear to the eye, so they are cover
-		// that hides nothing -- a creature in the aisle can watch what it
-		// cannot be reached by, which is a standoff no wall in this world
-		// produces.
-		for (int y = y0 + 2; y <= y0 + 3; y++) {
-			setBare(w, x0 + 6, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
-			setBare(w, x0 + 7, y, CAVE_Z, Tile.TileType.TYPE_SERVER);
-		}
-		// The plant, and the reason the racks can be there at all: a lagged
-		// coolant run comes down the wing to the cabinets, and a heat exchanger
-		// on the far side dumps what it carried away. Neither does anything yet
-		// -- they are the facility explaining, in the only language a tile has,
-		// where its cold and its heat come from, so that when temperature is a
-		// field rather than a picture it already has somewhere to start.
-		for (int x = x0 + 2; x <= x0 + 5; x++) {
-			setBare(w, x, y0 + 2, CAVE_Z, Tile.TileType.TYPE_COOLANT);
-		}
-		setBare(w, x0 + 9, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
-		setBare(w, x0 + 10, y0 + 2, CAVE_Z, Tile.TileType.TYPE_EXCHANGER);
-		// The drone rank, in the machine wing among the plant it belongs to --
-		// clear of the pipe run along row 1 and of both vents, and one tile in
-		// from the partition doorway at x0+11 so no pad is the threshold
-		// anything else has to cross.
-		//
-		// Four pads as two columns of two. A line of four does not fit a wing
-		// three rows tall — spaced along it, three of them land in the
-		// partition and the spine, which turns charge pads into doorways.
-		for (int i = 0; i < DRONE_RANK; i++) {
-			setBare(w, x0 + 13 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
-					Tile.TileType.TYPE_DOCK);
-		}
-
-		// Storage wing (west half): a vertical pipe drop and its own vents.
-		setBare(w, x0 + 8, y0 + 9, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		setBare(w, x0 + 8, y0 + 10, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		setBare(w, x0 + 3, y0 + 10, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 6, y0 + 9, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		// The waste sump: whatever the machine wing makes drains to the storage
-		// wing's west end and stays there. Walkable, so it is a shortcut with a
-		// price rather than a wall -- the only ground in the world that costs a
-		// body health to cross, and the reason the storage wing is worth
-		// crossing carefully instead of just crossing.
-		for (int x = x0 + 1; x <= x0 + 2; x++) {
-			for (int y = y0 + 9; y <= y0 + 11; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
-			}
-		}
-
-		// The shaft bay, Black-Mesa style: the whole south-east quadrant has
-		// given way to a bottomless pit, crossed by two catwalks meeting at
-		// a junction over the void. The east-west walk runs from the storage
-		// wing's pipe end out to a supply platform against the east wall;
-		// the north-south walk drops from the spine's doorway down to a
-		// second mouth in the south shell -- so one of the base's entrances
-		// is a walk over the abyss.
-		for (int x = x0 + 9; x <= x0 + 16; x++) {
-			for (int y = y0 + 9; y <= y0 + 11; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SHAFT);
-			}
-		}
-		for (int x = x0 + 9; x <= x0 + 15; x++) {
-			setBare(w, x, y0 + 10, CAVE_Z, Tile.TileType.TYPE_CATWALK); // east-west walk
-		}
-		for (int y = y0 + 9; y <= y0 + 11; y++) {
-			setBare(w, x0 + 11, y, CAVE_Z, Tile.TileType.TYPE_CATWALK); // north-south walk
-		}
-		// The supply platform at the catwalk's end: chequerplate, worn by
-		// whatever was landed on it, and lit grating on the approach so the
-		// walk over the void has one stretch that is lit from below rather
-		// than opening onto nothing.
-		setBare(w, x0 + 16, y0 + 10, CAVE_Z, Tile.TileType.TYPE_TREADPLATE);
-		setBare(w, x0 + 14, y0 + 10, CAVE_Z, Tile.TileType.TYPE_LIGHTGRATE);
-		setBare(w, x0 + 15, y0 + 10, CAVE_Z, Tile.TileType.TYPE_LIGHTGRATE);
-		w.spawnEntity(Item.food(x0 + 16.5, y0 + 10.5, CAVE_Z));
-
-		// The south gate: the catwalk's south arm exits through the shell, a
-		// self-cycling maintenance grate over the doorway and its own gallery
-		// tunnelled to the nearest cavern -- the base's second ground
-		// entrance. If the rock refuses a way out, the mouth seals back up
-		// and the catwalk arm simply dead-ends over the void.
-		setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_PAVED);
-		if (carveGallery(w, cols, rows, x0 + 11, y0 + H,
-				new int[][] { { x0 + 11, y0 + H - 1 } }) != null) {
-			w.addDoor(new net.hedinger.prototype.entities.Door(x0 + 11, y0 + H - 1,
-					CAVE_Z, 0, net.hedinger.prototype.entities.Door.GRATE));
-		} else {
-			setBare(w, x0 + 11, y0 + H - 1, CAVE_Z, Tile.TileType.TYPE_WALL_CONCRETE);
-		}
-
-		// The steel vault, closing the spine's east end: steel walls over the
-		// partition rows, a grate doorway facing the spine, and the crawl
-		// duct through its north wall into the machine wing.
-		int vx = x0 + 12, vy = y0 + 4, vw = 5, vh = 5;
-		for (int x = vx; x < vx + vw; x++) {
-			for (int y = vy; y < vy + vh; y++) {
-				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
-				setBare(w, x, y, CAVE_Z, rim
-						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
-			}
-		}
-		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
-		setBare(w, vx + 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct to the machine wing
-
-		// Furnishing: stacked crates in the storage wing (real items -- a
-		// hauler can move them, and one parked on a plate holds a door), and
-		// the vault's cache: the food worth locking behind buttons, plus a
-		// hazard standing guard over it.
-		// Where the ceiling came down: the storage wing's north-east corner,
-		// between the crates and the shaft. It is the only ground in the base
-		// that says something went wrong here.
-		for (int x = x0 + 6; x <= x0 + 7; x++) {
-			for (int y = y0 + 10; y <= y0 + 11; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_COLLAPSE);
-			}
-		}
-		w.spawnEntity(Item.crate(x0 + 4.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 5.5, y0 + 9.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 9.5, CAVE_Z)); // clear of the stair head
-		w.spawnEntity(Item.crate(x0 + 7.5, y0 + 11.5, CAVE_Z));
-		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
-		w.spawnEntity(Item.food(vx + 3.5, vy + 1.5, CAVE_Z));
-		w.spawnEntity(Item.hazard(vx + 2.5, vy + 2.5, CAVE_Z));
-
-		// The ceiling: a ventilation shaft from the surface over the spine,
-		// so gravity is the base's third entrance.
-		dropShaft(w, x0 + 2, x0 + 10, y0 + 5, y0 + 7);
-
-		// The rock below is virgin whatever shell the caves allowed up here, so a
-		// smaller station is no reason for the building to stop at one storey.
-		// The floor is sunk only if the station survives: a site with no way out
-		// through the rock is un-carved back to wall, and a second floor left
-		// hanging under a base that no longer exists is a hundred-odd walkable
-		// tiles nothing in the world can reach.
-		if (finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh)) {
-			sinkWorks(w, cols, rows, x0, y0, W, H);
-		}
-	}
-
-	/**
-	 * The compact annex, in a 15x9 shell: one hall with the pipe run, vents,
-	 * and the steel vault at its east end -- the fallback plan for caves
-	 * whose rock cannot host the full station.
-	 */
-	private static void buildCompactBase(World w, int cols, int rows, int x0, int y0) {
-		final int W = 15, H = 9;
-		for (int x = x0; x < x0 + W; x++) {
-			for (int y = y0; y < y0 + H; y++) {
-				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
-				setBare(w, x, y, CAVE_Z, shell
-						? Tile.TileType.TYPE_WALL_CONCRETE : Tile.TileType.TYPE_PLATE);
-			}
-		}
-		for (int x = x0 + 2; x < x0 + W - 2; x++) {
-			setBare(w, x, y0 + 1, CAVE_Z, Tile.TileType.TYPE_PIPES);
-		}
-		// The annex's stub of track, running the hall from mouth to vault.
-		for (int x = x0 + 1; x < x0 + W - 6; x++) {
-			setBare(w, x, y0 + 4, CAVE_Z, Tile.TileType.TYPE_RAIL);
-		}
-		setBare(w, x0 + 3, y0 + H - 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		setBare(w, x0 + 6, y0 + 3, CAVE_Z, Tile.TileType.TYPE_AIRVENT);
-		// One rack pair in the annex, against the north deck.
-		setBare(w, x0 + 8, y0 + 2, CAVE_Z, Tile.TileType.TYPE_SERVER);
-		setBare(w, x0 + 8, y0 + 3, CAVE_Z, Tile.TileType.TYPE_SERVER);
-		// The drone rank: the annex has one room, so the pads go against the
-		// north deck under the pipe run, out of the walk from the mouth to the
-		// vault. Same four as the full plan -- a smaller building is not a
-		// reason to warden the world with a smaller crew.
-		for (int i = 0; i < DRONE_RANK; i++) {
-			setBare(w, x0 + 2 + (i & 1) * 2, y0 + 2 + (i >> 1), CAVE_Z,
-					Tile.TileType.TYPE_DOCK);
-		}
-		// The annex has no storage wing to drain into, so its spill pools in
-		// the hall itself -- squarely on the walk from the mouth to the vault,
-		// which is the point: the shortest way across the room costs something.
-		for (int x = x0 + 5; x <= x0 + 6; x++) {
-			for (int y = y0 + 5; y <= y0 + 6; y++) {
-				setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SLUDGE);
-			}
-		}
-		int vx = x0 + W - 6, vy = y0 + 2, vw = 4, vh = H - 4;
-		for (int x = vx; x < vx + vw; x++) {
-			for (int y = vy; y < vy + vh; y++) {
-				boolean rim = x == vx || y == vy || x == vx + vw - 1 || y == vy + vh - 1;
-				setBare(w, x, y, CAVE_Z, rim
-						? Tile.TileType.TYPE_WALL_STEEL : Tile.TileType.TYPE_PLATE);
-			}
-		}
-		setBare(w, vx, vy + vh / 2, CAVE_Z, Tile.TileType.TYPE_PLATE); // vault doorway
-		setBare(w, vx + vw / 2, vy, CAVE_Z, Tile.TileType.TYPE_DUCT); // duct through the wall
-
-		// Furnishing, annex-sized: a crate pair by the south wall, the
-		// vault's small locked cache, and the ceiling shaft over the hall.
-		w.spawnEntity(Item.crate(x0 + 2.5, y0 + H - 2.5, CAVE_Z));
-		w.spawnEntity(Item.crate(x0 + 3.5, y0 + H - 2.5, CAVE_Z));
-		w.spawnEntity(Item.food(vx + 1.5, vy + 1.5, CAVE_Z));
-		dropShaft(w, x0 + 1, x0 + 7, y0 + 1, y0 + H - 2);
-
-		finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh);
-	}
-
-	/**
-	 * The shared finishing pass for either plan: the 2-wide blast mouth in
-	 * the west shell, the paved gallery tunnelled out to the nearest
-	 * walkable cavern (un-carving everything if no way out exists), the two
-	 * doors, and their switches.
-	 */
-	private static boolean finishBase(World w, int cols, int rows, int x0, int y0,
-			int W, int H, int vx, int vy, int vh) {
-		return finishBase(w, cols, rows, x0, y0, W, H, vx, vy, vh, y0 + H / 2 - 1);
 	}
 
 	/**
@@ -2078,37 +2049,6 @@ public final class Worlds {
 			net.hedinger.prototype.entities.Door door, int mode) {
 		setBare(w, x, y, CAVE_Z, Tile.TileType.TYPE_SWITCH);
 		w.spawnEntity(new net.hedinger.prototype.entities.Switch(x, y, CAVE_Z, door, mode));
-	}
-
-	/**
-	 * The all-rock rectangle of {@code pw x ph} nearest the map's centre on
-	 * the cave level; null when none fits. All-rock is the whole safety
-	 * argument: caverns, pools and link stations are all non-WALL tiles, so
-	 * requiring solid rock means carving overwrites nothing that already
-	 * works -- the shell may stand flush against a cavern wall, which only
-	 * reads as the buried structure surfacing in it.
-	 */
-	private static int[] findRockPocket(World w, int cols, int rows, int pw, int ph) {
-		int[] best = null;
-		double bestD = Double.MAX_VALUE;
-		for (int x0 = 2; x0 + pw < cols - 2; x0++) {
-			scan: for (int y0 = 2; y0 + ph < rows - 2; y0++) {
-				for (int x = x0; x < x0 + pw; x++) {
-					for (int y = y0; y < y0 + ph; y++) {
-						if (w.getTile(x, y, CAVE_Z).getType() != Tile.TileType.TYPE_WALL) {
-							continue scan;
-						}
-					}
-				}
-				double d = Math.pow(x0 + pw * 0.5 - cols * 0.5, 2)
-						+ Math.pow(y0 + ph * 0.5 - rows * 0.5, 2);
-				if (d < bestD) {
-					bestD = d;
-					best = new int[] { x0, y0 };
-				}
-			}
-		}
-		return best;
 	}
 
 	/**
@@ -3559,7 +3499,7 @@ public final class Worlds {
 		}
 
 		// The building's other machine. It marshals loose crates back onto the
-		// stack in the storage wing -- which is where the stack already is, so
+		// stack on the marshalling deck -- which is where the stack already is, so
 		// the drop point locates itself the way the dock does: by looking at
 		// what is on the map rather than by threading a coordinate out of
 		// whichever base plan ran. A world with nothing stacked in it has
@@ -3585,10 +3525,10 @@ public final class Worlds {
 	 * {@code {col, row}} pairs on the cave level, in reading order. Empty if
 	 * this map got no base.
 	 *
-	 * <p>Found by looking rather than remembered, because the two base plans put
-	 * their rank in different places and coordinates threaded back out through
-	 * {@code buryInstallation} would be one more thing for the plans to keep in
-	 * step with each other. The dock tiles are the record: they are on the map,
+	 * <p>Found by looking rather than remembered: the rank is wherever the
+	 * halls' drawing put it, and a coordinate threaded back out through
+	 * {@code buryInstallation} would be one more thing for the drawing to keep
+	 * in step with. The dock tiles are the record: they are on the map,
 	 * and anything that needs to know where the drones live asks the same
 	 * question this does. One pass over one level at world creation.
 	 *

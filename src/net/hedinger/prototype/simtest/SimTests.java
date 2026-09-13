@@ -8607,13 +8607,17 @@ public class SimTests {
 		@Override
 		public void run() {
 			long[] seeds = { 1, 7, 9, 25, 36, 42, 100, 777 };
-			int[][] sizes = { { 72, 44 }, { 144, 88 }, { 96, 120 } };
+			// The three small sizes, and the one that ships: a facility that
+			// only stands on maps big enough for it is only audited on one.
+			int[][] sizes = { { 72, 44 }, { 144, 88 }, { 96, 120 },
+					{ 0, 0 } }; // 0x0: the default size
 			for (long s : seeds) {
 				for (int[] wh : sizes) {
-					World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s, wh[0], wh[1]);
+					World w = wh[0] == 0 ? net.hedinger.prototype.sim.Worlds.demoTerrain(s)
+							: net.hedinger.prototype.sim.Worlds.demoTerrain(s, wh[0], wh[1]);
 					net.hedinger.prototype.sim.WorldAudit.Connectivity c =
 							net.hedinger.prototype.sim.WorldAudit.connectivity(w);
-					assertTrue(wh[0] + "x" + wh[1] + " seed " + s + " fully connected (reached "
+					assertTrue(w.getColums() + "x" + w.getRows() + " seed " + s + " fully connected (reached "
 							+ c.reachable + "/" + c.walkable + ", "
 							+ String.format("%.2f", c.coverage() * 100) + "%)", c.fullyConnected());
 				}
@@ -11219,36 +11223,42 @@ public class SimTests {
 	static class TheWorksAreTheRoomsThatWereDrawn extends Scenario {
 		@Override
 		public void run() {
-			String[] plan = net.hedinger.prototype.sim.Worlds.worksPlan();
 			int floors = 0;
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demo(s);
 				int[] at = worksOrigin(w);
 				if (at == null) {
-					continue; // this seed's caves only had room for the annex
+					continue; // a map too small for the facility
 				}
 				floors++;
-				java.util.Map<Character, Integer> type =
-						new java.util.HashMap<Character, Integer>();
-				for (int j = 0; j < plan.length; j++) {
-					for (int i = 0; i < plan[j].length(); i++) {
-						char ch = plan[j].charAt(i);
-						if (ch == '.') {
-							continue;
-						}
-						int got = w.getTile(at[0] + i, at[1] + j, 0).getType().getValue();
-						Integer want = type.put(ch, got);
-						assertTrue("seed " + s + ": every '" + ch + "' is the same tile"
-								+ " (" + at[0] + i + "," + (at[1] + j) + " is " + got
-								+ ", elsewhere " + want + ")",
-								want == null || want.intValue() == got);
-					}
-				}
-				java.util.Set<Integer> seen = new java.util.HashSet<Integer>(type.values());
-				assertEquals("seed " + s + ": every drawn feature is still its own tile",
-						type.size(), seen.size());
+				// Both floors, on the one origin: the halls above are a drawing
+				// too, and the atrium only works if the two stay in register.
+				drawn(w, s, "works", net.hedinger.prototype.sim.Worlds.worksPlan(), at, 0);
+				drawn(w, s, "halls", net.hedinger.prototype.sim.Worlds.hallsPlan(), at, 1);
 			}
-			assertLess("some seed actually built a plant floor", 0, floors);
+			assertLess("some seed actually built the facility", 0, floors);
+		}
+
+		void drawn(World w, long s, String name, String[] plan, int[] at, int z) {
+			java.util.Map<Character, Integer> type =
+					new java.util.HashMap<Character, Integer>();
+			for (int j = 0; j < plan.length; j++) {
+				for (int i = 0; i < plan[j].length(); i++) {
+					char ch = plan[j].charAt(i);
+					if (ch == '.') {
+						continue;
+					}
+					int got = w.getTile(at[0] + i, at[1] + j, z).getType().getValue();
+					Integer want = type.put(ch, got);
+					assertTrue("seed " + s + " " + name + ": every '" + ch + "' is the same tile"
+							+ " (" + (at[0] + i) + "," + (at[1] + j) + " is " + got
+							+ ", elsewhere " + want + ")",
+							want == null || want.intValue() == got);
+				}
+			}
+			java.util.Set<Integer> seen = new java.util.HashSet<Integer>(type.values());
+			assertEquals("seed " + s + " " + name + ": every drawn feature is still its own tile",
+					type.size(), seen.size());
 		}
 
 		/** The building's interior north-west corner on the deep level, or null
