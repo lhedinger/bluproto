@@ -39,6 +39,7 @@ public final class ServerTests {
 		vegetationFeedCarriesTheKind();
 		everyRungOfTheCactusLadderOccurs();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
+		bandAndWholeBakeAgree();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
 		aCarcassSaysWhatItIsWorth();
@@ -911,45 +912,50 @@ public final class ServerTests {
 	 */
 	static void theBakeIsOpaqueExceptWhereYouCanSeeDown() {
 		net.hedinger.prototype.engine.World terrain = Worlds.demoTerrain(42);
-		// bakeLevelImage through chunkRenderer, because that is the pair WorldHost
+		// bakeBandImage through chunkRenderer, because that is the pair WorldHost
 		// serves from. renderLevelImage builds the DESKTOP renderer's layers, which
 		// composite every level into one picture — a pit there is filled in by the
 		// floor below and could never be see-through. Asserting on it would be the
 		// same mistake the pits themselves were: testing the path nobody looks at.
+		//
+		// Band by band, for the same reason the server bakes that way: one image
+		// of a whole level of the default map is 830 MB, which is not a test, it
+		// is an out-of-memory error with assertions attached.
 		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
+		int band = WorldHost.CHUNK_TILES;
 		int deep = 0, bottom = -1;
 		for (int z = 0; z < terrain.getLevels(); z++) {
-			// One render per level: baking a whole level is the slow part here.
-			java.awt.image.BufferedImage img = LayerBaker.bakeLevelImage(terrain, lr, z);
-			check("level " + z + " leaves no art-pixel unpainted", opaqueBlack(img) == 0);
-			// A tile you can see down through must be REALLY see-through, not
-			// merely under 255. That weaker reading is what let the level stack
-			// bake itself into every chunk: the composite laid the floors below
-			// under a scrim per level, which on a mostly-open level came out at
-			// alpha 237 — "not opaque", and so acceptable to this check, while
-			// being a black sheet to look at.
-			String murk = murkyOpenTile(terrain, img, z);
-			check("level " + z + " does not bake the floors below into itself (" + murk + ")",
-					murk == null);
-			String stray = strayOpenTile(terrain, img, z);
-			check("level " + z + " is see-through only where a pit is (" + stray + ")",
-					stray == null);
-			check("level " + z + " bakes the same band-by-band as whole",
-					bandMatchesLevel(terrain, lr, img, z));
-
 			int[] p = findPit(terrain, z);
-			if (p == null) {
-				continue;
-			}
-			if (z == 0) {
-				// The bottom level's pits have nothing under them to look down onto.
-				bottom = z;
-				check("a pit over nothing is solid to the eye (" + p[0] + "," + p[1] + " "
-						+ terrain.getTile(p[0], p[1], z).getType() + ")",
-						openPixels(img, p) == 0);
-			} else {
-				deep = z;
-				check("a pit over a floor opens onto it", openPixels(img, p) > 0);
+			for (int y0 = 0; y0 < terrain.getRows(); y0 += band) {
+				int h = Math.min(band, terrain.getRows() - y0);
+				java.awt.image.BufferedImage img = LayerBaker.bakeBandImage(terrain, lr, z, y0, band);
+				check("level " + z + " leaves no art-pixel unpainted", opaqueBlack(img) == 0);
+				// A tile you can see down through must be REALLY see-through, not
+				// merely under 255. That weaker reading is what let the level stack
+				// bake itself into every chunk: the composite laid the floors below
+				// under a scrim per level, which on a mostly-open level came out at
+				// alpha 237 — "not opaque", and so acceptable to this check, while
+				// being a black sheet to look at.
+				String murk = murkyOpenTile(terrain, img, z, y0, h);
+				check("level " + z + " does not bake the floors below into itself (" + murk + ")",
+						murk == null);
+				String stray = strayOpenTile(terrain, img, z, y0, h);
+				check("level " + z + " is see-through only where a pit is (" + stray + ")",
+						stray == null);
+
+				if (p == null || p[1] < y0 || p[1] >= y0 + h) {
+					continue;
+				}
+				if (z == 0) {
+					// The bottom level's pits have nothing under them to look down onto.
+					bottom = z;
+					check("a pit over nothing is solid to the eye (" + p[0] + "," + p[1] + " "
+							+ terrain.getTile(p[0], p[1], z).getType() + ")",
+							openPixels(img, p, y0) == 0);
+				} else {
+					deep = z;
+					check("a pit over a floor opens onto it", openPixels(img, p, y0) > 0);
+				}
 			}
 		}
 		check("the demo world has a pit over another level", deep > 0);
@@ -957,36 +963,39 @@ public final class ServerTests {
 	}
 
 	/**
-	 * Whether one band of a level bakes to exactly the pixels the whole-level
-	 * bake puts there.
+	 * One band of a level bakes to exactly the pixels the whole-level bake puts
+	 * there.
 	 *
 	 * <p>WorldHost bakes band by band so that peak heap stops scaling with map
-	 * area, while this suite's other bake assertions — and the desktop path —
-	 * still ask for whole levels. Two ways to produce the same pixels is two
-	 * ways for them to disagree: a clip or translate off by one band would
-	 * shift every chunk the server serves below the first band, and nothing
-	 * else here would notice. So the two paths share one renderer, and this
-	 * pins that they agree.
+	 * area, while the desktop path still asks for whole levels. Two ways to
+	 * produce the same pixels is two ways for them to disagree: a clip or
+	 * translate off by one band would shift every chunk the server serves below
+	 * the first band, and nothing else here would notice. So the two paths share
+	 * one renderer, and this pins that they agree.
 	 *
-	 * <p>Checks the band that straddles the middle of the map: the first band
-	 * is the one case where the translate is a no-op and so proves nothing.
+	 * <p>On a deliberately small world, because it is the one assertion here
+	 * that needs a whole level in memory at once, and the property it checks is
+	 * about the clip and the translate — which do not know how big the map is.
+	 * It checks the band that straddles the middle: in the first band the
+	 * translate is a no-op and proves nothing.
 	 */
-	static boolean bandMatchesLevel(net.hedinger.prototype.engine.World terrain,
-			net.hedinger.prototype.engine.LayerRenderer lr,
-			java.awt.image.BufferedImage full, int z) {
-		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize;
-		int bandTiles = 16;
+	static void bandAndWholeBakeAgree() {
+		net.hedinger.prototype.engine.World terrain = Worlds.demoTerrain(42, 64, 48);
+		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
+		int ts = net.hedinger.prototype.engine.ResourceManager.tileSize, band = WorldHost.CHUNK_TILES;
 		int rows = terrain.getRows();
-		int y0 = Math.min((rows / 2 / bandTiles) * bandTiles, Math.max(0, rows - bandTiles));
-		java.awt.image.BufferedImage band = LayerBaker.bakeBandImage(terrain, lr, z, y0, bandTiles);
-		for (int y = 0; y < band.getHeight(); y++) {
-			for (int x = 0; x < band.getWidth(); x++) {
-				if (band.getRGB(x, y) != full.getRGB(x, y0 * ts + y)) {
-					return false;
+		int y0 = Math.min((rows / 2 / band) * band, Math.max(0, rows - band));
+		for (int z = 0; z < terrain.getLevels(); z++) {
+			java.awt.image.BufferedImage full = LayerBaker.bakeLevelImage(terrain, lr, z);
+			java.awt.image.BufferedImage strip = LayerBaker.bakeBandImage(terrain, lr, z, y0, band);
+			boolean same = true;
+			for (int y = 0; y < strip.getHeight() && same; y++) {
+				for (int x = 0; x < strip.getWidth() && same; x++) {
+					same = strip.getRGB(x, y) == full.getRGB(x, y0 * ts + y);
 				}
 			}
+			check("level " + z + " bakes the same band-by-band as whole", same);
 		}
-		return true;
 	}
 
 	/**
@@ -1052,16 +1061,17 @@ public final class ServerTests {
 	 * is clean.
 	 */
 	private static String murkyOpenTile(net.hedinger.prototype.engine.World w,
-			java.awt.image.BufferedImage img, int z) {
+			java.awt.image.BufferedImage img, int z, int y0Tile, int hTiles) {
 		int a = LayerBaker.CHUNK_PX;
 		for (int x = 1; x < w.getColums() - 1; x++) {
-			for (int y = 1; y < w.getRows() - 1; y++) {
+			for (int y = Math.max(1, y0Tile);
+					y < Math.min(w.getRows() - 1, y0Tile + hTiles); y++) {
 				if (!openAirWithRoom(w, x, y, z)) {
 					continue;
 				}
 				for (int aj = 0; aj < a; aj++) {
 					for (int ai = 0; ai < a; ai++) {
-						int px = artPixel(img, x, y, ai, aj);
+						int px = artPixel(img, x, y - y0Tile, ai, aj);
 						if ((px >>> 24) != 0) {
 							return "(" + x + "," + y + ") open air at alpha " + (px >>> 24);
 						}
@@ -1089,16 +1099,16 @@ public final class ServerTests {
 
 	/** The first tile that is see-through without being a pit, or null. */
 	private static String strayOpenTile(net.hedinger.prototype.engine.World w,
-			java.awt.image.BufferedImage img, int z) {
+			java.awt.image.BufferedImage img, int z, int y0Tile, int hTiles) {
 		int a = LayerBaker.CHUNK_PX;
 		for (int x = 0; x < w.getColums(); x++) {
-			for (int y = 0; y < w.getRows(); y++) {
+			for (int y = y0Tile; y < Math.min(w.getRows(), y0Tile + hTiles); y++) {
 				if (canSeeDown(w.getTile(x, y, z))) {
 					continue;
 				}
 				for (int aj = 0; aj < a; aj++) {
 					for (int ai = 0; ai < a; ai++) {
-						if ((artPixel(img, x, y, ai, aj) >>> 24) < 255) {
+						if ((artPixel(img, x, y - y0Tile, ai, aj) >>> 24) < 255) {
 							return "(" + x + "," + y + ") " + w.getTile(x, y, z).getType();
 						}
 					}
@@ -1109,11 +1119,11 @@ public final class ServerTests {
 	}
 
 	/** Art-pixels inside the pit at {@code p} that are not fully opaque. */
-	private static int openPixels(java.awt.image.BufferedImage img, int[] p) {
+	private static int openPixels(java.awt.image.BufferedImage img, int[] p, int y0Tile) {
 		int n = 0;
 		for (int aj = 3; aj < 9; aj++) { // inside the rim on every side
 			for (int ai = 3; ai < 9; ai++) {
-				if ((artPixel(img, p[0], p[1], ai, aj) >>> 24) < 255) {
+				if ((artPixel(img, p[0], p[1] - y0Tile, ai, aj) >>> 24) < 255) {
 					n++;
 				}
 			}
