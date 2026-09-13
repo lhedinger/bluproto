@@ -10182,7 +10182,7 @@ public class SimTests {
 				int cols = w.getColums(), rows = w.getRows();
 				int sky = w.getLevels() - 1, surf = w.getSurfaceZ();
 				assertTrue("seed " + s + ": the sky sits above the ground", sky > surf);
-				int voids = 0, standing = 0, floating = 0;
+				int voids = 0, standing = 0, floating = 0, climb = 0;
 				for (int x = 0; x < cols; x++) {
 					for (int y = 0; y < rows; y++) {
 						Tile t = w.getTile(x, y, sky);
@@ -10191,12 +10191,35 @@ public class SimTests {
 							continue;
 						}
 						standing++;
-						if (!w.getTile(x, y, surf).isSolid()) {
+						if (w.getTile(x, y, surf).isSolid()) {
+							continue;
+						}
+						// Over open ground, and so held up by nothing the
+						// terrain put there. Only a climb is allowed to do
+						// that, and only in the three places a climb is: the
+						// hole back down, the ramp beside it, and the tile the
+						// climb steps out onto, which stands over its own
+						// climbing ramp the way a stairwell overhangs its own
+						// stair. Anything else over open ground is a rock
+						// hanging in the air.
+						Tile.TileType below = w.getTile(x, y, surf).getType();
+						boolean partOfAClimb = t.getType() == Tile.TileType.TYPE_HOLE
+								|| t.getType() == Tile.TileType.TYPE_RAMPDOWN
+								|| below == Tile.TileType.TYPE_RAMPUP;
+						if (partOfAClimb) {
+							climb++;
+						} else {
 							floating++;
 						}
 					}
 				}
 				assertEquals("seed " + s + ": nothing floats in the sky", 0, floating);
+				// And the sky is REACHABLE: summits with tables on them are the
+				// whole reason the level is walkable, and a climb is the only
+				// way onto one. Zero here would mean the mesas quietly went
+				// back to being scenery.
+				assertTrue("seed " + s + ": the sky can be climbed to (" + climb
+						+ " climb tiles)", climb >= 3);
 				// Mostly empty, but not empty: a sky with no summits at all is a
 				// level with nothing to look at, and one that is mostly rock is
 				// a lid over the world. Measured 7%..12% rock across seeds.
