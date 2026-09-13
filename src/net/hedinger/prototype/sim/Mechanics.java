@@ -1056,10 +1056,9 @@ public final class Mechanics {
 								+ num(TestNPC.STARVE_HUNGER) + " will it eat its own kind."),
 						item("taboos", "Parasites are never food (too small, too foul), rivals "
 								+ "only in desperation, machines never."),
-						item("founding floor", "Reseeded hunters start at "
-								+ num(TestNPC.PREDATOR_MIN_SIZE_PX) + " px so the herd is "
-								+ "actually on their menu; born ones may drift smaller and "
-								+ "live with the consequences."),
+						item("no founding floor", "A hunter is whatever size its genome says. A "
+								+ "small one has a small menu, and whether that is a living is "
+								+ "the lineage's to find out, not a constant's."),
 						item("never grazes", "Its mouth works on prey alone — grass would be "
 								+ "a second income the niche was never priced around.")),
 				group("scavenger — eats what is already dead",

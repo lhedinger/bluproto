@@ -5853,8 +5853,8 @@ public class SimTests {
 	/**
 	 * A hunter's senses have to name its food. {@code nearestPrey} takes quarry up
 	 * to {@code PRED_MAX_PREY_RATIO} (1.5) times the hunter's own size, and the
-	 * hunting cohort is founded at size 12 against a cohort founded across 5..17
-	 * precisely so a hunter can reach above itself. If the prey channel splits at
+	 * cohort is founded across 5..17 precisely so a hunter can reach above
+	 * itself. If the prey channel splits at
 	 * the hunter's own size instead, every one of those larger bodies is absent
 	 * from {@code S_PREY_PROX} and present in {@code S_THREAT_PROX} — visible, but
 	 * only on a channel whose intent has no terminal act.
@@ -5883,7 +5883,7 @@ public class SimTests {
 		 * asked for. Twelve buys the second slot, and the padding is inert: it
 		 * writes a spare register nothing reads.
 		 */
-		private static Brain preySeeker() {
+		static Brain preySeeker() {
 			int[][] p = new int[12][];
 			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
 			p[1] = new int[] { Brain.WRITE, AgentIO.A_SEEK, 0, 0 };
@@ -5895,7 +5895,7 @@ public class SimTests {
 			return new Brain(p);
 		}
 
-		private static Genome body(double size, Brain brain) {
+		static Genome body(double size, Brain brain) {
 			Genome g = new Genome();
 			g.size = size;
 			g.speed = 0.0005; // near enough to standing still: this is not a chase
@@ -5916,7 +5916,7 @@ public class SimTests {
 		 * ratio falls monotonically from birth to adulthood and the sizes named
 		 * here are the ones that decide the outcome.
 		 */
-		private int quarryHealthAfter(double hunterSize, double quarrySize) {
+		int quarryHealthAfter(double hunterSize, double quarrySize) {
 			seed(31);
 			World w = room(14, 14);
 			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker()));
@@ -5945,6 +5945,33 @@ public class SimTests {
 			// on the menu on the way up.
 			assertEquals("quarry past the hunt ratio is not prey and survives whole",
 					100, quarryHealthAfter(12, 20));
+		}
+	}
+
+	/**
+	 * A small hunter is a small hunter. There used to be a founding floor of 12 px
+	 * on the hunting clade — imposed at every expression, so no hunter could be
+	 * smaller whatever its gene said — put there so the herd would be on the
+	 * menu. It also meant a hunter could never follow a shrinking herd down: the
+	 * live world's grazers evolved to 4 px and its hunters sat at 12, too big to
+	 * be fed by what was left. The floor is gone. How far down a hunting lineage
+	 * can live is now its own business, decided by the size gene like any other
+	 * body's, and the price of being small is the menu: quarry is still capped at
+	 * the hunt ratio times its own size, so a 5 px hunter eats 4 px animals and
+	 * fears 9 px ones.
+	 *
+	 * <p>Both legs are needed. The kill alone would pass under the old floor (a
+	 * 12 px hunter eats a 4 px animal too); the survival of the 9 px animal is
+	 * what proves the hunter really is 5 px, because a floored one would have had
+	 * it on the menu at 12.
+	 */
+	static class ASmallHunterLivesOnSmallQuarry extends AHunterSeesQuarryLargerThanItselfAsPrey {
+		@Override
+		public void run() {
+			assertEquals("a 5 px hunter kills a 4 px animal",
+					0, quarryHealthAfter(5, 4));
+			assertEquals("and a 9 px animal, past its 1.5x reach, survives whole",
+					100, quarryHealthAfter(5, 9));
 		}
 	}
 
@@ -8630,12 +8657,13 @@ public class SimTests {
 			assertTrue("yet the child's body is capped too — the invariant holds every "
 					+ "generation", paraChild.getPixelSize() <= TestNPC.PARASITE_MAX_SIZE_PX);
 
-			// A hunter is floored large the same way.
+			// A hunter is NOT floored: there is no hunting size, only a hunting
+			// menu, so the smallest gene expresses the smallest body.
 			Genome tiny = new Genome();
-			tiny.size = Genome.SIZE_MIN; // 4 px: below the hunting floor
+			tiny.size = Genome.SIZE_MIN; // 4 px
 			TestNPC hunter = TestNPC.mindedPredator(15.5, 15.5, 0, tiny).grown();
-			assertTrue("a hunter body is floored to its hunting size however small its gene",
-					hunter.getPixelSize() >= TestNPC.PREDATOR_MIN_SIZE_PX);
+			assertNear("a hunter body is exactly its size gene, however small",
+					Genome.SIZE_MIN, hunter.getPixelSize(), 1e-6);
 		}
 	}
 
@@ -8682,9 +8710,9 @@ public class SimTests {
 			assertTrue("a parasite card caps the body under its hosts",
 					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PARASITE)
 							.expressedSize(Genome.SIZE_MAX) <= TestNPC.PARASITE_MAX_SIZE_PX);
-			assertTrue("a predator card floors the body large enough to hunt",
-					net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR)
-							.expressedSize(Genome.SIZE_MIN) >= TestNPC.PREDATOR_MIN_SIZE_PX);
+			assertNear("a predator card imposes no floor: the body is its gene",
+					Genome.SIZE_MIN, net.hedinger.prototype.simtest.Niche.of(Genome.Clade.PREDATOR)
+							.expressedSize(Genome.SIZE_MIN), 0);
 			// A roleless fixture (null clade) grazes — the harmless default.
 			assertTrue("a null clade grazes",
 					net.hedinger.prototype.simtest.Niche.of(null).grazes());
@@ -12213,6 +12241,7 @@ public class SimTests {
 				new AHuntersBiteIsDueOnArrival(),
 				new AttackingAndEatingSatesAHunter(),
 				new AHunterSeesQuarryLargerThanItselfAsPrey(),
+				new ASmallHunterLivesOnSmallQuarry(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),

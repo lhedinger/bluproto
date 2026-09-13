@@ -688,22 +688,6 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * The smallest body a hunting lineage founds at, in pixels — the mirror of the
-	 * parasite's size ceiling, and needed for the same reason: a clade whose food
-	 * is other bodies has a size its living depends on, and a founder drawn
-	 * outside it starves whatever its mind does.
-	 *
-	 * <p>The arithmetic is {@link #PRED_MAX_PREY_RATIO}. A hunter takes quarry up
-	 * to 1.5 times its own size, and the minded cohort is founded across 5..17, so
-	 * a hunter of 12 can take almost the whole of that range while one founded at
-	 * the bottom of it could take nothing but the very smallest. This is a floor
-	 * and not a fixed size: mutation is free to go bigger, and the reseed mix is
-	 * free to prefer whatever actually eats.
-	 */
-	@Unit("px radius")
-	public static final double PREDATOR_MIN_SIZE_PX = 12;
-
-	/**
 	 * A minded parasite: the same brains and forage intent as the rest of the
 	 * cohort, with a clade that makes a bigger living body its food. Its forage
 	 * channel points at the nearest host, the shared attach machinery latches it
@@ -725,10 +709,9 @@ public class TestNPC extends NPC {
 	 * bodies are drawn from one instance.
 	 */
 	public static TestNPC mindedPredator(double x, double y, double z, Genome g) {
-		// The hunting-size floor is now an EXPRESSION invariant (see
-		// Niche.expressedSize), imposed every generation rather than clamped once
-		// into this founder's genome — so a hunter body is always big enough to
-		// hunt with, whatever its size gene has drifted to.
+		// No size floor: a hunter is whatever size its genome says, and how small
+		// a hunting lineage can live is evolution's to find out -- a small hunter
+		// simply has a small menu (see preyCeiling).
 		return mindedOfClade(x, y, z, g, Genome.Clade.PREDATOR);
 	}
 
@@ -2105,9 +2088,8 @@ public class TestNPC extends NPC {
 	 * "bigger than me".
 	 *
 	 * <p>The two channels have to split on the same line the body acts on, or a
-	 * hunter's senses lie about its dinner. A hunter founds at
-	 * {@link #PREDATOR_MIN_SIZE_PX} against a cohort founded across 5..17
-	 * precisely so that quarry above its own size is still on the menu; splitting
+	 * hunter's senses lie about its dinner. A hunter reaches above its own size
+	 * precisely so that quarry it cannot outweigh is still on the menu; splitting
 	 * the senses at its own size put every one of those bodies in the threat
 	 * channel and none in the prey channel. A mind can steer toward a threat --
 	 * the sign says approach or avoid -- but a threat has no terminal act, so a

@@ -27,9 +27,10 @@ public enum Niche {
 
 	/** Grazes the living substrate; no size constraint, ordinary locomotion. */
 	HERBIVORE(Diet.GRAZE, 1.0, 1.0, 0, Double.POSITIVE_INFINITY, 1.0),
-	/** Kills what it eats; floored large enough that the herd is on its menu, and
-	 *  takes quarry up to {@link TestNPC#PRED_MAX_PREY_RATIO} times its own size. */
-	PREDATOR(Diet.HUNT, 1.0, 1.0, TestNPC.PREDATOR_MIN_SIZE_PX, Double.POSITIVE_INFINITY,
+	/** Kills what it eats; no size floor — how small a hunter can live is the
+	 *  lineage's to find out — and takes quarry up to
+	 *  {@link TestNPC#PRED_MAX_PREY_RATIO} times its own size. */
+	PREDATOR(Diet.HUNT, 1.0, 1.0, 0, Double.POSITIVE_INFINITY,
 			TestNPC.PRED_MAX_PREY_RATIO),
 	/** Eats the dead; ranges far and cheap — the vulture's living is distance
 	 *  covered, not speed, so a big stride bought at a discounted travel bill. */
