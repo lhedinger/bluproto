@@ -94,7 +94,9 @@ final class SpriteCatalog {
 		ground("grassland_soil", Tile.TileType.TYPE_FLOOR);
 		ground("grassland_poor", Tile.TileType.TYPE_FLOOR, 0.25);
 		ground("rocky_grassland", Tile.TileType.TYPE_ROCKY, 0.30);
-		ground("tall_grass_cover", Tile.TileType.TYPE_COVER);
+		ground("tall_grass", Tile.TileType.TYPE_TALLGRASS);
+		ground("thicket", Tile.TileType.TYPE_COVER);
+		ground("desert_scrub", Tile.TileType.TYPE_SCRUB);
 		ground("water", Tile.TileType.TYPE_WATER);
 		ground("shallows", Tile.TileType.TYPE_SHALLOWS);
 		ground("reeds", Tile.TileType.TYPE_REEDS);
@@ -248,10 +250,13 @@ final class SpriteCatalog {
 	private void concealmentSection() {
 		section("Concealment", "A body in cover is veiled by the tile's own re-stamped "
 				+ "pixels — clustered canopy blocks over a thicket, stalk-exact reeds, the "
-				+ "duct's ribbed lid. Left: empty ground. Right: an occupant, part-hidden.");
+				+ "duct's ribbed lid, the lit tips of tall grass, a scrub's thorn clumps. "
+				+ "Left: empty ground. Right: an occupant, part-hidden.");
 		conceal("canopy", Tile.TileType.TYPE_COVER);
 		conceal("reeds", Tile.TileType.TYPE_REEDS);
 		conceal("duct", Tile.TileType.TYPE_DUCT);
+		conceal("tall_grass", Tile.TileType.TYPE_TALLGRASS);
+		conceal("scrub", Tile.TileType.TYPE_SCRUB);
 	}
 
 	private void conceal(String name, Tile.TileType type) {
@@ -842,6 +847,14 @@ final class SpriteCatalog {
 		case TYPE_COVER:
 			standVariant(out, t, "a stand in fruit", 7, 13);
 			standVariant(out, t, "a stand bearing nothing", 22, 27);
+			return;
+		case TYPE_TALLGRASS:
+			standVariant(out, t, "standing sward — close blades, lit tips", 4, 28);
+			standVariant(out, t, "trodden — gaps where the sward shows", 37, 39);
+			return;
+		case TYPE_SCRUB:
+			standVariant(out, t, "thorn thicket — clumps nearly touching", 32, 4);
+			standVariant(out, t, "bare pan — a clump every few paces", 19, 12);
 			return;
 		case TYPE_RAIL:
 		case TYPE_PIPES:
