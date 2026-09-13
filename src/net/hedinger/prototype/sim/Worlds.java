@@ -3244,6 +3244,25 @@ public final class Worlds {
 	 */
 	private static double[] clusterSpot(World w, java.util.Map<Integer, double[]> anchors,
 		int key, int z, boolean avoidDrops) {
+		return clusterSpot(w, anchors, key, z, avoidDrops, false);
+	}
+
+	/**
+	 * As above, with the anchor on PASTURE when asked: a grazing herd's first
+	 * member picks rich ground, and the herd arrives around it.
+	 *
+	 * <p>Since seeding landed in clusters this has been the difference between
+	 * a world that holds and one that does not. With one blend of terrain
+	 * everywhere, any anchor had meadow within reach; with regions, an anchor
+	 * drawn from all walkable ground lands in the steppe or the badlands as
+	 * readily as anywhere, and a herd does not migrate. Measured on seed 42: the
+	 * herd anchored in the steppe, its mean energy fell for twelve thousand
+	 * ticks, and then forty-six of it were eaten inside two thousand — while
+	 * the thirty that had wandered into the wetland grew to forty-five. Founders
+	 * are placed by the world, and the world knows where the grass is.
+	 */
+	private static double[] clusterSpot(World w, java.util.Map<Integer, double[]> anchors,
+		int key, int z, boolean avoidDrops, boolean onPasture) {
 		double[] anchor = anchors.get(key);
 		if (anchor != null) {
 			double[] near = spotNear(w, anchor[0], anchor[1], z, avoidDrops);
@@ -3251,10 +3270,33 @@ public final class Worlds {
 				return near;
 			}
 		}
-		double[] p = avoidDrops ? caveSpot(w) : openSpot(w);
+		double[] p = avoidDrops ? caveSpot(w) : onPasture ? pastureSpot(w) : openSpot(w);
 		anchors.putIfAbsent(key, p);
 		return p;
 	}
+
+	/** Grazing worth arriving on: the richest of a scatter of probes across
+	 *  the surface, so a herd's anchor is the best pasture of a handful and not
+	 *  merely a tile with grass on it. Falls back to any open ground on a map
+	 *  with none. */
+	private static double[] pastureSpot(World w) {
+		double[] best = null;
+		double bestFert = 0;
+		for (int tries = 0; tries < 60; tries++) {
+			double x = 2 + Utils.random() * (w.getColums() - 4);
+			double y = 2 + Utils.random() * (w.getRows() - 4);
+			Tile t = w.getTile(x, y, SURFACE_Z);
+			if (t.getType() == Tile.TileType.TYPE_FLOOR && t.getFertility() > bestFert) {
+				bestFert = t.getFertility();
+				best = new double[] { x, y };
+			}
+		}
+		return best != null && bestFert >= PASTURE_FERTILITY ? best : openSpot(w);
+	}
+
+	/** What counts as pasture for a founding herd: well into the green half of
+	 *  the meadow's fertility band. */
+	private static final double PASTURE_FERTILITY = 0.5;
 
 	private static double[] caveSpot(World w) {
 		for (int tries = 0; tries < 60; tries++) {
@@ -3378,7 +3420,7 @@ public final class Worlds {
 		// ground, the rest of that species land beside it (see SEED_CLUSTER_RADIUS).
 		java.util.Map<Integer, double[]> herds = new java.util.HashMap<>();
 		for (int i = 0; i < sc(32, scale); i++) { // with the two broods below, the herd founds AT its floor
-			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false);
+			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false, true);
 			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
 			// A species pool is a BODY plan -- one barcode, one size, one speed --
 			// so every founder drawn from it is a clone in everything else. That is
@@ -3410,7 +3452,7 @@ public final class Worlds {
 		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(nMinded);
 		java.util.Map<Integer, double[]> brood = new java.util.HashMap<>();
 		for (int i = 0; i < nMinded; i++) {
-			double[] p = clusterSpot(w, brood, 0, SURFACE_Z, false);
+			double[] p = clusterSpot(w, brood, 0, SURFACE_Z, false, true);
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// The underground gets its own minded seed group — separate founder
