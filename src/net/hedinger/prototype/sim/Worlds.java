@@ -2169,32 +2169,103 @@ public final class Worlds {
 				if (alreadyLinked || cavern.size() < MIN_CAVERN_FOR_STAIRS) {
 					continue;
 				}
-				long cx = 0, cy = 0;
-				for (int[] p : cavern) {
-					cx += p[0];
-					cy += p[1];
+				stairCavern(w, cols, rows, cavern);
+			}
+		}
+	}
+
+	/**
+	 * Cuts one cavern's share of stairwells: enough of them for its size, and
+	 * spread across it rather than clustered.
+	 *
+	 * <p>The first stair goes at the fitting site nearest the centroid, which
+	 * is where a single stair belongs and is exactly what a small cavern still
+	 * gets. Every stair after that goes at the fitting site FARTHEST from the
+	 * stairs already cut — farthest-point sampling, which spreads a handful of
+	 * points over an arbitrary shape without needing to know the shape. Both
+	 * choices are fully determined by the cavern; nothing here draws from the
+	 * RNG.
+	 *
+	 * <p>Sites already cut exclude themselves on the next pass without any
+	 * bookkeeping: {@link #stairwellFits} demands unbroken stone above, and a
+	 * sunk stairwell leaves a hole and a ramp there. {@link #MIN_STAIR_GAP}
+	 * does the rest, keeping two stairs from landing a few tiles apart in a
+	 * long cavern where the farthest free site happens to be next door.
+	 */
+	private static void stairCavern(World w, int cols, int rows,
+			java.util.List<int[]> cavern) {
+		long cx = 0, cy = 0;
+		for (int[] p : cavern) {
+			cx += p[0];
+			cy += p[1];
+		}
+		cx /= cavern.size();
+		cy /= cavern.size();
+		int want = Math.min(MAX_STAIRS_PER_CAVERN,
+				Math.max(1, cavern.size() / TILES_PER_STAIRWELL));
+		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
+		while (cut.size() < want) {
+			int bestX = -1, bestY = -1;
+			long best = cut.isEmpty() ? Long.MAX_VALUE : Long.MIN_VALUE;
+			for (int[] p : cavern) {
+				if (!stairwellFits(w, cols, rows, p[0], p[1])) {
+					continue;
 				}
-				cx /= cavern.size();
-				cy /= cavern.size();
-				int bestX = -1, bestY = -1;
-				long best = Long.MAX_VALUE;
-				for (int[] p : cavern) {
-					if (!stairwellFits(w, cols, rows, p[0], p[1])) {
-						continue;
-					}
+				if (cut.isEmpty()) {
+					// The first: nearest the centroid, so a cavern with one
+					// stair has it in the middle rather than at its north-west
+					// edge, which is all scanning order would ever give.
 					long d = (p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy);
 					if (d < best) {
 						best = d;
 						bestX = p[0];
 						bestY = p[1];
 					}
+					continue;
 				}
-				if (bestX >= 0) {
-					sinkStairwell(w, bestX, bestY, 1);
+				long near = Long.MAX_VALUE;
+				for (int[] q : cut) {
+					near = Math.min(near,
+							(long) (p[0] - q[0]) * (p[0] - q[0]) + (long) (p[1] - q[1]) * (p[1] - q[1]));
+				}
+				if (near >= (long) MIN_STAIR_GAP * MIN_STAIR_GAP && near > best) {
+					best = near;
+					bestX = p[0];
+					bestY = p[1];
 				}
 			}
+			if (bestX < 0) {
+				break; // the cavern has no room left that fits
+			}
+			// Two lanes wherever the tile south of the head also fits, so a
+			// body coming down does not have to wait for one going up. This is
+			// the common case in a roomy cavern and the reason the old
+			// one-lane-everywhere stairs felt like bottlenecks.
+			int lanes = stairwellFits(w, cols, rows, bestX, bestY + 1) ? 2 : 1;
+			sinkStairwell(w, bestX, bestY, lanes);
+			cut.add(new int[] { bestX, bestY });
 		}
 	}
+
+	/** How much cavern buys another stairwell down from the caves.
+	 *
+	 *  <p>One per cavern was enough to stop the reseal deleting the underdark,
+	 *  which is what that rule was for, but it is not enough to make the
+	 *  underdark somewhere bodies move THROUGH: a single stair in a
+	 *  three-hundred-tile cavern is a single door, and everything crossing
+	 *  between the two floors queues at it. Sixty tiles is roughly an
+	 *  eight-by-eight room per stair, near enough that a body in the dark is
+	 *  usually within sight of a way up. */
+	private static final int TILES_PER_STAIRWELL = 60;
+
+	/** A ceiling on stairs per cavern, so one enormous connected underdark on
+	 *  an unlucky seed does not turn into a colander. */
+	private static final int MAX_STAIRS_PER_CAVERN = 12;
+
+	/** The closest two stairwells in the same cavern may stand. Below this they
+	 *  read as one wide stair rather than two ways up, which is not what the
+	 *  count was spent on. */
+	private static final int MIN_STAIR_GAP = 9;
 
 	/** The smallest cavern worth cutting a stairwell into. Twenty tiles is
 	 *  where the measured size distribution turns: caverns at or above it hold
