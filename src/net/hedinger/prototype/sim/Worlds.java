@@ -2481,6 +2481,13 @@ public final class Worlds {
 	@net.hedinger.prototype.engine.Unit("tiles")
 	public static final double SEED_CLUSTER_RADIUS = 4.0;
 
+	/** How far a kin group's members are mutated off their shared founder recipe:
+	 *  enough that siblings differ, little enough that every pair stays a
+	 *  compatible mate by any threshold a lineage carries (markers move by at
+	 *  most this per axis, and similarity is one minus distance over root three). */
+	@net.hedinger.prototype.engine.Unit("per gene")
+	public static final double KIN_RATE = 0.03;
+
 	/**
 	 * A walkable spot within {@link #SEED_CLUSTER_RADIUS} of {@code (ax, ay)} on
 	 * level {@code z}, or null when a fair number of tries finds none -- the caller
@@ -2624,15 +2631,16 @@ public final class Worlds {
 		// Kin it can actually breed with is the difference between a cohort and three
 		// animals that happen to share a diet.
 		int nScavLines = 2;
-		int nScavPerLine = Math.max(3, sc(3, scale));
+		int nScavPerLine = Math.max(5, sc(5, scale)); // two lines: the clade founds AT its floor
 		net.hedinger.prototype.entities.Genome[] scavengers = mindedSpecies(nScavLines);
+		java.util.Map<Integer, double[]> scavengersAt = new java.util.HashMap<>();
 		for (int line = 0; line < nScavLines; line++) {
 			for (int i = 0; i < nScavPerLine; i++) {
-				double[] p = openSpot(w);
+				double[] p = clusterSpot(w, scavengersAt, line, SURFACE_Z, false); // a line lands together
 				// Siblings, not clones: enough drift for selection to have something to
 				// work on, well inside the genome's own similarity threshold.
 				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(scavengers[line], 0.03);
+						net.hedinger.prototype.entities.Genome.child(scavengers[line], KIN_RATE);
 				w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, g));
 			}
 		}
@@ -2646,13 +2654,14 @@ public final class Worlds {
 		// lineages of siblings for the same reason the scavengers are — diet is a
 		// mate barrier, and a lone founder of a sexual line dies single.
 		int nParaLines = 2;
-		int nParaPerLine = Math.max(3, sc(3, scale));
+		int nParaPerLine = Math.max(5, sc(5, scale)); // likewise
 		net.hedinger.prototype.entities.Genome[] parasites = mindedSpecies(nParaLines);
+		java.util.Map<Integer, double[]> parasitesAt = new java.util.HashMap<>();
 		for (int line = 0; line < nParaLines; line++) {
 			for (int i = 0; i < nParaPerLine; i++) {
-				double[] p = openSpot(w);
+				double[] p = clusterSpot(w, parasitesAt, line, SURFACE_Z, false); // a line lands together
 				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(parasites[line], 0.03);
+						net.hedinger.prototype.entities.Genome.child(parasites[line], KIN_RATE);
 				w.spawnEntity(TestNPC.mindedParasite(p[0], p[1], SURFACE_Z, g));
 			}
 		}
@@ -2665,13 +2674,14 @@ public final class Worlds {
 		// reason the other two are — a clade is a hard mate barrier, so a lone
 		// founder of a sexual line dies single.
 		int nHuntLines = 2;
-		int nHuntPerLine = Math.max(2, sc(2, scale));
+		int nHuntPerLine = Math.max(3, sc(3, scale)); // with the pack above, AT the floor
 		net.hedinger.prototype.entities.Genome[] hunters = mindedSpecies(nHuntLines);
+		java.util.Map<Integer, double[]> huntersAt = new java.util.HashMap<>();
 		for (int line = 0; line < nHuntLines; line++) {
 			for (int i = 0; i < nHuntPerLine; i++) {
-				double[] p = openSpot(w);
+				double[] p = clusterSpot(w, huntersAt, line, SURFACE_Z, false); // a line lands together
 				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(hunters[line], 0.03);
+						net.hedinger.prototype.entities.Genome.child(hunters[line], KIN_RATE);
 				w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
 			}
 		}
@@ -2727,17 +2737,6 @@ public final class Worlds {
 				// is a fact about the ecology, and the honest place to record it is
 				// beside the constant that is standing in for it.
 				new int[] { Math.max(2, sc(CLADE_FLOOR, scale)), sc(100, scale) },
-				// Minded ceiling raised 80 -> 250. At 80 the cohort sat AT its cap for
-				// long stretches, which meant the warden -- not grass, not predators --
-				// was setting the population, and a ceiling that binds is a governor
-				// rather than the backstop this is meant to be. 250 is well clear of
-				// anything the ecosystem reaches unaided, so what the headcount settles
-				// at is now a fact about the world instead of about this constant.
-				// The real limit is the deploy's heap and the 10 Hz broadcast, neither
-				// of which is measured yet; /api/health now reports tick cost so it can
-				// be watched. (Sim CPU is not the binding constraint: the world audit
-				// measures thousands of ticks/s against a 33 t/s requirement.)
-				Math.max(6, sc(6, scale)), // the minded LINEAGE floor -- not a population bound
 				// Scavengers. A floor so the niche is never simply empty, and a
 				// ceiling well above it -- the binding control is meant to be the
 				// carrion supply, which is finite and self-limiting in a way grass is
