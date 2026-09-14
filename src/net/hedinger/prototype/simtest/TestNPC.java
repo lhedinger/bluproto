@@ -3719,7 +3719,7 @@ public class TestNPC extends NPC {
 			child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
 		}
 		passBodyTraitsTo(child);
-		endow(child, reproCost);
+		endow(child, birthPayment()); // what this parent actually pays, never more
 		return child.withGeneration(generation + 1);
 	}
 
@@ -3734,7 +3734,7 @@ public class TestNPC extends NPC {
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), genome.mutationRate);
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
-		endow(child, reproCost + (partner instanceof TestNPC tp ? tp.reproCost : reproCost));
+		endow(child, birthPayment() + partner.birthPayment()); // both parents' actual payments
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {
