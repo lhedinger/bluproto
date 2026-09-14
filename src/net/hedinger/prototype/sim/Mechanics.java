@@ -292,8 +292,9 @@ public final class Mechanics {
 						"Poor, but it does not run away."),
 				row("A whole carcass", num(TestNPC.MEAT_ENERGY) + " × the dead body's mass",
 						"energy", "Reference-mass body: " + round(refBody, 2)),
-				row("Carrion", "the same as a kill", "energy",
-						"Found or killed, a body is worth what it is worth."),
+				row("Carrion", "what the eaters left", "energy",
+						"A body is worth its meat once: every bite, alive or dead, draws "
+						+ "from one ledger, and a kill eaten whole leaves a carcass worth nothing."),
 				row("A bite of carrion", pct(TestNPC.CARRION_BITE), "of the body per tick",
 						"~" + Math.round(1 / TestNPC.CARRION_BITE) + " ticks ("
 						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip it clean."),

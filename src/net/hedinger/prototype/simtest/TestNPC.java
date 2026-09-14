@@ -769,8 +769,9 @@ public class TestNPC extends NPC {
 			return;
 		}
 		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
+		double share = h.eatMeat(consumed / (double) FULL_BODY_HEALTH); // off the one ledger
 		h.damage(PARA_BITE, "parasites");
-		feed(MEAT_ENERGY * h.bodyMass() * (consumed / (double) FULL_BODY_HEALTH));
+		feed(MEAT_ENERGY * h.bodyMass() * share);
 		setAction("eating", true);
 	}
 
@@ -1445,6 +1446,10 @@ public class TestNPC extends NPC {
 	private double biteFeeds(NPC prey) {
 		int bite = biteDamage(prey);
 		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
+		// Paid for the flesh actually taken off the one ledger every mouth draws
+		// from, so the carcass this bite leaves is worth what it has left and
+		// not the whole animal again.
+		double share = prey.eatMeat(consumed / (double) FULL_BODY_HEALTH);
 		prey.damage(bite, "predation");
 		// Violence is audible. The scream comes from the quarry, not the hunter,
 		// and carries in proportion to how big the quarry is -- so a hunt tells the
@@ -1468,7 +1473,7 @@ public class TestNPC extends NPC {
 					fatal ? net.hedinger.prototype.entities.Sound.KILL
 							: net.hedinger.prototype.entities.Sound.FIGHT));
 		}
-		return MEAT_ENERGY * prey.bodyMass() * (consumed / (double) FULL_BODY_HEALTH);
+		return MEAT_ENERGY * prey.bodyMass() * share;
 	}
 
 	/**
@@ -2422,7 +2427,7 @@ public class TestNPC extends NPC {
 	 * a stand-in for it.
 	 */
 	private double carrionScore(NPC n) {
-		return prize(n.bodyMass() * (1.0 - n.decayProgress()),
+		return prize(n.bodyMass() * n.meatLeft() * (1.0 - n.decayProgress()),
 				distance(n.getX(), n.getY(), n.getZ()));
 	}
 
@@ -3395,12 +3400,13 @@ public class TestNPC extends NPC {
 		if (carrion == null) {
 			return 0;
 		}
-		double mass = carrion.bodyMass() * CARRION_BITE;
+		// A mouthful is a FRACTION of the body, so a big carcass is genuinely more
+		// meals rather than merely a bigger number -- taken off the one flesh
+		// ledger, so what a hunter already ate is not paid again, and a carcass
+		// eaten out is cleared. Bites used to be priced by the whole body and
+		// paid out against the corpse's decay clock instead of its flesh.
+		double mass = carrion.bodyMass() * carrion.eatMeat(CARRION_BITE);
 		feed(mass * MEAT_ENERGY); // meat -> stomach; satiation powers the body
-		// Aged in ticks of its own remaining span: a bite takes the same FRACTION
-		// out of a mouse as out of an apex body, so a big carcass is genuinely more
-		// meals rather than merely a bigger number.
-		carrion.eat(Math.max(1, (int) Math.round(carrion.getDeathspan() * CARRION_BITE)));
 		setAction("eating", true);
 		return mass;
 	}
@@ -3439,8 +3445,8 @@ public class TestNPC extends NPC {
 		double bestD = Double.MAX_VALUE;
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
-			if (n == this || !n.isDead() || n.isRemoved()) {
-				continue;
+			if (n == this || !n.isDead() || n.isRemoved() || n.meatLeft() <= 0) {
+				continue; // a carcass eaten out is not food
 			}
 			double reach = (getSize() + n.getSize()) / 2.0 + CARRION_REACH;
 			double d = distance(n.getX(), n.getY(), n.getZ());
