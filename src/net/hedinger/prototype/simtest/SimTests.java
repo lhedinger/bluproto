@@ -5447,9 +5447,10 @@ public class SimTests {
 			assertEquals("every reseed carries a program", SAMPLES, programs);
 
 			int[][] forager = net.hedinger.prototype.sim.Worlds.starterBrain().code();
+			int[][] hunter = net.hedinger.prototype.sim.Worlds.hunterBrain().code();
 			for (int i = 0; i < 50; i++) {
 				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain.code();
-				assertTrue("a founder hunter carries the forager seed", java.util.Arrays.deepEquals(forager, code));
+				assertTrue("a founder hunter carries the hunter seed", java.util.Arrays.deepEquals(hunter, code));
 			}
 			int hitchhikers = 0;
 			for (int i = 0; i < 300; i++) {
@@ -6455,6 +6456,74 @@ public class SimTests {
 			}
 			assertEquals("no hunter in the pack was bitten by a packmate (health-loss events)", 0, lost);
 			assertGreater("and the pack still hunts: a grazer was killed", herdDead, 0);
+		}
+	}
+
+	/**
+	 * A founder hunter chases flat out. The starter brain's throttle is a 0.25
+	 * amble -- right for a grazer, whose food does not run -- and every hunter
+	 * in the world inherited it from the grazer's seed. Chasing at a quarter of
+	 * its speed a hunter never catches prey that has seen it coming, so it lived
+	 * on ambush: two kills in eight thousand ticks on the live fertile genome.
+	 * The hunter seed is the same program with the throttle at 1.0, and the same
+	 * hunter lands ten. Movement costs the square of speed, so the seed chases
+	 * only with prey in sight and prowls at the amble otherwise: a founder pinned
+	 * at 1.0 burned as fast as the mint could convert its meals and drained with
+	 * a full stomach. The outcome pinned here is kills AND a tank that holds.
+	 */
+	static class AFounderHunterChasesFlatOut extends Scenario {
+		@Override
+		public void run() {
+			seed(3);
+			World w = room(40, 30);
+			for (int x = 1; x < 39; x++) {
+				for (int y = 1; y < 29; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			Genome hg = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+			hg.size = 16;
+			TestNPC hunter = TestNPC.mindedPredator(8.5, 15.5, 0, hg).grown().withHunger(0.6)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			java.util.List<TestNPC> herd = new java.util.ArrayList<>();
+			for (int i = 0; i < 12; i++) {
+				Genome g = Genome.random();
+				g.size = 9;
+				g.speed = 0.05;
+				g.metabolism = 0.02;
+				g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+				TestNPC gr = TestNPC.mindedForager(13 + net.hedinger.prototype.engine.Utils.random() * 4,
+						11 + net.hedinger.prototype.engine.Utils.random() * 8, 0, g)
+						.grown().withReproCooldown(100_000_000);
+				w.spawnEntity(gr);
+				herd.add(gr);
+			}
+			double e0 = hunter.getEnergy();
+			tick(w, 6000);
+			int kills = 0;
+			for (TestNPC g : herd) {
+				if (g.isDead()) {
+					kills++;
+				}
+			}
+			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
+			assertGreater("and the chase pays: the tank is well above the crawl reserve after it ("
+					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getEnergy(), hunter.energyCapacity()) + ")",
+					hunter.getEnergy(), 0.4 * hunter.energyCapacity());
+			assertLess("and it is fed", hunter.getHunger(), 0.5);
+
+			// The pace is the other half: a hunter slower than its prey cannot hunt at
+			// any throttle. The founder recipe used to draw hunters from the cohort's
+			// 0.04..0.07 band, half of them slower than a herd that has evolved to
+			// 0.055..0.062 (measured live). Every founder hunter now outpaces that.
+			double slowest = Double.MAX_VALUE;
+			for (int i = 0; i < 200; i++) {
+				slowest = Math.min(slowest,
+						net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).speed);
+			}
+			assertGreater("every founder hunter outpaces the live herd's fastest grazer (0.062; slowest of 200 drawn "
+					+ String.format("%.3f", slowest) + ")", slowest, 0.062);
 		}
 	}
 
@@ -12542,6 +12611,7 @@ public class SimTests {
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),
 				new APackDoesNotEatItself(),
+				new AFounderHunterChasesFlatOut(),
 				new SeedingLandsInClusters(),
 				new ABiggerMouthFinishesSmallerQuarrySooner(),
 				new StarterBrainedForagerFeedsItself(),

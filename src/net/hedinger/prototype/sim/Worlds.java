@@ -195,6 +195,70 @@ public final class Worlds {
 	}
 
 	/**
+	 * The hunter's seed: the {@link #starterBrain() starter}, prowling at the
+	 * grazer's 0.25 amble and chasing at 1.0 the moment prey is in sight. Three
+	 * instructions on the one register the starter leaves free; everything else
+	 * is the same program -- forage intent, the drink reflex, the flee override,
+	 * the mate write.
+	 *
+	 * <p>The amble is right for a grazer, whose food does not run, and it was the
+	 * one thing every hunter in the world inherited from the grazer's seed. A
+	 * hunter chasing at a quarter of its speed never catches prey that has seen
+	 * it, so it lived on ambush and its children, born small and slow, starved
+	 * among the herd: measured on the live fertile genome, two kills in eight
+	 * thousand ticks at 0.25 against ten at 1.0. The chase is gated on sight
+	 * because movement costs the square of speed: a founder pinned at 1.0 while
+	 * searching burned as fast as the mint could convert its meals and drained
+	 * with a full stomach. Whether a lineage keeps the pace is its own to
+	 * evolve; this is where it starts.
+	 */
+	/**
+	 * A founder hunter's pace, in tiles per tick: drawn above the herd's rather
+	 * than from the cohort's shared 0.04..0.07 band. A hunter slower than its
+	 * prey cannot hunt at any throttle -- the founder recipe drew 0.041 against a
+	 * herd at 0.05 and landed no kills in six thousand ticks where the same
+	 * hunter at 0.052 landed six -- and the live herd has already evolved to
+	 * 0.055..0.062, so the band starts above its fastest grazer. Whether a
+	 * lineage stays faster than the herd is the arms race
+	 * selection runs from here; a founder only has to start on the right side
+	 * of it.
+	 */
+	@net.hedinger.prototype.engine.Unit("tiles/tick")
+	public static final double HUNTER_SPEED_LO = 0.065, HUNTER_SPEED_HI = 0.085;
+
+	/** Makes {@code g} a founder hunter: the hunter seed for a mind, and a
+	 *  hunter's pace for a body. The clade is the caller's to set. */
+	static net.hedinger.prototype.entities.Genome hunterFounder(net.hedinger.prototype.entities.Genome g) {
+		g.brain = hunterBrain();
+		g.speed = HUNTER_SPEED_LO + Utils.random() * (HUNTER_SPEED_HI - HUNTER_SPEED_LO);
+		return g;
+	}
+
+	public static net.hedinger.prototype.entities.Brain hunterBrain() {
+		final int SET = net.hedinger.prototype.entities.Brain.SET;
+		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
+		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
+		int[][] seed = starterBrain().code();
+		java.util.List<int[]> code = new java.util.ArrayList<>();
+		boolean paced = false;
+		for (int[] ins : seed) {
+			code.add(ins.clone());
+			// Right after the amble is set: raise it to a chase when prey is in
+			// sight. r0 is the one register the starter leaves untouched.
+			if (!paced && ins[0] == SET && ins[1] == 5 && ins[2] == 7) {
+				code.add(new int[] { SENSE, 0, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r0 = prey near?
+				code.add(new int[] { SKIPZ, 0, 0, 0 }); // nothing in sight -> keep the amble
+				code.add(new int[] { SET, 5, 9, 0 }); // r5 = 1.0 (const[9]) -- chase flat out
+				paced = true;
+			}
+		}
+		if (!paced) {
+			throw new IllegalStateException("the starter brain no longer sets its amble where the hunter seed expects");
+		}
+		return new net.hedinger.prototype.entities.Brain(code.toArray(new int[0][]));
+	}
+
+	/**
 	 * A hitch-hiker: the forager's mirror image. Where the forager turns AWAY from
 	 * anything bigger than itself, this one turns TOWARDS it and clings on — the
 	 * same two sensors, read with the opposite sign.
@@ -240,8 +304,9 @@ public final class Worlds {
 	 * A founder-recipe genome for a reseed of {@code clade}: exactly what the world
 	 * seeds a minded cohort with at tick zero -- random dispositions and markers, a
 	 * body inside the sane band, and one of the hand-written starter programs. A
-	 * hunter always gets the forager seed (the hitch-hiker closes on what is
-	 * BIGGER than it, the wrong end of every encounter for a hunter); the rest
+	 * hunter always gets the {@link #hunterBrain() hunter seed} -- the forager
+	 * program at full throttle, never the hitch-hiker, which closes on what is
+	 * BIGGER than it, the wrong end of every encounter for a hunter; the rest
 	 * draw forager or hitch-hiker in the founding cohort's proportion.
 	 *
 	 * <p>A reseed used to descend from the clade's champion -- its oldest living
@@ -257,7 +322,7 @@ public final class Worlds {
 	public static net.hedinger.prototype.entities.Genome founderGenome(
 			net.hedinger.prototype.entities.Genome.Clade clade) {
 		if (clade == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
-			return mindedGenome(0);
+			return hunterFounder(mindedGenome(0));
 		}
 		return mindedGenome((int) (Utils.random() * 3)); // 0..2: the three founder programs
 	}
@@ -2602,8 +2667,7 @@ public final class Worlds {
 		java.util.Map<Integer, double[]> packs = new java.util.HashMap<>();
 		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
-			net.hedinger.prototype.entities.Genome g = pred[i % pred.length].copy();
-			g.brain = starterBrain();
+			net.hedinger.prototype.entities.Genome g = hunterFounder(pred[i % pred.length].copy());
 			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
@@ -2687,6 +2751,9 @@ public final class Worlds {
 		int nHuntLines = 2;
 		int nHuntPerLine = Math.max(3, sc(3, scale)); // with the pack above, AT the floor
 		net.hedinger.prototype.entities.Genome[] hunters = mindedSpecies(nHuntLines);
+		for (net.hedinger.prototype.entities.Genome h : hunters) {
+			hunterFounder(h); // a hunting line founds with a hunter's mind and pace
+		}
 		java.util.Map<Integer, double[]> huntersAt = new java.util.HashMap<>();
 		for (int line = 0; line < nHuntLines; line++) {
 			for (int i = 0; i < nHuntPerLine; i++) {
