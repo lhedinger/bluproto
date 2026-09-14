@@ -329,11 +329,27 @@ public abstract class NPC extends Entity {
 		return BASE_CAPACITY * adultMass();
 	}
 
-	/** What this body pays per offspring — public because birth conservation is
-	 *  audited against it (a child's tank plus its meat-priced body can never
-	 *  exceed what its parents paid; the scenario suite holds the books). */
+	/** What this body's lineage asks per offspring — public because birth
+	 *  conservation is audited against it (a child's tank plus its meat-priced
+	 *  body can never exceed what its parents paid; the scenario suite holds the
+	 *  books). What is actually paid is {@link #birthPayment()}. */
 	public double reproCost() {
 		return reproCost;
+	}
+
+	/**
+	 * What this body actually pays for a child right now: its lineage's price,
+	 * or everything it holds if that is less. The breeding gate is the line
+	 * ({@code reproFraction} of the tank), and the price is a second gene that
+	 * can drift above it; a parent whose price is above its line used to pay
+	 * the full price out of a tank that did not hold it, go negative, and be
+	 * clamped back to zero next tick -- and its child was endowed from the
+	 * whole of it. Measured: a parent holding 3.6 paid 8.1, and 4.5 energy was
+	 * minted at the birth. The child is endowed from this, so what it is born
+	 * holding is at most what its parent lost.
+	 */
+	public double birthPayment() {
+		return Math.max(0, Math.min(reproCost, energy));
 	}
 
 	/** The energy this body must bank before it breeds — its lineage's
@@ -2149,7 +2165,7 @@ public abstract class NPC extends Entity {
 		if (child == null) {
 			return false;
 		}
-		energy -= reproCost;
+		energy -= birthPayment();
 		reproCooldown = reproCooldownTicks();
 		breedHoldStart = -1;
 		getWorld().spawnEntity(child);
@@ -2222,8 +2238,8 @@ public abstract class NPC extends Entity {
 		if (child == null) {
 			return false;
 		}
-		energy -= reproCost;
-		partner.energy -= partner.reproCost;
+		energy -= birthPayment();
+		partner.energy -= partner.birthPayment();
 		reproCooldown = reproCooldownTicks();
 		partner.reproCooldown = partner.reproCooldownTicks();
 		getWorld().spawnEntity(child);

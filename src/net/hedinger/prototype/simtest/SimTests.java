@@ -9832,6 +9832,41 @@ public class SimTests {
 					kidWorth <= pa.reproCost() + pb.reproCost() + 0.01);
 			assertTrue("and a well-funded birth is still born below its own breeding line",
 					kid.getEnergy() < kid.getGenome().reproFraction * kid.energyCapacity());
+
+			// A price above the line. Both are genes and can drift apart; a parent
+			// whose price is above its line used to pay the whole price out of a
+			// tank that did not hold it, go negative, be clamped to zero next tick,
+			// and endow its child from all of it -- 4.5 energy minted at one birth,
+			// measured. Now it pays what it holds, and the child is worth no more
+			// than that.
+			World r = room(12, 12);
+			Genome gr = new Genome();
+			gr.sexuality = 0.3; // a budder
+			gr.reproFraction = 0.35;
+			gr.reproCostFraction = 0.9;
+			TestNPC poor = TestNPC.breeder(6.5, 6.5, 0, gr).withHunger(0.0);
+			poor.withEnergy(0.4 * poor.energyCapacity());
+			r.spawnEntity(poor);
+			r.think();
+			double held = poor.getEnergy();
+			assertLess("the parent holds less than its price", held, poor.reproCost());
+			TestNPC cheap = null;
+			for (int t = 0; t < 4000 && cheap == null; t++) {
+				tick(r, 1);
+				for (Entity e : r.getEntities()) {
+					if (e instanceof TestNPC n && !n.isDead() && n.generation() == 1) {
+						cheap = n;
+						break;
+					}
+				}
+			}
+			assertTrue("the poor parent still bred", cheap != null);
+			double cheapWorth = cheap.getEnergy() + TestNPC.MEAT_ENERGY * cheap.bodyMass()
+					+ (1 - cheap.getHunger()) * NPC.STOMACH * (cheap.getGenome().size / NPC.REF_SIZE);
+			assertTrue("its child is worth at most what the parent held ("
+					+ String.format("%.2f of %.2f", cheapWorth, held) + ")", cheapWorth <= held + 0.05);
+			assertTrue("and the parent never went below zero (" + String.format("%.2f", poor.getEnergy()) + ")",
+					poor.getEnergy() >= 0);
 		}
 	}
 
