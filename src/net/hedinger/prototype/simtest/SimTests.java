@@ -6369,6 +6369,75 @@ public class SimTests {
 	}
 
 	/**
+	 * A pack does not eat itself. The hunt's bite used to land on whoever was
+	 * nearest in reach: on open ground that was the quarry, and in a pack it was
+	 * a packmate. Five kin hunters seeded together beside a herd -- which is
+	 * exactly what a steward reseed now lands -- killed two of their own and one
+	 * grazer in a thousand ticks, each biting the brother between it and its
+	 * dinner. The intent now bites the quarry it named and nothing else; a
+	 * deliberate A_ATTACK still lashes out at the nearest body, but a hunter's
+	 * feeding bite lands only on quarry.
+	 *
+	 * <p>Two legs: no pack member loses a point of health in three thousand
+	 * ticks, and the pack still kills -- the hunt was not disarmed, only aimed.
+	 */
+	static class APackDoesNotEatItself extends Scenario {
+		@Override
+		public void run() {
+			seed(3);
+			World w = room(40, 30);
+			for (int x = 1; x < 39; x++) {
+				for (int y = 1; y < 29; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+			founder.size = 16;
+			java.util.List<TestNPC> pack = new java.util.ArrayList<>();
+			for (int i = 0; i < net.hedinger.prototype.sim.WorldSteward.RESEED_GROUP; i++) {
+				double[] p = net.hedinger.prototype.sim.Worlds.spotNear(w, 8, 15, 0, false);
+				TestNPC h = TestNPC.mindedPredator(p[0], p[1], 0,
+						Genome.child(founder, net.hedinger.prototype.sim.Worlds.KIN_RATE)).grown().withHunger(0.6);
+				w.spawnEntity(h);
+				pack.add(h);
+			}
+			java.util.List<TestNPC> herd = new java.util.ArrayList<>();
+			for (int i = 0; i < 12; i++) {
+				Genome g = Genome.random();
+				g.size = 9;
+				g.speed = 0.05;
+				g.metabolism = 0.02;
+				g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+				TestNPC gr = TestNPC.mindedForager(13 + net.hedinger.prototype.engine.Utils.random() * 4, 11 + net.hedinger.prototype.engine.Utils.random() * 8, 0, g)
+						.grown().withReproCooldown(100_000_000);
+				w.spawnEntity(gr);
+				herd.add(gr);
+			}
+			int lost = 0;
+			int[] hp = new int[pack.size()];
+			java.util.Arrays.fill(hp, 100);
+			for (int t = 0; t < 3000; t++) {
+				tick(w, 1);
+				for (int i = 0; i < pack.size(); i++) {
+					int h = pack.get(i).isDead() ? 0 : pack.get(i).getHealth();
+					if (h < hp[i]) {
+						lost++;
+					}
+					hp[i] = h;
+				}
+			}
+			int herdDead = 0;
+			for (TestNPC g : herd) {
+				if (g.isDead()) {
+					herdDead++;
+				}
+			}
+			assertEquals("no hunter in the pack was bitten by a packmate (health-loss events)", 0, lost);
+			assertGreater("and the pack still hunts: a grazer was killed", herdDead, 0);
+		}
+	}
+
+	/**
 	 * Seeding lands in clusters, not a scatter. A founder species arrives as a
 	 * herd, a founder pack as a pack; and when the steward reseeds a clade, the
 	 * body lands beside the oldest living member of that clade, so a niche is
@@ -12451,6 +12520,7 @@ public class SimTests {
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
 				new DoggednessIsALineagesOwnBusiness(),
+				new APackDoesNotEatItself(),
 				new SeedingLandsInClusters(),
 				new ABiggerMouthFinishesSmallerQuarrySooner(),
 				new StarterBrainedForagerFeedsItself(),

@@ -2995,12 +2995,21 @@ public class TestNPC extends NPC {
 			depositPheromone(NEST_DEPOSIT * 0.25);
 		}
 		boolean bit = false;
-		if (a[AgentIO.A_ATTACK] > 0.5 || intentBite) {
-			bit = attackNearest();
-			if (a[AgentIO.A_ATTACK] > 0.5) {
-				attackNearestItem(); // smashing crates is a deliberate act, not a side
-			}                        // effect of running something down
+		// The intent bites what it named. It used to bite whoever was nearest in
+		// reach, which on open ground was the quarry and in a pack was a packmate:
+		// five kin hunters seeded together beside a herd killed two of their own
+		// and one grazer in a thousand ticks, each biting the brother between it
+		// and its dinner. A deliberate A_ATTACK is still a lash-out at the nearest
+		// body -- fighting is a policy a mind may hold -- but a hunter's mouth
+		// feeds only on quarry, so a rival bitten on purpose takes the generic bite
+		// and pays no meal.
+		if (intentBite) {
+			bit = biteQuarry();
 		}
+		if (a[AgentIO.A_ATTACK] > 0.5) {
+			bit = attackNearest() || bit;
+			attackNearestItem(); // smashing crates is a deliberate act, not a side
+		}                        // effect of running something down
 		boolean bred = mateStatus == AgentIO.INTENT_DONE;
 		boolean asexual = genome == null || !genome.isSexual();
 		if (wantsMate && asexual) {
@@ -3185,6 +3194,31 @@ public class TestNPC extends NPC {
 		}
 	}
 
+	/**
+	 * The hunt's own bite: the quarry this tick's intent named ({@link #huntPick},
+	 * the one body {@code edibleQuarry} and the prey channel agreed on), if it is
+	 * in reach and a bite is due. Nothing else in reach is touched -- a packmate
+	 * standing between a hunter and its dinner is not dinner. A body of a clade
+	 * that does not hunt has no quarry channel to aim by and keeps the old
+	 * behaviour, biting whatever it reached.
+	 */
+	private boolean biteQuarry() {
+		if (!niche().hunts()) {
+			return attackNearest(); // no quarry channel to aim by: a grazer's bite is a lash-out
+		}
+		NPC q = huntPick;
+		if (q == null || q.isDead() || q.isRemoved() || !canExert()) {
+			return false;
+		}
+		double reach = (getSize() + q.getSize()) / 2.0 + ATTACK_REACH;
+		if (distance(q.getX(), q.getY(), q.getZ()) > reach || !biteDue()) {
+			return false; // out of reach, or still between bites: the intent stays pending
+		}
+		lastBiteAt = age;
+		feed(biteFeeds(q)); // damages, screams and pays, all in one
+		return true;
+	}
+
 	/** Bites the nearest perceived neighbour if it is in reach: it takes damage
 	 * (and dies once its health is gone) and the attacker gains a little energy.
 	 * Returns true if a bite actually landed. */
@@ -3213,9 +3247,10 @@ public class TestNPC extends NPC {
 		// weighs, and a minded hunter is now paid out of the same till as the
 		// scripted one — same damage, same meal, same scream.
 		//
-		// Only for a hunter, and only on flesh: a grazer lashing out is fighting,
-		// not eating, and keeps the generic bite it always had.
-		if (niche().hunts() && near.isOrganic()) {
+		// Only for a hunter, and only on quarry: a grazer lashing out is fighting,
+		// not eating, and keeps the generic bite it always had -- and so does a
+		// hunter biting a rival it is not starving enough to eat.
+		if (niche().hunts() && edibleQuarry(near, hunger >= STARVE_HUNGER)) {
 			if (!biteDue()) {
 				return false; // still between bites: the intent stays pending
 			}
