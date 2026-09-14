@@ -9798,7 +9798,12 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(7);
-			World w = room(30, 20); // no grass: every unit of food here is meat
+			World w = room(30, 20);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 19; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // no grass: every unit of food here is meat
+				}
+			}
 
 			// Killed and eaten: the hunter is paid the body, the carcass pays nothing.
 			TestNPC prey = TestNPC.grazer(15.5, 10.5, 0, body(12)).grown();
@@ -9829,6 +9834,88 @@ public class SimTests {
 			assertGreater("a whole carcass feeds scavengers (" + String.format("%.2f of %.2f", paid, whole) + ")",
 					paid, 0.5 * whole);
 			assertTrue("and never more than its meat", paid <= whole + 0.01);
+		}
+	}
+
+	/**
+	 * Mending buys back the flesh. Every bite is paid per point of health off
+	 * the one flesh ledger, and health used to mend for nothing, so a body that
+	 * regrew what was bitten off it was a flesh mint: a parasite riding a fed
+	 * host, or a grazer that shook a hunter off, minted meat out of nothing.
+	 * Eaten flesh is now bought back at the meat price, one hundredth of the
+	 * body per point, out of the tank; a wound that took no flesh still closes
+	 * for free.
+	 *
+	 * <p>Two identical, fed, watered grazers in a room with no grass. One is
+	 * bitten for thirty points by a parked hunter and then left to mend. Both
+	 * end at full health; the bitten one's stored food (tank plus stomach) is
+	 * lower by the meat price of thirty hundredths of its body -- exactly what
+	 * the hunter was paid for the bites, so the round trip minted nothing.
+	 */
+	static class MendingBuysBackTheFlesh extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		private static double stored(TestNPC n) {
+			return n.getEnergy() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
+		}
+
+		private static TestNPC grazer(double x, double y) {
+			// Metabolic, or nothing mends and nothing is spent: the four books are
+			// what this scenario audits.
+			TestNPC g = TestNPC.grazer(x, y, 0, body(12)).withMetabolic().grown().withHunger(0.0)
+					.withHydration(1.0).withReproCooldown(100_000_000);
+			g.withEnergy(g.energyCapacity());
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(9);
+			World w = room(30, 20);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 19; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // no grass: nothing to eat but each other
+				}
+			}
+			for (int y = 8; y <= 12; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_SHALLOWS); // a shore beside each, so thirst never
+				w.setTile(21, y, 0, Tile.TileType.TYPE_SHALLOWS); // stalls the mending
+			}
+			TestNPC bitten = grazer(8.5, 10.5);
+			TestNPC control = grazer(22.5, 10.5);
+			w.spawnEntity(bitten);
+			w.spawnEntity(control);
+			Genome hg = body(12); // same size: ten points a bite
+			TestNPC hunter = TestNPC.predator(8.9, 10.5, 0, hg).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			for (int t = 0; t < 1000 && bitten.getHealth() == 100; t++) {
+				tick(w, 1);
+			}
+			hunter.remove();
+			int wound = 100 - bitten.getHealth();
+			assertTrue("the hunter took a bite (" + wound + " points)", wound >= 5 && wound <= 20);
+			double paidToHunter = hunter.totalSwallowed();
+			double storedBefore = stored(bitten), controlBefore = stored(control);
+			// Until the wound has closed, at one point per MEND_PERIOD: measured the
+			// tick it does, before anything else drifts the books.
+			for (int t = 0; t < NPC.MEND_PERIOD * (wound + 5) && bitten.getHealth() < 100; t++) {
+				tick(w, 1);
+			}
+			assertEquals("the wound has closed", 100, bitten.getHealth());
+			assertEquals("the control never had one", 100, control.getHealth());
+			double cost = (storedBefore - stored(bitten)) - (controlBefore - stored(control));
+			double price = TestNPC.MEAT_ENERGY * bitten.bodyMass() * wound / 100.0;
+			assertNear("mending the wound cost the meat price of the flesh (" + String.format("%.2f", cost)
+					+ " against a price of " + String.format("%.2f", price) + ")", price, cost, 0.15 * price + 0.02);
+			assertNear("which is what the hunter was paid for it: the round trip minted nothing",
+					paidToHunter, cost, 0.15 * price + 0.02);
 		}
 	}
 
@@ -12748,6 +12835,7 @@ public class SimTests {
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new EnergyIsFoodBacked(),
 				new ABodyIsEatenOnce(),
+				new MendingBuysBackTheFlesh(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
 				new AQueryLeavesTheStreamAlone(),

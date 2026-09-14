@@ -759,7 +759,22 @@ public abstract class NPC extends Entity {
 			}
 			if (health < 100 && hunger < NEED_LOW && thirst < NEED_LOW
 					&& age % Math.max(1, (int) Math.round(MEND_PERIOD / eff)) == 0) {
-				health++;
+				// Flesh that was eaten is bought back at the meat price, one
+				// hundredth of the body per point, out of the tank; a wound that
+				// took no flesh (starvation, thirst, poison) closes for free. Every
+				// bite is paid per point of health, so a body that regrew what was
+				// bitten off it for nothing was a flesh mint: a parasite riding a
+				// fed host, or a grazer that shook a hunter off, minted meat.
+				if (meat < 1.0) {
+					double price = MEAT_ENERGY * bodyMass() / 100.0;
+					if (energy >= price) {
+						energy -= price;
+						meat = Math.min(1.0, meat + 0.01);
+						health++;
+					}
+				} else {
+					health++;
+				}
 			}
 		}
 	}
