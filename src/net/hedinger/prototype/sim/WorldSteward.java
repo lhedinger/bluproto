@@ -384,18 +384,15 @@ public final class WorldSteward extends Entity implements CullOrders {
 		return false;
 	}
 
-	/** Spawns one minded parasite on the surface where the herds are. Its genome
-	 *  comes from the parasite line's own reseed mix — see
-	 *  {@link Worlds#mindedReseedGenome}, which is the one place that describes
-	 *  what the mix is. */
+	/** Spawns one minded parasite on the surface where the herds are, from the
+	 *  founder recipe — see {@link Worlds#founderGenome}. */
 	/**
 	 * Where a reseed of {@code clade} lands on level {@code z}: beside the oldest
 	 * living minded body of that clade on that level, or anywhere walkable when
-	 * there is none. The oldest because that is the reseed's parent -- most reseeds
-	 * are its mutated children (see {@link Worlds#mindedReseedGenome}) -- and a
-	 * birth lands beside the parent. It is also what gives a sexual line a mate it
-	 * is compatible with: a child of a small mutation is within a few hundredths of
-	 * its parent on every marker. Scattered across the map, that pair never met.
+	 * there is none. The oldest only because it is a deterministic pick; a reseed
+	 * is a founder and not anyone's child, so what landing beside its kind buys is
+	 * company -- a niche restored as a group rather than as a scatter of strangers
+	 * who never meet.
 	 */
 	private double[] seedSpot(Genome.Clade clade, int z) {
 		TestNPC anchor = null;
@@ -426,7 +423,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 	}
 
 	private void seedParasite() {
-		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PARASITE);
+		Genome g = Worlds.founderGenome(Genome.Clade.PARASITE);
 		double[] p = seedSpot(Genome.Clade.PARASITE, surfaceZ);
 		getWorld().spawnEntity(TestNPC.mindedParasite(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
@@ -459,19 +456,18 @@ public final class WorldSteward extends Entity implements CullOrders {
 		return false;
 	}
 
-	/** Spawns one minded hunter on the surface, from the predator line's own
-	 *  reseed mix — see {@link Worlds#mindedReseedGenome}. */
+	/** Spawns one minded hunter on the surface, from the founder recipe — see
+	 *  {@link Worlds#founderGenome}. */
 	private void seedMindedPredator() {
-		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.PREDATOR);
+		Genome g = Worlds.founderGenome(Genome.Clade.PREDATOR);
 		double[] p = seedSpot(Genome.Clade.PREDATOR, surfaceZ);
 		getWorld().spawnEntity(TestNPC.mindedPredator(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
 
-	/** Spawns one minded scavenger on the surface where the bodies mostly fall.
-	 *  Its genome comes from the scavenger line's own reseed mix — see
-	 *  {@link Worlds#mindedReseedGenome}. */
+	/** Spawns one minded scavenger on the surface where the bodies mostly fall,
+	 *  from the founder recipe — see {@link Worlds#founderGenome}. */
 	private void seedScavenger() {
-		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.SCAVENGER);
+		Genome g = Worlds.founderGenome(Genome.Clade.SCAVENGER);
 		double[] p = seedSpot(Genome.Clade.SCAVENGER, surfaceZ);
 		getWorld().spawnEntity(TestNPC.mindedScavenger(p[0], p[1], surfaceZ, g).withDeathspan(ECO_DEATHSPAN));
 	}
@@ -479,16 +475,9 @@ public final class WorldSteward extends Entity implements CullOrders {
 	/** Spawns one minded herbivore at a random open tile. Reseeds alternate
 	 *  between the surface and the underground (when the world has one), so the
 	 *  cave cohort persists instead of draining one-way to the surface. Its genome
-	 *  comes from the herbivore line's own reseed mix — see
-	 *  {@link Worlds#mindedReseedGenome}.
-	 *
-	 *  <p>This used to restate the seeding rule here, and both halves of the
-	 *  restatement went stale the moment the rule changed: it named the
-	 *  longest-lived minded creature of ANY clade, and it said a founder arrives
-	 *  only when the cohort is wiped out, when a founder is now a routine fifth of
-	 *  the mix. One description, in the method that implements it. */
+	 *  is the founder recipe — see {@link Worlds#founderGenome}. */
 	private void seedMinded() {
-		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.HERBIVORE);
+		Genome g = Worlds.founderGenome(Genome.Clade.HERBIVORE);
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
 		seedBelow = !seedBelow;
 		double[] p = seedSpot(Genome.Clade.HERBIVORE, z);

@@ -5232,7 +5232,7 @@ public class SimTests {
 
 			int drawn = 0;
 			for (int i = 0; i < 300; i++) {
-				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.PARASITE);
+				Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PARASITE);
 				assertTrue("a founder recipe carries a program", g.brain != null);
 				if (g.mlp != null) {
 					drawn++;
@@ -5365,292 +5365,79 @@ public class SimTests {
 	}
 
 	/**
-	 * Survivor-seeding with longevity as fitness: when the steward must top the
-	 * minded cohort back up, the new creature descends from the longest-lived
-	 * minded creature currently alive (a mutated child, inheriting its brain), not a
-	 * fresh random one — living longest is itself the fitness, since a metabolic
-	 * creature that can't feed itself starves. Only a wiped-out cohort falls back to
-	 * random. Pins that the reseed tracks the OLDEST survivor's lineage (by its
-	 * markers), not a younger one, and that the empty-cohort fallback still yields a
-	 * valid random-brained genome.
+	 * A reseed is a founder, not the champion's child. The steward used to top a
+	 * clade up with mutated children of its oldest living body, on the theory
+	 * that living longest is fitness. It selected for the wrong thing: the
+	 * longest-lived hunter on the live world was one whose mate instruction had
+	 * mutated away, so it never paid for a child and never died of the cost, and
+	 * the steward cloned it into six of the nine hunters standing. Now a reseed
+	 * starts from the founder recipe every time, and what persists in a clade is
+	 * whatever breeds.
+	 *
+	 * <p>Leg one puts a distinctive old survivor in the world and draws two hundred
+	 * reseeds of its clade: under the champion rule the bulk were its children,
+	 * within one mutation step of it on every marker; now none are, beyond what a
+	 * random founder lands on by chance (a 0.16 cube of the marker space, under
+	 * one in two hundred). Leg two pins the hunter's seed: a founder hunter always
+	 * carries the forager program, never the hitch-hiker that closes on what is
+	 * bigger than itself.
 	 */
-	static class MindedReseedDescendsFromLongestLivedSurvivor extends Scenario {
-		/** Enough draws that a 60%-of-the-mix majority is unmistakable. */
+	static class AReseedIsAFounderNotAChampion extends Scenario {
 		private static final int SAMPLES = 200;
+		private static final double[] SURVIVOR = { 0.90, 0.10, 0.10 };
+		/** A routine reseed's mutation step, the old rule's signature. */
+		private static final double STEP = 0.08;
 
-		/** Whether this genome is within one routine reseed step of that parent.
-		 *  Mutation is additive and bounded by the rate, so a real child differs on
-		 *  every marker by at most it. */
 		private static boolean childOf(Genome g, double[] parent) {
 			for (int i = 0; i < parent.length; i++) {
-				if (Math.abs(g.markers[i] - parent[i]) > 0.08) {
+				if (Math.abs(g.markers[i] - parent[i]) > STEP) {
 					return false;
 				}
 			}
 			return true;
-		}
-
-		private static Genome mindedWith(double m0, double m1, double m2) {
-			Genome g = new Genome();
-			g.markers = new double[] { m0, m1, m2 };
-			g.size = 10;
-			g.speed = 0.05;
-			g.brain = Brain.random(16);
-			return g;
 		}
 
 		@Override
 		public void run() {
 			seed(90);
 			World w = room(20, 20);
+			Genome sg = new Genome();
+			sg.markers = SURVIVOR.clone();
+			sg.size = 10;
+			sg.speed = 0.05;
+			sg.brain = Brain.random(16);
+			TestNPC survivor = TestNPC.mindedPredator(5.5, 5.5, 0, sg);
+			w.spawnEntity(survivor);
+			tick(w, 200);
+			assertTrue("the survivor is alive and old", !survivor.isDead() && !survivor.isRemoved());
 
-			// Empty cohort: the reseed falls back to a fresh random-brained genome.
-			Genome fresh = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
-			assertTrue("a wiped-out cohort reseeds a fresh random-brained genome", fresh.brain != null);
-
-			// An older survivor (distinctive red-ish markers), then a younger one
-			// (green-ish). Both live comfortably within the window (a big reserve
-			// drains slowly), so age alone separates them.
-			TestNPC older = TestNPC.mindedForager(5.5, 5.5, 0, mindedWith(0.90, 0.10, 0.10));
-			w.spawnEntity(older);
-			tick(w, 200); // the older one banks 200 ticks of age
-			TestNPC younger = TestNPC.mindedForager(14.5, 14.5, 0, mindedWith(0.10, 0.90, 0.10));
-			w.spawnEntity(younger);
-			tick(w, 5);
-
-			assertTrue("both survivors are still alive to seed from",
-					!older.isDead() && !older.isRemoved() && !younger.isDead() && !younger.isRemoved());
-
-			// Reseeds are a MIX now, so this is a question about the bulk of them
-			// rather than about one draw. A single sample passing told you which
-			// way one coin landed, not that the champion is the one being copied.
-			int fromOlder = 0, fromYounger = 0, brainless = 0;
+			int children = 0, programs = 0;
 			for (int i = 0; i < SAMPLES; i++) {
-				Genome reseed = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
-						w, Genome.Clade.HERBIVORE);
-				if (reseed.brain == null && reseed.mlp == null) {
-					brainless++; // a reseed must carry SOME mind — LGP brain or MLP net
+				Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+				if (childOf(g, SURVIVOR)) {
+					children++;
 				}
-				if (childOf(reseed, new double[] { 0.90, 0.10, 0.10 })) {
-					fromOlder++;
-				}
-				if (childOf(reseed, new double[] { 0.10, 0.90, 0.10 })) {
-					fromYounger++;
+				if (g.brain != null) {
+					programs++;
 				}
 			}
-			assertEquals("every reseed inherits a mind — an LGP brain or an MLP net", 0, brainless);
-			assertGreater("the bulk of reseeds descend from the LONGEST-LIVED survivor",
-					fromOlder, SAMPLES / 2);
-			// Bounded rather than zero for the same reason as the cross-clade
-			// checks: a founder's random markers can land in the younger one's
-			// window by chance. Seeding from the wrong survivor would put ~60% of
-			// the mix there, not a stray one.
-			assertLess("reseeds do not descend from the younger survivor",
-					fromYounger, SAMPLES / 10);
-		}
-	}
+			assertLess("no reseed descends from the survivor, however old it is",
+					children, SAMPLES / 20);
+			assertEquals("every reseed carries a program", SAMPLES, programs);
 
-	/**
-	 * A reseed descends from its OWN clade's champion, not the world's.
-	 *
-	 * <p>All three minded seeders — forager, scavenger, parasite — used to call one
-	 * global argmax over every minded body alive, so whichever happened to be
-	 * oldest parented every reseed in the world. Measured over 100k ticks of the
-	 * live world that was a HERBIVORE, which means every scavenger and parasite
-	 * spawned in that time was handed a grazing brain with a different clade
-	 * stamped on top. The trait that kept the champion alive was competence at
-	 * grass; for a body whose food is carcasses that is not a qualification.
-	 *
-	 * <p>The mix was an accident of build order rather than a decision: when the
-	 * reseed was written "minded" was one cohort, the other clades were added to it
-	 * later, and {@code Genome.Clade} arrived after all of them.
-	 *
-	 * <p>The older survivor here is deliberately the herbivore, so a reseed that
-	 * still consulted the global champion would take its markers and fail. The
-	 * extinct-clade case is the other half: a clade with no survivors must restart
-	 * from a founder rather than borrow the herbivore, since borrowing is the whole
-	 * behaviour being removed. Mutation moves a marker by at most the 0.08 reseed
-	 * rate, so anything further than that from the grazer's 0.90 provably is not
-	 * its child.
-	 */
-	static class AReseedDescendsFromItsOwnClade extends Scenario {
-		/** Enough draws to answer "ever" rather than "this time". */
-		private static final int SAMPLES = 200;
-		private static final double[] GRAZER_MARKERS = { 0.90, 0.10, 0.10 };
-		private static final double[] SCAVENGER_MARKERS = { 0.10, 0.90, 0.10 };
-		/** The reseed's mutation rate; a marker moves by at most this per step. */
-		private static final double RESEED_RATE = 0.08;
-
-		private static Genome mindedWith(double[] m) {
-			Genome g = new Genome();
-			g.markers = m.clone();
-			g.size = 10;
-			g.speed = 0.05;
-			g.brain = Brain.random(16);
-			return g;
-		}
-
-		/**
-		 * Whether {@code g} could be a reseed child of a parent with these markers.
-		 * Mutation is additive and bounded by the rate, so a genuine child differs
-		 * on EVERY marker by at most that — which makes this a real test of
-		 * parentage rather than a distance that a stray founder can wander into.
-		 * The first cut of this scenario compared one marker and failed exactly
-		 * that way: a founder's random markers landed 0.061 from the grazer's, and
-		 * "far from the herbivore" could not tell that from descent.
-		 */
-		private static boolean couldBeChildOf(Genome g, double[] parent) {
-			for (int i = 0; i < parent.length; i++) {
-				if (Math.abs(g.markers[i] - parent[i]) > RESEED_RATE) {
-					return false;
+			int[][] forager = net.hedinger.prototype.sim.Worlds.starterBrain().code();
+			for (int i = 0; i < 50; i++) {
+				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain.code();
+				assertTrue("a founder hunter carries the forager seed", java.util.Arrays.deepEquals(forager, code));
+			}
+			int hitchhikers = 0;
+			for (int i = 0; i < 300; i++) {
+				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain.code();
+				if (!java.util.Arrays.deepEquals(forager, code)) {
+					hitchhikers++;
 				}
 			}
-			return true;
-		}
-
-		@Override
-		public void run() {
-			seed(91);
-			World w = room(20, 20);
-
-			TestNPC grazer = TestNPC.mindedForager(5.5, 5.5, 0, mindedWith(GRAZER_MARKERS));
-			w.spawnEntity(grazer);
-			tick(w, 200); // the herbivore banks the age that used to win it everything
-			TestNPC eater = TestNPC.mindedScavenger(14.5, 14.5, 0, mindedWith(SCAVENGER_MARKERS));
-			w.spawnEntity(eater);
-			tick(w, 5);
-
-			assertTrue("both survivors are alive to seed from",
-					!grazer.isDead() && !grazer.isRemoved()
-							&& !eater.isDead() && !eater.isRemoved());
-			assertGreater("the older of the two really is the herbivore",
-					grazer.getAge(), eater.getAge());
-
-			// Sampled, because reseeds are a mix: the cross-clade question is
-			// whether the herbivore EVER parents a scavenger, which one draw
-			// cannot answer.
-			int scavFromScav = 0, scavFromGrazer = 0;
-			for (int i = 0; i < SAMPLES; i++) {
-				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
-						w, Genome.Clade.SCAVENGER);
-				if (couldBeChildOf(g, SCAVENGER_MARKERS)) {
-					scavFromScav++;
-				}
-				if (couldBeChildOf(g, GRAZER_MARKERS)) {
-					scavFromGrazer++;
-				}
-			}
-			assertGreater("the bulk of scavenger reseeds descend from the scavenger",
-					scavFromScav, SAMPLES / 2);
-			// A BOUND, not zero, and the difference matters. Founder reseeds draw
-			// their markers at random, so one can land inside the 0.08 window by
-			// luck — measured, 1 in 200 at one seed. Zero passed only while the
-			// RNG happened to cooperate. Systematic borrowing is not subtle: with
-			// the old global champion this is the ~60% of the mix that descends
-			// from it, so a tenth of the sample separates the two cleanly.
-			assertLess("scavenger reseeds do not descend from the older herbivore",
-					scavFromGrazer, SAMPLES / 10);
-
-			int herbFromGrazer = 0;
-			for (int i = 0; i < SAMPLES; i++) {
-				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
-						w, Genome.Clade.HERBIVORE);
-				if (couldBeChildOf(g, GRAZER_MARKERS)) {
-					herbFromGrazer++;
-				}
-			}
-			assertGreater("the bulk of herbivore reseeds still descend from the herbivore",
-					herbFromGrazer, SAMPLES / 2);
-
-			int paraFromGrazer = 0, paraBrainless = 0;
-			for (int i = 0; i < SAMPLES; i++) {
-				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
-						w, Genome.Clade.PARASITE);
-				if (g.brain == null && g.mlp == null) {
-					paraBrainless++;
-				}
-				if (couldBeChildOf(g, GRAZER_MARKERS)) {
-					paraFromGrazer++;
-				}
-			}
-			assertEquals("an extinct clade still reseeds minded genomes (LGP or MLP)", 0, paraBrainless);
-			assertLess("an extinct clade does not borrow the herbivore's lineage",
-					paraFromGrazer, SAMPLES / 10);
-		}
-	}
-
-	/**
-	 * A reseed is a mix, not a photocopy of the champion.
-	 *
-	 * <p>Copying the single oldest survivor every time is the narrowest search
-	 * there is: one parent, one small step, and — because nothing ages out — an
-	 * incumbent that can only be displaced by dying rather than by being beaten.
-	 * A cohort ratchets onto whatever first worked and stays there. So most
-	 * reseeds still descend from the champion, a fifth start again from the
-	 * founder recipe, and a fifth are large mutations of the champion.
-	 *
-	 * <p>What this pins is that all three sources are actually live. A share set
-	 * to zero, or a mix collapsed back to pure champion, leaves the cohort with
-	 * nothing new to be beaten by — and would pass every other reseed scenario
-	 * here, because they all ask about the bulk.
-	 *
-	 * <p>The buckets are marker distance from the champion, and they read as
-	 * evidence rather than proof: routine children land within the 0.08 step,
-	 * founders are drawn at random and usually land far, and a wild child sits
-	 * between. A founder CAN land close by chance, so the far bucket
-	 * under-counts founders — which is why the assertion is that it is
-	 * substantial, not that it equals the configured share exactly. Measured at
-	 * 2000 draws: 60.5% routine, 22.1% middle, 17.4% far, against a design of
-	 * 60/20/20.
-	 */
-	static class AReseedIsAMixNotOnlyTheChampion extends Scenario {
-		private static final int SAMPLES = 600;
-		private static final double[] CHAMP = { 0.90, 0.10, 0.10 };
-
-		private static boolean within(Genome g, double r) {
-			for (int i = 0; i < CHAMP.length; i++) {
-				if (Math.abs(g.markers[i] - CHAMP[i]) > r) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		@Override
-		public void run() {
-			seed(92);
-			World w = room(20, 20);
-			Genome cg = new Genome();
-			cg.markers = CHAMP.clone();
-			cg.size = 10;
-			cg.speed = 0.05;
-			cg.brain = Brain.random(16);
-			TestNPC champ = TestNPC.mindedForager(5.5, 5.5, 0, cg);
-			w.spawnEntity(champ);
-			tick(w, 50);
-			assertTrue("the champion is alive to seed from",
-					!champ.isDead() && !champ.isRemoved());
-
-			int routine = 0, middle = 0, far = 0;
-			for (int i = 0; i < SAMPLES; i++) {
-				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(
-						w, Genome.Clade.HERBIVORE);
-				if (within(g, 0.08)) {
-					routine++;
-				} else if (within(g, 0.4)) {
-					middle++;
-				} else {
-					far++;
-				}
-			}
-			assertGreater("most reseeds are routine children of the champion",
-					routine, SAMPLES / 2);
-			assertLess("but the champion does not take all of them",
-					routine, (int) (SAMPLES * 0.85));
-			assertGreater("large mutations of the champion are reaching the world",
-					middle, SAMPLES / 20);
-			assertGreater("founder restarts are reaching the world too",
-					far, SAMPLES / 20);
+			assertGreater("a founder grazer still draws the hitch-hiker some of the time", hitchhikers, 50);
 		}
 	}
 
@@ -6584,12 +6371,10 @@ public class SimTests {
 	/**
 	 * Seeding lands in clusters, not a scatter. A founder species arrives as a
 	 * herd, a founder pack as a pack; and when the steward reseeds a clade, the
-	 * body lands beside the oldest living member of that clade -- a reseed is a
-	 * birth the steward performs, and a birth lands beside its parent. Most
-	 * reseeds are that body's mutated children, within a few hundredths of it on
-	 * every marker, so the pair is a compatible mate by any threshold a lineage is
-	 * likely to carry. Scattered across 144x88, the pair never met: measured on
-	 * the live world, no hunter reached a second generation in 2.3 million ticks.
+	 * body lands beside the oldest living member of that clade, so a niche is
+	 * restored as company rather than as a scatter of strangers. Scattered across
+	 * 144x88, bodies of one clade never met: measured on the live world, no hunter
+	 * reached a second generation in 2.3 million ticks.
 	 *
 	 * <p>Three outcomes. At tick zero nearly every herbivore founder has a
 	 * same-species founder within the cluster radius, and so does every hunter.
@@ -6782,14 +6567,13 @@ public class SimTests {
 				}
 			}
 			tick(w, 1); // advance the clock so vegetation is defined
-			// A fresh founder-recipe genome (empty cohort -> mindedReseedGenome yields
-			// the founder recipe), on a body in the usual size band -- with its mind
+			// A fresh founder-recipe genome, on a body in the usual size band -- with its mind
 			// pinned to the starter brain. The recipe draws one of four founder minds,
 			// and one of those is the MLP with random weights, which may or may not
 			// feed itself; which mind the draw lands on moves with every gene added
 			// to the genome's random stream. The claim here is the starter brain's,
 			// so the starter brain is what the body gets.
-			Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.HERBIVORE);
+			Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE);
 			g.mlp = null;
 			g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
 			// Suppress breeding so we test one forager feeding itself, not a cohort:
@@ -12577,9 +12361,7 @@ public class SimTests {
 				new MindedBodyUnsticksFromWallJam(),
 				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
-				new MindedReseedDescendsFromLongestLivedSurvivor(),
-				new AReseedDescendsFromItsOwnClade(),
-				new AReseedIsAMixNotOnlyTheChampion(),
+				new AReseedIsAFounderNotAChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
 				new AHuntersBiteIsDueOnArrival(),

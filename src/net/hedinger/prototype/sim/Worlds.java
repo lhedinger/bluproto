@@ -237,96 +237,29 @@ public final class Worlds {
 	}
 
 	/**
-	 * The genome for the steward's next minded reseed of one clade, under
-	 * survivor-seeding: a mutated child of the longest-lived creature of THAT
-	 * clade currently alive. Living longest <em>is</em> the fitness — a metabolic
-	 * creature that can't feed itself starves, so the oldest one alive is the one
-	 * coping best — so a lineage's reseeds descend from its own survival champion
-	 * and inherit its (mutated) brain, rather than starting from scratch each
-	 * death.
+	 * A founder-recipe genome for a reseed of {@code clade}: exactly what the world
+	 * seeds a minded cohort with at tick zero -- random dispositions and markers, a
+	 * body inside the sane band, and one of the hand-written starter programs. A
+	 * hunter always gets the forager seed (the hitch-hiker closes on what is
+	 * BIGGER than it, the wrong end of every encounter for a hunter); the rest
+	 * draw forager or hitch-hiker in the founding cohort's proportion.
 	 *
-	 * <p>The clade used to be no part of this, and that was an accident of build
-	 * order rather than a decision: when this was written "minded" was a single
-	 * cohort, so one champion for it was the whole story. Scavengers were then
-	 * added as a variant of that cohort and reused this as-is, parasites followed,
-	 * and {@link net.hedinger.prototype.entities.Genome.Clade} — the concept that
-	 * would have separated them — only arrived afterwards. Nothing revisited who
-	 * the reseeds descend from.
-	 *
-	 * <p>What it cost is not subtle. All three minded seeders drew from one global
-	 * argmax, so whichever body happened to be oldest parented every reseed in the
-	 * world: measured over 100k ticks of the live world the champion was a
-	 * HERBIVORE, and every scavenger and parasite spawned in that time was handed
-	 * its grazing brain with a different clade stamped on top. A scavenger reseed
-	 * inheriting a forager's mind is not survivor-seeding at all — the trait that
-	 * kept the champion alive was competence at grass, which is not the job.
-	 *
-	 * <p>So a clade seeds from its own. When a clade has no survivors it restarts
-	 * from a founder rather than borrowing another clade's champion: a fresh
-	 * starter brain is a worse mind than a proven one but an honest ancestor for
-	 * the role, and borrowing is exactly the mixing this exists to stop.
-	 *
-	 * <p><b>The champion is a share of the reseeds, not all of them.</b> Copying
-	 * the single oldest survivor every time is the narrowest search there is: one
-	 * parent, one small step, and — because nothing ages out — an incumbent that
-	 * can only be displaced by dying rather than by being beaten. That ratchets a
-	 * cohort onto whatever first worked and holds it there. So a fifth of reseeds
-	 * come from the founder recipe instead, and another fifth from the champion at
-	 * {@link #WILD_RESEED_RATE}: the line keeps its incumbent most of the time, and
-	 * still gets a supply of genuinely different starting points to be beaten by.
-	 *
-	 * <p>The wild share is deliberately a big mutation of a working parent rather
-	 * than a fresh random mind. GENOME.md records what fully-random brains did when
-	 * they were tried: they never stumbled onto feeding, so selection had no
-	 * gradient to climb. Entropy is worth having; entropy that cannot eat is not.
+	 * <p>A reseed used to descend from the clade's champion -- its oldest living
+	 * body -- with a founder as a fifth of the mix. Longevity was the fitness, and
+	 * it selected for the wrong thing. The longest-lived hunter on the live world
+	 * was one whose mate instruction had mutated away: it never paid for a child,
+	 * so it never died of the cost, so it outlived every hunter that bred, and the
+	 * steward cloned it into six of the nine hunters standing. A reseed is now a
+	 * founder every time. What persists in a clade is whatever breeds, because
+	 * breeding is the only way left for a genome to outlast the body carrying it;
+	 * the steward keeps the niche occupied and takes no view on who deserves to.
 	 */
-	public static net.hedinger.prototype.entities.Genome mindedReseedGenome(World w,
+	public static net.hedinger.prototype.entities.Genome founderGenome(
 			net.hedinger.prototype.entities.Genome.Clade clade) {
-		TestNPC best = null;
-		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
-			if (e instanceof TestNPC t && t.isMinded() && !t.isDead() && !t.isRemoved()
-					&& t.getGenome() != null && t.getGenome().clade == clade
-					&& (best == null || t.getAge() > best.getAge())) {
-				best = t;
-			}
+		if (clade == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
+			return mindedGenome(0);
 		}
-		if (best == null) {
-			return founderReseed(); // this clade is gone: restart its line from a founder
-		}
-		// The mix. Drawn before anything else is decided so the roll is one draw
-		// from the seeded stream whatever it selects, and the sim stays reproducible.
-		double roll = Utils.random();
-		if (roll < FOUNDER_SHARE) {
-			return founderReseed();
-		}
-		double rate = roll < FOUNDER_SHARE + WILD_SHARE ? WILD_RESEED_RATE : RESEED_RATE;
-		return net.hedinger.prototype.entities.Genome.child(best.getGenome(), rate);
-	}
-
-	/** How hard a routine reseed mutates its parent: the settled rate, a nudge. */
-	private static final double RESEED_RATE = 0.08;
-	/**
-	 * How hard a <em>wild</em> reseed mutates it — five times the nudge, which is a
-	 * jump rather than a step. Far enough to leave the champion's basin, near
-	 * enough to still be built on something that demonstrably feeds itself.
-	 */
-	private static final double WILD_RESEED_RATE = 0.4;
-	/** Share of reseeds that ignore the champion and start the line again from the
-	 *  founder recipe. */
-	private static final double FOUNDER_SHARE = 0.2;
-	/** Share that descend from the champion but at {@link #WILD_RESEED_RATE}. */
-	private static final double WILD_SHARE = 0.2;
-
-	/**
-	 * A founder-recipe genome for a reseed: exactly what the world seeds a minded
-	 * cohort with at tick zero — random dispositions and markers, a body inside the
-	 * sane band, and one of the two hand-written starter brains. The strategy is
-	 * drawn rather than fixed so the forager/hitch-hiker split arrives in roughly
-	 * the same one-in-three proportion the founding cohort has.
-	 */
-	private static net.hedinger.prototype.entities.Genome founderReseed() {
-		// 0..2: any of the three founder programs.
-		return mindedGenome((int) (Utils.random() * 3));
+		return mindedGenome((int) (Utils.random() * 3)); // 0..2: the three founder programs
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
@@ -2540,15 +2473,10 @@ public final class Worlds {
 	/**
 	 * How far from its anchor a seeded body lands. Seeding happens in clusters,
 	 * not a scatter: founders of one species arrive as a herd, a pack or a brood,
-	 * and a steward reseed lands beside the oldest living body of its own clade --
-	 * a reseed is a birth the steward performs, so it lands where a birth would.
-	 *
-	 * <p>This is what gives a sexual lineage anyone to breed with. Most reseeds are
-	 * mutated children of the clade's champion, and a child of a small mutation
-	 * sits within a few hundredths of its parent on every marker -- a compatible
-	 * mate by any threshold a lineage is likely to carry. Scattered across a
-	 * 144x88 world, that pair never met; measured on the live world, no hunter
-	 * reached a second generation in 2.3 million ticks.
+	 * and a steward reseed lands beside its own kind rather than anywhere at all,
+	 * so a niche is restored as company rather than as a scatter of strangers.
+	 * Scattered across a 144x88 world, bodies of one clade never met: measured on
+	 * the live world, no hunter reached a second generation in 2.3 million ticks.
 	 */
 	@net.hedinger.prototype.engine.Unit("tiles")
 	public static final double SEED_CLUSTER_RADIUS = 4.0;
