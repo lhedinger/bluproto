@@ -1313,12 +1313,16 @@ public final class Worlds {
 		// can agree on.
 		sinkWorks(w, cols, rows, x0, y0, W, H);
 
-		// The upper line: out of the tram shed through both end walls. West to
-		// the warehouse and on to administration; east to the coolant reserve
-		// and on to the biodome.
+		// The upper lines, out of the tram shed through both end walls, each
+		// TURNING at its first stop: west to the warehouse then north to
+		// administration, east to the coolant reserve then south to the
+		// biodome. Four sectors on two lines, in four quarters of the map --
+		// which is the shape a transit system has and a spine does not.
 		int ry = y0 + 1 + 21;
-		layLine(w, cols, rows, CAVE_Z, x0, ry, -1, new String[][] { WAREHOUSE, ADMIN }, null);
-		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, 1, new String[][] { COOLANT, BIODOME }, null);
+		layLine(w, cols, rows, CAVE_Z, x0, ry, new Leg[] {
+				new Leg(-1, 0, WAREHOUSE, null), new Leg(0, -1, ADMIN, null) });
+		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, new Leg[] {
+				new Leg(1, 0, COOLANT, null), new Leg(0, 1, BIODOME, null) });
 		return site;
 	}
 
@@ -1543,61 +1547,165 @@ public final class Worlds {
 	 * by every stairwell the two plans can agree on. It is taken back down if
 	 * none can be cut.
 	 */
-	private static void layLine(World w, int cols, int rows, int z, int px, int py,
-			int dir, String[][] stops, String[] above) {
-		if (walkLine(w, cols, rows, z, px, py, dir, stops, above) == 0 && above != null) {
-			// Nowhere along the whole line could hold both floors, so take the
-			// one. A two-storey Lambda is the better building and a Lambda is
-			// better than none: insisting on the pair left three seeds in
-			// eight with no complex at all, because its upper floor may not
-			// stand on another building and the cave line's stops get first
-			// call on the ground above.
-			walkLine(w, cols, rows, z, px, py, dir, stops, null);
+	private static void layLine(World w, int cols, int rows, int z, int px, int py, Leg[] route) {
+		if (walkLine(w, cols, rows, z, px, py, route, true) < route.length && anyPaired(route)) {
+			// A leg could not place its stop with both its floors, so run the
+			// route again taking ground floors. A two-storey Lambda is the
+			// better building and a Lambda is better than none: insisting on
+			// the pair left three seeds in eight with no complex at all,
+			// because an upper floor may not stand on another building and the
+			// cave line's stops get first call on the ground above.
+			//
+			// Asked as "placed nothing at all" this never fired once Lambda
+			// sat behind a mine head on the same line -- the mine head places,
+			// the count is one, and the retry the last leg needed was skipped.
+			// The line is short enough that laying it twice costs nothing, and
+			// every stop is placed at the same first fit both times.
+			walkLine(w, cols, rows, z, px, py, route, false);
 		}
 	}
 
-	/** One pass of the line, returning how many stops it managed to place. */
-	private static int walkLine(World w, int cols, int rows, int z, int px, int py,
-			int dir, String[][] stops, String[] above) {
-		setBare(w, px, py, z, Tile.TileType.TYPE_RAIL); // the portal through the shell
-		int x = px, y = py;
-		int laid = 0, next = 0;
-		for (int i = 1; i <= LINE_REACH; i++) {
-			int nx = x + dir;
-			if (nx < 4 || nx >= cols - 4) {
-				break;
-			}
-			if (i % 13 == 0) {
-				double turn = Utils.noise2(nx * 3 + 5000, y * 7 + 1200, 0.31);
-				int ny = y + (turn > 0.6 ? 1 : turn < 0.4 ? -1 : 0);
-				if (ny >= 4 && ny < rows - 4 && ny != y && layRail(w, z, nx, y)) {
-					layShoulder(w, z, nx, y - 1);
-					layShoulder(w, z, nx, y + 1);
-					y = ny;
-				}
-			}
-			if (!layRail(w, z, nx, y)) {
-				break; // another building: the line stops at its wall
-			}
-			layShoulder(w, z, nx, y - 1);
-			layShoulder(w, z, nx, y + 1);
-			x = nx;
-			laid++;
-			if (next < stops.length && laid >= LINE_MIN_RUN
-					&& stopFits(w, cols, rows, z, x, y, dir, stops[next], above)) {
-				x = stampStop(w, cols, rows, z, x, y, dir, stops[next], above);
-				next++;
-				laid = 0;
-				if (next == stops.length) {
-					return next;
-				}
+	/** Whether any leg of a route asks for a second floor. */
+	private static boolean anyPaired(Leg[] route) {
+		for (Leg leg : route) {
+			if (leg.above != null) {
+				return true;
 			}
 		}
-		return next;
+		return false;
+	}
+
+	/**
+	 * One leg of a route: a direction to travel, the stop to put at the end of
+	 * it, and optionally a second floor to stand over that stop.
+	 *
+	 * <p>A route is a list of these, and the line TURNS between them. That is
+	 * the whole difference between a transit system and a spine: the first
+	 * version stepped only in x, every line left the facility on the same row
+	 * of its tram shed, and every stop a line could meet had to be drawn with
+	 * a horizontal row of track — so five sectors came out in a single
+	 * east-west band across the middle of the map, which is not a network, it
+	 * is a corridor with rooms off it.
+	 */
+	private static final class Leg {
+		final int dx, dy;
+		final String[] stop;
+		final String[] above;
+
+		Leg(int dx, int dy, String[] stop, String[] above) {
+			this.dx = dx;
+			this.dy = dy;
+			this.stop = stop;
+			this.above = above;
+		}
+	}
+
+	/**
+	 * One pass of a route, returning how many stops it managed to place. A leg
+	 * that cannot place its stop ends the line: the legs after it are places
+	 * this seed's map had no room for.
+	 */
+	private static int walkLine(World w, int cols, int rows, int z, int px, int py,
+			Leg[] route, boolean paired) {
+		setBare(w, px, py, z, Tile.TileType.TYPE_RAIL); // the portal through the shell
+		int x = px, y = py;
+		int placed = 0;
+		for (int li = 0; li < route.length; li++) {
+			Leg drawn = route[li];
+			// A TURN's direction is a preference and the map gets a veto:
+			// pointed somewhere with no room for its stop, it turns the other
+			// way instead. Three seeds in eight put the facility low enough
+			// that "turn south" had forty-five rows of south in it and Lambda
+			// wants fifty-six, so the complex did not exist -- which reads as
+			// a map too small and is nothing of the kind, since the same map
+			// had a hundred and thirty rows the other way.
+			//
+			// The FIRST leg never flips. Its direction is which portal of the
+			// shed the line leaves by, and two lines that both consult the map
+			// both leave by the same one and run down each other.
+			int ahead = drawn.dx != 0 ? (drawn.dx > 0 ? cols - x : x)
+					: (drawn.dy > 0 ? rows - y : y);
+			int behind = drawn.dx != 0 ? (drawn.dx > 0 ? x : cols - x)
+					: (drawn.dy > 0 ? y : rows - y);
+			// And it overrides only when the drawn way genuinely CANNOT hold
+			// the stop, not merely when it is the shorter of the two. Flipping
+			// on "shorter" sent both of a level's branches the same way
+			// whenever the facility sat slightly off centre, which throws away
+			// the one thing the route is drawn to decide.
+			int need = LINE_MIN_RUN + drawn.stop[0].length() + 6;
+			Leg leg = li > 0 && ahead < need && behind >= need
+					? new Leg(-drawn.dx, -drawn.dy, drawn.stop, drawn.above) : drawn;
+			int laid = 0;
+			boolean done = false;
+			String[] above = paired ? leg.above : null;
+			for (int i = 1; i <= LINE_REACH && !done; i++) {
+				int nx = x + leg.dx, ny = y + leg.dy;
+				if (nx < 4 || ny < 4 || nx >= cols - 4 || ny >= rows - 4) {
+					break;
+				}
+				// The jog is ACROSS the run, so a line that turns wanders the
+				// same way whichever way it is pointing.
+				if (i % 13 == 0) {
+					double turn = Utils.noise2(nx * 3 + 5000, ny * 7 + 1200, 0.31);
+					int step = turn > 0.6 ? 1 : turn < 0.4 ? -1 : 0;
+					int jx = nx + step * leg.dy, jy = ny + step * leg.dx;
+					if (step != 0 && jx >= 4 && jy >= 4 && jx < cols - 4 && jy < rows - 4
+							&& layRail(w, z, nx, ny)) {
+						shoulder(w, z, nx, ny, leg);
+						nx = jx;
+						ny = jy;
+					}
+				}
+				if (!layRail(w, z, nx, ny)) {
+					break; // another building: the line stops at its wall
+				}
+				shoulder(w, z, nx, ny, leg);
+				x = nx;
+				y = ny;
+				laid++;
+				if (laid >= LINE_MIN_RUN && stopFits(w, cols, rows, z, x, y, leg, above)) {
+					int[] exit = stampStop(w, z, x, y, leg, above);
+					x = exit[0];
+					y = exit[1];
+					// Clear the building before the next leg turns. A portal
+					// sits IN a wall, so the tile beside it on the turn is the
+					// stop's own shell -- and a line that turns there stops
+					// dead against it. Every second stop on every line went
+					// missing that way, which reads as the map being too
+					// small and is nothing of the kind.
+					for (int k = 0; k < TURN_CLEARANCE; k++) {
+						int cx = x + leg.dx, cy = y + leg.dy;
+						if (cx < 4 || cy < 4 || cx >= cols - 4 || cy >= rows - 4
+								|| !layRail(w, z, cx, cy)) {
+							break;
+						}
+						shoulder(w, z, cx, cy, leg);
+						x = cx;
+						y = cy;
+					}
+					placed++;
+					done = true;
+				}
+			}
+			if (!done) {
+				break;
+			}
+		}
+		return placed;
+	}
+
+	/** The paved shoulders either side of a tile of track, across the run. */
+	private static void shoulder(World w, int z, int x, int y, Leg leg) {
+		layShoulder(w, z, x + leg.dy, y + leg.dx);
+		layShoulder(w, z, x - leg.dy, y - leg.dx);
 	}
 
 	/** How far a line runs past its last stop before it simply ends. */
 	private static final int LINE_REACH = 220;
+
+	/** How far a line runs on past a stop before it is allowed to turn: enough
+	 *  to be clear of the shell the portal is set in, corner included. */
+	private static final int TURN_CLEARANCE = 3;
 
 	/** The least a line runs between stops. A stop is somewhere the line goes
 	 *  TO, and thirty tiles is about the shortest journey that reads as one. */
@@ -1638,37 +1746,88 @@ public final class Worlds {
 		}
 	}
 
-	/** The row of a plan its track runs along: the one row that is nothing but
-	 *  rail. Every stop has one, and it is how the line knows where to meet
-	 *  it -- read off the drawing rather than written down beside it, so a
-	 *  sector redrawn with its track one row up still meets its line. */
-	private static int railRow(String[] plan) {
-		for (int j = 0; j < plan.length; j++) {
-			if (plan[j].chars().allMatch(ch -> ch == 'r')) {
-				return j;
+	/**
+	 * A plan turned a quarter turn clockwise, so a sector drawn along an
+	 * east-west track can stand on a north-south one. A ninety-degree lattice
+	 * rotation is lossless on a square grid (ART-STYLE section 5), which is
+	 * why the sectors are drawn once and turned rather than drawn twice.
+	 */
+	private static String[] turned(String[] plan) {
+		int h = plan.length, wd = plan[0].length();
+		String[] out = new String[wd];
+		for (int i = 0; i < wd; i++) {
+			StringBuilder sb = new StringBuilder(h);
+			for (int j = 0; j < h; j++) {
+				sb.append(plan[h - 1 - j].charAt(i));
 			}
+			out[i] = sb.toString();
 		}
-		throw new IllegalArgumentException("a stop needs a row of rail");
+		return out;
 	}
 
-	/** Whether a stop could stand where a line has reached (ex, ey) heading
-	 *  {@code dir}: inside the map, and on nothing that must not be built
-	 *  over. */
-	private static boolean stopFits(World w, int cols, int rows, int z, int ex, int ey, int dir,
-			String[] plan, String[] above) {
-		int sw = plan[0].length() + 2, sh = plan.length + 2;
-		int x0 = dir > 0 ? ex + 1 : ex - sw;
-		int y0 = ey - 1 - railRow(plan);
+	/** The plan as the line meets it: drawn for an east-west run, turned for a
+	 *  north-south one. */
+	private static String[] oriented(String[] plan, Leg leg) {
+		return leg.dx != 0 ? plan : turned(plan);
+	}
+
+	/**
+	 * Where the track runs through a plan: the index of the one line of it that
+	 * is nothing but rail -- a row for a stop on an east-west run, a column for
+	 * one on a north-south run.
+	 *
+	 * <p>Read off the drawing rather than written down beside it, so a sector
+	 * redrawn with its track one row over still meets its line.
+	 */
+	private static int trackAt(String[] plan, boolean vertical) {
+		int n = vertical ? plan[0].length() : plan.length;
+		outer: for (int k = 0; k < n; k++) {
+			if (!vertical) {
+				if (plan[k].chars().allMatch(ch -> ch == 'r')) {
+					return k;
+				}
+				continue;
+			}
+			for (String row : plan) {
+				if (row.charAt(k) != 'r') {
+					continue outer;
+				}
+			}
+			return k;
+		}
+		throw new IllegalArgumentException("a stop needs a line of rail");
+	}
+
+	/** A stop's shell corner, given the tile the line has reached and the leg
+	 *  it is travelling: {x0, y0, width, height}. */
+	private static int[] stopBox(int ex, int ey, Leg leg, String[] plan) {
+		String[] o = oriented(plan, leg);
+		int sw = o[0].length() + 2, sh = o.length + 2;
+		int t = trackAt(o, leg.dy != 0);
+		if (leg.dx != 0) {
+			return new int[] { leg.dx > 0 ? ex + 1 : ex - sw, ey - 1 - t, sw, sh };
+		}
+		return new int[] { ex - 1 - t, leg.dy > 0 ? ey + 1 : ey - sh, sw, sh };
+	}
+
+	/** Whether a stop could stand where a line has reached (ex, ey) on this
+	 *  leg: inside the map, and on nothing that must not be built over. */
+	private static boolean stopFits(World w, int cols, int rows, int z, int ex, int ey, Leg leg,
+			String[] above) {
+		int[] box = stopBox(ex, ey, leg, leg.stop);
+		int x0 = box[0], y0 = box[1], sw = box[2], sh = box[3];
 		if (x0 < 2 || y0 < 2 || x0 + sw > cols - 2 || y0 + sh > rows - 2) {
 			return false;
 		}
-		for (int x = x0; x < x0 + sw; x++) {
-			for (int y = y0; y < y0 + sh; y++) {
-				if (isRampOrDrop(w.getTile(x, y, z).getType())) {
-					return false;
-				}
-			}
-		}
+		// Links between floors inside the footprint are built ROUND, not
+		// refused -- the same rule the facility and the upper floors already
+		// follow. Refusing does not scale with the stop: the underdark's
+		// stairwells scale with the map, so an eighteen by twenty-six
+		// footprint covers one about six times in seven, and Lambda's ground
+		// floor stopped landing on three seeds in eight the moment its line
+		// was turned to reach somewhere the cave line had not already taken.
+		// A stairwell surfacing inside the complex is a way in.
+		//
 		// A two-floor stop has to fit on BOTH floors, and the test belongs
 		// HERE rather than after the lower floor is stamped. Checked
 		// afterwards, the line commits to a position the upper floor cannot
@@ -1677,7 +1836,7 @@ public final class Worlds {
 		// the fifty-odd link stations about seven times in eight, so the
 		// upper floor landed exactly never. Asked here, the line simply walks
 		// on until it finds somewhere both floors can stand.
-		return above == null || !matched(plan, above)
+		return above == null || !matched(leg.stop, above)
 				|| upperFits(w, z + 1, x0, y0, sw, sh);
 	}
 
@@ -1689,27 +1848,32 @@ public final class Worlds {
 	}
 
 	/**
-	 * A stop across the line: the plan stamped so its track row meets the rail
-	 * where the line arrived, a portal through each end wall, and doors
-	 * wherever a cavern meets it. Returns the x of the far portal, which is
-	 * where the line resumes. The caller has already checked it fits.
+	 * A stop across the line: the plan stamped -- turned a quarter if the line
+	 * is running north-south -- so its track meets the rail where the line
+	 * arrived, a portal through each of the two walls the track crosses, and
+	 * doors wherever a cavern meets it. Returns the far portal, which is where
+	 * the line resumes. The caller has already checked it fits.
 	 */
-	private static int stampStop(World w, int cols, int rows, int z, int ex, int ey, int dir,
-			String[] plan, String[] above) {
+	private static int[] stampStop(World w, int z, int ex, int ey, Leg leg, String[] above) {
 		// The plan's OWN size, not one figure for every stop: the sectors are
 		// twenty by twelve, the mine head twelve by eight and Lambda
 		// twenty-four by sixteen, and a portal placed at a fixed width lands
 		// outside the smaller ones' walls -- which is a stop the line enters
 		// and never leaves.
-		int sw = plan[0].length() + 2, sh = plan.length + 2;
-		int x0 = dir > 0 ? ex + 1 : ex - sw;
-		int y0 = ey - 1 - railRow(plan);
-		stampPlan(w, z, x0, y0, plan);
-		setBare(w, x0, ey, z, Tile.TileType.TYPE_RAIL);
-		setBare(w, x0 + sw - 1, ey, z, Tile.TileType.TYPE_RAIL);
+		int[] box = stopBox(ex, ey, leg, leg.stop);
+		int x0 = box[0], y0 = box[1], sw = box[2], sh = box[3];
+		stampPlan(w, z, x0, y0, oriented(leg.stop, leg), true);
+		// The two portals, on the walls the track runs through.
+		if (leg.dx != 0) {
+			setBare(w, x0, ey, z, Tile.TileType.TYPE_RAIL);
+			setBare(w, x0 + sw - 1, ey, z, Tile.TileType.TYPE_RAIL);
+		} else {
+			setBare(w, ex, y0, z, Tile.TileType.TYPE_RAIL);
+			setBare(w, ex, y0 + sh - 1, z, Tile.TileType.TYPE_RAIL);
+		}
 		punchDoors(w, z, x0, y0, sw, sh);
-		if (above != null && matched(plan, above) && z + 1 < w.getLevels()) {
-			stampPlan(w, z + 1, x0, y0, above, true);
+		if (above != null && matched(leg.stop, above) && z + 1 < w.getLevels()) {
+			stampPlan(w, z + 1, x0, y0, oriented(above, leg), true);
 			punchDoors(w, z + 1, x0, y0, sw, sh);
 			if (stairsBetween(w, x0, y0, sw, sh, z + 1, z) == 0) {
 				// An upper floor no stair reaches is a room nothing can enter:
@@ -1721,7 +1885,10 @@ public final class Worlds {
 				}
 			}
 		}
-		return dir > 0 ? x0 + sw - 1 : x0;
+		if (leg.dx != 0) {
+			return new int[] { leg.dx > 0 ? x0 + sw - 1 : x0, ey };
+		}
+		return new int[] { ex, leg.dy > 0 ? y0 + sh - 1 : y0 };
 	}
 
 	/** Whether a paired upper floor can stand over a stop: on no OTHER
@@ -1749,22 +1916,22 @@ public final class Worlds {
 	 * underdark's caverns are carved and linked, so it crosses them rather
 	 * than being carved around, and so its stops can stand among them.
 	 *
-	 * <p>Two lines, one each way. Lambda's upper floor is stamped on the CAVE
-	 * level over its lower one -- the only sector besides the halls with two
-	 * floors -- and may not stand on another building, so it goes west, away
-	 * from the cave line's own stops. The mine head, which has no upper floor
-	 * to place, goes east.
+	 * <p>Two lines, one each way, and the western one turns south at its mine
+	 * head to reach Lambda. Lambda's upper floor is stamped on the CAVE level
+	 * over its lower one -- the only sector besides the halls with two floors
+	 * -- and may not stand on another building, which is why it is sent out of
+	 * the band the cave line's own stops occupy rather than along it.
 	 */
 	private static void layDeepLine(World w, int cols, int rows, int x0, int y0) {
-		// Lambda goes WEST and the mine head east, so the two floors' lines do
-		// not chase each other: Lambda's upper floor may not stand on another
-		// building, and the cave line's own stops run east of the halls -- sent
-		// that way it spent its whole reach walking out from under them and
-		// arrived nowhere on half the seeds.
+		// Lambda goes west and then SOUTH, and the mine head east then north,
+		// so neither ends up under the cave line's own stops: Lambda's upper
+		// floor may not stand on another building, and sent straight along the
+		// same axis it spent its whole reach walking out from under them.
 		int ry = y0 + 1 + 21;
-		layLine(w, cols, rows, DEEP_Z, x0, ry, -1, new String[][] { LAMBDA_LOWER }, LAMBDA_UPPER);
-		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, ry, 1,
-				new String[][] { MINEHEAD }, null);
+		layLine(w, cols, rows, DEEP_Z, x0, ry, new Leg[] {
+				new Leg(-1, 0, MINEHEAD, null), new Leg(0, 1, LAMBDA_LOWER, LAMBDA_UPPER) });
+		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, ry, new Leg[] {
+				new Leg(1, 0, MINEHEAD, null) });
 	}
 
 	/**
