@@ -6528,6 +6528,85 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter's child grows up. The cohort's founder recipe pays 0.35..0.65 of
+	 * the tank per child, and a hunter's child born on that starved: its
+	 * childhood costs 4.5 energy ambling and 6.3 chasing against an endowment
+	 * of 2.75, the shortfall has to be killed while small and slow, and the meal
+	 * lands in an adult-sized stomach that mints slower than the child grows.
+	 * Nine of nine children died in the live world with three hundred grazers
+	 * around them. A founder hunter now pays 0.8 and banks 0.9 first, so its
+	 * child is born with 6.2 in the tank and grows up on that alone.
+	 *
+	 * <p>A kin group of five founders beside a herd of the live world's grazers
+	 * (7 px, 0.058 tiles a tick), breeding for real; the first child born is
+	 * followed from birth through its whole childhood and past it. It reaches
+	 * its adult size, is alive, and has a tank above the crawl reserve --
+	 * measured, not assumed, since a crawling juvenile is the way they died.
+	 */
+	static class AHuntersChildGrowsUp extends Scenario {
+		@Override
+		public void run() {
+			seed(8);
+			World w = room(44, 32);
+			for (int x = 1; x < 43; x++) {
+				for (int y = 1; y < 31; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			for (int x = 20; x <= 23; x++) {
+				for (int y = 14; y <= 17; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_SHALLOWS); // a pond: thirst is a need too
+				}
+			}
+			Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+			founder.size = 16;
+			java.util.Set<Integer> founders = new java.util.HashSet<>();
+			for (int i = 0; i < net.hedinger.prototype.sim.WorldSteward.RESEED_GROUP; i++) {
+				double[] p = net.hedinger.prototype.sim.Worlds.spotNear(w, 8, 16, 0, false);
+				TestNPC h = TestNPC.mindedPredator(p[0], p[1], 0,
+						Genome.child(founder, net.hedinger.prototype.sim.Worlds.KIN_RATE)).grown().withHunger(0.3);
+				h.withEnergy(h.energyCapacity());
+				w.spawnEntity(h);
+				founders.add(h.getID());
+			}
+			for (int i = 0; i < 30; i++) {
+				Genome g = Genome.random();
+				g.size = 7;
+				g.speed = 0.058;
+				g.metabolism = 0.02;
+				g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+				TestNPC gr = TestNPC.mindedForager(14 + net.hedinger.prototype.engine.Utils.random() * 26,
+						4 + net.hedinger.prototype.engine.Utils.random() * 24, 0, g)
+						.grown().withReproCooldown(100_000_000);
+				w.spawnEntity(gr);
+			}
+			// Wait for a birth: a hunter that is not one of the founders.
+			TestNPC child = null;
+			for (int t = 0; t < 12000 && child == null; t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC c && !founders.contains(c.getID()) && !c.isDead()
+							&& c.getGenome() != null && c.getGenome().clade == Genome.Clade.PREDATOR) {
+						child = c;
+					}
+				}
+			}
+			assertTrue("a founder hunter bred", child != null);
+			int born = child.getPixelSize();
+			double adult = child.getGenome().size;
+			assertTrue("the child is born small (" + born + " px of " + String.format("%.1f", adult) + ")",
+					born < adult * 0.6);
+			// Its whole childhood and a spell past it.
+			tick(w, TestNPC.growthTicks(adult) + 2000);
+			assertTrue("the child is alive at the end of its childhood", !child.isDead() && !child.isRemoved());
+			assertEquals("and has grown to its adult size", (int) Math.round(adult), child.getPixelSize());
+			assertGreater("with a tank above the crawl reserve ("
+					+ String.format("%.2f of %.2f", child.getEnergy(), child.energyCapacity()) + ")",
+					child.getEnergy(), net.hedinger.prototype.entities.NPC.CRAWL_RESERVE * child.energyCapacity() * 2);
+		}
+	}
+
+	/**
 	 * Seeding lands in clusters, not a scatter. A founder species arrives as a
 	 * herd, a founder pack as a pack; and when the steward reseeds a clade, the
 	 * body lands beside the oldest living member of that clade, so a niche is
@@ -12612,6 +12691,7 @@ public class SimTests {
 				new DoggednessIsALineagesOwnBusiness(),
 				new APackDoesNotEatItself(),
 				new AFounderHunterChasesFlatOut(),
+				new AHuntersChildGrowsUp(),
 				new SeedingLandsInClusters(),
 				new ABiggerMouthFinishesSmallerQuarrySooner(),
 				new StarterBrainedForagerFeedsItself(),

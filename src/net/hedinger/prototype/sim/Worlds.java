@@ -226,11 +226,32 @@ public final class Worlds {
 	@net.hedinger.prototype.engine.Unit("tiles/tick")
 	public static final double HUNTER_SPEED_LO = 0.065, HUNTER_SPEED_HI = 0.085;
 
-	/** Makes {@code g} a founder hunter: the hunter seed for a mind, and a
-	 *  hunter's pace for a body. The clade is the caller's to set. */
+	/**
+	 * What a founder hunter pays per child, as a fraction of its tank, and the
+	 * fraction it banks before it breeds. The cohort draws 0.35..0.65 for the
+	 * cost, and a hunter's child born on that starves: its childhood costs 4.5
+	 * energy ambling and 6.3 chasing (growth matter at the meat price plus
+	 * upkeep, measured on the live fertile genome) against an endowment of 2.75,
+	 * and the shortfall has to come from kills it lands while small and slow,
+	 * digested through an adult-sized stomach at a rate its growth outruns.
+	 * Nine of nine children died in the live world. At 0.8 the child is born
+	 * with 6.2 in the tank and grows up on that alone; its first kill is
+	 * surplus. The breeding line sits above the cost so the parent keeps a
+	 * tenth of its tank after a birth, above the crawl reserve, rather than
+	 * collapsing at the moment it has a child to feed beside. Fewer children,
+	 * each of which lives. Both stay genes a lineage can drift.
+	 */
+	@net.hedinger.prototype.engine.Unit("of the tank")
+	public static final double HUNTER_REPRO_COST = 0.8, HUNTER_REPRO_LINE = 0.9;
+
+	/** Makes {@code g} a founder hunter: the hunter seed for a mind, a hunter's
+	 *  pace for a body, and a hunter's price for a child. The clade is the
+	 *  caller's to set. */
 	static net.hedinger.prototype.entities.Genome hunterFounder(net.hedinger.prototype.entities.Genome g) {
 		g.brain = hunterBrain();
 		g.speed = HUNTER_SPEED_LO + Utils.random() * (HUNTER_SPEED_HI - HUNTER_SPEED_LO);
+		g.reproCostFraction = HUNTER_REPRO_COST;
+		g.reproFraction = HUNTER_REPRO_LINE;
 		return g;
 	}
 
