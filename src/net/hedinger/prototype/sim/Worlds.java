@@ -1397,6 +1397,37 @@ public final class Worlds {
 		return best;
 	}
 
+	/**
+	 * A tile that must be left exactly as it is: one end of a link between
+	 * floors, something wired, or the ROCK a ramp climbs into.
+	 *
+	 * <p>That last one is not decoration. An up ramp whose high side is open
+	 * floor is a staircase into a ceiling -- it climbs to a surface tile
+	 * resting on nothing, and the art has no mass to disappear into, which is
+	 * why {@code DemoLevelsLinkSurfaceAndCave} asserts it. The ramp tile
+	 * itself was always preserved; the rock it climbs into was not, so a
+	 * building set against a link station took the mass out from over it and
+	 * left the ramp climbing into air. It took packing the sectors against the
+	 * core to find it -- the campus puts several times as much wall next to
+	 * the link stations as a line of distant stops ever did.
+	 */
+	private static boolean mustStay(World w, int z, int x, int y) {
+		Tile t = w.getTile(x, y, z);
+		if (isRampOrDrop(t.getType())) {
+			return true;
+		}
+		if (!t.isSolid()) {
+			return false;
+		}
+		for (int d = 0; d < 4; d++) {
+			Tile n = w.getTile(x - Tile.dirDx(d), y - Tile.dirDy(d), z);
+			if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** A tile that must never be built over: it is one end of a link between
 	 *  two floors, or a control that something is wired to. */
 	private static boolean isRampOrDrop(Tile.TileType t) {
@@ -1432,7 +1463,7 @@ public final class Worlds {
 		int W = plan[0].length() + 2, H = plan.length + 2;
 		for (int x = x0; x < x0 + W; x++) {
 			for (int y = y0; y < y0 + H; y++) {
-				if (preserve && isRampOrDrop(w.getTile(x, y, z).getType())) {
+				if (preserve && mustStay(w, z, x, y)) {
 					continue;
 				}
 				boolean shell = x == x0 || y == y0 || x == x0 + W - 1 || y == y0 + H - 1;
@@ -1442,7 +1473,7 @@ public final class Worlds {
 		}
 		for (int j = 0; j < plan.length; j++) {
 			for (int i = 0; i < plan[j].length(); i++) {
-				if (preserve && isRampOrDrop(w.getTile(x0 + 1 + i, y0 + 1 + j, z).getType())) {
+				if (preserve && mustStay(w, z, x0 + 1 + i, y0 + 1 + j)) {
 					continue;
 				}
 				Tile.TileType t = plantTile(plan[j].charAt(i));
@@ -1727,6 +1758,12 @@ public final class Worlds {
 		if (isRampOrDrop(ty) || ty == Tile.TileType.TYPE_DUCT) {
 			return true; // left alone, and the line carries on past it
 		}
+		if (mustStay(w, z, x, y)) {
+			// The rock over a ramp's high side. Track cannot pass through it
+			// without leaving the ramp climbing into air, so the line stops
+			// here exactly as it stops at a wall.
+			return false;
+		}
 		if (ty == Tile.TileType.TYPE_WATER || ty == Tile.TileType.TYPE_SHAFT) {
 			setBare(w, x, y, z, Tile.TileType.TYPE_CATWALK);
 			return true;
@@ -1738,6 +1775,9 @@ public final class Worlds {
 	/** The shoulder beside the track: paved through rock, trestle over water,
 	 *  and whatever it already was where it was already ground. */
 	private static void layShoulder(World w, int z, int x, int y) {
+		if (mustStay(w, z, x, y)) {
+			return; // see mustStay: a shoulder is not worth a ramp
+		}
 		Tile.TileType ty = w.getTile(x, y, z).getType();
 		if (ty == Tile.TileType.TYPE_WALL || ty == Tile.TileType.TYPE_CRYSTAL) {
 			setBare(w, x, y, z, Tile.TileType.TYPE_PAVED);
