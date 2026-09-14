@@ -417,8 +417,8 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  having a living at all. */
 	private boolean carrionPresent() {
 		for (Entity e : getWorld().getEntities()) {
-			if (e instanceof TestNPC t && t.isDead() && !t.isRemoved()) {
-				return true;
+			if (e instanceof TestNPC t && t.isDead() && !t.isRemoved() && t.meatLeft() > 0) {
+				return true; // a carcass with flesh on it: a kill eaten out is not a living
 			}
 		}
 		return false;

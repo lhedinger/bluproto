@@ -360,6 +360,42 @@ public abstract class NPC extends Entity {
 
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
+	/**
+	 * How much of this body's flesh is still on it, 0..1. The one ledger every
+	 * mouth draws from: a hunter's bite, a parasite's drain and a scavenger's
+	 * mouthful each take a share and are paid the meat price for exactly that
+	 * share, so a body is worth {@code MEAT_ENERGY x mass} once, however many
+	 * eaters it has and whether it is bitten alive or found dead. It used to be
+	 * priced twice: a hunter was paid the whole body by the killing bite and the
+	 * carcass then paid scavengers the whole body again -- measured, 100% to the
+	 * hunter and another 97% to three scavengers for the same animal.
+	 */
+	protected double meat = 1.0;
+
+	/** The flesh still on this body, as a fraction of the whole. */
+	public double meatLeft() {
+		return meat;
+	}
+
+	/**
+	 * Takes up to {@code share} of this body's flesh and returns the share
+	 * actually taken -- what the eater is paid for. A carcass eaten out is
+	 * rotted through so the ordinary purge clears it; a living body eaten to
+	 * nothing is simply worth nothing more to anyone.
+	 */
+	public double eatMeat(double share) {
+		double taken = Math.max(0, Math.min(share, meat));
+		meat -= taken;
+		if (meat <= 1e-9) {
+			meat = 0;
+		}
+		if (isDead()) {
+			// A carcass is as far gone as the flesh taken off it: eating hastens
+			// its decay, and one eaten out is cleared on the ordinary schedule.
+			decayTo(1.0 - meat);
+		}
+		return taken;
+	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	@Unit("ticks")
 	public static int REPRO_COOLDOWN = 100;

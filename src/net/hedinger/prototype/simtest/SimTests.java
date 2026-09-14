@@ -9752,6 +9752,87 @@ public class SimTests {
 	}
 
 	/**
+	 * A body is eaten once. Every mouth draws from one flesh ledger: a hunter's
+	 * bite, a parasite's drain and a scavenger's mouthful each take a share of
+	 * the body and are paid the meat price for that share. It used to be paid
+	 * twice: the killing bites paid the hunter the whole animal, and the carcass
+	 * then paid scavengers the whole animal again -- measured, 100% to the
+	 * hunter and another 97% to three scavengers for the same body. That is the
+	 * free energy behind a scavenger eating its own dead, and every other corpse.
+	 *
+	 * <p>Two carcasses in a room with no grass. One was killed and eaten by a
+	 * hunter: three scavengers on it are paid nothing worth counting. One died
+	 * whole: the same three scavengers are paid its meat and not a bite more.
+	 */
+	static class ABodyIsEatenOnce extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		/** Total the given scavengers swallow off {@code corpse} before it is gone. */
+		private double scavenged(World w, TestNPC corpse, double x, double y) {
+			java.util.List<TestNPC> eaters = new java.util.ArrayList<>();
+			for (int i = 0; i < 3; i++) {
+				Genome g = body(10);
+				g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+				TestNPC s = TestNPC.mindedScavenger(x + 0.3 * Math.cos(i), y + 0.3 * Math.sin(i), 0, g)
+						.grown().withHunger(1.0).withReproCooldown(100_000_000);
+				w.spawnEntity(s);
+				eaters.add(s);
+			}
+			for (int t = 0; t < 2000 && !corpse.isRemoved(); t++) {
+				tick(w, 1);
+			}
+			double paid = 0;
+			for (TestNPC s : eaters) {
+				paid += s.totalSwallowed();
+				s.remove();
+			}
+			return paid;
+		}
+
+		@Override
+		public void run() {
+			seed(7);
+			World w = room(30, 20); // no grass: every unit of food here is meat
+
+			// Killed and eaten: the hunter is paid the body, the carcass pays nothing.
+			TestNPC prey = TestNPC.grazer(15.5, 10.5, 0, body(12)).grown();
+			Genome hg = body(16);
+			TestNPC hunter = TestNPC.predator(15.9, 10.5, 0, hg).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(prey);
+			w.spawnEntity(hunter);
+			for (int t = 0; t < 3000 && !prey.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("the hunter killed the parked animal", prey.isDead());
+			double meat = TestNPC.MEAT_ENERGY * prey.bodyMass();
+			assertNear("the hunter was paid the body, bite by bite", meat, hunter.totalSwallowed(), 0.05 * meat);
+			hunter.remove();
+			double leftovers = scavenged(w, prey, 15.5, 10.5);
+			assertLess("a carcass eaten whole pays scavengers nothing worth counting ("
+					+ String.format("%.2f of %.2f", leftovers, meat) + ")", leftovers, 0.02 * meat);
+
+			// Died whole: the carcass pays its meat once, to however many mouths.
+			TestNPC fallen = TestNPC.grazer(8.5, 10.5, 0, body(16)).grown();
+			w.spawnEntity(fallen);
+			tick(w, 1);
+			fallen.kill();
+			tick(w, 1);
+			double whole = TestNPC.MEAT_ENERGY * fallen.bodyMass();
+			double paid = scavenged(w, fallen, 8.5, 10.5);
+			assertGreater("a whole carcass feeds scavengers (" + String.format("%.2f of %.2f", paid, whole) + ")",
+					paid, 0.5 * whole);
+			assertTrue("and never more than its meat", paid <= whole + 0.01);
+		}
+	}
+
+	/**
 	 * Birth conserves energy: a child's tank endowment plus its meat-priced
 	 * body can never exceed what its parents paid for it. The audit is the
 	 * cannibal round trip — a parent that ate its own just-born child would
@@ -12666,6 +12747,7 @@ public class SimTests {
 				new CollapseIsNotDeath(),
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new EnergyIsFoodBacked(),
+				new ABodyIsEatenOnce(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
 				new AQueryLeavesTheStreamAlone(),
