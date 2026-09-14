@@ -292,16 +292,27 @@ public final class Worlds {
 	static final int COLS = 144, ROWS = 88;
 
 	/**
-	 * The reseed floor every clade shares: no niche is left standing with fewer
-	 * than this many bodies (scaled down with map area for the small worlds the
-	 * suite builds). One number on purpose — the floors are about the niche
-	 * existing at all, not about its natural headcount, and ten is enough of a
-	 * scatter to be a breeding population rather than a token occupant. The
-	 * predator, scavenger and parasite floors stay conditional on their food
-	 * being present (prey, carrion, hosts): a floor reseeds a cohort into a
-	 * world that can feed it, never one that starves it on arrival.
+	 * The reseed floor the three consumer clades share: no niche is left standing
+	 * with fewer than this many bodies (scaled down with map area for the small
+	 * worlds the suite builds). The floors are about the niche existing at all,
+	 * not about its natural headcount, and ten is enough of a scatter to be a
+	 * breeding population rather than a token occupant. The predator, scavenger
+	 * and parasite floors stay conditional on their food being present (prey,
+	 * carrion, hosts): a floor reseeds a cohort into a world that can feed it,
+	 * never one that starves it on arrival.
 	 */
 	private static final int CLADE_FLOOR = 10;
+	/**
+	 * The herd's own floor, four times the consumers'. The herd is what the other
+	 * three live on, and every one of them boosts to twice its floor the moment
+	 * it dips: with all four floors at ten, thirty hunters and thirty parasites
+	 * were living on twenty grazers, the herd crashed to its floor and was eaten
+	 * back down from thirty within the hour, every clade boosting in turn and
+	 * every hunter starving in a crowd. Measured on the live world at tick 76k.
+	 * A floor of forty, boosting to eighty, restores prey in proportion to the
+	 * mouths the other floors put back.
+	 */
+	private static final int HERD_FLOOR = 40;
 
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
@@ -2577,7 +2588,7 @@ public final class Worlds {
 		// Founders arrive as herds, packs and broods: the first of a species picks the
 		// ground, the rest of that species land beside it (see SEED_CLUSTER_RADIUS).
 		java.util.Map<Integer, double[]> herds = new java.util.HashMap<>();
-		for (int i = 0; i < sc(26, scale); i++) {
+		for (int i = 0; i < sc(32, scale); i++) { // with the two broods below, the herd founds AT its floor
 			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
@@ -2722,7 +2733,7 @@ public final class Worlds {
 				// the sum of the two it replaces (160 plain + 250 minded), measured at
 				// the settled world, so the merge changes WHO is counted rather than
 				// how many the world carries.
-				new int[] { sc(CLADE_FLOOR, scale), sc(410, scale) }, // prey  [floor, ceiling]
+				new int[] { sc(HERD_FLOOR, scale), sc(410, scale) }, // prey  [floor, ceiling]
 				// Predators. Ceiling 12 -> 100. At 12 the cohort sat AT the line,
 				// sampled 12 or 13 every time it was looked at, which meant the
 				// warden was setting the predator population and grass, prey and
