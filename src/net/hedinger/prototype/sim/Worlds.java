@@ -1313,16 +1313,24 @@ public final class Worlds {
 		// can agree on.
 		sinkWorks(w, cols, rows, x0, y0, W, H);
 
-		// The upper lines, out of the tram shed through both end walls, each
-		// TURNING at its first stop: west to the warehouse then north to
-		// administration, east to the coolant reserve then south to the
-		// biodome. Four sectors on two lines, in four quarters of the map --
-		// which is the shape a transit system has and a spine does not.
-		int ry = y0 + 1 + 21;
-		layLine(w, cols, rows, CAVE_Z, x0, ry, new Leg[] {
-				new Leg(-1, 0, WAREHOUSE, null), new Leg(0, -1, ADMIN, null) });
-		layLine(w, cols, rows, CAVE_Z, x0 + W - 1, ry, new Leg[] {
-				new Leg(1, 0, COOLANT, null), new Leg(0, 1, BIODOME, null) });
+		// The campus: three sectors packed against the halls and against each
+		// other, sharing walls where they can and standing off a corridor's
+		// width where they cannot. A site plan of a real complex of this kind
+		// is a cluster of boxes with a ragged outline -- administration hard
+		// up against the test labs, storage tucked under both, the whole
+		// thing one continuous built thing that the labels are drawn ON --
+		// not four rooms strung thirty tiles apart down a rail.
+		Leg[] spilt = packCampus(w, cols, rows, CAVE_Z, x0, y0, W, H, new Leg[] {
+				new Leg(0, 0, COOLANT, null), new Leg(0, 0, ADMIN, null),
+				new Leg(0, 0, WAREHOUSE, null) });
+
+		// And one outlier, out where the rail has to go to reach it. A campus
+		// with nothing outside it is a blob; what makes a site plan read is
+		// the near cluster AND the far annex, and the track between them.
+		int d = freeSide(w, cols, rows, CAVE_Z, x0, y0, W, H);
+		int[] pt = portalOn(d, x0, y0, W, H);
+		layLine(w, cols, rows, CAVE_Z, pt[0], pt[1], outliers(
+				new Leg(Tile.dirDx(d), Tile.dirDy(d), BIODOME, null), spilt));
 		return site;
 	}
 
@@ -1578,6 +1586,230 @@ public final class Worlds {
 	 * by every stairwell the two plans can agree on. It is taken back down if
 	 * none can be cut.
 	 */
+	/**
+	 * The annexes packed around what is already built, each joined to it by a
+	 * doorway or a corridor rather than by a journey.
+	 *
+	 * <p>A line is the wrong tool for most of a complex. Sent down one, every
+	 * sector stands alone in the rock with {@link #LINE_MIN_RUN} tiles of
+	 * nothing between it and the next, and the result reads as stations rather
+	 * than as a place. A site plan of a complex of this kind reads the other
+	 * way round: a dense cluster of boxes of different sizes, abutting and
+	 * overlapping, the outline ragged because each was added against whatever
+	 * was already there -- with one or two genuine outliers far off, reached
+	 * by track, precisely because they are the exception.
+	 *
+	 * <p>So the annexes go here and the outliers stay on {@link #layLine}.
+	 * Each annex is tried against every side of every box already standing --
+	 * the core first, then whatever has since been added to it, which is what
+	 * lets the third one tuck into the corner the first two made. It takes the
+	 * cheapest site that buries the least cavern, prefers to share a wall over
+	 * standing off one, and prefers to be somewhere the other annexes are not,
+	 * so the cluster grows round the core instead of down one side of it.
+	 */
+	private static Leg[] packCampus(World w, int cols, int rows, int z,
+			int x0, int y0, int cw, int ch, Leg[] annexes) {
+		int[][] boxes = new int[annexes.length + 1][];
+		int nb = 0;
+		boxes[nb++] = new int[] { x0, y0, cw, ch };
+		double cx = x0 + cw * 0.5, cy = y0 + ch * 0.5;
+		Leg[] spilt = new Leg[annexes.length];
+		int ns = 0;
+		for (Leg a : annexes) {
+			int[] at = null;
+			Leg best = null;
+			int[] from = null;
+			double bestScore = Double.MAX_VALUE;
+			for (int bi = 0; bi < nb; bi++) {
+				int[] b = boxes[bi];
+				for (int d = 0; d < 4; d++) {
+					Leg leg = new Leg(Tile.dirDx(d), Tile.dirDy(d), a.stop, a.above);
+					int lo = (leg.dx != 0 ? b[1] : b[0]) - CAMPUS_SLIDE;
+					int hi = (leg.dx != 0 ? b[1] + b[3] : b[0] + b[2]) + CAMPUS_SLIDE;
+					for (int along = lo; along <= hi; along++) {
+						for (int gap = 0; gap <= CAMPUS_GAP; gap++) {
+							int ex = leg.dx != 0
+									? (leg.dx > 0 ? b[0] + b[2] - 1 + gap : b[0] - gap) : along;
+							int ey = leg.dy != 0
+									? (leg.dy > 0 ? b[1] + b[3] - 1 + gap : b[1] - gap) : along;
+							double score = campusScore(w, cols, rows, z, ex, ey, leg,
+									a.above, boxes, nb, gap, cx, cy);
+							if (score < bestScore) {
+								bestScore = score;
+								at = new int[] { ex, ey };
+								best = leg;
+								from = b;
+							}
+						}
+					}
+				}
+			}
+			if (at == null) {
+				spilt[ns++] = a; // no room on the campus: it goes out on track
+				continue;
+			}
+			joinTo(w, z, from, best, at[0], at[1]);
+			stampStop(w, z, at[0], at[1], best, a.above);
+			boxes[nb++] = stopBox(at[0], at[1], best, best.stop);
+		}
+		Leg[] out = new Leg[ns];
+		System.arraycopy(spilt, 0, out, 0, ns);
+		return out;
+	}
+
+	/**
+	 * A route out to the outliers: the sectors that are meant to be off on
+	 * their own, followed by any the campus had no room for.
+	 *
+	 * <p>The second kind is why this exists. A cluster is bounded by the
+	 * cavern around it, and on a map whose caves come in close there is a
+	 * seed or two where the third annex simply has nowhere to stand -- and a
+	 * sector that does not exist is much worse than a sector further out than
+	 * intended. Each one past the first turns, alternately north and south,
+	 * so the overflow spreads instead of queueing down one heading.
+	 */
+	private static Leg[] outliers(Leg first, Leg[] spilt) {
+		Leg[] route = new Leg[spilt.length + 1];
+		route[0] = first;
+		for (int i = 0; i < spilt.length; i++) {
+			route[i + 1] = new Leg(0, i % 2 == 0 ? -1 : 1, spilt[i].stop, spilt[i].above);
+		}
+		return route;
+	}
+
+	/**
+	 * What an annex would cost standing here, or {@code MAX_VALUE} where it
+	 * cannot stand at all: cavern buried, plus a penalty for every tile it
+	 * stands off what it joins, less a bonus for being clear of the annexes
+	 * already placed.
+	 */
+	private static double campusScore(World w, int cols, int rows, int z, int ex, int ey,
+			Leg leg, String[] above, int[][] boxes, int nb, int gap, double cx, double cy) {
+		if (!stopFits(w, cols, rows, z, ex, ey, leg, above)) {
+			return Double.MAX_VALUE;
+		}
+		int[] box = stopBox(ex, ey, leg, leg.stop);
+		// An annex abuts what is already built; it does not stand ON it. This
+		// is the same test the upper floors use, asked of its own level.
+		if (!upperFits(w, z, box[0], box[1], box[2], box[3])) {
+			return Double.MAX_VALUE;
+		}
+		int cost = 0;
+		for (int x = box[0]; x < box[0] + box[2]; x++) {
+			for (int y = box[1]; y < box[1] + box[3]; y++) {
+				if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_WALL) {
+					cost++;
+				}
+			}
+		}
+		// Clear of the OTHER annexes, not of the core -- the core is the thing
+		// they are all meant to be against. Index zero is the core.
+		double bx = box[0] + box[2] * 0.5, by = box[1] + box[3] * 0.5;
+		double clear = CAMPUS_SPREAD;
+		int crowd = 0;
+		for (int i = 1; i < nb; i++) {
+			int[] o = boxes[i];
+			double ox = o[0] + o[2] * 0.5, oy = o[1] + o[3] * 0.5;
+			clear = Math.min(clear, Math.hypot(bx - ox, by - oy));
+			// And on a different side of the CORE, which distance alone does
+			// not buy: three annexes in a row all clear each other by a full
+			// footprint and still come out as one arm off one wall, because
+			// the far side of the core is more cavern and so always scores
+			// worse on cost. A complex wraps what it grew from.
+			if (quadrant(bx - cx, by - cy) == quadrant(ox - cx, oy - cy)) {
+				crowd++;
+			}
+		}
+		return cost + gap * 6.0 - clear * 2.0 + crowd * CAMPUS_CROWD
+				+ Utils.noise2(box[0] * 5 + 900, box[1] * 3 + 400, 0.37) * 10.0;
+	}
+
+	/** Which way a box lies from the middle of the campus, as one of four. */
+	private static int quadrant(double dx, double dy) {
+		return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 0 : 1) : (dy >= 0 ? 2 : 3);
+	}
+
+	/**
+	 * The way in: a doorway punched through the wall of the box being joined,
+	 * and track across whatever gap is left to the annex's own portal. The
+	 * annex's near wall is opened by {@link #stampStop}, so this meets it.
+	 */
+	private static void joinTo(World w, int z, int[] b, Leg leg, int ex, int ey) {
+		int wx = leg.dx != 0 ? (leg.dx > 0 ? b[0] + b[2] - 1 : b[0]) : ex;
+		int wy = leg.dy != 0 ? (leg.dy > 0 ? b[1] + b[3] - 1 : b[1]) : ey;
+		setBare(w, wx, wy, z, Tile.TileType.TYPE_RAIL);
+		for (int x = wx + leg.dx, y = wy + leg.dy;
+				leg.dx != 0 ? (leg.dx > 0 ? x <= ex : x >= ex) : (leg.dy > 0 ? y <= ey : y >= ey);
+				x += leg.dx, y += leg.dy) {
+			if (!layRail(w, z, x, y)) {
+				break;
+			}
+			shoulder(w, z, x, y, leg);
+		}
+	}
+
+	/**
+	 * The wall a line can actually leave a core by: the one with the longest
+	 * clear run out of it, east on a tie because that is the end the tram
+	 * shed's own track runs to.
+	 *
+	 * <p>Measured rather than inferred. The first version asked which walls
+	 * the campus had built against and took one of the others, and that is
+	 * the wrong question twice over: an annex set against the east wall but
+	 * slid well north of it does not block a line leaving eastward on the
+	 * shed's row, while one nominally to the north can sit squarely across
+	 * it. Walking the tiles answers what the bookkeeping only guessed at --
+	 * two seeds in twenty-four laid sixteen tiles of track into the side of
+	 * the mine head they had just built and stopped there.
+	 */
+	private static int freeSide(World w, int cols, int rows, int z,
+			int x0, int y0, int cw, int ch) {
+		int best = Tile.DIR_E, far = -1;
+		for (int d : new int[] { Tile.DIR_E, Tile.DIR_W, Tile.DIR_S, Tile.DIR_N }) {
+			int[] pt = portalOn(d, x0, y0, cw, ch);
+			int run = 0;
+			while (run < LINE_REACH) {
+				int nx = pt[0] + Tile.dirDx(d) * (run + 1), ny = pt[1] + Tile.dirDy(d) * (run + 1);
+				if (nx < 4 || ny < 4 || nx >= cols - 4 || ny >= rows - 4
+						|| !railable(w, z, nx, ny)) {
+					break;
+				}
+				run++;
+			}
+			if (run > far) {
+				far = run;
+				best = d;
+			}
+		}
+		return best;
+	}
+
+	/** Where a line leaves a core by a given wall: on the tram shed's own row
+	 *  where that wall is an end of it, on its middle column where it is a
+	 *  side. */
+	private static int[] portalOn(int d, int x0, int y0, int cw, int ch) {
+		return new int[] {
+				d == Tile.DIR_E ? x0 + cw - 1 : d == Tile.DIR_W ? x0 : x0 + 1 + 21,
+				d == Tile.DIR_S ? y0 + ch - 1 : d == Tile.DIR_N ? y0 : y0 + 1 + 21 };
+	}
+
+	/** How far an annex may slide past the end of the side it is set against,
+	 *  so a campus comes out with a ragged outline rather than a flush one. */
+	private static final int CAMPUS_SLIDE = 6;
+
+	/** The most an annex may stand off what it joins. Zero is a shared wall;
+	 *  past four it stops reading as one complex. */
+	private static final int CAMPUS_GAP = 4;
+
+	/** How far apart annexes are worth keeping. Past this they are simply on
+	 *  different sides of the core and no further bonus is owed. */
+	private static final int CAMPUS_SPREAD = 34;
+
+	/** What it costs an annex to be on the same side of the core as one that
+	 *  is already there. Enough to outweigh the cavern the far side buries,
+	 *  which is the only reason every annex wanted the same wall. */
+	private static final double CAMPUS_CROWD = 120.0;
+
 	private static void layLine(World w, int cols, int rows, int z, int px, int py, Leg[] route) {
 		if (walkLine(w, cols, rows, z, px, py, route, true) < route.length && anyPaired(route)) {
 			// A leg could not place its stop with both its floors, so run the
@@ -1619,6 +1851,18 @@ public final class Worlds {
 	 * is a corridor with rooms off it.
 	 */
 	private static final class Leg {
+		/** The plan to put at the end of this leg, or null for a RUN: a leg
+		 *  that lays track and then simply turns.
+		 *
+		 *  <p>A route needs corners more often than it needs sectors at them.
+		 *  Lambda sent straight out of the works spends its whole reach on one
+		 *  axis, and on a seed where that axis runs under the campus above it
+		 *  the upper floor never finds room -- the complex comes out a
+		 *  basement, which is the single largest thing in the world quietly
+		 *  half-built. Behind a mine head it had its corner, but the mine head
+		 *  cost it thirty tiles and a footprint of reach, and on a map that
+		 *  sites the works west that put the head on the rim with no room to
+		 *  turn at all. A run is the corner without the price. */
 		final int dx, dy;
 		final String[] stop;
 		final String[] above;
@@ -1643,32 +1887,42 @@ public final class Worlds {
 		int placed = 0;
 		for (int li = 0; li < route.length; li++) {
 			Leg drawn = route[li];
+			String[] above = paired ? drawn.above : null;
 			// A TURN's direction is a preference and the map gets a veto:
 			// pointed somewhere with no room for its stop, it turns the other
-			// way instead. Three seeds in eight put the facility low enough
-			// that "turn south" had forty-five rows of south in it and Lambda
-			// wants fifty-six, so the complex did not exist -- which reads as
-			// a map too small and is nothing of the kind, since the same map
-			// had a hundred and thirty rows the other way.
+			// way instead.
 			//
-			// The FIRST leg never flips. Its direction is which portal of the
-			// shed the line leaves by, and two lines that both consult the map
-			// both leave by the same one and run down each other.
-			int ahead = drawn.dx != 0 ? (drawn.dx > 0 ? cols - x : x)
-					: (drawn.dy > 0 ? rows - y : y);
-			int behind = drawn.dx != 0 ? (drawn.dx > 0 ? x : cols - x)
-					: (drawn.dy > 0 ? y : rows - y);
-			// And it overrides only when the drawn way genuinely CANNOT hold
-			// the stop, not merely when it is the shorter of the two. Flipping
-			// on "shorter" sent both of a level's branches the same way
-			// whenever the facility sat slightly off centre, which throws away
-			// the one thing the route is drawn to decide.
-			int need = LINE_MIN_RUN + drawn.stop[0].length() + 6;
-			Leg leg = li > 0 && ahead < need && behind >= need
-					? new Leg(-drawn.dx, -drawn.dy, drawn.stop, drawn.above) : drawn;
+			// The veto used to be measured in MAP EDGES -- is there further to
+			// go this way than that -- and that asks the wrong question. What
+			// stops a stop is almost never the rim; it is the campus on the
+			// floor above, which an upper floor may not stand on and which the
+			// distance to the edge knows nothing about. Four seeds in
+			// twenty-four sent Lambda down an axis with room to spare and no
+			// site on it, and it came out a basement or not at all.
+			//
+			// So ask the real question instead, by walking the heading and
+			// asking stopFits at each step. Nothing is laid, so it costs only
+			// the scan -- and it subsumes the old test, since running out of
+			// map is one of the ways a heading has no site on it.
+			//
+			// The FIRST leg still never flips. Its direction is which portal
+			// of the shed the line leaves by, and two lines that both consult
+			// the map both leave by the same one and run down each other.
+			Leg leg = drawn;
+			if (li > 0 && drawn.stop != null) {
+				Leg back = new Leg(-drawn.dx, -drawn.dy, drawn.stop, drawn.above);
+				// And it overrides only when the drawn way genuinely CANNOT
+				// hold the stop, not merely when the other way holds it
+				// sooner. Flipping on "sooner" sent both of a level's branches
+				// the same way whenever the facility sat slightly off centre,
+				// which throws away the one thing the route is drawn to decide.
+				if (reachToFit(w, cols, rows, z, x, y, drawn, above) < 0
+						&& reachToFit(w, cols, rows, z, x, y, back, above) >= 0) {
+					leg = back;
+				}
+			}
 			int laid = 0;
 			boolean done = false;
-			String[] above = paired ? leg.above : null;
 			for (int i = 1; i <= LINE_REACH && !done; i++) {
 				int nx = x + leg.dx, ny = y + leg.dy;
 				if (nx < 4 || ny < 4 || nx >= cols - 4 || ny >= rows - 4) {
@@ -1694,7 +1948,31 @@ public final class Worlds {
 				x = nx;
 				y = ny;
 				laid++;
-				if (laid >= LINE_MIN_RUN && stopFits(w, cols, rows, z, x, y, leg, above)) {
+				if (laid >= LINE_MIN_RUN && leg.stop == null) {
+					// A RUN: a leg with nowhere to go, which exists only so the
+					// route can change axis. See the Leg doc comment. So it
+					// ends where the route can ACTUALLY change axis, not after
+					// a fixed thirty tiles: stopping at the first thirty put
+					// the corner wherever it happened to land, and where that
+					// was hard against a wall on both perpendiculars the leg
+					// after it had nowhere at all to go. Walking on costs
+					// nothing -- track is the cheapest thing here -- and the
+					// corner lands somewhere a complex can stand.
+					Leg nxt = li + 1 < route.length ? route[li + 1] : null;
+					if (nxt != null && nxt.stop != null) {
+						String[] na = paired ? nxt.above : null;
+						Leg alt = new Leg(-nxt.dx, -nxt.dy, nxt.stop, nxt.above);
+						if (reachToFit(w, cols, rows, z, x, y, nxt, na) < 0
+								&& reachToFit(w, cols, rows, z, x, y, alt, na) < 0) {
+							continue;
+						}
+					}
+					placed++;
+					done = true;
+					continue;
+				}
+				if (laid >= LINE_MIN_RUN && leg.stop != null
+						&& stopFits(w, cols, rows, z, x, y, leg, above)) {
 					int[] exit = stampStop(w, z, x, y, leg, above);
 					x = exit[0];
 					y = exit[1];
@@ -1723,6 +2001,38 @@ public final class Worlds {
 			}
 		}
 		return placed;
+	}
+
+	/**
+	 * How far along a heading the first site its stop would fit is, or -1 if
+	 * there is none within reach. A pure query -- nothing is laid — so a route
+	 * can ask which way to turn before it commits to turning.
+	 */
+	private static int reachToFit(World w, int cols, int rows, int z, int x, int y,
+			Leg leg, String[] above) {
+		for (int i = 1; i <= LINE_REACH; i++) {
+			int nx = x + leg.dx * i, ny = y + leg.dy * i;
+			// Where the LINE can get to, not merely where a stop would fit:
+			// asked without this, a heading that has a site sixty tiles out
+			// behind a wall at forty reads as open, the veto does not fire,
+			// and the line walks into the wall. Which is how a route turned
+			// back into its own campus.
+			if (nx < 4 || ny < 4 || nx >= cols - 4 || ny >= rows - 4
+					|| !railable(w, z, nx, ny)) {
+				return -1;
+			}
+			if (i >= LINE_MIN_RUN && stopFits(w, cols, rows, z, nx, ny, leg, above)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	/** Whether track could be laid here at all. The read-only half of
+	 *  {@link #layRail}: everything else it meets, it builds over or bridges. */
+	private static boolean railable(World w, int z, int x, int y) {
+		Tile.TileType ty = w.getTile(x, y, z).getType();
+		return ty != Tile.TileType.TYPE_WALL_CONCRETE && ty != Tile.TileType.TYPE_WALL_STEEL;
 	}
 
 	/** The paved shoulders either side of a tile of track, across the run. */
@@ -1951,27 +2261,46 @@ public final class Worlds {
 	}
 
 	/**
-	 * The lower line: out of the works' east wall and across the underdark,
-	 * through the mine head to the Lambda complex at the end. Laid after the
-	 * underdark's caverns are carved and linked, so it crosses them rather
-	 * than being carved around, and so its stops can stand among them.
+	 * The underdark: a mine head packed against the works, and the long line
+	 * out to the Lambda complex. Laid after the underdark's caverns are carved
+	 * and linked, so the line crosses them rather than being carved around,
+	 * and so its stops can stand among them.
 	 *
-	 * <p>Two lines, one each way, and the western one turns south at its mine
-	 * head to reach Lambda. Lambda's upper floor is stamped on the CAVE level
-	 * over its lower one -- the only sector besides the halls with two floors
-	 * -- and may not stand on another building, which is why it is sent out of
-	 * the band the cave line's own stops occupy rather than along it.
+	 * <p>Lambda is the ONE sector meant to be far away -- a separate complex
+	 * with its own bunker, reached across open ground -- so it is the one that
+	 * gets a line to itself. Everything else on this floor belongs to the
+	 * works and stands against it.
+	 *
+	 * <p>It used to ride behind a mine head on the same line, and that cost it
+	 * {@link #LINE_MIN_RUN} tiles plus the mine head's own footprint before it
+	 * could even start looking. On a map that sites the works well west, the
+	 * mine head landed on the rim and there was no room left to turn: Lambda
+	 * did not exist at all, which is the largest thing in the world missing
+	 * without a word. The mine head packs into the campus now, so the line
+	 * spends its whole reach on the complex it is for.
 	 */
 	private static void layDeepLine(World w, int cols, int rows, int x0, int y0) {
-		// Lambda goes west and then SOUTH, and the mine head east then north,
-		// so neither ends up under the cave line's own stops: Lambda's upper
-		// floor may not stand on another building, and sent straight along the
-		// same axis it spent its whole reach walking out from under them.
-		int ry = y0 + 1 + 21;
-		layLine(w, cols, rows, DEEP_Z, x0, ry, new Leg[] {
-				new Leg(-1, 0, MINEHEAD, null), new Leg(0, 1, LAMBDA_LOWER, LAMBDA_UPPER) });
-		layLine(w, cols, rows, DEEP_Z, x0 + FACILITY_W - 1, ry, new Leg[] {
-				new Leg(1, 0, MINEHEAD, null) });
+		packCampus(w, cols, rows, DEEP_Z, x0, y0, FACILITY_W, FACILITY_H, new Leg[] {
+				new Leg(0, 0, MINEHEAD, null) });
+		// Out of a wall the mine head is not against, and turning at the far
+		// end, so Lambda's upper floor comes down somewhere the cave campus
+		// has not already built: an upper floor may not stand on another
+		// building, and sent along one axis it spends its whole reach walking
+		// out from under the sectors above.
+		int d = freeSide(w, cols, rows, DEEP_Z, x0, y0, FACILITY_W, FACILITY_H);
+		int[] pt = portalOn(d, x0, y0, FACILITY_W, FACILITY_H);
+		// And it turns toward the LARGER half of the map. Lambda wants
+		// LINE_MIN_RUN tiles plus its own twenty-six before it can stand, and
+		// a works sited in the southern third has barely forty rows south of
+		// it -- turned that way by a constant, the complex had nowhere to go
+		// on a map with a hundred and fifteen rows the other way. There is
+		// only one line on this floor, so nothing else can be sent into.
+		int t = d == Tile.DIR_E || d == Tile.DIR_W
+				? (y0 + FACILITY_H / 2 > rows / 2 ? Tile.DIR_N : Tile.DIR_S)
+				: (x0 + FACILITY_W / 2 > cols / 2 ? Tile.DIR_W : Tile.DIR_E);
+		layLine(w, cols, rows, DEEP_Z, pt[0], pt[1], new Leg[] {
+				new Leg(Tile.dirDx(d), Tile.dirDy(d), null, null),
+				new Leg(Tile.dirDx(t), Tile.dirDy(t), LAMBDA_LOWER, LAMBDA_UPPER) });
 	}
 
 	/**
