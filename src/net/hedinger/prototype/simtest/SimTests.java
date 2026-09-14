@@ -6378,9 +6378,10 @@ public class SimTests {
 	 *
 	 * <p>Three outcomes. At tick zero nearly every herbivore founder has a
 	 * same-species founder within the cluster radius, and so does every hunter.
-	 * When the hunting line is cut to one and the steward restores it, the
-	 * newcomer appears within the radius of the survivor -- measured the tick it
-	 * appears, before either has walked. And with the line wiped out entirely the
+	 * When the hunting line is cut to one and the steward restores it, the line
+	 * comes back at double its floor in a single tick, as whole kin groups of
+	 * {@code RESEED_GROUP} whose members land within the radius of one another --
+	 * measured the tick they appear, before anyone walks. And with the line wiped out entirely the
 	 * reseed still lands somewhere walkable: clustering is where a body goes when
 	 * it has kin, not a precondition for having a body at all.
 	 */
@@ -6396,8 +6397,16 @@ public class SimTests {
 			return out;
 		}
 
+		/** Same species: markers within one kin step of each other on every axis
+		 *  -- exact copies (the founding herds) and a kin group's siblings alike. */
 		private static boolean sameSpecies(TestNPC a, TestNPC b) {
-			return java.util.Arrays.equals(a.getGenome().markers, b.getGenome().markers);
+			double[] ma = a.getGenome().markers, mb = b.getGenome().markers;
+			for (int i = 0; i < ma.length; i++) {
+				if (Math.abs(ma[i] - mb[i]) > 2 * net.hedinger.prototype.sim.Worlds.KIN_RATE + 1e-9) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		/** Share of {@code bodies} that have a same-species body within {@code r}
@@ -6439,7 +6448,10 @@ public class SimTests {
 			assertGreater("hunter founders arrive as a pack",
 					clustered(living(w, Genome.Clade.PREDATOR), r), 0.9);
 
-			// Reseed: cut the hunting line to one and let the steward restore it.
+			// Reseed: cut the hunting line to one and let the steward restore it. A
+			// clade under its floor comes back at RESEED_BOOST times the floor, all
+			// in one tick, as kin groups of RESEED_GROUP -- measured the tick they
+			// appear, before anyone walks or dies.
 			java.util.List<TestNPC> hunters = living(w, Genome.Clade.PREDATOR);
 			TestNPC survivor = hunters.get(0);
 			for (TestNPC t : hunters) {
@@ -6448,19 +6460,62 @@ public class SimTests {
 				}
 			}
 			assertEquals("one hunter left", 1, living(w, Genome.Clade.PREDATOR).size());
-			TestNPC newcomer = null;
-			for (int t = 0; t < 2000 && newcomer == null; t++) {
-				tick(w, 1); // one at a time: the gap is measured before anyone walks
+			java.util.List<TestNPC> newcomers = new java.util.ArrayList<>();
+			for (int t = 0; t < 2000 && newcomers.isEmpty(); t++) {
+				tick(w, 1);
 				for (TestNPC h : living(w, Genome.Clade.PREDATOR)) {
 					if (h != survivor) {
-						newcomer = h;
+						newcomers.add(h);
 					}
 				}
 			}
-			assertTrue("the steward restores the hunting line", newcomer != null);
-			assertTrue("and the newcomer lands beside the survivor ("
-					+ String.format("%.1f", survivor.distance(newcomer.getX(), newcomer.getY(), newcomer.getZ()))
-					+ " tiles)", survivor.distance(newcomer.getX(), newcomer.getY(), newcomer.getZ()) <= r);
+			net.hedinger.prototype.sim.WorldSteward steward = null;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.sim.WorldSteward st) {
+					steward = st;
+				}
+			}
+			assertTrue("the world has its steward", steward != null);
+			int group = net.hedinger.prototype.sim.WorldSteward.RESEED_GROUP;
+			int floor = steward.floor(Genome.Clade.PREDATOR);
+			// Literal, not derived from the boost constant: the promise is "double
+			// the floor", and a scenario that computed its expectation from the
+			// constant would pass whatever the constant said.
+			assertTrue("the hunting line comes back at double its floor, in one tick ("
+					+ newcomers.size() + " against a floor of " + floor + ")",
+					newcomers.size() >= 2 * floor);
+			assertTrue("and not much more than that: whole groups only ("
+					+ newcomers.size() + ")", newcomers.size() < 2 * floor + group);
+			assertEquals("in whole groups", 0, newcomers.size() % group);
+			java.util.List<java.util.List<TestNPC>> groups = new java.util.ArrayList<>();
+			for (TestNPC n : newcomers) {
+				java.util.List<TestNPC> mine = null;
+				for (java.util.List<TestNPC> g : groups) {
+					if (sameSpecies(g.get(0), n)) {
+						mine = g;
+					}
+				}
+				if (mine == null) {
+					mine = new java.util.ArrayList<>();
+					groups.add(mine);
+				}
+				mine.add(n);
+			}
+			assertEquals("as whole kin groups", newcomers.size() / group, groups.size());
+			// Members land within R on each axis of a shared anchor, so within
+			// 2R*sqrt(2) of each other in the plane.
+			double r2 = 2 * net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
+			for (java.util.List<TestNPC> g : groups) {
+				assertEquals("each of " + group, group, g.size());
+				double spread = 0;
+				for (TestNPC a : g) {
+					for (TestNPC b : g) {
+						spread = Math.max(spread, a.distance(b.getX(), b.getY(), b.getZ()));
+					}
+				}
+				assertTrue("and each group lands together (" + String.format("%.1f", spread)
+						+ " tiles across)", spread <= r2);
+			}
 
 			// Fallback: nobody of its kind anywhere -- the reseed still lands.
 			for (TestNPC t : living(w, Genome.Clade.PREDATOR)) {
@@ -8529,13 +8584,36 @@ public class SimTests {
 			assertTrue("hand-placed creature was never deleted by the population "
 					+ "ceiling (" + fate + ")", !culledWhileHealthy);
 
-			// The ceiling still bites: exempting founders must not let the cohort run
+			// The ceiling still bites: exempting founders must not let any cohort run
 			// away, since only this one body is protected and its offspring are not.
-			// Bound is the configured cap plus the overshoot the 3-per-tick trim
-			// allows, NOT "no growth" — the cohort legitimately fills its headroom.
-			assertTrue("minded cohort stayed bounded after the injection ("
-					+ countMinded(w) + ", was " + mindedBefore + " before)",
-					countMinded(w) <= 95);
+			// Bound is each cohort's configured cap plus the overshoot the backstop
+			// allows before the 3-per-tick trim, NOT "no growth" — a cohort
+			// legitimately fills its headroom, and a floor crossing legitimately
+			// lands a boost. (It used to be one magic number for "the minded
+			// cohort", from when that was a cohort with a cap of its own; every
+			// creature is minded now, and the number was whatever the world happened
+			// to hold.)
+			net.hedinger.prototype.sim.WorldSteward steward = null;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.sim.WorldSteward st) {
+					steward = st;
+				}
+			}
+			assertTrue("the world has its steward", steward != null);
+			for (Genome.Clade c : Genome.Clade.values()) {
+				int n = 0;
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC t
+							&& net.hedinger.prototype.sim.WorldSteward.cohortCladeOf(t) == c) {
+						n++;
+					}
+				}
+				int cap = steward.ceiling(c);
+				assertTrue(c + " cohort stayed bounded after the injection (" + n
+						+ " against a ceiling of " + cap + "; " + countMinded(w) + " minded in all, was "
+						+ mindedBefore + " before)",
+						n <= cap * net.hedinger.prototype.sim.WorldSteward.BACKSTOP + 3);
+			}
 		}
 
 		private static int countMinded(World w) {
