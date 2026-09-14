@@ -436,7 +436,9 @@ public final class Mechanics {
 						+ "kill, so rescue by a meal or a shore stays possible."),
 				row("Both needs under " + pct(NPC.NEED_LOW), "mend health", "",
 						"1 point per ~" + num(NPC.MEND_PERIOD) + " ticks at average "
-						+ "metabolism; wounds close over minutes of fed, watered living."));
+						+ "metabolism; wounds close over minutes of fed, watered living. Flesh "
+						+ "that was eaten is bought back at the meat price, out of the tank; a "
+						+ "wound that took no flesh closes for free."));
 		return s;
 	}
 
