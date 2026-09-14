@@ -5338,9 +5338,30 @@ public class SimTests {
 			}
 			assertEquals("the herd is gone before the floor is asked to restore it",
 					0, countHerbivores(w));
-			tick(w, 400);
-			assertGreater("the steward restores the herd", countHerbivores(w), 0);
+			int restored = 0;
+			for (int t = 0; t < 400 && restored == 0; t++) {
+				tick(w, 1); // one at a time: the boost is measured the tick it lands
+				restored = countHerbivores(w);
+			}
+			assertGreater("the steward restores the herd", restored, 0);
 			assertEquals("and every body it put back has a mind", 0, countScripted(w));
+			// The herd is what the other three clades live on, and each of them
+			// boosts to twice its floor: a herd floor no higher than theirs had
+			// thirty hunters and thirty parasites on twenty grazers, measured live.
+			net.hedinger.prototype.sim.WorldSteward steward = null;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.sim.WorldSteward st) {
+					steward = st;
+				}
+			}
+			assertTrue("the world has its steward", steward != null);
+			assertTrue("the herd's floor is at least four times a consumer's ("
+					+ steward.floor(Genome.Clade.HERBIVORE) + " against "
+					+ steward.floor(Genome.Clade.PREDATOR) + ")",
+					steward.floor(Genome.Clade.HERBIVORE) >= 4 * steward.floor(Genome.Clade.PREDATOR));
+			assertTrue("and the herd came back at double that floor (" + restored + ")",
+					restored >= 2 * steward.floor(Genome.Clade.HERBIVORE));
+			tick(w, 400);
 
 			// The hunters' floor is the other seeder, and it needs its own turn:
 			// it only fires with a herd to hunt, so wiping the herd above cannot
