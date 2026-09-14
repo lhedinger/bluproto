@@ -72,11 +72,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
 	private static final int ECO_DEATHSPAN = 90;
 
-	/** How many MLP-minded bodies the world keeps standing — a small floor, so the
-	 *  second decision substrate persists to be selected on rather than flickering
-	 *  out under the tuned LGP starter. */
-	private static final int MLP_FLOOR = 8;
-
 	/**
 	 * Where a cull stops: the drone thins a cohort to this fraction of its
 	 * ceiling, not to the ceiling itself.
@@ -230,20 +225,12 @@ public final class WorldSteward extends Entity implements CullOrders {
 		int predMin = predBounds[0];
 
 		int herb = 0, pred = 0, scav = 0, para = 0, minded = 0, mindedPred = 0, mindedHerb = 0;
-		int mlp = 0;
 		for (Entity e : getWorld().getEntities()) {
 			if (e instanceof TestNPC t) {
 				// Tallied alongside the cohorts, but NOT one of them: see the
 				// lineage guard below.
 				if (!t.isDead() && !t.isRemoved() && t.isMinded()) {
 					minded++;
-				}
-				// The MLP substrate, tracked separately so its own floor can keep
-				// the A/B alive — it is otherwise outcompeted by the hand-tuned LGP
-				// starter and reseeded too rarely to persist.
-				if (!t.isDead() && !t.isRemoved() && t.getGenome() != null
-						&& t.getGenome().mlp != null) {
-					mlp++;
 				}
 				if (!t.isDead() && !t.isRemoved() && t.isMinded() && t.getGenome() != null) {
 					if (t.getGenome().clade == Genome.Clade.PREDATOR) {
@@ -294,15 +281,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 		// nearly gone".
 		if (mindedHerb < mindedFloor) {
 			seedMinded();
-		}
-		// The MLP substrate's own floor — the second decision method competes on a
-		// level field only if it is kept in the world at all, the way the minded
-		// lineage above is. Without it the dense network, outmatched by the tuned
-		// LGP starter, would flicker out and the A/B would quietly become an A. A
-		// small floor, because the point is that the substrate persists to be
-		// selected on, not that it is propped up to a large share.
-		if (mlp < MLP_FLOOR) {
-			seedMlp();
 		}
 		// The scavenger cohort. Its floor is conditional on there being anything to
 		// scavenge: reseeding one into a world with no bodies is spawning it to
@@ -511,18 +489,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 *  the mix. One description, in the method that implements it. */
 	private void seedMinded() {
 		Genome g = Worlds.mindedReseedGenome(getWorld(), Genome.Clade.HERBIVORE);
-		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
-		seedBelow = !seedBelow;
-		double[] p = seedSpot(Genome.Clade.HERBIVORE, z);
-		getWorld().spawnEntity(TestNPC.mindedForager(p[0], p[1], z, g).withDeathspan(ECO_DEATHSPAN));
-	}
-
-	/** Seeds one MLP-minded founder — a fresh network with the forage-and-breed
-	 *  prior — to keep the second substrate's floor. It descends from the same
-	 *  founder recipe as the rest of the minded cohort, differing only in carrying
-	 *  a network instead of a program. */
-	private void seedMlp() {
-		Genome g = Worlds.mlpFounderGenome();
 		int z = seedBelow && caveZ >= 0 ? caveZ : surfaceZ;
 		seedBelow = !seedBelow;
 		double[] p = seedSpot(Genome.Clade.HERBIVORE, z);
