@@ -5188,6 +5188,71 @@ public class SimTests {
 	}
 
 	/**
+	 * The world seeds only program minds, for now. The MLP substrate is still in
+	 * the code and still runs behind the same seam -- a genome injected with one
+	 * works, and {@code AnMlpMindCompetesThroughTheSameSeam} keeps proving it --
+	 * but neither the founding cohort nor a steward reseed carries one any more.
+	 * Measured on the live world, seven of eight scavengers and seven of eight
+	 * parasites had converged on the network by inheritance rather than by any
+	 * test of which forages better, and a network's policy cannot be read in the
+	 * inspector, so the cohort being watched is the one being seeded.
+	 *
+	 * <p>Three legs: the founding cohort of a demo world carries no network; the
+	 * founder recipe never draws one across many draws; and the steward's own
+	 * floors put none back after a wipe.
+	 */
+	static class TheWorldSeedsOnlyProgramMinds extends Scenario {
+		private static int networks(World w) {
+			int n = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.getGenome() != null && t.getGenome().mlp != null) {
+					n++;
+				}
+			}
+			return n;
+		}
+
+		private static int minds(World w) {
+			int n = 0;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+						&& t.getGenome() != null && t.getGenome().brain != null) {
+					n++;
+				}
+			}
+			return n;
+		}
+
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(13);
+			assertGreater("the founding cohort has program minds", minds(w), 0);
+			assertEquals("and no network among them", 0, networks(w));
+
+			int drawn = 0;
+			for (int i = 0; i < 300; i++) {
+				Genome g = net.hedinger.prototype.sim.Worlds.mindedReseedGenome(w, Genome.Clade.PARASITE);
+				assertTrue("a founder recipe carries a program", g.brain != null);
+				if (g.mlp != null) {
+					drawn++;
+				}
+			}
+			assertEquals("and never a network, in 300 draws", 0, drawn);
+
+			// Wipe every clade the steward floors and let it restore them all.
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.getGenome() != null) {
+					t.remove();
+				}
+			}
+			tick(w, 600);
+			assertGreater("the steward restored a cohort", minds(w), 0);
+			assertEquals("with no network in it", 0, networks(w));
+		}
+	}
+
+	/**
 	 * Every creature the world seeds has a mind, and the steward keeps it that way.
 	 *
 	 * <p>This used to assert the opposite half: that scripted herbivores persisted
@@ -12510,6 +12575,7 @@ public class SimTests {
 				new AFloorBlocksSightUnlessAnOpeningIsNear(),
 				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),
+				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
 				new MindedReseedDescendsFromLongestLivedSurvivor(),
 				new AReseedDescendsFromItsOwnClade(),
