@@ -405,6 +405,18 @@ final class WorldHost {
 		return out;
 	}
 
+	/** Kills one creature where it stands, so the suite can read back what the
+	 *  wire says about a CARCASS. The same seam as {@link #liveCreatureIds()}:
+	 *  a test asks the host, never the world behind it. */
+	void killForTest(int id) {
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e.getID() == id && e instanceof net.hedinger.prototype.entities.NPC n) {
+				n.kill();
+				return;
+			}
+		}
+	}
+
 	java.util.List<Integer> liveCreatureIds() {
 		java.util.List<Integer> out = new java.util.ArrayList<>();
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
@@ -614,6 +626,24 @@ final class WorldHost {
 					d.put("thirst", round(n.getThirst()));
 				}
 				d.put("health", n.getHealth());
+				// What this body weighs to an eater: the body it HAS, not the one its
+				// genome describes. A juvenile is worth its juvenile mass, and the
+				// genome's size is the adult it is still climbing toward.
+				d.put("mass", round(n.bodyMass()));
+				// A carcass is a resource, and the inspector said nothing about it.
+				// These four are the whole of what decides whether one is worth
+				// walking to -- the same numbers the scavenger's own scan reads --
+				// and none of them could be worked out from what was on the wire:
+				// the genome carries the ADULT size, so even the mass was missing.
+				if (n.isDead()) {
+					d.put("decay", round(n.decayProgress()));
+					d.put("meat", round(n.meatLeft()));
+					d.put("worth", round(net.hedinger.prototype.entities.NPC.MEAT_ENERGY
+							* n.bodyMass() * n.meatLeft()));
+					// Ticks before the world reclaims it. Eating a body ages it, so
+					// this shortens as it is consumed as well as as it rots.
+					d.put("rotsIn", Math.max(0, n.getDeathspan() + n.getAge()));
+				}
 				d.put("carrying", n.getCarriedLoad() > 0); // hauling an ITEM (a crate)
 				d.put("grabbed", n.isGrabbed());
 				// Who has hold of whom. `attachedTo` above says which entity this one

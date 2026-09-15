@@ -37,6 +37,7 @@ public final class ServerTests {
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
+		aCarcassSaysWhatItIsWorth();
 		theDroneRankIsDronesAndOnlyDrones();
 		theTileCatalogListsEveryType();
 		theBeltPointsWhereItIsLaid();
@@ -85,6 +86,55 @@ public final class ServerTests {
 		}
 		check("the world actually contained machinery", machines > 0);
 		check("and creatures to contrast it with", creatures > 0);
+	}
+
+	/**
+	 * A carcass tells the inspector what it is worth.
+	 *
+	 * <p>Tapping a corpse used to report that it was dead, what killed it, and
+	 * nothing else that mattered about it. A corpse is a resource — it is the
+	 * whole of a scavenger's living — and the four numbers that decide whether
+	 * anything walks to it were all missing from the wire: how much flesh is
+	 * left, how far through rotting it is, how long it has, and what it weighs.
+	 * The mass was not merely absent but unobtainable, because the genome
+	 * carries the ADULT size and a body dies at whatever size it had reached.
+	 */
+	static void aCarcassSaysWhatItIsWorth() {
+		WorldHost host = new WorldHost(11);
+		java.util.Map<String, Object> corpse = null;
+		// Kill something and read it back through the same endpoint the panel uses.
+		for (int id : host.liveCreatureIds()) {
+			java.util.Map<String, Object> alive = host.entityDetail(id);
+			if (alive == null || !alive.containsKey("mass")) {
+				continue;
+			}
+			check("a living body reports its CURRENT mass, not its genome's adult size",
+					alive.get("mass") instanceof Number);
+			check("and carries no carcass facts while it is alive", !alive.containsKey("decay"));
+			host.killForTest(id);
+			corpse = host.entityDetail(id);
+			break;
+		}
+		check("the world had a body to kill and inspect", corpse != null);
+		if (corpse == null) {
+			return;
+		}
+		for (String k : java.util.List.of("decay", "meat", "worth", "rotsIn", "mass")) {
+			check("a carcass reports " + k, corpse.get(k) instanceof Number);
+		}
+		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
+		double decay = ((Number) corpse.get("decay")).doubleValue();
+		double meat = ((Number) corpse.get("meat")).doubleValue();
+		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
+		check("and still has its flesh on it", meat > 0.9 && meat <= 1.0);
+		check("it has ticks left to be eaten in", ((Number) corpse.get("rotsIn")).intValue() > 0);
+		// The one number a scavenger's own scan actually reads, so the panel shows
+		// the same figure the simulation weighs a carcass by rather than a second
+		// version of it computed in the viewer.
+		double worth = ((Number) corpse.get("worth")).doubleValue();
+		double mass = ((Number) corpse.get("mass")).doubleValue();
+		check("its worth is the meat price of the flesh still on it",
+				Math.abs(worth - net.hedinger.prototype.entities.NPC.MEAT_ENERGY * mass * meat) < 0.02);
 	}
 
 	/**

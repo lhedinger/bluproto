@@ -747,6 +747,9 @@ function renderInspectSimple(d: Record<string, any>): void {
       : row('riding', `#${d.attachedTo}`));
   }
   if (d.species) rows.push(row('species', d.species));
+  // A corpse's own facts sit under its identity: what it was comes first,
+  // then what is left of it, which is the part anything still alive cares about.
+  rows.push(...carcassRows(d));
   if ('hauling' in d) rows.push(row('carrying', `#${d.hauling}`));
   if (d.carrying) rows.push(row('hauling', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
@@ -878,6 +881,7 @@ function attributesTab(d: Record<string, any>): string {
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
   if (d.diedOf) status.push(row('died of', d.diedOf));
+  status.push(...carcassRows(d));
   // Which way round the hold goes, the same way the card says it: `attachedTo`
   // alone cannot tell a passenger from a captive, and folded into a flags blob
   // as "attached→#12" it did not try to.
@@ -885,6 +889,7 @@ function attributesTab(d: Record<string, any>): string {
     status.push(d.grabbed ? row('held by', `#${d.attachedTo}`) : row('riding', `#${d.attachedTo}`));
   }
   if ('hauling' in d) status.push(row('hauling', `#${d.hauling}`));
+  if ('mass' in d) status.push(row('mass', `${d.mass} × reference`));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
   if (d.flying) fl.push('flying');
@@ -1075,6 +1080,23 @@ function bar(k: string, v: unknown, pct: number): string {
 function showInspect(size: PanelSize): void {
   openPanel(inspectEl, size);
   wirePanelChrome(inspectEl, deselect);
+}
+
+/** What a carcass still offers, for both inspector surfaces. A corpse is a
+ *  resource, not a full stop: how much flesh is left on it and how far through
+ *  rotting it is are what decide whether anything walks to it, and they are
+ *  exactly what the panel used to omit. Shown the same way up as the living
+ *  books -- a full bar is a good carcass -- so "meat" fills and "freshness"
+ *  drains with rot rather than one of each. */
+function carcassRows(d: Record<string, any>): string[] {
+  const out: string[] = [];
+  if (!('decay' in d)) return out;
+  out.push(bar('meat left', `${Math.round(d.meat * 100)}%`, Math.max(0, Math.min(1, d.meat))));
+  out.push(bar('freshness', `${Math.round((1 - d.decay) * 100)}%`,
+    Math.max(0, Math.min(1, 1 - d.decay))));
+  if ('worth' in d) out.push(row('worth', `${d.worth} energy`));
+  if ('rotsIn' in d) out.push(row('rots away in', `${d.rotsIn} ticks`));
+  return out;
 }
 
 function row(k: string, v: unknown): string {
