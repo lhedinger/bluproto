@@ -676,6 +676,83 @@ public class SimTests {
 	}
 
 	/**
+	 * The fungus bed is a mat, and it leaves room for the crop standing in it.
+	 *
+	 * <p>This is a regression guard with a number behind it. The bed used to
+	 * paint 16% of every tile in the ramp's highlight — the brightest colour in
+	 * the caves — because it drew mushroom caps at full density in the GROUND
+	 * layer, which is baked once and cannot know how much food is left. The
+	 * fruiting bodies that carry that number are stamped on top by the
+	 * vegetation sprite layer, and they were landing on a tile that already
+	 * looked fully stocked, so the whole 1..5 range read the same.
+	 *
+	 * <p>So the assertions are about layer discipline rather than looks: the
+	 * mat stays quiet enough that something can stand on it, its bright marks
+	 * are punctate (dots on a web) rather than areal (the crowns of a crowd),
+	 * and it invents no colour. A screenshot cannot tell you 16% from 3%, and
+	 * nothing else in the build would notice the bed creeping back up.
+	 */
+	static class TheFungusBedLeavesRoomForItsCrop extends Scenario {
+		@Override
+		public void run() {
+			final int A = net.hedinger.prototype.engine.GroundTextures.ART;
+			int shadow = GroundTextures.rampColor(GroundTextures.CLS_FUNGUS, 0);
+			int thread = GroundTextures.rampColor(GroundTextures.CLS_FUNGUS, 1);
+			int knot = GroundTextures.rampColor(GroundTextures.CLS_FUNGUS, 2);
+			int spark = 0x9df5c6; // the bed's one accent, ART-STYLE §2
+			java.util.Set<Integer> rock = new java.util.HashSet<>();
+			for (int i = 0; i < 3; i++) {
+				rock.add(GroundTextures.rampColor(GroundTextures.CLS_STONE, i));
+			}
+
+			int total = 0, knots = 0, sparks = 0, mat = 0;
+			double feltMin = 1, feltMax = 0;
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int tileMat = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							int c = GroundTextures.fungus(wx + (ai + 0.5) / A,
+									wy + (aj + 0.5) / A, wx * A + ai, wy * A + aj);
+							assertTrue("the bed is its own ramp, the spark, and the rock it "
+									+ "grows on: " + Integer.toHexString(c),
+									c == shadow || c == thread || c == knot || c == spark
+											|| rock.contains(c));
+							total++;
+							if (c == knot) {
+								knots++;
+							}
+							if (c == spark) {
+								sparks++;
+							}
+							if (c != spark && !rock.contains(c)) {
+								tileMat++;
+							}
+						}
+					}
+					mat += tileMat;
+					double f = tileMat / (double) (A * A);
+					feltMin = Math.min(feltMin, f);
+					feltMax = Math.max(feltMax, f);
+				}
+			}
+
+			// The number this scenario exists for. The caps standing on the bed
+			// are drawn in the bloom red, and they cannot be seen over a ground
+			// that is already wearing the brightest colour in the cave across a
+			// sixth of its area.
+			assertLess("the bed's highlight is punctate, not a field",
+					knots / (double) total, 0.06);
+			assertLess("and the spore spark stays an accent", sparks / (double) total, 0.01);
+			// But it is still a bed: mycelium, not bare stone with a scratch.
+			assertGreater("the mat covers real ground", mat / (double) total, 0.30);
+			// And the colony field does something — a bed has thick and thin.
+			assertLess("somewhere the colony is thin", feltMin, 0.35);
+			assertGreater("and somewhere it is thick", feltMax, 0.70);
+		}
+	}
+
+	/**
 	 * The two cover tiles the world was missing: tall grass and desert scrub.
 	 *
 	 * <p>Pinned for the same reasons the reed bed is, plus one that is specific
@@ -12898,6 +12975,7 @@ public class SimTests {
 				new EveryBodyStaysInItsCell(),
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
+				new TheFungusBedLeavesRoomForItsCrop(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
