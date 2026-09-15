@@ -359,6 +359,18 @@ The precedents, so nobody pays twice:
   `TheFungusBedLeavesRoomForItsCrop` pins the number because a screenshot cannot
   tell 16% from 3%.
 
+- **The palette from nowhere** — that same mushroom sprite wore six colours
+  found in no ramp in the project, under a comment asserting they were "in the
+  ground bake's key". They were not, and nothing caught it for as long as the
+  sprite existed: an invented palette is invisible precisely because it looks
+  fine on its own. Grep before you write a hex literal, and grep the comment
+  too — a claim about where a colour came from is worth exactly as much as a
+  claim about anything else in a comment. The cap is now the bloom red the rest
+  of the world's flora-food wears, promoted by deriving its missing shade off
+  the accent (§2); the stem and button come off the sand ramp, and
+  `TheMushroomIsPaintedFromRamps` holds the client file to it because Java
+  cannot read `render.ts` and nothing else links the two.
+
 - **Open cover keeps, closed cover drops** — a concealment veil names the
   baked pixels it re-stamps, and which way it names them is not a coding
   taste. Closed cover (a thicket, a reed bed) is a canopy with holes: the veil
