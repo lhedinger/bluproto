@@ -3685,6 +3685,35 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * What one child of this body costs to raise, from the moment it is born to
+	 * the moment it stops growing: the matter of the body it arrives with, the
+	 * flesh it has to buy to finish growing (new flesh is matter, bought at the
+	 * meat price), the meal it is born digesting, and the resting burn of the
+	 * whole childhood. Every term is read off the constant that already prices
+	 * that thing, so this is what a childhood actually costs rather than a
+	 * number picked to make one work.
+	 *
+	 * <p>The travel term prices the whole childhood at the body's TOP pace,
+	 * which no creature actually holds; the estimate is deliberately high.
+	 * The two ways of being wrong are not symmetric — a lineage that asks too
+	 * much per child has fewer of them and drift can walk the price down at
+	 * its leisure, while a lineage that asks too little buries its young and
+	 * has no descendants left to do any drifting. So a founder starts on the
+	 * generous side of its own arithmetic. A per-clade price constant used to
+	 * stand in for this whole sum.
+	 */
+	public static double childhoodCost(double adultSize, double birthSatiation, double speed) {
+		double m = adultSize / NPC.REF_SIZE;
+		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultSize));
+		double ticks = NPC.growthTicks(adultSize);
+		double flesh = (adultSize - birthSize) * MEAT_ENERGY / NPC.REF_SIZE;
+		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.STOMACH * m;
+		double upkeep = NPC.BASE_METABOLISM * Math.pow(m, 0.75) * ticks;
+		double travel = NPC.MOVE_ENERGY * m * speed * speed * ticks;
+		return birthBodyCost(m) + flesh + meal + upkeep + travel;
+	}
+
+	/**
 	 * Opens a newborn's books out of what its parents hand over, and returns
 	 * what the transfer actually consumed. The identity this exists to hold:
 	 * <b>what the child is worth equals what its parents lost</b> — its

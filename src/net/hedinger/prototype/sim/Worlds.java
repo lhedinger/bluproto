@@ -226,32 +226,47 @@ public final class Worlds {
 	@net.hedinger.prototype.engine.Unit("tiles/tick")
 	public static final double HUNTER_SPEED_LO = 0.065, HUNTER_SPEED_HI = 0.085;
 
-	/**
-	 * What a founder hunter pays per child, as a fraction of its tank, and the
-	 * fraction it banks before it breeds. The cohort draws 0.35..0.65 for the
-	 * cost, and a hunter's child born on that starves: its childhood costs 4.5
-	 * energy ambling and 6.3 chasing (growth matter at the meat price plus
-	 * upkeep, measured on the live fertile genome) against an endowment of 2.75,
-	 * and the shortfall has to come from kills it lands while small and slow,
-	 * digested through an adult-sized stomach at a rate its growth outruns.
-	 * Nine of nine children died in the live world. At 0.8 the child is born
-	 * with 6.2 in the tank and grows up on that alone; its first kill is
-	 * surplus. The breeding line sits above the cost so the parent keeps a
-	 * tenth of its tank after a birth, above the crawl reserve, rather than
-	 * collapsing at the moment it has a child to feed beside. Fewer children,
-	 * each of which lives. Both stay genes a lineage can drift.
-	 */
-	@net.hedinger.prototype.engine.Unit("of the tank")
-	public static final double HUNTER_REPRO_COST = 0.8, HUNTER_REPRO_LINE = 0.9;
 
-	/** Makes {@code g} a founder hunter: the hunter seed for a mind, a hunter's
-	 *  pace for a body, and a hunter's price for a child. The clade is the
-	 *  caller's to set. */
+	/**
+	 * Sets what a founder asks per child, and the line it banks to before it
+	 * will: the price is what raising that child actually costs (see
+	 * {@link net.hedinger.prototype.simtest.TestNPC#childhoodCost}), as a
+	 * fraction of the founder's own tank, and the line sits far enough above
+	 * the price that paying it leaves the parent above the crawl reserve
+	 * rather than collapsed the moment it has a newborn beside it.
+	 *
+	 * <p>This replaces a pair of per-clade constants. Hunters had their own
+	 * price (0.8 of the tank against a cohort that drew 0.35..0.65) because a
+	 * hunter's child born on the cohort draw starved -- nine of nine died in
+	 * the live world -- and the number was arrived at by measuring that
+	 * childhood and rounding. Measuring the childhood is the part worth
+	 * keeping, so it is done here from the body's own arithmetic, for every
+	 * clade, and no clade needs a number of its own. Both remain genes and
+	 * drift from the first birth; this only says where a lineage starts.
+	 *
+	 * <p>Public because the price is read off the BODY: anything that changes
+	 * a founder's size after {@link #founderGenome} has priced it is holding a
+	 * price for a body it no longer has, and has to re-price.
+	 */
+	public static net.hedinger.prototype.entities.Genome pricedFounder(
+			net.hedinger.prototype.entities.Genome g) {
+		double cap = net.hedinger.prototype.entities.NPC.BASE_CAPACITY * g.size
+				/ net.hedinger.prototype.entities.NPC.REF_SIZE;
+		double price = net.hedinger.prototype.simtest.TestNPC.childhoodCost(
+				g.size, g.birthSatiation, g.speed) / cap;
+		g.reproCostFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproC", price);
+		g.reproFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproF",
+				g.reproCostFraction + 2 * net.hedinger.prototype.entities.NPC.CRAWL_RESERVE);
+		return g;
+	}
+
+	/** Makes {@code g} a founder hunter: the hunter seed for a mind and a
+	 *  hunter's pace for a body. What it charges per child is priced from the
+	 *  childhood like every other clade's ({@link #pricedFounder}). The clade
+	 *  is the caller's to set. */
 	static net.hedinger.prototype.entities.Genome hunterFounder(net.hedinger.prototype.entities.Genome g) {
 		g.brain = hunterBrain();
 		g.speed = HUNTER_SPEED_LO + Utils.random() * (HUNTER_SPEED_HI - HUNTER_SPEED_LO);
-		g.reproCostFraction = HUNTER_REPRO_COST;
-		g.reproFraction = HUNTER_REPRO_LINE;
 		return g;
 	}
 
@@ -343,9 +358,10 @@ public final class Worlds {
 	public static net.hedinger.prototype.entities.Genome founderGenome(
 			net.hedinger.prototype.entities.Genome.Clade clade) {
 		if (clade == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
-			return hunterFounder(mindedGenome(0));
+			return pricedFounder(hunterFounder(mindedGenome(0)));
 		}
-		return mindedGenome((int) (Utils.random() * 3)); // 0..2: the three founder programs
+		// 0..2: the three founder programs
+		return pricedFounder(mindedGenome((int) (Utils.random() * 3)));
 	}
 
 	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
