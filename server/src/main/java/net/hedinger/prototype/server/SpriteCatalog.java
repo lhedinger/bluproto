@@ -257,6 +257,27 @@ final class SpriteCatalog {
 		conceal("duct", Tile.TileType.TYPE_DUCT);
 		conceal("tall_grass", Tile.TileType.TYPE_TALLGRASS);
 		conceal("scrub", Tile.TileType.TYPE_SCRUB);
+		bedGround();
+	}
+
+	/**
+	 * A clean 4x4 crop of mycelium mat, with nothing standing in it.
+	 *
+	 * <p>Not a concealment pair and not a ground swatch: it exists so the web
+	 * catalog can draw the mushroom vegetation sprites over the ground they
+	 * actually grow on. The mat and the fruiting bodies are one reading — the
+	 * mat says a tile is a fungus bed, the caps say how much is left on it —
+	 * and showing the caps over a flat tone, which is what the catalog did,
+	 * proves the transparency but hides the only thing worth checking: whether
+	 * the crop reads against its own substrate.
+	 */
+	private void bedGround() {
+		World w = stage(8, 8);
+		fill(w, Tile.TileType.TYPE_FUNGUS);
+		w.alignTiles();
+		int ts = ResourceManager.tileSize;
+		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
+		assets.put("fungus_bed_ground.png", png(img.getSubimage(2 * ts, 2 * ts, 4 * ts, 4 * ts)));
 	}
 
 	private void conceal(String name, Tile.TileType type) {
