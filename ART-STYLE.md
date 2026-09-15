@@ -343,6 +343,22 @@ The precedents, so nobody pays twice:
   the catalog of record, so a client visual without an entry drawn by its own
   live code path does not merge.
 
+- **The bed that drew its own crop** — the cave fungus ground stamped mushroom
+  caps at the tile's ideal density, putting 16% of every fungus tile in the ramp
+  highlight, the brightest colour in the caves. The caps that carry the real
+  number are the vegetation sprite layer's, stamped on top, and they were
+  landing on a tile that already looked fully stocked — so the whole 1..5 growth
+  range read identically and the food signal was gone. The ground layer is baked
+  once and cannot know live state; drawing the live layer's subject at a
+  constant is drawing a lie, and a bright one drowns the truth painted over it.
+  Rule: **a ground says what a tile is, at the quietest reading that still says
+  it** — the mat, not the mushrooms; the sward's potential, not the standing
+  crop. Where two layers describe the same thing, the static one yields
+  contrast to the live one. The bed is now a mycelium mat (§3's crack network
+  read positive) whose highlight is punctate at 3%, and
+  `TheFungusBedLeavesRoomForItsCrop` pins the number because a screenshot cannot
+  tell 16% from 3%.
+
 - **Open cover keeps, closed cover drops** — a concealment veil names the
   baked pixels it re-stamps, and which way it names them is not a coding
   taste. Closed cover (a thicket, a reed bed) is a canopy with holes: the veil

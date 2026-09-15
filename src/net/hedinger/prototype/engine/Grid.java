@@ -891,10 +891,11 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_PAVED) {
 								col = GroundTextures.paved(gx, gy);
 							} else if (cl == GroundTextures.CLS_FUNGUS) {
-								// Bioluminescent beds at their full ideal density: the
-								// ground shows what the tile IS; how much is left to
-								// graze is the vegetation sprite layer's job.
-								col = GroundTextures.fungus(wx, wy, gx, gy, 1);
+								// The mycelium mat: the ground shows what the tile IS.
+								// How much is left to graze is the vegetation sprite
+								// layer's job, and the mat is drawn quiet so that the
+								// fruiting bodies riding on it can actually be seen.
+								col = GroundTextures.fungus(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_CRYSTAL_BED) {
 								col = GroundTextures.crystalBed(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_CRYSTAL_SPARSE) {

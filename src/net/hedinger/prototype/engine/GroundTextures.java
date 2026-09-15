@@ -695,53 +695,71 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * Cave fungus beds drawn as pixel-art clusters, not noise: discrete
-	 * rounded caps stamped on a jittered lattice, each cap shaded as a shape
-	 * -- lit crown toward screen-north, base flank, and a grounded shadow rim
-	 * under its south edge -- so a bed reads as a mass of individual growths
-	 * (the benthic-node look). A coarse clump field gates where caps appear;
-	 * a few caps carry a small glowing core, the bed's emissive accent.
-	 * {@code veg} in [0,1] is the tile's live vegetation fraction: grazing
-	 * thins the caps, shrinks them and kills the glow.
+	 * A cave fungus bed, drawn as the MAT it is: mycelium creeping over stone,
+	 * not a field of mushrooms.
+	 *
+	 * <p>The bed used to stamp rounded caps on a lattice at the tile's ideal
+	 * density, and the caps ate the tile — 16% of every fungus tile came out
+	 * the ramp highlight, the brightest colour anywhere in the caves. That is a
+	 * problem of what the layers are FOR. The ground says what a tile IS and is
+	 * baked once; the fruiting bodies are the vegetation sprite layer's job and
+	 * are the only thing that tracks how much food is actually left. A ground
+	 * that draws caps at full density is drawing the sprite layer's subject,
+	 * permanently at full — so the caps that carry the real number were stamped
+	 * onto a tile that already looked stocked, and the whole 1..5 growth range
+	 * was invisible. The mat is the substrate; the caps standing in it are the
+	 * crop.
+	 *
+	 * <p>Grammar is §3's crack network read positive: two jittered-lattice
+	 * Voronoi webs, coarse runners in the ramp's base and fine hyphae in its
+	 * shadow, over the same {@code quietGround} stone the cave floor around it
+	 * is made of, so a bed reads as rock that has been colonised rather than as
+	 * a square of something else. The sample position is warped by a little
+	 * noise first, because an unwarped Voronoi web runs in long straight
+	 * segments meeting at right angles and reads as circuitry. Where a runner
+	 * crosses a hypha the mat thickens into a lit knot — which is also where a
+	 * real fruiting body would initiate — and a few knots carry the spore
+	 * spark. Both are punctate: the highlight is now 3% of the tile instead of
+	 * 16%, and it is dots on a web rather than the crowns of a crowd.
+	 *
+	 * <p>Rejected on the comparison sheet: runners painted in the highlight
+	 * (the web became a glowing lattice that competed with the caps all over
+	 * again, and read mechanical); an unfelted web (correct but so quiet the
+	 * bed stopped reading as a distinct patch at map zoom); a warp strong
+	 * enough to break the threads into dashes, which read as noise rather than
+	 * as a network; and a heavier felt at twice this warp, which closed the mat
+	 * into a dark field — the rock between the threads stopped showing, and a
+	 * mat you cannot see the floor through is on its way back to being the
+	 * crowd of caps this replaced. The bed wants to be OPEN: the stone reading
+	 * between the threads is what keeps the crop the densest thing on the tile.
+	 *
+	 * <p>There is no {@code veg} parameter any more. The bake always passed 1,
+	 * because a chunk bake is static and cannot know live state — the argument
+	 * only ever documented an intention the renderer could not honour.
 	 */
-	public static int fungus(double wx, double wy, int px, int py, double veg) {
-		int C = 4; // candidate-cap lattice pitch, art-px
-		int cx0 = Math.floorDiv(px, C), cy0 = Math.floorDiv(py, C);
-		double bestD = 1e9, bestDy = 0, bestR = 0;
-		boolean bestGlow = false;
-		for (int oy = -1; oy <= 1; oy++) {
-			for (int ox = -1; ox <= 1; ox++) {
-				int cx = cx0 + ox, cy = cy0 + oy;
-				// Cap presence: the clump field sampled at this cell's centre,
-				// widened by lush vegetation.
-				double nwx = wx + (cx * C + C * 0.5 - (px + 0.5)) / 12.0;
-				double nwy = wy + (cy * C + C * 0.5 - (py + 0.5)) / 12.0;
-				if (Utils.noise2(nwx + 77, nwy + 55, 1.9) < 0.64 - 0.22 * veg) {
-					continue;
-				}
-				double jx = cx * C + 1 + hash01(cx, cy, 31) * (C - 2);
-				double jy = cy * C + 1 + hash01(cx, cy, 32) * (C - 2);
-				double r = 1.4 + hash01(cx, cy, 33) * (0.5 + 0.9 * veg);
-				double dx = px + 0.5 - jx, dy = py + 0.5 - jy;
-				double d = Math.sqrt(dx * dx + dy * dy);
-				if (d - r < bestD - bestR) {
-					bestD = d;
-					bestDy = dy;
-					bestR = r;
-					bestGlow = veg > 0.4 && hash01(cx, cy, 34) > 0.8;
-				}
-			}
+	public static int fungus(double wx, double wy, int px, int py) {
+		double ux = wx + 0.15 * (Utils.noise2(wx + 11, wy + 3, 2.6) - 0.5);
+		double uy = wy + 0.15 * (Utils.noise2(wx + 61, wy + 97, 2.6) - 0.5);
+		boolean runner = crack(ux, uy, 0.55, 0.045);
+		boolean hypha = crack(ux + 40, uy + 70, 0.22, 0.022);
+		if (runner && hypha) {
+			// A knot, and rarely the spore spark sitting on one.
+			return hash01(px, py, 35) > 0.90 ? FUNGUS_SPARK : RAMP[CLS_FUNGUS][2];
 		}
-		if (bestD < bestR) {
-			if (bestGlow && bestD < 0.75) {
-				return FUNGUS_SPARK; // glowing cap core, a deliberate 1-2px accent
-			}
-			return RAMP[CLS_FUNGUS][bestDy < -0.2 * bestR ? 2 : 1]; // lit crown / flank
+		if (runner) {
+			return RAMP[CLS_FUNGUS][1];
 		}
-		if (bestD < bestR + 1.1 && bestDy > 0) {
-			return RAMP[CLS_FUNGUS][0]; // shadow rim grounding the cap's south edge
+		if (hypha) {
+			return RAMP[CLS_FUNGUS][0];
 		}
-		return RAMP[CLS_STONE][0]; // bare cave rock between beds
+		// Felt: where the colony is thickest the rock between the threads is
+		// dithered toward the mat's shadow, so the bed has a footprint at map
+		// zoom instead of dissolving into a scribble.
+		double felt = Utils.noise2(wx + 77, wy + 55, 1.9);
+		if (felt > 0.52 && bayer(px, py) < (felt - 0.52) * 2.2) {
+			return RAMP[CLS_FUNGUS][0];
+		}
+		return quietGround(CLS_STONE, wx, wy, px, py); // the rock it grows on
 	}
 
 	/**
