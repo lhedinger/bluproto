@@ -171,6 +171,18 @@ public final class GeneSchema {
 				g -> g.birthSatiation, (g, v) -> g.birthSatiation = v);
 	}
 
+	/** Clamps {@code v} into the declared bounds of the gene named {@code key},
+	 *  so a DERIVED starting value cannot be seeded outside the range drift is
+	 *  allowed to reach. An unknown key passes the value through. */
+	public static double clampTo(String key, double v) {
+		for (Gene g : GENES) {
+			if (g.key.equals(key)) {
+				return Math.max(g.lo, Math.min(g.hi, v));
+			}
+		}
+		return v;
+	}
+
 	/** The genes, in declaration (and mutation-draw) order. */
 	public static List<Gene> genes() {
 		return GENES;

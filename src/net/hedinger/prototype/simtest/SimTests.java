@@ -6528,6 +6528,72 @@ public class SimTests {
 	}
 
 	/**
+	 * A founder asks, per child, what that child's childhood actually costs —
+	 * and the sum is right. Hunters used to carry a price of their own (0.8 of
+	 * the tank against a cohort drawing 0.35..0.65) because the cohort draw
+	 * buried their young; the number came from measuring a hunter's childhood
+	 * and rounding. The measuring is now done in the code, from the same
+	 * constants that price a body, its flesh, its meal and its burn, so no
+	 * clade needs a number of its own and the price follows any body a lineage
+	 * evolves into.
+	 *
+	 * <p>Two legs. The arithmetic: a founder's price times its tank is the
+	 * childhood bill. The outcome, which is the one that matters: in a room
+	 * with water and no food whatsoever, a founder's child is still solvent
+	 * when its childhood ends and has all but finished growing — on the
+	 * endowment alone, with nothing earned. On the cohort draw the same child
+	 * collapses well before it stops growing.
+	 */
+	static class AFounderPricesTheChildhoodItPaysFor extends Scenario {
+		@Override
+		public void run() {
+			seed(77);
+			for (int adult : new int[] { 8, 13, 20 }) {
+				Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+				founder.size = adult;
+				net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
+				double cap = NPC.BASE_CAPACITY * adult / NPC.REF_SIZE;
+				double bill = TestNPC.childhoodCost(adult, founder.birthSatiation, founder.speed);
+				double asked = founder.reproCostFraction * cap;
+				assertNear("a founder of " + adult + " px asks what the childhood costs ("
+						+ String.format("%.2f against a bill of %.2f", asked, bill) + ")",
+						asked, Math.min(bill, 0.9 * cap), 0.01 * cap);
+				assertGreater("and banks past that price before it breeds",
+						founder.reproFraction, founder.reproCostFraction);
+
+				// No food at all: whatever the child manages is what it was given.
+				World w = room(30, 24);
+				for (int x = 1; x < 29; x++) {
+					for (int y = 1; y < 23; y++) {
+						w.getTile(x, y, 0).setFertility(0.0);
+					}
+				}
+				for (int x = 13; x <= 16; x++) {
+					for (int y = 10; y <= 13; y++) {
+						w.setTile(x, y, 0, Tile.TileType.TYPE_SHALLOWS); // thirst is not the variable
+					}
+				}
+				TestNPC parent = TestNPC.mindedPredator(8, 8, 0, founder).grown().withHunger(0.3);
+				parent.withEnergy(parent.energyCapacity());
+				w.spawnEntity(parent);
+				TestNPC child = (TestNPC) parent.spawnOffspring();
+				assertTrue("the founder can afford a child", child != null);
+				parent.settleBirth(child, null);
+				w.spawnEntity(child);
+				int childhood = TestNPC.growthTicks(child.getGenome().size);
+				tick(w, childhood);
+				assertGreater("a " + adult + " px founder's child is still solvent when its childhood "
+						+ "ends, on the endowment alone (" + String.format("%.2f of %.2f",
+						child.getEnergy(), child.energyCapacity()) + ")",
+						child.getEnergy(), NPC.CRAWL_RESERVE * child.energyCapacity());
+				assertGreater("and has all but finished growing (" + child.getPixelSize() + " px of "
+						+ String.format("%.1f", child.getGenome().size) + ")",
+						child.getPixelSize() + 1.0, child.getGenome().size);
+			}
+		}
+	}
+
+	/**
 	 * A founder hunter's children grow up on what they were endowed with. The
 	 * childhood bill is real — new flesh is bought at the meat price, and the
 	 * body burns the whole way — so this is the end-to-end test that the birth
@@ -12957,6 +13023,7 @@ public class SimTests {
 				new DoggednessIsALineagesOwnBusiness(),
 				new APackDoesNotEatItself(),
 				new AFounderHunterChasesFlatOut(),
+				new AFounderPricesTheChildhoodItPaysFor(),
 				new AHuntersChildGrowsUp(),
 				new SeedingLandsInClusters(),
 				new ABiggerMouthFinishesSmallerQuarrySooner(),

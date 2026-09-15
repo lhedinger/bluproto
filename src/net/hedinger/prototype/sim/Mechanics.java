@@ -384,6 +384,11 @@ public final class Mechanics {
 						"Also a gene — the r/K trade. Backed by tank AND stomach together "
 						+ "and drawn proportionally from both, so neither book is a loophole "
 						+ "and a full gut can pay for a child on its own."),
+				row("Founders ask", "what the childhood costs", "",
+						"A world-seeded founder does not draw its price: it is the body's own "
+						+ "bill — the matter of the newborn, the flesh it must buy to finish "
+						+ "growing, its birth meal, and the burn of the whole childhood. No "
+						+ "clade carries a price of its own; it is a gene from there on."),
 				row("Offspring is worth", "exactly what its parents paid", "",
 						"Meat-priced body + stomach + tank = the payment, to the penny — "
 						+ "nothing minted, nothing burnt. A pair pools two offers, so "
