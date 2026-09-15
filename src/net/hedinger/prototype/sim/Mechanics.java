@@ -166,9 +166,10 @@ public final class Mechanics {
 		rows(s,
 				row("Full tank", num(NPC.BASE_CAPACITY) + " × mass", "energy",
 						"Reference body: " + round(NPC.BASE_CAPACITY, 2)),
-				row("Born holding", pct(TestNPC.BORN_FRACTION), "of the tank",
-						"World-seeded founders, and the ceiling on any birth "
-						+ "endowment — under the breeding line either way."),
+				row("Founders hold", pct(TestNPC.FOUNDER_FRACTION), "of the tank",
+						"World-seeded bodies only, and under the breeding line: a founder "
+						+ "has no parents to be endowed by. A BORN body holds whatever its "
+						+ "parents handed over — there is no ceiling on that."),
 				row("Regenerates", num(NPC.REGEN_RATE)
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
 						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
@@ -380,12 +381,17 @@ public final class Mechanics {
 				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
 						+ ", health at 60+", "", "Surplus across all four books."),
 				row("Costs", pct(refReproC), "of the tank, each parent",
-						"Also a gene — the r/K trade. Reference lineage "
-						+ round(refReproC * NPC.BASE_CAPACITY, 2) + " at a reference body."),
+						"Also a gene — the r/K trade. Backed by tank AND stomach together "
+						+ "and drawn proportionally from both, so neither book is a loophole "
+						+ "and a full gut can pay for a child on its own."),
 				row("Offspring is worth", "exactly what its parents paid", "",
-						"Tank + birth meal + meat-priced body = the payment; "
-						+ "born at " + pct(TestNPC.BORN_HUNGER) + " hunger, its "
-						+ "first act is to eat. No free energy at birth."),
+						"Meat-priced body + stomach + tank = the payment, to the penny — "
+						+ "nothing minted, nothing burnt. A pair pools two offers, so "
+						+ "mating genuinely buys a better-funded child."),
+				row("Born sated", pct(new Genome().birthSatiation), "of the stomach",
+						"A gene, paid for out of the same endowment: the rest of it goes to "
+						+ "the tank. Gut food is what the mint runs on, tank energy is "
+						+ "spendable at once — so a newborn's hunger is derived, not decreed."),
 				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
 						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
 				row("Cooldown", "half the offspring's childhood, at least "
@@ -929,6 +935,9 @@ public final class Mechanics {
 						+ "axis, low is breed-early, high is bank-first."),
 				row("Spends per child", pct(def.reproCostFraction) + " of the tank", "",
 						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
+				row("Newborns sated to", pct(def.birthSatiation) + " of the stomach", "",
+						"How a lineage provisions its young: a full gut regenerates, a full "
+						+ "tank spends. Too little of either and its children do not make it."),
 				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
 						"Evolvability, itself heritable — meta-evolution, bounded so a lineage "
 						+ "cannot fossilise or dissolve."),

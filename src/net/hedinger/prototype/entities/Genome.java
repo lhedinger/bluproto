@@ -250,6 +250,20 @@ public class Genome {
 	 *  in each child. Paired with {@link #reproFraction} this is the whole r/K
 	 *  trade: cheap-and-many against dear-and-few. */
 	public double reproCostFraction = 0.5;
+	/**
+	 * How full a lineage packs its newborns' stomachs, 0..1 of stomach capacity
+	 * — the satiation a child is born with, and the third life-history gene.
+	 * What it costs comes out of the same endowment as the tank, so this is a
+	 * real trade and not a free gift: food in the gut is what the mint runs on
+	 * and it feeds a child for a long time, but it converts only at the rate
+	 * satiation allows, while energy in the tank is spendable at once and pays
+	 * for growth directly. Pack too little and the child is born starving;
+	 * pack too much and it is born with nothing to grow on. This was a
+	 * constant (every child born at 0.9 hunger, whatever its parents could
+	 * afford); as a gene, how to provision a child is something a lineage
+	 * discovers rather than something the world decrees.
+	 */
+	public double birthSatiation = 0.1;
 	/** How hard this lineage mutates its own offspring, per gene at birth — meta-
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */
@@ -311,6 +325,12 @@ public class Genome {
 		// and the foraging instinct all vary from the first generation.
 		g.reproFraction = 0.6 + Utils.random() * 0.3;
 		g.reproCostFraction = 0.35 + Utils.random() * 0.3;
+		// birthSatiation is deliberately NOT drawn: founders carry the reference
+		// value and variation arrives by drift from the first birth. Gut food and
+		// tank energy are not interchangeable to a growing child (the mint is
+		// throttled by satiation, while growth is paid straight out of the tank),
+		// so a founder drawn far off the reference starts its lineage in a hole
+		// selection then has to climb out of before it can explore anything else.
 		g.mutationRate = 0.05 + Utils.random() * 0.1;
 		g.instinct = 0.5 + Utils.random() * 0.5;
 		return g;

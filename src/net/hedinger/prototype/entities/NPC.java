@@ -329,29 +329,84 @@ public abstract class NPC extends Entity {
 		return BASE_CAPACITY * adultMass();
 	}
 
-	/** What this body's lineage asks per offspring — public because birth
-	 *  conservation is audited against it (a child's tank plus its meat-priced
-	 *  body can never exceed what its parents paid; the scenario suite holds the
-	 *  books). What is actually paid is {@link #birthPayment()}. */
+	/** What this body's lineage asks per offspring — its
+	 *  {@link Genome#reproCostFraction} of the (size-scaled) tank, so the price
+	 *  is a property of the body and the lineage rather than of how full the
+	 *  gut happens to be this tick. What BACKS the price is both books (see
+	 *  {@link #reserves()}): a parent with an empty tank and a full stomach can
+	 *  still afford a child, and pays for it out of the meal. Public because
+	 *  birth conservation is audited against it. What is actually handed over
+	 *  is {@link #birthPayment()}. */
 	public double reproCost() {
-		return reproCost;
+		return genome != null ? genome.reproCostFraction * energyCapacity() : reproCost;
+	}
+
+	/** Food energy still undigested in the stomach: the complement of
+	 *  {@link #stomachRoom()}, in the same units {@link #feed} consumes. Held
+	 *  wealth exactly as the tank is — it is what the mint runs on — so a birth
+	 *  draws on it too. */
+	public double stomachEnergy() {
+		return (1 - hunger) * STOMACH * adultMass();
+	}
+
+	/** Everything this body holds that a child can be made out of: the banked
+	 *  tank plus the undigested food in the stomach, both already in energy
+	 *  units. The two books a birth debits, and the two a newborn is opened
+	 *  with — which is what makes the transaction conserve. */
+	public double reserves() {
+		return Math.max(0, energy) + stomachEnergy();
 	}
 
 	/**
-	 * What this body actually pays for a child right now: its lineage's price,
-	 * or everything it holds if that is less. The breeding gate is the line
-	 * ({@code reproFraction} of the tank), and the price is a second gene that
-	 * can drift above it; a parent whose price is above its line used to pay
-	 * the full price out of a tank that did not hold it, go negative, and be
-	 * clamped back to zero next tick -- and its child was endowed from the
+	 * What this body actually hands over for a child right now: its lineage's
+	 * price, or everything it holds if that is less. The breeding gate is the
+	 * line ({@code reproFraction} of the tank), and the price is a second gene
+	 * that can drift above it; a parent whose price is above its line used to
+	 * pay the full price out of a tank that did not hold it, go negative, and
+	 * be clamped back to zero next tick -- and its child was endowed from the
 	 * whole of it. Measured: a parent holding 3.6 paid 8.1, and 4.5 energy was
-	 * minted at the birth. The child is endowed from this, so what it is born
-	 * holding is at most what its parent lost.
+	 * minted at the birth. The child is opened from this, so what it is born
+	 * holding is exactly what its parents lost.
 	 */
 	public double birthPayment() {
-		return Math.max(0, Math.min(reproCost, energy));
+		return Math.max(0, Math.min(reproCost(), reserves()));
 	}
 
+	/**
+	 * Takes {@code amount} out of this body's books for a birth and returns
+	 * what was actually taken. Drawn proportionally from the tank and the
+	 * stomach, so neither book is a loophole: a parent cannot shelter a birth
+	 * behind a full gut, and paying does not selectively empty the reserve the
+	 * body needs to keep moving. Never takes more than is there.
+	 */
+	public double payBirth(double amount) {
+		double held = reserves();
+		if (amount <= 0 || held <= 0) {
+			return 0;
+		}
+		double share = Math.min(1.0, amount / held);
+		double fromTank = Math.max(0, energy) * share;
+		double fromGut = stomachEnergy() * share;
+		energy = Math.max(0, energy) - fromTank;
+		double stomach = STOMACH * adultMass();
+		if (stomach > 0) {
+			hunger = Math.min(1.0, hunger + fromGut / stomach);
+		}
+		return fromTank + fromGut;
+	}
+
+	/**
+	 * Settles a birth: charges the parents and opens the child's books. The
+	 * base implementation only charges, for bodies whose young keep no books
+	 * of their own; {@code TestNPC} overrides it with the conserving transfer,
+	 * where everything the parents lose turns up in the child.
+	 */
+	protected void settleBirth(NPC child, NPC partner) {
+		payBirth(birthPayment());
+		if (partner != null) {
+			partner.payBirth(partner.birthPayment());
+		}
+	}
 	/** The energy this body must bank before it breeds — its lineage's
 	 *  {@link Genome#reproFraction} of the tank (a probe for the scenario suite). */
 	public double reproThreshold() {
@@ -2216,7 +2271,7 @@ public abstract class NPC extends Entity {
 		if (child == null) {
 			return false;
 		}
-		energy -= birthPayment();
+		settleBirth(child, null);
 		reproCooldown = reproCooldownTicks();
 		breedHoldStart = -1;
 		getWorld().spawnEntity(child);
@@ -2289,8 +2344,7 @@ public abstract class NPC extends Entity {
 		if (child == null) {
 			return false;
 		}
-		energy -= birthPayment();
-		partner.energy -= partner.birthPayment();
+		settleBirth(child, partner);
 		reproCooldown = reproCooldownTicks();
 		partner.reproCooldown = partner.reproCooldownTicks();
 		getWorld().spawnEntity(child);
