@@ -106,6 +106,17 @@ public class TestNPC extends NPC {
 	 */
 	@Unit("of the body/tick")
 	public static final double CARRION_BITE = 0.015;
+	/**
+	 * Where a corpse stops being a hunter's meat and becomes a scavenger's, as a
+	 * fraction of its decay. Below it the body is fresh: a hunter will eat it and
+	 * a scavenger will not touch it. At or past it the body is rotting: a
+	 * scavenger will eat it and a hunter cannot stomach it. So the two clades
+	 * are never at the same carcass at the same time -- the hunter has its
+	 * window, and what it leaves ripens into the scavenger's. One number, on
+	 * purpose, so it can be tuned.
+	 */
+	@Unit("of decay")
+	public static double CARRION_TURN = 0.25;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
 	@Unit("tiles beyond touching")
 	public static final double CARRION_REACH = 0.6;
@@ -1453,25 +1464,24 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * A hunter finishing its kill, and the one place both hunter paths do it.
+	 * A hunter eating fresh meat, and the one place both hunter paths do it.
 	 *
 	 * <p>The animal it brought down stops being quarry the instant it dies --
-	 * {@link #edibleQuarry} rejects a corpse -- but it is still a body with
-	 * meat on it and the hunter is standing over it. Now that a bite takes a
-	 * mouthful rather than the whole animal, a hunter without this walks away
-	 * from most of what it killed. It is not a second income: the flesh comes
-	 * off the one ledger either way, so a hunter that stays with its kill ends
-	 * up with what it always had. It stops at the same line that stops it
-	 * killing -- a full mouth leaves the rest, which is where the world gets
-	 * its carrion from now.
+	 * {@link #edibleQuarry} rejects a corpse -- but it is still a fresh body
+	 * with meat on it and the hunter is standing over it. A bite takes a
+	 * mouthful rather than the whole animal, so a hunter without this would walk
+	 * away from most of what it killed. It is not a second income: the flesh
+	 * comes off the one ledger either way, and it stops at the same line that
+	 * stops it killing -- a full mouth leaves the rest.
+	 *
+	 * <p>A hunter is not a scavenger. It eats only what is still fresh -- under
+	 * {@link #CARRION_TURN} of decay, which {@link #edibleCarrion} enforces on
+	 * every carcass it reaches for -- and once a body has turned it cannot
+	 * stomach it. Its window on a kill is the front of the corpse's life; what
+	 * it leaves ripens into the scavengers'.
 	 */
 	private double finishTheKill() {
-		// Behaviour is honoured as an override here for the same reason ecoClade
-		// honours it: a scripted hunter's niche() reads its GENOME clade, which
-		// the hardcoded hunting loop does not set, so asking niche() alone left
-		// the scripted hunter unable to finish a kill it had just made.
-		boolean hunts = behavior == Behavior.PREDATOR || niche().hunts();
-		if (!hunts || hunger <= PRED_FULL_HUNGER) {
+		if (!actsAsHunter() || hunger <= PRED_FULL_HUNGER) {
 			return 0;
 		}
 		double got = scavenge();
@@ -2445,8 +2455,8 @@ public class TestNPC extends NPC {
 		double bestScore = held == null ? 0 : carrionScore(held) * determination();
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
-			if (n == this || !n.isDead() || n.isRemoved()) {
-				continue;
+			if (!edibleCarrion(n)) {
+				continue; // a body still too fresh to stomach is not yet a meal to walk to
 			}
 			if (distance(n.getX(), n.getY(), n.getZ()) > CARRION_SCENT_R) {
 				continue;
@@ -2470,11 +2480,12 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * What a carcass is worth from here: the energy still in it over the walk to
-	 * reach it. Since a bite is paid at full rate and rot is charged once, in how
-	 * much carcass is LEFT, {@code mass * freshness} is exactly the energy
-	 * remaining — so this really is expected payoff per unit of travel rather than
-	 * a stand-in for it.
+	 * What a carcass is worth from here: the meat still on it, over the walk to
+	 * reach it, discounted by how much of its clock is left. Meat is what the
+	 * bite is paid for; the freshness factor is not a second price on rot but the
+	 * odds the body is still there on arrival -- at the end of its decay it
+	 * dissolves, meat or no meat. Only carcasses this mouth may eat are scored at
+	 * all ({@link #edibleCarrion}).
 	 */
 	private double carrionScore(NPC n) {
 		return prize(n.bodyMass() * n.meatLeft() * (1.0 - n.decayProgress()),
@@ -3431,20 +3442,17 @@ public class TestNPC extends NPC {
 	 * consumed, on the same scale {@link #graze} reports, so both feed the same
 	 * intake counter.
 	 *
-	 * <p>The bite does two things at once, and they are the same thing: it converts
-	 * carcass mass into the eater's energy, and it ages the corpse toward removal
-	 * ({@link net.hedinger.prototype.entities.NPC#eat}). A scavenger does not
-	 * "trigger" decomposition — feeding IS the decomposition, which is why this
-	 * needs no separate decay hook.
+	 * <p>The bite takes flesh off the one ledger and feeds it to the eater; it
+	 * does nothing to the corpse's decay. Decay is time (and, in time, weather),
+	 * and meat is what is edible: a body can be eaten to nothing and still lie
+	 * there until its clock runs out, and a body can rot to nothing with every
+	 * scrap of meat still on it. Eating used to advance the decay clock in step
+	 * with the flesh, which folded the two into one number.
 	 *
-	 * <p>A bite is paid at full rate and freshness is not charged again on top of
-	 * it, because rot is already priced -- in how much carcass is LEFT. Eating
-	 * advances the same clock decay does, so a body found half rotted has half its
-	 * bites remaining and yields half as much; one found nearly gone yields nearly
-	 * nothing. Multiplying the per-bite rate by freshness as well discounted the
-	 * same rot twice and made a whole fresh carcass worth half a kill of the same
-	 * mass. The incentive to reach bodies early survives intact -- it just comes
-	 * from the size of what is left rather than from a second penalty.
+	 * <p>Which mouth this is decides which carcasses it will take at all -- see
+	 * {@link #edibleCarrion} and {@link #CARRION_TURN}. A bite is paid at full
+	 * rate, whatever the freshness: a scavenger is paid for the meat it takes,
+	 * and rot decides only whether it may take it.
 	 */
 	private double scavenge() {
 		NPC carrion = carrionInReach();
@@ -3486,6 +3494,31 @@ public class TestNPC extends NPC {
 		return super.canMateWith(other);
 	}
 
+	/** Whether this body hunts, honouring behaviour as an override the way
+	 *  {@link #ecoClade} does: a scripted hunter's niche() reads its GENOME
+	 *  clade, which the hardcoded hunting loop never sets. */
+	private boolean actsAsHunter() {
+		return behavior == Behavior.PREDATOR || niche().hunts();
+	}
+
+	/**
+	 * Whether {@code n} is a carcass THIS mouth can eat. Decay decides it, and it
+	 * decides it differently for the two clades that eat the dead: a hunter
+	 * takes fresh meat and nothing else, a scavenger takes rotting meat and
+	 * nothing else, and the line between them is {@link #CARRION_TURN}. A
+	 * carcass with no meat left is food to nobody, however fresh.
+	 */
+	private boolean edibleCarrion(NPC n) {
+		if (n == this || !n.isDead() || n.isRemoved() || n.meatLeft() <= 0) {
+			return false;
+		}
+		boolean fresh = n.decayProgress() < CARRION_TURN;
+		if (actsAsHunter()) {
+			return fresh;
+		}
+		return niche().scavenges() && !fresh;
+	}
+
 	/** The nearest carcass this body could bite right now, or null. Corpses only --
 	 *  a scavenger has no way to kill, so a living body is not food to it. */
 	private NPC carrionInReach() {
@@ -3496,8 +3529,8 @@ public class TestNPC extends NPC {
 		double bestD = Double.MAX_VALUE;
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
-			if (n == this || !n.isDead() || n.isRemoved() || n.meatLeft() <= 0) {
-				continue; // a carcass eaten out is not food
+			if (!edibleCarrion(n)) {
+				continue; // eaten out, or the wrong side of the turn for this mouth
 			}
 			double reach = (getSize() + n.getSize()) / 2.0 + CARRION_REACH;
 			double d = distance(n.getX(), n.getY(), n.getZ());

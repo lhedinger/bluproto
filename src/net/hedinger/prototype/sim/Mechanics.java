@@ -299,6 +299,11 @@ public final class Mechanics {
 				row("A bite of carrion", pct(TestNPC.CARRION_BITE), "of the body per tick",
 						"~" + Math.round(1 / TestNPC.CARRION_BITE) + " ticks ("
 						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip it clean."),
+				row("A carcass turns at", pct(TestNPC.CARRION_TURN), "of its decay",
+						"Fresh meat is a hunter's and rotting meat a scavenger's: below the line "
+						+ "only a hunter eats it, at or past it only a scavenger. Decay is time "
+						+ "(and, in time, weather) and never eating; meat is what is edible. A body "
+						+ "eaten to nothing lies there until its clock runs out, then dissolves."),
 				row("Scent range for corpses", num(TestNPC.CARRION_SCENT_R), "tiles",
 						"Smelled, not seen — it reaches through walls that sight does not."),
 				row("A parasite's bite", num(TestNPC.PARA_BITE) + " health per "
