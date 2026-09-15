@@ -1305,6 +1305,9 @@ public class TestNPC extends NPC {
 	 * starvation forces the issue.
 	 */
 	private void thinkPredator() {
+		if (finishTheKill() > 0) {
+			return; // standing over a body with meat on it: eating IS the act
+		}
 		if (unstickIfPinned(speed * PRED_CRUISE, true, false)) {
 			tryReproduce(); // shaking loose from a pin; still breed if well-fed
 			return;
@@ -1449,13 +1452,54 @@ public class TestNPC extends NPC {
 		return age - lastBiteAt >= PRED_BITE_PERIOD;
 	}
 
+	/**
+	 * A hunter finishing its kill, and the one place both hunter paths do it.
+	 *
+	 * <p>The animal it brought down stops being quarry the instant it dies --
+	 * {@link #edibleQuarry} rejects a corpse -- but it is still a body with
+	 * meat on it and the hunter is standing over it. Now that a bite takes a
+	 * mouthful rather than the whole animal, a hunter without this walks away
+	 * from most of what it killed. It is not a second income: the flesh comes
+	 * off the one ledger either way, so a hunter that stays with its kill ends
+	 * up with what it always had. It stops at the same line that stops it
+	 * killing -- a full mouth leaves the rest, which is where the world gets
+	 * its carrion from now.
+	 */
+	private double finishTheKill() {
+		// Behaviour is honoured as an override here for the same reason ecoClade
+		// honours it: a scripted hunter's niche() reads its GENOME clade, which
+		// the hardcoded hunting loop does not set, so asking niche() alone left
+		// the scripted hunter unable to finish a kill it had just made.
+		boolean hunts = behavior == Behavior.PREDATOR || niche().hunts();
+		if (!hunts || hunger <= PRED_FULL_HUNGER) {
+			return 0;
+		}
+		double got = scavenge();
+		totalIntake += got;
+		return got;
+	}
+
 	private double biteFeeds(NPC prey) {
 		int bite = biteDamage(prey);
-		int consumed = Math.max(0, Math.min(bite, prey.getHealth()));
-		// Paid for the flesh actually taken off the one ledger every mouth draws
-		// from, so the carcass this bite leaves is worth what it has left and
-		// not the whole animal again.
-		double share = prey.eatMeat(consumed / (double) FULL_BODY_HEALTH);
+		// A mouthful, not a wound. The flesh a bite took used to BE the damage it
+		// dealt, as a share of full health -- and since killing costs exactly one
+		// body's health, killing an animal consumed exactly all of it, by algebra:
+		// bites-to-kill times flesh-per-bite is 1 however the damage is sized. So
+		// the manner of death decided what was left on the ground. Measured over
+		// 60k ticks of the seeded world: 320 deaths by predation left 3% of the
+		// body, 123 by starvation left 99%, so every scrap of carrion in the world
+		// came from an animal nothing had eaten -- and the clade that lives on
+		// carrion was starving beside the bodies of the clade that makes it.
+		//
+		// Health and flesh are different books. A bite that kills is still one
+		// bite's worth of eating, so the mouthful is the weight of flesh a mouth
+		// takes in one go -- the same weight a scavenger takes off a carcass --
+		// expressed as a share of the body being eaten. A hunter goes on eating
+		// once the animal stops being quarry (see the act block), so an undisturbed
+		// hunter still ends up with the whole of a small kill; what it leaves is
+		// what it was too full, or too harried, to finish.
+		double mouthful = Math.min(1.0, CARRION_BITE * bodyMass() / Math.max(1e-6, prey.bodyMass()));
+		double share = prey.eatMeat(mouthful);
 		prey.damage(bite, "predation");
 		// Violence is audible. The scream comes from the quarry, not the hunter,
 		// and carries in proportion to how big the quarry is -- so a hunt tells the
@@ -2990,14 +3034,15 @@ public class TestNPC extends NPC {
 			// A parasite's mouth works on nothing here: it cannot graze and it
 			// does not scavenge — its whole living is the host drain reflex
 			// (parasiteFeed), which runs while it rides, hungry.
-			// A hunter takes nothing here either: its meal is the bite, paid out by
-			// attackNearest below, and letting it graze would hand it a second
-			// income the scripted hunter has never had.
+			// A hunter takes nothing HERE either: its mouth belongs on meat, and
+			// letting it graze would hand it an income the scripted hunter has
+			// never had. Its own kill is handled below, off the same ledger.
 			eaten = niche().scavenges() ? scavenge()
 					: niche().drains() || niche().hunts() ? 0
 							: graze(grazeDemand());
 			totalIntake += eaten;
 		}
+		eaten += finishTheKill();
 		boolean ateItem = false;
 		if (eats || intentTake) {
 			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach

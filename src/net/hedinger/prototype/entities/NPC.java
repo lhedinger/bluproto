@@ -1099,6 +1099,14 @@ public abstract class NPC extends Entity {
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
 		age = -1;
+		// A body arrives on the ground as far gone as the flesh already taken off
+		// it. Decay tracks the flesh for a corpse (see eatMeat), but flesh eaten
+		// while the animal was still alive was not counted, so an animal eaten out
+		// and then killed lay there for its whole span looking like a whole body
+		// with nothing on it -- measured on the live world at 0% meat and 96%
+		// freshness with 937 ticks to run. What is on the ground now matches what
+		// is left of it, whatever it died of.
+		decayTo(1.0 - meat);
 	}
 
 	@Override

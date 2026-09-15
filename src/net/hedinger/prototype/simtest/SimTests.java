@@ -5810,8 +5810,12 @@ public class SimTests {
 			assertEquals("a hunter alone on a meadow has nothing to forage",
 					0, sawSomething);
 			assertGreater("and arriving at it kills", killed, 2);
-			assertEquals("while its mouth stays shut on the meadow it is standing in",
-					0, (long) Math.round(hunter.totalIntake() * 1000));
+			// Measured on the LONE hunter, which is the only one of the two with
+			// nothing but grass around it. The other is standing among the animals
+			// it killed, and eating those is its living -- a hunter finishes its own
+			// kill now, so its intake is no longer evidence about grass either way.
+			assertEquals("a hunter's mouth stays shut on the meadow it is standing in",
+					0, (long) Math.round(lone.totalIntake() * 1000));
 		}
 	}
 
@@ -5915,7 +5919,13 @@ public class SimTests {
 			for (int t = 0; t < 600 && !prey.isDead(); t++) {
 				tick(w, 1);
 			}
-			assertTrue("the carcass was actually finished", prey.isDead());
+			assertTrue("the quarry was actually brought down", prey.isDead());
+			// And then eaten. A bite is a mouthful now, so the kill leaves a carcass
+			// the hunter finishes where it lies -- which is what makes one carcass,
+			// rather than one kill, the honest unit to measure a meal in.
+			for (int t = 0; t < 2000 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
+				tick(w, 1);
+			}
 			return eater.totalSwallowed() - before;
 		}
 
@@ -6072,6 +6082,11 @@ public class SimTests {
 					}
 					if (prey.isDead()) {
 						killed++;
+					}
+					// And then eaten where it fell: a bite takes a mouthful, so the
+					// kill is the start of the meal rather than the whole of it.
+					for (int t = 0; t < 500 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
+						tick(w, 1);
 					}
 					prey.remove();
 				}
@@ -6749,7 +6764,12 @@ public class SimTests {
 			assertGreater("and the chase pays: the tank is well above the crawl reserve after it ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getEnergy(), hunter.energyCapacity()) + ")",
 					hunter.getEnergy(), 0.4 * hunter.energyCapacity());
-			assertLess("and it is fed", hunter.getHunger(), 0.5);
+			// Fed, but no longer stuffed. A kill is not swallowed whole any more --
+			// a bite takes a mouthful and a hunter that moves straight on to the
+			// next animal leaves the rest of the last one lying there for whatever
+			// finds it. What this pins is that the chase pays for itself, not that
+			// it ends sated; lingering at a carcass is a habit selection can find.
+			assertLess("and it is fed", hunter.getHunger(), 0.65);
 
 			// The pace is the other half: a hunter slower than its prey cannot hunt at
 			// any throttle. The founder recipe used to draw hunters from the cohort's
@@ -10074,6 +10094,83 @@ public class SimTests {
 	}
 
 	/**
+	 * What is left on a carcass says how much was eaten off it, not how the
+	 * animal died.
+	 *
+	 * <p>It used to say the opposite, and by algebra rather than by accident: a
+	 * bite took the damage it dealt as a share of full health, killing costs
+	 * exactly one body's health, so bites-to-kill times flesh-per-bite came to
+	 * exactly one however the damage was sized. Every kill ate the whole animal.
+	 * Measured over 60k ticks of the seeded world, 320 deaths by predation left
+	 * 3% of the body against 99% for 123 deaths by starvation -- so the clade
+	 * that lives on carrion was starving beside the bodies of the clade that
+	 * makes it, and the only carrion in the world came from animals nothing had
+	 * eaten.
+	 *
+	 * <p>Two identical animals, killed two ways, with the hunter taken off its
+	 * kill the moment it lands so that what is measured is what the KILLING
+	 * took. Both leave a carcass, and the two are within a few points of each
+	 * other. The hunter is not cheated of its meal by this: it goes on eating
+	 * where the body lies, which {@link ABodyIsEatenOnce} pins.
+	 */
+	static class WhatIsLeftIsNotHowItDied extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(9);
+			World w = room(30, 20);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 19; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // every unit of food here is meat
+				}
+			}
+
+			// Killed by a hunter, which is then taken away before it can eat what
+			// it brought down.
+			TestNPC hunted = TestNPC.grazer(15.5, 10.5, 0, body(12)).grown();
+			TestNPC hunter = TestNPC.predator(15.9, 10.5, 0, body(16)).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunted);
+			w.spawnEntity(hunter);
+			for (int t = 0; t < 3000 && !hunted.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("the hunter brought one down", hunted.isDead());
+			hunter.remove();
+			double killedLeft = hunted.meatLeft();
+
+			// Died of something that does not eat.
+			TestNPC fallen = TestNPC.grazer(6.5, 10.5, 0, body(12)).grown();
+			w.spawnEntity(fallen);
+			tick(w, 1);
+			fallen.kill();
+			tick(w, 1);
+			double fellLeft = fallen.meatLeft();
+
+			assertGreater("an animal that was killed still leaves a carcass worth eating ("
+					+ String.format("%.0f%%", 100 * killedLeft) + " of it)", killedLeft, 0.5);
+			assertNear("and what is left is near enough what an unkilled body leaves ("
+					+ String.format("%.0f%% against %.0f%%", 100 * killedLeft, 100 * fellLeft) + ")",
+					killedLeft, fellLeft, 0.35);
+
+			// The body on the ground matches the ledger, whichever way it died: a
+			// body eaten down before it died used to lie there at full freshness
+			// with nothing on it -- measured live at 0% meat, 96% fresh, 937 ticks
+			// still to run -- because decay only started counting once it was dead.
+			assertNear("a carcass is as far gone as the flesh already taken off it",
+					1 - hunted.meatLeft(), hunted.decayProgress(), 0.05);
+			assertNear("and an untouched one starts from whole", 0, fallen.decayProgress(), 0.05);
+		}
+	}
+
+	/**
 	 * A body is eaten once. Every mouth draws from one flesh ledger: a hunter's
 	 * bite, a parasite's drain and a scavenger's mouthful each take a share of
 	 * the body and are paid the meat price for that share. It used to be paid
@@ -10138,6 +10235,14 @@ public class SimTests {
 				tick(w, 1);
 			}
 			assertTrue("the hunter killed the parked animal", prey.isDead());
+			// Killing is no longer the end of the meal. A bite takes a mouthful, so
+			// the animal is still mostly there when it stops being quarry, and the
+			// hunter goes on eating it where it lies. The body is still worth its
+			// meat ONCE -- that is the invariant here -- it just takes the hunter
+			// longer than the killing to collect it.
+			for (int t = 0; t < 2000 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
+				tick(w, 1);
+			}
 			double meat = TestNPC.MEAT_ENERGY * prey.bodyMass();
 			assertNear("the hunter was paid the body, bite by bite", meat, hunter.totalSwallowed(), 0.05 * meat);
 			hunter.remove();
@@ -10222,7 +10327,9 @@ public class SimTests {
 			}
 			hunter.remove();
 			int wound = 100 - bitten.getHealth();
+			double flesh = 1.0 - bitten.meatLeft(); // what the mouthful actually took
 			assertTrue("the hunter took a bite (" + wound + " points)", wound >= 5 && wound <= 20);
+			assertGreater("and the bite took flesh with it", flesh, 0.0);
 			double paidToHunter = hunter.totalSwallowed();
 			double storedBefore = stored(bitten), controlBefore = stored(control);
 			// Until the wound has closed, at one point per MEND_PERIOD: measured the
@@ -10233,7 +10340,12 @@ public class SimTests {
 			assertEquals("the wound has closed", 100, bitten.getHealth());
 			assertEquals("the control never had one", 100, control.getHealth());
 			double cost = (storedBefore - stored(bitten)) - (controlBefore - stored(control));
-			double price = TestNPC.MEAT_ENERGY * bitten.bodyMass() * wound / 100.0;
+			// The flesh the bite actually took, not the wound it left. Those used to
+			// be the same number -- the bite ate exactly the health it removed --
+			// which is what made killing an animal consume all of it. A mouthful is
+			// its own quantity now, so the price of mending is read off the ledger
+			// rather than computed from the damage.
+			double price = TestNPC.MEAT_ENERGY * bitten.bodyMass() * flesh;
 			assertNear("mending the wound cost the meat price of the flesh (" + String.format("%.2f", cost)
 					+ " against a price of " + String.format("%.2f", price) + ")", price, cost, 0.15 * price + 0.02);
 			assertNear("which is what the hunter was paid for it: the round trip minted nothing",
@@ -13203,6 +13315,7 @@ public class SimTests {
 				new AppetiteReturnsAtHalfThirstsPace(),
 				new EnergyIsFoodBacked(),
 				new ABodyIsEatenOnce(),
+				new WhatIsLeftIsNotHowItDied(),
 				new MendingBuysBackTheFlesh(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
