@@ -753,6 +753,53 @@ public class SimTests {
 	}
 
 	/**
+	 * The mushroom the client stamps on that bed is painted from real ramps.
+	 *
+	 * <p>Its six colours used to exist in no ramp anywhere — the comment above
+	 * them claimed they were "in the fungus family" and they were in no family
+	 * at all, which is the §2 violation that is easiest to commit and hardest
+	 * to see. The cap is now the bloom red every other flora accent in the
+	 * world wears, promoted to a body colour the sanctioned way by deriving the
+	 * shade it lacks off the accent itself; the rest comes off the sand ramp.
+	 *
+	 * <p>Java cannot read {@code render.ts}, so this pins the values the client
+	 * file was written with. If a ramp moves under it, this fails and names the
+	 * client as the thing that needs editing — which is the only mechanical
+	 * link the two renderers have here.
+	 */
+	static class TheMushroomIsPaintedFromRamps extends Scenario {
+		@Override
+		public void run() {
+			// Copied from render.ts: SHROOM_CAP, SHROOM_CAP_DARK, SHROOM_STEM,
+			// SHROOM_BUD, SHROOM_DEAD.
+			int cap = 0xe0455f, capDark = 0x912c3d;
+			int stem = 0xc0aa7e, bud = 0x98865c, dead = 0x6e5f42;
+
+			assertEquals("the cap is the flora family's bloom red", 0xE0455F, cap);
+			// §2's promotion rule: the missing shade comes off the accent by
+			// scaling, so the hue stays the world's.
+			int r = (int) (((cap >> 16) & 255) * 0.65);
+			int g = (int) (((cap >> 8) & 255) * 0.65);
+			int b = (int) ((cap & 255) * 0.65);
+			assertEquals("and its shadow is that red at x0.65, not a picked brown",
+					(r << 16) | (g << 8) | b, capDark);
+			// Everything that is not the cap is the sand family, verbatim.
+			assertEquals("the stalk is the sand ramp's pale",
+					GroundTextures.rampColor(GroundTextures.CLS_SAND, 2), stem);
+			assertEquals("an unopened button is its base",
+					GroundTextures.rampColor(GroundTextures.CLS_SAND, 1), bud);
+			assertEquals("and what a grazed bed leaves is its shadow",
+					GroundTextures.rampColor(GroundTextures.CLS_SAND, 0), dead);
+			// The cap must not be the bed: a crop drawn in its own ground's
+			// colours is the bug this whole pair was redrawn to fix.
+			for (int i = 0; i < 3; i++) {
+				int f = GroundTextures.rampColor(GroundTextures.CLS_FUNGUS, i);
+				assertTrue("the crop is never painted in the mat's own ramp", f != cap && f != capDark);
+			}
+		}
+	}
+
+	/**
 	 * The two cover tiles the world was missing: tall grass and desert scrub.
 	 *
 	 * <p>Pinned for the same reasons the reed bed is, plus one that is specific
@@ -12976,6 +13023,7 @@ public class SimTests {
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
 				new TheFungusBedLeavesRoomForItsCrop(),
+				new TheMushroomIsPaintedFromRamps(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),

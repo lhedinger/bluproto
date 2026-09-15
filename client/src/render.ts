@@ -1555,15 +1555,27 @@ export const VEG_STAGES = 5;
 export const VEG_VARIANTS = 4;
 
 // Palettes in the ground bake's key: greens for living grass, dry olives for
-// trampled remains; mushroom caps in the fungus family, pale stems.
+// trampled remains.
 const GRASS_BLADE = ['#2f5c2a', '#3f7a38', '#57944a'];
 const GRASS_TIP = '#8fc46f';
 const GRASS_DRY = ['#8a8a52', '#6f6b3f'];
-const SHROOM_CAP = ['#8f4a3c', '#6e352b'];
-const SHROOM_SPOT = '#e6dccb';
-const SHROOM_STEM = '#cfc4b0';
-const SHROOM_BUD = '#b9a98e';
-const SHROOM_DEAD = '#7a6a55';
+
+// The mushroom wore six colours that existed in no ramp anywhere — the comment
+// above used to claim they were "in the fungus family" and they were not in any
+// family at all. A cap is the cave's berry: the same thing on the same errand
+// as a wildflower, a shrub berry and a thicket berry, which all share the bloom
+// accents. So the cap is BLOOM_RED promoted to a body colour the sanctioned way
+// (§2) — the shade it lacks derived off the accent itself at x0.65 — with the
+// bloom cream, its own partner accent, as the fleck. Everything that is not the
+// cap comes off the sand ramp, which is already what the world's bones wear.
+const SHROOM_CAP = '#e0455f';      // bloom red, promoted
+const SHROOM_CAP_DARK = '#912c3d'; // and its derived shadow (x0.65)
+const SHROOM_SPOT = '#f0e8c6';     // bloom cream, the accent's own partner
+const SHROOM_STEM = '#c0aa7e';     // sand highlight: a pale stalk
+const SHROOM_BUD = '#98865c';      // sand base: an unopened button
+const SHROOM_DEAD = '#6e5f42';     // sand shadow: what a grazed bed leaves
+/** §4's contact shadow, at the same weight the loader's stands on. */
+const SHADE = 'rgba(0,0,0,0.42)';
 
 /**
  * Paints one vegetation tile at (x, y) with `px` screen pixels per art pixel.
@@ -1615,16 +1627,25 @@ export function drawVegetationTile(g: CanvasRenderingContext2D, kind: VegKind,
       }
       return;
     }
+    // A cap is a raised thing, so it is lit north and sunk south (§4) — the
+    // upper rank takes the bloom red, the rank under the dome its derived
+    // shadow. This used to hash-pick ONE shade for the whole mushroom, which
+    // made some of them uniformly dark and read as a second species rather
+    // than as the same dome turned toward the same sun. A contact shadow one
+    // art-pixel south of the stem sits the thing on the mat; nothing floats.
     const shroom = (cx: number, cy: number, big: boolean) => {
-      const cap = SHROOM_CAP[Math.floor(rnd(cx + cy) * 2)];
       if (big) {
-        p(cx - 1, cy - 2, cap); p(cx, cy - 2, cap); p(cx + 1, cy - 2, cap);
-        p(cx - 2, cy - 1, cap); p(cx - 1, cy - 1, cap); p(cx, cy - 1, cap);
-        p(cx + 1, cy - 1, cap); p(cx + 2, cy - 1, cap);
+        p(cx, cy + 2, SHADE); // contact shadow
+        p(cx - 1, cy - 2, SHROOM_CAP); p(cx, cy - 2, SHROOM_CAP); p(cx + 1, cy - 2, SHROOM_CAP);
+        p(cx - 2, cy - 1, SHROOM_CAP_DARK); p(cx - 1, cy - 1, SHROOM_CAP_DARK);
+        p(cx, cy - 1, SHROOM_CAP_DARK); p(cx + 1, cy - 1, SHROOM_CAP_DARK);
+        p(cx + 2, cy - 1, SHROOM_CAP_DARK);
         p(cx + (rnd(cx) > 0.5 ? 1 : -1), cy - 2, SHROOM_SPOT);
         p(cx, cy, SHROOM_STEM); p(cx, cy + 1, SHROOM_STEM);
       } else {
-        p(cx - 1, cy - 1, cap); p(cx, cy - 1, cap); p(cx + 1, cy - 1, cap);
+        p(cx, cy + 1, SHADE); // contact shadow
+        p(cx - 1, cy - 1, SHROOM_CAP_DARK); p(cx, cy - 1, SHROOM_CAP);
+        p(cx + 1, cy - 1, SHROOM_CAP_DARK);
         p(cx, cy, SHROOM_STEM);
       }
     };
