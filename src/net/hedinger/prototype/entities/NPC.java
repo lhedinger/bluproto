@@ -444,11 +444,14 @@ public abstract class NPC extends Entity {
 		if (meat <= 1e-9) {
 			meat = 0;
 		}
-		if (isDead()) {
-			// A carcass is as far gone as the flesh taken off it: eating hastens
-			// its decay, and one eaten out is cleared on the ordinary schedule.
-			decayTo(1.0 - meat);
-		}
+		// Eating does not rot a body. Decay and meat are two different things: decay
+		// is how long the corpse has lain there (and, in time, how wet and warm and
+		// lit the ground is), and at the end of it the body dissolves into the
+		// ground whether or not anything ate it. Meat is the edible part, and a
+		// corpse eaten out still lies there with nothing on it until its time is
+		// up. Eating used to advance the decay clock in step with the flesh, which
+		// folded the two into one number and made a half-eaten fresh kill read as
+		// half-rotted.
 		return taken;
 	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
@@ -1098,15 +1101,7 @@ public abstract class NPC extends Entity {
 	@Override
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
-		age = -1;
-		// A body arrives on the ground as far gone as the flesh already taken off
-		// it. Decay tracks the flesh for a corpse (see eatMeat), but flesh eaten
-		// while the animal was still alive was not counted, so an animal eaten out
-		// and then killed lay there for its whole span looking like a whole body
-		// with nothing on it -- measured on the live world at 0% meat and 96%
-		// freshness with 937 ticks to run. What is on the ground now matches what
-		// is left of it, whatever it died of.
-		decayTo(1.0 - meat);
+		age = -1; // the decay clock starts here, from whole, whatever was eaten first
 	}
 
 	@Override
