@@ -111,6 +111,9 @@ public final class ServerTests {
 			check("a living body reports its CURRENT mass, not its genome's adult size",
 					alive.get("mass") instanceof Number);
 			check("and carries no carcass facts while it is alive", !alive.containsKey("decay"));
+			check("a living body keeps its four books",
+					alive.containsKey("health") && alive.containsKey("energy")
+							&& alive.containsKey("hunger") && alive.containsKey("thirst"));
 			host.killForTest(id);
 			corpse = host.entityDetail(id);
 			break;
@@ -123,6 +126,15 @@ public final class ServerTests {
 			check("a carcass reports " + k, corpse.get(k) instanceof Number);
 		}
 		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
+		// Death is where the four books stop. The tank and the stomach evaporate
+		// with it -- which is exactly what the birth ledger audits -- so the
+		// numbers left in those fields describe a body that no longer keeps them,
+		// and the panel drew a carcass with a brimming tank that was merely a
+		// little peckish. The client omits any book it is not given.
+		for (String k : java.util.List.of("health", "energy", "energyCap", "hunger", "thirst")) {
+			check("a carcass is not sent " + k + ": death is where that book stops",
+					!corpse.containsKey(k));
+		}
 		double decay = ((Number) corpse.get("decay")).doubleValue();
 		double meat = ((Number) corpse.get("meat")).doubleValue();
 		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);

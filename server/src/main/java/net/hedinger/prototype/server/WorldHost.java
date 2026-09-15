@@ -569,7 +569,9 @@ final class WorldHost {
 				d.put("diedOf", e.getDeathCause()); // a corpse explains itself
 			}
 			d.put("flying", e.isFlying());
-			d.put("health", e.getHealth());
+			if (!e.isDead()) {
+				d.put("health", e.getHealth()); // a corpse has failed this by definition
+			}
 			d.put("attachedTo", e.getAttachTarget() == null ? -1 : e.getAttachTarget().getID());
 			if (e instanceof net.hedinger.prototype.entities.Item it) {
 				d.put("kind", "item." + it.getKind().name().toLowerCase());
@@ -603,7 +605,7 @@ final class WorldHost {
 				// life gate — each its own number, so the inspector shows why a
 				// creature is doing what it is doing.
 				//
-				// Three of the four are physiology, and physiology belongs to
+				// Three of the four are physiology, and physiology belongs to living
 				// organisms. The facility's machines keep none of them: they are
 				// not metabolic, so their hunger and thirst never move off zero
 				// and their energy never moves off it either. Sent anyway, the
@@ -612,7 +614,15 @@ final class WorldHost {
 				// one of which actively reads as a machine about to drop. The
 				// client already omits any book it is not given, so the fix is
 				// not to give it one.
-				if (n.isOrganic()) {
+				//
+				// A corpse is the same case. Death is where the four books stop: the
+				// tank and the stomach evaporate with it — that is exactly what the
+				// birth ledger audits, a parent eating its own young recovers the
+				// meat and nothing else — so the numbers still sitting in the fields
+				// describe a body that no longer keeps them. Shown, they read as a
+				// carcass with a brimming tank that is merely a little peckish. What
+				// a corpse is worth is its own four numbers, below.
+				if (n.isOrganic() && !n.isDead()) {
 					d.put("energy", round(n.getEnergy()));
 					// The tank this body's energy is a fraction OF. It is size-scaled,
 					// so no constant on the viewer's side can stand in for it: the bar
@@ -625,7 +635,9 @@ final class WorldHost {
 					d.put("hunger", round(n.getHunger()));
 					d.put("thirst", round(n.getThirst()));
 				}
-				d.put("health", n.getHealth());
+				if (!n.isDead()) {
+					d.put("health", n.getHealth()); // the life gate, and it has been passed
+				}
 				// What this body weighs to an eater: the body it HAS, not the one its
 				// genome describes. A juvenile is worth its juvenile mass, and the
 				// genome's size is the adult it is still climbing toward.

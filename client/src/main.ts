@@ -876,7 +876,11 @@ function attributesTab(d: Record<string, any>): string {
   // budget, hunger and thirst the needs that rise between meals and drinks.
   // Inverted into satisfactions the same way the entity card does it, so the
   // two panels never disagree about which way is up.
-  status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
+  // Guarded like the other three: a corpse is sent none of the four books,
+  // because death is where they stop.
+  if ('health' in d) {
+    status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
+  }
   if ('energy' in d) status.push(energyRow(d));
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
