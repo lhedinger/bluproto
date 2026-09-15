@@ -67,8 +67,6 @@ public final class WorldSteward extends Entity implements CullOrders {
 	private final int caveZ; // the underground level, or -1 for a one-level world
 	private boolean seedBelow = false; // alternates minded reseeds between the levels
 
-	/** Corpse lifespan for reseeded creatures (matches Worlds.ECO_DEATHSPAN). */
-	private static final int ECO_DEATHSPAN = 90;
 
 	/**
 	 * Where a cull stops: the drone thins a cohort to this fraction of its
@@ -322,7 +320,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 			case SCAVENGER -> TestNPC.mindedScavenger(p[0], p[1], z, g);
 			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
 			};
-			getWorld().spawnEntity(body.withDeathspan(ECO_DEATHSPAN));
+			getWorld().spawnEntity(body); // its corpse lasts as long as its body took to build
 		}
 	}
 

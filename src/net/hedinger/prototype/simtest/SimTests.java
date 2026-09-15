@@ -206,6 +206,114 @@ public class SimTests {
 	}
 
 	/**
+	 * A carcass outlasts the walk to it, and nothing stamps a flat span over what
+	 * the body earned. The derivation itself is pinned by
+	 * {@link CorpseRotsForAsLongAsItTookToGrow}; what was missing was a guard on
+	 * everything downstream of it. Three callers overrode the computed span with a
+	 * flat 90 ticks — the steward on every reseed, the spawn command on every
+	 * injection — and a child copied its parent's span instead of reading its own
+	 * body, so the 90 spread from the reseeds to the whole living population.
+	 * Measured on the live world: every carcass lasted 2.6 seconds whatever it
+	 * weighed, and a founder's corpse vanished the tick it died because nothing
+	 * set a span for it at all.
+	 *
+	 * <p>That is not a cosmetic bug. A scavenger smells carrion ten tiles off and
+	 * covers about three of them in ninety ticks, so nearly everything it could
+	 * smell rotted out from under it on the way, and the only carcass it could
+	 * reliably reach was one that died where it was already standing.
+	 *
+	 * <p>Two legs: a scavenger walks the width of its own scent range and still
+	 * finds a meal; and a steward reseed carries its body's span, not a constant.
+	 */
+	static class ACarcassOutlastsTheWalkToIt extends Scenario {
+		@Override
+		public void run() {
+			seed(44);
+			// Barren and shored: nothing to graze, nothing to be thirsty about, so
+			// the only thing on offer is the body at the far end.
+			World w = room(20, 9);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome g = Genome.phenotype(12, 0.055, 5, 12, Math.PI * 2, 100000);
+			// The carcass, at the very edge of what a scavenger can smell.
+			double reach = TestNPC.CARRION_SCENT_R;
+			TestNPC body = TestNPC.breeder(3.5 + reach, 4.5, 0, g);
+			w.spawnEntity(body);
+			tick(w, 2);
+			body.damage(500);
+			tick(w, 1);
+			assertTrue("a carcass lies at the far edge of scent range", body.isDead());
+			assertEquals("and it will lie there for as long as it took to build",
+					net.hedinger.prototype.entities.NPC.growthTicks(12), body.getDeathspan());
+
+			// A scavenger that simply walks at its food: the mind is not the
+			// variable here, the clock on the meal is.
+			Mind walk = (sensors, act) -> {
+				act[AgentIO.A_SEEK] = 0.1; // forage, which for a scavenger is carrion
+				act[AgentIO.A_THROTTLE] = 1.0;
+				act[AgentIO.A_EAT] = 1.0;
+			};
+			TestNPC scav = TestNPC.minded(3.5, 4.5, 0, g.copy(), walk)
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic().withHeading(0);
+			scav.withEnergy(scav.energyCapacity());
+			w.spawnEntity(scav);
+
+			double before = body.meatLeft();
+			int arrived = -1;
+			for (int t = 0; t < 4000 && arrived < 0; t++) {
+				tick(w, 1);
+				if (body.isRemoved() || body.meatLeft() < before - 0.01) {
+					arrived = t;
+				}
+			}
+			assertGreater("the scavenger reached the carcass and got a meal out of it "
+					+ "(after " + arrived + " ticks, of a " + body.getDeathspan()
+					+ "-tick span)", arrived, -1);
+			assertGreater("and it fed: the body has less meat on it than it did",
+					before - body.meatLeft(), 0.0);
+
+			// Nothing downstream re-stamps the span. A steward reseed is the path
+			// that used to, and the one every creature in the live world descends
+			// from.
+			World d = net.hedinger.prototype.sim.Worlds.demo(12);
+			java.util.Set<Integer> founders = new java.util.HashSet<>();
+			java.util.List<TestNPC> hunters = new java.util.ArrayList<>();
+			for (Entity e : d.getEntities()) {
+				if (e instanceof TestNPC t && t.getGenome() != null && !t.isRemoved()) {
+					founders.add(t.getID());
+					if (t.getGenome().clade == Genome.Clade.PREDATOR) {
+						hunters.add(t);
+					}
+				}
+			}
+			assertGreater("the seeded world founded a hunting line", hunters.size(), 1);
+			// Cut it below its floor so the steward has to restore it, which is the
+			// path that used to stamp the flat span every live creature inherited.
+			for (TestNPC t : hunters) {
+				t.remove();
+			}
+			int checked = 0;
+			for (int t = 0; t < 2000 && checked == 0; t++) {
+				tick(d, 1);
+				for (Entity e : d.getEntities()) {
+					if (e instanceof TestNPC n && n.getGenome() != null && !n.isRemoved()
+							&& !founders.contains(n.getID())) {
+						double adult = Niche.of(n.getGenome().clade).expressedSize(n.getGenome().size);
+						assertEquals("a RESEEDED " + n.getGenome().clade
+								+ " leaves the carcass its body earns, not a flat span",
+								net.hedinger.prototype.entities.NPC.growthTicks(adult), n.getDeathspan());
+						checked++;
+					}
+				}
+			}
+			assertGreater("the steward reseeded something to check", checked, 0);
+		}
+	}
+
+	/**
 	 * A scavenger makes its living off carrion, and eating it IS decomposition:
 	 * the same bite that feeds the eater ages the body toward removal. Pins the
 	 * whole third trophic level -- that carrion feeds, that it decomposes faster
@@ -1110,13 +1218,19 @@ public class SimTests {
 			assertGreater("the scavenger budded", w.getAliveCount(), 1);
 			assertEquals("and every one of its young is a scavenger too",
 					0, countRolesOtherThan(w, "scavenger"));
-			// Diet is not the only body trait the genome does not carry. A minded
-			// child used to inherit none of them -- only the plain-breeder branch
-			// remembered corpse lifespan, and nothing remembered clade.
+			// Diet is not the only body trait the genome does not carry; clade is the
+			// one that has to be handed down, and a minded child used to inherit
+			// none of them. Corpse lifespan is NOT handed down: it is read off the
+			// child's own body, so the parent's hand-set 777 stops at the parent.
+			// Inheriting it is how a flat 90 ticks, stamped on the steward's
+			// reseeds, spread to every carcass in the live world.
 			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && t != parent && !t.isRemoved()) {
-					assertEquals("a child keeps its lineage's corpse lifespan",
-							parent.getDeathspan(), t.getDeathspan());
+					assertEquals("a child's corpse lasts as long as ITS body took to build",
+							net.hedinger.prototype.entities.NPC.growthTicks(
+									t.getGenome().size), t.getDeathspan());
+					assertTrue("not the span its parent was hand-given",
+							t.getDeathspan() != parent.getDeathspan());
 				}
 			}
 
@@ -13031,6 +13145,7 @@ public class SimTests {
 				new ScavengerHoldsTheCarcassItChose(),
 				new ScavengerCrossesToAMuchBetterCarcass(),
 				new CorpseRotsForAsLongAsItTookToGrow(),
+				new ACarcassOutlastsTheWalkToIt(),
 				new SoundWakesListener(),
 				new ASoundRingsForAsLongAsItSays(),
 				new HoleFallRespectsFlying(),

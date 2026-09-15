@@ -20,10 +20,6 @@ import net.hedinger.prototype.simtest.TestNPC;
  */
 public record SpawnMindedCommand(Genome genome, double x, double y, double z) implements SimCommand {
 
-	/** Corpse lifespan for an injected creature (ticks ≈ 3 s), matching the
-	 *  ecosystem's other bodies so its remains clear rather than pile up. */
-	private static final int DEATHSPAN = 90;
-
 	/** Parses the wire form (an encoded genome + position); null if the genome
 	 *  string is malformed, so a bad payload is rejected rather than applied. */
 	public static SpawnMindedCommand parse(String encodedGenome, double x, double y, double z) {
@@ -47,7 +43,7 @@ public record SpawnMindedCommand(Genome genome, double x, double y, double z) im
 		// otherwise silently delete a healthy just-placed creature (no corpse)
 		// whenever the minded cohort sat at its ceiling.
 		TestNPC npc = TestNPC.mindedForager(p[0], p[1], z, genome)
-				.withHandPlaced().withDeathspan(DEATHSPAN);
+				.withHandPlaced(); // corpse lifespan comes from its body, like every other
 		// Born brand-new: age 0 (a fresh entity already starts there) and a FULL
 		// tank rather than the ecosystem's 0.6-capacity "born fed" default. An
 		// injected seed gets the longest possible runway to establish itself — the

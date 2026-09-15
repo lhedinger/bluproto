@@ -851,7 +851,11 @@ public class TestNPC extends NPC {
 		// size and so linear in mass, which is the scaling that matters -- a big
 		// animal leaves a big body, lying there for a big scavenger's window.
 		// Measured from the body it will grow INTO, so a creature that dies young
-		// still leaves the corpse its species leaves.
+		// still leaves the corpse its species leaves. Nothing may stamp over this
+		// afterwards: three callers used to, with a flat 90 ticks, and because a
+		// child copied its parent's span rather than reading its own body, that 90
+		// spread from the steward's reseeds to the entire living population. Every
+		// carcass in the world lasted 2.6 seconds whatever it weighed.
 		t.deathspan = growthTicks(adult);
 		// Speed is the genome's, scaled by what the clade does with it — a ranging
 		// factor derived here so a lineage keeps it, not a founder-only stamp.
@@ -3667,7 +3671,6 @@ public class TestNPC extends NPC {
 		// the one that silently wins whenever the two disagree.
 		child.vigilant = vigilant; // a vigilant lineage stays predator-aware
 		child.alwaysInteract = alwaysInteract;
-		child.withDeathspan(deathspan); // the lineage shares how long its dead lie about
 	}
 
 	// How hard a birth mutates its offspring is a per-lineage gene now
