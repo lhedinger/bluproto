@@ -1652,12 +1652,33 @@ export function drawVegetationTile(g: CanvasRenderingContext2D, kind: VegKind,
     const bud = (cx: number, cy: number) => { p(cx, cy, SHROOM_BUD); p(cx + 1, cy, SHROOM_BUD); };
     const bx = 3 + Math.floor(rnd(50) * 4), by = 4 + Math.floor(rnd(51) * 4);
     const ox = 2 + Math.floor(rnd(52) * 7), oy = 2 + Math.floor(rnd(53) * 8);
-    if (stage === 2) { bud(bx, by); if (rnd(54) > 0.4) bud(ox, oy); return; }
-    if (stage === 3) { shroom(bx, by, false); if (rnd(54) > 0.5) bud(ox, oy); return; }
-    if (stage === 4) { shroom(bx, by, true); if (rnd(54) > 0.5) bud(ox, oy); return; }
+    // The stages are spread over the range a fungus bed can actually REACH.
+    // A tile's stage is measured against the world's maximum and its fertility
+    // is the ceiling (vegetationCap = VEG_MAX * fertility); beds are seeded at
+    // 0.6, so a bed that has fully regrown reports 60, which quantises to
+    // stage 3 — and the live world serves nothing above it. The ramp used to
+    // put its first big cap at 4 and its crowd at 5, which meant every bed in
+    // the game, however full, was drawn as buds or one three-pixel cap. The
+    // top of the reachable range has to look like the top of the range.
+    //
+    // 4 and 5 stay, and are not dead: nutrient closure drifts fertility up
+    // over a world's life, so an old, well-fed bed grows into them.
+    if (stage === 2) { shroom(bx, by, false); if (rnd(54) > 0.4) bud(ox, oy); return; }
+    if (stage === 3) { shroom(bx, by, true); if (rnd(54) > 0.5) bud(ox, oy); return; }
+    if (stage === 4) {
+      shroom(bx, by, true);
+      shroom(Math.min(10, ox + 1), Math.min(10, oy + 1), false);
+      if (rnd(55) > 0.5) bud((bx + ox) % 10 + 1, 9);
+      return;
+    }
+    // Stage 5 is a crowd: two open caps, a young one still small, and buds
+    // coming. Anything running off the tile is clipped by p(), which is what
+    // makes a bed read as continuous across its tiles rather than as a grid of
+    // separate clumps.
     shroom(bx, by, true);
+    shroom(bx <= 4 ? bx + 5 : bx - 4, by <= 5 ? by + 4 : by - 3, true);
     shroom(Math.min(10, ox + 1), Math.min(10, oy + 1), false);
-    if (rnd(55) > 0.4) bud((bx + ox) % 10 + 1, 9);
+    if (rnd(55) > 0.3) bud((bx + ox) % 10 + 1, 9);
   }
 }
 

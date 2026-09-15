@@ -32,6 +32,7 @@ public final class ServerTests {
 		lineageCensusIsTheSameWorldFiner();
 		lineageFlowsConserveEveryHead();
 		fertilityCapsTheGrassSpriteStage();
+		aFungusBedTopsOutAtStageThree();
 		vegetationFeedCarriesTheKind();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
@@ -594,6 +595,35 @@ public final class ServerTests {
 		grazed.graze(t, 1.0);
 		check("a stripped tile falls to the trampled remnants",
 				VegFeed.stateOf(WorldHost.grassLevel(grazed, t)) == 1);
+	}
+
+	/**
+	 * Which stages a fungus bed can actually reach — written down because the
+	 * sprite that draws them has to spend its range there.
+	 *
+	 * <p>Beds are seeded at fertility 0.6 everywhere they are generated, and
+	 * the stage scale is absolute, so a bed that has fully regrown reports
+	 * stage 3 and the live world serves nothing above it. The mushroom sprite
+	 * was authored as though the full 1..5 were in play: its first big cap sat
+	 * at 4 and its crowd at 5, so every bed in the game, however full, drew as
+	 * buds or one three-pixel cap and the crop was invisible over its own bed.
+	 *
+	 * <p>This is the fact that made that a bug rather than a taste, and it is
+	 * not visible from either file alone — the sprite is in the client and the
+	 * ceiling is in world generation. If fertility or {@link VegFeed#stateOf}
+	 * moves, this fails, and the mushroom's stage ramp in {@code render.ts} is
+	 * what needs revisiting.
+	 */
+	static void aFungusBedTopsOutAtStageThree() {
+		long t = 10_000_000; // long enough to have regrown to the cap
+		var bed = new net.hedinger.prototype.engine.Tile(0, 0, 0,
+				net.hedinger.prototype.engine.Tile.TileType.TYPE_FUNGUS);
+		bed.setFertility(0.6); // Worlds.java seeds every bed at exactly this
+		check("a full fungus bed reports stage 3, not 5",
+				VegFeed.stateOf(WorldHost.grassLevel(bed, t)) == 3);
+		bed.graze(t, 1.0);
+		check("and a stripped one falls to the trampled remnants",
+				VegFeed.stateOf(WorldHost.grassLevel(bed, t)) == 1);
 	}
 
 	/**
