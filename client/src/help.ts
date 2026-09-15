@@ -373,15 +373,25 @@ for (const kind of VEG_KINDS) {
       }
     }
   }), `<b>${kind}</b> — stages 1..${VEG_STAGES} × ${VEG_VARIANTS} variants`, vegSec);
-  // The same sprites over two different grounds, cycling through growth:
-  // the transparency promise, demonstrated.
+  // The same sprites over two different grounds, cycling through growth: the
+  // transparency promise, demonstrated. For the mushroom the right-hand ground
+  // is the REAL fungus bed bake rather than a flat tone — the mat and the caps
+  // are one reading (the mat says the tile is a bed, the caps say how much is
+  // left on it), and a flat tone cannot show whether the crop survives its own
+  // substrate. That is the check the bed was redrawn to pass.
   const D = 176, T = D / 4;
-  pair(vegSec, `${kind} growing on two grounds`, D * 2 + 12, D, (g, t) => {
+  const bed = kind === 'mushroom' ? await loadCanvas('/help/fungus_bed_ground.png') : null;
+  pair(vegSec, bed ? `${kind} growing on flat tone and on its own bed`
+      : `${kind} growing on two grounds`, D * 2 + 12, D, (g, t) => {
     const stage = 1 + Math.floor((t % 7.5) / 1.5);
     for (const [gx, tone] of [[0, '#3f7a38'], [D + 12, '#584430']] as const) {
-      g.fillStyle = tone;
-      g.fillRect(gx, 0, D, D);
       g.imageSmoothingEnabled = false;
+      if (bed && gx > 0) {
+        g.drawImage(bed, 0, 0, bed.width, bed.height, gx, 0, D, D);
+      } else {
+        g.fillStyle = tone;
+        g.fillRect(gx, 0, D, D);
+      }
       for (let ty = 0; ty < 4; ty++) {
         for (let tx = 0; tx < 4; tx++) {
           g.drawImage(vegetationTileFor(kind, stage, (tx * 7 + ty * 5) % VEG_VARIANTS),
