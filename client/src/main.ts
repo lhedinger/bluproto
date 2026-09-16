@@ -563,7 +563,17 @@ cam.attach(tap => {
   let bestD = Infinity;
   for (const [id, t] of state.tracks) {
     const e = t.curr;
-    if (e.kind === 'phero') continue;
+    // You can select what you can SEE. Pheromone clouds and sounds are events,
+    // not bodies — the renderer skips both in every body pass and says so in
+    // those words, and only the sense overlay draws them. The picker missed
+    // that memo and only excluded the clouds, so every sound was a tap target:
+    // a spent one lingers as a dead entity, and they are 40% of everything the
+    // viewer tracks, invisible and scattered exactly where the noise was made,
+    // which is to say on top of the creatures. Tapping an animal often selected
+    // the sound of it instead, and the inspector then reported an "entity" that
+    // "died of old age" — which is what a lifespan expiry is called in a body,
+    // and nonsense for a noise.
+    if (e.kind === 'phero' || e.kind === 'sound') continue;
     if (Math.round(e.z) !== currentLevel) continue; // only the visible level is selectable
     const d = Math.hypot(e.x - tap.x, e.y - tap.y);
     // Reach is the body OR a finger's width, whichever is larger -- not a multiple
