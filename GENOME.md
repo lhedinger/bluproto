@@ -276,16 +276,23 @@ movement rather than intent.
 Spending is mass-based everywhere above, so income is too.
 
 ```
-meat  = MEAT_ENERGY · prey_mass · (damage / FULL_BODY_HEALTH)   // per bite
+meat  = MEAT_ENERGY · mass_taken_off_the_carcass                 // per mouthful, dead only
 grass = GRASS_ENERGY · vegetation_cropped                       // per tick grazing
 ```
 
-- **A carcass is worth what it weighs.** Health is a flat 100 on every body, so
-  the *meal* has to carry the size instead. Since each bite pays for the share of
-  the body it removed, a whole carcass comes to `MEAT_ENERGY · prey_mass` however
-  many bites it took — an animal that is hard to bring down is slower to eat, not
-  more nutritious, and a hunter arriving at something already chewed on gets only
-  what is left.
+- **A carcass is worth what it weighs, and a body is not all meat.** Health is
+  a flat 100 on every body, so the *meal* has to carry the size instead. At death
+  the body divides into three pools by mass: a third is **fresh meat**, the only
+  thing a hunter eats; half the rest is **decayed meat**, a scavenger's living;
+  the last third is **bone**, food to nobody. Every mouthful is paid
+  `MEAT_ENERGY` per unit of mass it takes, so a whole carcass comes to
+  `MEAT_ENERGY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
+  share is at most the fresh third. A bite on a *living* animal is a wound and
+  nothing else: the hunter is paid nothing until its quarry is dead. Fresh meat
+  spoils on its own into decayed meat (about five seconds on a reference body,
+  and every bite hurries it), and decayed meat rots away on the decay clock once
+  the body has turned, so a late scavenger finds less. What no mouth took feeds
+  the ground when the corpse dissolves.
 - **This was the one corner where mass did not appear.** A flat per-bite payout
   made a mouse and an animal the hunter's own size worth exactly the same
   (measured: 2.49 either way), which pointed selection at the smallest, easiest

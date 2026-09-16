@@ -292,18 +292,27 @@ public final class Mechanics {
 				row("Grass", num(NPC.GRASS_ENERGY), "energy per unit grazed",
 						"Poor, but it does not run away."),
 				row("A whole carcass", num(TestNPC.MEAT_ENERGY) + " × the dead body's mass",
-						"energy", "Reference-mass body: " + round(refBody, 2)),
-				row("Carrion", "what the eaters left", "energy",
-						"A body is worth its meat once: every bite, alive or dead, draws "
-						+ "from one ledger, and a kill eaten whole leaves a carcass worth nothing."),
+						"energy, if every mouth got its share", "Reference-mass body: " + round(refBody, 2)
+						+ ". A third of it is bone and worth nothing to anyone."),
+				row("What a body is made of", pct(NPC.FRESH_SHARE) + " fresh meat, "
+						+ pct((1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) + " decayed meat, "
+						+ pct((1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE)) + " bone", "of the mass at death",
+						"Fresh meat is the hunters'; decayed meat the scavengers'; bone is nobody's. "
+						+ "Every mouth takes fresh meat first. A bite on a LIVING animal wounds it and "
+						+ "feeds nobody: a hunter is paid only once its quarry is dead."),
 				row("A bite of carrion", pct(TestNPC.CARRION_BITE), "of the body per tick",
 						"~" + Math.round(1 / TestNPC.CARRION_BITE) + " ticks ("
-						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip it clean."),
-				row("Fresh meat", "the whole body at death", "by mass",
-						"Declines on its own, slowly then fast -- the rate is set by the value "
-						+ "alone -- for ~" + num(NPC.FRESH_TICKS) + " ticks (" + round(NPC.FRESH_TICKS / TPS, 1)
-						+ " s) on a reference body, longer on a heavier one. Every bite takes fresh "
-						+ "meat with it. Decay does not start until it is gone."),
+						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip a whole body; "
+						+ "the edible two thirds go in proportion."),
+				row("Fresh meat", "spoils on its own, slowly then fast", "by mass",
+						"The rate is set by the value alone: about " + num(NPC.FRESH_TICKS) + " ticks ("
+						+ round(NPC.FRESH_TICKS / TPS, 1) + " s) on a reference body, longer on a heavier "
+						+ "one. What spoils uneaten becomes decayed meat. Every bite of it brings the turn "
+						+ "on sooner. Decay does not start until it is gone."),
+				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
+						"Holds together early and thins out late, reaching nothing exactly as the corpse "
+						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "
+						+ "hurry the clock. What rots uneaten feeds the ground along with the bones."),
 				row("Who eats the dead", "a rule of the body's clade", "",
 						"A hunter: only a corpse with fresh meat on it. A scavenger: any corpse "
 						+ "with meat, however old. A parasite: the living only. A fresh carcass is on "
