@@ -287,15 +287,21 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
   the last third is **bone**, food to nobody. Every mouthful is paid
   `MEAT_ENERGY` per unit of mass it takes, so a whole carcass comes to
   `MEAT_ENERGY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
-  share is at most the fresh third. `MEAT_ENERGY` is sized so the fresh third
-  of a reference body holds three reference stomachs (`3 · STOMACH / ⅓`), which
-  after spoilage and the overflow of last bites fills two same-size hunters,
-  and the decayed third two scavengers after them: a kill is a meal for
-  several, not a snack. It is
-  deliberately far above `FLESH_COST`, the price flesh is grown, mended and
-  drunk by a parasite at; what an eater collects beyond that is the grass the
-  animal ate to build and run itself, concentrated, and that margin is not
-  conserved. A bite on a *living* animal is a wound and
+  share is at most the fresh third. `MEAT_ENERGY` is **the one price of mass,
+  both ways**: what a body pays per unit of mass it grows or lays down as
+  fat, what a wound is mended at, what a parasite is paid, and what every
+  mouth at a carcass is paid. Nothing in the chain can mint: a body is worth
+  exactly what was put into it, and everything anyone eats was bought with
+  grass by someone. It is sized so a reference frame is three stomachs
+  (`3 · STOMACH`), so the fresh third of a lean medium corpse fills one
+  same-size hunter. **Fat is the body's store**: a fed body with a full tank
+  lays what it cannot use down as mass, up to `FAT_CAP` of its frame, and
+  draws it back into the stomach before starvation can bite. Fat is carried
+  on every step and it is on the carcass, half fresh and half decayed, so a
+  long fed life leaves a rich body and a starved one leaves bones. The same
+  price is what growing up costs -- a child buys two thirds of its frame out
+  of what it eats -- which is why grazing and digestion are paced to pay for
+  it in minutes. A bite on a *living* animal is a wound and
   nothing else: the hunter is paid nothing until its quarry is dead. Fresh meat
   spoils on its own into decayed meat (about five seconds on a reference body,
   and every bite hurries it), and decayed meat rots away on the decay clock once
@@ -326,8 +332,10 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
 
 A creature is born at `BIRTH_SIZE_FRACTION` of its adult body and grows in at a
 fixed `GROWTH_RATE`. Because the *rate* is fixed and the *distance* is not,
-childhood length scales with adult size — the largest body a genome can express
-takes about a minute, the longest childhood the world produces.
+childhood length scales with adult size at the well-fed ceiling; in practice
+growth is bought out of what the child eats, at the one price of mass, so a
+childhood is measured in minutes of grazing (about two and a half for a small
+body, three and a half for the largest) and stretches with scarcity.
 
 Growth is deliberately **physical, not economic**. Everything derived from the
 body a creature has *right now* follows it down — resting burn, movement cost,

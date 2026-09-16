@@ -320,7 +320,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 			case SCAVENGER -> TestNPC.mindedScavenger(p[0], p[1], z, g);
 			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
 			};
-			getWorld().spawnEntity(body); // its corpse lasts as long as its body took to build
+			getWorld().spawnEntity(body.grown().fattened()); // arrives grown and fed, an adult with the fat to breed from; its corpse lasts as long as its body took to build
 		}
 	}
 

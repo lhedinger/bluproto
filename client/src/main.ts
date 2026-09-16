@@ -775,6 +775,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   if ('energy' in d) rows.push(energyRow(d));
   if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
+  if ('fat' in d) rows.push(fatRow(d));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
@@ -894,6 +895,7 @@ function attributesTab(d: Record<string, any>): string {
   if ('energy' in d) status.push(energyRow(d));
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
+  if ('fat' in d) status.push(fatRow(d));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   status.push(...carcassRows(d));
   // Which way round the hold goes, the same way the card says it: `attachedTo`
@@ -984,6 +986,15 @@ function genomeTab(d: Record<string, any>): string {
  * look right. Shared now so they cannot disagree again, and when the cap is
  * missing the number is printed rather than a bar drawn against a guess.
  */
+/** The body's store: fat as a share of what its frame can carry, with the
+ *  mass it amounts to. A fed life reads as a full bar; a starving body draws
+ *  it down before its health goes. */
+function fatRow(d: Record<string, any>): string {
+  const f = Math.max(0, Math.min(1, Number(d.fat)));
+  const mass = typeof d.fatMass === 'number' ? ` (${d.fatMass.toFixed(2)} mass)` : '';
+  return bar('fat', `${Math.round(f * 100)}%${mass}`, f);
+}
+
 function energyRow(d: Record<string, any>): string {
   const e = Number(d.energy);
   const cap = Number(d.energyCap);
