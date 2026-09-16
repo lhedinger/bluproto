@@ -417,6 +417,19 @@ final class WorldHost {
 		}
 	}
 
+	/** The world's warden, or null. The same seam as {@link #killForTest}: the
+	 *  suite asks the host rather than reaching past it into the world, so the
+	 *  bounds test can compare what {@link #cladeBounds()} put on the wire
+	 *  against the object that enforces them. */
+	net.hedinger.prototype.sim.WorldSteward stewardForTest() {
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (e instanceof net.hedinger.prototype.sim.WorldSteward st) {
+				return st;
+			}
+		}
+		return null;
+	}
+
 	java.util.List<Integer> liveCreatureIds() {
 		java.util.List<Integer> out = new java.util.ArrayList<>();
 		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
@@ -1408,7 +1421,43 @@ final class WorldHost {
 		}
 		return java.util.Map.of("sampleSec", POP_SAMPLE_SEC, "tps",
 				SimulationRunner.TICKS_PER_SECOND, "tick", ticks, "herbivore", herb,
-				"predator", pred, "scavenger", scav, "parasite", para);
+				"predator", pred, "scavenger", scav, "parasite", para,
+				"bounds", cladeBounds());
+	}
+
+	/**
+	 * The steward's guardrails per clade, {@code {clade: {floor, ceiling}}} —
+	 * the floor it restores a failing clade from and the ceiling it culls back
+	 * to.
+	 *
+	 * <p>On the wire because the chart cannot derive them. A population line
+	 * sitting flat says nothing about whether it is resting at a comfortable
+	 * level or pinned against a cull, and a line climbing out of a trough looks
+	 * the same whether it bred back or was reseeded — the guardrails are what
+	 * separates those readings, and they live in {@link WorldSteward}, which
+	 * scales them per world size.
+	 *
+	 * <p>Read off the warden itself rather than restated here, for the reason
+	 * the scenario suite reads them that way too: a second copy of a bound is
+	 * free to drift from the one actually being enforced, and a chart drawing
+	 * the wrong line is worse than one drawing none. Empty for a world with no
+	 * steward in it, which is every staged test world — the client omits what
+	 * it is not given.
+	 */
+	java.util.Map<String, Object> cladeBounds() {
+		var out = new java.util.LinkedHashMap<String, Object>();
+		for (net.hedinger.prototype.engine.Entity e : runner.world().getEntities()) {
+			if (!(e instanceof net.hedinger.prototype.sim.WorldSteward st)) {
+				continue;
+			}
+			for (net.hedinger.prototype.entities.Genome.Clade c
+					: net.hedinger.prototype.entities.Genome.Clade.values()) {
+				out.put(c.wireName(), java.util.Map.of(
+						"floor", st.floor(c), "ceiling", st.ceiling(c)));
+			}
+			break; // one warden to a world
+		}
+		return out;
 	}
 
 	/** Operational snapshot for {@code /api/metrics}: sim cost, size, viewers. */

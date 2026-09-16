@@ -29,6 +29,7 @@ public final class ServerTests {
 		visitorLogCountsWithoutIdentifying();
 		visitorLogReadsTheClientThroughTheProxy();
 		populationCensusCountsEveryLivingRole();
+		theChartIsSentTheBoundsActuallyEnforced();
 		lineageCensusIsTheSameWorldFiner();
 		lineageFlowsConserveEveryHead();
 		fertilityCapsTheGrassSpriteStage();
@@ -562,6 +563,57 @@ public final class ServerTests {
 			c.merge(sp, 1, Integer::sum);
 		}
 		return c;
+	}
+
+	/**
+	 * The guardrails the population chart draws are the ones being enforced.
+	 *
+	 * <p>The chart now draws each clade's floor and ceiling as dashed rails, so
+	 * a viewer can see whether a flat line is resting or pinned against a cull
+	 * and whether a rise out of a trough was breeding or a reseed. That only
+	 * works if the number on the wire is the number {@link
+	 * net.hedinger.prototype.sim.WorldSteward} actually holds the clade to — a
+	 * rail drawn at the wrong height is worse than no rail, because it reads as
+	 * a fact.
+	 *
+	 * <p>It compares against the warden rather than against numbers restated
+	 * here, because the bounds are scaled per world size — hardcoding 410 would
+	 * pass on the default world and silently lie on every other one. Both sides
+	 * therefore come from the same object, so what this actually proves is the
+	 * MAPPING: that every clade is present, keyed by the name the client looks
+	 * it up under, with floor and ceiling the right way round. That is the
+	 * whole failure surface between the two, and a swapped pair would draw a
+	 * ceiling below a floor without anything else noticing.
+	 */
+	static void theChartIsSentTheBoundsActuallyEnforced() {
+		WorldHost host = new WorldHost(11);
+		Object raw = host.population().get("bounds");
+		check("the population series carries the steward's bounds",
+				raw instanceof java.util.Map<?, ?>);
+		if (!(raw instanceof java.util.Map<?, ?> sent)) {
+			return;
+		}
+		net.hedinger.prototype.sim.WorldSteward steward = host.stewardForTest();
+		check("the demo world has a warden to read them off", steward != null);
+		if (steward == null) {
+			return;
+		}
+		// Every clade, not a sample of them: a clade added tomorrow gets rails
+		// on the chart the moment it gets bounds, or this says it did not.
+		for (Genome.Clade c : Genome.Clade.values()) {
+			Object o = sent.get(c.wireName());
+			check(c.wireName() + " is sent its rails", o instanceof java.util.Map<?, ?>);
+			if (!(o instanceof java.util.Map<?, ?> b)) {
+				continue;
+			}
+			check(c.wireName() + "'s floor is the one enforced",
+					((Number) b.get("floor")).intValue() == steward.floor(c));
+			check(c.wireName() + "'s ceiling is the one enforced",
+					((Number) b.get("ceiling")).intValue() == steward.ceiling(c));
+			// A rail pair that is not a pair would draw two lines that cross.
+			check(c.wireName() + " is floored below its ceiling",
+					steward.floor(c) < steward.ceiling(c));
+		}
 	}
 
 	static void populationCensusCountsEveryLivingRole() {
