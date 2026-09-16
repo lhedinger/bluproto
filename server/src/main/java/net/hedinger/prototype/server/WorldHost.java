@@ -417,6 +417,12 @@ final class WorldHost {
 		}
 	}
 
+	/** Every entity in the world, for a suite that needs to walk them all rather
+	 *  than one kind of them. The same seam as {@link #killForTest}. */
+	Iterable<net.hedinger.prototype.engine.Entity> worldEntitiesForTest() {
+		return runner.world().getEntities();
+	}
+
 	/** The world's warden, or null. The same seam as {@link #killForTest}: the
 	 *  suite asks the host rather than reaching past it into the world, so the
 	 *  bounds test can compare what {@link #cladeBounds()} put on the wire
@@ -570,6 +576,13 @@ final class WorldHost {
 			if (e == null || e.getID() != id || e.isRemoved()) {
 				continue;
 			}
+			// The warden is filtered out of every snapshot (WorldSnapshot), so no
+			// viewer can see or select it. Describing it here would be the one way
+			// to reach it anyway, and it would arrive as a bare "entity" with no
+			// kind — the same shape a spent sound used to arrive in.
+			if (e instanceof net.hedinger.prototype.sim.WorldSteward) {
+				continue;
+			}
 			java.util.Map<String, Object> d = new java.util.LinkedHashMap<String, Object>();
 			d.put("id", id);
 			d.put("x", e.getX());
@@ -578,8 +591,15 @@ final class WorldHost {
 			d.put("dir", round(e.getDirection()));
 			d.put("age", e.getAge());
 			d.put("dead", e.isDead());
-			if (e.isDead() && e.getDeathCause() != null) {
-				d.put("diedOf", e.getDeathCause()); // a corpse explains itself
+			// A corpse explains itself -- but only a body has one. Entity.think
+			// records "old age" whenever a lifespan runs out, and the ephemera
+			// have lifespans too: a spent sound is a dead entity that died of old
+			// age, and the inspector reported exactly that, for a noise. Guarded
+			// on NPC rather than on organic, because a wrecked machine's cause
+			// (shot, culled) is worth reading and a machine is not organic.
+			if (e.isDead() && e.getDeathCause() != null
+					&& e instanceof net.hedinger.prototype.entities.NPC) {
+				d.put("diedOf", e.getDeathCause());
 			}
 			d.put("flying", e.isFlying());
 			if (!e.isDead()) {
@@ -611,6 +631,21 @@ final class WorldHost {
 			} else if (e instanceof net.hedinger.prototype.engine.PheromoneCloud p) {
 				d.put("kind", "phero");
 				d.put("strength", round(p.getStrength()));
+			} else if (e instanceof net.hedinger.prototype.entities.Sound snd) {
+				// A sound is not selectable in the viewer -- it is an event, and
+				// the picker skips it the way the renderer does. It gets a branch
+				// anyway so that anything which does reach one reads it as what it
+				// is: without this it fell through to the generic tail and came
+				// back as a bare "entity", which is how a noise came to be
+				// inspectable as a corpse.
+				d.put("kind", "sound");
+				d.put("subtype", switch (snd.getCode()) {
+				case net.hedinger.prototype.entities.Sound.KILL -> "a death";
+				case net.hedinger.prototype.entities.Sound.FIGHT -> "a fight";
+				default -> "a noise";
+				});
+				d.put("earshot", round(snd.getRadius()));
+				d.put("heard", e.isDead()); // broadcast once, then spent
 			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());
 				d.put("subtype", n.getNpcTypeName().toLowerCase());
