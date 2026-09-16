@@ -1260,6 +1260,74 @@ public class SimTests {
 	 * anything would pass a test that only looked at the mixed pair, and four
 	 * drones would then stack on one charge pad.
 	 */
+	/**
+	 * A sound is gone once it has been heard, and it still gets heard.
+	 *
+	 * <p>Both halves matter and they pull against each other, which is why they
+	 * are pinned together. A sound is useful for exactly the twenty ticks it
+	 * spends travelling; it then broadcast to everything in earshot and lingered
+	 * for another 2048 as a dead entity, so 99% of the sounds in the world were
+	 * spent ones and they were around 40% of every entity the viewer tracked.
+	 * Shortening that to nothing is one character, and the one-character version
+	 * of it that removes the body a tick too early is a world where nothing can
+	 * hear anything — a silent failure, because the sim has no other symptom for
+	 * it than predators that stop reacting.
+	 *
+	 * <p>The ordering it depends on is not obvious from reading either file:
+	 * {@code Entity.run} increments age BEFORE calling {@code think()}, so the
+	 * broadcast fires on the tick age reaches the lifespan, and the lifespan
+	 * kill lands on the NEXT run. The removal therefore cannot beat the
+	 * broadcast — but only because of an {@code age++} four lines away from the
+	 * check that reads it.
+	 */
+	static class ASoundIsHeardAndThenGone extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			java.lang.reflect.Field heard;
+			try {
+				heard = net.hedinger.prototype.engine.Entity.class
+						.getDeclaredField("lastHeardSound");
+				heard.setAccessible(true);
+			} catch (ReflectiveOperationException e) {
+				throw new AssertionError("Entity no longer records what it heard", e);
+			}
+			int listeners = 0, worstSpent = 0, everLive = 0;
+			for (int t = 0; t < 1200; t++) {
+				w.think();
+				int spent = 0, live = 0, hearers = 0;
+				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+					if (e == null || e.isRemoved()) {
+						continue; // what the snapshot carries, and nothing else
+					}
+					if (e instanceof net.hedinger.prototype.entities.Sound) {
+						if (e.isDead()) {
+							spent++;
+						} else {
+							live++;
+						}
+						continue;
+					}
+					try {
+						if (heard.get(e) != null) {
+							hearers++;
+						}
+					} catch (ReflectiveOperationException ignored) {
+						// a field we just made accessible; nothing to do
+					}
+				}
+				listeners = Math.max(listeners, hearers);
+				worstSpent = Math.max(worstSpent, spent);
+				everLive = Math.max(everLive, live);
+			}
+			// The world was noisy enough for the question to mean something.
+			assertGreater("the world made sounds to be heard", everLive, 0);
+			assertGreater("and bodies heard them", listeners, 0);
+			// And not one spent sound was ever in the stream.
+			assertEquals("a sound leaves the world the moment it is spent", 0, worstSpent);
+		}
+	}
+
 	static class AFlyerAndAWalkerDoNotShoveEachOther extends Scenario {
 		/** Two bodies dropped on the same spot; how far apart they end up. */
 		private double gapAfter(boolean aFlies, boolean bFlies) {
@@ -13472,6 +13540,7 @@ public class SimTests {
 				new TheTallAndTheDryAreOpenCover(),
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
+				new ASoundIsHeardAndThenGone(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
