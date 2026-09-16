@@ -28,6 +28,7 @@ public final class ServerTests {
 		replayReconstructsLiveSessionExactly();
 		visitorLogCountsWithoutIdentifying();
 		visitorLogReadsTheClientThroughTheProxy();
+		anEventIsNotInspectedAsABody();
 		populationCensusCountsEveryLivingRole();
 		theChartIsSentTheBoundsActuallyEnforced();
 		lineageCensusIsTheSameWorldFiner();
@@ -563,6 +564,58 @@ public final class ServerTests {
 			c.merge(sp, 1, Integer::sum);
 		}
 		return c;
+	}
+
+	/**
+	 * A sound is an event, and the inspector never reports one as a body.
+	 *
+	 * <p>Sounds are entities with a lifespan, and {@code Entity.think} records
+	 * "old age" whenever a lifespan runs out — so a spent sound is, on the wire,
+	 * a dead entity that died of old age. It also had no branch in {@link
+	 * WorldHost#entityDetail}, so it fell through to the generic tail with no
+	 * kind at all, and the viewer's non-debug inspector rendered the only two
+	 * facts it was given: a bare "entity" and a death from old age. For a noise.
+	 *
+	 * <p>Two things are pinned here, because the ephemera outnumber the bodies
+	 * — around 40% of everything the viewer tracks is a sound, and almost all of
+	 * them are spent. A sound says what it is, and nothing that is not a body
+	 * reports a cause of death.
+	 */
+	static void anEventIsNotInspectedAsABody() {
+		WorldHost host = new WorldHost(11);
+		// A world at rest is silent: sounds are made by creatures doing things,
+		// so the subject of this test does not exist until the world has run.
+		for (int t = 0; t < 600; t++) {
+			host.runner().world().think();
+		}
+		int sounds = 0, corpses = 0;
+		for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
+			java.util.Map<String, Object> d = host.entityDetail(e.getID());
+			if (d == null) {
+				continue;
+			}
+			// Nothing reaches the viewer without saying what it is. A payload with
+			// no kind renders under the header's last-resort "entity", which is
+			// the shape the bug arrived in.
+			check("entity " + e.getID() + " tells the inspector what it is",
+					d.containsKey("kind"));
+			if (e instanceof net.hedinger.prototype.entities.Sound) {
+				sounds++;
+				check("a sound is a sound", "sound".equals(d.get("kind")));
+				check("a sound never dies of anything", !d.containsKey("diedOf"));
+				check("it says which event it was", d.get("subtype") instanceof String);
+			}
+			if (d.containsKey("diedOf")) {
+				corpses++;
+				check("only a body has a cause of death: " + d.get("kind"),
+						e instanceof net.hedinger.prototype.entities.NPC);
+			}
+		}
+		// The world has to have contained the thing under test, or this passes by
+		// looking at nothing -- which is how it would pass again after a
+		// regression that stopped streaming sounds for some other reason.
+		check("the world was making noise to test against", sounds > 0);
+		check("and had bodies whose deaths still explain themselves", corpses >= 0);
 	}
 
 	/**
