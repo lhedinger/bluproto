@@ -287,7 +287,15 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
   the last third is **bone**, food to nobody. Every mouthful is paid
   `MEAT_ENERGY` per unit of mass it takes, so a whole carcass comes to
   `MEAT_ENERGY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
-  share is at most the fresh third. A bite on a *living* animal is a wound and
+  share is at most the fresh third. `MEAT_ENERGY` is sized so the fresh third
+  of a reference body holds three reference stomachs (`3 · STOMACH / ⅓`), which
+  after spoilage and the overflow of last bites fills two same-size hunters,
+  and the decayed third two scavengers after them: a kill is a meal for
+  several, not a snack. It is
+  deliberately far above `FLESH_COST`, the price flesh is grown, mended and
+  drunk by a parasite at; what an eater collects beyond that is the grass the
+  animal ate to build and run itself, concentrated, and that margin is not
+  conserved. A bite on a *living* animal is a wound and
   nothing else: the hunter is paid nothing until its quarry is dead. Fresh meat
   spoils on its own into decayed meat (about five seconds on a reference body,
   and every bite hurries it), and decayed meat rots away on the decay clock once

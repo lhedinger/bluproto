@@ -704,56 +704,81 @@ public class SimTests {
 	}
 
 	/**
-	 * A carcass is worth what a kill of the same mass is worth. Meat is meat: what
-	 * separates a hunter from a scavenger is the chase and the risk on one side and
-	 * the search on the other, not the price of the meal.
+	 * A carcass is a meal for several. Meat is priced far above what flesh costs
+	 * to grow -- {@link NPC#MEAT_ENERGY} against {@link NPC#FLESH_COST} -- so that
+	 * one medium body is not a snack: its fresh third fills two reference-size
+	 * hunters, and the rest fills two scavengers after them. Every mouth is paid
+	 * the meat price for exactly the mass it takes, and no more than the edible
+	 * body is ever taken between them.
 	 *
-	 * <p>This also pins that rot is charged exactly once. Eating advances the same
-	 * clock decay does, so a half-rotted body has half its bites left and yields
-	 * half as much on its own; multiplying the per-bite rate by freshness as well
-	 * discounted the same rot twice and left a whole fresh carcass worth half a
-	 * kill.
+	 * <p>Mouths come to the body one at a time, each eating until it is full
+	 * and then leaving, so what is counted is stomachs filled rather than what
+	 * an already-full mouth could not hold.
 	 */
-	static class ACarcassIsWorthWhatAKillIsWorth extends Scenario {
+	static class ACarcassIsAMealForSeveral extends Scenario {
+		/** Sends bodies of {@code clade} to the carcass one after another, each
+		 *  eating until full or until {@code ticks} pass, and returns
+		 *  {fed to at least 80%, total paid}. */
+		private double[] mouths(World w, TestNPC body, Genome g, Genome.Clade clade, int count, int ticks) {
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			int fed = 0;
+			double paid = 0;
+			boolean hunts = clade == Genome.Clade.PREDATOR;
+			for (int i = 0; i < count; i++) {
+				TestNPC m = TestNPC.minded(body.getX(), body.getY(), 0, g, feeder)
+						.withClade(clade).withHunger(1.0).withReproCooldown(100_000_000);
+				w.spawnEntity(m);
+				// Until full, or until there is nothing left this mouth may eat -- a
+				// mouth waiting at a body it cannot eat is not part of the meal.
+				for (int t = 0; t < ticks && m.getHunger() > 0.06
+						&& (hunts ? body.freshMeat() : body.edibleMass()) > 0; t++) {
+					tick(w, 1);
+				}
+				if (m.getHunger() <= 0.2) {
+					fed++;
+				}
+				paid += m.totalSwallowed();
+				m.remove();
+			}
+			return new double[] { fed, paid };
+		}
+
 		@Override
 		public void run() {
 			seed(34);
-			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
-			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
-
-			// Strip one whole carcass, from perfectly fresh, and total the takings.
+			Genome g = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000); // reference size
 			World w = room(12, 12);
-			TestNPC body = TestNPC.breeder(6.5, 6.5, 0, g);
+			TestNPC body = TestNPC.grazer(6.5, 6.5, 0, g).grown(); // a medium body: reference mass
 			w.spawnEntity(body);
 			tick(w, 2);
-			body.damage(500);
+			body.kill();
 			tick(w, 1);
 			assertTrue("there is a carcass", body.isDead());
-			double bodyMass = body.bodyMass();
+			double mass = body.bodyMass();
+			assertNear("of reference mass", 1.0, mass, 0.01);
+			double edible = body.edibleMass();
+			double stomach = NPC.STOMACH * mass; // a same-size eater's
 
-			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
-					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
-			w.spawnEntity(scav);
-			tick(w, 1);
-			double before = scav.totalSwallowed();
-			// Long enough to consume the body outright; the swallowed ledger counts
-			// only what fit the stomach, so the gain is the meal and nothing else.
-			tick(w, 400);
-			// Eaten OUT, not gone: meat and decay are separate books, and a body
-			// with nothing left on it lies there until its own clock runs out.
-			assertTrue("the carcass has been eaten away", body.meatLeft() <= 0.01);
-			assertNear("and what lies there is the bones", body.bones(), body.remainingMass(), 0.01);
-			assertGreater("which are a real part of the body", body.bones(), 0.2 * bodyMass);
-			double fromCarrion = scav.totalSwallowed() - before;
+			// Hunters first, on the fresh third.
+			double[] hunters = mouths(w, body, g, Genome.Clade.PREDATOR, 4, 300);
+			assertGreater("the fresh third of a medium body fills two same-size hunters", hunters[0], 1);
+			assertTrue("and the hunters left the decayed meat alone",
+					body.decayedMeat() >= (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * mass - 1e-9);
+			double hunterMeat = body.eatenMass();
+			assertTrue("and were paid the meat price for what they took, less the last bite's overflow",
+					hunters[1] <= NPC.MEAT_ENERGY * hunterMeat + 1e-9
+							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 4 * stomach * 0.15);
 
-			// A body is not all meat. A scavenger is paid MEAT_ENERGY per unit of the
-			// edible part -- the fresh third and the decayed third, whichever it took
-			// first -- and nothing for the bones, so a whole carcass is worth two thirds
-			// of its mass and not a scrap more, however long the mouth stays on it.
-			double edible = (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) * bodyMass;
-			assertNear("a whole carcass pays its edible meat, two thirds of the body",
-					TestNPC.MEAT_ENERGY * edible, fromCarrion, TestNPC.MEAT_ENERGY * edible * 0.05);
-			assertLess("and never the whole body", fromCarrion, TestNPC.MEAT_ENERGY * bodyMass * 0.8);
+			// Then scavengers, on what is left.
+			double[] scavs = mouths(w, body, g, Genome.Clade.SCAVENGER, 4, 300);
+			assertGreater("what the hunters left fills two same-size scavengers", scavs[0], 1);
+			assertGreater("so one medium body is a meal for four", hunters[0] + scavs[0], 3);
+			double taken = body.eatenMass();
+			assertTrue("between them the mouths never took more than the edible body ("
+					+ String.format("%.2f of %.2f", taken, edible) + ")", taken <= edible + 1e-9);
+			assertTrue("nor were paid for more than they took",
+					hunters[1] + scavs[1] <= NPC.MEAT_ENERGY * taken + 1e-9);
+			assertTrue("and the bones are still lying there", !body.isRemoved() && body.bones() > 0);
 		}
 	}
 
@@ -7188,6 +7213,16 @@ public class SimTests {
 						asked, Math.min(bill, 0.9 * cap), 0.01 * cap);
 				assertGreater("and banks past that price before it breeds",
 						founder.reproFraction, founder.reproCostFraction);
+				// The bill is priced at the flesh price. What meat sells for is a
+				// different number, and no term of a childhood may read it.
+				double meatPrice = NPC.MEAT_ENERGY;
+				NPC.MEAT_ENERGY = 2 * meatPrice;
+				try {
+					assertNear("the childhood bill does not move with the price of meat", bill,
+							TestNPC.childhoodCost(adult, founder.birthSatiation, founder.speed), 1e-9);
+				} finally {
+					NPC.MEAT_ENERGY = meatPrice;
+				}
 
 				// No food at all: whatever the child manages is what it was given.
 				World w = room(30, 24);
@@ -10622,14 +10657,23 @@ public class SimTests {
 			// it leaves spoils into the scavengers' pool. The invariant is the ledger:
 			// between them the mouths are paid the edible body ONCE, and the bones never.
 			double toHunter = hunter.totalSwallowed();
-			assertGreater("the hunter was paid most of the fresh third, bite by bite ("
-					+ String.format("%.2f of %.2f", toHunter, freshMeat) + ")", toHunter, 0.5 * freshMeat);
+			double stomach = NPC.STOMACH * hunter.bodyMass(); // the fresh third of a size-12 body overfills a size-16 hunter
+			assertGreater("the hunter ate its fill of the fresh third, bite by bite ("
+					+ String.format("%.2f of %.2f, stomach %.2f", toHunter, freshMeat, stomach) + ")",
+					toHunter, 0.9 * Math.min(freshMeat, stomach));
 			assertTrue("and never more than the fresh third", toHunter <= freshMeat + 0.01);
 			hunter.remove();
 			double leftovers = scavenged(w, prey, 15.5, 10.5);
-			assertNear("the scavengers were paid exactly the edible meat the hunter left ("
-					+ String.format("%.2f + %.2f against %.2f", toHunter, leftovers, edible) + ")",
-					edible, toHunter + leftovers, 0.05 * edible);
+			assertGreater("the scavengers found meat the hunter left", leftovers, 0.0);
+			// The ledger is kept on the carcass: what every mouth took, summed, never
+			// exceeds the edible body, and nobody is paid for more than it took. (Paid
+			// can be less: a full stomach credits nothing, and meat rots.)
+			double edibleMass = prey.bodyMass() * (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
+			assertTrue("between them the mouths took no more than the edible body ("
+					+ String.format("%.2f of %.2f", prey.eatenMass(), edibleMass) + ")",
+					prey.eatenMass() <= edibleMass + 1e-9);
+			assertTrue("and were paid for no more than they took",
+					toHunter + leftovers <= NPC.MEAT_ENERGY * prey.eatenMass() + 1e-9);
 			assertTrue("and the body was worth its meat once, to however many mouths",
 					toHunter + leftovers <= meat + 0.01);
 
@@ -10641,10 +10685,13 @@ public class SimTests {
 			tick(w, 1);
 			double whole = TestNPC.MEAT_ENERGY * fallen.bodyMass()
 					* (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
+			double stomachs = 3 * NPC.STOMACH * (10 / NPC.REF_SIZE); // three size-10 scavengers
 			double paid = scavenged(w, fallen, 8.5, 10.5);
-			assertGreater("a whole carcass feeds scavengers its edible two thirds ("
-					+ String.format("%.2f of %.2f", paid, whole) + ")", paid, 0.8 * whole);
-			assertTrue("and never more than its meat", paid <= whole + 0.01);
+			assertGreater("a whole carcass fills three scavengers ("
+					+ String.format("%.2f of %.2f in stomachs, %.2f on the body", paid, stomachs, whole) + ")",
+					paid, 0.9 * Math.min(stomachs, whole));
+			assertTrue("and never pays more than its meat", paid <= whole + 0.01);
+			assertTrue("nor more than was taken off it", paid <= TestNPC.MEAT_ENERGY * fallen.eatenMass() + 0.01);
 		}
 	}
 
@@ -10736,7 +10783,7 @@ public class SimTests {
 			double controlSpent = controlBefore - stored(control);
 			double biteCost = (bittenBefore - stored(bitten)) - controlSpent;
 			double drainCost = (drainedBefore - stored(drained)) - controlSpent;
-			double price = TestNPC.MEAT_ENERGY * drained.bodyMass() * flesh;
+			double price = NPC.FLESH_COST * drained.bodyMass() * flesh;
 			assertNear("a wound that took no flesh closed for free (" + String.format("%.3f", biteCost) + ")",
 					0, biteCost, 0.15 * price + 0.02);
 			assertNear("mending the drain cost the meat price of the flesh (" + String.format("%.2f", drainCost)
@@ -10771,9 +10818,9 @@ public class SimTests {
 		}
 
 		/** What a newborn is worth: its tank, its stomach, and its body at the
-		 *  meat price any eater would collect for it. */
+		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
-			return n.getEnergy() + TestNPC.MEAT_ENERGY * n.bodyMass()
+			return n.getEnergy() + NPC.FLESH_COST * n.bodyMass()
 					+ (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
@@ -10959,7 +11006,7 @@ public class SimTests {
 			// everything minted from its stomach, less what it still holds) is
 			// at least the meat price of the flesh it put on.
 			double minted = grower.getHunger() * NPC.STOMACH * (16.0 / NPC.REF_SIZE);
-			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
+			double flesh = NPC.FLESH_COST * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
 			assertGreater("and the flesh was paid for out of the books ("
 					+ String.format("%.2f", e0 + minted - grower.getEnergy())
@@ -11303,6 +11350,13 @@ public class SimTests {
 			assertLess("and the host is being eaten away", host.getHealth(), hp0);
 			assertGreater("what the host lost, the parasite swallowed",
 					para.totalSwallowed(), 0.0);
+			// At the FLESH price, not the meat price: the drink is a transfer the
+			// host mends at the same price, so the pair cannot mint energy.
+			double drained = (hp0 - host.getHealth()) / (double) TestNPC.FULL_BODY_HEALTH;
+			assertNear("and was paid the flesh price for the share it drank ("
+					+ String.format("%.3f for %.0f%% of the host", para.totalSwallowed(), drained * 100) + ")",
+					NPC.FLESH_COST * host.bodyMass() * drained, para.totalSwallowed(),
+					0.25 * NPC.FLESH_COST * host.bodyMass() * drained + 0.01);
 			assertNear("nothing was grazed on the way", 0.0, para.totalIntake(), 1e-9);
 		}
 	}
@@ -13640,7 +13694,7 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),
-				new ACarcassIsWorthWhatAKillIsWorth(),
+				new ACarcassIsAMealForSeveral(),
 				new ABodyIsShapedByWhatItEats(),
 				new EveryCladeWearsEightBodies(),
 				new EveryBodyStaysInItsCell(),
