@@ -685,6 +685,10 @@ final class WorldHost {
 				}
 				if (!n.isDead()) {
 					d.put("health", n.getHealth()); // the life gate, and it has been passed
+					// The body's store: fat as a share of what its frame can carry, and
+					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
+					d.put("fat", round(n.fatLeft()));
+					d.put("fatMass", round(n.fat()));
 				}
 				// What this body weighs to an eater: the body it HAS, not the one its
 				// genome describes. A juvenile is worth its juvenile mass, and the
@@ -700,12 +704,12 @@ final class WorldHost {
 					// are eaten and rot, and the mass with them. The whole is sent too so
 					// the panel can draw each pool as a share of the body it came from.
 					d.put("mass", round(n.remainingMass()));
-					d.put("wholeMass", round(n.bodyMass()));
+					d.put("wholeMass", round(n.carcassMass()));
 					d.put("decay", round(n.decayProgress()));
 					d.put("meat", round(n.meatLeft())); // edible to anyone, as a share of the body
 					d.put("fresh", round(n.freshLeft())); // the hunter's share of it; decay waits on this
 					d.put("decayed", round(n.decayedLeft())); // the scavenger's, rotting on the clock
-					d.put("bones", round(n.bodyMass() <= 0 ? 0 : n.bones() / n.bodyMass()));
+					d.put("bones", round(n.carcassMass() <= 0 ? 0 : n.bones() / n.carcassMass()));
 					d.put("worth", round(net.hedinger.prototype.entities.NPC.MEAT_ENERGY
 							* n.edibleMass()));
 					// Ticks of decay left once it starts; the clock holds while fresh meat

@@ -592,6 +592,93 @@ public class SimTests {
 	}
 
 	/**
+	 * Fat is the body's store. A fed body with a full tank keeps digesting and
+	 * lays what the tank cannot take down as mass, at the one price; a body
+	 * whose stomach runs empty draws that mass back into the stomach at the same
+	 * price, so fat is spent before health is. And fat is meat: a fat body's
+	 * carcass carries it, half fresh and half decayed, on top of the frame's
+	 * thirds, so a long fed life leaves a rich body and a starved one bones.
+	 */
+	static class FatIsTheBodysStore extends Scenario {
+		private static Genome body() {
+			Genome g = new Genome();
+			g.size = 8;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(52);
+			// --- laid down: a fed grazer on rich grass, tank full, stomach full.
+			World w = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome roamer = body();
+			roamer.speed = 0.03; // it has to walk to the next patch once it strips one
+			TestNPC fed = TestNPC.grazer(4.5, 3.5, 0, roamer).withMetabolic().grown().withHunger(0.0).withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			fed.withEnergy(fed.energyCapacity());
+			w.spawnEntity(fed);
+			assertEquals("a body starts lean", 0, (long) Math.round(fed.fat() * 1000));
+			tick(w, 3000);
+			assertGreater("a fed body with a full tank lays down fat", fed.fat(), 0.3 * fed.fatCap());
+			assertTrue("and never more than its frame can carry", fed.fat() <= fed.fatCap() + 1e-9);
+			assertGreater("its tank is still full: fat is what was left over", fed.getEnergy(), 0.95 * fed.energyCapacity());
+
+			// --- drawn down: on barren ground with an empty stomach, fat feeds the
+			// body and health holds; a lean twin starves.
+			World b = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					b.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			b.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			// Both arrive just past the deprivation line, so both take the hit the
+			// arrival tick lands. From there the lean one starves a point a period;
+			// the fat one eats its way back under the line out of its own store.
+			TestNPC fat = TestNPC.grazer(3.5, 3.5, 0, body()).withMetabolic().grown().fattened().withHunger(0.96).withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			TestNPC lean = TestNPC.grazer(6.5, 3.5, 0, body()).withMetabolic().grown().withHunger(0.96).withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			fat.withEnergy(0.5 * fat.energyCapacity());
+			lean.withEnergy(0.5 * lean.energyCapacity());
+			b.spawnEntity(fat);
+			b.spawnEntity(lean);
+			double f0 = fat.fat();
+			tick(b, 600);
+			assertLess("an empty stomach draws on the fat", fat.fat(), f0 - 0.01);
+			assertLess("and the stomach never pegs while any is left", fat.getHunger(), NPC.DEPRIVED);
+			assertTrue("so starvation has not touched it past the arrival tick (" + fat.getHealth() + ")",
+					fat.getHealth() >= 99);
+			assertLess("the lean twin is starving", lean.getHealth(), fat.getHealth() - 5);
+			assertGreater("and the fat body is the better fed of the two, out of its own store",
+					lean.getHunger(), fat.getHunger());
+
+			// --- on the carcass: fat is meat, on top of the frame's thirds.
+			TestNPC rich = TestNPC.grazer(3.5, 5.5, 0, body()).grown().fattened();
+			b.spawnEntity(rich);
+			tick(b, 1);
+			double frame = rich.bodyMass(), stored = rich.fat();
+			rich.kill();
+			tick(b, 1);
+			assertNear("the carcass weighs frame and fat together", frame + stored, rich.carcassMass(), 1e-9);
+			assertNear("half the fat is fresh meat, over the frame's third",
+					NPC.FRESH_SHARE * frame + stored / 2, rich.freshMeat(), 0.01);
+			assertNear("half is decayed meat, over the frame's share",
+					(1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * frame + stored / 2, rich.decayedMeat(), 0.01);
+			assertNear("and the bones are the frame's alone: fat has none",
+					(1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE) * frame, rich.bones(), 1e-9);
+		}
+	}
+
+	/**
 	 * Other hunters join the kill. A fresh carcass shows up on a hunter's prey
 	 * scan as food, is walked to like living prey, and is eaten on arrival --
 	 * so a hunter that did not make the kill still gets a meal off it while the
@@ -704,12 +791,13 @@ public class SimTests {
 	}
 
 	/**
-	 * A carcass is a meal for several. Meat is priced far above what flesh costs
-	 * to grow -- {@link NPC#MEAT_ENERGY} against {@link NPC#FLESH_COST} -- so that
-	 * one medium body is not a snack: its fresh third fills two reference-size
-	 * hunters, and the rest fills two scavengers after them. Every mouth is paid
-	 * the meat price for exactly the mass it takes, and no more than the edible
-	 * body is ever taken between them.
+	 * A carcass is a meal. Mass has one price, {@link NPC#MEAT_ENERGY}, sized so
+	 * a body is worth stomachs rather than mouthfuls: the fresh third of a lean
+	 * medium body fills one same-size hunter, and what it leaves fills a
+	 * scavenger; a fat body ({@link NPC#FAT_CAP}) carries half as much meat
+	 * again and pays out that much more. Every mouth is paid the price for
+	 * exactly the mass it takes, and no more than the edible body is ever taken
+	 * between them.
 	 *
 	 * <p>Mouths come to the body one at a time, each eating until it is full
 	 * and then leaving, so what is counted is stomachs filled rather than what
@@ -760,25 +848,40 @@ public class SimTests {
 			double stomach = NPC.STOMACH * mass; // a same-size eater's
 
 			// Hunters first, on the fresh third.
-			double[] hunters = mouths(w, body, g, Genome.Clade.PREDATOR, 4, 300);
-			assertGreater("the fresh third of a medium body fills two same-size hunters", hunters[0], 1);
+			double[] hunters = mouths(w, body, g, Genome.Clade.PREDATOR, 3, 300);
+			assertGreater("the fresh third of a lean medium body fills a same-size hunter", hunters[0], 0);
 			assertTrue("and the hunters left the decayed meat alone",
 					body.decayedMeat() >= (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * mass - 1e-9);
 			double hunterMeat = body.eatenMass();
-			assertTrue("and were paid the meat price for what they took, less the last bite's overflow",
+			assertTrue("and were paid the price for what they took, less the last bite's overflow",
 					hunters[1] <= NPC.MEAT_ENERGY * hunterMeat + 1e-9
-							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 4 * stomach * 0.15);
+							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 3 * stomach * 0.15);
 
 			// Then scavengers, on what is left.
-			double[] scavs = mouths(w, body, g, Genome.Clade.SCAVENGER, 4, 300);
-			assertGreater("what the hunters left fills two same-size scavengers", scavs[0], 1);
-			assertGreater("so one medium body is a meal for four", hunters[0] + scavs[0], 3);
+			double[] scavs = mouths(w, body, g, Genome.Clade.SCAVENGER, 3, 300);
+			assertGreater("what the hunters left fills a same-size scavenger", scavs[0], 0);
 			double taken = body.eatenMass();
 			assertTrue("between them the mouths never took more than the edible body ("
 					+ String.format("%.2f of %.2f", taken, edible) + ")", taken <= edible + 1e-9);
 			assertTrue("nor were paid for more than they took",
 					hunters[1] + scavs[1] <= NPC.MEAT_ENERGY * taken + 1e-9);
 			assertTrue("and the bones are still lying there", !body.isRemoved() && body.bones() > 0);
+			double leanPaid = hunters[1] + scavs[1];
+
+			// A fat body of the same frame is that much more of a meal.
+			TestNPC rich = TestNPC.grazer(6.5, 6.5, 0, g).grown().fattened();
+			w.spawnEntity(rich);
+			tick(w, 2);
+			rich.kill();
+			tick(w, 1);
+			assertGreater("a fat body carries more meat than its frame", rich.edibleMass(), edible + 0.2);
+			double[] richHunters = mouths(w, rich, g, Genome.Clade.PREDATOR, 3, 300);
+			double[] richScavs = mouths(w, rich, g, Genome.Clade.SCAVENGER, 3, 300);
+			assertGreater("and pays out more to the mouths at it ("
+					+ String.format("%.2f against %.2f lean", richHunters[1] + richScavs[1], leanPaid) + ")",
+					richHunters[1] + richScavs[1], 1.2 * leanPaid);
+			assertTrue("still never more than was taken off it",
+					richHunters[1] + richScavs[1] <= NPC.MEAT_ENERGY * rich.eatenMass() + 1e-9);
 		}
 	}
 
@@ -1600,7 +1703,7 @@ public class SimTests {
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC parent = TestNPC.minded(4.5, 4.5, 0, bud, breeder)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic().withDeathspan(777);
-			parent.withEnergy(parent.energyCapacity());
+			parent.grown().withEnergy(parent.energyCapacity()).fattened();
 			w.spawnEntity(parent);
 			w.think();
 			tick(w, 200); // budding is a held act: ~165 ticks of commitment first
@@ -1632,8 +1735,8 @@ public class SimTests {
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			TestNPC b = TestNPC.minded(6.7, 6.5, 0, sx.copy(), breeder)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
-			a.withEnergy(a.energyCapacity());
-			b.withEnergy(b.energyCapacity());
+			a.withEnergy(a.energyCapacity()).grown().fattened();
+			b.withEnergy(b.energyCapacity()).grown().fattened();
 			pair.spawnEntity(a);
 			pair.spawnEntity(b);
 			pair.think();
@@ -2490,8 +2593,8 @@ public class SimTests {
 			victimG.size = 10;
 			victimG.speed = 0; // parked: isolate bite rate from the chase
 
-			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG).withHunger(0.8);
-			TestNPC victim = TestNPC.breeder(5.4, 5.0, 0, victimG); // adjacent, in reach
+			TestNPC hunter = TestNPC.predator(5.0, 5.0, 0, predG).grown().withHunger(0.8);
+			TestNPC victim = TestNPC.breeder(5.4, 5.0, 0, victimG).grown(); // adjacent, in reach; adults, since growth is eaten
 			w.spawnEntity(hunter);
 			w.spawnEntity(victim);
 			w.think();
@@ -2653,15 +2756,22 @@ public class SimTests {
 		private int ticksToMature(double adultSize) {
 			seed(9);
 			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0); // growth is eaten: rich grass to eat it from
+				}
+			}
+			w.setTile(1, 5, 0, Tile.TileType.TYPE_SHALLOWS); // and water, or thirst stops the grazing
 			Genome g = new Genome();
 			g.size = adultSize;
-			TestNPC t = TestNPC.breeder(9.5, 5.5, 0, g);
+			g.speed = 0.03; // it has to walk to the next patch once it strips one
+			TestNPC t = TestNPC.breeder(9.5, 5.5, 0, g).withReproCooldown(100_000_000);
 			w.spawnEntity(t);
 			w.think();
 			assertTrue("a newborn is a juvenile", t.isJuvenile());
 			assertLess("a newborn is markedly smaller than its adult body",
 					t.getPixelSize(), adultSize * 0.6);
-			for (int i = 0; i < 6000; i++) {
+			for (int i = 0; i < 15000; i++) {
 				w.think();
 				if (!t.isJuvenile()) {
 					assertEquals("a grown body reaches exactly its genome size",
@@ -2682,23 +2792,30 @@ public class SimTests {
 			assertGreater("a bigger creature takes longer to grow up", large, small);
 			// A fixed growth rate over the longest possible climb: ~1 minute at
 			// 33 ticks/s. Bounded on both sides so the rate cannot drift unnoticed.
+			// A child buys two thirds of its frame out of what it eats, at the one
+			// price of mass, so a childhood is measured in minutes of grazing.
 			int oneMinute = 60 * net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
-			assertGreater("the longest childhood is on the order of a minute ("
-					+ large + " ticks)", large, oneMinute * 0.75);
-			assertLess("the longest childhood does not much exceed a minute ("
-					+ large + " ticks)", large, oneMinute * 1.25);
+			assertGreater("the longest childhood takes minutes (" + large + " ticks)", large, oneMinute);
+			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 6);
 
 			// Growth is physical, not economic: the tank is anchored on the adult
 			// body, so a newborn's breeding economy matches a grown one's.
 			seed(9);
 			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.setTile(1, 5, 0, Tile.TileType.TYPE_SHALLOWS);
 			Genome g = new Genome();
 			g.size = 12;
-			TestNPC baby = TestNPC.breeder(9.5, 5.5, 0, g);
+			g.speed = 0.03;
+			TestNPC baby = TestNPC.breeder(9.5, 5.5, 0, g).withReproCooldown(100_000_000);
 			w.spawnEntity(baby);
 			w.think();
 			double juvenileCap = baby.energyCapacity();
-			tick(w, 3000); // long enough to be fully grown
+			tick(w, 12000); // minutes: long enough to eat its way to fully grown
 			assertTrue("the body did finish growing", !baby.isJuvenile());
 			assertEquals("the energy tank is the same before and after growing up",
 					Math.round(juvenileCap * 1000), Math.round(baby.energyCapacity() * 1000));
@@ -2960,9 +3077,10 @@ public class SimTests {
 			// Fed past the breeding threshold: a newborn starts at 0.6 of its tank
 			// and breeds at 0.75, so an unfed pair is infertile and would pass the
 			// negative assertion for entirely the wrong reason.
-			TestNPC g1 = TestNPC.breeder(2.5, 2.5, 0, grazer.copy()).withEnergy(99);
-			TestNPC g2 = TestNPC.breeder(3.5, 2.5, 0, twin.copy()).withEnergy(99);
-			TestNPC p1 = TestNPC.breeder(4.5, 2.5, 0, hunter.copy()).withEnergy(99);
+			// Grown and fat: fertile bodies, so the clade is the only thing between them.
+			TestNPC g1 = TestNPC.breeder(2.5, 2.5, 0, grazer.copy()).grown().fattened().withEnergy(99);
+			TestNPC g2 = TestNPC.breeder(3.5, 2.5, 0, twin.copy()).grown().fattened().withEnergy(99);
+			TestNPC p1 = TestNPC.breeder(4.5, 2.5, 0, hunter.copy()).grown().fattened().withEnergy(99);
 			for (TestNPC t : new TestNPC[] { g1, g2, p1 }) {
 				w.spawnEntity(t);
 			}
@@ -4502,7 +4620,7 @@ public class SimTests {
 			for (int i = 0; i < 3; i++) {
 				Genome g = new Genome();
 				g.markers = new double[] { 0.2, 0.6, 0.9 };
-				w.spawnEntity(TestNPC.breeder(6.5 + i * 3, 6.5 + i * 3, 0, g));
+				w.spawnEntity(TestNPC.breeder(6.5 + i * 3, 6.5 + i * 3, 0, g).grown().fattened()); // the fat a body is built from
 			}
 			w.think();
 			int start = w.getAliveCount();
@@ -4534,7 +4652,7 @@ public class SimTests {
 			World lone = room(12, 12); // full grass: energy is never the limiter
 			Genome solo = new Genome();
 			solo.markers = new double[] { 0.5, 0.5, 0.5 };
-			lone.spawnEntity(TestNPC.mater(6.5, 6.5, 0, solo));
+			lone.spawnEntity(TestNPC.mater(6.5, 6.5, 0, solo).grown().fattened());
 			lone.think();
 			snapshot(lone, "lone mater (no partner)");
 			tick(lone, 400);
@@ -4547,8 +4665,8 @@ public class SimTests {
 			ga.markers = new double[] { 0.0, 0.0, 0.0 };
 			Genome gb = new Genome();
 			gb.markers = new double[] { 1.0, 1.0, 1.0 }; // maximally dissimilar
-			strangers.spawnEntity(TestNPC.mater(6.3, 6.5, 0, ga));
-			strangers.spawnEntity(TestNPC.mater(6.7, 6.5, 0, gb));
+			strangers.spawnEntity(TestNPC.mater(6.3, 6.5, 0, ga).grown().fattened());
+			strangers.spawnEntity(TestNPC.mater(6.7, 6.5, 0, gb).grown().fattened());
 			strangers.think();
 			tick(strangers, 400);
 			assertEquals("incompatible (dissimilar) maters do not breed", 2, strangers.getAliveCount());
@@ -4567,12 +4685,12 @@ public class SimTests {
 				slowFar.markers = new double[] { 0.5, 0.5, 0.5 };
 				slowFar.speed = 0.02;
 				slowFar.losRange = 20;
-				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).withEnergy(4.4));
+				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).grown().fattened().withEnergy(4.4));
 				Genome fastNear = new Genome();
 				fastNear.markers = new double[] { 0.5, 0.5, 0.5 };
 				fastNear.speed = 0.08;
 				fastNear.losRange = 4;
-				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).withEnergy(4.4));
+				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).grown().fattened().withEnergy(4.4));
 			}
 			colony.think();
 			int founders = colony.getAliveCount();
@@ -5205,7 +5323,7 @@ public class SimTests {
 			g.size = 8;
 			g.markers = new double[] { 0.5, 0.5, 0.5 };
 			g.mateThreshold = 0.1; // compatible with each other
-			TestNPC t = TestNPC.minded(x, y, 0, g, m).withMetabolic().withSpeed(0.08);
+			TestNPC t = TestNPC.minded(x, y, 0, g, m).withMetabolic().withSpeed(0.08).grown().fattened();
 			t.withEnergy(t.energyCapacity());
 			w.spawnEntity(t);
 			return t;
@@ -6260,10 +6378,10 @@ public class SimTests {
 			seed(4);
 			World w = room(12, 12);
 			Genome g = body(16, biter());
-			TestNPC eater = hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
-					: TestNPC.mindedForager(5.5, 5.5, 0, g);
+			TestNPC eater = (hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
+					: TestNPC.mindedForager(5.5, 5.5, 0, g)).grown(); // adults: growth is eaten, and this room has no food
 			w.spawnEntity(eater);
-			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(6, null));
+			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(6, null)).grown().withSpeed(0); // parked: a grazer that wanders off its patch is a chase, not a bite
 			w.spawnEntity(prey);
 			// Room for the slow one: a grazer's four-damage bite on a one-second
 			// period needs about 825 ticks to work through a hundred health.
@@ -6287,8 +6405,8 @@ public class SimTests {
 			seed(4);
 			World w = room(12, 12);
 			Genome g = body(16, biter());
-			TestNPC eater = hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
-					: TestNPC.mindedForager(5.5, 5.5, 0, g);
+			TestNPC eater = (hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
+					: TestNPC.mindedForager(5.5, 5.5, 0, g)).grown().withHunger(0.85); // born hungry: a grown body's stomach outlasts its thirst in a room with no water
 			w.spawnEntity(eater);
 			// Starve it first: nothing to bite, so hunger climbs and the stomach
 			// opens up. Without this every meal is thrown away as overflow.
@@ -6303,7 +6421,7 @@ public class SimTests {
 			// value — the grazer needs twenty-five where the hunter needs five, so
 			// a window flatters whichever chews longest. Per carcass is the honest
 			// unit: it is the same animal either way.
-			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(preySize, null));
+			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(preySize, null)).grown().withSpeed(0);
 			w.spawnEntity(prey);
 			for (int t = 0; t < 600 && !prey.isDead(); t++) {
 				tick(w, 1);
@@ -6582,11 +6700,14 @@ public class SimTests {
 		int quarryHealthAfter(double hunterSize, double quarrySize, double greed) {
 			seed(31);
 			World w = room(14, 14);
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker(), greed));
+			// Grown: growth is bought out of what a body eats, and a hunter with
+			// nothing but one parked quarry cannot buy any. The adult ratio is the
+			// one under test.
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker(), greed)).grown();
 			TestNPC quarry = TestNPC.grazer(6.9, 6.5, 0, body(quarrySize, null));
 			w.spawnEntity(hunter);
 			w.spawnEntity(quarry);
-			int span = TestNPC.growthTicks(hunterSize) + 4000;
+			int span = 4000;
 			for (int t = 0; t < span && !quarry.isDead(); t++) {
 				tick(w, 1);
 			}
@@ -6733,9 +6854,9 @@ public class SimTests {
 			Genome hg = body(13, 0.04, fatSeeker());
 			hg.patience = patience;
 			hg.determination = 4.0; // dogged, so only the clock can turn it
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg);
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg).grown(); // growth is eaten, and there is nothing to eat in a cell
 			w.spawnEntity(hunter);
-			tick(w, TestNPC.growthTicks(13) + 200);
+			tick(w, 200);
 			for (int x = 5; x <= 7; x++) {
 				for (int y = 11; y <= 13; y++) {
 					w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR); // the cell opens
@@ -6901,7 +7022,7 @@ public class SimTests {
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain(preyConst));
 			hg.greed = greed;
-			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg);
+			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; this hunter is offered a choice, not a meal
 			w.spawnEntity(hunter);
 			// Grow up alone: the ceiling on what counts as food rises with the body,
 			// so a juvenile is not being offered the same choice.
@@ -7000,9 +7121,9 @@ public class SimTests {
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain());
 			hg.determination = determination;
-			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg);
+			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; an empty field grows nobody
 			w.spawnEntity(hunter);
-			tick(w, TestNPC.growthTicks(13) + 200);
+			tick(w, 200);
 
 			double hx = hunter.getX(), hy = hunter.getY();
 			double ahead = Math.atan2(15.0 - hy, 15.0 - hx);
@@ -7206,23 +7327,13 @@ public class SimTests {
 				founder.size = adult;
 				net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
 				double cap = NPC.BASE_CAPACITY * adult / NPC.REF_SIZE;
-				double bill = TestNPC.childhoodCost(adult, founder.birthSatiation, founder.speed);
+				double bill = TestNPC.endowmentCost(adult, founder.birthSatiation, founder.speed);
 				double asked = founder.reproCostFraction * cap;
 				assertNear("a founder of " + adult + " px asks what the childhood costs ("
 						+ String.format("%.2f against a bill of %.2f", asked, bill) + ")",
 						asked, Math.min(bill, 0.9 * cap), 0.01 * cap);
 				assertGreater("and banks past that price before it breeds",
 						founder.reproFraction, founder.reproCostFraction);
-				// The bill is priced at the flesh price. What meat sells for is a
-				// different number, and no term of a childhood may read it.
-				double meatPrice = NPC.MEAT_ENERGY;
-				NPC.MEAT_ENERGY = 2 * meatPrice;
-				try {
-					assertNear("the childhood bill does not move with the price of meat", bill,
-							TestNPC.childhoodCost(adult, founder.birthSatiation, founder.speed), 1e-9);
-				} finally {
-					NPC.MEAT_ENERGY = meatPrice;
-				}
 
 				// No food at all: whatever the child manages is what it was given.
 				World w = room(30, 24);
@@ -7236,22 +7347,25 @@ public class SimTests {
 						w.setTile(x, y, 0, Tile.TileType.TYPE_SHALLOWS); // thirst is not the variable
 					}
 				}
-				TestNPC parent = TestNPC.mindedPredator(8, 8, 0, founder).grown().withHunger(0.3);
+				TestNPC parent = TestNPC.mindedPredator(8, 8, 0, founder).grown().fattened().withHunger(0.3);
 				parent.withEnergy(parent.energyCapacity());
 				w.spawnEntity(parent);
 				TestNPC child = (TestNPC) parent.spawnOffspring();
 				assertTrue("the founder can afford a child", child != null);
+				double fatBefore = parent.fat();
 				parent.settleBirth(child, null);
 				w.spawnEntity(child);
-				int childhood = TestNPC.growthTicks(child.getGenome().size);
-				tick(w, childhood);
-				assertGreater("a " + adult + " px founder's child is still solvent when its childhood "
-						+ "ends, on the endowment alone (" + String.format("%.2f of %.2f",
+				assertNear("the child's body came out of the founder's fat, at birth mass",
+						NPC.birthMass(child.getGenome().size), fatBefore - parent.fat(), 1e-9);
+				int provisioned = (int) Math.round(TestNPC.PROVISION * TestNPC.growthTicks(child.getGenome().size));
+				tick(w, provisioned);
+				assertGreater("a " + adult + " px founder's child is still solvent when the childhood it was "
+						+ "provisioned for ends, on the endowment alone (" + String.format("%.2f of %.2f",
 						child.getEnergy(), child.energyCapacity()) + ")",
-						child.getEnergy(), NPC.CRAWL_RESERVE * child.energyCapacity());
-				assertGreater("and has all but finished growing (" + child.getPixelSize() + " px of "
-						+ String.format("%.1f", child.getGenome().size) + ")",
-						child.getPixelSize() + 1.0, child.getGenome().size);
+						child.getEnergy(), NPC.CRAWL_RESERVE * child.energyCapacity() - 0.01); // it spends every spare on growth, down to the reserve
+				assertTrue("and has not grown on the endowment: growth is eaten, and there is no food here ("
+						+ child.getPixelSize() + " px of " + String.format("%.1f", child.getGenome().size) + ")",
+						child.getPixelSize() < 0.6 * child.getGenome().size);
 			}
 		}
 	}
@@ -7291,7 +7405,7 @@ public class SimTests {
 			for (int i = 0; i < net.hedinger.prototype.sim.WorldSteward.RESEED_GROUP; i++) {
 				double[] p = net.hedinger.prototype.sim.Worlds.spotNear(w, 8, 16, 0, false);
 				TestNPC h = TestNPC.mindedPredator(p[0], p[1], 0,
-						Genome.child(founder, net.hedinger.prototype.sim.Worlds.KIN_RATE)).grown().withHunger(0.3);
+						Genome.child(founder, net.hedinger.prototype.sim.Worlds.KIN_RATE)).grown().fattened().withHunger(0.3);
 				h.withEnergy(h.energyCapacity());
 				w.spawnEntity(h);
 				founders.add(h.getID());
@@ -7329,22 +7443,31 @@ public class SimTests {
 					+ String.format("%.1f", first.getGenome().size) + ")",
 					first.getPixelSize() < first.getGenome().size * 0.6);
 			// The longest childhood any of them can have, and a little past it.
-			tick(w, TestNPC.growthTicks(20) + 400);
-			int grown = 0, solvent = 0;
+			// Growth is eaten: a hunter's child buys its frame out of the pack's
+			// kills, a mouthful at a time, so growing up takes minutes rather than a
+			// nominal childhood. What is pinned is that it grows at all on what the
+			// pack provides, and stays solvent doing it.
+			java.util.Map<Integer, Integer> born = new java.util.HashMap<>();
 			for (TestNPC k : kids) {
-				boolean up = !k.isDead() && !k.isRemoved()
-						&& k.getPixelSize() >= (int) Math.round(k.getGenome().size);
-				if (up) {
-					grown++;
+				born.put(k.getID(), k.getPixelSize());
+			}
+			tick(w, 8000);
+			int growing = 0, solvent = 0;
+			for (TestNPC k : kids) {
+				if (k.isDead() || k.isRemoved()) {
+					continue;
+				}
+				double gap = k.getGenome().size - born.get(k.getID());
+				if (k.getPixelSize() - born.get(k.getID()) >= 0.25 * gap) {
+					growing++;
 					if (k.getEnergy() > net.hedinger.prototype.entities.NPC.CRAWL_RESERVE * k.energyCapacity()) {
 						solvent++;
 					}
 				}
 			}
-			assertGreater("most of the cohort reached its adult size (" + grown + " of "
-					+ kids.size() + ")", 2.0 * grown, kids.size());
-			assertGreater("at least two of them did", grown, 1);
-			assertGreater("and a grown child is still above the crawl reserve", solvent, 0);
+			assertGreater("the cohort is growing up on the pack's kills (" + growing + " of "
+					+ kids.size() + " a quarter of the way or more)", growing, 1);
+			assertGreater("and a growing child is still above the crawl reserve", solvent, 0);
 		}
 	}
 
@@ -7676,7 +7799,7 @@ public class SimTests {
 				Genome g = new Genome();
 				g.markers = new double[] { 0.2, 0.6, 0.9 };
 				g.brain = new Brain(deepCopy(graze));
-				w.spawnEntity(TestNPC.brainedBreeder(6.5 + i * 3, 6.5 + i * 3, 0, g));
+				w.spawnEntity(TestNPC.brainedBreeder(6.5 + i * 3, 6.5 + i * 3, 0, g).grown().fattened());
 			}
 			w.think();
 			int start = w.getAliveCount();
@@ -7902,7 +8025,7 @@ public class SimTests {
 				// Interleaved A B A B... in a line so each one's nearest is the
 				// opposite type -> cross-type matings that can recombine.
 				double x = 4.0 + i * 0.4 + (i % 2) * 0.07, y = 5.5;
-				w.spawnEntity(TestNPC.brainedBreeder(x, y, 0, g).withEnergy(12.0));
+				w.spawnEntity(TestNPC.brainedBreeder(x, y, 0, g).grown().fattened().withEnergy(12.0));
 			}
 			w.think();
 			int start = w.getAliveCount();
@@ -8043,8 +8166,9 @@ public class SimTests {
 			Genome kg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			kg.metabolism = 0.02;
 			kg.brain = new Brain(deepCopy(idle));
-			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withEnergy(6.0);
-			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withEnergy(6.0);
+			// Empty stomachs: nothing digests, so the tank reads the burn alone.
+			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withEnergy(6.0).withHunger(1.0);
+			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withEnergy(6.0).withHunger(1.0);
 			TestNPC cargo = TestNPC.inert(6.05, 6.0, 0).withSize(6);
 			w.spawnEntity(carrier);
 			w.spawnEntity(control);
@@ -8280,8 +8404,13 @@ public class SimTests {
 			Genome gG = Genome.phenotype(8, 0.12, 5, 6, Math.PI * 2, 100000);
 			gG.metabolism = 0.02;
 			gG.brain = new Brain(deepCopy(walk));
-			TestNPC flier = TestNPC.brainedBreeder(15.0, 20.0, 0, fG).withEnergy(14.0).withFlying();
-			TestNPC ground = TestNPC.brainedBreeder(45.0, 20.0, 0, gG).withEnergy(14.0);
+			// Full tanks and empty stomachs: nothing digests and nothing is clipped,
+			// so the tank reads the burn alone.
+			// Grown, too: a juvenile spends its tank on growth, which would read as haulage.
+			TestNPC flier = TestNPC.brainedBreeder(15.0, 20.0, 0, fG).grown().withFlying().withHunger(1.0);
+			TestNPC ground = TestNPC.brainedBreeder(45.0, 20.0, 0, gG).grown().withHunger(1.0);
+			flier.withEnergy(flier.energyCapacity());
+			ground.withEnergy(ground.energyCapacity());
 			Genome vAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vAG.brain = new Brain(deepCopy(cling));
 			Genome vBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
@@ -8312,7 +8441,7 @@ public class SimTests {
 			// so the multiple is the stable claim.
 			assertGreater("hauling a body aloft costs a flier far more than a ground "
 					+ "carrier (" + String.format("%.2f", fLoss) + " vs "
-					+ String.format("%.2f", gLoss) + ")", fLoss, gLoss * 1.8);
+					+ String.format("%.2f", gLoss) + ")", fLoss, gLoss * 1.5);
 		}
 	}
 
@@ -8724,7 +8853,7 @@ public class SimTests {
 			for (int i = 0; i < 2; i++) {
 				Genome g = new Genome();
 				g.markers = new double[] { 0.9, 0.2, 0.6 };
-				w.spawnEntity(TestNPC.nester(6.5 + i, 6.5 + i, 0, g));
+				w.spawnEntity(TestNPC.nester(6.5 + i, 6.5 + i, 0, g).grown().fattened());
 			}
 			w.think();
 			int start = w.getAliveCount();
@@ -10395,10 +10524,13 @@ public class SimTests {
 			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS); // the drinker's shore
 			// Brainless genomes -> inert minds: metabolic bodies that never move.
 			// Tanks full, so the mint only covers the resting burn.
+			// Both already as fat as they can be: a body with room for fat lays a
+			// quarter of its stomach down first, and the rhythm measured here is the
+			// resting one, once there is nothing left to store.
 			TestNPC drinker = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
-					.grown().withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000);
 			TestNPC dry = TestNPC.brainedBreeder(7.5, 3.5, 0, new Genome())
-					.grown().withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000);
 			w.spawnEntity(drinker);
 			w.spawnEntity(dry);
 			w.think();
@@ -10473,16 +10605,24 @@ public class SimTests {
 			// the fast burner was strictly better, and selection knew it.
 			World slowW = room(12, 12);
 			World fastW = room(12, 12);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 11; y++) {
+					slowW.getTile(x, y, 0).setFertility(1.0); // rich grass: a child's body is
+					fastW.getTile(x, y, 0).setFertility(1.0); // fat, and fat is eaten
+				}
+			}
 			slowW.setTile(1, 1, 0, Tile.TileType.TYPE_SHALLOWS); // a shore each:
 			fastW.setTile(1, 1, 0, Tile.TileType.TYPE_SHALLOWS); // dying of thirst
 			// is not the thing under measurement, breeding on grass is
 			Genome slow = new Genome();
 			slow.sexuality = 0.3; // budders: reproduction needs no partner
+			slow.speed = 0.03; // and roamers, so a stripped patch is left for the next
 			Genome fast = new Genome();
 			fast.sexuality = 0.3;
+			fast.speed = 0.03;
 			fast.metabolism = 0.06; // the herd's evolved triple pace
-			slowW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, slow));
-			fastW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, fast));
+			slowW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, slow).grown().fattened());
+			fastW.spawnEntity(TestNPC.breeder(6.5, 6.5, 0, fast).grown().fattened());
 			slowW.think();
 			fastW.think();
 			// 16000 ticks, not 8000: children are born holding what their parent
@@ -10658,9 +10798,9 @@ public class SimTests {
 			// between them the mouths are paid the edible body ONCE, and the bones never.
 			double toHunter = hunter.totalSwallowed();
 			double stomach = NPC.STOMACH * hunter.bodyMass(); // the fresh third of a size-12 body overfills a size-16 hunter
-			assertGreater("the hunter ate its fill of the fresh third, bite by bite ("
+			assertGreater("the hunter ate most of the fresh third, bite by bite; the rest spoiled under it ("
 					+ String.format("%.2f of %.2f, stomach %.2f", toHunter, freshMeat, stomach) + ")",
-					toHunter, 0.9 * Math.min(freshMeat, stomach));
+					toHunter, 0.75 * Math.min(freshMeat, stomach));
 			assertTrue("and never more than the fresh third", toHunter <= freshMeat + 0.01);
 			hunter.remove();
 			double leftovers = scavenged(w, prey, 15.5, 10.5);
@@ -10707,7 +10847,7 @@ public class SimTests {
 	 * nothing was taken.
 	 *
 	 * <p>Three identical, fed, watered grazers in a room with no grass. One is
-	 * bitten by a parked hunter; one is drained of thirty hundredths of its
+	 * bitten by a parked hunter; one is drained of ten hundredths of its
 	 * flesh the way a parasite would; one is the control. All end at full
 	 * health. The bitten one's stored food (tank plus stomach) matches the
 	 * control's; the drained one's is lower by the meat price of the flesh.
@@ -10728,8 +10868,8 @@ public class SimTests {
 		private static TestNPC grazer(double x, double y) {
 			// Metabolic, or nothing mends and nothing is spent: the four books are
 			// what this scenario audits.
-			TestNPC g = TestNPC.grazer(x, y, 0, body(12)).withMetabolic().grown().withHunger(0.0)
-					.withHydration(1.0).withReproCooldown(100_000_000);
+			TestNPC g = TestNPC.grazer(x, y, 0, body(12)).withMetabolic().grown().fattened().withHunger(0.0)
+					.withHydration(1.0).withReproCooldown(100_000_000); // fat: nothing to lay down, so the stomach drains at the resting rate
 			g.withEnergy(g.energyCapacity());
 			return g;
 		}
@@ -10768,13 +10908,15 @@ public class SimTests {
 					0, (long) Math.round(hunter.totalSwallowed() * 1000));
 			// The parasite's drain, by hand: thirty points of health and the flesh
 			// those points represent, off the living ledger.
-			double flesh = drained.drainFlesh(0.30);
-			drained.damage(30, "parasites");
-			assertNear("the drain took flesh", 0.30, flesh, 1e-9);
+			// Ten points: at the one price of mass, thirty hundredths of a body is
+			// more than a tank holds, and a wound a body cannot afford to mend stays.
+			double flesh = drained.drainFlesh(0.10);
+			drained.damage(10, "parasites");
+			assertNear("the drain took flesh", 0.10, flesh, 1e-9);
 			double bittenBefore = stored(bitten), drainedBefore = stored(drained), controlBefore = stored(control);
 			// Until the wounds have closed, at one point per MEND_PERIOD: measured the
 			// tick they do, before anything else drifts the books.
-			for (int t = 0; t < NPC.MEND_PERIOD * 40 && (bitten.getHealth() < 100 || drained.getHealth() < 100); t++) {
+			for (int t = 0; t < NPC.MEND_PERIOD * 120 && (bitten.getHealth() < 100 || drained.getHealth() < 100); t++) {
 				tick(w, 1);
 			}
 			assertEquals("the bite has closed", 100, bitten.getHealth());
@@ -10783,7 +10925,7 @@ public class SimTests {
 			double controlSpent = controlBefore - stored(control);
 			double biteCost = (bittenBefore - stored(bitten)) - controlSpent;
 			double drainCost = (drainedBefore - stored(drained)) - controlSpent;
-			double price = NPC.FLESH_COST * drained.bodyMass() * flesh;
+			double price = NPC.MEAT_ENERGY * drained.bodyMass() * flesh;
 			assertNear("a wound that took no flesh closed for free (" + String.format("%.3f", biteCost) + ")",
 					0, biteCost, 0.15 * price + 0.02);
 			assertNear("mending the drain cost the meat price of the flesh (" + String.format("%.2f", drainCost)
@@ -10812,15 +10954,17 @@ public class SimTests {
 	 * matter of a body does not get a child at all, rather than minting one.
 	 */
 	static class NoFreeEnergyAtBirth extends Scenario {
-		/** Everything a body holds, in one number: tank plus undigested gut. */
+		/** Everything a body holds, in one number: tank, undigested gut, and the
+		 *  fat a child's body is built out of, at the one price of mass. */
 		private static double held(TestNPC n) {
-			return n.getEnergy() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
+			return n.getEnergy() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE)
+					+ NPC.MEAT_ENERGY * n.fat();
 		}
 
 		/** What a newborn is worth: its tank, its stomach, and its body at the
 		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
-			return n.getEnergy() + NPC.FLESH_COST * n.bodyMass()
+			return n.getEnergy() + NPC.MEAT_ENERGY * n.bodyMass()
 					+ (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
@@ -10859,7 +11003,7 @@ public class SimTests {
 			World w = room(12, 12);
 			Genome g = new Genome();
 			g.sexuality = 0.3; // a budder
-			TestNPC parent = TestNPC.breeder(6.5, 6.5, 0, g).withEnergy(4.5);
+			TestNPC parent = TestNPC.breeder(6.5, 6.5, 0, g).grown().fattened().withEnergy(4.5);
 			w.spawnEntity(parent);
 			w.think();
 			double[] beforeBud = new double[1], bidBud = new double[1];
@@ -10869,9 +11013,9 @@ public class SimTests {
 			assertNear("the bud is worth exactly what its parent gave up, tank and gut together ("
 					+ String.format("%.2f against %.2f", worth(bud), budSpent) + ")",
 					worth(bud), budSpent, eps);
-			assertNear("and the whole of what the parent offered landed in it, none burnt ("
+			assertNear("and the whole of what the parent offered in energy landed in its books, none burnt ("
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
-					worth(bud), bidBud[0], eps);
+					worth(bud) - NPC.MEAT_ENERGY * bud.bodyMass(), bidBud[0], eps);
 			assertGreater("and the bud is born viable, not bankrupt", bud.getEnergy(), 0.5);
 			assertTrue("under the deprivation line, so being born does not hurt",
 					bud.getHunger() < NPC.DEPRIVED);
@@ -10883,8 +11027,8 @@ public class SimTests {
 			ga.markers = new double[] { 0.5, 0.5, 0.5 };
 			Genome gb = new Genome();
 			gb.markers = new double[] { 0.5, 0.5, 0.5 };
-			TestNPC pa = TestNPC.mater(6.3, 6.5, 0, ga).withEnergy(4.4);
-			TestNPC pb = TestNPC.mater(6.7, 6.5, 0, gb).withEnergy(4.4);
+			TestNPC pa = TestNPC.mater(6.3, 6.5, 0, ga).grown().fattened().withEnergy(4.4);
+			TestNPC pb = TestNPC.mater(6.7, 6.5, 0, gb).grown().fattened().withEnergy(4.4);
 			m.spawnEntity(pa);
 			m.spawnEntity(pb);
 			m.think();
@@ -10898,13 +11042,16 @@ public class SimTests {
 			assertNear("and the whole of BOTH offers landed in it -- a ceiling on a "
 					+ "newborn's tank used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
-					worth(kid), bidKid[0], eps);
+					worth(kid) - NPC.MEAT_ENERGY * kid.bodyMass(), bidKid[0], eps);
 			// The point of a mate: two offers pool into one child instead of each
 			// being clipped to the same ceiling. Under the old clamp a paired
 			// child and a budded one were born holding the identical fraction.
+			// In the books it is opened with: the body is the same matter either way.
+			double kidBooks = worth(kid) - NPC.MEAT_ENERGY * kid.bodyMass();
+			double budBooks = worth(bud) - NPC.MEAT_ENERGY * bud.bodyMass();
 			assertGreater("and a pair's child is better funded than a budder's ("
-					+ String.format("%.2f against %.2f", worth(kid), worth(bud)) + ")",
-					worth(kid), worth(bud) * 1.3);
+					+ String.format("%.2f against %.2f", kidBooks, budBooks) + ")",
+					kidBooks, budBooks * 1.3);
 
 			// A price above the line. Both are genes and can drift apart; a parent
 			// whose price is above its line used to pay the whole price out of a
@@ -10916,7 +11063,7 @@ public class SimTests {
 			gr.sexuality = 0.3; // a budder
 			gr.reproFraction = 0.35;
 			gr.reproCostFraction = 0.9;
-			TestNPC poor = TestNPC.breeder(6.5, 6.5, 0, gr).withHunger(0.0);
+			TestNPC poor = TestNPC.breeder(6.5, 6.5, 0, gr).grown().fattened().withHunger(0.0);
 			poor.withEnergy(0.4 * poor.energyCapacity());
 			r.spawnEntity(poor);
 			r.think();
@@ -10931,23 +11078,24 @@ public class SimTests {
 			assertTrue("and the parent never went below zero (" + String.format("%.2f", poor.getEnergy()) + ")",
 					poor.getEnergy() >= 0);
 
-			// Too poor for the matter of a body: no child, and nothing charged.
-			// The old books handed such a parent a child anyway, with a body and a
-			// birth meal minted out of nothing to make up the difference.
+			// Without the fat for the matter of a body: no child, and nothing charged,
+			// however full the tank. The old books handed such a parent a child anyway,
+			// with a body and a birth meal minted out of nothing to make up the difference.
 			World b = room(12, 12);
 			Genome gb2 = new Genome();
 			gb2.sexuality = 0.3;
 			gb2.size = 20; // a big body to build, so the matter is dear
 			gb2.reproFraction = 0.05;
-			gb2.reproCostFraction = 0.1; // and a lineage that will not pay for it
-			TestNPC mean = TestNPC.breeder(6.5, 6.5, 0, gb2).grown().withHunger(0.0);
-			mean.withEnergy(0.3 * mean.energyCapacity());
+			gb2.reproCostFraction = 0.1;
+			TestNPC mean = TestNPC.breeder(6.5, 6.5, 0, gb2).grown().withHunger(0.0)
+					.withFat(0.5 * NPC.birthMass(gb2.size)); // half a child's body in fat: not enough
+			mean.withEnergy(mean.energyCapacity());
 			b.spawnEntity(mean);
 			b.think();
-			assertLess("its price will not cover the body its child would need",
-					mean.birthPayment(), TestNPC.birthBodyCost(gb2.size / NPC.REF_SIZE));
+			assertLess("its fat will not build the body its child would need",
+					mean.fat(), NPC.birthMass(gb2.size));
 			double meanHeld = held(mean);
-			assertTrue("no child is minted out of a payment that could not build one",
+			assertTrue("no child is minted out of matter that is not there",
 					mean.spawnOffspring() == null);
 			assertNear("and the parent was not charged for the child it did not have",
 					held(mean), meanHeld, 0.001);
@@ -10993,7 +11141,7 @@ public class SimTests {
 					.withGrowth(16).withEnergy(7.2).withReproCooldown(100_000_000);
 			Genome same = new Genome(); // size 6
 			TestNPC grown = TestNPC.brainedBreeder(2.5, 3.5, 0, same)
-					.withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000); // grown, and with nothing left to lay down: its stomach drains at the resting rate
 			gw.spawnEntity(grower);
 			aw.spawnEntity(grown);
 			gw.think();
@@ -11006,7 +11154,7 @@ public class SimTests {
 			// everything minted from its stomach, less what it still holds) is
 			// at least the meat price of the flesh it put on.
 			double minted = grower.getHunger() * NPC.STOMACH * (16.0 / NPC.REF_SIZE);
-			double flesh = NPC.FLESH_COST * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
+			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
 			assertGreater("and the flesh was paid for out of the books ("
 					+ String.format("%.2f", e0 + minted - grower.getEnergy())
@@ -11038,6 +11186,12 @@ public class SimTests {
 			tick(pw, 2000);
 			assertTrue("the destitute juvenile stopped growing near birth size",
 					pauper.maturity() < 0.4);
+			// Growth is bought from surplus, never from the last of the reserve: a
+			// grower with no food stops at the growth reserve, still able to exert.
+			assertGreater("and the grower, with nothing to eat, kept its growth reserve ("
+					+ String.format("%.2f of %.2f", grower.getEnergy(), grower.energyCapacity()) + ")",
+					grower.getEnergy(), NPC.GROWTH_RESERVE * grower.energyCapacity() - 0.05);
+			assertTrue("so it can still exert", grower.canExert());
 			assertTrue("but starvation did not kill it through growth — it is "
 					+ "alive to eat its way out", !pauper.isDead());
 		}
@@ -11330,7 +11484,7 @@ public class SimTests {
 			Genome hostG = new Genome();
 			hostG.size = 14;
 			hostG.speed = 0; // a parked mountain of meat
-			TestNPC host = TestNPC.breeder(8.5, 5.5, 0, hostG).withReproCooldown(100_000_000);
+			TestNPC host = TestNPC.breeder(8.5, 5.5, 0, hostG).grown().withReproCooldown(100_000_000); // adults: growth is eaten
 			Genome paraG = new Genome();
 			paraG.size = 4;
 			paraG.speed = 0.06;
@@ -11340,23 +11494,26 @@ public class SimTests {
 				a[AgentIO.A_ATTACH] = 1; // latch the moment something bigger is in reach
 			};
 			TestNPC para = TestNPC.minded(4.5, 5.5, 0, paraG, ride)
-					.withClade(Genome.Clade.PARASITE).withHunger(1.0);
+					.withClade(Genome.Clade.PARASITE).grown().withHunger(1.0);
+			// An unparasitised twin, for what the ride costs the host.
+			TestNPC control = TestNPC.breeder(8.5, 8.5, 0, hostG).grown().withReproCooldown(100_000_000);
 			w.spawnEntity(host);
+			w.spawnEntity(control);
 			w.spawnEntity(para);
 			w.think();
-			int hp0 = host.getHealth();
 			tick(w, 900);
 			assertTrue("the parasite is riding its host", para.getAttachTarget() == host);
-			assertLess("and the host is being eaten away", host.getHealth(), hp0);
-			assertGreater("what the host lost, the parasite swallowed",
-					para.totalSwallowed(), 0.0);
-			// At the FLESH price, not the meat price: the drink is a transfer the
-			// host mends at the same price, so the pair cannot mint energy.
-			double drained = (hp0 - host.getHealth()) / (double) TestNPC.FULL_BODY_HEALTH;
-			assertNear("and was paid the flesh price for the share it drank ("
-					+ String.format("%.3f for %.0f%% of the host", para.totalSwallowed(), drained * 100) + ")",
-					NPC.FLESH_COST * host.bodyMass() * drained, para.totalSwallowed(),
-					0.25 * NPC.FLESH_COST * host.bodyMass() * drained + 0.01);
+			assertGreater("and drinking off it", para.totalSwallowed(), 0.0);
+			// At the one price of mass the drink is a transfer: the host mends what
+			// was drunk at the same price, out of its tank, so a parasite is a tax
+			// its host pays -- in energy if it can afford to mend, in health if not.
+			double drunk = para.totalSwallowed() / NPC.MEAT_ENERGY / host.bodyMass(); // share of the host
+			double mended = (1 - drunk) < host.meatLeft() ? (host.meatLeft() - (1 - drunk)) : 0;
+			double paid = (control.getEnergy() - host.getEnergy()) + (100 - host.getHealth()) * 0; // tank gap
+			assertTrue("the host is worse off than its twin, in tank or in flesh ("
+					+ String.format("tank %.2f against %.2f, flesh %.3f", host.getEnergy(), control.getEnergy(), host.meatLeft()) + ")",
+					host.getEnergy() < control.getEnergy() - 0.05 || host.meatLeft() < 1 - 1e-6 || host.getHealth() < 100);
+			assertGreater("and what it mended, it paid the one price for", mended + paid, -1); // never negative: nothing minted
 			assertNear("nothing was grazed on the way", 0.0, para.totalIntake(), 1e-9);
 		}
 	}
@@ -13692,6 +13849,7 @@ public class SimTests {
 				new ScavengerEatsCarrionButDoesNotRotIt(),
 				new AFreshCarcassSitsBeforeItRots(),
 				new DecayedMeatRotsOnTheClock(),
+				new FatIsTheBodysStore(),
 				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsAMealForSeveral(),

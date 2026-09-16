@@ -252,7 +252,7 @@ public final class Worlds {
 			net.hedinger.prototype.entities.Genome g) {
 		double cap = net.hedinger.prototype.entities.NPC.BASE_CAPACITY * g.size
 				/ net.hedinger.prototype.entities.NPC.REF_SIZE;
-		double price = net.hedinger.prototype.simtest.TestNPC.childhoodCost(
+		double price = net.hedinger.prototype.simtest.TestNPC.endowmentCost(
 				g.size, g.birthSatiation, g.speed) / cap;
 		g.reproCostFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproC", price);
 		g.reproFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproF",
@@ -2694,7 +2694,7 @@ public final class Worlds {
 			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g));
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// Founder hunters (few: predation should track the prey, not cap it), on
 		// the predator species' big fast bodies. Always the forager seed and never
@@ -2705,7 +2705,7 @@ public final class Worlds {
 		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = hunterFounder(pred[i % pred.length].copy());
-			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
+			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
 		// competes inside the same world as the scripted species — the A/B seam
@@ -2716,7 +2716,7 @@ public final class Worlds {
 		java.util.Map<Integer, double[]> brood = new java.util.HashMap<>();
 		for (int i = 0; i < nMinded; i++) {
 			double[] p = clusterSpot(w, brood, 0, SURFACE_Z, false);
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]));
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// The underground gets its own minded seed group — separate founder
 		// lineages, so cave life starts as its own experiment. Fungus beds feed
@@ -2727,7 +2727,7 @@ public final class Worlds {
 		java.util.Map<Integer, double[]> caveBrood = new java.util.HashMap<>();
 		for (int i = 0; i < nCaveMinded; i++) {
 			double[] p = clusterSpot(w, caveBrood, 0, CAVE_Z, true);
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]));
+			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 
 		// Founder scavengers: minded, like the cohort above and running the same
@@ -2753,7 +2753,7 @@ public final class Worlds {
 				// work on, well inside the genome's own similarity threshold.
 				net.hedinger.prototype.entities.Genome g =
 						net.hedinger.prototype.entities.Genome.child(scavengers[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, g));
+				w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 			}
 		}
 
@@ -2774,7 +2774,7 @@ public final class Worlds {
 				double[] p = clusterSpot(w, parasitesAt, line, SURFACE_Z, false); // a line lands together
 				net.hedinger.prototype.entities.Genome g =
 						net.hedinger.prototype.entities.Genome.child(parasites[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedParasite(p[0], p[1], SURFACE_Z, g));
+				w.spawnEntity(TestNPC.mindedParasite(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 			}
 		}
 
@@ -2797,7 +2797,7 @@ public final class Worlds {
 				double[] p = clusterSpot(w, huntersAt, line, SURFACE_Z, false); // a line lands together
 				net.hedinger.prototype.entities.Genome g =
 						net.hedinger.prototype.entities.Genome.child(hunters[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g));
+				w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 			}
 		}
 

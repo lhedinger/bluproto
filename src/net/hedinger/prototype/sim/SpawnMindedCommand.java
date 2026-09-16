@@ -49,7 +49,7 @@ public record SpawnMindedCommand(Genome genome, double x, double y, double z) im
 		// injected seed gets the longest possible runway to establish itself — the
 		// most head-room before metabolism can starve it — so a hand-placed creature
 		// doesn't wink out moments after landing.
-		npc.withEnergy(npc.energyCapacity());
+		npc.withEnergy(npc.energyCapacity()).fattened();
 		w.spawnEntity(npc);
 	}
 

@@ -362,9 +362,15 @@ public final class Mechanics {
 				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body", ""),
 				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
 						"The well-fed ceiling, not a guarantee."),
-				row("Flesh costs", num(NPC.FLESH_COST) + " × mass grown", "energy",
-						"The same price mends a wound and pays a parasite, so no living "
-						+ "transfer mints energy. Carrion is priced apart, and far higher."),
+				row("Mass costs", num(NPC.MEAT_ENERGY) + " × mass grown", "energy",
+						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
+						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
+				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the frame", "mass",
+						"Laid down at the digestion rate while the stomach is fuller than "
+						+ pct(1 - NPC.FAT_STORE_BELOW) + " against a full tank; drawn back into the "
+						+ "stomach once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
+						+ "before health does. Carried on every step, and on the carcass, half "
+						+ "fresh and half decayed."),
 				row("Childhood", "(1 − " + num(NPC.BIRTH_SIZE_FRACTION) + ") × adult size ÷ "
 						+ num(NPC.GROWTH_RATE), "ticks", "Nominal; also how long "
 						+ "the corpse lasts."));

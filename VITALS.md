@@ -259,23 +259,29 @@ against the satiation-state mint on both counts.
 door for free energy, and it had three: a bud arrived holding 0.6 of a tank
 its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
 full stomach of mintable food. A newborn is now worth exactly what its
-parents paid: tank + birth meal + meat-priced body = the payment, per
-parent share for a sexual pair (the pair's surplus is spent on the act, not
-banked — a newborn still arrives below the breeding line). It is born at
-0.9 hunger — as hungry as a body can be without the deprivation trickle —
-so its first act is a meal, and a lineage compounds only on food actually
-eaten. The audit is the cannibal round trip: a parent eating its just-born
-child loses tank and stomach with the death, gets the body back at meat
-price, and can never profit. Pinned by `NoFreeEnergyAtBirth`, which fails
-against the old books at 9.5 conjured per 2.25 paid.
+parents lost. **Its body is matter, and comes out of the parents' fat**: the
+birth mass (`BIRTH_SIZE_FRACTION` of the child's adult frame) is taken from
+each parent's fat in proportion to what it holds, never from the frame, so no
+parent can die of giving birth and a lean one cannot breed at all. Its books
+— the meal it is born digesting and its tank — come out of the parents'
+tanks and stomachs, per parent share for a sexual pair. A founder's energy
+price is the child's living for a nominal childhood (meal, resting burn,
+travel at top pace), not its growth: a child buys its own flesh out of what
+it eats. The audit is the cannibal round trip: a parent eating its just-born
+child gets back at most the edible share of the mass it gave, and can never
+profit. Pinned by `NoFreeEnergyAtBirth`, which fails against the old books
+at 9.5 conjured per 2.25 paid.
 
 **Growth is paid for too.** The flesh a juvenile puts on is the same matter
 an eater collects at the meat price, so each step of growth is bought from
-the tank at that price — `FLESH_COST` per unit of mass grown — the same
-price a wound is mended at and a parasite is paid, so no living transfer
-mints energy. Carrion is priced apart (`MEAT_ENERGY`, far higher): a kill
-is a meal for several, and what an eater collects beyond the flesh price is
-the grass the animal ate to build and run itself, concentrated. The old fixed
+the tank at that price — `MEAT_ENERGY` per unit of mass grown — the one
+price of mass, which also mends a wound, pays a parasite and pays every
+mouth at a carcass, so nothing in the chain mints energy. It is sized so a
+body is worth stomachs rather than mouthfuls, which makes growing up the
+big purchase of a life; digestion and grazing are paced so a child can pay
+for it in minutes. A fed adult with a full tank lays what it cannot use down
+as fat, mass on top of the frame, and draws it back into the stomach before
+starvation can bite — the store a long fed life leaves on the carcass. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus
 above the crawl reserve affords, so childhood stretches with scarcity and a
 starving juvenile stops growing before it stops living. Because the mint

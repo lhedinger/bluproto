@@ -267,7 +267,7 @@ public class TestNPC extends NPC {
 	 * — measured, not assumed. See that constant for the calibration.
 	 */
 	@Unit("vegetation/tick at mass 1")
-	public static double GRAZE_DEMAND = 0.003;
+	public static double GRAZE_DEMAND = 0.009;
 
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). A
@@ -773,10 +773,9 @@ public class TestNPC extends NPC {
 		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
 		double share = h.drainFlesh(consumed / (double) FULL_BODY_HEALTH); // off the living ledger
 		h.damage(PARA_BITE, "parasites");
-		// Paid at the FLESH price, not the meat price: a parasite's drink is a
-		// transfer from a living body that will mend it at the same price, so the
-		// pair can never mint energy between them. Carrion is priced apart.
-		feed(NPC.FLESH_COST * h.bodyMass() * share);
+		// At the one price of mass: the host mends what was drunk at the same
+		// price, so the pair can never mint energy between them.
+		feed(MEAT_ENERGY * h.bodyMass() * share);
 		setAction("eating", true);
 	}
 
@@ -1041,6 +1040,18 @@ public class TestNPC extends NPC {
 	public TestNPC withEnergy(double e) {
 		energy = e;
 		return this;
+	}
+
+	/** Carrying this much fat, in body-mass units (clamped to what the frame
+	 *  can hold). */
+	public TestNPC withFat(double mass) {
+		fat = Math.max(0, Math.min(fatCap(), mass));
+		return this;
+	}
+
+	/** As fat as its frame can carry: a body that has lived well. */
+	public TestNPC fattened() {
+		return withFat(fatCap());
 	}
 
 	/** Generation depth: 0 for a creature the world (or steward) spawned, and one
@@ -2494,7 +2505,7 @@ public class TestNPC extends NPC {
 	 * all ({@link #edibleCarrion}).
 	 */
 	private double carrionScore(NPC n) {
-		return prize(n.bodyMass() * n.meatLeft() * (1.0 - n.decayProgress()),
+		return prize(n.carcassMass() * n.meatLeft() * (1.0 - n.decayProgress()),
 				distance(n.getX(), n.getY(), n.getZ()));
 	}
 
@@ -3462,7 +3473,7 @@ public class TestNPC extends NPC {
 		// ledger, so what a hunter already ate is not paid again, and a carcass
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
-		double mass = carrion.eatCarrion(CARRION_BITE * carrion.bodyMass(), actsAsHunter());
+		double mass = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
 		feed(mass * MEAT_ENERGY); // meat -> stomach; satiation powers the body
 		setAction("eating", true);
 		return mass;
@@ -3602,13 +3613,16 @@ public class TestNPC extends NPC {
 		return null;
 	}
 
-	/** True once a metabolic creature already has enough energy to reproduce — its
-	 *  biological goal — so more grazing just strips the pasture for a surplus it
-	 *  banks little of (it breeds the reserve away before ever topping out). Below
-	 *  this it grazes to refill; at/above it, it stops cropping and moves on.
+	/** True once a metabolic creature has everything eating can give it: the
+	 *  tank past its breeding line, a stomach full enough to lay fat down from,
+	 *  and all the fat its frame can carry -- so more grazing would only strip
+	 *  the pasture. Below any of those it grazes on; at all of them it moves on.
+	 *  It used to be the tank alone, and a body whose children are built out of
+	 *  fat then stopped eating with a full tank and never bred again.
 	 *  Always false for non-metabolic grazers (no energy tank). */
 	private boolean sated() {
-		return metabolic && energy >= reproThreshold;
+		return metabolic && energy >= reproThreshold
+				&& hunger <= NPC.FAT_STORE_BELOW && fat >= fatCap() - 1e-9;
 	}
 
 	/** Grazes for energy and buds a mutated child once well-fed. When
@@ -3755,57 +3769,62 @@ public class TestNPC extends NPC {
 	// Genome.child, which keeps the two ways of being born mutating alike.
 
 	/** What a body of this adult mass costs to build, at the
-	 *  {@link NPC#FLESH_COST} price every unit of living flesh is bought at. Birth size
+	 *  {@link NPC#MEAT_ENERGY} price every unit of mass is bought at. Birth size
 	 *  carries beginGrowth's floor of 1 and the same rounding
 	 *  {@code bodyMass()} reads, so the matter is priced as it will be weighed. */
 	static double birthBodyCost(double adultMass) {
 		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultMass * NPC.REF_SIZE));
-		return NPC.FLESH_COST * birthSize / NPC.REF_SIZE;
+		return MEAT_ENERGY * birthSize / NPC.REF_SIZE;
 	}
 
+	/** How much of a nominal childhood (the growth ceiling's, in ticks) a
+	 *  founder provisions a child's LIVING for: the resting and travelling burn
+	 *  of that span, on top of the meal it is born with. A child provisioned for
+	 *  a quarter of it was born below the crawl reserve and, if it was a hunter,
+	 *  could not walk to the kill it needed. */
+	@Unit("of a childhood")
+	public static double PROVISION = 1.0;
+
 	/**
-	 * What one child of this body costs to raise, from the moment it is born to
-	 * the moment it stops growing: the matter of the body it arrives with, the
-	 * flesh it has to buy to finish growing (new flesh is matter, bought at the
-	 * flesh price), the meal it is born digesting, and the resting burn of the
-	 * whole childhood. Every term is read off the constant that already prices
-	 * that thing, so this is what a childhood actually costs rather than a
-	 * number picked to make one work.
+	 * What a founder endows one child with, in ENERGY: the meal it is born
+	 * digesting, and the resting burn and travel (at the body's top pace, which
+	 * no creature actually holds -- deliberately high) of {@link #PROVISION} of
+	 * a nominal childhood: its living, until it is feeding itself. The body is
+	 * not in this sum: it is matter, and comes out of the parents' fat. Nor is
+	 * the flesh it will put on: a child buys its own growth out of what it
+	 * eats, which is the whole of why growing up takes minutes. Every term is
+	 * read off the constant that already prices that thing.
 	 *
-	 * <p>The travel term prices the whole childhood at the body's TOP pace,
-	 * which no creature actually holds; the estimate is deliberately high.
-	 * The two ways of being wrong are not symmetric — a lineage that asks too
-	 * much per child has fewer of them and drift can walk the price down at
-	 * its leisure, while a lineage that asks too little buries its young and
-	 * has no descendants left to do any drifting. So a founder starts on the
-	 * generous side of its own arithmetic. A per-clade price constant used to
-	 * stand in for this whole sum.
+	 * <p>The two ways of being wrong are not symmetric -- a lineage that asks
+	 * too much per child has fewer of them and drift can walk the price down
+	 * at its leisure, while a lineage that asks too little buries its young
+	 * and has no descendants left to do any drifting. So a founder starts on
+	 * the generous side of its own arithmetic.
 	 */
-	public static double childhoodCost(double adultSize, double birthSatiation, double speed) {
+	public static double endowmentCost(double adultSize, double birthSatiation, double speed) {
 		double m = adultSize / NPC.REF_SIZE;
-		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultSize));
-		double ticks = NPC.growthTicks(adultSize);
-		double flesh = (adultSize - birthSize) * NPC.FLESH_COST / NPC.REF_SIZE;
+		double ticks = PROVISION * NPC.growthTicks(adultSize);
 		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.STOMACH * m;
 		double upkeep = NPC.BASE_METABOLISM * Math.pow(m, 0.75) * ticks;
 		double travel = NPC.MOVE_ENERGY * m * speed * speed * ticks;
-		return birthBodyCost(m) + flesh + meal + upkeep + travel;
+		return meal + upkeep + travel;
 	}
 
 	/**
-	 * Opens a newborn's books out of what its parents hand over, and returns
-	 * what the transfer actually consumed. The identity this exists to hold:
-	 * <b>what the child is worth equals what its parents lost</b> — its
-	 * meat-priced body, plus the food in its stomach, plus its tank, summing
-	 * to the payment and never to a penny more or less. Nothing is minted (the
+	 * Opens a newborn's ENERGY books out of what its parents hand over, and
+	 * returns what the transfer actually consumed. The body itself is not
+	 * bought here: it is matter, and it comes out of the parents' fat
+	 * ({@link #settleBirth}). The identity this exists to hold: <b>what the
+	 * child is worth equals what its parents lost</b> — its mass at the one
+	 * price, plus the food in its stomach, plus its tank, summing to what was
+	 * handed over and never to a penny more or less. Nothing is minted (the
 	 * old books gave every newborn a body and a stomach nobody paid for, so a
 	 * lineage of budders was a perpetual-motion machine) and nothing is burnt
 	 * (a ceiling on the tank used to throw away the surplus of a well-funded
 	 * birth, which erased the entire advantage of pairing — a paired child and
 	 * a budded one arrived holding the identical fraction of a tank).
 	 *
-	 * <p>The body is built first, because matter is not optional. Then the
-	 * stomach is filled to the lineage's {@link Genome#birthSatiation}, and
+	 * <p>The stomach is filled to the lineage's {@link Genome#birthSatiation}, and
 	 * everything still left goes into the tank — with each book's overflow
 	 * running back into the other, so a lineage that over-fills one does not
 	 * lose the difference and the sum still balances. A child's hunger is
@@ -3816,8 +3835,7 @@ public class TestNPC extends NPC {
 	 */
 	private static double endow(TestNPC child, double paid, double satiationShare) {
 		double m = child.adultMass();
-		double body = birthBodyCost(m);
-		double spare = Math.max(0, paid - body);
+		double spare = Math.max(0, paid);
 		double gut = STOMACH * m;
 		double tank = child.energyCapacity();
 		double intoGut = Math.min(spare, satiationShare * gut);
@@ -3825,7 +3843,7 @@ public class TestNPC extends NPC {
 		intoGut = Math.min(gut, intoGut + (spare - intoGut - intoTank)); // tank overflow runs back to the gut
 		child.hunger = gut > 0 ? Math.max(0, 1 - intoGut / gut) : 0;
 		child.energy = intoTank;
-		return body + intoGut + intoTank;
+		return intoGut + intoTank;
 	}
 
 	/** A PARENT's {@link Genome#birthSatiation}, clamped to the 0..1 of a
@@ -3855,6 +3873,20 @@ public class TestNPC extends NPC {
 			super.settleBirth(child, partner);
 			return;
 		}
+		// The body first: matter, out of fat, from each parent in proportion to
+		// the fat it holds -- so a lean parent can pair with a fat one and the
+		// child is still whole. The frame is never touched: nobody dies of it.
+		double mass = NPC.birthMass(kid.getGenome().size);
+		double myFat = fat, theirFat = partner == null ? 0 : partner.fat();
+		double pooled = myFat + theirFat;
+		if (pooled > 0) {
+			double rest = mass - payBirthMass(mass * myFat / pooled);
+			if (partner != null) {
+				partner.payBirthMass(rest);
+			}
+		}
+		// Then the books: the meal it is born digesting and its tank, out of the
+		// parents' tanks and stomachs.
 		double mine = birthPayment();
 		double theirs = partner == null ? 0 : partner.birthPayment();
 		double offered = mine + theirs;
@@ -3879,8 +3911,8 @@ public class TestNPC extends NPC {
 		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
 		// genome carries a brain, Genome.child mutates the inherited program too.
 		Genome childG = Genome.child(genome, genome.mutationRate);
-		if (birthPayment() < birthBodyCost(childG.size / NPC.REF_SIZE)) {
-			return null; // cannot afford the matter: no child, and nothing is charged
+		if (fat < NPC.birthMass(childG.size)) {
+			return null; // not the fat to build the body out of: no child, and nothing is charged
 		}
 		TestNPC child;
 		if (behavior == Behavior.MINDED) {
@@ -3904,8 +3936,8 @@ public class TestNPC extends NPC {
 		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), genome.mutationRate);
-		if (birthPayment() + partner.birthPayment() < birthBodyCost(childG.size / NPC.REF_SIZE)) {
-			return null; // between them the pair cannot afford the matter
+		if (fat + partner.fat() < NPC.birthMass(childG.size)) {
+			return null; // between them the pair has not the fat to build the body out of
 		}
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do

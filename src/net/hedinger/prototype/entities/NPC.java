@@ -104,38 +104,29 @@ public abstract class NPC extends Entity {
 	@Unit("of base burn")
 	public static double CAPABILITY_FLOOR = 0.5;
 	/**
-	 * What living flesh costs, per unit of body mass ({@code REF_SIZE} = 1): the
-	 * price a metabolic body pays per unit of mass it grows, the price a wound
-	 * that took flesh is mended at, and the price a parasite is paid for the
-	 * flesh it drinks -- one figure on both sides of every living transfer, so
-	 * a host and its parasite, or a body and its own growth, can never mint
-	 * energy between them.
-	 */
-	@Unit("energy per mass")
-	public static double FLESH_COST = 2.5;
-	/**
-	 * Food value of meat, per unit of carcass mass taken ({@code REF_SIZE} = 1).
-	 * A body is worth what it weighs, so the meal tracks the quarry rather than
-	 * the effort: an animal that takes twice as many bites to bring down is not
-	 * twice as nutritious, it is just slower to eat. This replaces a flat
+	 * The price of mass, per unit of body mass ({@code REF_SIZE} = 1), both ways.
+	 * It is what a metabolic body pays per unit of mass it grows or stores as
+	 * fat, what a wound that took flesh is mended at, what a parasite is paid
+	 * for the flesh it drinks, and what every mouth is paid per unit of carcass
+	 * it takes. One figure on both sides of every transfer, so nothing in the
+	 * chain can mint energy: a body is worth exactly what was put into it, and
+	 * everything anyone eats was bought with grass by someone.
+	 *
+	 * <p>A body is worth what it weighs, so the meal tracks the quarry rather
+	 * than the effort: an animal that takes twice as many bites to bring down is
+	 * not twice as nutritious, it is just slower to eat. This replaced a flat
 	 * per-bite payout, under which a mouse and an animal the hunter's own size
 	 * were worth exactly the same (measured: 2.49 either way).
 	 *
-	 * <p>Deliberately far above {@link #FLESH_COST}. At the flesh price a whole
-	 * reference body was worth 2.5 energy against a stomach of {@link #STOMACH}
-	 * -- a kill was a snack, and a hunter had to kill every few seconds to stay
-	 * fed. A carcass is meant to be a meal for several: this is sized so the
-	 * fresh third of a reference body ({@link #FRESH_SHARE}) holds three
-	 * reference stomachs, {@code 3 x STOMACH / FRESH_SHARE}, which after the
-	 * spoilage every bite hurries and the overflow of each mouth's last bite
-	 * fills two hunters -- and the decayed third two scavengers after them,
-	 * measured ({@code ACarcassIsAMealForSeveral}). The energy an eater collects beyond what
-	 * the flesh cost to grow is the grass the animal ate to build and run
-	 * itself, concentrated; it is not conserved, and the ledger of rearing a
-	 * body then eating it is open by exactly that margin.
+	 * <p>Sized so a body is a meal, not a snack: a reference frame is three
+	 * stomachs ({@link #STOMACH}), so the fresh third of a lean medium corpse
+	 * fills one same-size hunter, and a fat one ({@link #FAT_CAP}) half as much
+	 * again. The same figure is what growing up costs -- a child buys two
+	 * thirds of its frame out of what it eats -- which is why grazing and
+	 * digestion ({@link #REGEN_RATE}) are paced to pay for it in minutes.
 	 */
 	@Unit("energy per mass")
-	public static double MEAT_ENERGY = 81.0;
+	public static double MEAT_ENERGY = 27.0;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
@@ -148,7 +139,7 @@ public abstract class NPC extends Entity {
 	 * the largest possible body takes the longest. At {@link Genome#SIZE_MAX}
 	 * (20) the climb from birth size is 13 units, or ~1970 ticks — about one
 	 * minute at 33 ticks/s, the shortest childhood such a body can have. A
-	 * metabolic grower pays {@link #FLESH_COST} for each step's flesh and slows
+	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
 	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
 	@Unit("px radius/tick")
@@ -417,8 +408,11 @@ public abstract class NPC extends Entity {
 	 */
 	protected void settleBirth(NPC child, NPC partner) {
 		payBirth(birthPayment());
+		double mass = child.getGenome() != null ? birthMass(child.getGenome().size) : 0;
+		double rest = mass - payBirthMass(mass);
 		if (partner != null) {
 			partner.payBirth(partner.birthPayment());
+			partner.payBirthMass(rest);
 		}
 	}
 	/** The energy this body must bank before it breeds — its lineage's
@@ -480,6 +474,92 @@ public abstract class NPC extends Entity {
 	/** Mass mouths have taken off this corpse, in body-mass units -- the one part
 	 *  of the body the ground never gets. */
 	protected double eaten = 0;
+	/** What the body weighed the instant it died, frame and fat together, in
+	 *  body-mass units: the whole the corpse's pools are shares of. */
+	protected double carcassMass = 0;
+
+	/*
+	 * Fat is the body's store. A fed body with a full tank keeps digesting, and
+	 * what the tank cannot take is laid down as mass at MEAT_ENERGY; a body whose
+	 * stomach has run empty draws that mass back into the stomach at the same
+	 * price, so fat is spent before health is. Both moves run at the body's
+	 * digestion rate. Fat is real mass: it is carried (and paid for) on every
+	 * step, it is on the carcass for whoever eats it, and it is what a parent
+	 * builds a child's body out of. It is the only thing in the economy that can
+	 * turn a long fed life into a rich corpse, and a starved one into bones.
+	 */
+	/** Mass of fat on this body, in body-mass units, on top of the frame. */
+	protected double fat = 0;
+	/** Growth spends only the tank above this share of it: a juvenile that grew
+	 *  itself down to the crawl reserve could not exert, and a young hunter or
+	 *  parasite that cannot bite cannot eat its way back up. Growth is bought
+	 *  from surplus, never from the last of the reserve. */
+	@Unit("of the tank")
+	public static double GROWTH_RESERVE = 0.25;
+	/** How much fat a body can carry, as a share of its frame. */
+	@Unit("of frame mass")
+	public static double FAT_CAP = 0.5;
+	/** A body lays down fat only while its stomach is fuller than this and its
+	 *  tank is full: fat is what is left over once everything else is paid. */
+	@Unit("hunger")
+	public static double FAT_STORE_BELOW = 0.25;
+	/** A body draws on its fat once its stomach is emptier than this, so the
+	 *  stomach never pegs -- and starvation never bites -- while any fat is left. */
+	@Unit("hunger")
+	public static double FAT_DRAW_ABOVE = 0.75;
+
+	/** Fat on this body, in body-mass units. */
+	public double fat() {
+		return fat;
+	}
+
+	/** The most fat this frame can carry, in body-mass units. */
+	public double fatCap() {
+		return FAT_CAP * bodyMass();
+	}
+
+	/** Fat as a share of what the frame could carry, 0..1, for the inspector. */
+	public double fatLeft() {
+		double c = fatCap();
+		return c <= 0 ? 0 : Math.max(0, Math.min(1, fat / c));
+	}
+
+	/** Mass a newborn of {@code adultSize} px arrives with, in body-mass units,
+	 *  with the same floor and rounding {@code beginGrowth} applies -- so the
+	 *  matter is priced as it will be weighed. It comes out of its parents' fat:
+	 *  a body is built of what its parents stored, not conjured. */
+	public static double birthMass(double adultSize) {
+		return Math.round(Math.max(1, BIRTH_SIZE_FRACTION * adultSize)) / REF_SIZE;
+	}
+
+	/** Fat this body must hold before it will try to breed: half a child of its
+	 *  own frame, since a pair pools two halves. A budder still needs the whole
+	 *  at the moment of birth -- see {@code spawnOffspring}. */
+	protected double fatToBreed() {
+		double adult = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
+		return birthMass(adult) / 2;
+	}
+
+	/** Takes up to {@code mass} of fat off this body for a child's birth mass
+	 *  and returns what was actually taken. Fat only: the frame is not for sale,
+	 *  so no parent can die of giving birth. */
+	public double payBirthMass(double mass) {
+		double taken = Math.max(0, Math.min(mass, fat));
+		fat -= taken;
+		return taken;
+	}
+
+	/** Everything a living body weighs: its frame plus its fat. On a corpse,
+	 *  what it weighed when it died. */
+	public double totalMass() {
+		return isDead() ? carcassMass : bodyMass() + fat;
+	}
+
+	/** What this corpse weighed the instant it died, frame and fat together;
+	 *  the whole its pools are shares of. The living frame plus fat otherwise. */
+	public double carcassMass() {
+		return totalMass();
+	}
 
 	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
 	 *  About five seconds. A heavier body sits fresh longer, a lighter one less,
@@ -526,9 +606,9 @@ public abstract class NPC extends Entity {
 	}
 
 	/** What is physically left of this body: on a corpse the meat still on it
-	 *  plus the bones; on the living, the whole body. */
+	 *  plus the bones; on the living, the whole body, fat and all. */
 	public double remainingMass() {
-		return isDead() ? edibleMass() + bones() : bodyMass();
+		return isDead() ? edibleMass() + bones() : totalMass();
 	}
 
 	/** Fresh meat as a fraction of the whole body, 0..1, for the inspector. */
@@ -542,7 +622,7 @@ public abstract class NPC extends Entity {
 	}
 
 	private double shareOfBody(double mass) {
-		double m = bodyMass();
+		double m = isDead() ? carcassMass : bodyMass();
 		return m <= 0 ? 0 : Math.max(0, Math.min(1, mass / m));
 	}
 
@@ -935,8 +1015,8 @@ public abstract class NPC extends Entity {
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
-				double price = FLESH_COST / REF_SIZE; // energy per pixel grown
-				double spare = energy - CRAWL_RESERVE * energyCapacity();
+				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
+				double spare = energy - Math.max(CRAWL_RESERVE, GROWTH_RESERVE) * energyCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
 				energy -= step * price;
 			}
@@ -995,7 +1075,7 @@ public abstract class NPC extends Entity {
 			// Charged on the ground actually covered -- a step cancelled by a
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
-			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + carriedMass()) * lastStep * lastStep;
+			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + fat + carriedMass()) * lastStep * lastStep;
 			// Regeneration: the body converts the stomach's contents into energy
 			// over time — food never becomes energy directly (feed() fills the
 			// stomach), and the mint drains the meal it is minted from, 1:1 in
@@ -1013,6 +1093,20 @@ public abstract class NPC extends Entity {
 			energy = Math.min(cap, energy + regen - out);
 			if (energy < 0) {
 				energy = 0; // collapse, never death — health is the only gate
+			}
+			// Fat, both ways, at the digestion rate and the one price of mass. A
+			// stomach running empty is refilled out of fat before it can peg; a
+			// stomach that is full against a full tank is laid down as fat.
+			double stomach = STOMACH * adultMass();
+			double digest = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * vigor;
+			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
+				double back = Math.min(fat * MEAT_ENERGY, digest);
+				fat -= back / MEAT_ENERGY;
+				hunger = Math.max(0, hunger - back / stomach);
+			} else if (hunger < FAT_STORE_BELOW && energy >= cap - 1e-9 && fat < fatCap()) {
+				double store = Math.min(digest, Math.min((fatCap() - fat) * MEAT_ENERGY, (1 - hunger) * stomach));
+				fat += store / MEAT_ENERGY;
+				hunger = Math.min(1.0, hunger + store / stomach);
 			}
 			// A collapsed captor cannot hold: restraint is exertion, and below the
 			// crawl reserve there is none to spend — the grip opens and the captive
@@ -1039,7 +1133,7 @@ public abstract class NPC extends Entity {
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
 				if (meat < 1.0) {
-					double price = FLESH_COST * bodyMass() / 100.0;
+					double price = MEAT_ENERGY * bodyMass() / 100.0;
 					if (energy >= price) {
 						energy -= price;
 						meat = Math.min(1.0, meat + 0.01);
@@ -1082,7 +1176,7 @@ public abstract class NPC extends Entity {
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
 	 *  refills an empty tank in roughly a minute and a half. */
 	@Unit("energy/tick at mass 1")
-	public static double REGEN_RATE = 0.002;
+	public static double REGEN_RATE = 0.006;
 	/** Fraction of the tank kept as a crawl reserve: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
@@ -1209,7 +1303,7 @@ public abstract class NPC extends Entity {
 		if (this instanceof Item) {
 			return;
 		}
-		double bump = ROT_FERTILITY * Math.max(0, bodyMass() - eaten);
+		double bump = ROT_FERTILITY * Math.max(0, carcassMass - eaten);
 		enrich(X, Y, Z, bump);
 		enrich(X + 1, Y, Z, bump * 0.4);
 		enrich(X - 1, Y, Z, bump * 0.4);
@@ -1318,12 +1412,17 @@ public abstract class NPC extends Entity {
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
 		if (age >= 0) {
-			// Freshly dead: the body divides into its three pools and the decay
+			// Freshly dead: the frame divides into its three pools and the decay
 			// clock waits on the fresh one. Flesh drained off it alive is not on it.
+			// Fat is all meat -- bones do not get fatter -- half fresh, half
+			// decayed, so a fed life leaves a richer body for hunter and scavenger
+			// alike, and a starved one leaves bones.
 			double m = bodyMass();
-			freshFull = FRESH_SHARE * m * meat;
+			carcassMass = m + fat;
+			freshFull = FRESH_SHARE * m * meat + fat / 2;
 			fresh = freshFull;
-			decayed = (1 - FRESH_SHARE) * SCAVENGER_SHARE * m;
+			decayed = (1 - FRESH_SHARE) * SCAVENGER_SHARE * m + fat / 2;
+			fat = 0;
 			eaten = 0;
 		}
 		age = -1;
@@ -2515,7 +2614,7 @@ public abstract class NPC extends Entity {
 	 */
 	protected boolean surplusForBreeding() {
 		return metabolic && !isDead() && reproCooldown == 0
-				&& energy >= reproThreshold
+				&& energy >= reproThreshold && fat >= fatToBreed()
 				&& hunger < NEED_LOW && thirst < NEED_LOW && health >= 60;
 	}
 
