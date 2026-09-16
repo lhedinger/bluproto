@@ -94,9 +94,20 @@ public class Sound extends Entity {
 		return Math.min(1.0, age / (double) TRAVEL_TICKS);
 	}
 
+	/**
+	 * A sound is a Sound. It answered "Bullet" -- Sound was written from the
+	 * projectile family and this came across with the rest of it -- and that
+	 * string is what {@link net.hedinger.prototype.engine.World#filterType}
+	 * dispatches on, so every type query in the world read a scream as a round
+	 * of ammunition. It happened to be harmless, for one reason: the only typed
+	 * searches are a bullet's and an explosion's, both of them EXCLUDE lists,
+	 * and both already excluded bullets. Sounds were therefore skipped by
+	 * accident, under the wrong name, and the ignore lists now say so on
+	 * purpose.
+	 */
 	@Override
 	public String getEntityTypeName() {
-		return "Bullet";
+		return "Sound";
 	}
 
 }

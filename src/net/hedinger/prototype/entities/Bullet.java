@@ -12,8 +12,12 @@ public class Bullet extends Entity {
 	private double accuracy = 1; // 0 = worst, 1 = perfect
 
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
+	// A round passes through its own kind and through the rest of the ordnance.
+	// "Entity.Sound" is named here now that a sound answers to its own name: it
+	// used to call itself a Bullet, so the first entry excluded it by accident,
+	// and without this a shot would have started taking noises as targets.
 	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Weapon", "Entity.Grenade",
-	"Entity.Explosion" };
+	"Entity.Explosion", "Entity.Sound" };
 
 	public Bullet(double x, double y, double z, double d) {
 
