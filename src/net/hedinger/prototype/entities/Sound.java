@@ -53,7 +53,19 @@ public class Sound extends Entity {
 		this.radius = radius;
 		this.code = code;
 		lifespan = TRAVEL_TICKS;
-		deathspan = 2048;
+		// Gone the moment it has been heard, like the other one-shot ephemeral:
+		// Bullet sets this to 0 too. It used to be 2048 -- a hundred times the
+		// twenty ticks a sound is useful for -- so a sound spent 0.6s travelling
+		// and then sat in the world as a corpse for the next 62 seconds. Nothing
+		// reads a spent sound: the broadcast below happens once, at age 20, and
+		// the branch cannot run again because age goes negative at death; the
+		// viewer's sense overlay draws live sounds only and keeps its own 2.2s
+		// echo, keyed by id and decaying on its own clock, for exactly the case
+		// where the source is already gone. What the deathspan bought was a
+		// stream in which 99% of the sounds were spent ones -- around 40% of
+		// every entity the viewer tracked -- each of them a dead entity that,
+		// per Entity.think, had died of old age.
+		deathspan = 0;
 	}
 
 	@Override
