@@ -67,10 +67,9 @@ public class TestNPC extends NPC {
 	 * A pursuit is now something that can be lost, escaped, or interrupted by a
 	 * third party, none of which was possible before.
 	 *
-	 * <p>The carcass is worth exactly what it was: {@link #biteFeeds} pays out
-	 * {@code MEAT_ENERGY * mass * damage/FULL_BODY_HEALTH}, which sums to the same
-	 * meal however the hundred health is divided. What changes is how long the
-	 * hunter must stay on it to collect, not what it collects.
+	 * <p>The bites themselves feed nothing: a hunter is paid once the animal is
+	 * dead, off the carcass's fresh meat ({@link #finishTheKill}). What the period
+	 * changes is how long the hunter must stay on its quarry to bring it down.
 	 *
 	 * <p>Phase comes from the body's own age, the way {@link #PARA_BITE_PERIOD}
 	 * already does for a parasite, so two hunters on one animal are not
@@ -84,8 +83,8 @@ public class TestNPC extends NPC {
 	 *  uses is its own greed's business -- see {@link #preyReach}. */
 	@Unit("x own size")
 	public static final double PRED_PREY_RATIO_CAP = 2.0;
-	/** Full health, and so the whole of a body: a bite that removes this much of a
-	 *  creature has consumed all of it. Health is flat across every body size, which
+	/** Full health, and so the whole of a body: a parasite's drain is priced as the
+	 *  share of this its bite removed. Health is flat across every body size, which
 	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
 	@Unit("hp")
 	public static final int FULL_BODY_HEALTH = 100;
@@ -772,7 +771,7 @@ public class TestNPC extends NPC {
 			return;
 		}
 		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
-		double share = h.eatMeat(consumed / (double) FULL_BODY_HEALTH); // off the one ledger
+		double share = h.drainFlesh(consumed / (double) FULL_BODY_HEALTH); // off the living ledger
 		h.damage(PARA_BITE, "parasites");
 		feed(MEAT_ENERGY * h.bodyMass() * share);
 		setAction("eating", true);
@@ -1331,7 +1330,7 @@ public class TestNPC extends NPC {
 			pinCount = 0; // biting in place is not a pin — hold off the give-up
 			if (biteDue()) {
 				lastBiteAt = age;
-				feed(biteFeeds(prey));
+				wound(prey); // a bite wounds; the meal comes once the animal is dead
 			}
 		} else if (prey != null && !sated) {
 			lockTarget(prey);
@@ -1414,16 +1413,6 @@ public class TestNPC extends NPC {
 		return Math.max(1, Math.min(FULL_BODY_HEALTH, dmg));
 	}
 
-	/**
-	 * Takes one bite out of {@code prey} and returns what it fed the hunter.
-	 *
-	 * <p>The bite removes health; the meal is the share of the body that health
-	 * represented, {@code MEAT_ENERGY * preyMass * (damage / FULL_BODY_HEALTH)}. So
-	 * the whole carcass is worth {@code MEAT_ENERGY * preyMass} no matter how many
-	 * bites it took, and a hunter that arrives at an animal something else has
-	 * already chewed on gets only what is left of it. Damage past death feeds
-	 * nobody — you cannot eat more of an animal than there was.
-	 */
 	/** When this body last got its teeth in, for {@link #biteDue}. */
 	private long lastBiteAt = Long.MIN_VALUE / 2;
 
@@ -1477,29 +1466,25 @@ public class TestNPC extends NPC {
 		return got;
 	}
 
-	private double biteFeeds(NPC prey) {
+	/**
+	 * One bite into a LIVING animal: a wound, and a scream. It feeds nothing.
+	 *
+	 * <p>A bite used to be a mouthful as well, paid to the hunter at the meat
+	 * price -- and since killing costs exactly one body's health, killing an
+	 * animal consumed exactly all of it, by algebra: bites-to-kill times
+	 * flesh-per-bite is 1 however the damage is sized. So the manner of death
+	 * decided what was left on the ground (measured over 60k ticks of the seeded
+	 * world: 320 deaths by predation left 3% of the body, 123 by starvation left
+	 * 99%), and a hunter that was shaken off had eaten part of an animal that
+	 * walked away. Health and flesh are different books, and the flesh is not
+	 * the hunter's until the animal is dead: it is paid nothing here, and eats
+	 * the carcass afterwards through {@link #finishTheKill}, a mouthful at a
+	 * time, off the fresh meat only.
+	 */
+	private void wound(NPC prey) {
 		int bite = biteDamage(prey);
-		// A mouthful, not a wound. The flesh a bite took used to BE the damage it
-		// dealt, as a share of full health -- and since killing costs exactly one
-		// body's health, killing an animal consumed exactly all of it, by algebra:
-		// bites-to-kill times flesh-per-bite is 1 however the damage is sized. So
-		// the manner of death decided what was left on the ground. Measured over
-		// 60k ticks of the seeded world: 320 deaths by predation left 3% of the
-		// body, 123 by starvation left 99%, so every scrap of carrion in the world
-		// came from an animal nothing had eaten -- and the clade that lives on
-		// carrion was starving beside the bodies of the clade that makes it.
-		//
-		// Health and flesh are different books. A bite that kills is still one
-		// bite's worth of eating, so the mouthful is the weight of flesh a mouth
-		// takes in one go -- the same weight a scavenger takes off a carcass --
-		// expressed as a share of the body being eaten. A hunter goes on eating
-		// once the animal stops being quarry (see the act block), so an undisturbed
-		// hunter still ends up with the whole of a small kill; what it leaves is
-		// what it was too full, or too harried, to finish.
-		double mouthful = Math.min(1.0, CARRION_BITE * bodyMass() / Math.max(1e-6, prey.bodyMass()));
-		double share = prey.eatMeat(mouthful);
 		if (!prey.isDead()) {
-			prey.damage(bite, "predation"); // a bite into a carcass wounds nothing; it only eats
+			prey.damage(bite, "predation"); // a bite into a carcass wounds nothing
 		}
 		// Violence is audible. The scream comes from the quarry, not the hunter,
 		// and carries in proportion to how big the quarry is -- so a hunt tells the
@@ -1513,9 +1498,7 @@ public class TestNPC extends NPC {
 		if (getWorld() != null) {
 			// Fatal is judged by the health this bite just exhausted, not by
 			// isDead(): the reaper runs at the tick boundary, so the flag still
-			// reads alive on the killing bite itself. Bites into what is
-			// already a carcass also say KILL — the fact a listener wants from
-			// that sign is "a carcass exists here", and it does.
+			// reads alive on the killing bite itself.
 			boolean fatal = prey.isDead() || prey.getHealth() <= 0;
 			getWorld().spawnEntity(new net.hedinger.prototype.entities.Sound(
 					prey.getX(), prey.getY(), prey.getLvl(),
@@ -1523,7 +1506,6 @@ public class TestNPC extends NPC {
 					fatal ? net.hedinger.prototype.entities.Sound.KILL
 							: net.hedinger.prototype.entities.Sound.FIGHT));
 		}
-		return MEAT_ENERGY * prey.bodyMass() * share;
 	}
 
 	/**
@@ -3303,7 +3285,7 @@ public class TestNPC extends NPC {
 			return false; // out of reach, or still between bites: the intent stays pending
 		}
 		lastBiteAt = age;
-		feed(biteFeeds(q)); // damages, screams and pays, all in one
+		wound(q); // damages and screams; the meal comes once the animal is dead
 		return true;
 	}
 
@@ -3319,21 +3301,13 @@ public class TestNPC extends NPC {
 		if (distance(near.getX(), near.getY(), near.getZ()) > reach) {
 			return false;
 		}
-		// A hunter bites as a hunter. ATTACK_DAMAGE and BITE_ENERGY are the
-		// generic "anything can lash out" constants, and routing a predator's
-		// hunting bite through them was the whole of why the guild starved:
-		// against a size-7 grazer they pay 0.03 food units where biteFeeds pays
-		// 0.4375, and they take 25 bites to a kill where PRED_DAMAGE takes 5.
-		// Fourteen times less per bite, five times longer to earn it, and the
-		// measured intake showed it exactly — hunters swallowed 0.074 units per
-		// thousand ticks against a grazer's 1.137, a fifteenfold gap that matches
-		// the per-bite ratio almost to the digit.
-		//
-		// It also made the meat constant unreadable from here: doubling
-		// MEAT_ENERGY moved predator intake from 0.074 to 0.075, because this path
-		// never consulted it. biteFeeds is where a carcass is priced by what it
-		// weighs, and a minded hunter is now paid out of the same till as the
-		// scripted one — same damage, same meal, same scream.
+		// A hunter bites as a hunter. ATTACK_DAMAGE is the generic "anything can
+		// lash out" constant, and routing a predator's hunting bite through it
+		// was the whole of why the guild starved: they took 25 bites to a kill
+		// where PRED_DAMAGE takes 5, and the measured intake showed it -- hunters
+		// swallowed 0.074 units per thousand ticks against a grazer's 1.137. A
+		// minded hunter now wounds with the same teeth as the scripted one, and
+		// both are paid the same way: nothing for the bite, the carcass after.
 		//
 		// Only for a hunter, and only on quarry: a grazer lashing out is fighting,
 		// not eating, and keeps the generic bite it always had -- and so does a
@@ -3343,7 +3317,7 @@ public class TestNPC extends NPC {
 				return false; // still between bites: the intent stays pending
 			}
 			lastBiteAt = age;
-			feed(biteFeeds(near)); // damages, screams and pays, all in one
+			wound(near); // damages and screams; the meal comes once the animal is dead
 			return true;
 		}
 		// The same period governs a plain bite. A mouth can only work so fast, and
@@ -3485,7 +3459,7 @@ public class TestNPC extends NPC {
 		// ledger, so what a hunter already ate is not paid again, and a carcass
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
-		double mass = carrion.bodyMass() * carrion.eatMeat(CARRION_BITE);
+		double mass = carrion.eatCarrion(CARRION_BITE * carrion.bodyMass(), actsAsHunter());
 		feed(mass * MEAT_ENERGY); // meat -> stomach; satiation powers the body
 		setAction("eating", true);
 		return mass;

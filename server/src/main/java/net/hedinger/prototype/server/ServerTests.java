@@ -124,7 +124,8 @@ public final class ServerTests {
 		if (corpse == null) {
 			return;
 		}
-		for (String k : java.util.List.of("decay", "meat", "fresh", "worth", "rotsIn", "mass")) {
+		for (String k : java.util.List.of("decay", "meat", "fresh", "decayed", "bones", "worth", "rotsIn",
+				"mass", "wholeMass")) {
 			check("a carcass reports " + k, corpse.get(k) instanceof Number);
 		}
 		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
@@ -139,18 +140,30 @@ public final class ServerTests {
 		}
 		double decay = ((Number) corpse.get("decay")).doubleValue();
 		double meat = ((Number) corpse.get("meat")).doubleValue();
-		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
-		check("and still has its flesh on it", meat > 0.9 && meat <= 1.0);
 		double fresh = ((Number) corpse.get("fresh")).doubleValue();
-		check("a just-dead body is all fresh meat", fresh > 0.9 && fresh <= 1.0);
+		double decayed = ((Number) corpse.get("decayed")).doubleValue();
+		double bones = ((Number) corpse.get("bones")).doubleValue();
+		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
+		// A body is three pools, each sent as its share of the whole: the fresh
+		// third that is the hunters', the decayed third that is the scavengers', and
+		// the bones. Just dead, nothing has been eaten or rotted, so they add up to
+		// the whole body and the meat -- everything edible -- is the two thirds.
+		check("a just-dead body's fresh meat is a third of it", fresh > 0.3 && fresh < 0.36);
+		check("its decayed meat another third", decayed > 0.3 && decayed < 0.36);
+		check("and its bones the last", bones > 0.3 && bones < 0.36);
+		check("so the three pools are the whole body", Math.abs(fresh + decayed + bones - 1.0) < 0.02);
+		check("and the meat on it is the edible two thirds", Math.abs(meat - (fresh + decayed)) < 0.02);
 		check("it has ticks left to be eaten in", ((Number) corpse.get("rotsIn")).intValue() > 0);
+		double mass = ((Number) corpse.get("mass")).doubleValue();
+		double wholeMass = ((Number) corpse.get("wholeMass")).doubleValue();
+		check("nothing has been taken off it yet, so what is left is the whole body",
+				wholeMass > 0 && Math.abs(mass - wholeMass) < 0.02);
 		// The one number a scavenger's own scan actually reads, so the panel shows
 		// the same figure the simulation weighs a carcass by rather than a second
 		// version of it computed in the viewer.
 		double worth = ((Number) corpse.get("worth")).doubleValue();
-		double mass = ((Number) corpse.get("mass")).doubleValue();
-		check("its worth is the meat price of the flesh still on it",
-				Math.abs(worth - net.hedinger.prototype.entities.NPC.MEAT_ENERGY * mass * meat) < 0.02);
+		check("its worth is the meat price of the edible meat still on it",
+				Math.abs(worth - net.hedinger.prototype.entities.NPC.MEAT_ENERGY * wholeMass * meat) < 0.03);
 	}
 
 	/**

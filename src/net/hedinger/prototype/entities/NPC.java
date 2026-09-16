@@ -416,29 +416,56 @@ public abstract class NPC extends Entity {
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	/**
-	 * How much of this body's flesh is still on it, 0..1. The one ledger every
-	 * mouth draws from: a hunter's bite, a parasite's drain and a scavenger's
-	 * mouthful each take a share and are paid the meat price for exactly that
-	 * share, so a body is worth {@code MEAT_ENERGY x mass} once, however many
-	 * eaters it has and whether it is bitten alive or found dead. It used to be
-	 * priced twice: a hunter was paid the whole body by the killing bite and the
-	 * carcass then paid scavengers the whole body again -- measured, 100% to the
-	 * hunter and another 97% to three scavengers for the same animal.
+	 * How much of this LIVING body's flesh is still on it, 0..1. A parasite's
+	 * drain comes off it and is paid the meat price for exactly that share, and a
+	 * mended wound buys it back (see the mend step). A hunter's bite on a live
+	 * animal takes nothing here: a bite wounds, and the hunter is paid nothing
+	 * until the animal is dead. What is left of this ledger at death is what the
+	 * corpse is made of -- see {@link #kill}.
 	 */
 	protected double meat = 1.0;
 
-	/**
-	 * Fresh meat still on a corpse, in body-mass units. Full -- the whole body
-	 * -- the instant the animal dies, and the only thing a hunter will eat off
-	 * the dead; a scavenger takes the body whatever this reads. It declines on
-	 * its own, slowly at first and then fast (see {@link #spoil}), and every
-	 * bite taken off the corpse takes fresh meat with it. While any is left the
-	 * body is FRESHLY dead and its decay clock has not started; when it is gone
-	 * the body is DECAYING, and decay runs on its own, time-only clock to the
-	 * point the corpse dissolves. So the freshness window is also the delay
-	 * before rot sets in, and eating during it brings the rot on sooner.
+	/*
+	 * A corpse is not all meat. At death the body divides into three pools, in
+	 * body-mass units, and every mouth is told which it may draw from:
+	 *
+	 *  - fresh meat, FRESH_SHARE of the body: the only thing a hunter eats, and
+	 *    what a scavenger takes first. It spoils on its own, slowly then fast
+	 *    (spoil()), and what spoils uneaten is not lost -- it turns into
+	 *  - decayed meat, SCAVENGER_SHARE of the rest at death plus everything that
+	 *    spoiled: inedible to a hunter, a scavenger's living. Once the body has
+	 *    turned it rots away on its own over the decay clock (rot()), so a late
+	 *    scavenger finds less;
+	 *  - bones, the remainder: food to nobody, lying there until the clock runs
+	 *    out.
+	 *
+	 * While any fresh meat is left the body is FRESHLY dead and the decay clock
+	 * has not started; when it is gone the body is DECAYING on a time-only clock
+	 * to the point it dissolves. Bites never move the clock: a fresh bite brings
+	 * the turn on sooner (the spoilage rate runs on how much of the fresh pool is
+	 * gone), a decayed bite simply leaves less to rot. What was eaten is gone;
+	 * everything else -- meat that rotted uneaten, and the bones -- feeds the
+	 * ground when the corpse dissolves.
 	 */
+
+	/** Share of a body that is fresh meat at death: the hunters' third. */
+	@Unit("of body mass")
+	public static final double FRESH_SHARE = 1.0 / 3;
+	/** Share of the NON-fresh remainder that is decayed meat a scavenger can eat;
+	 *  the rest of it is bone. */
+	@Unit("of the non-fresh mass")
+	public static final double SCAVENGER_SHARE = 0.5;
+
+	/** Fresh meat on this corpse, in body-mass units; 0 for the living. */
 	protected double fresh = 0;
+	/** Fresh meat the body had the instant it died: the pool the spoilage curve
+	 *  runs over. */
+	protected double freshFull = 0;
+	/** Decayed meat on this corpse, in body-mass units; 0 for the living. */
+	protected double decayed = 0;
+	/** Mass mouths have taken off this corpse, in body-mass units -- the one part
+	 *  of the body the ground never gets. */
+	protected double eaten = 0;
 
 	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
 	 *  About five seconds. A heavier body sits fresh longer, a lighter one less,
@@ -446,10 +473,17 @@ public abstract class NPC extends Entity {
 	 *  not by the fraction of it: a big carcass has more to turn. */
 	@Unit("ticks")
 	public static int FRESH_TICKS = 165;
-	/** What gets spoilage going on a body with nothing yet spoiled, in mass
-	 *  units of a reference body: the rate is proportional to what has already
+	/** What gets spoilage going on a body with nothing yet spoiled, as a share of
+	 *  a reference body's fresh meat: the rate is proportional to what has already
 	 *  turned plus this seed, so it starts at a crawl and compounds. */
 	private static final double FRESH_SEED = 0.05;
+	/** Shape of the rot once the body has turned. The decayed meat still on it is
+	 *  {@code 1 - p^ROT_SHAPE} of what it had, p the decay progress, so it holds
+	 *  together early and thins out late -- the curve the corpse is drawn
+	 *  dissolving on. 1 is linear; higher keeps meat on a decaying body longer.
+	 *  The tunable for how long carrion is worth walking to. */
+	@Unit("exponent on decay progress")
+	public static double ROT_SHAPE = 2.0;
 
 	/** Fresh meat on this corpse, in body-mass units; 0 for the living and for
 	 *  a body that has turned. */
@@ -457,79 +491,163 @@ public abstract class NPC extends Entity {
 		return fresh;
 	}
 
-	/** Fresh meat as a fraction of the body, 0..1, for the inspector. */
+	/** Decayed meat on this corpse, in body-mass units; 0 for the living. */
+	public double decayedMeat() {
+		return decayed;
+	}
+
+	/** The bones: the part of a corpse nobody eats, in body-mass units. */
+	public double bones() {
+		return isDead() ? bodyMass() * (1 - FRESH_SHARE) * (1 - SCAVENGER_SHARE) : 0;
+	}
+
+	/** Meat anybody could still eat off this corpse: fresh plus decayed. */
+	public double edibleMass() {
+		return fresh + decayed;
+	}
+
+	/** What is physically left of this body: on a corpse the meat still on it
+	 *  plus the bones; on the living, the whole body. */
+	public double remainingMass() {
+		return isDead() ? edibleMass() + bones() : bodyMass();
+	}
+
+	/** Fresh meat as a fraction of the whole body, 0..1, for the inspector. */
 	public double freshLeft() {
+		return shareOfBody(fresh);
+	}
+
+	/** Decayed meat as a fraction of the whole body, 0..1, for the inspector. */
+	public double decayedLeft() {
+		return shareOfBody(decayed);
+	}
+
+	private double shareOfBody(double mass) {
 		double m = bodyMass();
-		return m <= 0 ? 0 : Math.max(0, Math.min(1, fresh / m));
+		return m <= 0 ? 0 : Math.max(0, Math.min(1, mass / m));
 	}
 
 	/**
 	 * One tick of spoilage. The rate depends on the fresh-meat value alone: it is
-	 * proportional to how much of the body has already turned, plus a seed, so a
-	 * just-dead body spoils very slowly and a half-turned one quickly. Solved for
-	 * a reference-mass body it reaches zero at exactly {@link #FRESH_TICKS}; a
-	 * body of mass m takes ln((m + seed)/seed) / ln((1 + seed)/seed) times as
-	 * long -- twice the mass is about a fifth longer, not twice.
+	 * proportional to how much of the fresh pool is already gone (spoiled or
+	 * eaten), plus a seed, so a just-dead body spoils very slowly and a
+	 * half-turned one quickly. Solved for a reference-mass body it reaches zero at
+	 * exactly {@link #FRESH_TICKS}; a body of mass m takes
+	 * ln((m + seed)/seed) / ln((1 + seed)/seed) times as long -- twice the mass is
+	 * about a fifth longer, not twice. What spoils joins the decayed meat.
 	 */
 	private void spoil() {
 		double k = Math.log((1 + FRESH_SEED) / FRESH_SEED) / Math.max(1, FRESH_TICKS);
-		double gone = Math.max(0, bodyMass() - fresh);
-		fresh -= k * (gone + FRESH_SEED);
-		if (fresh < 1e-9) {
-			fresh = 0;
+		double seed = FRESH_SEED * FRESH_SHARE; // a share of a reference body's fresh meat
+		double gone = Math.max(0, freshFull - fresh);
+		double turned = Math.min(fresh, k * (gone + seed));
+		if (fresh - turned < 1e-9) {
+			turned = fresh;
+		}
+		fresh -= turned;
+		decayed += turned; // spoiled, not lost: it is the scavengers' now
+	}
+
+	/**
+	 * One tick of rot on a body that has turned, taken as the clock steps from
+	 * where it stands to where this tick leaves it: the decayed meat thins along
+	 * {@link #ROT_SHAPE} so it reaches nothing exactly as the clock runs out.
+	 * Bites do not change the pace, only what is left to rot.
+	 */
+	private void rot() {
+		if (deathspan <= 0) {
+			decayed = 0;
+			return;
+		}
+		double p0 = decayProgress();
+		double p1 = Math.min(1.0, (-age + 1) / (double) deathspan);
+		double left0 = 1 - Math.pow(p0, ROT_SHAPE);
+		double left1 = 1 - Math.pow(p1, ROT_SHAPE);
+		decayed = left0 <= 1e-9 ? 0 : decayed * Math.max(0, left1 / left0);
+		if (decayed < 1e-9) {
+			decayed = 0;
 		}
 	}
 
 	/** Decay forced forward by hand -- the steward drone's zap -- is a body that far
-	 *  gone, and a body that far gone is not fresh meat. Without this the held
-	 *  clock kept a vaporised remnant lying there for as long as it stayed fresh. */
+	 *  gone, and a body that far gone is not fresh meat: what was fresh has turned,
+	 *  and the decayed meat has rotted as far as the clock says. Without this the
+	 *  held clock kept a vaporised remnant lying there for as long as it stayed fresh. */
 	@Override
 	public void decayTo(double progress) {
 		super.decayTo(progress);
 		if (progress > 0) {
+			decayed += fresh;
 			fresh = 0;
+			decayed *= Math.max(0, 1 - Math.pow(Math.min(1, progress), ROT_SHAPE));
 		}
 	}
 
 	/** Freshly dead: spoiling, and holding the decay clock. Called by the body's
-	 *  dead tick; returns whether the clock is still held after this tick. */
+	 *  dead tick; returns whether the clock is still held after this tick. Once
+	 *  the body has turned the clock runs, and the meat rots with it. */
 	@Override
 	protected boolean decayHeld() {
-		if (fresh <= 0) {
-			return false;
+		if (fresh > 0) {
+			spoil();
+			if (fresh > 0) {
+				return true;
+			}
 		}
-		spoil();
-		return fresh > 0;
+		rot();
+		return false;
 	}
 
-	/** The flesh still on this body, as a fraction of the whole. */
+	/** The flesh still on this body as a fraction of the whole: on the living,
+	 *  the living ledger; on a corpse, the meat anybody could still eat. */
 	public double meatLeft() {
-		return meat;
+		return isDead() ? shareOfBody(edibleMass()) : meat;
 	}
 
 	/**
-	 * Takes up to {@code share} of this body's flesh and returns the share
-	 * actually taken -- what the eater is paid for. A carcass eaten out is
-	 * rotted through so the ordinary purge clears it; a living body eaten to
-	 * nothing is simply worth nothing more to anyone.
+	 * A parasite's drain on a LIVING body: takes up to {@code share} of its flesh
+	 * and returns the share actually taken -- what the drinker is paid for.
+	 * Nothing comes off a corpse this way: the dead are eaten through
+	 * {@link #eatCarrion}.
 	 */
-	public double eatMeat(double share) {
+	public double drainFlesh(double share) {
+		if (isDead()) {
+			return 0;
+		}
 		double taken = Math.max(0, Math.min(share, meat));
 		meat -= taken;
 		if (meat <= 1e-9) {
 			meat = 0;
 		}
-		// A bite off a corpse takes fresh meat with it, in the same mass units, so
-		// eating during the freshness window brings the rot on sooner. It does not
-		// touch the decay clock itself: decay and meat are two different books.
-		// Decay is how long the body has lain there (and, in time, how wet and
-		// warm and lit the ground is), and at the end of it the body dissolves
-		// into the ground whether or not anything ate it. Meat is the edible part,
-		// and a corpse eaten out still lies there with nothing on it until its
-		// time is up.
-		if (isDead() && fresh > 0) {
-			fresh = Math.max(0, fresh - taken * bodyMass());
+		return taken;
+	}
+
+	/**
+	 * A mouthful off a corpse: takes up to {@code mass} body-mass units, fresh
+	 * meat first -- every mouth prefers it -- and then, unless {@code freshOnly},
+	 * decayed meat. Returns the mass actually taken, which is what the eater is
+	 * paid for. A hunter eats fresh only; a scavenger both. The decay clock is
+	 * not touched: decay is how long the body has lain there, and a corpse eaten
+	 * out still lies there, bones and all, until its time is up.
+	 */
+	public double eatCarrion(double mass, boolean freshOnly) {
+		if (!isDead() || mass <= 0) {
+			return 0;
 		}
+		double taken = Math.min(mass, fresh);
+		fresh -= taken;
+		if (fresh < 1e-9) {
+			fresh = 0;
+		}
+		if (!freshOnly) {
+			double more = Math.min(mass - taken, decayed);
+			decayed -= more;
+			if (decayed < 1e-9) {
+				decayed = 0;
+			}
+			taken += more;
+		}
+		eaten += taken;
 		return taken;
 	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
@@ -1064,14 +1182,15 @@ public abstract class NPC extends Entity {
 	@Override
 	protected void onCorpseExpired() {
 		// Nutrient closure (WORLDGEN-RESEARCH.md): a body that rots where it
-		// fell feeds the ground. The bump scales with body mass and bleeds
-		// into the four neighbouring tiles, so death sites become meadows —
-		// grass feeds grazers feed predators feed grass. Items are inanimate
-		// and return nothing.
+		// fell feeds the ground. The bump scales with what is left of the body --
+		// the bones and whatever meat rotted uneaten; what mouths took is theirs
+		// and is not paid to the ground a second time -- and bleeds into the four
+		// neighbouring tiles, so death sites become meadows: grass feeds grazers
+		// feed predators feed grass. Items are inanimate and return nothing.
 		if (this instanceof Item) {
 			return;
 		}
-		double bump = ROT_FERTILITY * bodyMass();
+		double bump = ROT_FERTILITY * Math.max(0, bodyMass() - eaten);
 		enrich(X, Y, Z, bump);
 		enrich(X + 1, Y, Z, bump * 0.4);
 		enrich(X - 1, Y, Z, bump * 0.4);
@@ -1180,7 +1299,13 @@ public abstract class NPC extends Entity {
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
 		if (age >= 0) {
-			fresh = bodyMass(); // freshly dead: the whole body is fresh meat, and the decay clock waits
+			// Freshly dead: the body divides into its three pools and the decay
+			// clock waits on the fresh one. Flesh drained off it alive is not on it.
+			double m = bodyMass();
+			freshFull = FRESH_SHARE * m * meat;
+			fresh = freshFull;
+			decayed = (1 - FRESH_SHARE) * SCAVENGER_SHARE * m;
+			eaten = 0;
 		}
 		age = -1;
 	}

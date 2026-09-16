@@ -1105,10 +1105,20 @@ function showInspect(size: PanelSize): void {
 function carcassRows(d: Record<string, any>): string[] {
   const out: string[] = [];
   if (!('decay' in d)) return out;
-  out.push(bar('meat left', `${Math.round(d.meat * 100)}%`, Math.max(0, Math.min(1, d.meat))));
-  // The hunter's share of it: while any is left the body is freshly dead and
-  // its decay clock has not started.
-  if ('fresh' in d) out.push(bar('fresh meat', `${Math.round(d.fresh * 100)}%`, Math.max(0, Math.min(1, d.fresh))));
+  // A corpse is three pools, each drawn as its share of the body it came from,
+  // so the three bars stack to what is left. Fresh meat is the hunters' and
+  // holds the decay clock; decayed meat is the scavengers' and rots on it;
+  // bones feed nobody and lie there until the clock runs out.
+  const whole = typeof d.wholeMass === 'number' && d.wholeMass > 0 ? d.wholeMass : 0;
+  const pool = (label: string, share: unknown) => {
+    if (typeof share !== 'number') return;
+    const f = Math.max(0, Math.min(1, share));
+    const mass = whole ? ` (${(f * whole).toFixed(2)} mass)` : '';
+    out.push(bar(label, `${Math.round(f * 100)}%${mass}`, f));
+  };
+  pool('fresh meat', d.fresh);
+  pool('decayed meat', d.decayed);
+  pool('bones', d.bones);
   out.push(bar('freshness', `${Math.round((1 - d.decay) * 100)}%`,
     Math.max(0, Math.min(1, 1 - d.decay))));
   if ('worth' in d) out.push(row('worth', `${d.worth} energy`));

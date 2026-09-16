@@ -696,11 +696,18 @@ final class WorldHost {
 				// and none of them could be worked out from what was on the wire:
 				// the genome carries the ADULT size, so even the mass was missing.
 				if (n.isDead()) {
+					// What is left of it, not what it weighed: the pools shrink as they
+					// are eaten and rot, and the mass with them. The whole is sent too so
+					// the panel can draw each pool as a share of the body it came from.
+					d.put("mass", round(n.remainingMass()));
+					d.put("wholeMass", round(n.bodyMass()));
 					d.put("decay", round(n.decayProgress()));
-					d.put("meat", round(n.meatLeft()));
+					d.put("meat", round(n.meatLeft())); // edible to anyone, as a share of the body
 					d.put("fresh", round(n.freshLeft())); // the hunter's share of it; decay waits on this
+					d.put("decayed", round(n.decayedLeft())); // the scavenger's, rotting on the clock
+					d.put("bones", round(n.bodyMass() <= 0 ? 0 : n.bones() / n.bodyMass()));
 					d.put("worth", round(net.hedinger.prototype.entities.NPC.MEAT_ENERGY
-							* n.bodyMass() * n.meatLeft()));
+							* n.edibleMass()));
 					// Ticks of decay left once it starts; the clock holds while fresh meat
 					// remains, so a fresh body reads its whole span here.
 					d.put("rotsIn", Math.max(0, n.getDeathspan() + n.getAge()));
