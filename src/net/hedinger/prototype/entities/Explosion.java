@@ -12,7 +12,12 @@ public class Explosion extends Entity {
 	private static int EXPLOSION_DMG = 200;
 
 	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
-	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Bullet", "Entity.Grenade" };
+	// The blast passes through the rest of the ordnance and through sounds --
+	// the latter named explicitly now that a sound answers to its own name
+	// rather than to "Bullet", which is what used to exclude it here by
+	// accident.
+	private String[] ignoreTypes = { getEntityTypeName(), "Entity.Bullet", "Entity.Grenade",
+			"Entity.Sound" };
 
 	public Explosion(double x, double y, double z) {
 
@@ -44,9 +49,13 @@ public class Explosion extends Entity {
 		}
 	}
 
+	/** An explosion is an Explosion. It answered "Bullet" -- the same copy that
+	 *  gave Sound the wrong name -- which meant the first entry of its own
+	 *  ignore list, {@code getEntityTypeName()}, read "Bullet" too, so a blast
+	 *  did not skip other blasts the way the list plainly intends. */
 	@Override
 	public String getEntityTypeName() {
-		return "Bullet";
+		return "Explosion";
 	}
 
 }
