@@ -1998,9 +1998,15 @@ const POP_SERIES = [
   { key: 'parasite' as const, label: 'parasites', rgb: '#b07fe0' },
 ];
 
+/** The steward's guardrails for one clade: the headcount it restores a failing
+ *  clade from, and the one it culls back under. */
+type CladeBounds = { floor: number; ceiling: number };
+
 type PopData = {
   sampleSec: number; tps: number; tick: number[];
   herbivore: number[]; predator: number[]; scavenger: number[]; parasite: number[];
+  /** Absent on a world with no steward in it — then no guides are drawn. */
+  bounds?: Partial<Record<string, CladeBounds>>;
 };
 
 /** The Sankey's feed: WHO existed at each stage and exactly where every head
@@ -2131,6 +2137,15 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
   for (const s of POP_SERIES) {
     if (popHidden.has(s.key)) continue;
     for (const v of d[s.key]) if (v > max) max = v;
+    // A visible clade's ceiling is part of the picture, so it has to fit in
+    // it: the whole reason to draw the line is to see how much headroom is
+    // left, and a guide scrolled off the top of the plot answers nothing. It
+    // costs some height when a cohort sits far under its cap — which is itself
+    // the reading, and the legend still drops whichever clade is squashing the
+    // rest. Hidden clades are not consulted, so dropping the herbivores drops
+    // their ceiling out of the axis with them.
+    const c = d.bounds?.[s.key]?.ceiling;
+    if (c !== undefined && c > max) max = c;
   }
   max = niceCeil(max);
   const xAt = (i: number) => padL + (gw * i) / (n - 1);
@@ -2152,6 +2167,46 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
   ctx.fillText('0', padL - 4 * dpr, yAt(0));
   ctx.textAlign = 'left';
 
+  // The steward's guardrails, under the series so a population line always
+  // wins where they cross. Dashed and faint on purpose: these are not measured
+  // quantities but the rails the measured one runs between, and drawn solid at
+  // full strength they read as four more populations. Each takes its clade's
+  // own colour, because a legend with four entries cannot also explain eight
+  // lines — the colour says whose rail it is and the dash says it is a rail.
+  // Clades routinely SHARE a bound — three of the four sit at the same floor
+  // and the same ceiling in the standard world — so drawn in phase they land
+  // on exactly the same pixels and the last one painted is the only one you
+  // can see, which reads as a rail belonging to one clade rather than to
+  // three. Each series therefore gets its own quarter of the dash period and
+  // draws only in that slot: coincident rails interleave into one line that
+  // alternates colours, distinct rails just look dashed. The value is never
+  // nudged to make room — a guide that is off by a pixel to be legible is a
+  // guide that lies about the number it exists to show.
+  const slot = 4 * dpr, period = slot * POP_SERIES.length;
+  ctx.save();
+  ctx.setLineDash([slot, period - slot]);
+  ctx.lineWidth = 1 * dpr;
+  ctx.globalAlpha = 0.5;
+  POP_SERIES.forEach((s, i) => {
+    // Tied to the series, not to the data: hiding a clade takes its rails with
+    // it. A guide for a line that is not on the chart is an orphan the legend
+    // gives the viewer no way to explain or get rid of.
+    if (popHidden.has(s.key)) return;
+    const b = d.bounds?.[s.key];
+    if (!b) return;
+    ctx.lineDashOffset = i * slot;
+    ctx.strokeStyle = s.rgb;
+    ctx.beginPath();
+    for (const v of [b.floor, b.ceiling]) {
+      if (v > max) continue; // only ever the floor, on an axis a ceiling lifted
+      const y = Math.round(yAt(v)) + 0.5;
+      ctx.moveTo(padL, y);
+      ctx.lineTo(padL + gw, y);
+    }
+    ctx.stroke();
+  });
+  ctx.restore();
+
   for (const s of POP_SERIES) {
     if (popHidden.has(s.key)) continue;
     ctx.strokeStyle = s.rgb;
@@ -2165,7 +2220,12 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
     ctx.stroke();
   }
   const spanSec = (n - 1) * d.sampleSec;
-  popWin.textContent = `${fmtSpan(spanSec)} · ${n} samples`;
+  // Say what the dashes are. Four extra lines appeared on this chart with
+  // nothing on screen to name them, and a dashed line among solid ones reads
+  // as another measurement until something says otherwise.
+  const rails = POP_SERIES.some(s => !popHidden.has(s.key) && d.bounds?.[s.key]);
+  popWin.textContent = `${fmtSpan(spanSec)} · ${n} samples`
+    + (rails ? ' · dashed: steward floor/ceiling' : '');
 }
 
 /** One node's box, for ribbon anchoring: outCur/inCur walk down its right and
