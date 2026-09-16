@@ -106,17 +106,6 @@ public class TestNPC extends NPC {
 	 */
 	@Unit("of the body/tick")
 	public static final double CARRION_BITE = 0.015;
-	/**
-	 * Where a corpse stops being a hunter's meat and becomes a scavenger's, as a
-	 * fraction of its decay. Below it the body is fresh: a hunter will eat it and
-	 * a scavenger will not touch it. At or past it the body is rotting: a
-	 * scavenger will eat it and a hunter cannot stomach it. So the two clades
-	 * are never at the same carcass at the same time -- the hunter has its
-	 * window, and what it leaves ripens into the scavenger's. One number, on
-	 * purpose, so it can be tuned.
-	 */
-	@Unit("of decay")
-	public static double CARRION_TURN = 0.25;
 	/** How far (tiles, beyond touching) a scavenger can reach a carcass. */
 	@Unit("tiles beyond touching")
 	public static final double CARRION_REACH = 0.6;
@@ -1474,11 +1463,10 @@ public class TestNPC extends NPC {
 	 * comes off the one ledger either way, and it stops at the same line that
 	 * stops it killing -- a full mouth leaves the rest.
 	 *
-	 * <p>A hunter is not a scavenger. It eats only what is still fresh -- under
-	 * {@link #CARRION_TURN} of decay, which {@link #edibleCarrion} enforces on
-	 * every carcass it reaches for -- and once a body has turned it cannot
-	 * stomach it. Its window on a kill is the front of the corpse's life; what
-	 * it leaves ripens into the scavengers'.
+	 * <p>A hunter is not a scavenger. It eats only fresh meat ({@link NPC#freshMeat}),
+	 * which {@link #edibleCarrion} enforces on every carcass it reaches for, and
+	 * once a body has turned it cannot stomach it. Its window on a kill is the
+	 * front of the corpse's life; what it leaves is the scavengers'.
 	 */
 	private double finishTheKill() {
 		if (!actsAsHunter() || hunger <= PRED_FULL_HUNGER) {
@@ -1510,7 +1498,9 @@ public class TestNPC extends NPC {
 		// what it was too full, or too harried, to finish.
 		double mouthful = Math.min(1.0, CARRION_BITE * bodyMass() / Math.max(1e-6, prey.bodyMass()));
 		double share = prey.eatMeat(mouthful);
-		prey.damage(bite, "predation");
+		if (!prey.isDead()) {
+			prey.damage(bite, "predation"); // a bite into a carcass wounds nothing; it only eats
+		}
 		// Violence is audible. The scream comes from the quarry, not the hunter,
 		// and carries in proportion to how big the quarry is -- so a hunt tells the
 		// neighbourhood something is happening here, and roughly how big a
@@ -1693,16 +1683,25 @@ public class TestNPC extends NPC {
 	 * </ul>
 	 */
 	private boolean edibleQuarry(NPC n, boolean cannibal) {
-		if (n == this || n.isDead() || n.isRemoved()) {
-			return false;
-		}
-		if (n.getSize() > preyCeiling() || !n.isOrganic()) {
+		if (n == this || n.isRemoved() || !n.isOrganic()) {
 			return false;
 		}
 		if (nicheOf(n) != null && !nicheOf(n).isHuntable()) {
-			return false; // a parasite is not quarry: too small and too foul
+			return false; // a parasite is not quarry: too small and too foul -- alive or dead
 		}
-		return cannibal || !(n instanceof TestNPC tn && Niche.of(tn.ecoClade()).hunts());
+		// Its own kind is off the menu short of starvation, alive or dead.
+		boolean kin = n instanceof TestNPC tn && Niche.of(tn.ecoClade()).hunts();
+		if (n.isDead()) {
+			// A fresh carcass is quarry too: it shows up on the same scan as living
+			// prey and is walked to and eaten the same way, which is how a second
+			// hunter joins a kill. No size ceiling -- the dead do not fight back --
+			// and the fresh-meat rule is edibleCarrion's.
+			return edibleCarrion(n) && (cannibal || !kin);
+		}
+		if (n.getSize() > preyCeiling()) {
+			return false;
+		}
+		return cannibal || !kin;
 	}
 
 	/**
@@ -1900,6 +1899,18 @@ public class TestNPC extends NPC {
 				best = n;
 			}
 		}
+		// And the fresh dead: a carcass with fresh meat on it is food to a hunter
+		// on the same terms as living prey, which is how other hunters join a kill.
+		for (NPC n : getWorld().census().corpses(getLvl())) {
+			if (!edibleQuarry(n, cannibal) || distance(n.getX(), n.getY(), n.getZ()) > LOS_RANGE) {
+				continue;
+			}
+			double score = preyScore(n);
+			if (score > bar && isInLOS(n)) {
+				bar = score;
+				best = n;
+			}
+		}
 		if (best != null) {
 			if (best != preyTarget) {
 				chaseSince = age; // a new chase starts the patience clock afresh
@@ -1924,6 +1935,16 @@ public class TestNPC extends NPC {
 		double bestD = radius;
 		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creatures(getLvl())) {
+			if (!edibleQuarry(n, cannibal)) {
+				continue;
+			}
+			double d = distance(n.getX(), n.getY(), n.getZ());
+			if (d < bestD && isInLOS(n)) {
+				bestD = d;
+				best = n;
+			}
+		}
+		for (NPC n : getWorld().census().corpses(getLvl())) { // the fresh dead are quarry too
 			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
@@ -3450,9 +3471,9 @@ public class TestNPC extends NPC {
 	 * with the flesh, which folded the two into one number.
 	 *
 	 * <p>Which mouth this is decides which carcasses it will take at all -- see
-	 * {@link #edibleCarrion} and {@link #CARRION_TURN}. A bite is paid at full
-	 * rate, whatever the freshness: a scavenger is paid for the meat it takes,
-	 * and rot decides only whether it may take it.
+	 * {@link #edibleCarrion}. A bite is paid at full rate whatever the freshness:
+	 * a scavenger is paid for the meat it takes, and freshness decides only
+	 * whether a HUNTER may take it.
 	 */
 	private double scavenge() {
 		NPC carrion = carrionInReach();
@@ -3502,21 +3523,21 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * Whether {@code n} is a carcass THIS mouth can eat. Decay decides it, and it
-	 * decides it differently for the two clades that eat the dead: a hunter
-	 * takes fresh meat and nothing else, a scavenger takes rotting meat and
-	 * nothing else, and the line between them is {@link #CARRION_TURN}. A
-	 * carcass with no meat left is food to nobody, however fresh.
+	 * Whether {@code n} is a carcass THIS mouth can eat -- a hard rule of the
+	 * body's clade, not of its mind or any adaptable attribute. A hunter eats
+	 * only a corpse with fresh meat still on it ({@link NPC#freshMeat}); once
+	 * the body has turned it cannot stomach it. A scavenger eats any corpse
+	 * with meat on it, however old. A parasite lives off the living and eats
+	 * nothing here. A carcass with no meat left is food to nobody.
 	 */
 	private boolean edibleCarrion(NPC n) {
 		if (n == this || !n.isDead() || n.isRemoved() || n.meatLeft() <= 0) {
 			return false;
 		}
-		boolean fresh = n.decayProgress() < CARRION_TURN;
 		if (actsAsHunter()) {
-			return fresh;
+			return n.freshMeat() > 0;
 		}
-		return niche().scavenges() && !fresh;
+		return niche().scavenges();
 	}
 
 	/** The nearest carcass this body could bite right now, or null. Corpses only --

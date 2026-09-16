@@ -145,9 +145,15 @@ public class SimTests {
 			snapshot(w, "corpse");
 			assertTrue("dead after lethal damage", h.isDead());
 			assertEquals("no living actors after the kill", 0, w.getAliveCount());
+			// Freshly dead first: the decay clock waits until the fresh meat has
+			// turned, then the 100-tick deathspan runs.
+			for (int t = 0; t < 2000 && h.freshMeat() > 0; t++) {
+				tick(w, 1);
+			}
+			assertTrue("the body has turned and still lies there", !h.isRemoved());
 			tick(w, 50); // partway through the 100-tick deathspan
 			assertTrue("corpse lingers while within its deathspan", !h.isRemoved());
-			tick(w, 80); // total 130 ticks dead, past the deathspan
+			tick(w, 80); // 130 ticks of decay, past the deathspan
 			assertTrue("corpse decays on its own once its deathspan elapses", h.isRemoved());
 
 			// Scavenging clears a body well before its deathspan would.
@@ -199,6 +205,11 @@ public class SimTests {
 			tick(w, 1);
 			assertTrue("dead", b.isDead());
 			assertLess("a fresh corpse has barely decayed", b.decayProgress(), 0.05);
+			// Rot begins when the fresh meat has turned; the span is measured from there.
+			for (int t = 0; t < 2000 && b.freshMeat() > 0; t++) {
+				tick(w, 1);
+			}
+			assertLess("and still barely decayed the moment it turns", b.decayProgress(), 0.05);
 			tick(w, b.getDeathspan() / 2);
 			assertNear("halfway through the span it is halfway rotted",
 					0.5, b.decayProgress(), 0.05);
@@ -314,15 +325,11 @@ public class SimTests {
 	}
 
 	/**
-	 * A scavenger makes its living off carrion, and eating it does NOT rot it.
-	 * Decay and meat are two different books. Decay is how long the body has
-	 * lain there -- and, in time, how wet and warm and lit the ground is -- and
-	 * at the end of it the body dissolves into the ground whether or not
-	 * anything ate it. Meat is the edible part. The two used to be one number:
-	 * every bite advanced the decay clock in step with the flesh, so a
-	 * half-eaten fresh kill read as half-rotted, and this scenario asserted
-	 * exactly that as if it were correct. Now it pins the opposite, against a
-	 * control corpse in a lockstep world so nothing but the eating differs.
+	 * A scavenger eats carrion, and what that does to the corpse is exactly
+	 * this: it takes fresh meat with the flesh, so the body turns sooner and its
+	 * rot begins earlier -- and nothing else. Once both are rotting they rot at
+	 * the same pace, because decay is time and never eating. Pinned against a
+	 * control corpse in a lockstep world, so nothing but the eating differs.
 	 */
 	static class ScavengerEatsCarrionButDoesNotRotIt extends Scenario {
 		@Override
@@ -345,9 +352,6 @@ public class SimTests {
 			tick(w, 1);
 			tick(w2, 1);
 			assertTrue("there is a carcass", body.isDead());
-			// A scavenger takes only rotting meat, so both are aged past the turn.
-			body.decayTo(TestNPC.CARRION_TURN);
-			alone.decayTo(TestNPC.CARRION_TURN);
 
 			// Driven by a scripted mind that simply holds "eat": this pins the BODY's
 			// scavenging, not whatever a starter brain happens to have evolved into.
@@ -360,94 +364,206 @@ public class SimTests {
 			assertTrue("a scavenger is its own trophic level", "scavenger".equals(scav.ecoRole()));
 
 			double fed = scav.totalSwallowed();
-			tick(w, 60);
-			tick(w2, 60);
-			assertGreater("carrion feeds the scavenger", scav.totalSwallowed() - fed, 0);
+			tick(w, 30);
+			tick(w2, 30);
+			assertGreater("carrion feeds the scavenger, fresh or not", scav.totalSwallowed() - fed, 0);
 			assertLess("and the flesh comes off the body", body.meatLeft(), alone.meatLeft());
-			// Both corpses have been dead for exactly the same number of ticks, so
-			// any gap here would be the eating -- and there is none.
-			assertNear("but an eaten body rots at exactly the pace of one left alone",
-					alone.decayProgress(), body.decayProgress(), 0.001);
+			assertLess("every bite took fresh meat with it, so the eaten body is closer to turning",
+					body.freshMeat(), alone.freshMeat());
+			// Let both turn.
+			for (int t = 0; t < 1000 && (body.freshMeat() > 0 || alone.freshMeat() > 0); t++) {
+				tick(w, 1);
+				tick(w2, 1);
+			}
+			assertTrue("both have turned", body.freshMeat() == 0 && alone.freshMeat() == 0);
+			assertTrue("the eaten one began rotting no later than the one left alone",
+					body.decayProgress() >= alone.decayProgress() - 1e-9);
+			// From here the clocks run at the same pace: decay is time, never eating.
+			double b0 = body.decayProgress(), a0 = alone.decayProgress();
+			tick(w, 50);
+			tick(w2, 50);
+			assertNear("but once rotting, an eaten body rots at exactly the pace of one left alone",
+					alone.decayProgress() - a0, body.decayProgress() - b0, 0.001);
+		}
+	}
+
+
+	/**
+	 * A creature is alive, then freshly dead, then decaying, then gone -- and
+	 * the middle two are decided by two different books.
+	 *
+	 * <p>Fresh meat is full at death and sized by the body's mass. It declines
+	 * on its own, slowly at first and then fast, at a rate set by the value
+	 * alone: about five seconds for a reference body, longer for a heavier one.
+	 * Every bite off the corpse takes fresh meat with it, so eating during the
+	 * window brings the rot on sooner. Decay does not start until the fresh
+	 * meat is gone; then it runs on its own time-only clock until the body
+	 * dissolves. Who may eat the dead is a hard rule of the body's clade: a
+	 * hunter takes only fresh meat, a scavenger takes any corpse however old,
+	 * a parasite takes only the living.
+	 */
+	static class AFreshCarcassSitsBeforeItRots extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		private World barren() {
+			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			return w;
+		}
+
+		@Override
+		public void run() {
+			seed(45);
+			// --- the clock: full at death, slow then fast, five seconds, then decay.
+			World w = barren();
+			TestNPC ref = TestNPC.grazer(4.5, 4.5, 0, body(8)).grown(); // reference mass
+			TestNPC big = TestNPC.grazer(9.5, 4.5, 0, body(16)).grown(); // twice it
+			w.spawnEntity(ref);
+			w.spawnEntity(big);
+			tick(w, 1);
+			ref.kill();
+			big.kill();
+			tick(w, 1);
+			assertNear("fresh meat is full at death", 1.0, ref.freshLeft(), 0.02);
+			assertNear("and is the whole body, by mass", ref.bodyMass(), ref.freshMeat(), 0.02);
+			assertLess("and the decay clock has not started", ref.decayProgress(), 0.01);
+			int half = NPC.FRESH_TICKS / 2;
+			tick(w, half);
+			assertGreater("halfway through the window most of it is still fresh -- slowly first",
+					ref.freshLeft(), 0.7);
+			assertLess("and the body is still not rotting", ref.decayProgress(), 0.01);
+			tick(w, NPC.FRESH_TICKS - half + 2);
+			assertEquals("a reference body has turned after about five seconds",
+					0, (long) Math.round(ref.freshLeft() * 1000));
+			assertGreater("a heavier body sits fresh longer", big.freshMeat(), 0.0);
+			double turned = ref.decayProgress();
+			tick(w, 50);
+			assertGreater("once turned, it rots on its own clock", ref.decayProgress(), turned + 0.02);
+			for (int t = 0; t < 400 && big.freshMeat() > 0; t++) {
+				tick(w, 1);
+			}
+			assertEquals("and the heavy one turns too, a while later", 0, (long) Math.round(big.freshLeft() * 1000));
+
+			// --- who eats what: three mouths on one fresh body, and a control.
+			World m = barren();
+			TestNPC prey = TestNPC.grazer(10.5, 6.5, 0, body(12)).grown();
+			TestNPC control = TestNPC.grazer(3.5, 3.5, 0, body(12)).grown(); // out of every reach
+			m.spawnEntity(prey);
+			m.spawnEntity(control);
+			tick(m, 1);
+			prey.kill();
+			control.kill();
+			tick(m, 1);
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			TestNPC hunter = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
+					.withClade(Genome.Clade.PREDATOR).withHunger(1.0);
+			TestNPC scav = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
+					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
+			TestNPC para = TestNPC.minded(10.5, 6.5, 0, body(4), feeder)
+					.withClade(Genome.Clade.PARASITE).withHunger(1.0);
+			m.spawnEntity(hunter);
+			m.spawnEntity(scav);
+			m.spawnEntity(para);
+			tick(m, 1);
+			double h0 = hunter.totalSwallowed(), s0 = scav.totalSwallowed(), p0 = para.totalSwallowed();
+			tick(m, 20);
+			assertGreater("a hunter eats fresh meat", hunter.totalSwallowed() - h0, 0);
+			assertGreater("a scavenger eats it too, fresh or not", scav.totalSwallowed() - s0, 0);
+			assertTrue("a parasite lives off the living and touches no corpse",
+					para.totalSwallowed() - p0 < 1e-9);
+			assertLess("every bite took fresh meat with it, so the eaten body turns sooner",
+					prey.freshMeat(), control.freshMeat());
+			// Let it turn, then the hunter is done with it and the scavenger is not.
+			for (int t = 0; t < 600 && prey.freshMeat() > 0; t++) {
+				tick(m, 1);
+			}
+			assertEquals("the body has turned", 0, (long) Math.round(prey.freshLeft() * 1000));
+			double h1 = hunter.totalSwallowed(), s1 = scav.totalSwallowed();
+			tick(m, 20);
+			assertTrue("a hunter cannot stomach a body that has turned",
+					hunter.totalSwallowed() - h1 < 1e-9);
+			assertGreater("a scavenger eats the dead however old", scav.totalSwallowed() - s1, 0);
+			for (int t = 0; t < 800 && prey.meatLeft() > 0.01; t++) {
+				tick(m, 1);
+			}
+			assertTrue("eaten to nothing, it still lies there", prey.meatLeft() <= 0.01 && !prey.isRemoved());
+			tick(m, prey.getDeathspan() + 5);
+			assertTrue("and dissolves into the ground when its own clock runs out", prey.isRemoved());
 		}
 	}
 
 	/**
-	 * Fresh meat is a hunter's and rotting meat is a scavenger's, and the line
-	 * between them is one tunable fraction of a corpse's decay
-	 * ({@link TestNPC#CARRION_TURN}). Below it a hunter eats and a scavenger
-	 * will not touch the body; at or past it the scavenger eats and the hunter
-	 * cannot stomach it. A hunter is not a scavenger: its window on a kill is
-	 * the front of the corpse's life, and what it leaves ripens into the
-	 * scavengers'.
-	 *
-	 * <p>Also pins that decay and meat are separate books all the way through:
-	 * eating takes meat and leaves the clock alone (checked against a control
-	 * corpse nothing can reach), a body eaten to nothing still lies there, and
-	 * it dissolves on its own clock and not before.
+	 * Other hunters join the kill. A fresh carcass shows up on a hunter's prey
+	 * scan as food, is walked to like living prey, and is eaten on arrival --
+	 * so a hunter that did not make the kill still gets a meal off it while the
+	 * meat is fresh. Before, a corpse was never quarry: the hunter that made
+	 * the kill ate what it could and every other hunter walked past.
 	 */
-	static class FreshMeatIsAHuntersRottenMeatIsAScavengers extends Scenario {
+	static class OtherHuntersJoinTheKill extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
 		@Override
 		public void run() {
-			seed(45);
-			World w = room(20, 12);
-			for (int x = 1; x < 19; x++) {
+			seed(46);
+			World w = room(24, 12);
+			for (int x = 1; x < 23; x++) {
 				for (int y = 1; y < 11; y++) {
-					w.getTile(x, y, 0).setFertility(0.0); // no grass: every unit of food is meat
+					w.getTile(x, y, 0).setFertility(0.0);
 				}
 			}
-			Genome g = Genome.phenotype(12, 0.0, 5, 6, Math.PI * 2, 100000);
-			TestNPC body = TestNPC.breeder(10.5, 6.5, 0, g);
-			TestNPC control = TestNPC.breeder(3.5, 3.5, 0, g); // out of every mouth's reach
-			w.spawnEntity(body);
-			w.spawnEntity(control);
-			tick(w, 2);
-			body.damage(500);
-			control.damage(500);
-			tick(w, 1);
-			assertTrue("there is a fresh carcass", body.isDead() && body.decayProgress() < TestNPC.CARRION_TURN);
-
-			// Both mouths on the same body, each simply holding "eat".
-			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
-			TestNPC hunter = TestNPC.minded(10.5, 6.5, 0, g.copy(), feeder)
-					.withClade(Genome.Clade.PREDATOR).withHunger(1.0);
-			TestNPC scav = TestNPC.minded(10.5, 6.5, 0, g.copy(), feeder)
-					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
-			w.spawnEntity(hunter);
-			w.spawnEntity(scav);
-			tick(w, 1);
-
-			// Fresh: the hunter's window.
-			double h0 = hunter.totalSwallowed(), s0 = scav.totalSwallowed();
-			tick(w, 30);
-			assertLess("still fresh", body.decayProgress(), TestNPC.CARRION_TURN);
-			assertGreater("fresh meat feeds the hunter", hunter.totalSwallowed() - h0, 0);
-			assertTrue("and the scavenger will not touch it", scav.totalSwallowed() - s0 < 1e-9);
-			assertNear("eating did not hasten the rot",
-					control.decayProgress(), body.decayProgress(), 0.001);
-
-			// Turned: the scavenger's.
-			body.decayTo(TestNPC.CARRION_TURN);
-			control.decayTo(TestNPC.CARRION_TURN);
-			tick(w, 1);
-			double h1 = hunter.totalSwallowed(), s1 = scav.totalSwallowed();
-			tick(w, 30);
-			assertTrue("once it has turned the hunter cannot stomach it",
-					hunter.totalSwallowed() - h1 < 1e-9);
-			assertGreater("and rotting meat feeds the scavenger", scav.totalSwallowed() - s1, 0);
-
-			// Eaten out, and still there.
-			for (int t = 0; t < 800 && body.meatLeft() > 0.01; t++) {
+			// A parked animal and the hunter that will bring it down.
+			TestNPC prey = TestNPC.grazer(8.5, 6.5, 0, body(12)).grown();
+			TestNPC killer = TestNPC.predator(8.9, 6.5, 0, body(16)).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(prey);
+			w.spawnEntity(killer);
+			// A second, hungry hunter with the scene in plain sight but well out
+			// of reach, driven by the ordinary hunter seed: it seeks forage, which for
+			// a hunter is its prey scan. Nothing living is left for it to hunt, so if
+			// its forage channel lights up, what lit it is the carcass.
+			Genome jg = body(16);
+			jg.speed = 0.06;
+			jg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC joiner = TestNPC.mindedPredator(15.5, 6.5, 0, jg).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(joiner);
+			double j0 = joiner.totalSwallowed();
+			for (int t = 0; t < 3000 && !prey.isDead(); t++) {
 				tick(w, 1);
 			}
-			assertTrue("the body has been eaten to nothing", body.meatLeft() <= 0.01);
-			assertTrue("and still lies there with nothing on it", !body.isRemoved());
-			assertLess("nowhere near dissolved", body.decayProgress(), 0.9);
-
-			// It dissolves on its own clock.
-			tick(w, body.getDeathspan() + 5);
-			assertTrue("and dissolves into the ground when its time is up", body.isRemoved());
+			assertTrue("the first hunter made the kill", prey.isDead());
+			killer.remove(); // out of the way: what is eaten now is the joiner's
+			tick(w, 2);
+			double[] sense = new double[AgentIO.NUM_SENSORS];
+			joiner.senseInto(sense);
+			assertGreater("the fresh carcass shows up on a hunter's prey scan as food",
+					sense[AgentIO.S_FORAGE_PROX], 0.0);
+			double before = prey.meatLeft();
+			for (int t = 0; t < NPC.FRESH_TICKS + 200 && prey.meatLeft() >= before - 0.05; t++) {
+				tick(w, 1);
+			}
+			assertGreater("a second hunter came to the fresh carcass and ate off it",
+					joiner.totalSwallowed() - j0, 0.0);
+			assertLess("the meat it took came off the body", prey.meatLeft(), before);
 		}
 	}
+
 
 
 	/**
@@ -470,7 +586,6 @@ public class SimTests {
 			tick(w, 2);
 			body.damage(500);
 			tick(w, 1);
-			body.decayTo(TestNPC.CARRION_TURN); // a scavenger's forage is rotting meat, not fresh
 
 			// Inert minds and a fixed heading: bearing is measured in the heading
 			// frame, so a creature free to turn would make "dead ahead" a statement
@@ -525,7 +640,6 @@ public class SimTests {
 			body.damage(500);
 			tick(w, 1);
 			assertTrue("there is a carcass", body.isDead());
-			body.decayTo(TestNPC.CARRION_TURN); // turned: a scavenger takes rotting meat only
 			double bodyMass = body.bodyMass();
 
 			TestNPC scav = TestNPC.minded(6.5, 6.5, 0, g, feeder)
@@ -1423,7 +1537,6 @@ public class SimTests {
 			tick(w, 2);
 			far.damage(500);
 			tick(w, 1);
-			far.decayTo(TestNPC.CARRION_TURN); // rotting: a scavenger's meal
 
 			Mind still = (sensors, act) -> { };
 			TestNPC scav = TestNPC.minded(8.5, 5.5, 0, g, still)
@@ -1439,9 +1552,7 @@ public class SimTests {
 			w.spawnEntity(underfoot);
 			tick(w, 2);
 			underfoot.damage(500);
-			tick(w, 1);
-			underfoot.decayTo(TestNPC.CARRION_TURN);
-			tick(w, 1);
+			tick(w, 2);
 			assertTrue("a far better carcass is a step behind it", underfoot.isDead());
 
 			assertNear("the scavenger crosses to it", 1.0,
@@ -4762,7 +4873,7 @@ public class SimTests {
 			w.spawnEntity(t);
 			w.think();
 			t.damage(1000); // killed outright
-			for (int i = 1; i <= 2000; i++) {
+			for (int i = 1; i <= 4000; i++) { // fresh window, then the span
 				tick(w, 1);
 				if (t.isRemoved()) {
 					return i;
@@ -6176,7 +6287,7 @@ public class SimTests {
 					}
 					// And then eaten where it fell: a bite takes a mouthful, so the
 					// kill is the start of the meal rather than the whole of it.
-					for (int t = 0; t < 500 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
+					for (int t = 0; t < 500 && prey.freshMeat() > 0 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
 						tick(w, 1);
 					}
 					prey.remove();
@@ -6854,7 +6965,11 @@ public class SimTests {
 			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
 			assertGreater("and the chase pays: the tank is well above the crawl reserve after it ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getEnergy(), hunter.energyCapacity()) + ")",
-					hunter.getEnergy(), 0.4 * hunter.energyCapacity());
+					// A kill feeds a hunter only while the meat is fresh -- it takes what it
+					// can before the body turns and the rest is the scavengers' -- so a
+					// hunting spell ends less flush than when a kill was the whole animal.
+					// The claim is that the chase pays for itself, well clear of collapse.
+					hunter.getEnergy(), 0.25 * hunter.energyCapacity());
 			// Fed, but no longer stuffed. A kill is not swallowed whole any more --
 			// a bite takes a mouthful and a hunter that moves straight on to the
 			// next animal leaves the rest of the last one lying there for whatever
@@ -10329,16 +10444,28 @@ public class SimTests {
 			// the animal is still mostly there when it stops being quarry, and the
 			// hunter goes on eating it where it lies. The body is still worth its
 			// meat ONCE -- that is the invariant here -- it just takes the hunter
-			// longer than the killing to collect it.
-			for (int t = 0; t < 2000 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
+			// longer than the killing to collect it -- and only for as long as the
+			// meat stays fresh, which is the hunter's whole window.
+			for (int t = 0; t < 2000 && prey.freshMeat() > 0 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
 				tick(w, 1);
 			}
 			double meat = TestNPC.MEAT_ENERGY * prey.bodyMass();
-			assertNear("the hunter was paid the body, bite by bite", meat, hunter.totalSwallowed(), 0.05 * meat);
+			// The hunter eats while the meat is fresh and no longer: every bite spends
+			// fresh meat as well as flesh and spoilage compounds on what is gone, so a
+			// lone hunter does not finish a body its own size before it turns. What
+			// it leaves is the scavengers'. The invariant is the ledger: between them
+			// the mouths are paid the body ONCE.
+			double toHunter = hunter.totalSwallowed();
+			assertGreater("the hunter was paid most of the body, bite by bite ("
+					+ String.format("%.2f of %.2f", toHunter, meat) + ")", toHunter, 0.5 * meat);
+			assertTrue("and never more than the body", toHunter <= meat + 0.01);
 			hunter.remove();
 			double leftovers = scavenged(w, prey, 15.5, 10.5);
-			assertLess("a carcass eaten whole pays scavengers nothing worth counting ("
-					+ String.format("%.2f of %.2f", leftovers, meat) + ")", leftovers, 0.02 * meat);
+			assertNear("the scavengers were paid exactly what the hunter left ("
+					+ String.format("%.2f + %.2f against %.2f", toHunter, leftovers, meat) + ")",
+					meat, toHunter + leftovers, 0.05 * meat);
+			assertTrue("and the body was worth its meat once, to however many mouths",
+					toHunter + leftovers <= meat + 0.01);
 
 			// Died whole: the carcass pays its meat once, to however many mouths.
 			TestNPC fallen = TestNPC.grazer(8.5, 10.5, 0, body(16)).grown();
@@ -11268,6 +11395,9 @@ public class SimTests {
 			w.spawnEntity(victim);
 			tick(w, 2);
 			victim.kill();
+			for (int t = 0; t < 2000 && victim.freshMeat() > 0; t++) {
+				tick(w, 1); // freshly dead: the decay clock waits
+			}
 			tick(w, 60); // longer than the deathspan: the corpse rots away
 			assertTrue("the corpse rotted away", victim.isRemoved());
 			assertGreater("the ground it rotted on is richer than before",
@@ -13331,7 +13461,8 @@ public class SimTests {
 				new LethalDamageAndScavenging(),
 				new ForageIgnoresFoodBehindWalls(),
 				new ScavengerEatsCarrionButDoesNotRotIt(),
-				new FreshMeatIsAHuntersRottenMeatIsAScavengers(),
+				new AFreshCarcassSitsBeforeItRots(),
+				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsWorthWhatAKillIsWorth(),
 				new ABodyIsShapedByWhatItEats(),

@@ -698,10 +698,11 @@ final class WorldHost {
 				if (n.isDead()) {
 					d.put("decay", round(n.decayProgress()));
 					d.put("meat", round(n.meatLeft()));
+					d.put("fresh", round(n.freshLeft())); // the hunter's share of it; decay waits on this
 					d.put("worth", round(net.hedinger.prototype.entities.NPC.MEAT_ENERGY
 							* n.bodyMass() * n.meatLeft()));
-					// Ticks before the world reclaims it. Eating a body ages it, so
-					// this shortens as it is consumed as well as as it rots.
+					// Ticks of decay left once it starts; the clock holds while fresh meat
+					// remains, so a fresh body reads its whole span here.
 					d.put("rotsIn", Math.max(0, n.getDeathspan() + n.getAge()));
 				}
 				d.put("carrying", n.getCarriedLoad() > 0); // hauling an ITEM (a crate)

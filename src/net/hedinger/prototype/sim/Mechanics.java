@@ -299,11 +299,15 @@ public final class Mechanics {
 				row("A bite of carrion", pct(TestNPC.CARRION_BITE), "of the body per tick",
 						"~" + Math.round(1 / TestNPC.CARRION_BITE) + " ticks ("
 						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip it clean."),
-				row("A carcass turns at", pct(TestNPC.CARRION_TURN), "of its decay",
-						"Fresh meat is a hunter's and rotting meat a scavenger's: below the line "
-						+ "only a hunter eats it, at or past it only a scavenger. Decay is time "
-						+ "(and, in time, weather) and never eating; meat is what is edible. A body "
-						+ "eaten to nothing lies there until its clock runs out, then dissolves."),
+				row("Fresh meat", "the whole body at death", "by mass",
+						"Declines on its own, slowly then fast -- the rate is set by the value "
+						+ "alone -- for ~" + num(NPC.FRESH_TICKS) + " ticks (" + round(NPC.FRESH_TICKS / TPS, 1)
+						+ " s) on a reference body, longer on a heavier one. Every bite takes fresh "
+						+ "meat with it. Decay does not start until it is gone."),
+				row("Who eats the dead", "a rule of the body's clade", "",
+						"A hunter: only a corpse with fresh meat on it. A scavenger: any corpse "
+						+ "with meat, however old. A parasite: the living only. A fresh carcass is on "
+						+ "a hunter's prey scan, so other hunters join a kill."),
 				row("Scent range for corpses", num(TestNPC.CARRION_SCENT_R), "tiles",
 						"Smelled, not seen — it reaches through walls that sight does not."),
 				row("A parasite's bite", num(TestNPC.PARA_BITE) + " health per "

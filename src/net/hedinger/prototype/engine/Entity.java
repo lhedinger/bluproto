@@ -160,10 +160,12 @@ public abstract class Entity {
 		} else {
 			// A corpse ages toward removal: after `deathspan` ticks it drops past
 			// -deathspan and is purged next run. Without this a dead body with a
-			// positive deathspan only ever cleared if something scavenged it
-			// (eat() decrements age), so corpses accumulated forever in a
-			// long-running world. Scavenging still speeds it up.
-			age--;
+			// positive deathspan only ever cleared if something scavenged it, so
+			// corpses accumulated forever in a long-running world. A body that
+			// says it is still FRESHLY dead holds the clock: rot has not set in.
+			if (!decayHeld()) {
+				age--;
+			}
 		}
 		return true;
 	}
@@ -751,6 +753,14 @@ public abstract class Entity {
 
 	public void kill() {
 		age = -1;
+	}
+
+	/** Whether this dead body is still holding its decay clock -- freshly dead
+	 *  rather than decaying. A plain entity never is; a body with fresh meat on
+	 *  it is, for as long as the meat stays fresh. Called once per dead tick, so
+	 *  an override may spoil as it answers. */
+	protected boolean decayHeld() {
+		return false;
 	}
 
 	/**

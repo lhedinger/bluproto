@@ -1106,6 +1106,9 @@ function carcassRows(d: Record<string, any>): string[] {
   const out: string[] = [];
   if (!('decay' in d)) return out;
   out.push(bar('meat left', `${Math.round(d.meat * 100)}%`, Math.max(0, Math.min(1, d.meat))));
+  // The hunter's share of it: while any is left the body is freshly dead and
+  // its decay clock has not started.
+  if ('fresh' in d) out.push(bar('fresh meat', `${Math.round(d.fresh * 100)}%`, Math.max(0, Math.min(1, d.fresh))));
   out.push(bar('freshness', `${Math.round((1 - d.decay) * 100)}%`,
     Math.max(0, Math.min(1, 1 - d.decay))));
   if ('worth' in d) out.push(row('worth', `${d.worth} energy`));
