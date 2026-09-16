@@ -271,8 +271,11 @@ against the old books at 9.5 conjured per 2.25 paid.
 
 **Growth is paid for too.** The flesh a juvenile puts on is the same matter
 an eater collects at the meat price, so each step of growth is bought from
-the tank at that price — `MEAT_ENERGY` per unit of mass grown — and rearing
-a body then eating it can never mint energy between them. The old fixed
+the tank at that price — `FLESH_COST` per unit of mass grown — the same
+price a wound is mended at and a parasite is paid, so no living transfer
+mints energy. Carrion is priced apart (`MEAT_ENERGY`, far higher): a kill
+is a meal for several, and what an eater collects beyond the flesh price is
+the grass the animal ate to build and run itself, concentrated. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus
 above the crawl reserve affords, so childhood stretches with scarcity and a
 starving juvenile stops growing before it stops living. Because the mint

@@ -773,7 +773,10 @@ public class TestNPC extends NPC {
 		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
 		double share = h.drainFlesh(consumed / (double) FULL_BODY_HEALTH); // off the living ledger
 		h.damage(PARA_BITE, "parasites");
-		feed(MEAT_ENERGY * h.bodyMass() * share);
+		// Paid at the FLESH price, not the meat price: a parasite's drink is a
+		// transfer from a living body that will mend it at the same price, so the
+		// pair can never mint energy between them. Carrion is priced apart.
+		feed(NPC.FLESH_COST * h.bodyMass() * share);
 		setAction("eating", true);
 	}
 
@@ -3751,20 +3754,20 @@ public class TestNPC extends NPC {
 	// evolution, bounded. Both offspring paths hand the parent's own rate to
 	// Genome.child, which keeps the two ways of being born mutating alike.
 
-	/** What a body of this adult mass costs to build, at exactly the
-	 *  {@link NPC#MEAT_ENERGY} price an eater would collect for it. Birth size
+	/** What a body of this adult mass costs to build, at the
+	 *  {@link NPC#FLESH_COST} price every unit of living flesh is bought at. Birth size
 	 *  carries beginGrowth's floor of 1 and the same rounding
 	 *  {@code bodyMass()} reads, so the matter is priced as it will be weighed. */
 	static double birthBodyCost(double adultMass) {
 		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultMass * NPC.REF_SIZE));
-		return MEAT_ENERGY * birthSize / NPC.REF_SIZE;
+		return NPC.FLESH_COST * birthSize / NPC.REF_SIZE;
 	}
 
 	/**
 	 * What one child of this body costs to raise, from the moment it is born to
 	 * the moment it stops growing: the matter of the body it arrives with, the
 	 * flesh it has to buy to finish growing (new flesh is matter, bought at the
-	 * meat price), the meal it is born digesting, and the resting burn of the
+	 * flesh price), the meal it is born digesting, and the resting burn of the
 	 * whole childhood. Every term is read off the constant that already prices
 	 * that thing, so this is what a childhood actually costs rather than a
 	 * number picked to make one work.
@@ -3782,7 +3785,7 @@ public class TestNPC extends NPC {
 		double m = adultSize / NPC.REF_SIZE;
 		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultSize));
 		double ticks = NPC.growthTicks(adultSize);
-		double flesh = (adultSize - birthSize) * MEAT_ENERGY / NPC.REF_SIZE;
+		double flesh = (adultSize - birthSize) * NPC.FLESH_COST / NPC.REF_SIZE;
 		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.STOMACH * m;
 		double upkeep = NPC.BASE_METABOLISM * Math.pow(m, 0.75) * ticks;
 		double travel = NPC.MOVE_ENERGY * m * speed * speed * ticks;

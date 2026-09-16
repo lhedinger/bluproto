@@ -104,24 +104,38 @@ public abstract class NPC extends Entity {
 	@Unit("of base burn")
 	public static double CAPABILITY_FLOOR = 0.5;
 	/**
-	 * Energy in a whole carcass, per unit of body mass ({@code REF_SIZE} = 1). A
-	 * body is worth what it weighs, so the meal tracks the quarry rather than the
-	 * effort: an animal that takes twice as many bites to bring down is not twice
-	 * as nutritious, it is just slower to eat.
-	 *
-	 * <p>This replaces a flat per-bite payout, under which a mouse and an animal the
-	 * hunter's own size were worth exactly the same (measured: 2.49 either way). That
-	 * pointed selection at the smallest, easiest quarry and left no niche for a large
-	 * hunter — the one corner of the economy where mass did not appear, while
-	 * metabolism, movement and tank capacity all scale with it.
-	 *
-	 * <p>Lives here rather than with the feeding arithmetic because it is the price
-	 * of FLESH, both ways: what an eater collects per unit of body mass, and what a
-	 * metabolic body pays per unit of mass it grows — the same figure, so rearing a
-	 * body and eating it can never mint energy between them.
+	 * What living flesh costs, per unit of body mass ({@code REF_SIZE} = 1): the
+	 * price a metabolic body pays per unit of mass it grows, the price a wound
+	 * that took flesh is mended at, and the price a parasite is paid for the
+	 * flesh it drinks -- one figure on both sides of every living transfer, so
+	 * a host and its parasite, or a body and its own growth, can never mint
+	 * energy between them.
 	 */
 	@Unit("energy per mass")
-	public static double MEAT_ENERGY = 2.5;
+	public static double FLESH_COST = 2.5;
+	/**
+	 * Food value of meat, per unit of carcass mass taken ({@code REF_SIZE} = 1).
+	 * A body is worth what it weighs, so the meal tracks the quarry rather than
+	 * the effort: an animal that takes twice as many bites to bring down is not
+	 * twice as nutritious, it is just slower to eat. This replaces a flat
+	 * per-bite payout, under which a mouse and an animal the hunter's own size
+	 * were worth exactly the same (measured: 2.49 either way).
+	 *
+	 * <p>Deliberately far above {@link #FLESH_COST}. At the flesh price a whole
+	 * reference body was worth 2.5 energy against a stomach of {@link #STOMACH}
+	 * -- a kill was a snack, and a hunter had to kill every few seconds to stay
+	 * fed. A carcass is meant to be a meal for several: this is sized so the
+	 * fresh third of a reference body ({@link #FRESH_SHARE}) holds three
+	 * reference stomachs, {@code 3 x STOMACH / FRESH_SHARE}, which after the
+	 * spoilage every bite hurries and the overflow of each mouth's last bite
+	 * fills two hunters -- and the decayed third two scavengers after them,
+	 * measured ({@code ACarcassIsAMealForSeveral}). The energy an eater collects beyond what
+	 * the flesh cost to grow is the grass the animal ate to build and run
+	 * itself, concentrated; it is not conserved, and the ledger of rearing a
+	 * body then eating it is open by exactly that margin.
+	 */
+	@Unit("energy per mass")
+	public static double MEAT_ENERGY = 81.0;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
@@ -134,7 +148,7 @@ public abstract class NPC extends Entity {
 	 * the largest possible body takes the longest. At {@link Genome#SIZE_MAX}
 	 * (20) the climb from birth size is 13 units, or ~1970 ticks — about one
 	 * minute at 33 ticks/s, the shortest childhood such a body can have. A
-	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
+	 * metabolic grower pays {@link #FLESH_COST} for each step's flesh and slows
 	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
 	@Unit("px radius/tick")
@@ -499,6 +513,11 @@ public abstract class NPC extends Entity {
 	/** The bones: the part of a corpse nobody eats, in body-mass units. */
 	public double bones() {
 		return isDead() ? bodyMass() * (1 - FRESH_SHARE) * (1 - SCAVENGER_SHARE) : 0;
+	}
+
+	/** Mass mouths have taken off this corpse so far, in body-mass units. */
+	public double eatenMass() {
+		return eaten;
 	}
 
 	/** Meat anybody could still eat off this corpse: fresh plus decayed. */
@@ -916,7 +935,7 @@ public abstract class NPC extends Entity {
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
-				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
+				double price = FLESH_COST / REF_SIZE; // energy per pixel grown
 				double spare = energy - CRAWL_RESERVE * energyCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
 				energy -= step * price;
@@ -1020,7 +1039,7 @@ public abstract class NPC extends Entity {
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
 				if (meat < 1.0) {
-					double price = MEAT_ENERGY * bodyMass() / 100.0;
+					double price = FLESH_COST * bodyMass() / 100.0;
 					if (energy >= price) {
 						energy -= price;
 						meat = Math.min(1.0, meat + 0.01);

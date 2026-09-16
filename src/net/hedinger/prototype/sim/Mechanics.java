@@ -362,9 +362,9 @@ public final class Mechanics {
 				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body", ""),
 				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
 						"The well-fed ceiling, not a guarantee."),
-				row("Flesh costs", num(NPC.MEAT_ENERGY) + " × mass grown", "energy",
-						"The price an eater would pay — rearing a body and "
-						+ "eating it can never mint energy between them."),
+				row("Flesh costs", num(NPC.FLESH_COST) + " × mass grown", "energy",
+						"The same price mends a wound and pays a parasite, so no living "
+						+ "transfer mints energy. Carrion is priced apart, and far higher."),
 				row("Childhood", "(1 − " + num(NPC.BIRTH_SIZE_FRACTION) + ") × adult size ÷ "
 						+ num(NPC.GROWTH_RATE), "ticks", "Nominal; also how long "
 						+ "the corpse lasts."));
