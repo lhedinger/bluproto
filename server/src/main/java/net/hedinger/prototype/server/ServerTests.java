@@ -124,7 +124,7 @@ public final class ServerTests {
 		if (corpse == null) {
 			return;
 		}
-		for (String k : java.util.List.of("decay", "meat", "worth", "rotsIn", "mass")) {
+		for (String k : java.util.List.of("decay", "meat", "fresh", "worth", "rotsIn", "mass")) {
 			check("a carcass reports " + k, corpse.get(k) instanceof Number);
 		}
 		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
@@ -141,6 +141,8 @@ public final class ServerTests {
 		double meat = ((Number) corpse.get("meat")).doubleValue();
 		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
 		check("and still has its flesh on it", meat > 0.9 && meat <= 1.0);
+		double fresh = ((Number) corpse.get("fresh")).doubleValue();
+		check("a just-dead body is all fresh meat", fresh > 0.9 && fresh <= 1.0);
 		check("it has ticks left to be eaten in", ((Number) corpse.get("rotsIn")).intValue() > 0);
 		// The one number a scavenger's own scan actually reads, so the panel shows
 		// the same figure the simulation weighs a carcass by rather than a second

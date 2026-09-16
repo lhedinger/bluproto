@@ -427,6 +427,81 @@ public abstract class NPC extends Entity {
 	 */
 	protected double meat = 1.0;
 
+	/**
+	 * Fresh meat still on a corpse, in body-mass units. Full -- the whole body
+	 * -- the instant the animal dies, and the only thing a hunter will eat off
+	 * the dead; a scavenger takes the body whatever this reads. It declines on
+	 * its own, slowly at first and then fast (see {@link #spoil}), and every
+	 * bite taken off the corpse takes fresh meat with it. While any is left the
+	 * body is FRESHLY dead and its decay clock has not started; when it is gone
+	 * the body is DECAYING, and decay runs on its own, time-only clock to the
+	 * point the corpse dissolves. So the freshness window is also the delay
+	 * before rot sets in, and eating during it brings the rot on sooner.
+	 */
+	protected double fresh = 0;
+
+	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
+	 *  About five seconds. A heavier body sits fresh longer, a lighter one less,
+	 *  because the spoilage rate is set by the amount of fresh meat itself and
+	 *  not by the fraction of it: a big carcass has more to turn. */
+	@Unit("ticks")
+	public static int FRESH_TICKS = 165;
+	/** What gets spoilage going on a body with nothing yet spoiled, in mass
+	 *  units of a reference body: the rate is proportional to what has already
+	 *  turned plus this seed, so it starts at a crawl and compounds. */
+	private static final double FRESH_SEED = 0.05;
+
+	/** Fresh meat on this corpse, in body-mass units; 0 for the living and for
+	 *  a body that has turned. */
+	public double freshMeat() {
+		return fresh;
+	}
+
+	/** Fresh meat as a fraction of the body, 0..1, for the inspector. */
+	public double freshLeft() {
+		double m = bodyMass();
+		return m <= 0 ? 0 : Math.max(0, Math.min(1, fresh / m));
+	}
+
+	/**
+	 * One tick of spoilage. The rate depends on the fresh-meat value alone: it is
+	 * proportional to how much of the body has already turned, plus a seed, so a
+	 * just-dead body spoils very slowly and a half-turned one quickly. Solved for
+	 * a reference-mass body it reaches zero at exactly {@link #FRESH_TICKS}; a
+	 * body of mass m takes ln((m + seed)/seed) / ln((1 + seed)/seed) times as
+	 * long -- twice the mass is about a fifth longer, not twice.
+	 */
+	private void spoil() {
+		double k = Math.log((1 + FRESH_SEED) / FRESH_SEED) / Math.max(1, FRESH_TICKS);
+		double gone = Math.max(0, bodyMass() - fresh);
+		fresh -= k * (gone + FRESH_SEED);
+		if (fresh < 1e-9) {
+			fresh = 0;
+		}
+	}
+
+	/** Decay forced forward by hand -- the steward drone's zap -- is a body that far
+	 *  gone, and a body that far gone is not fresh meat. Without this the held
+	 *  clock kept a vaporised remnant lying there for as long as it stayed fresh. */
+	@Override
+	public void decayTo(double progress) {
+		super.decayTo(progress);
+		if (progress > 0) {
+			fresh = 0;
+		}
+	}
+
+	/** Freshly dead: spoiling, and holding the decay clock. Called by the body's
+	 *  dead tick; returns whether the clock is still held after this tick. */
+	@Override
+	protected boolean decayHeld() {
+		if (fresh <= 0) {
+			return false;
+		}
+		spoil();
+		return fresh > 0;
+	}
+
 	/** The flesh still on this body, as a fraction of the whole. */
 	public double meatLeft() {
 		return meat;
@@ -444,14 +519,17 @@ public abstract class NPC extends Entity {
 		if (meat <= 1e-9) {
 			meat = 0;
 		}
-		// Eating does not rot a body. Decay and meat are two different things: decay
-		// is how long the corpse has lain there (and, in time, how wet and warm and
-		// lit the ground is), and at the end of it the body dissolves into the
-		// ground whether or not anything ate it. Meat is the edible part, and a
-		// corpse eaten out still lies there with nothing on it until its time is
-		// up. Eating used to advance the decay clock in step with the flesh, which
-		// folded the two into one number and made a half-eaten fresh kill read as
-		// half-rotted.
+		// A bite off a corpse takes fresh meat with it, in the same mass units, so
+		// eating during the freshness window brings the rot on sooner. It does not
+		// touch the decay clock itself: decay and meat are two different books.
+		// Decay is how long the body has lain there (and, in time, how wet and
+		// warm and lit the ground is), and at the end of it the body dissolves
+		// into the ground whether or not anything ate it. Meat is the edible part,
+		// and a corpse eaten out still lies there with nothing on it until its
+		// time is up.
+		if (isDead() && fresh > 0) {
+			fresh = Math.max(0, fresh - taken * bodyMass());
+		}
 		return taken;
 	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
@@ -1101,7 +1179,10 @@ public abstract class NPC extends Entity {
 	@Override
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
-		age = -1; // the decay clock starts here, from whole, whatever was eaten first
+		if (age >= 0) {
+			fresh = bodyMass(); // freshly dead: the whole body is fresh meat, and the decay clock waits
+		}
+		age = -1;
 	}
 
 	@Override
