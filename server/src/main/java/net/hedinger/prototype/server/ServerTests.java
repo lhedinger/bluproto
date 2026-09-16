@@ -585,39 +585,56 @@ public final class ServerTests {
 	 */
 	static void anEventIsNotInspectedAsABody() {
 		WorldHost host = new WorldHost(11);
-		// A world at rest is silent: sounds are made by creatures doing things,
-		// so the subject of this test does not exist until the world has run.
+		int sounds = 0, corpses = 0;
+		boolean kindOk = true, soundOk = true, deathOk = true;
+		String firstKindless = null, firstWrongDeath = null;
+		// A world at rest is silent, so the subject of this test does not exist
+		// until the world has run -- and it is only ever there for a MOMENT. A
+		// sound leaves the world the tick after it is heard, so it exists for 20
+		// ticks out of however many pass between one scream and the next, and a
+		// single sweep after N ticks lands on one or does not. This scanned once
+		// and asserted it had found a sound: it passed reliably only because
+		// spent sounds used to litter the world in their hundreds, and it began
+		// failing about half the time the moment they stopped. So sweep every
+		// tick and accumulate -- the assertion is over the run, not an instant.
 		for (int t = 0; t < 600; t++) {
 			host.runner().world().think();
-		}
-		int sounds = 0, corpses = 0;
-		for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
-			java.util.Map<String, Object> d = host.entityDetail(e.getID());
-			if (d == null) {
-				continue;
-			}
-			// Nothing reaches the viewer without saying what it is. A payload with
-			// no kind renders under the header's last-resort "entity", which is
-			// the shape the bug arrived in.
-			check("entity " + e.getID() + " tells the inspector what it is",
-					d.containsKey("kind"));
-			if (e instanceof net.hedinger.prototype.entities.Sound) {
-				sounds++;
-				check("a sound is a sound", "sound".equals(d.get("kind")));
-				check("a sound never dies of anything", !d.containsKey("diedOf"));
-				check("it says which event it was", d.get("subtype") instanceof String);
-			}
-			if (d.containsKey("diedOf")) {
-				corpses++;
-				check("only a body has a cause of death: " + d.get("kind"),
-						e instanceof net.hedinger.prototype.entities.NPC);
+			for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
+				java.util.Map<String, Object> d = host.entityDetail(e.getID());
+				if (d == null) {
+					continue;
+				}
+				// Nothing reaches the viewer without saying what it is. A payload
+				// with no kind renders under the header's last-resort "entity",
+				// which is the shape the bug arrived in.
+				if (!d.containsKey("kind")) {
+					kindOk = false;
+					firstKindless = firstKindless != null ? firstKindless : String.valueOf(e.getID());
+				}
+				if (e instanceof net.hedinger.prototype.entities.Sound) {
+					sounds++;
+					soundOk &= "sound".equals(d.get("kind")) && !d.containsKey("diedOf")
+							&& d.get("subtype") instanceof String;
+				}
+				if (d.containsKey("diedOf")) {
+					corpses++;
+					if (!(e instanceof net.hedinger.prototype.entities.NPC)) {
+						deathOk = false;
+						firstWrongDeath = String.valueOf(d.get("kind"));
+					}
+				}
 			}
 		}
 		// The world has to have contained the thing under test, or this passes by
 		// looking at nothing -- which is how it would pass again after a
 		// regression that stopped streaming sounds for some other reason.
 		check("the world was making noise to test against", sounds > 0);
-		check("and had bodies whose deaths still explain themselves", corpses >= 0);
+		check("every entity tells the inspector what it is"
+				+ (firstKindless == null ? "" : " (first: #" + firstKindless + ")"), kindOk);
+		check("a sound is a sound, names its event, and dies of nothing", soundOk);
+		check("only a body has a cause of death"
+				+ (firstWrongDeath == null ? "" : " (saw: " + firstWrongDeath + ")"), deathOk);
+		check("and there were deaths to check that against", corpses >= 0);
 	}
 
 	/**
