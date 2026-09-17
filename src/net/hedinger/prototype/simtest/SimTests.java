@@ -3057,7 +3057,7 @@ public class SimTests {
 			// price of mass, so a childhood is measured in minutes of grazing.
 			int oneMinute = 60 * net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
 			assertGreater("the longest childhood takes minutes (" + large + " ticks)", large, oneMinute);
-			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 6);
+			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 7);
 
 			// Growth is physical, not economic: glycogen is anchored on the adult
 			// body, so a newborn's breeding economy matches a grown one's.
@@ -11168,13 +11168,14 @@ public class SimTests {
 			assertNear("and the bite took no flesh: a wound is not a mouthful", 1.0, bitten.meatLeft(), 1e-9);
 			assertEquals("and the hunter was paid nothing for it -- the meal waits on the kill",
 					0, (long) Math.round(hunter.totalSwallowed() * 1000));
-			// The parasite's drain, by hand: thirty points of health and the flesh
-			// those points represent, off the living ledger.
-			// Ten points: at the one price of mass, thirty hundredths of a body is
-			// more than glycogen holds, and a wound a body cannot afford to mend stays.
-			double flesh = drained.drainFlesh(0.10);
-			drained.damage(10, "parasites");
-			assertNear("the drain took flesh", 0.10, flesh, 1e-9);
+			// The parasite's drain, by hand: six points of health and the flesh
+			// those points represent, off the living ledger. Six and not more
+			// because flesh is bought back at the built price -- the meat price
+			// times what it costs to assemble it -- and a wound a body cannot
+			// afford to mend simply stays open.
+			double flesh = drained.drainFlesh(0.06);
+			drained.damage(6, "parasites");
+			assertNear("the drain took flesh", 0.06, flesh, 1e-9);
 			double bittenBefore = stored(bitten), drainedBefore = stored(drained), controlBefore = stored(control);
 			// Until the wounds have closed, at one point per MEND_PERIOD: measured the
 			// tick they do, before anything else drifts the books.
@@ -11187,10 +11188,10 @@ public class SimTests {
 			double controlSpent = controlBefore - stored(control);
 			double biteCost = (bittenBefore - stored(bitten)) - controlSpent;
 			double drainCost = (drainedBefore - stored(drained)) - controlSpent;
-			double price = NPC.LEAN_DENSITY * drained.leanMass() * flesh;
+			double price = NPC.SYNTHESIS_COST * NPC.LEAN_DENSITY * drained.leanMass() * flesh;
 			assertNear("a wound that took no flesh closed for free (" + String.format("%.3f", biteCost) + ")",
 					0, biteCost, 0.15 * price + 0.02);
-			assertNear("mending the drain cost the meat price of the flesh (" + String.format("%.2f", drainCost)
+			assertNear("mending the drain cost the built price of the flesh (" + String.format("%.2f", drainCost)
 					+ " against a price of " + String.format("%.2f", price) + ")", price, drainCost, 0.15 * price + 0.02);
 			assertNear("and the flesh is back on the body", 1.0, drained.meatLeft(), 0.01);
 		}
@@ -11419,10 +11420,17 @@ public class SimTests {
 			double minted = grower.getHunger() * NPC.GUT_PER_MASS * (16.0 / NPC.REF_SIZE);
 			double flesh = NPC.LEAN_DENSITY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
+			double spent = e0 + minted - grower.getGlycogen();
 			assertGreater("and the flesh was paid for out of the books ("
-					+ String.format("%.2f", e0 + minted - grower.getGlycogen())
+					+ String.format("%.2f", spent)
 					+ " spent, flesh worth " + String.format("%.2f", flesh) + ")",
-					e0 + minted - grower.getGlycogen(), flesh - 1e-6);
+					spent, flesh - 1e-6);
+			// And paid for at the BUILT price, not at what the flesh will hold:
+			// assembling tissue is work, and the difference leaves as heat. That
+			// is what makes a round trip through a body a loss rather than a wash.
+			assertGreater("at the built price, not the meat price ("
+					+ String.format("%.2f spent against %.2f built", spent, NPC.SYNTHESIS_COST * flesh) + ")",
+					spent, NPC.SYNTHESIS_COST * flesh - 1e-6);
 
 			// 2) The appetite: the growing body drained far more of its gut
 			// than the same-size grown body beside it — and is the hungrier.

@@ -303,9 +303,12 @@ knobs, and in life fat carries about six times what wet muscle does.
   continuously rather than only at death, and a herd enriches the range it
   works instead of stripping it.
 - **The trophic loss is now a mechanism, not a constant.** Building a unit of
-  lean tissue costs `LEAN_DENSITY` out of glycogen and eating that same unit
-  returns `LEAN_DENSITY · 0.85`, so no round trip through a body can break
-  even and each level of the chain keeps less than the one below it.
+  lean tissue costs `SYNTHESIS_COST · LEAN_DENSITY` out of glycogen —
+  assembling tissue is work, and the overhead leaves as heat — while eating
+  that same unit returns `FLESH_ASSIMILATION · LEAN_DENSITY`. A round trip
+  through a body therefore returns about 0.85/1.35, near two units in three,
+  so no level of the chain can break even against the one below it and
+  conservation is an inequality rather than a knife-edge equality.
 
 - **A carcass is worth what it weighs, and a body is not all meat.** Health is
   a flat 100 on every body, so the *meal* has to carry the size instead. At death

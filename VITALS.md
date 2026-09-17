@@ -317,9 +317,11 @@ with no clade rule saying so. What does not cross is egesta: it drops where
 the animal fed and fertilises that tile at `EGESTA_FERTILITY`, the same worth
 per unit of matter a rotting body returns, so nutrients cycle while animals
 are alive and not only when they die. Conservation stops being an equality
-and becomes an inequality: building a unit of tissue costs `LEAN_DENSITY` and
-eating it back returns 0.85 of that, so no round trip through a body breaks
-even. It is sized so a
+and becomes an inequality at both ends: building a unit of tissue costs
+`SYNTHESIS_COST` (1.35) times `LEAN_DENSITY`, because assembling it is work
+and the overhead leaves as heat, and eating it back returns 0.85 of
+`LEAN_DENSITY`. A round trip through a body returns about two units in three,
+so nothing that grows and is eaten breaks even. It is sized so a
 body is worth gut-fills rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
 for it in minutes. A fed adult with full glycogen lays what it cannot use down
