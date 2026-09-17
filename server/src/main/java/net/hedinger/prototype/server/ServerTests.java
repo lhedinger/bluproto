@@ -521,9 +521,18 @@ public final class ServerTests {
 		// the day an unrelated change shifted the stream and the interval came
 		// out quiet. Killing one body ourselves makes the died-flow (and, read
 		// backwards, the born-flow) a certainty instead of a bet.
+		//
+		// It has to be a body the EARLIER stage knows: a died-flow is an id in
+		// `a` that is not in `b`, so killing something born during the interval
+		// is a death nobody can see, and the certainty goes back to being a bet.
+		java.util.Set<Integer> beforeIds = new java.util.HashSet<Integer>();
+		for (int id : a.ids()) {
+			beforeIds.add(id);
+		}
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
-					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null) {
+					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null
+					&& beforeIds.contains(e.getID())) {
 				t.kill();
 				break;
 			}
