@@ -292,14 +292,14 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
   fat, what a wound is mended at, what a parasite is paid, and what every
   mouth at a carcass is paid. Nothing in the chain can mint: a body is worth
   exactly what was put into it, and everything anyone eats was bought with
-  grass by someone. It is sized so a reference frame is three stomachs
+  grass by someone. It is sized so a reference lean mass is three stomachs
   (`3 · STOMACH`), so the fresh third of a lean medium corpse fills one
   same-size hunter. **Fat is the body's store**: a fed body with full glycogen
-  lays what it cannot use down as mass, up to `FAT_CAP` of its frame, and
+  lays what it cannot use down as mass, up to `FAT_CAP` of its lean mass, and
   draws it back into the stomach before starvation can bite. Fat is carried
   on every step and it is on the carcass, half fresh and half decayed, so a
   long fed life leaves a rich body and a starved one leaves bones. The same
-  price is what growing up costs -- a child buys two thirds of its frame out
+  price is what growing up costs -- a child buys two thirds of its lean mass out
   of what it eats -- which is why grazing and digestion are paced to pay for
   it in minutes. A bite on a *living* animal is a wound and
   nothing else: the hunter is paid nothing until its quarry is dead. Fresh meat

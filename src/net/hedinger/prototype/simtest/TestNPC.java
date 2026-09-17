@@ -274,7 +274,7 @@ public class TestNPC extends NPC {
 	 *  sated body has no appetite at all — graze() additionally bounds every
 	 *  bite by the stomach room left, so nothing strips ground it can't digest. */
 	private double grazeDemand() {
-		return hunger <= 0 ? 0 : GRAZE_DEMAND * bodyMass();
+		return hunger <= 0 ? 0 : GRAZE_DEMAND * leanMass();
 	}
 	/** Eco herbivore: flees any predator within this radius (tiles). */
 	private static final double THREAT_R = 6.0;
@@ -775,7 +775,7 @@ public class TestNPC extends NPC {
 		h.damage(PARA_BITE, "parasites");
 		// At the one price of mass: the host mends what was drunk at the same
 		// price, so the pair can never mint energy between them.
-		feed(MEAT_ENERGY * h.bodyMass() * share);
+		feed(MEAT_ENERGY * h.leanMass() * share);
 		setAction("eating", true);
 	}
 
@@ -1042,14 +1042,14 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
-	/** Carrying this much fat, in body-mass units (clamped to what the frame
+	/** Carrying this much fat, in body-mass units (clamped to what the body
 	 *  can hold). */
 	public TestNPC withFat(double mass) {
 		fat = Math.max(0, Math.min(fatCap(), mass));
 		return this;
 	}
 
-	/** As fat as its frame can carry: a body that has lived well. */
+	/** As fat as the body can carry: a body that has lived well. */
 	public TestNPC fattened() {
 		return withFat(fatCap());
 	}
@@ -1516,7 +1516,7 @@ public class TestNPC extends NPC {
 			boolean fatal = prey.isDead() || prey.getHealth() <= 0;
 			getWorld().spawnEntity(new net.hedinger.prototype.entities.Sound(
 					prey.getX(), prey.getY(), prey.getLvl(),
-					KILL_LOUDNESS * prey.bodyMass(),
+					KILL_LOUDNESS * prey.leanMass(),
 					fatal ? net.hedinger.prototype.entities.Sound.KILL
 							: net.hedinger.prototype.entities.Sound.FIGHT));
 		}
@@ -1761,7 +1761,7 @@ public class TestNPC extends NPC {
 		double dist = distance(n.getX(), n.getY(), n.getZ());
 		switch (preyWanted()) {
 		case AgentIO.PREY_BIGGEST:
-			return prize(n.bodyMass(), dist);
+			return prize(n.leanMass(), dist);
 		case AgentIO.PREY_WEAKEST: {
 			double left = Math.max(1, Math.ceil(Math.max(1, n.getHealth())
 					/ (double) biteDamage(n)));
@@ -1769,7 +1769,7 @@ public class TestNPC extends NPC {
 		}
 		case AgentIO.PREY_EASIEST: {
 			double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
-			return prize(n.bodyMass() / bites, dist);
+			return prize(n.leanMass() / bites, dist);
 		}
 		default:
 			return prize(1.0, dist);
@@ -3615,7 +3615,7 @@ public class TestNPC extends NPC {
 
 	/** True once a metabolic creature has everything eating can give it: the
 	 *  glycogen past its breeding line, a stomach full enough to lay fat down from,
-	 *  and all the fat its frame can carry -- so more grazing would only strip
+	 *  and all the fat the body can carry -- so more grazing would only strip
 	 *  the pasture. Below any of those it grazes on; at all of them it moves on.
 	 *  It used to be glycogen alone, and a body whose children are built out of
 	 *  fat then stopped eating with full glycogen and never bred again.
@@ -3771,7 +3771,7 @@ public class TestNPC extends NPC {
 	/** What a body of this adult mass costs to build, at the
 	 *  {@link NPC#MEAT_ENERGY} price every unit of mass is bought at. Birth size
 	 *  carries beginGrowth's floor of 1 and the same rounding
-	 *  {@code bodyMass()} reads, so the matter is priced as it will be weighed. */
+	 *  {@code leanMass()} reads, so the matter is priced as it will be weighed. */
 	static double birthBodyCost(double adultMass) {
 		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultMass * NPC.REF_SIZE));
 		return MEAT_ENERGY * birthSize / NPC.REF_SIZE;
@@ -3875,7 +3875,7 @@ public class TestNPC extends NPC {
 		}
 		// The body first: matter, out of fat, from each parent in proportion to
 		// the fat it holds -- so a lean parent can pair with a fat one and the
-		// child is still whole. The frame is never touched: nobody dies of it.
+		// child is still whole. The lean mass is never touched: nobody dies of it.
 		double mass = NPC.birthMass(kid.getGenome().size);
 		double myFat = fat, theirFat = partner == null ? 0 : partner.fat();
 		double pooled = myFat + theirFat;
