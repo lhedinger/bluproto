@@ -3473,10 +3473,10 @@ public class TestNPC extends NPC {
 		// ledger, so what a hunter already ate is not paid again, and a carcass
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
-		double mass = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
-		ingest(mass * LEAN_DENSITY, FLESH_ASSIMILATION); // meat -> gut; satiation powers the body
+		Mouthful bite = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
+		ingest(bite.energy(), FLESH_ASSIMILATION); // meat -> gut; satiation powers the body
 		setAction("eating", true);
-		return mass;
+		return bite.mass();
 	}
 
 	/**

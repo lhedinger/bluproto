@@ -166,8 +166,18 @@ public final class ServerTests {
 		// the same figure the simulation weighs a carcass by rather than a second
 		// version of it computed in the viewer.
 		double worth = ((Number) corpse.get("worth")).doubleValue();
-		check("its worth is the meat price of the edible meat still on it",
-				Math.abs(worth - net.hedinger.prototype.entities.NPC.LEAN_DENSITY * wholeMass * meat) < 0.03);
+		// A carcass is a mixture of lean and fat, and how much of each is on this
+		// one is not on the wire, so the check is that the figure is the meat
+		// still on it priced as SOME mixture of the two -- and `meat` arrives
+		// rounded to two places, hence the slack.
+		double edible = wholeMass * meat;
+		double lean = Math.min(net.hedinger.prototype.entities.NPC.LEAN_DENSITY,
+				net.hedinger.prototype.entities.NPC.FAT_DENSITY) * edible;
+		double rich = Math.max(net.hedinger.prototype.entities.NPC.LEAN_DENSITY,
+				net.hedinger.prototype.entities.NPC.FAT_DENSITY) * edible;
+		check("its worth is the meat still on it, priced as the mixture it is ("
+				+ worth + " in " + lean + ".." + rich + ")",
+				worth >= lean - 0.01 * rich - 0.01 && worth <= rich + 0.01 * rich + 0.01);
 	}
 
 	/**

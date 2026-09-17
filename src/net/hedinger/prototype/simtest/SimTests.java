@@ -553,9 +553,9 @@ public class SimTests {
 
 			// A hunter's mouthful off a turned body takes nothing: decayed meat is not
 			// its food, whatever it reaches for. A scavenger's, by hand, takes it.
-			assertNear("a hunter's mouthful off a turned body takes nothing", 0, bitten.eatCarrion(0.2 * mass, true), 1e-12);
+			assertNear("a hunter's mouthful off a turned body takes nothing", 0, bitten.eatCarrion(0.2 * mass, true).mass(), 1e-12);
 			assertNear("and leaves the meat as it was", d0, bitten.decayedMeat(), 1e-9);
-			double bite = bitten.eatCarrion(0.2 * mass, false);
+			double bite = bitten.eatCarrion(0.2 * mass, false).mass();
 			assertNear("the bite came off the decayed meat", 0.2 * mass, bite, 1e-9);
 			assertNear("and left that much less", d0 - bite, bitten.decayedMeat(), 1e-9);
 			assertNear("without moving the clock", whole.decayProgress(), bitten.decayProgress(), 1e-9);
@@ -830,6 +830,40 @@ public class SimTests {
 			assertNear("and the bones come off the lean mass alone: fat has none",
 					(1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE) * structure, rich.bones(), 1e-9);
 
+			// --- and the carcass prices that fat AS fat. The two densities are
+			// equal today, so only moving one of them can say which material the
+			// mixture on the body is being charged at: make fat twice as rich and
+			// the same carcass is worth the fat on it over again, no more.
+			double asIs = rich.carrionWorth();
+			double plainFat = NPC.FAT_DENSITY;
+			double dearer;
+			try {
+				NPC.FAT_DENSITY = 2 * plainFat;
+				dearer = rich.carrionWorth();
+			} finally {
+				NPC.FAT_DENSITY = plainFat;
+			}
+			assertNear("a carcass prices the fat in its meat as fat",
+					asIs + plainFat * stored, dearer, 0.01);
+			assertNear("and a body with no fat on it does not move at all",
+					0, richerBy(TestNPC.grazer(6.5, 5.5, 0, body()).grown(), b), 1e-9);
+			// And a mouth is paid that same mixture, not the mass at one price:
+			// under a fat price that is not lean's, swallowing a whole fat body
+			// must pay exactly what the body is worth.
+			try {
+				NPC.FAT_DENSITY = 2 * plainFat;
+				TestNPC whole = TestNPC.grazer(2.5, 5.5, 0, body()).grown().fattened();
+				b.spawnEntity(whole);
+				tick(b, 1);
+				whole.kill();
+				tick(b, 1);
+				assertNear("a mouth is paid the meat it took, priced as the mixture it was",
+						whole.carrionWorth(),
+						whole.eatCarrion(whole.carcassMass(), false).energy(), 1e-9);
+			} finally {
+				NPC.FAT_DENSITY = plainFat;
+			}
+
 			// --- and fat is priced at fat's own density, not at lean tissue's.
 			// The two constants are equal today, so nothing but this can tell
 			// which one the store is wired to: make fat twice as rich and the
@@ -839,6 +873,23 @@ public class SimTests {
 			assertGreater("a fasting body spends fat at all", plain, 0.01);
 			assertNear("twice the density, half the mass spent for the same living",
 					plain / 2, dense, 0.1 * plain);
+		}
+
+		/** How much dearer {@code lean}'s carcass reads with fat priced at twice
+		 *  its density: nothing at all, for a body that carries none. */
+		private double richerBy(TestNPC body, World w) {
+			w.spawnEntity(body);
+			tick(w, 1);
+			body.kill();
+			tick(w, 1);
+			double asIs = body.carrionWorth();
+			double was = NPC.FAT_DENSITY;
+			try {
+				NPC.FAT_DENSITY = 2 * was;
+				return body.carrionWorth() - asIs;
+			} finally {
+				NPC.FAT_DENSITY = was;
+			}
 		}
 
 		/** Fat mass a fattened body burns over a fixed fast on barren ground,

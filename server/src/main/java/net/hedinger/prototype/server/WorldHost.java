@@ -710,8 +710,7 @@ final class WorldHost {
 					d.put("fresh", round(n.freshLeft())); // the hunter's share of it; decay waits on this
 					d.put("decayed", round(n.decayedLeft())); // the scavenger's, rotting on the clock
 					d.put("bones", round(n.carcassMass() <= 0 ? 0 : n.bones() / n.carcassMass()));
-					d.put("worth", round(net.hedinger.prototype.entities.NPC.LEAN_DENSITY
-							* n.edibleMass()));
+					d.put("worth", round(n.carrionWorth()));
 					// Ticks of decay left once it starts; the clock holds while fresh meat
 					// remains, so a fresh body reads its whole span here.
 					d.put("rotsIn", Math.max(0, n.getDeathspan() + n.getAge()));

@@ -326,7 +326,11 @@ knobs, and in life fat carries about six times what wet muscle does.
   lays what it cannot use down as mass, up to `FAT_CAP` of its lean mass, and
   draws it back into the gut before starvation can bite. Fat is carried
   on every step and it is on the carcass, half fresh and half decayed, so a
-  long fed life leaves a rich body and a starved one leaves bones. The same
+  long fed life leaves a rich body and a starved one leaves bones. Each pool
+  remembers how much of it is fat, so a mouthful off a carcass is priced as
+  the mixture it came from -- lean at `LEAN_DENSITY`, fat at `FAT_DENSITY` --
+  and a fat body is a better meal than a lean one of the same weight without
+  any rule saying so. The same
   price is what growing up costs -- a child buys two thirds of its lean mass out
   of what it eats -- which is why grazing and digestion are paced to pay for
   it in minutes. A bite on a *living* animal is a wound and
