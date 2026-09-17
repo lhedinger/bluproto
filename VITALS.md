@@ -27,12 +27,12 @@ The premises, fixed up front:
 
 | attribute | gene | role |
 |---|---|---|
-| **mass** `m` | `Genome.size` (normalised: reference body = 1.0) | scales every **capacity** — stomach, water reserve, energy tank, meal size, offspring cost — linearly |
+| **mass** `m` | `Genome.size` (normalised: reference body = 1.0) | scales every **capacity** — stomach, water reserve, glycogen store, meal size, offspring cost — linearly |
 | **metabolic rate** `R` | `Genome.metabolism` (neutral = 1.0) | scales every **rate** — need rise, intake speed, energy regeneration, healing — as `R · m^0.75` (Kleiber, as today) |
 
 Because capacities grow with `m` but rates only with `m^0.75`, a big body's
 needs rise **slower** per unit of reserve — large animals fast longer between
-meals but need bigger meals — exactly the story the current energy tank tells,
+meals but need bigger meals — exactly the story the current glycogen store tells,
 now applied uniformly to all four books.
 
 `R` is the **pace-of-life gene**. A hot metabolism runs everything faster:
@@ -71,8 +71,8 @@ Invariants worth stating baldly:
                         │    mass m           metabolism R   │
                         └──────┬────────────────────┬────────┘
               capacities ∝ m   │                    │   rates ∝ R · m^0.75
-      (stomach, water, energy  │                    │   (need rise, intake,
-       tank, offspring cost)   ▼                    ▼    regen, healing)
+      (stomach, water,         │                    │   (need rise, intake,
+       glycogen, offspring)    ▼                    ▼    regen, healing)
              ┌───────────────────────────────────────────────┐
   eating ──▶ │            NEEDS  (rise with time)            │ ◀── drinking
   (timed,    │     HUNGER (period 2T)     THIRST (period T)  │     (timed,
@@ -167,7 +167,7 @@ Reproduction stops being an energy checkout and becomes a **surplus signal**:
 - **Eligibility**: energy above a threshold `∝ m`, **and** hunger < 0.5,
   **and** thirst < 0.5, **and** health above a floor. A parched, starving or
   badly wounded body does not court — which is what couples reproduction to
-  the whole vitals loop instead of just the tank.
+  the whole vitals loop instead of just glycogen.
 - **The act takes time** (§4) and pays its energy cost `∝ m` on completion.
 - **Cooldown scales with mass**: today's flat 100 ticks (~3 s) becomes a
   fraction of the childhood the offspring itself will spend growing
@@ -178,14 +178,14 @@ Reproduction stops being an energy checkout and becomes a **surplus signal**:
 
 | today | target |
 |---|---|
-| `graze()` feeds the energy tank directly | eating lowers **hunger**; energy regenerates from satiation over time |
+| `graze()` feeds the glycogen store directly | eating lowers **hunger**; energy regenerates from satiation over time |
 | `energy <= 0` kills instantly (`"starvation"`) | energy 0 = collapse (no meaningful action); **only health 0 kills**, deprivation erodes health with its cause attached |
 | `hydration` a bolt-on 0..1 with its own drain | **thirst**, a first-class need, sibling of hunger, twice hunger's rate |
-| no hunger stat — appetite is "tank not full" | **hunger**, a first-class need; predators eat by appetite, not by tank headroom |
+| no hunger stat — appetite is "glycogen not full" | **hunger**, a first-class need; predators eat by appetite, not by glycogen headroom |
 | health = 100, wounds only, never recovers | health mends slowly under low needs; erodes under pegged needs; scales energy regen (vigor) |
 | repro: threshold 2.0, cost 1.0, cooldown 100 ticks | threshold/cost `∝ m`; timed act; low-needs + health gates; cooldown `∝ growthTicks` |
 | `Genome.metabolism` scales the resting burn only | scales **every** rate: need rise, intake, regen, healing — one pace-of-life gene |
-| minds sense `energy`, `thirst`, `health` | add `S_HUNGER`; seeded reflexes forage on hunger and drink on thirst, not on the tank |
+| minds sense `glycogen`, `thirst`, `health` | add `S_HUNGER`; seeded reflexes forage on hunger and drink on thirst, not on glycogen |
 
 Deliberately **unchanged**: Kleiber `m^0.75` scaling, movement priced at
 `m·v²`, growth (`GROWTH_RATE`, birth fraction), the nutrient ledger (what is
@@ -207,7 +207,7 @@ the periods are named constants rather than folded into magic drain values.
 All five went as proposed, and are now what the code does:
 
 1. **Satiation gate**: `1 − max(hunger, thirst)` — the worse need governs.
-2. **Collapse**: a crawl reserve (5% of the tank, `CRAWL_RESERVE`): below it
+2. **Collapse**: a crawl reserve (5% of glycogen, `CRAWL_RESERVE`): below it
    the body can only crawl at a quarter of its top speed — it cannot bite,
    grab, breed, or keep a grip (a collapsed captor's captive walks free) —
    but it can still reach food two tiles away and recover.
@@ -227,7 +227,7 @@ All five went as proposed, and are now what the code does:
 The model above regenerated energy from the *state* of being fed: satiation
 gated the mint, but nothing drained the stomach as energy was minted. The
 constants made the exchange rate `REGEN · T_hunger / stomach = 12` — twelve
-units of tank energy per unit of food actually eaten — and the herd found the
+units of glycogen per unit of food actually eaten — and the herd found the
 seam. Selection drove metabolism to triple the reference (net income scales
 linearly with `R`), collapsed mate choice, drifted lineages toward budding,
 and the population exploded on land it had visibly stripped, because a
@@ -236,9 +236,9 @@ breeding's worth of energy cost a third of a vegetation unit of real grass.
 The repair is one mechanism and one identity:
 
 - **The mint drains the meal.** Every unit of energy regeneration adds
-  `minted / stomach` to hunger, so the tank can never bank more than the body
-  ate. Conversion that would overflow a full tank does not run (a sated body
-  does not burn its meal for nothing). Food, stomach and tank are now one
+  `minted / stomach` to hunger, so glycogen can never bank more than the body
+  ate. Conversion that would overflow full glycogen does not run (a sated body
+  does not burn its meal for nothing). Food, stomach and glycogen are now one
   conserved ledger; grass prices what it says.
 - **Hunger needs no clock.** With the drain in place the resting burn alone
   empties a stomach, so the old timed rise became a redundant proxy and was
@@ -255,16 +255,16 @@ food supply; and reproduction is bounded by grazing income rather than by
 the cooldown alone. Pinned by the `EnergyIsFoodBacked` scenario, which fails
 against the satiation-state mint on both counts.
 
-**Birth conserves too.** Once food backs the tank, birth becomes the last
-door for free energy, and it had three: a bud arrived holding 0.6 of a tank
+**Birth conserves too.** Once food backs glycogen, birth becomes the last
+door for free energy, and it had three: a bud arrived holding 0.6 of a store
 its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
 full stomach of mintable food. A newborn is now worth exactly what its
 parents lost. **Its body is matter, and comes out of the parents' fat**: the
 birth mass (`BIRTH_SIZE_FRACTION` of the child's adult frame) is taken from
 each parent's fat in proportion to what it holds, never from the frame, so no
 parent can die of giving birth and a lean one cannot breed at all. Its books
-— the meal it is born digesting and its tank — come out of the parents'
-tanks and stomachs, per parent share for a sexual pair. A founder's energy
+— the meal it is born digesting and its glycogen — come out of the parents'
+stores and stomachs, per parent share for a sexual pair. A founder's energy
 price is the child's living for a nominal childhood (meal, resting burn,
 travel at top pace), not its growth: a child buys its own flesh out of what
 it eats. The audit is the cannibal round trip: a parent eating its just-born
@@ -287,12 +287,12 @@ noticing what it means.
 
 **Growth is paid for too.** The flesh a juvenile puts on is the same matter
 an eater collects at the meat price, so each step of growth is bought from
-the tank at that price — `MEAT_ENERGY` per unit of mass grown — the one
+glycogen at that price — `MEAT_ENERGY` per unit of mass grown — the one
 price of mass, which also mends a wound, pays a parasite and pays every
 mouth at a carcass, so nothing in the chain mints energy. It is sized so a
 body is worth stomachs rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
-for it in minutes. A fed adult with a full tank lays what it cannot use down
+for it in minutes. A fed adult with full glycogen lays what it cannot use down
 as fat, mass on top of the frame, and draws it back into the stomach before
 starvation can bite — the store a long fed life leaves on the carcass. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus

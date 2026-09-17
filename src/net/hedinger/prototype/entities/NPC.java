@@ -38,19 +38,19 @@ public abstract class NPC extends Entity {
 	// tick, and an entity that hits zero starves. Real species leave `metabolic`
 	// false, so their behaviour and determinism are untouched.
 	protected boolean metabolic = false;
-	protected double energy = 1.0;
+	protected double glycogen = 1.0;
 	// Movement has no separate "gear": a creature simply chooses how fast to go
 	// (its throttle, or a behaviour's chosen speed) and the movement cost below
 	// prices that choice continuously. There is no sprint flag and no surcharge.
 
 	// --- size-scaled energy model --------------------------------------------
 	// Everything scales off a body-size factor, normalised so a reference-size
-	// creature is 1.0. The reserve (the "fully fed" tank) grows in proportion to
+	// creature is 1.0. The reserve (glycogen, "fully fed") grows in proportion to
 	// size, while the resting burn grows only with size^0.75 (Kleiber: a big body
 	// burns more in absolute terms but less per unit mass). So a big creature's
-	// bigger tank outlasts a small one's — large animals fast longer between meals
+	// bigger store outlasts a small one's — large animals fast longer between meals
 	// — yet still need bigger meals to top up. Anchored so a reference creature
-	// lasts a few minutes on a full tank.
+	// lasts a few minutes on full glycogen.
 	/**
 	 * One day of world time, in ticks: the world's one clock. Every biological
 	 * duration in the simulation is a multiple of it, and the energy unit is
@@ -86,11 +86,11 @@ public abstract class NPC extends Entity {
 	public static final double REF_SIZE = 8.0;
 	/** Full energy reserve of a reference-size creature ("fully fed"). */
 	@Unit("energy at mass 1")
-	public static double BASE_CAPACITY = 6.0;
+	public static double GLYCOGEN_PER_MASS = 6.0;
 	/** Resting energy/tick a reference-size creature burns — one energy unit
 	 *  per {@link #DAY}, which is what makes the energy unit a day of lying
 	 *  still. Every store can therefore be read as a fasting time straight off
-	 *  its energy: {@link #BASE_CAPACITY} of 6 is six days of lying still. */
+	 *  its energy: {@link #GLYCOGEN_PER_MASS} of 6 is six days of lying still. */
 	@Unit("energy/tick at mass 1")
 	public static double BASE_METABOLISM = 1.0 / DAY;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
@@ -184,7 +184,7 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * Starts this body as a juvenile that will grow into {@code adult}. The
-	 * size-derived economy (tank, burn, collision reach, what can eat it) follows
+	 * size-derived economy (glycogen, burn, collision reach, what can eat it) follows
 	 * the CURRENT body, so a juvenile is genuinely small: cheaper to run, but a
 	 * smaller reserve and easy prey.
 	 */
@@ -350,55 +350,55 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
-	 * "Fully fed" energy ceiling: the tank grows with size, so a big body banks
+	 * "Fully fed" glycogen ceiling: the store grows with size, so a big body banks
 	 * more and can go longer between meals (but needs more food to top up).
 	 *
 	 * <p>Anchored on the ADULT body, deliberately. Growth is a physical change —
 	 * how much a body burns, how far it reaches, what can eat it — and pinning the
-	 * tank to the grown body keeps the whole reproduction economy (born-fed level,
+	 * the store to the grown body keeps the whole reproduction economy (born-fed level,
 	 * breeding threshold, breeding cost, and a hunter's "sated" line, all of which
-	 * are fractions of this) identical to what it was before creatures grew. A
-	 * juvenile-sized tank would instead have silently re-gated breeding on maturity
+	 * are fractions of this) identical to what it was before creatures grew.
+	 * A juvenile-sized store would instead have silently re-gated breeding on maturity
 	 * and left young hunters unable ever to count as sated.
 	 */
-	public double energyCapacity() {
-		return BASE_CAPACITY * adultMass();
+	public double glycogenCapacity() {
+		return GLYCOGEN_PER_MASS * adultMass();
 	}
 
 	/** What this body's lineage asks per offspring — its
-	 *  {@link Genome#reproCostFraction} of the (size-scaled) tank, so the price
+	 *  {@link Genome#reproCostFraction} of the (size-scaled) glycogen, so the price
 	 *  is a property of the body and the lineage rather than of how full the
 	 *  gut happens to be this tick. What BACKS the price is both books (see
-	 *  {@link #reserves()}): a parent with an empty tank and a full stomach can
+	 *  {@link #reserves()}): a parent with empty glycogen and a full stomach can
 	 *  still afford a child, and pays for it out of the meal. Public because
 	 *  birth conservation is audited against it. What is actually handed over
 	 *  is {@link #birthPayment()}. */
 	public double reproCost() {
-		return genome != null ? genome.reproCostFraction * energyCapacity() : reproCost;
+		return genome != null ? genome.reproCostFraction * glycogenCapacity() : reproCost;
 	}
 
 	/** Food energy still undigested in the stomach: the complement of
 	 *  {@link #stomachRoom()}, in the same units {@link #feed} consumes. Held
-	 *  wealth exactly as the tank is — it is what the mint runs on — so a birth
+	 *  wealth exactly as glycogen is — it is what the mint runs on — so a birth
 	 *  draws on it too. */
 	public double stomachEnergy() {
 		return (1 - hunger) * STOMACH * adultMass();
 	}
 
 	/** Everything this body holds that a child can be made out of: the banked
-	 *  tank plus the undigested food in the stomach, both already in energy
+	 *  glycogen plus the undigested food in the stomach, both already in energy
 	 *  units. The two books a birth debits, and the two a newborn is opened
 	 *  with — which is what makes the transaction conserve. */
 	public double reserves() {
-		return Math.max(0, energy) + stomachEnergy();
+		return Math.max(0, glycogen) + stomachEnergy();
 	}
 
 	/**
 	 * What this body actually hands over for a child right now: its lineage's
 	 * price, or everything it holds if that is less. The breeding gate is the
-	 * line ({@code reproFraction} of the tank), and the price is a second gene
+	 * line ({@code reproFraction} of glycogen), and the price is a second gene
 	 * that can drift above it; a parent whose price is above its line used to
-	 * pay the full price out of a tank that did not hold it, go negative, and
+	 * pay the full price out of glycogen that did not hold it, go negative, and
 	 * be clamped back to zero next tick -- and its child was endowed from the
 	 * whole of it. Measured: a parent holding 3.6 paid 8.1, and 4.5 energy was
 	 * minted at the birth. The child is opened from this, so what it is born
@@ -410,7 +410,7 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * Takes {@code amount} out of this body's books for a birth and returns
-	 * what was actually taken. Drawn proportionally from the tank and the
+	 * what was actually taken. Drawn proportionally from glycogen and the
 	 * stomach, so neither book is a loophole: a parent cannot shelter a birth
 	 * behind a full gut, and paying does not selectively empty the reserve the
 	 * body needs to keep moving. Never takes more than is there.
@@ -421,14 +421,14 @@ public abstract class NPC extends Entity {
 			return 0;
 		}
 		double share = Math.min(1.0, amount / held);
-		double fromTank = Math.max(0, energy) * share;
+		double fromGlycogen = Math.max(0, glycogen) * share;
 		double fromGut = stomachEnergy() * share;
-		energy = Math.max(0, energy) - fromTank;
+		glycogen = Math.max(0, glycogen) - fromGlycogen;
 		double stomach = STOMACH * adultMass();
 		if (stomach > 0) {
 			hunger = Math.min(1.0, hunger + fromGut / stomach);
 		}
-		return fromTank + fromGut;
+		return fromGlycogen + fromGut;
 	}
 
 	/**
@@ -447,7 +447,7 @@ public abstract class NPC extends Entity {
 		}
 	}
 	/** The energy this body must bank before it breeds — its lineage's
-	 *  {@link Genome#reproFraction} of the tank (a probe for the scenario suite). */
+	 *  {@link Genome#reproFraction} of glycogen (a probe for the scenario suite). */
 	public double reproThreshold() {
 		return reproThreshold;
 	}
@@ -510,8 +510,8 @@ public abstract class NPC extends Entity {
 	protected double carcassMass = 0;
 
 	/*
-	 * Fat is the body's store. A fed body with a full tank keeps digesting, and
-	 * what the tank cannot take is laid down as mass at MEAT_ENERGY; a body whose
+	 * Fat is the body's store. A fed body with full glycogen keeps digesting, and
+	 * what glycogen cannot take is laid down as mass at MEAT_ENERGY; a body whose
 	 * stomach has run empty draws that mass back into the stomach at the same
 	 * price, so fat is spent before health is. Both moves run at the body's
 	 * digestion rate. Fat is real mass: it is carried (and paid for) on every
@@ -521,17 +521,17 @@ public abstract class NPC extends Entity {
 	 */
 	/** Mass of fat on this body, in body-mass units, on top of the frame. */
 	protected double fat = 0;
-	/** Growth spends only the tank above this share of it: a juvenile that grew
+	/** Growth spends only the glycogen above this share of the store: a juvenile that grew
 	 *  itself down to the crawl reserve could not exert, and a young hunter or
 	 *  parasite that cannot bite cannot eat its way back up. Growth is bought
 	 *  from surplus, never from the last of the reserve. */
-	@Unit("of the tank")
+	@Unit("of glycogen")
 	public static double GROWTH_RESERVE = 0.25;
 	/** How much fat a body can carry, as a share of its frame. */
 	@Unit("of frame mass")
 	public static double FAT_CAP = 0.5;
 	/** A body lays down fat only while its stomach is fuller than this and its
-	 *  tank is full: fat is what is left over once everything else is paid. */
+	 *  glycogen is full: fat is what is left over once everything else is paid. */
 	@Unit("hunger")
 	public static double FAT_STORE_BELOW = 0.25;
 	/** A body draws on its fat once its stomach is emptier than this, so the
@@ -838,21 +838,21 @@ public abstract class NPC extends Entity {
 
 	/** Removes energy (never below zero); used when another entity imposes a cost,
 	 *  e.g. a struggling captive draining its captor. */
-	public void drainEnergy(double amount) {
-		energy -= amount;
-		if (energy < 0) {
-			energy = 0;
+	public void drainGlycogen(double amount) {
+		glycogen -= amount;
+		if (glycogen < 0) {
+			glycogen = 0;
 		}
 	}
 
 	/** Adds energy; used when an external source feeds this creature, e.g. eating
 	 *  a food {@link Item}. */
-	public void addEnergy(double amount) {
-		energy += amount;
+	public void addGlycogen(double amount) {
+		glycogen += amount;
 	}
 
-	public double getEnergy() {
-		return energy;
+	public double getGlycogen() {
+		return glycogen;
 	}
 
 	/**
@@ -1034,23 +1034,23 @@ public abstract class NPC extends Entity {
 		// Growth: a juvenile creeps toward its adult body at a fixed ceiling
 		// rate, so the bigger the adult the longer the childhood. New flesh is
 		// matter, and matter is paid for: a metabolic body buys each step at the
-		// meat price an eater would get for it, out of the tank — which the mint
+		// meat price an eater would get for it, out of glycogen — which the mint
 		// then refills from the stomach, so a growing child is hungrier than an
 		// adult of the same current size. Growth yields to survival: it slows to
 		// what the surplus above the crawl reserve affords, stretching childhood
 		// when food is poor — a starving juvenile stops growing before it stops
 		// living, and GROWTH_RATE becomes the well-fed pace rather than a
 		// guarantee. Non-metabolic growers keep no books and grow as before.
-		// Everything size-derived — tank, resting burn, transport cost,
+		// Everything size-derived — glycogen, resting burn, transport cost,
 		// collision reach, and whether a hunter can take it — follows the body
 		// it has right now, not the one it will have.
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
 				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
-				double spare = energy - Math.max(CRAWL_RESERVE, GROWTH_RESERVE) * energyCapacity();
+				double spare = glycogen - Math.max(CRAWL_RESERVE, GROWTH_RESERVE) * glycogenCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
-				energy -= step * price;
+				glycogen -= step * price;
 			}
 			grownSize = Math.min(adultSize, grownSize + step);
 			size = (int) Math.round(grownSize);
@@ -1075,7 +1075,7 @@ public abstract class NPC extends Entity {
 			if (reproCooldown > 0) {
 				reproCooldown--;
 			}
-			double cap = energyCapacity();
+			double cap = glycogenCapacity();
 			double eff = metaEfficiency();
 			// The thirst clock: capacity grows with m, the burn only with m^0.75,
 			// so a big body's needs rise slower per unit of reserve (Kleiber's
@@ -1119,23 +1119,23 @@ public abstract class NPC extends Entity {
 			double regen = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * satiation * vigor;
 			double out = base + grip + travel;
 			// Only conversion that lands in the books draws down the stomach: at
-			// a full tank the mint stops instead of burning the meal for nothing.
-			double minted = Math.min(regen, Math.max(0, cap - energy + out));
+			// full glycogen the mint stops instead of burning the meal for nothing.
+			double minted = Math.min(regen, Math.max(0, cap - glycogen + out));
 			hunger = Math.min(1.0, hunger + minted / (STOMACH * adultMass()));
-			energy = Math.min(cap, energy + regen - out);
-			if (energy < 0) {
-				energy = 0; // collapse, never death — health is the only gate
+			glycogen = Math.min(cap, glycogen + regen - out);
+			if (glycogen < 0) {
+				glycogen = 0; // collapse, never death — health is the only gate
 			}
 			// Fat, both ways, at the digestion rate and the one price of mass. A
 			// stomach running empty is refilled out of fat before it can peg; a
-			// stomach that is full against a full tank is laid down as fat.
+			// stomach that is full against full glycogen is laid down as fat.
 			double stomach = STOMACH * adultMass();
 			double digest = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * vigor;
 			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
 				double back = Math.min(fat * MEAT_ENERGY, digest);
 				fat -= back / MEAT_ENERGY;
 				hunger = Math.max(0, hunger - back / stomach);
-			} else if (hunger < FAT_STORE_BELOW && energy >= cap - 1e-9 && fat < fatCap()) {
+			} else if (hunger < FAT_STORE_BELOW && glycogen >= cap - 1e-9 && fat < fatCap()) {
 				double store = Math.min(digest, Math.min((fatCap() - fat) * MEAT_ENERGY, (1 - hunger) * stomach));
 				fat += store / MEAT_ENERGY;
 				hunger = Math.min(1.0, hunger + store / stomach);
@@ -1159,15 +1159,15 @@ public abstract class NPC extends Entity {
 			if (health < 100 && hunger < NEED_LOW && thirst < NEED_LOW
 					&& age % Math.max(1, (int) Math.round(MEND_PERIOD / eff)) == 0) {
 				// Flesh that was eaten is bought back at the meat price, one
-				// hundredth of the body per point, out of the tank; a wound that
+				// hundredth of the body per point, out of glycogen; a wound that
 				// took no flesh (starvation, thirst, poison) closes for free. Every
 				// bite is paid per point of health, so a body that regrew what was
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
 				if (meat < 1.0) {
 					double price = MEAT_ENERGY * bodyMass() / 100.0;
-					if (energy >= price) {
-						energy -= price;
+					if (glycogen >= price) {
+						glycogen -= price;
 						meat = Math.min(1.0, meat + 0.01);
 						health++;
 					}
@@ -1209,13 +1209,13 @@ public abstract class NPC extends Entity {
 	public static double STOMACH = 9.0;
 	/** Energy regenerated per tick by a fed, watered, healthy reference body —
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
-	 *  refills an empty tank in roughly a minute and a half. */
+	 *  refills empty glycogen in roughly a minute and a half. */
 	@Unit("energy/tick at mass 1")
 	public static double REGEN_RATE = 0.006;
-	/** Fraction of the tank kept as a crawl reserve: below it the body is
+	/** Fraction of glycogen kept as a crawl reserve: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
-	@Unit("of the tank")
+	@Unit("of glycogen")
 	public static double CRAWL_RESERVE = 0.05;
 	/** Fraction of the genome's top speed a collapsed body can still make. */
 	@Unit("of top speed")
@@ -1295,7 +1295,7 @@ public abstract class NPC extends Entity {
 	/** Whether the body has the reserve to act (bite, grab, breed, press):
 	 *  below the crawl reserve it is collapsed and can only crawl. */
 	public boolean canExert() {
-		return !metabolic || energy > CRAWL_RESERVE * energyCapacity();
+		return !metabolic || glycogen > CRAWL_RESERVE * glycogenCapacity();
 	}
 
 	/** Legacy read: hydration is the complement of the thirst need. */
@@ -2534,7 +2534,7 @@ public abstract class NPC extends Entity {
 	 * -- the base of the food chain.
 	 *
 	 * <p>The return value is grass, not energy: callers measure grazing pressure on
-	 * the substrate with it. The conversion into the tank happens here, at
+	 * the substrate with it. The conversion into glycogen happens here, at
 	 * {@link #GRASS_ENERGY} per unit.
 	 */
 	protected double graze(double demand) {
@@ -2651,7 +2651,7 @@ public abstract class NPC extends Entity {
 	 */
 	protected boolean surplusForBreeding() {
 		return metabolic && !isDead() && reproCooldown == 0
-				&& energy >= reproThreshold && fat >= fatToBreed()
+				&& glycogen >= reproThreshold && fat >= fatToBreed()
 				&& hunger < NEED_LOW && thirst < NEED_LOW && health >= 60;
 	}
 

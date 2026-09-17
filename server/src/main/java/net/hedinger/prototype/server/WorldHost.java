@@ -664,22 +664,22 @@ final class WorldHost {
 				// not to give it one.
 				//
 				// A corpse is the same case. Death is where the four books stop: the
-				// tank and the stomach evaporate with it — that is exactly what the
+				// glycogen and the stomach evaporate with it — that is exactly what the
 				// birth ledger audits, a parent eating its own young recovers the
 				// meat and nothing else — so the numbers still sitting in the fields
 				// describe a body that no longer keeps them. Shown, they read as a
-				// carcass with a brimming tank that is merely a little peckish. What
+				// carcass with a brimming store that is merely a little peckish. What
 				// a corpse is worth is its own four numbers, below.
 				if (n.isOrganic() && !n.isDead()) {
-					d.put("energy", round(n.getEnergy()));
-					// The tank this body's energy is a fraction OF. It is size-scaled,
+					d.put("glycogen", round(n.getGlycogen()));
+					// The store this body's glycogen is a fraction OF. It is size-scaled,
 					// so no constant on the viewer's side can stand in for it: the bar
 					// divided by a flat 4, which pinned every large body at full from a
-					// quarter tank and drew a small body's brimming tank as
+					// quarter store and drew a small body's brimming store as
 					// three-quarters. Hunger and thirst arrive normalised and health is
-					// a percentage; energy was the one book shown against a number that
+					// a percentage; glycogen was the one book shown against a number that
 					// was not its maximum.
-					d.put("energyCap", round(n.energyCapacity()));
+					d.put("glycogenCap", round(n.glycogenCapacity()));
 					d.put("hunger", round(n.getHunger()));
 					d.put("thirst", round(n.getThirst()));
 				}

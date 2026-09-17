@@ -21,7 +21,7 @@ import net.hedinger.prototype.simtest.TestNPC;
  * arithmetic the simulation uses. Nothing here is transcribed. That is the whole
  * point: a hand-written page saying "a reference creature lasts six minutes"
  * becomes a lie the moment somebody tunes {@link NPC#BASE_METABOLISM}, and
- * nothing fails when it does. A page that divides the tank by the burn rate
+ * nothing fails when it does. A page that divides glycogen by the burn rate
  * cannot be wrong, only out of date by one deploy.
  *
  * <p>The prose is the exception — it explains <em>why</em> a rule is shaped the
@@ -75,7 +75,7 @@ public final class Mechanics {
 	public static List<Map<String, Object>> bodyPage() {
 		List<Map<String, Object>> out = new ArrayList<>();
 		out.add(mass());
-		out.add(tank());
+		out.add(glycogen());
 		out.add(resting());
 		out.add(moving());
 		out.add(growth());
@@ -135,7 +135,7 @@ public final class Mechanics {
 		Map<String, Object> s = section("mass", "Body size, and the mass it implies",
 				"One number drives every energy scale: body mass, expressed as a factor "
 				+ "normalised so a reference-size body is exactly 1.0. A genome carries a size; "
-				+ "mass is that size over the reference. Tank, burn, movement price, what a "
+				+ "mass is that size over the reference. Glycogen, burn, movement price, what a "
 				+ "carcass is worth and how long it takes to rot are all this factor raised to "
 				+ "some power, which is why tuning one constant moves the whole economy "
 				+ "coherently instead of leaving parts of it behind.");
@@ -149,24 +149,24 @@ public final class Mechanics {
 		return s;
 	}
 
-	private static Map<String, Object> tank() {
-		Map<String, Object> s = section("tank", "The energy tank",
+	private static Map<String, Object> glycogen() {
+		Map<String, Object> s = section("glycogen", "The glycogen store",
 				"Energy is the ACTION budget — what a body can currently do, not how hungry it "
-				+ "is (hunger is its own book; see the needs). The tank's ceiling grows in "
+				+ "is (hunger is its own book; see the needs). Glycogen's ceiling grows in "
 				+ "proportion to mass, anchored on the body a creature is growing INTO, so a "
 				+ "juvenile is not economically punished for being young. Food never fills the "
-				+ "tank directly: eating fills the stomach, and regeneration converts the "
+				+ "glycogen directly: eating fills the stomach, and regeneration converts the "
 				+ "stomach's contents into energy over time — draining the meal it is minted "
 				+ "from, one for one, so a body can never bank more energy than it actually "
 				+ "ate. The rate scales with how healthy the body is — an unhealthy body is "
-				+ "also a listless one. An empty tank is COLLAPSE, never death: below the crawl "
+				+ "also a listless one. Empty glycogen is COLLAPSE, never death: below the crawl "
 				+ "reserve a body can only crawl — no biting, grabbing, breeding, or holding a "
 				+ "captive — and it recovers the moment food and water let regeneration run. "
 				+ "Only health decides death.");
 		rows(s,
-				row("Full tank", num(NPC.BASE_CAPACITY) + " × mass", "energy",
-						"Reference body: " + round(NPC.BASE_CAPACITY, 2)),
-				row("Founders hold", pct(TestNPC.FOUNDER_FRACTION), "of the tank",
+				row("Glycogen store", num(NPC.GLYCOGEN_PER_MASS) + " × mass", "energy",
+						"Reference body: " + round(NPC.GLYCOGEN_PER_MASS, 2)),
+				row("Founders hold", pct(TestNPC.FOUNDER_FRACTION), "of glycogen",
 						"World-seeded bodies only, and under the breeding line: a founder "
 						+ "has no parents to be endowed by. A BORN body holds whatever its "
 						+ "parents handed over — there is no ceiling on that."),
@@ -174,10 +174,10 @@ public final class Mechanics {
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
 						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
 						+ "Every unit minted drains a unit from the stomach."),
-				row("Crawl reserve", pct(NPC.CRAWL_RESERVE), "of the tank",
+				row("Crawl reserve", pct(NPC.CRAWL_RESERVE), "of glycogen",
 						"Below it: collapse. A crawl at " + pct(NPC.CRAWL_SPEED)
 						+ " of top speed, and nothing else."),
-				row("Empty tank", "collapse, not death", "",
+				row("Glycogen empty", "collapse, not death", "",
 						"Recoverable; health is the only gate to dying."));
 		return s;
 	}
@@ -188,7 +188,7 @@ public final class Mechanics {
 				+ "being a body, and that burn follows Kleiber's law — it grows with mass to the "
 				+ "power 0.75, not with mass itself. A big animal therefore burns more in "
 				+ "absolute terms but less per unit of mass, which is why its proportionally "
-				+ "larger tank outlasts a small animal's: large bodies fast longer. On top of "
+				+ "larger store outlasts a small animal's: large bodies fast longer. On top of "
 				+ "the size term sits a heritable efficiency multiplier from the genome, "
 				+ "normalised so an average genome burns exactly the size-based rate and "
 				+ "mutation nudges it either way.\n\n"
@@ -220,16 +220,16 @@ public final class Mechanics {
 		List<List<String>> t = new ArrayList<>();
 		for (double size : SAMPLE_SIZES) {
 			double m = size / NPC.REF_SIZE;
-			double cap = NPC.BASE_CAPACITY * m;
+			double cap = NPC.GLYCOGEN_PER_MASS * m;
 			double burn = NPC.BASE_METABOLISM * Math.pow(m, 0.75);
 			double ticks = cap / burn;
 			t.add(List.of(num(size), round(m, 2), round(cap, 2), sci(burn),
 					num(Math.round(ticks)), round(ticks / TPS / 60, 1)));
 		}
-		table(s, "What a full tank buys a motionless creature — the tank grows linearly with "
+		table(s, "What full glycogen buys a motionless creature — glycogen grows linearly with "
 				+ "mass while the burn grows with mass^0.75, so the fasting window widens as "
 				+ "bodies get bigger.",
-				List.of("Size", "Mass", "Full tank", "Burn/tick", "Ticks unfed", "Minutes unfed"),
+				List.of("Size", "Mass", "Glycogen store", "Burn/tick", "Ticks unfed", "Minutes unfed"),
 				t);
 		return s;
 	}
@@ -258,13 +258,13 @@ public final class Mechanics {
 		for (double v : SAMPLE_SPEEDS) {
 			double cost = NPC.MOVE_ENERGY * 1.0 * v * v;
 			t.add(List.of(round(v, 3), round(v * TPS, 2), sci(cost), round(cost / rest, 2) + "×",
-					round(NPC.BASE_CAPACITY / (rest + cost) / TPS / 60, 1)));
+					round(NPC.GLYCOGEN_PER_MASS / (rest + cost) / TPS / 60, 1)));
 		}
 		table(s, "A reference-mass creature carrying nothing, at each pace. The break-even — "
 				+ "where moving costs as much again as merely existing — sits around the founder "
 				+ "speed of 0.05; past that, travel dominates the budget entirely.",
 				List.of("Speed (tiles/tick)", "Tiles/s", "Move cost/tick", "× resting burn",
-						"Minutes on a full tank"),
+						"Minutes on full glycogen"),
 				t);
 		return s;
 	}
@@ -351,7 +351,7 @@ public final class Mechanics {
 				+ "distance is not, the nominal childhood scales with how big the adult body "
 				+ "is: a small grazer is grown in seconds, the largest body the genome can "
 				+ "express takes the longest. New flesh is matter and matter is paid for — "
-				+ "each step of growth is bought from the tank at the same meat price an "
+				+ "each step of growth is bought from glycogen at the same meat price an "
 				+ "eater would collect for it, so a growing child is hungrier than an adult "
 				+ "of its current size, and growth slows to what the surplus affords: "
 				+ "childhood stretches with scarcity, and a starving juvenile stops growing "
@@ -367,7 +367,7 @@ public final class Mechanics {
 						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
 				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the frame", "mass",
 						"Laid down at the digestion rate while the stomach is fuller than "
-						+ pct(1 - NPC.FAT_STORE_BELOW) + " against a full tank; drawn back into the "
+						+ pct(1 - NPC.FAT_STORE_BELOW) + " against full glycogen; drawn back into the "
 						+ "stomach once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
 						+ "before health does. Carried on every step, and on the carcass, half "
 						+ "fresh and half decayed."),
@@ -399,13 +399,13 @@ public final class Mechanics {
 		double refReproF = new Genome().reproFraction;
 		double refReproC = new Genome().reproCostFraction;
 		rows(s,
-				row("Breeds above", pct(refReproF), "of the tank",
+				row("Breeds above", pct(refReproF), "of glycogen",
 						"A per-lineage gene; reference lineage "
-						+ round(refReproF * NPC.BASE_CAPACITY, 2) + " at a reference body."),
+						+ round(refReproF * NPC.GLYCOGEN_PER_MASS, 2) + " at a reference body."),
 				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
 						+ ", health at 60+", "", "Surplus across all four books."),
-				row("Costs", pct(refReproC), "of the tank, each parent",
-						"Also a gene — the r/K trade. Backed by tank AND stomach together "
+				row("Costs", pct(refReproC), "of glycogen, each parent",
+						"Also a gene — the r/K trade. Backed by glycogen AND stomach together "
 						+ "and drawn proportionally from both, so neither book is a loophole "
 						+ "and a full gut can pay for a child on its own."),
 				row("Founders ask", "what the childhood costs", "",
@@ -414,12 +414,12 @@ public final class Mechanics {
 						+ "growing, its birth meal, and the burn of the whole childhood. No "
 						+ "clade carries a price of its own; it is a gene from there on."),
 				row("Offspring is worth", "exactly what its parents paid", "",
-						"Meat-priced body + stomach + tank = the payment, to the penny — "
+						"Meat-priced body + stomach + glycogen = the payment, to the penny — "
 						+ "nothing minted, nothing burnt. A pair pools two offers, so "
 						+ "mating genuinely buys a better-funded child."),
 				row("Born sated", pct(new Genome().birthSatiation), "of the stomach",
 						"A gene, paid for out of the same endowment: the rest of it goes to "
-						+ "the tank. Gut food is what the mint runs on, tank energy is "
+						+ "glycogen. Gut food is what the mint runs on, glycogen is "
 						+ "spendable at once — so a newborn's hunger is derived, not decreed."),
 				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
 						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
@@ -445,7 +445,7 @@ public final class Mechanics {
 				+ "Eating and drinking are rates held over ticks, never instant refills: a "
 				+ "drink is seconds of standing at a shore, a meal is longer, and walking away "
 				+ "mid-act keeps exactly the partial refill so far. The needs are what drive "
-				+ "behaviour — a predator hunts by appetite, not tank headroom — and what feed "
+				+ "behaviour — a predator hunts by appetite, not glycogen headroom — and what feed "
 				+ "the other books: satiation powers energy regeneration, and a need pegged "
 				+ "near its ceiling erodes health with its cause attached, so the corpse still "
 				+ "says what killed it. Creatures route to water through passable ground (a "
@@ -463,7 +463,7 @@ public final class Mechanics {
 						"= resting burn × hunger period: a full stomach IS "
 						+ "a hunger period of fuel. A sated body strips no ground."),
 				row("Hunter hunts above", num(TestNPC.PRED_HUNT_HUNGER), "hunger",
-						"Appetite, not tank headroom, starts the chase."),
+						"Appetite, not glycogen headroom, starts the chase."),
 				row("Cannibalism above", num(TestNPC.STARVE_HUNGER), "hunger",
 						"Desperation lifts the taboo, and only desperation."),
 				row("A pegged need (" + pct(NPC.DEPRIVED) + "+)", "erodes health", "",
@@ -472,7 +472,7 @@ public final class Mechanics {
 				row("Both needs under " + pct(NPC.NEED_LOW), "mend health", "",
 						"1 point per ~" + num(NPC.MEND_PERIOD) + " ticks at average "
 						+ "metabolism; wounds close over minutes of fed, watered living. Flesh "
-						+ "that was eaten is bought back at the meat price, out of the tank; a "
+						+ "that was eaten is bought back at the meat price, out of glycogen; a "
 						+ "wound that took no flesh closes for free."));
 		return s;
 	}
@@ -538,7 +538,7 @@ public final class Mechanics {
 						"Proximity, not range: near things are loud, far ones fade."));
 		groups(s,
 				group("Its own condition",
-						sense(AgentIO.S_ENERGY, "How full the action budget is, against THIS "
+						sense(AgentIO.S_GLYCOGEN, "How full the action budget is, against THIS "
 								+ "body's own capacity — what it can currently DO, which is a "
 								+ "different fact from how hungry it is."),
 						sense(AgentIO.S_HEALTH, "How hurt it is. A wounded creature can behave "
@@ -645,7 +645,7 @@ public final class Mechanics {
 								+ "impossible, under way, or a pulse the tick the act actually "
 								+ "landed. The only channel that tells a mind whether what it "
 								+ "wanted happened — without it, a creature can infer success "
-								+ "only from its tank drifting upward, several thoughts too "
+								+ "only from its glycogen drifting upward, several thoughts too "
 								+ "late.")));
 		return s;
 	}
@@ -926,7 +926,7 @@ public final class Mechanics {
 				+ "own genome; it is written once at birth, from the parents' copies, and read "
 				+ "for the rest of that body's life. The body is what the genome buys: every "
 				+ "gene below is expressed through physics that scales with it, so a bigger "
-				+ "size gene is not a free win — it is a bigger tank AND a bigger bill.\n\n"
+				+ "size gene is not a free win — it is a bigger store AND a bigger bill.\n\n"
 				+ "The bounds are part of the contract. Multiplicative drift random-walks to "
 				+ "extremes over a long world, so the magnitudes are clamped where readability "
 				+ "or the engine demands it — and a clamped gene is still honest: the fastest "
@@ -934,7 +934,7 @@ public final class Mechanics {
 				+ "the inspector never advertises a speed the world would throw away.");
 		rows(s,
 				row("Size", num(Genome.SIZE_MIN) + " – " + num(Genome.SIZE_MAX), "px radius",
-						"The master gene: mass, tank, burn, meal worth, childhood and corpse "
+						"The master gene: mass, glycogen, burn, meal worth, childhood and corpse "
 						+ "span all scale from it."),
 				row("Top speed", "0 – " + num(Genome.SPEED_MAX), "tiles/tick",
 						"Clamped under the engine's half-tile step; movement bills its square."),
@@ -959,14 +959,14 @@ public final class Mechanics {
 				row("Brain", "up to " + num(Brain.MAX_LEN) + " instructions", "",
 						"The mind's program rides in the genome and evolves with it; a genome "
 						+ "without one drives a scripted body instead."),
-				row("Breeds above", pct(def.reproFraction) + " of the tank", "",
+				row("Breeds above", pct(def.reproFraction) + " of glycogen", "",
 						"Life history: how full a reserve this lineage breeds off — the r/K "
 						+ "axis, low is breed-early, high is bank-first."),
-				row("Spends per child", pct(def.reproCostFraction) + " of the tank", "",
+				row("Spends per child", pct(def.reproCostFraction) + " of glycogen", "",
 						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
 				row("Newborns sated to", pct(def.birthSatiation) + " of the stomach", "",
 						"How a lineage provisions its young: a full gut regenerates, a full "
-						+ "tank spends. Too little of either and its children do not make it."),
+						+ "glycogen spends. Too little of either and its children do not make it."),
 				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
 						"Evolvability, itself heritable — meta-evolution, bounded so a lineage "
 						+ "cannot fossilise or dissolve."),
@@ -1047,7 +1047,7 @@ public final class Mechanics {
 						"A grazer's grandchildren never wake up eating carrion: diet is "
 						+ "authored, species are emergent."),
 				row("A newborn's books", "exactly what its parents paid", "",
-						"Tank, birth meal and meat-priced body sum to the parents' spend — "
+						"Glycogen, birth meal and meat-priced body sum to the parents' spend — "
 						+ "see the breeding section on the body page."));
 		return s;
 	}
@@ -1161,7 +1161,7 @@ public final class Mechanics {
 				+ "poorer than the flesh allows. These are the hard limits — the reason a "
 				+ "mind genome cannot override its body, and the reason a policy that works "
 				+ "must work WITH a body rather than around it.\n\n"
-				+ "The same veto is what makes the collapse state meaningful: an empty tank "
+				+ "The same veto is what makes the collapse state meaningful: empty glycogen "
 				+ "takes the expensive verbs away wholesale, so \"too exhausted to fight\" is "
 				+ "enforced by the body rather than promised by the mind.");
 		rows(s,
@@ -1178,7 +1178,7 @@ public final class Mechanics {
 						"Holding the attack actuator high does not bite faster — for anyone. "
 						+ "A non-hunter's bite is a gnaw: " + num(TestNPC.ATTACK_DAMAGE)
 						+ " hp, fighting rather than feeding."),
-				row("Collapse", "below " + pct(NPC.CRAWL_RESERVE) + " of the tank", "",
+				row("Collapse", "below " + pct(NPC.CRAWL_RESERVE) + " of glycogen", "",
 						"No biting, grabbing, breeding or holding a captive; a crawl at "
 						+ pct(NPC.CRAWL_SPEED) + " of top speed is all that is left."),
 				row("Grab and ride", "smaller only / larger only", "",

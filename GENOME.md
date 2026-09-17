@@ -127,7 +127,7 @@ the moment its owner walked out of range.
 ### An intent reports back — `S_INTENT`
 
 A mind could set a goal but never learn whether it worked; success showed up only
-as the tank drifting upward, several thought-cycles late. `S_INTENT` closes that
+as glycogen drifting upward, several thought-cycles late. `S_INTENT` closes that
 loop with four values:
 
 | value | meaning |
@@ -176,7 +176,7 @@ gain is in what the cohort *does*, not in what it costs to say.
 
 Measured over 100k ticks of the live world, same instrument, cohort ceiling 80:
 
-| Starter brains | cohort | grazing | mean tank |
+| Starter brains | cohort | grazing | mean glycogen |
 |---|---|---|---|
 | motor-level | 73–80, dips to 38 | 22–47 | 0.12–0.19 |
 | intent-based | **80–81, flat** | **43–65** | 0.13–0.27 |
@@ -249,14 +249,14 @@ movement rather than intent.
 
 ### The laws that fall out of it
 
-- **Resting scales sublinearly with mass** (`mass^0.75`, Kleiber) while the tank
-  scales linearly, so fasting endurance goes as **mass^0.25**: a bigger body
+- **Resting scales sublinearly with mass** (`mass^0.75`, Kleiber) while the glycogen
+  store scales linearly, so fasting endurance goes as **mass^0.25**: a bigger body
   idles longer between meals, but needs bigger meals to refill.
 - **Movement is kinetic.** Cost per tick rises with v², so cost per *tile* rises
   linearly with v — twice as fast is four times as expensive per tick and twice as
   expensive per tile. Covering ground is cheapest slowly, so speed has to buy
   something real (escaping, catching) to be worth its price.
-- **Travel is mass-neutral in tank terms.** `travel / capacity` reduces to
+- **Travel is mass-neutral in glycogen terms.** `travel / capacity` reduces to
   `distance / 600` with the mass cancelling: crossing the map costs *every*
   creature the same fraction of its reserve. Being big buys endurance at rest and
   nothing at all for covering ground.
@@ -294,7 +294,7 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
   exactly what was put into it, and everything anyone eats was bought with
   grass by someone. It is sized so a reference frame is three stomachs
   (`3 · STOMACH`), so the fresh third of a lean medium corpse fills one
-  same-size hunter. **Fat is the body's store**: a fed body with a full tank
+  same-size hunter. **Fat is the body's store**: a fed body with full glycogen
   lays what it cannot use down as mass, up to `FAT_CAP` of its frame, and
   draws it back into the stomach before starvation can bite. Fat is carried
   on every step and it is on the carcass, half fresh and half decayed, so a
@@ -321,12 +321,12 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
 - **Crop rate and energy density are one knob, not two.** They multiply into a
   herbivore's income per tick, so grass cannot be made both slower to eat and
   poorer without starving the herd. Measured over 60k ticks at the current crop
-  rate: below `GRASS_ENERGY` 0.75 predators fall to their floor on empty tanks, and
+  rate: below `GRASS_ENERGY` 0.75 predators fall to their floor on empty stores, and
   at 0.25 the herd stops breeding and only the steward keeps it alive. The shipped
   value is the poorest grass the food chain will carry.
-- **A predator will not kill on a full tank.** The opportunistic bite is gated on
+- **A predator will not kill on full glycogen.** The opportunistic bite is gated on
   having room for the meal; without that, a full hunter killed prey whose energy
-  the tank cap then discarded.
+  the glycogen cap then discarded.
 
 ### Growth
 
@@ -340,10 +340,10 @@ body, three and a half for the largest) and stretches with scarcity.
 Growth is deliberately **physical, not economic**. Everything derived from the
 body a creature has *right now* follows it down — resting burn, movement cost,
 collision reach, and what a hunter may take — so a juvenile is cheap to run but
-genuinely small and easy prey. The energy **tank** is anchored on the *adult*
+genuinely small and easy prey. The **glycogen store** is anchored on the *adult*
 body, which keeps the whole reproduction economy (born-fed level, breeding
 threshold and cost, a hunter's "sated" line) identical to a world without growth.
-Anchoring the tank on the juvenile body instead was tried and silently re-gated
+Anchoring the store on the juvenile body instead was tried and silently re-gated
 breeding on maturity while leaving young hunters unable ever to count as sated.
 
 ### Engine limits, not balance knobs

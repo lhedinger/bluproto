@@ -242,21 +242,21 @@ public class Genome {
 	// bank-and-invest is a strategy selection can explore, not a number chosen
 	// once. The defaults are the reference lineage's, matching the constants they
 	// replaced.
-	/** Fraction of the (size-scaled) tank that must be full before this lineage
+	/** Fraction of the (size-scaled) glycogen that must be full before this lineage
 	 *  breeds. Low is an r-strategist — breed early, off a thin reserve; high is a
 	 *  K-strategist that banks a buffer first. */
 	public double reproFraction = 0.75;
-	/** Fraction of the tank this lineage spends per offspring — how much it invests
+	/** Fraction of glycogen this lineage spends per offspring — how much it invests
 	 *  in each child. Paired with {@link #reproFraction} this is the whole r/K
 	 *  trade: cheap-and-many against dear-and-few. */
 	public double reproCostFraction = 0.5;
 	/**
 	 * How full a lineage packs its newborns' stomachs, 0..1 of stomach capacity
 	 * — the satiation a child is born with, and the third life-history gene.
-	 * What it costs comes out of the same endowment as the tank, so this is a
+	 * What it costs comes out of the same endowment as glycogen, so this is a
 	 * real trade and not a free gift: food in the gut is what the mint runs on
 	 * and it feeds a child for a long time, but it converts only at the rate
-	 * satiation allows, while energy in the tank is spendable at once and pays
+	 * satiation allows, while energy in glycogen is spendable at once and pays
 	 * for growth directly. Pack too little and the child is born starving;
 	 * pack too much and it is born with nothing to grow on. This was a
 	 * constant (every child born at 0.9 hunger, whatever its parents could
@@ -327,8 +327,8 @@ public class Genome {
 		g.reproCostFraction = 0.35 + Utils.random() * 0.3;
 		// birthSatiation is deliberately NOT drawn: founders carry the reference
 		// value and variation arrives by drift from the first birth. Gut food and
-		// tank energy are not interchangeable to a growing child (the mint is
-		// throttled by satiation, while growth is paid straight out of the tank),
+		// glycogen energy are not interchangeable to a growing child (the mint is
+		// throttled by satiation, while growth is paid straight out of glycogen),
 		// so a founder drawn far off the reference starts its lineage in a hole
 		// selection then has to climb out of before it can explore anything else.
 		g.mutationRate = 0.05 + Utils.random() * 0.1;

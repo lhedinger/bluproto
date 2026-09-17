@@ -153,9 +153,9 @@ public final class GeneSchema {
 				g -> g.determination, (g, v) -> g.determination = v);
 		// Life history — the r/K axis and evolvability, appended so older draws are
 		// unshifted (a new gene only ever adds a draw at the end of the stream).
-		add("reproF", "of the tank", Drift.ADD, 0.3, 0.95, false,
+		add("reproF", "of glycogen", Drift.ADD, 0.3, 0.95, false,
 				g -> g.reproFraction, (g, v) -> g.reproFraction = v);
-		add("reproC", "of the tank", Drift.ADD, 0.1, 0.9, false,
+		add("reproC", "of glycogen", Drift.ADD, 0.1, 0.9, false,
 				g -> g.reproCostFraction, (g, v) -> g.reproCostFraction = v);
 		add("mut", "per gene", Drift.ADD, 0.01, 0.5, false,
 				g -> g.mutationRate, (g, v) -> g.mutationRate = v);

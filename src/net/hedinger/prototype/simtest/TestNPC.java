@@ -207,7 +207,7 @@ public class TestNPC extends NPC {
 	 *  lopes around cheaply and opens up to full speed only for a real pursuit. */
 	private static final double PRED_CRUISE = 0.6;
 	/** Hunger at which a hunter starts hunting in earnest (VITALS.md: appetite,
-	 *  not tank headroom, is what sends a predator after prey). Sits at the
+	 *  not glycogen headroom, is what sends a predator after prey). Sits at the
 	 *  NEED_LOW seek line, so appetite returns in twice the time thirst does. */
 	@Unit("hunger level")
 	public static double PRED_HUNT_HUNGER = 0.5;
@@ -220,15 +220,15 @@ public class TestNPC extends NPC {
 	 *  fit its stomach, so the prey would die for nothing. */
 	@Unit("hunger level")
 	public static double PRED_FULL_HUNGER = 0.05;
-	/** Fraction of its (adult-sized) tank a world-seeded FOUNDER starts holding.
+	/** Fraction of its (adult-sized) glycogen a world-seeded FOUNDER starts holding.
 	 *  A founder has no parents to be endowed by — it is placed into the world
 	 *  by the steward, not born — so this one number has to be chosen: fed
 	 *  enough to make a living, below the breeding line so it must make that
-	 *  living before it makes a child. Nothing BORN uses it. A child's tank,
+	 *  living before it makes a child. Nothing BORN uses it. A child's glycogen,
 	 *  and its hunger with it, is whatever its parents actually handed over
 	 *  (see {@code endow}), which is why there is no born-holding constant any
 	 *  more and no ceiling on a well-funded birth. */
-	@Unit("of the tank")
+	@Unit("of glycogen")
 	public static double FOUNDER_FRACTION = 0.6;
 	// The breeding threshold and per-offspring cost were global constants here;
 	// they are now per-lineage genes (Genome.reproFraction / reproCostFraction),
@@ -612,7 +612,7 @@ public class TestNPC extends NPC {
 		// The one expression path, shared with every genome body: juvenile growth,
 		// size-scaled energy books, clade stride and the expressed-size invariant.
 		// A minded body used to be built here by hand — full-grown, with a flat
-		// energy tank and the default repro thresholds — so a founder (built through
+		// glycogen store and the default repro thresholds — so a founder (built through
 		// configureGenomeBody) and its own child (built here) were economically
 		// different animals. Routing both through configureGenomeBody makes a
 		// lineage consistent with itself.
@@ -642,9 +642,9 @@ public class TestNPC extends NPC {
 	/** A metabolic brained forager: runs its genome's brain, grazes and burns
 	 * energy, and buds mutated offspring that inherit (a crossed/mutated copy of)
 	 * the brain -- so the mind itself evolves. Now just a minded body: the energy
-	 * economy it used to set by hand (metabolic, a flat unit tank) is exactly what
+	 * economy it used to set by hand (metabolic, a flat unit glycogen) is exactly what
 	 * the shared expression already gives every genome body, so there is nothing
-	 * left to add. Offspring endowment still overrides the tank in {@link #endow}. */
+	 * left to add. Offspring endowment still overrides glycogen in {@link #endow}. */
 	public static TestNPC brainedBreeder(double x, double y, double z, Genome g) {
 		return minded(x, y, z, g, mindOf(g));
 	}
@@ -865,16 +865,16 @@ public class TestNPC extends NPC {
 		t.metabolic = true;
 		// Energy scales are all derived from body size (see NPC's size-scaled model):
 		// born comfortably fed, and reproduction gated on filling a big fraction of
-		// the (size-scaled) tank so a bigger creature must eat more before it breeds.
-		// energyCapacity() is anchored on the adult body, so these are unchanged by
+		// the (size-scaled) glycogen so a bigger creature must eat more before it breeds.
+		// glycogenCapacity() is anchored on the adult body, so these are unchanged by
 		// the creature being born a juvenile — growth is physical, not economic.
-		t.energy = FOUNDER_FRACTION * t.energyCapacity();
+		t.glycogen = FOUNDER_FRACTION * t.glycogenCapacity();
 		// The reproductive strategy is the lineage's own now (see Genome life
-		// history), not one number shared by the whole world: how full a tank it
+		// history), not one number shared by the whole world: how full glycogen it
 		// breeds off and how much it spends per child are genes, so r- and
 		// K-strategists can both evolve. Birth conserves energy, so whatever a
 		// lineage picks, the books still balance.
-		t.reproThreshold = g.reproFraction * t.energyCapacity();
+		t.reproThreshold = g.reproFraction * t.glycogenCapacity();
 		t.col = g.toColor();
 	}
 
@@ -1037,8 +1037,8 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
-	public TestNPC withEnergy(double e) {
-		energy = e;
+	public TestNPC withGlycogen(double e) {
+		glycogen = e;
 		return this;
 	}
 
@@ -1120,7 +1120,7 @@ public class TestNPC extends NPC {
 
 	/** Turns the energy economy OFF for a fixture that measures behaviour rather
 	 *  than survival — a body that neither burns nor starves, so a probe can hold
-	 *  it at a fixed hunger and read what its mind does without the tank moving
+	 *  it at a fixed hunger and read what its mind does without glycogen moving
 	 *  under the measurement. Every genome body is metabolic by default now (the
 	 *  living world's bodies all are), so a test that wants a bench specimen says
 	 *  so here. */
@@ -1328,7 +1328,7 @@ public class TestNPC extends NPC {
 
 		// Appetite dictates the hunt (VITALS.md): hunger is the need for food,
 		// distinct from the energy budget, so a hunter chases when its stomach
-		// asks — not when its tank has headroom. A sated hunter patrols and
+		// asks — not when its glycogen has headroom. A sated hunter patrols and
 		// takes only prey that blunders into reach; hungry it hunts in earnest;
 		// only genuine starvation lifts the taboo on eating its own kind.
 		boolean sated = hunger < PRED_HUNT_HUNGER;
@@ -2044,8 +2044,8 @@ public class TestNPC extends NPC {
 	void senseInto(double[] s) {
 		long now = getWorld().getTick();
 		s[AgentIO.S_BIAS] = 1.0;
-		double cap = energyCapacity();
-		s[AgentIO.S_ENERGY] = cap > 0 ? clampUnit(getEnergy() / cap) : 0; // fraction of OWN tank
+		double cap = glycogenCapacity();
+		s[AgentIO.S_GLYCOGEN] = cap > 0 ? clampUnit(getGlycogen() / cap) : 0; // fraction of OWN glycogen
 		s[AgentIO.S_FOOD] = getWorld().getTile(X, Y, Z).getVegetation(now)
 				/ net.hedinger.prototype.engine.Tile.VEG_MAX;
 		s[AgentIO.S_PHERO] = Math.tanh(sensePheromone());
@@ -2129,7 +2129,7 @@ public class TestNPC extends NPC {
 		}
 
 		// The needs (VITALS.md): hunger and thirst as the mind's own hollow
-		// feelings, distinct from S_ENERGY (what the body can DO). With the
+		// feelings, distinct from S_GLYCOGEN (what the body can DO). With the
 		// water channel below, "when dry, steer to water" stays a
 		// two-instruction reflex away.
 		s[AgentIO.S_HUNGER] = hunger;
@@ -3184,9 +3184,9 @@ public class TestNPC extends NPC {
 	 * grip is overcome is flung clear and cannot re-attach for a while. Its own
 	 * grabbed captive (which it wants to keep) is never bucked. */
 	private void buckRiders(double s) {
-		energy -= s * BUCK_SELF_COST;
-		if (energy < 0) {
-			energy = 0;
+		glycogen -= s * BUCK_SELF_COST;
+		if (glycogen < 0) {
+			glycogen = 0;
 		}
 		for (net.hedinger.prototype.engine.Entity e : getWorld().getEntities()) {
 			if (e.getAttachTarget() != this || e.isGrabbed() || e.isRemoved()) {
@@ -3264,11 +3264,11 @@ public class TestNPC extends NPC {
 		if (s > 0) {
 			if (getAttachTarget() instanceof NPC) {
 				// Fighting makes the captive heavier to hold for its captor...
-				((NPC) getAttachTarget()).drainEnergy(getSize() * s * STRUGGLE_CARRIER_COST);
+				((NPC) getAttachTarget()).drainGlycogen(getSize() * s * STRUGGLE_CARRIER_COST);
 			}
-			energy -= s * STRUGGLE_SELF_COST; // ...and exhausts the captive itself
-			if (energy < 0) {
-				energy = 0;
+			glycogen -= s * STRUGGLE_SELF_COST; // ...and exhausts the captive itself
+			if (glycogen < 0) {
+				glycogen = 0;
 			}
 		}
 		// Communicate: even pinned, a captive can still lay pheromone -- a distress
@@ -3614,14 +3614,14 @@ public class TestNPC extends NPC {
 	}
 
 	/** True once a metabolic creature has everything eating can give it: the
-	 *  tank past its breeding line, a stomach full enough to lay fat down from,
+	 *  glycogen past its breeding line, a stomach full enough to lay fat down from,
 	 *  and all the fat its frame can carry -- so more grazing would only strip
 	 *  the pasture. Below any of those it grazes on; at all of them it moves on.
-	 *  It used to be the tank alone, and a body whose children are built out of
-	 *  fat then stopped eating with a full tank and never bred again.
-	 *  Always false for non-metabolic grazers (no energy tank). */
+	 *  It used to be glycogen alone, and a body whose children are built out of
+	 *  fat then stopped eating with full glycogen and never bred again.
+	 *  Always false for non-metabolic grazers (no glycogen store). */
 	private boolean sated() {
-		return metabolic && energy >= reproThreshold
+		return metabolic && glycogen >= reproThreshold
 				&& hunger <= NPC.FAT_STORE_BELOW && fat >= fatCap() - 1e-9;
 	}
 
@@ -3638,7 +3638,7 @@ public class TestNPC extends NPC {
 				return;
 			}
 		}
-		// A full creature stops cropping: grazing past the tank just wastes the
+		// A full creature stops cropping: grazing past glycogen just wastes the
 		// intake and needlessly holds the grass down, so it grazes only when it
 		// has room to fill.
 		double intake = sated() ? 0 : graze(grazeDemand());
@@ -3718,7 +3718,7 @@ public class TestNPC extends NPC {
 	private void thinkNester() {
 		double intake = graze(grazeDemand());
 		totalIntake += intake;
-		if (!homing && energy >= reproThreshold && reproCooldown == 0) {
+		if (!homing && glycogen >= reproThreshold && reproCooldown == 0) {
 			homing = true; // commit -- don't flip back to foraging mid-trip
 		}
 		if (homing) {
@@ -3816,16 +3816,16 @@ public class TestNPC extends NPC {
 	 * bought here: it is matter, and it comes out of the parents' fat
 	 * ({@link #settleBirth}). The identity this exists to hold: <b>what the
 	 * child is worth equals what its parents lost</b> — its mass at the one
-	 * price, plus the food in its stomach, plus its tank, summing to what was
+	 * price, plus the food in its stomach, plus its glycogen, summing to what was
 	 * handed over and never to a penny more or less. Nothing is minted (the
 	 * old books gave every newborn a body and a stomach nobody paid for, so a
 	 * lineage of budders was a perpetual-motion machine) and nothing is burnt
-	 * (a ceiling on the tank used to throw away the surplus of a well-funded
+	 * (a ceiling on glycogen used to throw away the surplus of a well-funded
 	 * birth, which erased the entire advantage of pairing — a paired child and
-	 * a budded one arrived holding the identical fraction of a tank).
+	 * a budded one arrived holding the identical fraction of glycogen).
 	 *
 	 * <p>The stomach is filled to the lineage's {@link Genome#birthSatiation}, and
-	 * everything still left goes into the tank — with each book's overflow
+	 * everything still left goes into glycogen — with each book's overflow
 	 * running back into the other, so a lineage that over-fills one does not
 	 * lose the difference and the sum still balances. A child's hunger is
 	 * therefore derived rather than decreed: born to a lineage that provisions
@@ -3837,13 +3837,13 @@ public class TestNPC extends NPC {
 		double m = child.adultMass();
 		double spare = Math.max(0, paid);
 		double gut = STOMACH * m;
-		double tank = child.energyCapacity();
+		double glycogen = child.glycogenCapacity();
 		double intoGut = Math.min(spare, satiationShare * gut);
-		double intoTank = Math.min(spare - intoGut, tank);
-		intoGut = Math.min(gut, intoGut + (spare - intoGut - intoTank)); // tank overflow runs back to the gut
+		double intoGlycogen = Math.min(spare - intoGut, glycogen);
+		intoGut = Math.min(gut, intoGut + (spare - intoGut - intoGlycogen)); // glycogen overflow runs back to the gut
 		child.hunger = gut > 0 ? Math.max(0, 1 - intoGut / gut) : 0;
-		child.energy = intoTank;
-		return intoGut + intoTank;
+		child.glycogen = intoGlycogen;
+		return intoGut + intoGlycogen;
 	}
 
 	/** A PARENT's {@link Genome#birthSatiation}, clamped to the 0..1 of a
@@ -3858,12 +3858,12 @@ public class TestNPC extends NPC {
 	/**
 	 * The birth transaction, both halves at once: the child's books are opened
 	 * from what the parents offer, and each parent is then charged its share of
-	 * exactly what the child took. What the child is worth — body, gut and tank
+	 * exactly what the child took. What the child is worth — body, gut and glycogen
 	 * — equals what the parents lost, across both of their books, to the penny.
 	 *
 	 * <p>A pair is therefore genuinely better off than a budder: two offers are
 	 * pooled, a bigger child comes out, and none of the surplus is thrown away.
-	 * Under the old ceiling both arrived holding the same fraction of a tank and
+	 * Under the old ceiling both arrived holding the same fraction of glycogen and
 	 * a mate bought nothing at all.
 	 */
 	@Override
@@ -3885,8 +3885,8 @@ public class TestNPC extends NPC {
 				partner.payBirthMass(rest);
 			}
 		}
-		// Then the books: the meal it is born digesting and its tank, out of the
-		// parents' tanks and stomachs.
+		// Then the books: the meal it is born digesting and its glycogen, out of the
+		// parents' glycogen stores and stomachs.
 		double mine = birthPayment();
 		double theirs = partner == null ? 0 : partner.birthPayment();
 		double offered = mine + theirs;
@@ -4156,7 +4156,7 @@ public class TestNPC extends NPC {
 			s.append(" ate ").append(String.format("%.2f", totalIntake));
 		}
 		if (behavior == Behavior.BREEDER || behavior == Behavior.NEST || behavior == Behavior.MATER) {
-			s.append(String.format(" e%.1f", getEnergy()));
+			s.append(String.format(" e%.1f", getGlycogen()));
 		}
 		if (flying) {
 			s.append(" fly");
