@@ -217,7 +217,7 @@ public class TestNPC extends NPC {
 	@Unit("hunger level")
 	public static double STARVE_HUNGER = 0.9;
 	/** Below this hunger a hunter stops killing altogether: the meal would not
-	 *  fit its stomach, so the prey would die for nothing. */
+	 *  fit its gut, so the prey would die for nothing. */
 	@Unit("hunger level")
 	public static double PRED_FULL_HUNGER = 0.05;
 	/** Fraction of its (adult-sized) glycogen a world-seeded FOUNDER starts holding.
@@ -272,7 +272,7 @@ public class TestNPC extends NPC {
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). A
 	 *  sated body has no appetite at all — graze() additionally bounds every
-	 *  bite by the stomach room left, so nothing strips ground it can't digest. */
+	 *  bite by the gut room left, so nothing strips ground it can't digest. */
 	private double grazeDemand() {
 		return hunger <= 0 ? 0 : GRAZE_DEMAND * leanMass();
 	}
@@ -754,7 +754,7 @@ public class TestNPC extends NPC {
 	 * takes {@link #PARA_BITE} health off the host and digests the share of the
 	 * body that health represented — the same meat arithmetic as a hunter's
 	 * bite, so a bigger host is a richer ride. The drain stops on its own when
-	 * the stomach is full or the body is collapsed, and a host that dies under
+	 * the gut is full or the body is collapsed, and a host that dies under
 	 * it is let go of: a parasite drinks lives, not corpses (the carrion niche
 	 * is the scavenger's).
 	 */
@@ -1327,7 +1327,7 @@ public class TestNPC extends NPC {
 		}
 
 		// Appetite dictates the hunt (VITALS.md): hunger is the need for food,
-		// distinct from the energy budget, so a hunter chases when its stomach
+		// distinct from the energy budget, so a hunter chases when its gut
 		// asks — not when its glycogen has headroom. A sated hunter patrols and
 		// takes only prey that blunders into reach; hungry it hunts in earnest;
 		// only genuine starvation lifts the taboo on eating its own kind.
@@ -1336,7 +1336,7 @@ public class TestNPC extends NPC {
 		NPC prey = nearestPrey(LOS_RANGE, starving); // hunt as far as it can see
 		double reach = prey == null ? 0
 				: (getSize() + prey.getSize()) / 2.0 + ATTACK_REACH;
-		// So nearly sated a kill would be thrown away: the stomach has no room.
+		// So nearly sated a kill would be thrown away: the gut has no room.
 		boolean full = hunger <= PRED_FULL_HUNGER;
 		if (prey != null && !full && distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
 			lockTarget(prey);
@@ -1468,7 +1468,7 @@ public class TestNPC extends NPC {
 	 *
 	 * <p>A hunter is not a scavenger. It eats only fresh meat ({@link NPC#freshMeat}),
 	 * which {@link #edibleCarrion} enforces on every carcass it reaches for, and
-	 * once a body has turned it cannot stomach it. Its window on a kill is the
+	 * once a body has turned it cannot gut it. Its window on a kill is the
 	 * front of the corpse's life; what it leaves is the scavengers'.
 	 */
 	private double finishTheKill() {
@@ -2473,7 +2473,7 @@ public class TestNPC extends NPC {
 		// Census walk: this level's corpses only.
 		for (NPC n : getWorld().census().corpses(getLvl())) {
 			if (!edibleCarrion(n)) {
-				continue; // a body still too fresh to stomach is not yet a meal to walk to
+				continue; // a body still too fresh to gut is not yet a meal to walk to
 			}
 			if (distance(n.getX(), n.getY(), n.getZ()) > CARRION_SCENT_R) {
 				continue;
@@ -3344,7 +3344,7 @@ public class TestNPC extends NPC {
 		}
 		lastBiteAt = age;
 		near.damage(ATTACK_DAMAGE, "combat");
-		feed(BITE_ENERGY); // predation feeds the attacker — into the stomach
+		feed(BITE_ENERGY); // predation feeds the attacker — into the gut
 		return true;
 	}
 
@@ -3474,7 +3474,7 @@ public class TestNPC extends NPC {
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
 		double mass = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
-		feed(mass * MEAT_ENERGY); // meat -> stomach; satiation powers the body
+		feed(mass * MEAT_ENERGY); // meat -> gut; satiation powers the body
 		setAction("eating", true);
 		return mass;
 	}
@@ -3514,7 +3514,7 @@ public class TestNPC extends NPC {
 	 * Whether {@code n} is a carcass THIS mouth can eat -- a hard rule of the
 	 * body's clade, not of its mind or any adaptable attribute. A hunter eats
 	 * only a corpse with fresh meat still on it ({@link NPC#freshMeat}); once
-	 * the body has turned it cannot stomach it. A scavenger eats any corpse
+	 * the body has turned it cannot gut it. A scavenger eats any corpse
 	 * with meat on it, however old. A parasite lives off the living and eats
 	 * nothing here. A carcass with no meat left is food to nobody.
 	 */
@@ -3614,7 +3614,7 @@ public class TestNPC extends NPC {
 	}
 
 	/** True once a metabolic creature has everything eating can give it: the
-	 *  glycogen past its breeding line, a stomach full enough to lay fat down from,
+	 *  glycogen past its breeding line, a gut full enough to lay fat down from,
 	 *  and all the fat the body can carry -- so more grazing would only strip
 	 *  the pasture. Below any of those it grazes on; at all of them it moves on.
 	 *  It used to be glycogen alone, and a body whose children are built out of
@@ -3780,7 +3780,7 @@ public class TestNPC extends NPC {
 	/** How much of a nominal childhood (the growth ceiling's, in ticks) a
 	 *  founder provisions a child's LIVING for: the resting and travelling burn
 	 *  of that span, on top of the meal it is born with. A child provisioned for
-	 *  a quarter of it was born below the crawl reserve and, if it was a hunter,
+	 *  a quarter of it was born below the exhaustion floor and, if it was a hunter,
 	 *  could not walk to the kill it needed. */
 	@Unit("of a childhood")
 	public static double PROVISION = 1.0;
@@ -3804,9 +3804,9 @@ public class TestNPC extends NPC {
 	public static double endowmentCost(double adultSize, double birthSatiation, double speed) {
 		double m = adultSize / NPC.REF_SIZE;
 		double ticks = PROVISION * NPC.growthTicks(adultSize);
-		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.STOMACH * m;
-		double upkeep = NPC.BASE_METABOLISM * Math.pow(m, 0.75) * ticks;
-		double travel = NPC.MOVE_ENERGY * m * speed * speed * ticks;
+		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.GUT_PER_MASS * m;
+		double upkeep = NPC.BASAL_RATE * Math.pow(m, 0.75) * ticks;
+		double travel = NPC.TRANSPORT_COST * m * speed * speed * ticks;
 		return meal + upkeep + travel;
 	}
 
@@ -3816,15 +3816,15 @@ public class TestNPC extends NPC {
 	 * bought here: it is matter, and it comes out of the parents' fat
 	 * ({@link #settleBirth}). The identity this exists to hold: <b>what the
 	 * child is worth equals what its parents lost</b> — its mass at the one
-	 * price, plus the food in its stomach, plus its glycogen, summing to what was
+	 * price, plus the food in its gut, plus its glycogen, summing to what was
 	 * handed over and never to a penny more or less. Nothing is minted (the
-	 * old books gave every newborn a body and a stomach nobody paid for, so a
+	 * old books gave every newborn a body and a gut nobody paid for, so a
 	 * lineage of budders was a perpetual-motion machine) and nothing is burnt
 	 * (a ceiling on glycogen used to throw away the surplus of a well-funded
 	 * birth, which erased the entire advantage of pairing — a paired child and
 	 * a budded one arrived holding the identical fraction of glycogen).
 	 *
-	 * <p>The stomach is filled to the lineage's {@link Genome#birthSatiation}, and
+	 * <p>The gut is filled to the lineage's {@link Genome#birthSatiation}, and
 	 * everything still left goes into glycogen — with each book's overflow
 	 * running back into the other, so a lineage that over-fills one does not
 	 * lose the difference and the sum still balances. A child's hunger is
@@ -3836,7 +3836,7 @@ public class TestNPC extends NPC {
 	private static double endow(TestNPC child, double paid, double satiationShare) {
 		double m = child.adultMass();
 		double spare = Math.max(0, paid);
-		double gut = STOMACH * m;
+		double gut = GUT_PER_MASS * m;
 		double glycogen = child.glycogenCapacity();
 		double intoGut = Math.min(spare, satiationShare * gut);
 		double intoGlycogen = Math.min(spare - intoGut, glycogen);
@@ -3847,7 +3847,7 @@ public class TestNPC extends NPC {
 	}
 
 	/** A PARENT's {@link Genome#birthSatiation}, clamped to the 0..1 of a
-	 *  stomach it means; a body without a genome packs the default. Read off
+	 *  gut it means; a body without a genome packs the default. Read off
 	 *  the parents and never off the child: how full a newborn arrives is a
 	 *  decision its parents make, not one it makes for itself. */
 	private static double birthSatiationOf(net.hedinger.prototype.entities.NPC parent) {
@@ -3886,7 +3886,7 @@ public class TestNPC extends NPC {
 			}
 		}
 		// Then the books: the meal it is born digesting and its glycogen, out of the
-		// parents' glycogen stores and stomachs.
+		// parents' glycogen and guts.
 		double mine = birthPayment();
 		double theirs = partner == null ? 0 : partner.birthPayment();
 		double offered = mine + theirs;

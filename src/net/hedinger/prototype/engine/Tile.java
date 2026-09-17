@@ -669,7 +669,7 @@ public class Tile {
 	 * such ground, and they are the first in the world at all: until now the
 	 * map could stop a body, slow it, hide it or drop it, but never wound it,
 	 * so every injury in the world came from another creature or from its own
-	 * empty stomach.
+	 * empty gut.
 	 *
 	 * <p>Deliberately walkable rather than solid. A wall is a fact you route
 	 * around and forget; a floor that costs you something to cross is a

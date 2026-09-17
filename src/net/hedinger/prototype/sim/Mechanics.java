@@ -20,7 +20,7 @@ import net.hedinger.prototype.simtest.TestNPC;
  * simulation or a figure <em>computed</em> from those constants by the same
  * arithmetic the simulation uses. Nothing here is transcribed. That is the whole
  * point: a hand-written page saying "a reference creature lasts six minutes"
- * becomes a lie the moment somebody tunes {@link NPC#BASE_METABOLISM}, and
+ * becomes a lie the moment somebody tunes {@link NPC#BASAL_RATE}, and
  * nothing fails when it does. A page that divides glycogen by the burn rate
  * cannot be wrong, only out of date by one deploy.
  *
@@ -155,8 +155,8 @@ public final class Mechanics {
 				+ "is (hunger is its own book; see the needs). Glycogen's ceiling grows in "
 				+ "proportion to mass, anchored on the body a creature is growing INTO, so a "
 				+ "juvenile is not economically punished for being young. Food never fills the "
-				+ "glycogen directly: eating fills the stomach, and regeneration converts the "
-				+ "stomach's contents into energy over time — draining the meal it is minted "
+				+ "glycogen directly: eating fills the gut, and regeneration converts the "
+				+ "gut's contents into energy over time — draining the meal it is minted "
 				+ "from, one for one, so a body can never bank more energy than it actually "
 				+ "ate. The rate scales with how healthy the body is — an unhealthy body is "
 				+ "also a listless one. Empty glycogen is COLLAPSE, never death: below the crawl "
@@ -170,11 +170,11 @@ public final class Mechanics {
 						"World-seeded bodies only, and under the breeding line: a founder "
 						+ "has no parents to be endowed by. A BORN body holds whatever its "
 						+ "parents handed over — there is no ceiling on that."),
-				row("Regenerates", num(NPC.REGEN_RATE)
+				row("Regenerates", num(NPC.ASSIMILATION_RATE)
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
 						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
-						+ "Every unit minted drains a unit from the stomach."),
-				row("Crawl reserve", pct(NPC.CRAWL_RESERVE), "of glycogen",
+						+ "Every unit minted drains a unit from the gut."),
+				row("Exhaustion floor", pct(NPC.EXHAUSTION), "of glycogen",
 						"Below it: collapse. A crawl at " + pct(NPC.CRAWL_SPEED)
 						+ " of top speed, and nothing else."),
 				row("Glycogen empty", "collapse, not death", "",
@@ -201,9 +201,9 @@ public final class Mechanics {
 				+ "length — is now a real trade a lineage spends or saves its living on, priced "
 				+ "the way movement and mass already are.");
 		rows(s,
-				row("Resting burn", num(NPC.BASE_METABOLISM) + " × mass^0.75 × efficiency",
+				row("Resting burn", num(NPC.BASAL_RATE) + " × mass^0.75 × efficiency",
 						"energy/tick", "Before capability surcharges."),
-				row("Reference burn", sci(NPC.BASE_METABOLISM), "energy/tick",
+				row("Reference burn", sci(NPC.BASAL_RATE), "energy/tick",
 						"At mass 1.0, average genome, reference capabilities."),
 				row("Efficiency", "genome metabolism ÷ " + num(NPC.META_REF), "",
 						"A multiplier: 1.0 for an average burner, and heritable."),
@@ -221,7 +221,7 @@ public final class Mechanics {
 		for (double size : SAMPLE_SIZES) {
 			double m = size / NPC.REF_SIZE;
 			double cap = NPC.GLYCOGEN_PER_MASS * m;
-			double burn = NPC.BASE_METABOLISM * Math.pow(m, 0.75);
+			double burn = NPC.BASAL_RATE * Math.pow(m, 0.75);
 			double ticks = cap / burn;
 			t.add(List.of(num(size), round(m, 2), round(cap, 2), sci(burn),
 					num(Math.round(ticks)), round(ticks / TPS / 60, 1)));
@@ -247,16 +247,16 @@ public final class Mechanics {
 				+ "a wall moved nothing and costs nothing. And it bills the whole load, because "
 				+ "anything a creature is hauling is simply extra mass.");
 		rows(s,
-				row("Movement cost", num(NPC.MOVE_ENERGY)
+				row("Movement cost", num(NPC.TRANSPORT_COST)
 						+ " × efficiency × (mass + load) × step²", "energy/tick", ""),
 				row("Fastest genome", num(Genome.SPEED_MAX), "tiles/tick",
 						round(Genome.SPEED_MAX * TPS, 1) + " tiles/s"),
 				row("Standing still", "0", "energy/tick",
 						"Even under a load — weight is billed by the step."));
 		List<List<String>> t = new ArrayList<>();
-		double rest = NPC.BASE_METABOLISM;
+		double rest = NPC.BASAL_RATE;
 		for (double v : SAMPLE_SPEEDS) {
-			double cost = NPC.MOVE_ENERGY * 1.0 * v * v;
+			double cost = NPC.TRANSPORT_COST * 1.0 * v * v;
 			t.add(List.of(round(v, 3), round(v * TPS, 2), sci(cost), round(cost / rest, 2) + "×",
 					round(NPC.GLYCOGEN_PER_MASS / (rest + cost) / TPS / 60, 1)));
 		}
@@ -366,9 +366,9 @@ public final class Mechanics {
 						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
 						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
 				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the lean mass", "mass",
-						"Laid down at the digestion rate while the stomach is fuller than "
+						"Laid down at the digestion rate while the gut is fuller than "
 						+ pct(1 - NPC.FAT_STORE_BELOW) + " against full glycogen; drawn back into the "
-						+ "stomach once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
+						+ "gut once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
 						+ "before health does. Carried on every step, and on the carcass, half "
 						+ "fresh and half decayed."),
 				row("Childhood", "(1 − " + num(NPC.BIRTH_SIZE_FRACTION) + ") × adult size ÷ "
@@ -405,7 +405,7 @@ public final class Mechanics {
 				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
 						+ ", health at 60+", "", "Surplus across all four books."),
 				row("Costs", pct(refReproC), "of glycogen, each parent",
-						"Also a gene — the r/K trade. Backed by glycogen AND stomach together "
+						"Also a gene — the r/K trade. Backed by glycogen AND gut together "
 						+ "and drawn proportionally from both, so neither book is a loophole "
 						+ "and a full gut can pay for a child on its own."),
 				row("Founders ask", "what the childhood costs", "",
@@ -414,10 +414,10 @@ public final class Mechanics {
 						+ "growing, its birth meal, and the burn of the whole childhood. No "
 						+ "clade carries a price of its own; it is a gene from there on."),
 				row("Offspring is worth", "exactly what its parents paid", "",
-						"Meat-priced body + stomach + glycogen = the payment, to the penny — "
+						"Meat-priced body + gut + glycogen = the payment, to the penny — "
 						+ "nothing minted, nothing burnt. A pair pools two offers, so "
 						+ "mating genuinely buys a better-funded child."),
-				row("Born sated", pct(new Genome().birthSatiation), "of the stomach",
+				row("Born sated", pct(new Genome().birthSatiation), "of the gut",
 						"A gene, paid for out of the same endowment: the rest of it goes to "
 						+ "glycogen. Gut food is what the mint runs on, glycogen is "
 						+ "spendable at once — so a newborn's hunger is derived, not decreed."),
@@ -439,7 +439,7 @@ public final class Mechanics {
 				+ "the same instant wants water in half the time it takes to want food, and a "
 				+ "sated hunter's appetite returns in twice the time its thirst does — at "
 				+ "rest. Thirst is a clock; hunger is not: appetite arrives as regeneration "
-				+ "drains the stomach, so it tracks what the body actually burns, and "
+				+ "drains the gut, so it tracks what the body actually burns, and "
 				+ "exertion buys appetite on top. Both stretch with mass^0.25 (big bodies "
 				+ "cycle slower, Kleiber again) and run faster for hot metabolisms.\n\n"
 				+ "Eating and drinking are rates held over ticks, never instant refills: a "
@@ -456,11 +456,11 @@ public final class Mechanics {
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
 				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
 						"At rest. Twice thirst's period — the rhythm anchor, held "
-						+ "by the stomach's sizing rather than a clock."),
+						+ "by the gut's sizing rather than a clock."),
 				row("A full drink", num((long) NPC.DRINK_TICKS), "ticks at water",
 						round(NPC.DRINK_TICKS / TPS, 1) + " s; any water/shallows in the 3×3."),
-				row("The stomach", num(NPC.STOMACH) + " × mass", "food units",
-						"= resting burn × hunger period: a full stomach IS "
+				row("The gut", num(NPC.GUT_PER_MASS) + " × mass", "food units",
+						"= resting burn × hunger period: a full gut IS "
 						+ "a hunger period of fuel. A sated body strips no ground."),
 				row("Hunter hunts above", num(TestNPC.PRED_HUNT_HUNGER), "hunger",
 						"Appetite, not glycogen headroom, starts the chase."),
@@ -964,7 +964,7 @@ public final class Mechanics {
 						+ "axis, low is breed-early, high is bank-first."),
 				row("Spends per child", pct(def.reproCostFraction) + " of glycogen", "",
 						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
-				row("Newborns sated to", pct(def.birthSatiation) + " of the stomach", "",
+				row("Newborns sated to", pct(def.birthSatiation) + " of the gut", "",
 						"How a lineage provisions its young: a full gut regenerates, a full "
 						+ "glycogen spends. Too little of either and its children do not make it."),
 				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
@@ -1076,7 +1076,7 @@ public final class Mechanics {
 				group("herbivore — grazes the living substrate",
 						item("diet", "Vegetation underfoot: " + num(TestNPC.GRAZE_DEMAND)
 								+ " units/tick at mass 1, scaled by body mass and bounded by "
-								+ "stomach room — a sated body strips no ground."),
+								+ "gut room — a sated body strips no ground."),
 						item("forage sense", "The richest patch in sight, scored density over "
 								+ "distance and re-chosen every "
 								+ num(TestNPC.FORAGE_SCAN_PERIOD) + " ticks — commitment by "
@@ -1103,7 +1103,7 @@ public final class Mechanics {
 								+ "without a bite is let go."),
 						item("appetite gates", "Hunts above " + num(TestNPC.PRED_HUNT_HUNGER)
 								+ " hunger, stops killing below " + num(TestNPC.PRED_FULL_HUNGER)
-								+ " (a full stomach wastes the prey), and only above "
+								+ " (a full gut wastes the prey), and only above "
 								+ num(TestNPC.STARVE_HUNGER) + " will it eat its own kind."),
 						item("taboos", "Parasites are never food (too small, too foul), rivals "
 								+ "only in desperation, machines never."),
@@ -1178,7 +1178,7 @@ public final class Mechanics {
 						"Holding the attack actuator high does not bite faster — for anyone. "
 						+ "A non-hunter's bite is a gnaw: " + num(TestNPC.ATTACK_DAMAGE)
 						+ " hp, fighting rather than feeding."),
-				row("Collapse", "below " + pct(NPC.CRAWL_RESERVE) + " of glycogen", "",
+				row("Collapse", "below " + pct(NPC.EXHAUSTION) + " of glycogen", "",
 						"No biting, grabbing, breeding or holding a captive; a crawl at "
 						+ pct(NPC.CRAWL_SPEED) + " of top speed is all that is left."),
 				row("Grab and ride", "smaller only / larger only", "",

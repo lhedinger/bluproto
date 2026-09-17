@@ -251,7 +251,7 @@ public class Genome {
 	 *  trade: cheap-and-many against dear-and-few. */
 	public double reproCostFraction = 0.5;
 	/**
-	 * How full a lineage packs its newborns' stomachs, 0..1 of stomach capacity
+	 * How full a lineage packs its newborns' guts, 0..1 of gut capacity
 	 * — the satiation a child is born with, and the third life-history gene.
 	 * What it costs comes out of the same endowment as glycogen, so this is a
 	 * real trade and not a free gift: food in the gut is what the mint runs on

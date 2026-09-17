@@ -27,7 +27,7 @@ The premises, fixed up front:
 
 | attribute | gene | role |
 |---|---|---|
-| **mass** `m` | `Genome.size` (normalised: reference body = 1.0) | scales every **capacity** — stomach, water reserve, glycogen store, meal size, offspring cost — linearly |
+| **mass** `m` | `Genome.size` (normalised: reference body = 1.0) | scales every **capacity** — gut, water reserve, glycogen store, meal size, offspring cost — linearly |
 | **metabolic rate** `R` | `Genome.metabolism` (neutral = 1.0) | scales every **rate** — need rise, intake speed, energy regeneration, healing — as `R · m^0.75` (Kleiber, as today) |
 
 Because capacities grow with `m` but rates only with `m^0.75`, a big body's
@@ -44,15 +44,15 @@ bundle; there is no free knob.
 
 | vital | range | rises / falls | what it is |
 |---|---|---|---|
-| **hunger** | 0 (sated) → 1 (starving) | rises as regeneration **drains the stomach** (no clock of its own — §8); falls only by **eating** | the need for food, and the fuel gauge |
+| **hunger** | 0 (sated) → 1 (starving) | rises as regeneration **drains the gut** (no clock of its own — §8); falls only by **eating** | the need for food, and the fuel gauge |
 | **thirst** | 0 (slaked) → 1 (parched) | same shape, **twice the rate** of hunger; falls only by **drinking** | the need for water |
 | **energy** | 0 → capacity `∝ m` | spent by **actions**; **regenerates** from satiation | the action budget |
 | **health** | 0 → 100 | worn by wounds and deprivation; regenerates under low needs | the life gate |
 
 Invariants worth stating baldly:
 
-- **Food and water never touch energy directly.** Eating fills the stomach
-  (lowers hunger); regeneration then converts the stomach's contents into
+- **Food and water never touch energy directly.** Eating fills the gut
+  (lowers hunger); regeneration then converts the gut's contents into
   energy *over time*, draining the meal it is minted from, one for one — so
   **energy is food-backed**: a body can never bank more than it actually ate
   (§8). Today `graze()` deposits straight into the action budget — that
@@ -71,7 +71,7 @@ Invariants worth stating baldly:
                         │    mass m           metabolism R   │
                         └──────┬────────────────────┬────────┘
               capacities ∝ m   │                    │   rates ∝ R · m^0.75
-      (stomach, water,         │                    │   (need rise, intake,
+      (gut, water,             │                    │   (need rise, intake,
        glycogen, offspring)    ▼                    ▼    regen, healing)
              ┌───────────────────────────────────────────────┐
   eating ──▶ │            NEEDS  (rise with time)            │ ◀── drinking
@@ -96,13 +96,13 @@ Invariants worth stating baldly:
 In formulas, for review rather than for code:
 
 ```
-hunger'  = +  minted energy / stomach                 (the drain; no clock — §8)
-             resting-only body: = R · m^-0.25 / T_hunger  by the stomach identity
+hunger'  = +  minted energy / gut                     (the drain; no clock — §8)
+             resting-only body: = R · m^-0.25 / T_hunger  by the gut identity
 thirst'  = +  R · m^-0.25 / T_thirst                  (T_hunger = 2 · T_thirst)
-eating   = −  intake · m / stomach     while the act runs (grazers also patch-limited)
+eating   = −  intake · m / gut         while the act runs (grazers also patch-limited)
 drinking = −  intake · m / reserve     while at water
 
-energy'  = +  REGEN · R · m^0.75 · satiation · vigor  −  action costs
+energy'  = +  ASSIMILATION · R · m^0.75 · satiation · vigor  −  action costs
              satiation = 1 − max(hunger, thirst)       (the worse need governs)
              vigor     = health / 100                  (healthy bodies regen faster)
 action costs: movement m·v² per tick, grip, bite, growth, breeding — as priced today
@@ -207,12 +207,12 @@ the periods are named constants rather than folded into magic drain values.
 All five went as proposed, and are now what the code does:
 
 1. **Satiation gate**: `1 − max(hunger, thirst)` — the worse need governs.
-2. **Collapse**: a crawl reserve (5% of glycogen, `CRAWL_RESERVE`): below it
+2. **Collapse**: an exhaustion floor (5% of glycogen, `EXHAUSTION`): below it
    the body can only crawl at a quarter of its top speed — it cannot bite,
    grab, breed, or keep a grip (a collapsed captor's captive walks free) —
    but it can still reach food two tiles away and recover.
 3. **Mass**: the linear radius-normalised `bodyMass()` stays.
-4. **Stomach**: hunger-as-level, with a lifetime `swallowed` ledger for
+4. **Gut**: hunger-as-level, with a lifetime `swallowed` ledger for
    probes and the scenario suite; no digestion queue.
 5. **Rollout**: both cohorts at once. Measured on seed 42 over 40k ticks: the
    ecology settles with every death cause live (starvation, thirst,
@@ -225,8 +225,8 @@ All five went as proposed, and are now what the code does:
 ## 8. Amendment — energy is food-backed
 
 The model above regenerated energy from the *state* of being fed: satiation
-gated the mint, but nothing drained the stomach as energy was minted. The
-constants made the exchange rate `REGEN · T_hunger / stomach = 12` — twelve
+gated the mint, but nothing drained the gut as energy was minted. The
+constants made the exchange rate `ASSIMILATION · T_hunger / gut = 12` — twelve
 units of glycogen per unit of food actually eaten — and the herd found the
 seam. Selection drove metabolism to triple the reference (net income scales
 linearly with `R`), collapsed mate choice, drifted lineages toward budding,
@@ -236,15 +236,15 @@ breeding's worth of energy cost a third of a vegetation unit of real grass.
 The repair is one mechanism and one identity:
 
 - **The mint drains the meal.** Every unit of energy regeneration adds
-  `minted / stomach` to hunger, so glycogen can never bank more than the body
+  `minted / gut` to hunger, so glycogen can never bank more than the body
   ate. Conversion that would overflow full glycogen does not run (a sated body
-  does not burn its meal for nothing). Food, stomach and glycogen are now one
+  does not burn its meal for nothing). Food, gut and glycogen are now one
   conserved ledger; grass prices what it says.
 - **Hunger needs no clock.** With the drain in place the resting burn alone
-  empties a stomach, so the old timed rise became a redundant proxy and was
-  removed. The stomach is sized to the anchor instead:
-  `stomach = base burn · T_hunger` (9 units at reference mass), which makes a
-  full stomach exactly one hunger period of resting fuel — the rhythm anchor
+  empties a gut, so the old timed rise became a redundant proxy and was
+  removed. The gut is sized to the anchor instead:
+  `gut = base burn · T_hunger` (9 units at reference mass), which makes a
+  full gut exactly one hunger period of resting fuel — the rhythm anchor
   (§5) holds *by construction* for a resting body, and exertion now buys
   appetite the clock could never price.
 
@@ -258,13 +258,13 @@ against the satiation-state mint on both counts.
 **Birth conserves too.** Once food backs glycogen, birth becomes the last
 door for free energy, and it had three: a bud arrived holding 0.6 of a store
 its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
-full stomach of mintable food. A newborn is now worth exactly what its
+full gut of mintable food. A newborn is now worth exactly what its
 parents lost. **Its body is matter, and comes out of the parents' fat**: the
 birth mass (`BIRTH_SIZE_FRACTION` of the child's adult lean mass) is taken from
 each parent's fat in proportion to what it holds, never from the lean mass, so no
 parent can die of giving birth and a lean one cannot breed at all. Its books
 — the meal it is born digesting and its glycogen — come out of the parents'
-stores and stomachs, per parent share for a sexual pair. A founder's energy
+glycogen and guts, per parent share for a sexual pair. A founder's energy
 price is the child's living for a nominal childhood (meal, resting burn,
 travel at top pace), not its growth: a child buys its own flesh out of what
 it eats. The audit is the cannibal round trip: a parent eating its just-born
@@ -276,9 +276,9 @@ at 9.5 conjured per 2.25 paid.
 60.6 s at 33 ticks/s, a minute to the eye — and every biological duration is a
 multiple of it, so the tempo of life scales with one number instead of a dozen
 drifting apart. The keystone is the energy unit: **one unit is one day of
-resting burn for a reference body**, so `BASE_METABOLISM == 1 / DAY` and any
+resting burn for a reference body**, so `BASAL_RATE == 1 / DAY` and any
 store reads straight off its energy as a fasting time. A reserve of 6 is six
-days of lying still; a stomach of 9 is nine; a full fat store of 13.5 is
+days of lying still; a gut of 9 is nine; a full fat store of 13.5 is
 thirteen and a half. That is also where the metabolism already sat before the
 clock was named, by accident rather than design. Pinned by
 `TheWorldKeepsOneClock`, which asserts every duration in the units biology
@@ -290,15 +290,15 @@ an eater collects at the meat price, so each step of growth is bought from
 glycogen at that price — `MEAT_ENERGY` per unit of mass grown — the one
 price of mass, which also mends a wound, pays a parasite and pays every
 mouth at a carcass, so nothing in the chain mints energy. It is sized so a
-body is worth stomachs rather than mouthfuls, which makes growing up the
+body is worth gut-fills rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
 for it in minutes. A fed adult with full glycogen lays what it cannot use down
-as fat, mass on top of the lean mass, and draws it back into the stomach before
+as fat, mass on top of the lean mass, and draws it back into the gut before
 starvation can bite — the store a long fed life leaves on the carcass. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus
-above the crawl reserve affords, so childhood stretches with scarcity and a
+above the exhaustion floor affords, so childhood stretches with scarcity and a
 starving juvenile stops growing before it stops living. Because the mint
-refills what growth spends and the mint drains the stomach, a growing child
+refills what growth spends and the mint drains the gut, a growing child
 is hungrier than an adult of the same current size — measured at over twice
 the reserve drain, motionless and side by side. `growthTicks` stays the
 NOMINAL childhood, which is still the right scale for the clocks derived

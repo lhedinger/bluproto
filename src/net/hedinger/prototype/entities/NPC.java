@@ -55,7 +55,7 @@ public abstract class NPC extends Entity {
 	 * One day of world time, in ticks: the world's one clock. Every biological
 	 * duration in the simulation is a multiple of it, and the energy unit is
 	 * defined as one day of resting burn for a reference body — so
-	 * {@link #BASE_METABOLISM} is exactly {@code 1 / DAY}, and any store's size
+	 * {@link #BASAL_RATE} is exactly {@code 1 / DAY}, and any store's size
 	 * can be read straight off as "how many days of lying still it buys".
 	 *
 	 * <p>Scaling this scales the whole tempo of life coherently: a longer day
@@ -92,7 +92,7 @@ public abstract class NPC extends Entity {
 	 *  still. Every store can therefore be read as a fasting time straight off
 	 *  its energy: {@link #GLYCOGEN_PER_MASS} of 6 is six days of lying still. */
 	@Unit("energy/tick at mass 1")
-	public static double BASE_METABOLISM = 1.0 / DAY;
+	public static double BASAL_RATE = 1.0 / DAY;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
 	@Unit("gene value = pace 1")
@@ -150,11 +150,11 @@ public abstract class NPC extends Entity {
 	 * were worth exactly the same (measured: 2.49 either way).
 	 *
 	 * <p>Sized so a body is a meal, not a snack: a reference lean mass is three
-	 * stomachs ({@link #STOMACH}), so the fresh third of a lean medium corpse
+	 * gut-fills ({@link #GUT_PER_MASS}), so the fresh third of a lean medium corpse
 	 * fills one same-size hunter, and a fat one ({@link #FAT_CAP}) half as much
 	 * again. The same figure is what growing up costs -- a child buys two
 	 * thirds of its lean mass out of what it eats -- which is why grazing and
-	 * digestion ({@link #REGEN_RATE}) are paced to pay for it in minutes.
+	 * digestion ({@link #ASSIMILATION_RATE}) are paced to pay for it in minutes.
 	 */
 	@Unit("energy per mass")
 	public static double MEAT_ENERGY = 27.0;
@@ -258,7 +258,7 @@ public abstract class NPC extends Entity {
 	}
 	/**
 	 * Movement cost coefficient: a creature pays
-	 * {@code MOVE_ENERGY * mass * v^2} every tick, where {@code v} is the ground
+	 * {@code TRANSPORT_COST * mass * v^2} every tick, where {@code v} is the ground
 	 * it actually covered that tick — kinetic energy, so speed is charged as a
 	 * square rather than a flat toll per tile.
 	 *
@@ -277,7 +277,7 @@ public abstract class NPC extends Entity {
 	 * several times over rather than merely proportionally.
 	 */
 	@Unit("energy/tick at mass 1, speed 1")
-	public static double MOVE_ENERGY = 0.2;
+	public static double TRANSPORT_COST = 0.2;
 
 	/** This creature's clade ("herbivore", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick
@@ -369,7 +369,7 @@ public abstract class NPC extends Entity {
 	 *  {@link Genome#reproCostFraction} of the (size-scaled) glycogen, so the price
 	 *  is a property of the body and the lineage rather than of how full the
 	 *  gut happens to be this tick. What BACKS the price is both books (see
-	 *  {@link #reserves()}): a parent with empty glycogen and a full stomach can
+	 *  {@link #reserves()}): a parent with empty glycogen and a full gut can
 	 *  still afford a child, and pays for it out of the meal. Public because
 	 *  birth conservation is audited against it. What is actually handed over
 	 *  is {@link #birthPayment()}. */
@@ -377,20 +377,20 @@ public abstract class NPC extends Entity {
 		return genome != null ? genome.reproCostFraction * glycogenCapacity() : reproCost;
 	}
 
-	/** Food energy still undigested in the stomach: the complement of
-	 *  {@link #stomachRoom()}, in the same units {@link #feed} consumes. Held
+	/** Food energy still undigested in the gut: the complement of
+	 *  {@link #gutRoom()}, in the same units {@link #feed} consumes. Held
 	 *  wealth exactly as glycogen is — it is what the mint runs on — so a birth
 	 *  draws on it too. */
-	public double stomachEnergy() {
-		return (1 - hunger) * STOMACH * adultMass();
+	public double gutEnergy() {
+		return (1 - hunger) * GUT_PER_MASS * adultMass();
 	}
 
 	/** Everything this body holds that a child can be made out of: the banked
-	 *  glycogen plus the undigested food in the stomach, both already in energy
+	 *  glycogen plus the undigested food in the gut, both already in energy
 	 *  units. The two books a birth debits, and the two a newborn is opened
 	 *  with — which is what makes the transaction conserve. */
 	public double reserves() {
-		return Math.max(0, glycogen) + stomachEnergy();
+		return Math.max(0, glycogen) + gutEnergy();
 	}
 
 	/**
@@ -411,7 +411,7 @@ public abstract class NPC extends Entity {
 	/**
 	 * Takes {@code amount} out of this body's books for a birth and returns
 	 * what was actually taken. Drawn proportionally from glycogen and the
-	 * stomach, so neither book is a loophole: a parent cannot shelter a birth
+	 * gut, so neither book is a loophole: a parent cannot shelter a birth
 	 * behind a full gut, and paying does not selectively empty the reserve the
 	 * body needs to keep moving. Never takes more than is there.
 	 */
@@ -422,11 +422,11 @@ public abstract class NPC extends Entity {
 		}
 		double share = Math.min(1.0, amount / held);
 		double fromGlycogen = Math.max(0, glycogen) * share;
-		double fromGut = stomachEnergy() * share;
+		double fromGut = gutEnergy() * share;
 		glycogen = Math.max(0, glycogen) - fromGlycogen;
-		double stomach = STOMACH * adultMass();
-		if (stomach > 0) {
-			hunger = Math.min(1.0, hunger + fromGut / stomach);
+		double gut = GUT_PER_MASS * adultMass();
+		if (gut > 0) {
+			hunger = Math.min(1.0, hunger + fromGut / gut);
 		}
 		return fromGlycogen + fromGut;
 	}
@@ -512,7 +512,7 @@ public abstract class NPC extends Entity {
 	/*
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting, and
 	 * what glycogen cannot take is laid down as mass at MEAT_ENERGY; a body whose
-	 * stomach has run empty draws that mass back into the stomach at the same
+	 * gut has run empty draws that mass back into the gut at the same
 	 * price, so fat is spent before health is. Both moves run at the body's
 	 * digestion rate. Fat is real mass: it is carried (and paid for) on every
 	 * step, it is on the carcass for whoever eats it, and it is what a parent
@@ -522,7 +522,7 @@ public abstract class NPC extends Entity {
 	/** Mass of fat on this body, in body-mass units, on top of the lean mass. */
 	protected double fat = 0;
 	/** Growth spends only the glycogen above this share of the store: a juvenile that grew
-	 *  itself down to the crawl reserve could not exert, and a young hunter or
+	 *  itself down to the exhaustion floor could not exert, and a young hunter or
 	 *  parasite that cannot bite cannot eat its way back up. Growth is bought
 	 *  from surplus, never from the last of the reserve. */
 	@Unit("of glycogen")
@@ -530,12 +530,12 @@ public abstract class NPC extends Entity {
 	/** How much fat a body can carry, as a share of its lean mass. */
 	@Unit("of lean mass")
 	public static double FAT_CAP = 0.5;
-	/** A body lays down fat only while its stomach is fuller than this and its
+	/** A body lays down fat only while its gut is fuller than this and its
 	 *  glycogen is full: fat is what is left over once everything else is paid. */
 	@Unit("hunger")
 	public static double FAT_STORE_BELOW = 0.25;
-	/** A body draws on its fat once its stomach is emptier than this, so the
-	 *  stomach never pegs -- and starvation never bites -- while any fat is left. */
+	/** A body draws on its fat once its gut is emptier than this, so the
+	 *  gut never pegs -- and starvation never bites -- while any fat is left. */
 	@Unit("hunger")
 	public static double FAT_DRAW_ABOVE = 0.75;
 
@@ -871,7 +871,7 @@ public abstract class NPC extends Entity {
 		// genome burns exactly the size-based rate and mutations nudge it.
 		double m34 = Math.pow(leanMass(), 0.75);
 		double eff = genome != null ? genome.metabolism / META_REF : 1.0;
-		double base = BASE_METABOLISM * m34 * eff;
+		double base = BASAL_RATE * m34 * eff;
 		if (genome == null) {
 			return base;
 		}
@@ -1035,9 +1035,9 @@ public abstract class NPC extends Entity {
 		// rate, so the bigger the adult the longer the childhood. New flesh is
 		// matter, and matter is paid for: a metabolic body buys each step at the
 		// meat price an eater would get for it, out of glycogen — which the mint
-		// then refills from the stomach, so a growing child is hungrier than an
+		// then refills from the gut, so a growing child is hungrier than an
 		// adult of the same current size. Growth yields to survival: it slows to
-		// what the surplus above the crawl reserve affords, stretching childhood
+		// what the surplus above the exhaustion floor affords, stretching childhood
 		// when food is poor — a starving juvenile stops growing before it stops
 		// living, and GROWTH_RATE becomes the well-fed pace rather than a
 		// guarantee. Non-metabolic growers keep no books and grow as before.
@@ -1048,7 +1048,7 @@ public abstract class NPC extends Entity {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
 				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
-				double spare = glycogen - Math.max(CRAWL_RESERVE, GROWTH_RESERVE) * glycogenCapacity();
+				double spare = glycogen - Math.max(EXHAUSTION, GROWTH_RESERVE) * glycogenCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
 				glycogen -= step * price;
 			}
@@ -1082,7 +1082,7 @@ public abstract class NPC extends Entity {
 			// fast). Hunger has no clock of its own any more — appetite arrives
 			// through the regeneration drain below, so it tracks what the body
 			// actually burns; the resting rhythm anchor (appetite returns in
-			// twice the time thirst does) survives as the STOMACH identity.
+			// twice the time thirst does) survives as the GUT_PER_MASS identity.
 			double pace = Math.pow(leanMass(), -0.25) * eff;
 			thirst = Math.min(1.0, thirst + pace / THIRST_PERIOD);
 			// Drinking: a rate held over ticks, never a refill — a body beside
@@ -1107,41 +1107,41 @@ public abstract class NPC extends Entity {
 			// Charged on the ground actually covered -- a step cancelled by a
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
-			double travel = MOVE_ENERGY * travelEfficiency() * (leanMass() + fat + carriedMass()) * lastStep * lastStep;
-			// Regeneration: the body converts the stomach's contents into energy
+			double travel = TRANSPORT_COST * travelEfficiency() * (leanMass() + fat + carriedMass()) * lastStep * lastStep;
+			// Regeneration: the body converts the gut's contents into energy
 			// over time — food never becomes energy directly (feed() fills the
-			// stomach), and the mint drains the meal it is minted from, 1:1 in
+			// gut), and the mint drains the meal it is minted from, 1:1 in
 			// energy units, so a body can never bank more than it actually ate.
 			// The worse need still governs the rate, and vigor makes health
 			// compound with the rest: an unhealthy body is also a listless one.
 			double satiation = 1.0 - Math.max(hunger, thirst);
 			double vigor = Math.max(0, health) / 100.0;
-			double regen = REGEN_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor;
+			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor;
 			double out = base + grip + travel;
-			// Only conversion that lands in the books draws down the stomach: at
+			// Only conversion that lands in the books draws down the gut: at
 			// full glycogen the mint stops instead of burning the meal for nothing.
 			double minted = Math.min(regen, Math.max(0, cap - glycogen + out));
-			hunger = Math.min(1.0, hunger + minted / (STOMACH * adultMass()));
+			hunger = Math.min(1.0, hunger + minted / (GUT_PER_MASS * adultMass()));
 			glycogen = Math.min(cap, glycogen + regen - out);
 			if (glycogen < 0) {
 				glycogen = 0; // collapse, never death — health is the only gate
 			}
 			// Fat, both ways, at the digestion rate and the one price of mass. A
-			// stomach running empty is refilled out of fat before it can peg; a
-			// stomach that is full against full glycogen is laid down as fat.
-			double stomach = STOMACH * adultMass();
-			double digest = REGEN_RATE * Math.pow(leanMass(), 0.75) * eff * vigor;
+			// gut running empty is refilled out of fat before it can peg; a
+			// gut that is full against full glycogen is laid down as fat.
+			double gut = GUT_PER_MASS * adultMass();
+			double digest = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * vigor;
 			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
 				double back = Math.min(fat * MEAT_ENERGY, digest);
 				fat -= back / MEAT_ENERGY;
-				hunger = Math.max(0, hunger - back / stomach);
+				hunger = Math.max(0, hunger - back / gut);
 			} else if (hunger < FAT_STORE_BELOW && glycogen >= cap - 1e-9 && fat < fatCap()) {
-				double store = Math.min(digest, Math.min((fatCap() - fat) * MEAT_ENERGY, (1 - hunger) * stomach));
+				double store = Math.min(digest, Math.min((fatCap() - fat) * MEAT_ENERGY, (1 - hunger) * gut));
 				fat += store / MEAT_ENERGY;
-				hunger = Math.min(1.0, hunger + store / stomach);
+				hunger = Math.min(1.0, hunger + store / gut);
 			}
 			// A collapsed captor cannot hold: restraint is exertion, and below the
-			// crawl reserve there is none to spend — the grip opens and the captive
+			// exhaustion floor there is none to spend — the grip opens and the captive
 			// walks free of a captor that is still alive.
 			if (!canExert() && grabbing != null) {
 				drop();
@@ -1188,8 +1188,8 @@ public abstract class NPC extends Entity {
 	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
 	 *  twice {@link #THIRST_PERIOD}, so appetite returns in twice the time
 	 *  thirst does — the design's one rhythm anchor. No longer a clock of its
-	 *  own: hunger rises only as regeneration drains the stomach, and this
-	 *  period holds because the stomach is sized to it (see {@link #STOMACH}).
+	 *  own: hunger rises only as regeneration drains the gut, and this
+	 *  period holds because the gut is sized to it (see {@link #GUT_PER_MASS}).
 	 *  Exertion adds appetite on top, which the old clock could not price. */
 	@Unit("ticks")
 	public static double HUNGER_PERIOD = 9.0 * DAY;
@@ -1198,25 +1198,25 @@ public abstract class NPC extends Entity {
 	 *  interruptible by simply walking away. */
 	@Unit("ticks")
 	public static double DRINK_TICKS = days(0.066);
-	/** Stomach of a reference body, in vegetation-energy units: eating
-	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
-	 *  to sated. Not a free knob: it equals {@code BASE_METABOLISM *
+	/** Gut of a reference body, in vegetation-energy units: eating
+	 *  {@code GUT_PER_MASS * adultMass()} worth of food takes hunger from starving
+	 *  to sated. Not a free knob: it equals {@code BASAL_RATE *
 	 *  HUNGER_PERIOD} (0.0005 * 18000), which is what makes the resting burn
-	 *  drain a full stomach in exactly {@link #HUNGER_PERIOD} ticks — the
+	 *  drain a full gut in exactly {@link #HUNGER_PERIOD} ticks — the
 	 *  rhythm anchor, preserved by construction now that hunger has no clock
 	 *  of its own. Change either factor and this must follow. */
 	@Unit("food energy at mass 1")
-	public static double STOMACH = 9.0;
+	public static double GUT_PER_MASS = 9.0;
 	/** Energy regenerated per tick by a fed, watered, healthy reference body —
 	 *  before the resting burn nets it down. Anchored so an idle ideal body
 	 *  refills empty glycogen in roughly a minute and a half. */
 	@Unit("energy/tick at mass 1")
-	public static double REGEN_RATE = 0.006;
-	/** Fraction of glycogen kept as a crawl reserve: below it the body is
+	public static double ASSIMILATION_RATE = 0.006;
+	/** Fraction of glycogen kept as the exhaustion floor: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
 	@Unit("of glycogen")
-	public static double CRAWL_RESERVE = 0.05;
+	public static double EXHAUSTION = 0.05;
 	/** Fraction of the genome's top speed a collapsed body can still make. */
 	@Unit("of top speed")
 	public static double CRAWL_SPEED = 0.25;
@@ -1264,21 +1264,21 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * Digests food worth {@code amount} (vegetation-energy units): lowers
-	 * hunger by its share of the mass-scaled stomach. Deliberately never
+	 * hunger by its share of the mass-scaled gut. Deliberately never
 	 * touches energy — satiation regenerates energy over time (VITALS.md), so
 	 * a meal's power arrives gradually and an interrupted meal keeps exactly
 	 * what was eaten.
 	 */
 	public void feed(double amount) {
 		if (amount > 0) {
-			double stomach = STOMACH * adultMass();
-			swallowed += Math.min(amount, hunger * stomach); // only what fit counts
-			hunger = Math.max(0, hunger - amount / stomach);
+			double gut = GUT_PER_MASS * adultMass();
+			swallowed += Math.min(amount, hunger * gut); // only what fit counts
+			hunger = Math.max(0, hunger - amount / gut);
 		}
 	}
 
 	/** Food units this body has digested over its lifetime — what actually fit
-	 *  in the stomach, not what was merely bitten. The measurable end of
+	 *  in the gut, not what was merely bitten. The measurable end of
 	 *  {@link #feed}, for probes and the scenario suite. */
 	private double swallowed = 0;
 
@@ -1286,16 +1286,16 @@ public abstract class NPC extends Entity {
 		return swallowed;
 	}
 
-	/** Room left in the stomach, in the same vegetation-energy units
+	/** Room left in the gut, in the same vegetation-energy units
 	 *  {@link #feed} consumes — what a sated body can still swallow (0). */
-	protected double stomachRoom() {
-		return hunger * STOMACH * adultMass();
+	protected double gutRoom() {
+		return hunger * GUT_PER_MASS * adultMass();
 	}
 
 	/** Whether the body has the reserve to act (bite, grab, breed, press):
-	 *  below the crawl reserve it is collapsed and can only crawl. */
+	 *  below the exhaustion floor it is collapsed and can only crawl. */
 	public boolean canExert() {
-		return !metabolic || glycogen > CRAWL_RESERVE * glycogenCapacity();
+		return !metabolic || glycogen > EXHAUSTION * glycogenCapacity();
 	}
 
 	/** Legacy read: hydration is the complement of the thirst need. */
@@ -1913,7 +1913,7 @@ public abstract class NPC extends Entity {
 			D += 2 * Math.PI;
 		}
 
-		// Collapse (VITALS.md): a body below its crawl reserve can still crawl —
+		// Collapse (VITALS.md): a body below its exhaustion floor can still crawl —
 		// slowly, toward food two tiles away — but nothing more. Clamping at the
 		// one movement choke point covers every behaviour and mind alike.
 		if (!canExert()) {
@@ -2543,10 +2543,10 @@ public abstract class NPC extends Entity {
 			return 0;
 		}
 		// A sated body does not strip ground it cannot digest: the bite is
-		// bounded by the stomach room left (converted back to grass units).
-		double room = stomachRoom() / GRASS_ENERGY;
+		// bounded by the gut room left (converted back to grass units).
+		double room = gutRoom() / GRASS_ENERGY;
 		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, room));
-		feed(eaten * GRASS_ENERGY); // grass -> stomach, at grass's poor rate
+		feed(eaten * GRASS_ENERGY); // grass -> gut, at grass's poor rate
 		return eaten;
 	}
 
