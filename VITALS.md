@@ -290,7 +290,20 @@ an eater collects at the meat price, so each step of growth is bought from
 glycogen at that price — `LEAN_DENSITY` per unit of mass grown — the one
 price of lean tissue, which also mends a wound, pays a parasite and pays
 every mouth at a carcass, so nothing in the chain mints energy. Fat has its
-own density, `FAT_DENSITY`, equal to it for now. It is sized so a
+own density, `FAT_DENSITY`, equal to it for now.
+
+**And eating is lossy, which is where the pyramid comes from.** A meal is
+swallowed whole but only assimilated in part: `FLESH_ASSIMILATION` 0.85 of
+flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.40 of plant matter
+does, so the same gutful is worth twice as much to a carnivore as to a
+herbivore — the honest reason a grazer eats all day and a hunter eats once,
+with no clade rule saying so. What does not cross is egesta: it drops where
+the animal fed and fertilises that tile at `EGESTA_FERTILITY`, the same worth
+per unit of matter a rotting body returns, so nutrients cycle while animals
+are alive and not only when they die. Conservation stops being an equality
+and becomes an inequality: building a unit of tissue costs `LEAN_DENSITY` and
+eating it back returns 0.85 of that, so no round trip through a body breaks
+even. It is sized so a
 body is worth gut-fills rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
 for it in minutes. A fed adult with full glycogen lays what it cannot use down

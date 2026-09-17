@@ -646,12 +646,102 @@ public class SimTests {
 			inDays("a reference reserve is six days of lying still", 6.0,
 					NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE);
 			inDays("a reference gut is nine", 9.0, NPC.GUT_PER_MASS / NPC.BASAL_RATE);
-			inDays("a full fat store is thirteen and a half", 13.5,
-					NPC.FAT_CAP * NPC.LEAN_DENSITY / NPC.BASAL_RATE);
-			inDays("and the lean body is twenty-seven", 27.0,
+			inDays("a full fat store is nearly sixteen", 15.88,
+					NPC.FAT_CAP * NPC.FAT_DENSITY / NPC.BASAL_RATE);
+			inDays("and the lean body is thirty-one and three quarters", 31.76,
 					NPC.LEAN_DENSITY / NPC.BASAL_RATE);
 			assertNear("so a store's energy reads straight off as days",
 					NPC.GLYCOGEN_PER_MASS, NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE / NPC.DAY, 1e-9);
+		}
+	}
+
+	/**
+	 * Nothing absorbs a whole meal. The assimilable share of what is swallowed
+	 * crosses the gut wall; the rest passes through, drops where the animal fed
+	 * and fertilises that ground. Flesh goes across nearly whole and plant
+	 * matter mostly does not, which is the honest reason a grazer eats all day
+	 * and a hunter eats once -- no rule about clades says it.
+	 *
+	 * <p>Pinned as a ratio rather than as totals: for a given food the dung a
+	 * tile gets and the energy a gut gets are two halves of the same mouthful,
+	 * so their quotient is fixed by the constants alone and does not depend on
+	 * how much the animal managed to eat.
+	 */
+	static class WhatIsNotAbsorbedFeedsTheGround extends Scenario {
+		private static Genome body() {
+			Genome g = new Genome();
+			g.size = 8;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		/** Dung per unit of energy absorbed, for food assimilated at {@code a}. */
+		private static double dungPerFed(double a) {
+			return NPC.EGESTA_FERTILITY * (1 - a) / a;
+		}
+
+		@Override
+		public void run() {
+			seed(61);
+			// --- plant, cropped off the tile the animal is standing on. Parked
+			// (speed 0) so the ground it feeds is the ground it eats.
+			World w = room(6, 6);
+			for (int x = 1; x < 5; x++) {
+				for (int y = 1; y < 5; y++) {
+					w.getTile(x, y, 0).setFertility(0.5);
+				}
+			}
+			TestNPC g = TestNPC.grazer(3.5, 3.5, 0, body()).withMetabolic().grown()
+					.withSpeed(0).withHunger(1.0).withHydration(1.0).withReproCooldown(100_000_000);
+			w.spawnEntity(g);
+			double before = w.getTile(3, 3, 0).getFertility();
+			tick(w, 600);
+			double fed = g.totalSwallowed();
+			double dung = w.getTile(3, 3, 0).getFertility() - before;
+			assertGreater("a grazer takes something off the ground", fed, 0.1);
+			assertGreater("and feeds the ground while it eats it", dung, 0.0);
+			assertNear("gut and ground are the two halves of one mouthful ("
+					+ String.format("%.4f dung against %.3f fed", dung, fed) + ")",
+					dungPerFed(NPC.PLANT_ASSIMILATION), dung / fed, 1e-4);
+
+			// --- flesh, off a carcass, in a room with nothing growing in it so
+			// the only thing either mouth swallows is meat.
+			World b = room(6, 6);
+			for (int x = 1; x < 5; x++) {
+				for (int y = 1; y < 5; y++) {
+					b.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			TestNPC prey = TestNPC.grazer(3.5, 3.5, 0, body()).grown();
+			b.spawnEntity(prey);
+			tick(b, 1);
+			prey.kill();
+			tick(b, 1);
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			TestNPC scav = TestNPC.minded(3.5, 3.5, 0, body(), feeder)
+					.withClade(Genome.Clade.SCAVENGER).withMetabolic().grown()
+					.withSpeed(0).withHunger(1.0).withHydration(1.0).withReproCooldown(100_000_000);
+			b.spawnEntity(scav);
+			double beforeMeat = b.getTile(3, 3, 0).getFertility();
+			// Stopped while it is still hungry: a mouthful that does not fit is
+			// swallowed and egested all the same, but only the part that fits is
+			// credited, and that would put the two halves out of step.
+			for (int t = 0; t < 400 && scav.getHunger() > 0.3; t++) {
+				tick(b, 1);
+			}
+			double meatFed = scav.totalSwallowed();
+			double meatDung = b.getTile(3, 3, 0).getFertility() - beforeMeat;
+			assertGreater("a scavenger takes something off the body", meatFed, 0.1);
+			assertNear("and the same two halves, at flesh's share ("
+					+ String.format("%.4f dung against %.3f fed", meatDung, meatFed) + ")",
+					dungPerFed(NPC.FLESH_ASSIMILATION), meatDung / meatFed, 1e-4);
+
+			// The divergence itself: the same energy swallowed leaves far more on
+			// the ground when it was grass than when it was meat.
+			assertGreater("grass passes through an animal, meat does not ("
+					+ String.format("%.5f against %.5f per unit fed",
+							dung / fed, meatDung / meatFed) + ")",
+					dung / fed, 4 * meatDung / meatFed);
 		}
 	}
 
@@ -3504,7 +3594,7 @@ public class SimTests {
 			for (java.util.List<String> r : tableOf(secs, "food")) {
 				double size = Double.parseDouble(r.get(0));
 				assertNear("carcass at size " + size,
-						TestNPC.LEAN_DENSITY * (size / NPC.REF_SIZE),
+						TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * (size / NPC.REF_SIZE),
 						Double.parseDouble(r.get(2)), 0.005);
 				assertEquals("rot time at size " + size, NPC.growthTicks(size),
 						Long.parseLong(r.get(4)));
@@ -10888,7 +10978,7 @@ public class SimTests {
 			for (int t = 0; t < 2000 && prey.freshMeat() > 0 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
 				tick(w, 1);
 			}
-			double meat = TestNPC.LEAN_DENSITY * prey.leanMass();
+			double meat = TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * prey.leanMass();
 			double freshMeat = NPC.FRESH_SHARE * meat;
 			double edible = (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) * meat;
 			// Every bite spends fresh meat and spoilage compounds on what is gone, so
@@ -10912,7 +11002,8 @@ public class SimTests {
 					+ String.format("%.2f of %.2f", prey.eatenMass(), edibleMass) + ")",
 					prey.eatenMass() <= edibleMass + 1e-9);
 			assertTrue("and were paid for no more than they took",
-					toHunter + leftovers <= NPC.LEAN_DENSITY * prey.eatenMass() + 1e-9);
+					toHunter + leftovers
+							<= NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * prey.eatenMass() + 1e-9);
 			assertTrue("and the body was worth its meat once, to however many mouths",
 					toHunter + leftovers <= meat + 0.01);
 
@@ -10922,7 +11013,7 @@ public class SimTests {
 			tick(w, 1);
 			fallen.kill();
 			tick(w, 1);
-			double whole = TestNPC.LEAN_DENSITY * fallen.leanMass()
+			double whole = TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * fallen.leanMass()
 					* (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
 			double guts = 3 * NPC.GUT_PER_MASS * (10 / NPC.REF_SIZE); // three size-10 scavengers
 			double paid = scavenged(w, fallen, 8.5, 10.5);
@@ -11538,7 +11629,7 @@ public class SimTests {
 				net.hedinger.prototype.sim.Tuning.restoreDefaults();
 			}
 			assertNear("defaults restore the code-level value",
-					0.75, NPC.PLANT_DENSITY, 1e-12);
+					1.875, NPC.PLANT_DENSITY, 1e-12);
 		}
 	}
 
@@ -13950,6 +14041,7 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new FatIsTheBodysStore(),
+				new WhatIsNotAbsorbedFeedsTheGround(),
 				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),
 				new ACarcassIsAMealForSeveral(),

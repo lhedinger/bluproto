@@ -775,7 +775,7 @@ public class TestNPC extends NPC {
 		h.damage(PARA_BITE, "parasites");
 		// At the one price of mass: the host mends what was drunk at the same
 		// price, so the pair can never mint energy between them.
-		feed(LEAN_DENSITY * h.leanMass() * share);
+		ingest(LEAN_DENSITY * h.leanMass() * share, FLESH_ASSIMILATION);
 		setAction("eating", true);
 	}
 
@@ -3474,7 +3474,7 @@ public class TestNPC extends NPC {
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
 		double mass = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
-		feed(mass * LEAN_DENSITY); // meat -> gut; satiation powers the body
+		ingest(mass * LEAN_DENSITY, FLESH_ASSIMILATION); // meat -> gut; satiation powers the body
 		setAction("eating", true);
 		return mass;
 	}
