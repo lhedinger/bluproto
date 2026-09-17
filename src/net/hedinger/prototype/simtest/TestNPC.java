@@ -76,7 +76,7 @@ public class TestNPC extends NPC {
 	 * synchronised and neither has to carry a timer of its own.
 	 */
 	@Unit("ticks")
-	public static final int PRED_BITE_PERIOD = 33;
+	public static final int PRED_BITE_PERIOD = NPC.days(0.0165); // ~24 min between bites
 	/** The physical limit on how much larger than itself a hunter can take on, as
 	 *  a multiple of its own body size. Nothing above twice a hunter's size is
 	 *  huntable by any hunter; how much of the room below that a lineage actually
@@ -951,7 +951,7 @@ public class TestNPC extends NPC {
 	// --- parasitism ---------------------------------------------------------
 	/** Ticks between a riding parasite's bites of its host. */
 	@Unit("ticks")
-	public static final int PARA_BITE_PERIOD = 30;
+	public static final int PARA_BITE_PERIOD = NPC.days(0.015); // ~22 min between drinks
 	/** Health a parasite's bite takes off the host — a slow drain, not an
 	 *  attack: minutes to matter, so the host has every chance to buck it off
 	 *  or simply outlive it. The meal is the same meat arithmetic as a

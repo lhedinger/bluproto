@@ -51,17 +51,48 @@ public abstract class NPC extends Entity {
 	// bigger tank outlasts a small one's — large animals fast longer between meals
 	// — yet still need bigger meals to top up. Anchored so a reference creature
 	// lasts a few minutes on a full tank.
+	/**
+	 * One day of world time, in ticks: the world's one clock. Every biological
+	 * duration in the simulation is a multiple of it, and the energy unit is
+	 * defined as one day of resting burn for a reference body — so
+	 * {@link #BASE_METABOLISM} is exactly {@code 1 / DAY}, and any store's size
+	 * can be read straight off as "how many days of lying still it buys".
+	 *
+	 * <p>Scaling this scales the whole tempo of life coherently: a longer day
+	 * is a slower world, not a differently-proportioned one. It is the single
+	 * knob for that, which is why it is the one constant here expressed in
+	 * ticks rather than in days.
+	 *
+	 * <p>2000 ticks is 60.6 s at 33 ticks/s — a minute, to the eye. That is
+	 * also where the metabolism already sat before the clock was named: a full
+	 * reference reserve burned down in almost exactly this span, so the energy
+	 * unit had been a day of resting burn all along, by accident.
+	 *
+	 * <p>Build-time, deliberately. The durations derived from it stay
+	 * individually tunable at runtime for experiments; moving the day itself is
+	 * a decision about the world, and wants a rebuild and a fresh population.
+	 */
+	@Unit("ticks")
+	public static final int DAY = 2000;
+
+	/** Ticks in {@code days} of world time — the one conversion, so a duration
+	 *  can be written in the unit biology quotes it in. */
+	public static int days(double days) {
+		return (int) Math.round(days * DAY);
+	}
+
 	/** Body size the energy model is anchored on (size factor 1.0 here). */
 	@Unit("px radius")
 	public static final double REF_SIZE = 8.0;
 	/** Full energy reserve of a reference-size creature ("fully fed"). */
 	@Unit("energy at mass 1")
 	public static double BASE_CAPACITY = 6.0;
-	/** Resting energy/tick a reference-size creature burns. At 33 t/s a full
-	 *  reference tank (6.0 / 0.0005 = 12000 ticks) lasts ~6 minutes unfed, so even
-	 *  a half-empty creature has a few minutes of reserve before it starves. */
+	/** Resting energy/tick a reference-size creature burns — one energy unit
+	 *  per {@link #DAY}, which is what makes the energy unit a day of lying
+	 *  still. Every store can therefore be read as a fasting time straight off
+	 *  its energy: {@link #BASE_CAPACITY} of 6 is six days of lying still. */
 	@Unit("energy/tick at mass 1")
-	public static double BASE_METABOLISM = 0.0005;
+	public static double BASE_METABOLISM = 1.0 / DAY;
 	/** The neutral {@link Genome#metabolism}; a genome at this value is an
 	 *  average burner, and mutations above/below it scale efficiency. */
 	@Unit("gene value = pace 1")
@@ -566,7 +597,7 @@ public abstract class NPC extends Entity {
 	 *  because the spoilage rate is set by the amount of fresh meat itself and
 	 *  not by the fraction of it: a big carcass has more to turn. */
 	@Unit("ticks")
-	public static int FRESH_TICKS = 165;
+	public static int FRESH_TICKS = days(0.0825); // about two hours
 	/** What gets spoilage going on a body with nothing yet spoiled, as a share of
 	 *  a reference body's fresh meat: the rate is proportional to what has already
 	 *  turned plus this seed, so it starts at a crawl and compounds. */
@@ -751,7 +782,7 @@ public abstract class NPC extends Entity {
 	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	@Unit("ticks")
-	public static int REPRO_COOLDOWN = 100;
+	public static int REPRO_COOLDOWN = days(0.05); // a floor, about an hour
 	/**
 	 * Energy per tick per unit of held body weight, for keeping a grip on a
 	 * <em>grabbed</em> captive — the cost of restraint itself, separate from the
@@ -1150,7 +1181,7 @@ public abstract class NPC extends Entity {
 	/** Ticks for thirst to rise slaked -> parched at the reference body
 	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
 	@Unit("ticks")
-	public static double THIRST_PERIOD = 9000;
+	public static double THIRST_PERIOD = 4.5 * DAY;
 	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
 	 *  twice {@link #THIRST_PERIOD}, so appetite returns in twice the time
 	 *  thirst does — the design's one rhythm anchor. No longer a clock of its
@@ -1158,11 +1189,11 @@ public abstract class NPC extends Entity {
 	 *  period holds because the stomach is sized to it (see {@link #STOMACH}).
 	 *  Exertion adds appetite on top, which the old clock could not price. */
 	@Unit("ticks")
-	public static double HUNGER_PERIOD = 18000;
+	public static double HUNGER_PERIOD = 9.0 * DAY;
 	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
 	 *  with a duration, interruptible by simply walking away. */
 	@Unit("ticks")
-	public static double DRINK_TICKS = 132;
+	public static double DRINK_TICKS = days(0.066);
 	/** Stomach of a reference body, in vegetation-energy units: eating
 	 *  {@code STOMACH * adultMass()} worth of food takes hunger from starving
 	 *  to sated. Not a free knob: it equals {@code BASE_METABOLISM *
@@ -1195,15 +1226,15 @@ public abstract class NPC extends Entity {
 	 *  health in ~2.5 min, slow enough that rescue by a meal or a shore is a
 	 *  real possibility. */
 	@Unit("ticks per hp lost")
-	public static int DEPRIVATION_PERIOD = 50;
+	public static int DEPRIVATION_PERIOD = days(0.025); // ~36 min a point, so ~2.5 days to die
 	/** Ticks per mended health point (divided by metabolic efficiency): a bad
 	 *  wound takes minutes of fed, watered living to close. */
 	@Unit("ticks per hp mended")
-	public static int MEND_PERIOD = 160;
+	public static int MEND_PERIOD = days(0.08); // ~2 h a point, so ~8 days to heal through
 	/** Ticks a budding (asexual) birth must be held for before it completes —
 	 *  ~5 s of sustained commitment; breaking off resets the act. */
 	@Unit("ticks")
-	public static int BREED_HOLD_TICKS = 165;
+	public static int BREED_HOLD_TICKS = days(0.0825); // about two hours
 
 	/** The hunger need, 0 (sated) .. 1 (starving). Metabolic bodies only. */
 	protected double hunger = 0;

@@ -46,7 +46,7 @@ public class Tile {
 	 *  ticks (~1 min at 33 t/s) before it starts to recover; a tile with grass to
 	 *  spare resumes at once. */
 	@Unit("ticks")
-	public static final long REGROW_DELAY = 2000;
+	public static final long REGROW_DELAY = net.hedinger.prototype.entities.NPC.days(1.0);
 	/** Below this fraction of its cap a tile counts as "depleted" and takes the
 	 *  {@link #REGROW_DELAY} cooldown before recovering. */
 	private static final double DEPLETION_LEVEL = 0.25;

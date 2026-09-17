@@ -272,6 +272,19 @@ child gets back at most the edible share of the mass it gave, and can never
 profit. Pinned by `NoFreeEnergyAtBirth`, which fails against the old books
 at 9.5 conjured per 2.25 paid.
 
+**The world keeps one clock.** `NPC.DAY` is a day in ticks — 2000, which is
+60.6 s at 33 ticks/s, a minute to the eye — and every biological duration is a
+multiple of it, so the tempo of life scales with one number instead of a dozen
+drifting apart. The keystone is the energy unit: **one unit is one day of
+resting burn for a reference body**, so `BASE_METABOLISM == 1 / DAY` and any
+store reads straight off its energy as a fasting time. A reserve of 6 is six
+days of lying still; a stomach of 9 is nine; a full fat store of 13.5 is
+thirteen and a half. That is also where the metabolism already sat before the
+clock was named, by accident rather than design. Pinned by
+`TheWorldKeepsOneClock`, which asserts every duration in the units biology
+quotes them in, so a constant cannot be nudged in ticks without someone
+noticing what it means.
+
 **Growth is paid for too.** The flesh a juvenile puts on is the same matter
 an eater collects at the meat price, so each step of growth is bought from
 the tank at that price — `MEAT_ENERGY` per unit of mass grown — the one
