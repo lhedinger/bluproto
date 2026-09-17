@@ -270,7 +270,7 @@ public final class Mechanics {
 	}
 
 	private static Map<String, Object> food() {
-		double refBody = TestNPC.MEAT_ENERGY;
+		double refBody = TestNPC.LEAN_DENSITY;
 		Map<String, Object> s = section("food", "What food is worth",
 				"Four ways to make a living, priced very differently. Grass is abundant, "
 				+ "everywhere, and poor. Meat is concentrated and scarce, and a carcass is worth "
@@ -289,9 +289,9 @@ public final class Mechanics {
 				+ "many ticks rather than swallowed whole, which is what makes a carcass a place "
 				+ "creatures gather at instead of an instant.");
 		rows(s,
-				row("Grass", num(NPC.GRASS_ENERGY), "energy per unit grazed",
+				row("Grass", num(NPC.PLANT_DENSITY), "energy per unit grazed",
 						"Poor, but it does not run away."),
-				row("A whole carcass", num(TestNPC.MEAT_ENERGY) + " × the dead body's mass",
+				row("A whole carcass", num(TestNPC.LEAN_DENSITY) + " × the dead body's mass",
 						"energy, if every mouth got its share", "Reference-mass body: " + round(refBody, 2)
 						+ ". A third of it is bone and worth nothing to anyone."),
 				row("What a body is made of", pct(NPC.FRESH_SHARE) + " fresh meat, "
@@ -331,9 +331,9 @@ public final class Mechanics {
 		List<List<String>> t = new ArrayList<>();
 		for (double size : SAMPLE_SIZES) {
 			double m = size / NPC.REF_SIZE;
-			double meal = TestNPC.MEAT_ENERGY * m;
+			double meal = TestNPC.LEAN_DENSITY * m;
 			t.add(List.of(num(size), round(m, 2), round(meal, 2),
-					round(meal / NPC.GRASS_ENERGY, 1),
+					round(meal / NPC.PLANT_DENSITY, 1),
 					num(NPC.growthTicks(size)), round(NPC.growthTicks(size) / TPS, 1)));
 		}
 		table(s, "What a body is worth once it stops moving, and how long it stays worth it — "
@@ -362,7 +362,7 @@ public final class Mechanics {
 				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body", ""),
 				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
 						"The well-fed ceiling, not a guarantee."),
-				row("Mass costs", num(NPC.MEAT_ENERGY) + " × mass grown", "energy",
+				row("Mass costs", num(NPC.LEAN_DENSITY) + " × mass grown", "energy",
 						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
 						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
 				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the lean mass", "mass",
@@ -1090,7 +1090,7 @@ public final class Mechanics {
 						item("diet", "Living bodies up to half a body more than its greed times "
 								+ "its own size (a default hunter reaches 1.5×), never past "
 								+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×; the meal is the meat arithmetic — "
-								+ num(TestNPC.MEAT_ENERGY) + " × the prey's mass, paid out "
+								+ num(TestNPC.LEAN_DENSITY) + " × the prey's mass, paid out "
 								+ "bite by bite."),
 						item("the bite", num(TestNPC.PRED_DAMAGE) + " hp every "
 								+ num(TestNPC.PRED_BITE_PERIOD) + " ticks: a kill is ten "
