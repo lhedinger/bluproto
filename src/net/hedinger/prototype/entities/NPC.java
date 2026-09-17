@@ -549,6 +549,18 @@ public abstract class NPC extends Entity {
 	protected double freshFull = 0;
 	/** Decayed meat on this corpse, in body-mass units; 0 for the living. */
 	protected double decayed = 0;
+	/*
+	 * How much of each pool is FAT rather than lean tissue. A carcass is a
+	 * mixture and the two materials are not worth the same, so a pool has to
+	 * remember what it is made of or a mouthful cannot be priced. Every mouthful
+	 * comes off a pool in the proportion the pool holds, and spoilage and rot
+	 * move both parts together, so the mixture stays what it was and a fat body
+	 * is a richer meal all the way down.
+	 */
+	/** Fat within {@link #fresh}, in body-mass units. */
+	protected double freshFat = 0;
+	/** Fat within {@link #decayed}, in body-mass units. */
+	protected double decayedFat = 0;
 	/** Mass mouths have taken off this corpse, in body-mass units -- the one part
 	 *  of the body the ground never gets. */
 	protected double eaten = 0;
@@ -684,6 +696,15 @@ public abstract class NPC extends Entity {
 		return fresh + decayed;
 	}
 
+	/** What the meat still on this corpse is worth to whatever eats it: the
+	 *  lean at lean's density and the fat at fat's. A carcass is a mixture, so
+	 *  its worth is not its mass times one number, and a fat body is the better
+	 *  meal for it. */
+	public double carrionWorth() {
+		double stored = freshFat + decayedFat;
+		return Math.max(0, edibleMass() - stored) * LEAN_DENSITY + stored * FAT_DENSITY;
+	}
+
 	/** What is physically left of this body: on a corpse the meat still on it
 	 *  plus the bones; on the living, the whole body, fat and all. */
 	public double remainingMass() {
@@ -722,8 +743,11 @@ public abstract class NPC extends Entity {
 		if (fresh - turned < 1e-9) {
 			turned = fresh;
 		}
+		double turnedFat = fresh > 0 ? turned * (freshFat / fresh) : 0;
 		fresh -= turned;
+		freshFat = Math.max(0, freshFat - turnedFat);
 		decayed += turned; // spoiled, not lost: it is the scavengers' now
+		decayedFat += turnedFat;
 	}
 
 	/**
@@ -741,9 +765,12 @@ public abstract class NPC extends Entity {
 		double p1 = Math.min(1.0, (-age + 1) / (double) deathspan);
 		double left0 = 1 - Math.pow(p0, ROT_SHAPE);
 		double left1 = 1 - Math.pow(p1, ROT_SHAPE);
-		decayed = left0 <= 1e-9 ? 0 : decayed * Math.max(0, left1 / left0);
+		double thin = left0 <= 1e-9 ? 0 : Math.max(0, left1 / left0);
+		decayed *= thin;
+		decayedFat *= thin;
 		if (decayed < 1e-9) {
 			decayed = 0;
+			decayedFat = 0;
 		}
 	}
 
@@ -756,8 +783,12 @@ public abstract class NPC extends Entity {
 		super.decayTo(progress);
 		if (progress > 0) {
 			decayed += fresh;
+			decayedFat += freshFat;
 			fresh = 0;
-			decayed *= Math.max(0, 1 - Math.pow(Math.min(1, progress), ROT_SHAPE));
+			freshFat = 0;
+			double thin = Math.max(0, 1 - Math.pow(Math.min(1, progress), ROT_SHAPE));
+			decayed *= thin;
+			decayedFat *= thin;
 		}
 	}
 
@@ -803,30 +834,50 @@ public abstract class NPC extends Entity {
 	/**
 	 * A mouthful off a corpse: takes up to {@code mass} body-mass units, fresh
 	 * meat first -- every mouth prefers it -- and then, unless {@code freshOnly},
-	 * decayed meat. Returns the mass actually taken, which is what the eater is
-	 * paid for. A hunter eats fresh only; a scavenger both. The decay clock is
+	 * decayed meat. Returns what came away and what it is worth, which is what
+	 * the eater is paid. A hunter eats fresh only; a scavenger both. The decay clock is
 	 * not touched: decay is how long the body has lain there, and a corpse eaten
 	 * out still lies there, bones and all, until its time is up.
 	 */
-	public double eatCarrion(double mass, boolean freshOnly) {
+	public Mouthful eatCarrion(double mass, boolean freshOnly) {
 		if (!isDead() || mass <= 0) {
-			return 0;
+			return Mouthful.NOTHING;
 		}
 		double taken = Math.min(mass, fresh);
+		double fatTaken = fresh > 0 ? taken * (freshFat / fresh) : 0;
 		fresh -= taken;
+		freshFat = Math.max(0, freshFat - fatTaken);
 		if (fresh < 1e-9) {
 			fresh = 0;
+			freshFat = 0;
 		}
 		if (!freshOnly) {
 			double more = Math.min(mass - taken, decayed);
+			double moreFat = decayed > 0 ? more * (decayedFat / decayed) : 0;
 			decayed -= more;
+			decayedFat = Math.max(0, decayedFat - moreFat);
 			if (decayed < 1e-9) {
 				decayed = 0;
+				decayedFat = 0;
 			}
 			taken += more;
+			fatTaken += moreFat;
 		}
 		eaten += taken;
-		return taken;
+		return new Mouthful(taken, (taken - fatTaken) * LEAN_DENSITY + fatTaken * FAT_DENSITY);
+	}
+
+	/**
+	 * A mouthful off a carcass: the mass that came away, and what that mass is
+	 * worth once the fat in it is priced as fat and the lean as lean.
+	 *
+	 * <p>Two numbers rather than one because a carcass is a mixture: the same
+	 * mass off a fat body and off a starved one are not the same meal, and an
+	 * eater cannot work the difference out from the mass alone.
+	 */
+	public record Mouthful(double mass, double energy) {
+		/** Nothing came away: a live body, or one already eaten out. */
+		public static final Mouthful NOTHING = new Mouthful(0, 0);
 	}
 	protected int reproCooldown = 0; // ticks until able to reproduce again
 	@Unit("ticks")
@@ -1522,7 +1573,9 @@ public abstract class NPC extends Entity {
 			carcassMass = m + fat;
 			freshFull = FRESH_SHARE * m * lean + fat / 2;
 			fresh = freshFull;
+			freshFat = fat / 2;
 			decayed = (1 - FRESH_SHARE) * SCAVENGER_SHARE * m + fat / 2;
+			decayedFat = fat / 2;
 			fat = 0;
 			eaten = 0;
 		}
