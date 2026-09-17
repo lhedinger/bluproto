@@ -76,7 +76,7 @@ public class TestNPC extends NPC {
 	 * synchronised and neither has to carry a timer of its own.
 	 */
 	@Unit("ticks")
-	public static final int PRED_BITE_PERIOD = NPC.days(0.0165); // ~24 min between bites
+	public static final int PRED_BITE_PERIOD = NPC.days(0.0165); // ~24 min of world time, one second of watching
 	/** The physical limit on how much larger than itself a hunter can take on, as
 	 *  a multiple of its own body size. Nothing above twice a hunter's size is
 	 *  huntable by any hunter; how much of the room below that a lineage actually

@@ -43,8 +43,8 @@ public class Tile {
 	@Unit("vegetation/tick")
 	public static final double VEG_REGROW = 0.002;
 	/** A tile grazed below {@link #DEPLETION_LEVEL} of its cap pauses this many
-	 *  ticks (~1 min at 33 t/s) before it starts to recover; a tile with grass to
-	 *  spare resumes at once. */
+	 *  ticks -- a day of world time, a minute of watching -- before it starts to
+	 *  recover; a tile with grass to spare resumes at once. */
 	@Unit("ticks")
 	public static final long REGROW_DELAY = net.hedinger.prototype.entities.NPC.days(1.0);
 	/** Below this fraction of its cap a tile counts as "depleted" and takes the

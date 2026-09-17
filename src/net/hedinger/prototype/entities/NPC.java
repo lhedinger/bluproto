@@ -593,7 +593,8 @@ public abstract class NPC extends Entity {
 	}
 
 	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
-	 *  About five seconds. A heavier body sits fresh longer, a lighter one less,
+	 *  About two hours of world time, which is five seconds of watching. A
+	 *  heavier body sits fresh longer, a lighter one less,
 	 *  because the spoilage rate is set by the amount of fresh meat itself and
 	 *  not by the fraction of it: a big carcass has more to turn. */
 	@Unit("ticks")
@@ -1178,8 +1179,10 @@ public abstract class NPC extends Entity {
 	}
 
 	// --- the four books (VITALS.md) ------------------------------------------
-	/** Ticks for thirst to rise slaked -> parched at the reference body
-	 *  (~4.5 min at 33 t/s). The faster of the two need clocks. */
+	/** Ticks for thirst to rise slaked -> parched at the reference body: 4.5
+	 *  days of world time, which is ~4.5 min of watching. The faster of the two
+	 *  need clocks, and about right for an animal -- death by thirst takes days,
+	 *  not weeks. */
 	@Unit("ticks")
 	public static double THIRST_PERIOD = 4.5 * DAY;
 	/** Ticks for hunger to rise sated -> starving in a RESTING reference body:
@@ -1190,8 +1193,9 @@ public abstract class NPC extends Entity {
 	 *  Exertion adds appetite on top, which the old clock could not price. */
 	@Unit("ticks")
 	public static double HUNGER_PERIOD = 9.0 * DAY;
-	/** Ticks of standing at water for a full drink (~4 s): drinking is an act
-	 *  with a duration, interruptible by simply walking away. */
+	/** Ticks of standing at water for a full drink -- a couple of hours of world
+	 *  time, four seconds of watching: drinking is an act with a duration,
+	 *  interruptible by simply walking away. */
 	@Unit("ticks")
 	public static double DRINK_TICKS = days(0.066);
 	/** Stomach of a reference body, in vegetation-energy units: eating
@@ -1223,16 +1227,18 @@ public abstract class NPC extends Entity {
 	@Unit("need level")
 	public static double NEED_LOW = 0.5;
 	/** Ticks between deprivation damage points: a pegged need kills through
-	 *  health in ~2.5 min, slow enough that rescue by a meal or a shore is a
-	 *  real possibility. */
+	 *  health in ~2.5 days of world time (2.5 min of watching), slow enough that
+	 *  rescue by a meal or a shore is a real possibility. */
 	@Unit("ticks per hp lost")
 	public static int DEPRIVATION_PERIOD = days(0.025); // ~36 min a point, so ~2.5 days to die
-	/** Ticks per mended health point (divided by metabolic efficiency): a bad
-	 *  wound takes minutes of fed, watered living to close. */
+	/** Ticks per mended health point (divided by metabolic efficiency): a body
+	 *  mends through from nothing in about eight days of world time, which is
+	 *  minutes of fed, watered living to watch. */
 	@Unit("ticks per hp mended")
 	public static int MEND_PERIOD = days(0.08); // ~2 h a point, so ~8 days to heal through
 	/** Ticks a budding (asexual) birth must be held for before it completes —
-	 *  ~5 s of sustained commitment; breaking off resets the act. */
+	 *  about two hours of world time, five seconds of sustained commitment to
+	 *  watch; breaking off resets the act. */
 	@Unit("ticks")
 	public static int BREED_HOLD_TICKS = days(0.0825); // about two hours
 
