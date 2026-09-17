@@ -287,13 +287,26 @@ public final class Mechanics {
 				+ "A meal's worth scales with the eaten body's mass, not the eater's, so a big "
 				+ "carcass is a big meal for whoever finds it. Corpses are eaten in bites over "
 				+ "many ticks rather than swallowed whole, which is what makes a carcass a place "
-				+ "creatures gather at instead of an instant.");
+				+ "creatures gather at instead of an instant.\n\n"
+				+ "Nothing absorbs a whole meal. Flesh is close to the animal eating it and goes "
+				+ "across the gut wall nearly whole; plant matter is mostly structure nothing here "
+				+ "has an enzyme for, and the greater part of it passes straight through. That "
+				+ "difference, and no rule about clades, is why a grazer eats all day and a hunter "
+				+ "eats once. What does not cross is not lost: it drops where the animal fed and "
+				+ "fertilises that ground, so a herd enriches the range it works and nutrients "
+				+ "cycle continuously instead of only at death.");
 		rows(s,
 				row("Grass", num(NPC.PLANT_DENSITY), "energy per unit grazed",
-						"Poor, but it does not run away."),
+						"Poor, but it does not run away. Swallowed; "
+						+ round(NPC.PLANT_DENSITY * NPC.PLANT_ASSIMILATION, 3) + " of it crosses."),
+				row("Absorbed", pct(NPC.PLANT_ASSIMILATION) + " of plant, "
+						+ pct(NPC.FLESH_ASSIMILATION) + " of flesh", "of what is swallowed",
+						"The rest is egesta, and fertilises the tile it was eaten on at "
+						+ num(NPC.EGESTA_FERTILITY) + " per unit."),
 				row("A whole carcass", num(TestNPC.LEAN_DENSITY) + " × the dead body's mass",
 						"energy, if every mouth got its share", "Reference-mass body: " + round(refBody, 2)
-						+ ". A third of it is bone and worth nothing to anyone."),
+						+ ", of which " + round(refBody * NPC.FLESH_ASSIMILATION, 2) + " is absorbed."
+						+ " A third of it is bone and worth nothing to anyone."),
 				row("What a body is made of", pct(NPC.FRESH_SHARE) + " fresh meat, "
 						+ pct((1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) + " decayed meat, "
 						+ pct((1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE)) + " bone", "of the mass at death",
@@ -331,9 +344,9 @@ public final class Mechanics {
 		List<List<String>> t = new ArrayList<>();
 		for (double size : SAMPLE_SIZES) {
 			double m = size / NPC.REF_SIZE;
-			double meal = TestNPC.LEAN_DENSITY * m;
+			double meal = TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * m;
 			t.add(List.of(num(size), round(m, 2), round(meal, 2),
-					round(meal / NPC.PLANT_DENSITY, 1),
+					round(meal / (NPC.PLANT_DENSITY * NPC.PLANT_ASSIMILATION), 1),
 					num(NPC.growthTicks(size)), round(NPC.growthTicks(size) / TPS, 1)));
 		}
 		table(s, "What a body is worth once it stops moving, and how long it stays worth it — "

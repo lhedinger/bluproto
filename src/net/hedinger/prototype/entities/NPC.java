@@ -157,7 +157,7 @@ public abstract class NPC extends Entity {
 	 * digestion ({@link #ASSIMILATION_RATE}) are paced to pay for it in minutes.
 	 */
 	@Unit("energy per mass")
-	public static double LEAN_DENSITY = 27.0;
+	public static double LEAN_DENSITY = 31.76;
 	/**
 	 * Energy per unit of FAT, the material a body stores its surplus in and
 	 * draws back on when the gut runs dry.
@@ -170,7 +170,41 @@ public abstract class NPC extends Entity {
 	 * two apart.
 	 */
 	@Unit("energy per mass")
-	public static double FAT_DENSITY = 27.0;
+	public static double FAT_DENSITY = 31.76;
+
+	/*
+	 * Assimilation: how much of a meal actually crosses the gut wall.
+	 *
+	 * Nothing that eats absorbs all of what it swallows. Flesh is close to the
+	 * animal doing the eating and goes across almost whole; plant matter is
+	 * mostly structure an animal has no enzyme for, and the greater part of it
+	 * passes through. That difference, and not a rule about clades, is why a
+	 * grazer eats all day and a hunter eats once: the same gutful is worth
+	 * twice as much to the one as to the other.
+	 *
+	 * What does not cross is egesta, and it is not lost. It drops where the
+	 * animal fed and fertilises that ground, so nutrients cycle continuously
+	 * instead of only at death, and a herd enriches the range it works.
+	 */
+	/** Share of PLANT energy that crosses the gut wall; the rest is egesta. */
+	@Unit("of plant energy swallowed")
+	public static double PLANT_ASSIMILATION = 0.40;
+	/** Share of FLESH energy that crosses the gut wall; the rest is egesta. */
+	@Unit("of flesh energy swallowed")
+	public static double FLESH_ASSIMILATION = 0.85;
+	/**
+	 * Fertility the ground gets back per unit of food energy that passed
+	 * through an animal without being absorbed.
+	 *
+	 * <p>Matter is worth the same to the ground however it arrives there: a
+	 * body that rots returns {@code ROT_FERTILITY} (0.10) per unit of mass, and
+	 * a unit of mass is {@link #LEAN_DENSITY} (27) of energy, so a unit of
+	 * energy is 0.0037 either way. Written out rather than derived because
+	 * either constant can be tuned at runtime and the ground's price should not
+	 * move when they are.
+	 */
+	@Unit("fertility per energy")
+	public static double EGESTA_FERTILITY = 0.0037;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
@@ -1297,6 +1331,23 @@ public abstract class NPC extends Entity {
 
 	public double totalSwallowed() {
 		return swallowed;
+	}
+
+	/**
+	 * Swallows {@code energy} worth of food: the {@code assimilation} share of
+	 * it crosses the gut wall and the remainder passes straight through, drops
+	 * where the animal is standing and fertilises that ground.
+	 *
+	 * <p>The one door food comes in by, so no eater can absorb a whole meal by
+	 * going round the gate, and nothing an animal fails to digest leaves the
+	 * world -- it goes back to the tile it was eaten on.
+	 */
+	protected void ingest(double energy, double assimilation) {
+		if (energy <= 0) {
+			return;
+		}
+		feed(energy * assimilation);
+		enrich(X, Y, Z, EGESTA_FERTILITY * energy * (1 - assimilation));
 	}
 
 	/** Room left in the gut, in the same vegetation-energy units
@@ -2538,7 +2589,7 @@ public abstract class NPC extends Entity {
 	 * re-verifies 0.75 still carries the food chain.
 	 */
 	@Unit("energy per vegetation")
-	public static double PLANT_DENSITY = 0.75;
+	public static double PLANT_DENSITY = 1.875;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
@@ -2548,7 +2599,8 @@ public abstract class NPC extends Entity {
 	 *
 	 * <p>The return value is grass, not energy: callers measure grazing pressure on
 	 * the substrate with it. The conversion into food energy happens here, at
-	 * {@link #PLANT_DENSITY} per unit.
+	 * {@link #PLANT_DENSITY} per unit, of which {@link #PLANT_ASSIMILATION}
+	 * crosses the gut wall and the rest fertilises this very tile.
 	 */
 	protected double graze(double demand) {
 		World w = getWorld();
@@ -2556,10 +2608,11 @@ public abstract class NPC extends Entity {
 			return 0;
 		}
 		// A sated body does not strip ground it cannot digest: the bite is
-		// bounded by the gut room left (converted back to grass units).
-		double room = gutRoom() / PLANT_DENSITY;
+		// bounded by the gut room left (converted back to grass units, through
+		// the share of a mouthful that will actually get there).
+		double room = gutRoom() / (PLANT_DENSITY * PLANT_ASSIMILATION);
 		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, room));
-		feed(eaten * PLANT_DENSITY); // grass -> gut, at grass's poor rate
+		ingest(eaten * PLANT_DENSITY, PLANT_ASSIMILATION);
 		return eaten;
 	}
 

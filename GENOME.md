@@ -276,6 +276,10 @@ movement rather than intent.
 Spending is mass-based everywhere above, so income is too.
 
 ```
+swallowed = density · mass_eaten                     // what went in
+absorbed  = assimilation · swallowed                 // what crossed the wall
+egesta    = swallowed − absorbed                     // what fertilises the tile
+
 flesh = LEAN_DENSITY  · mass_taken_off_the_carcass   // per mouthful, dead only
 plant = PLANT_DENSITY · vegetation_cropped           // per tick grazing
 ```
@@ -287,21 +291,38 @@ and fat are set to the same figure today — the corpse pools mix a body's fat
 into its meat and cannot price the two apart yet — but they are separate
 knobs, and in life fat carries about six times what wet muscle does.
 
+- **Nothing absorbs a whole meal.** `FLESH_ASSIMILATION` 0.85 of swallowed
+  flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.40 of swallowed plant
+  matter does: flesh is close to the animal eating it, grass is mostly
+  structure nothing here has an enzyme for. **That difference, and no rule
+  about clades, is why a grazer eats all day and a hunter eats once** — the
+  same gutful is worth twice as much to the one as to the other.
+- **What is not absorbed is not lost.** Egesta drop where the animal fed and
+  fertilise that tile at `EGESTA_FERTILITY` per unit of energy, which is the
+  same worth per unit of matter a rotting body returns. So nutrients cycle
+  continuously rather than only at death, and a herd enriches the range it
+  works instead of stripping it.
+- **The trophic loss is now a mechanism, not a constant.** Building a unit of
+  lean tissue costs `LEAN_DENSITY` out of glycogen and eating that same unit
+  returns `LEAN_DENSITY · 0.85`, so no round trip through a body can break
+  even and each level of the chain keeps less than the one below it.
+
 - **A carcass is worth what it weighs, and a body is not all meat.** Health is
   a flat 100 on every body, so the *meal* has to carry the size instead. At death
   the body divides into three pools by mass: a third is **fresh meat**, the only
   thing a hunter eats; half the rest is **decayed meat**, a scavenger's living;
   the last third is **bone**, food to nobody. Every mouthful is paid
-  `LEAN_DENSITY` per unit of mass it takes, so a whole carcass comes to
-  `LEAN_DENSITY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
+  `LEAN_DENSITY · FLESH_ASSIMILATION` per unit of mass it takes, so a whole
+  carcass comes to `0.85 · LEAN_DENSITY · ⅔ · prey_mass` across every mouth
+  that eats it and the rest goes to the ground under them, and a hunter's
   share is at most the fresh third. `LEAN_DENSITY` is **the one price of lean
   tissue, both ways**: what a body pays per unit of mass it grows, what a
   wound is mended at, what a parasite is paid, and what every mouth at a
   carcass is paid. `FAT_DENSITY` is the same figure for the store. Nothing in the chain can mint: a body is worth
   exactly what was put into it, and everything anyone eats was bought with
   grass by someone. It is sized so a reference lean mass is three gut-fills
-  (`3 · GUT_PER_MASS`), so the fresh third of a lean medium corpse fills one
-  same-size hunter. **Fat is the body's store**: a fed body with full glycogen
+  once absorbed (`0.85 · LEAN_DENSITY = 3 · GUT_PER_MASS`), so the fresh third
+  of a lean medium corpse fills one same-size hunter. **Fat is the body's store**: a fed body with full glycogen
   lays what it cannot use down as mass, up to `FAT_CAP` of its lean mass, and
   draws it back into the gut before starvation can bite. Fat is carried
   on every step and it is on the carcass, half fresh and half decayed, so a
@@ -328,9 +349,11 @@ knobs, and in life fat carries about six times what wet muscle does.
 - **Crop rate and energy density are one knob, not two.** They multiply into a
   herbivore's income per tick, so grass cannot be made both slower to eat and
   poorer without starving the herd. Measured over 60k ticks at the current crop
-  rate: below `PLANT_DENSITY` 0.75 predators fall to their floor on empty stores, and
-  at 0.25 the herd stops breeding and only the steward keeps it alive. The shipped
-  value is the poorest grass the food chain will carry.
+  rate: below 0.75 *absorbed* per unit cropped predators fall to their floor on
+  empty stores, and at a third of that the herd stops breeding and only the
+  steward keeps it alive. The shipped `PLANT_DENSITY` of 1.875 is that figure
+  grossed up through `PLANT_ASSIMILATION`, and it is the poorest grass the food
+  chain will carry.
 - **A predator will not kill on full glycogen.** The opportunistic bite is gated on
   having room for the meal; without that, a full hunter killed prey whose energy
   the glycogen cap then discarded.
