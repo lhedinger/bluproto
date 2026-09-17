@@ -649,7 +649,7 @@ function select(id: number, sightUnseen = false): void {
   }
   refreshDetail();
   clearInterval(detailTimer);
-  detailTimer = window.setInterval(refreshDetail, 1000); // energy/state tick live
+  detailTimer = window.setInterval(refreshDetail, 1000); // glycogen/state tick live
   reflect();
 }
 
@@ -765,14 +765,14 @@ function renderInspectSimple(d: Record<string, any>): void {
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
   // The four books (VITALS.md), for anyone following a creature — not a debug
-  // detail: health is whether it lives, energy what it can do, fed and watered
+  // detail: health is whether it lives, glycogen what it can do, fed and watered
   // why it is doing what it is doing. All four count the SAME way up — see
   // sated() — so a creature in trouble is four draining bars rather than two
   // full ones and two empty, which is what the needs read as when shown raw.
   if ('health' in d && d.role) {
     rows.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   }
-  if ('energy' in d) rows.push(energyRow(d));
+  if ('glycogen' in d) rows.push(glycogenRow(d));
   if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
   if ('fat' in d) rows.push(fatRow(d));
@@ -883,7 +883,7 @@ function attributesTab(d: Record<string, any>): string {
   if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
   if (d.juvenile) status.push(row('grown', d.grown));
-  // The four books (VITALS.md): health the life gate, energy the action
+  // The four books (VITALS.md): health the life gate, glycogen the action
   // budget, hunger and thirst the needs that rise between meals and drinks.
   // Inverted into satisfactions the same way the entity card does it, so the
   // two panels never disagree about which way is up.
@@ -892,7 +892,7 @@ function attributesTab(d: Record<string, any>): string {
   if ('health' in d) {
     status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
   }
-  if ('energy' in d) status.push(energyRow(d));
+  if ('glycogen' in d) status.push(glycogenRow(d));
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
   if ('fat' in d) status.push(fatRow(d));
@@ -977,12 +977,12 @@ function genomeTab(d: Record<string, any>): string {
 }
 
 /**
- * The energy book as a fraction of THIS body's tank.
+ * The glycogen book as a fraction of THIS body's store.
  *
- * The tank is size-scaled (`NPC.energyCapacity`), so no constant here can stand
- * in for it — and one did: a flat 4, which pinned every large body at full from
- * a quarter tank and drew a small body's brimming tank as three-quarters. Both
- * panels drew it, so both were wrong in the same way, which is what made it
+ * The store is size-scaled (`NPC.glycogenCapacity`), so no constant here can
+ * stand in for it — and one did: a flat 4, which pinned every large body at full
+ * from a quarter store and drew a small body's brimming store as three-quarters.
+ * Both panels drew it, so both were wrong in the same way, which is what made it
  * look right. Shared now so they cannot disagree again, and when the cap is
  * missing the number is printed rather than a bar drawn against a guess.
  */
@@ -995,12 +995,12 @@ function fatRow(d: Record<string, any>): string {
   return bar('fat', `${Math.round(f * 100)}%${mass}`, f);
 }
 
-function energyRow(d: Record<string, any>): string {
-  const e = Number(d.energy);
-  const cap = Number(d.energyCap);
+function glycogenRow(d: Record<string, any>): string {
+  const e = Number(d.glycogen);
+  const cap = Number(d.glycogenCap);
   return cap > 0
-    ? bar('energy', `${e.toFixed(2)} / ${cap.toFixed(2)}`, Math.max(0, Math.min(1, e / cap)))
-    : row('energy', e.toFixed(2));
+    ? bar('glycogen', `${e.toFixed(2)} / ${cap.toFixed(2)}`, Math.max(0, Math.min(1, e / cap)))
+    : row('glycogen', e.toFixed(2));
 }
 
 /** The family line. Everything here is the world's birth registry speaking:
@@ -1278,7 +1278,7 @@ async function downloadGenome(id: number): Promise<void> {
 // and gated actuators only matter once they cross their firing threshold.
 const SENSOR_KIND: Record<string, string> = {
   bias: 'const',
-  energy: 'mag', food: 'mag', phero: 'mag', near_prox: 'mag', near_sim: 'mag',
+  glycogen: 'mag', food: 'mag', phero: 'mag', near_prox: 'mag', near_sim: 'mag',
   item_prox: 'mag', prey_prox: 'mag', threat_prox: 'mag', health: 'mag',
   near_bearing: 'brg', item_bearing: 'brg', prey_bearing: 'brg',
   threat_bearing: 'brg', kin_bearing: 'brg',

@@ -73,7 +73,7 @@ public final class ServerTests {
 			check("a machine is not reported fed: " + d.get("subtype"),
 					!d.containsKey("hunger"));
 			check("nor watered: " + d.get("subtype"), !d.containsKey("thirst"));
-			check("nor out of energy: " + d.get("subtype"), !d.containsKey("energy"));
+			check("nor out of glycogen: " + d.get("subtype"), !d.containsKey("glycogen"));
 			check("but it still has a health reading: " + d.get("subtype"),
 					d.containsKey("health"));
 		}
@@ -84,7 +84,7 @@ public final class ServerTests {
 			}
 			creatures++;
 			check("a creature still keeps its books", d.containsKey("hunger")
-					&& d.containsKey("thirst") && d.containsKey("energy"));
+					&& d.containsKey("thirst") && d.containsKey("glycogen"));
 		}
 		check("the world actually contained machinery", machines > 0);
 		check("and creatures to contrast it with", creatures > 0);
@@ -114,7 +114,7 @@ public final class ServerTests {
 					alive.get("mass") instanceof Number);
 			check("and carries no carcass facts while it is alive", !alive.containsKey("decay"));
 			check("a living body keeps its four books",
-					alive.containsKey("health") && alive.containsKey("energy")
+					alive.containsKey("health") && alive.containsKey("glycogen")
 							&& alive.containsKey("hunger") && alive.containsKey("thirst"));
 			check("and reports its fat, the store the books draw on",
 					alive.get("fat") instanceof Number && alive.get("fatMass") instanceof Number);
@@ -131,12 +131,12 @@ public final class ServerTests {
 			check("a carcass reports " + k, corpse.get(k) instanceof Number);
 		}
 		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
-		// Death is where the four books stop. The tank and the stomach evaporate
+		// Death is where the four books stop. Glycogen and the stomach evaporate
 		// with it -- which is exactly what the birth ledger audits -- so the
 		// numbers left in those fields describe a body that no longer keeps them,
-		// and the panel drew a carcass with a brimming tank that was merely a
+		// and the panel drew a carcass with a brimming store that was merely a
 		// little peckish. The client omits any book it is not given.
-		for (String k : java.util.List.of("health", "energy", "energyCap", "hunger", "thirst")) {
+		for (String k : java.util.List.of("health", "glycogen", "glycogenCap", "hunger", "thirst")) {
 			check("a carcass is not sent " + k + ": death is where that book stops",
 					!corpse.containsKey(k));
 		}
@@ -239,8 +239,8 @@ public final class ServerTests {
 		check("the mind is named by its substrate",
 				java.util.List.of("network", "program", "none").contains(genome.get("mind")));
 		// And the one book whose scale is per-body arrives with that scale.
-		check("energy arrives with the tank it is a fraction of",
-				detail.containsKey("energy") == detail.containsKey("energyCap"));
+		check("glycogen arrives with the store it is a fraction of",
+				detail.containsKey("glycogen") == detail.containsKey("glycogenCap"));
 	}
 
 	/**

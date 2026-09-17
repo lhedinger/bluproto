@@ -741,12 +741,12 @@ void (async () => {
   const lead = el('p', undefined, 'note');
   lead.innerHTML = 'Every figure below is read off the <b>running simulation\'s own '
     + 'constants</b>, or worked out from them by the same arithmetic the simulation '
-    + 'uses — nothing on this page is transcribed. A page that divides the tank by '
+    + 'uses — nothing on this page is transcribed. A page that divides glycogen by '
     + 'the burn rate cannot be wrong about how long a creature lasts; a page that '
     + 'states the answer can, and would never say so. The deeper halves of the '
     + 'reference have pages of their own: <a href="/help/genome">the genome</a> — '
     + 'genes, clades, minds, senses and acts — and <a href="/help/body">the body</a> '
-    + '— tanks, burns, prices and the hard limits no mind can override.';
+    + '— glycogen stores, burns, prices and the hard limits no mind can override.';
   const secs = await renderMechPage('/help/mechanics.json', mechRoot, 'nav-mech');
   if (secs.length) {
     mechRoot.prepend(head, lead);

@@ -45,11 +45,11 @@ public record SpawnMindedCommand(Genome genome, double x, double y, double z) im
 		TestNPC npc = TestNPC.mindedForager(p[0], p[1], z, genome)
 				.withHandPlaced(); // corpse lifespan comes from its body, like every other
 		// Born brand-new: age 0 (a fresh entity already starts there) and a FULL
-		// tank rather than the ecosystem's 0.6-capacity "born fed" default. An
+		// glycogen rather than the ecosystem's 0.6-capacity "born fed" default. An
 		// injected seed gets the longest possible runway to establish itself — the
 		// most head-room before metabolism can starve it — so a hand-placed creature
 		// doesn't wink out moments after landing.
-		npc.withEnergy(npc.energyCapacity()).fattened();
+		npc.withGlycogen(npc.glycogenCapacity()).fattened();
 		w.spawnEntity(npc);
 	}
 

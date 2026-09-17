@@ -61,7 +61,7 @@ public final class Worlds {
 		double[] sizes = { 20, 18 };
 		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
 		// these big hunters a large reserve and a long fasting endurance (bigger
-		// body, bigger tank), so a predator drains gently between kills. Running
+		// body, bigger store), so a predator drains gently between kills. Running
 		// prey down is what costs it: movement is charged as mass * v^2, so a
 		// full-speed pursuit burns far harder than its patrol and a long fruitless
 		// chase still thins it.
@@ -231,12 +231,12 @@ public final class Worlds {
 	 * Sets what a founder asks per child, and the line it banks to before it
 	 * will: the price is what raising that child actually costs (see
 	 * {@link net.hedinger.prototype.simtest.TestNPC#childhoodCost}), as a
-	 * fraction of the founder's own tank, and the line sits far enough above
+	 * fraction of the founder's own glycogen, and the line sits far enough above
 	 * the price that paying it leaves the parent above the crawl reserve
 	 * rather than collapsed the moment it has a newborn beside it.
 	 *
 	 * <p>This replaces a pair of per-clade constants. Hunters had their own
-	 * price (0.8 of the tank against a cohort that drew 0.35..0.65) because a
+	 * price (0.8 of glycogen against a cohort that drew 0.35..0.65) because a
 	 * hunter's child born on the cohort draw starved -- nine of nine died in
 	 * the live world -- and the number was arrived at by measuring that
 	 * childhood and rounding. Measuring the childhood is the part worth
@@ -250,7 +250,7 @@ public final class Worlds {
 	 */
 	public static net.hedinger.prototype.entities.Genome pricedFounder(
 			net.hedinger.prototype.entities.Genome g) {
-		double cap = net.hedinger.prototype.entities.NPC.BASE_CAPACITY * g.size
+		double cap = net.hedinger.prototype.entities.NPC.GLYCOGEN_PER_MASS * g.size
 				/ net.hedinger.prototype.entities.NPC.REF_SIZE;
 		double price = net.hedinger.prototype.simtest.TestNPC.endowmentCost(
 				g.size, g.birthSatiation, g.speed) / cap;

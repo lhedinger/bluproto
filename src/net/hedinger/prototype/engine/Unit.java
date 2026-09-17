@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * The unit a simulation constant is measured in — "energy/tick", "ticks",
- * "of the tank" — read at runtime by the tuning registry and shown beside the
+ * "of glycogen" — read at runtime by the tuning registry and shown beside the
  * number wherever the constant is displayed, so a value is never just a bare
  * figure. The registry refuses to survey a constant that lacks one: a
  * quantity without a unit is only half stated, and the panel would be showing

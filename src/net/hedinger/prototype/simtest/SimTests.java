@@ -269,7 +269,7 @@ public class SimTests {
 			};
 			TestNPC scav = TestNPC.minded(3.5, 4.5, 0, g.copy(), walk)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic().withHeading(0);
-			scav.withEnergy(scav.energyCapacity());
+			scav.withGlycogen(scav.glycogenCapacity());
 			w.spawnEntity(scav);
 
 			double before = body.meatLeft();
@@ -644,20 +644,20 @@ public class SimTests {
 			// On this clock a store's energy IS its day count, which is the whole
 			// point of anchoring the unit to a day of resting burn.
 			inDays("a reference reserve is six days of lying still", 6.0,
-					NPC.BASE_CAPACITY / NPC.BASE_METABOLISM);
+					NPC.GLYCOGEN_PER_MASS / NPC.BASE_METABOLISM);
 			inDays("a reference stomach is nine", 9.0, NPC.STOMACH / NPC.BASE_METABOLISM);
 			inDays("a full fat store is thirteen and a half", 13.5,
 					NPC.FAT_CAP * NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
 			inDays("and the lean body is twenty-seven", 27.0,
 					NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
 			assertNear("so a store's energy reads straight off as days",
-					NPC.BASE_CAPACITY, NPC.BASE_CAPACITY / NPC.BASE_METABOLISM / NPC.DAY, 1e-9);
+					NPC.GLYCOGEN_PER_MASS, NPC.GLYCOGEN_PER_MASS / NPC.BASE_METABOLISM / NPC.DAY, 1e-9);
 		}
 	}
 
 	/**
-	 * Fat is the body's store. A fed body with a full tank keeps digesting and
-	 * lays what the tank cannot take down as mass, at the one price; a body
+	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
+	 * lays what glycogen cannot take down as mass, at the one price; a body
 	 * whose stomach runs empty draws that mass back into the stomach at the same
 	 * price, so fat is spent before health is. And fat is meat: a fat body's
 	 * carcass carries it, half fresh and half decayed, on top of the frame's
@@ -675,7 +675,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(52);
-			// --- laid down: a fed grazer on rich grass, tank full, stomach full.
+			// --- laid down: a fed grazer on rich grass, glycogen full, stomach full.
 			World w = room(10, 8);
 			for (int x = 1; x < 9; x++) {
 				for (int y = 1; y < 7; y++) {
@@ -687,13 +687,13 @@ public class SimTests {
 			roamer.speed = 0.03; // it has to walk to the next patch once it strips one
 			TestNPC fed = TestNPC.grazer(4.5, 3.5, 0, roamer).withMetabolic().grown().withHunger(0.0).withHydration(1.0)
 					.withReproCooldown(100_000_000);
-			fed.withEnergy(fed.energyCapacity());
+			fed.withGlycogen(fed.glycogenCapacity());
 			w.spawnEntity(fed);
 			assertEquals("a body starts lean", 0, (long) Math.round(fed.fat() * 1000));
 			tick(w, 3000);
-			assertGreater("a fed body with a full tank lays down fat", fed.fat(), 0.3 * fed.fatCap());
+			assertGreater("a fed body with full glycogen lays down fat", fed.fat(), 0.3 * fed.fatCap());
 			assertTrue("and never more than its frame can carry", fed.fat() <= fed.fatCap() + 1e-9);
-			assertGreater("its tank is still full: fat is what was left over", fed.getEnergy(), 0.95 * fed.energyCapacity());
+			assertGreater("its glycogen is still full: fat is what was left over", fed.getGlycogen(), 0.95 * fed.glycogenCapacity());
 
 			// --- drawn down: on barren ground with an empty stomach, fat feeds the
 			// body and health holds; a lean twin starves.
@@ -711,8 +711,8 @@ public class SimTests {
 					.withReproCooldown(100_000_000);
 			TestNPC lean = TestNPC.grazer(6.5, 3.5, 0, body()).withMetabolic().grown().withHunger(0.96).withHydration(1.0)
 					.withReproCooldown(100_000_000);
-			fat.withEnergy(0.5 * fat.energyCapacity());
-			lean.withEnergy(0.5 * lean.energyCapacity());
+			fat.withGlycogen(0.5 * fat.glycogenCapacity());
+			lean.withGlycogen(0.5 * lean.glycogenCapacity());
 			b.spawnEntity(fat);
 			b.spawnEntity(lean);
 			double f0 = fat.fat();
@@ -1767,7 +1767,7 @@ public class SimTests {
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC parent = TestNPC.minded(4.5, 4.5, 0, bud, breeder)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic().withDeathspan(777);
-			parent.grown().withEnergy(parent.energyCapacity()).fattened();
+			parent.grown().withGlycogen(parent.glycogenCapacity()).fattened();
 			w.spawnEntity(parent);
 			w.think();
 			tick(w, 200); // budding is a held act: ~165 ticks of commitment first
@@ -1799,8 +1799,8 @@ public class SimTests {
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			TestNPC b = TestNPC.minded(6.7, 6.5, 0, sx.copy(), breeder)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
-			a.withEnergy(a.energyCapacity()).grown().fattened();
-			b.withEnergy(b.energyCapacity()).grown().fattened();
+			a.withGlycogen(a.glycogenCapacity()).grown().fattened();
+			b.withGlycogen(b.glycogenCapacity()).grown().fattened();
 			pair.spawnEntity(a);
 			pair.spawnEntity(b);
 			pair.think();
@@ -1845,8 +1845,8 @@ public class SimTests {
 			TestNPC scav = TestNPC.minded(6.3, 6.5, 0, g.copy(), breeder)
 					.withClade(Genome.Clade.SCAVENGER).withMetabolic();
 			TestNPC grazer = TestNPC.minded(6.7, 6.5, 0, g.copy(), breeder).withMetabolic();
-			scav.withEnergy(scav.energyCapacity());
-			grazer.withEnergy(grazer.energyCapacity());
+			scav.withGlycogen(scav.glycogenCapacity());
+			grazer.withGlycogen(grazer.glycogenCapacity());
 			w.spawnEntity(scav);
 			w.spawnEntity(grazer);
 			w.think();
@@ -2285,7 +2285,7 @@ public class SimTests {
 			Genome riderG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			riderG.metabolism = 0.02;
 			riderG.brain = new Brain(deepCopy(cling));
-			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withEnergy(6.0);
+			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withGlycogen(6.0);
 			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
 			ride.spawnEntity(rider);
 			ride.spawnEntity(host);
@@ -2731,19 +2731,19 @@ public class SimTests {
 			// Same size (so identical resting burn), same start energy, differing
 			// only in speed. Movers walk east across open floor, never reaching a wall
 			// within the window, so nothing cancels their steps.
-			TestNPC still = TestNPC.inert(2.5, 3.5, 0).withMetabolic().withEnergy(4);
-			TestNPC slow = TestNPC.mover(2.5, 6.5, 0, 0).withMetabolic().withEnergy(4).withSpeed(0.05);
-			TestNPC fast = TestNPC.mover(2.5, 9.5, 0, 0).withMetabolic().withEnergy(4).withSpeed(0.15);
+			TestNPC still = TestNPC.inert(2.5, 3.5, 0).withMetabolic().withGlycogen(4);
+			TestNPC slow = TestNPC.mover(2.5, 6.5, 0, 0).withMetabolic().withGlycogen(4).withSpeed(0.05);
+			TestNPC fast = TestNPC.mover(2.5, 9.5, 0, 0).withMetabolic().withGlycogen(4).withSpeed(0.15);
 			w.spawnEntity(still);
 			w.spawnEntity(slow);
 			w.spawnEntity(fast);
 			w.think();
 
-			double e0 = still.getEnergy();
+			double e0 = still.getGlycogen();
 			tick(w, 100);
-			double burnStill = e0 - still.getEnergy();
-			double burnSlow = e0 - slow.getEnergy();
-			double burnFast = e0 - fast.getEnergy();
+			double burnStill = e0 - still.getGlycogen();
+			double burnSlow = e0 - slow.getGlycogen();
+			double burnFast = e0 - fast.getGlycogen();
 
 			assertGreater("walking costs more than standing still", burnSlow, burnStill);
 			assertGreater("travelling further costs more again", burnFast, burnSlow);
@@ -2775,11 +2775,11 @@ public class SimTests {
 			// term, so a motionless carrier pays nothing for weight it is merely
 			// holding. Standing still would compare three identical resting bills.
 			TestNPC empty = TestNPC.mover(3.0, 4.0, 0, 0).withSize(12).withMetabolic()
-					.withEnergy(4).withSpeed(0.08);
+					.withGlycogen(4).withSpeed(0.08);
 			TestNPC ferry = TestNPC.mover(3.0, 10.0, 0, 0).withSize(12).withMetabolic()
-					.withEnergy(4).withSpeed(0.08);
+					.withGlycogen(4).withSpeed(0.08);
 			TestNPC captor = TestNPC.mover(3.0, 16.0, 0, 0).withSize(12).withMetabolic()
-					.withEnergy(4).withSpeed(0.08);
+					.withGlycogen(4).withSpeed(0.08);
 			TestNPC rider = TestNPC.inert(3.05, 10.0, 0).withSize(6);
 			TestNPC victim = TestNPC.inert(3.05, 16.0, 0).withSize(6);
 			w.spawnEntity(empty);
@@ -2794,11 +2794,11 @@ public class SimTests {
 			assertTrue("a grabbed body is held, a rider is not",
 					victim.isGrabbed() && !rider.isGrabbed());
 
-			double e0 = empty.getEnergy();
+			double e0 = empty.getGlycogen();
 			tick(w, 100);
-			double burnEmpty = e0 - empty.getEnergy();
-			double burnFerry = e0 - ferry.getEnergy();
-			double burnCaptor = e0 - captor.getEnergy();
+			double burnEmpty = e0 - empty.getGlycogen();
+			double burnFerry = e0 - ferry.getGlycogen();
+			double burnCaptor = e0 - captor.getGlycogen();
 
 			assertGreater("hauling a passenger costs more than travelling empty",
 					burnFerry, burnEmpty);
@@ -2812,7 +2812,7 @@ public class SimTests {
 	 * runs at a fixed rate, so the bigger the adult body the longer the childhood —
 	 * and the largest body a genome can express takes about a minute, the longest
 	 * childhood the world can produce. Growth is physical: the juvenile is smaller,
-	 * burns less and is easier prey, but the energy economy (tank, breeding
+	 * burns less and is easier prey, but the energy economy (glycogen, breeding
 	 * threshold and cost) is anchored on the adult body and so is unchanged.
 	 */
 	static class CreaturesGrowToAdultSize extends Scenario {
@@ -2862,7 +2862,7 @@ public class SimTests {
 			assertGreater("the longest childhood takes minutes (" + large + " ticks)", large, oneMinute);
 			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 6);
 
-			// Growth is physical, not economic: the tank is anchored on the adult
+			// Growth is physical, not economic: glycogen is anchored on the adult
 			// body, so a newborn's breeding economy matches a grown one's.
 			seed(9);
 			World w = room(20, 12);
@@ -2878,11 +2878,11 @@ public class SimTests {
 			TestNPC baby = TestNPC.breeder(9.5, 5.5, 0, g).withReproCooldown(100_000_000);
 			w.spawnEntity(baby);
 			w.think();
-			double juvenileCap = baby.energyCapacity();
+			double juvenileCap = baby.glycogenCapacity();
 			tick(w, 12000); // minutes: long enough to eat its way to fully grown
 			assertTrue("the body did finish growing", !baby.isJuvenile());
-			assertEquals("the energy tank is the same before and after growing up",
-					Math.round(juvenileCap * 1000), Math.round(baby.energyCapacity() * 1000));
+			assertEquals("the glycogen store is the same before and after growing up",
+					Math.round(juvenileCap * 1000), Math.round(baby.glycogenCapacity() * 1000));
 		}
 	}
 
@@ -2953,7 +2953,7 @@ public class SimTests {
 			// sits hard against the partition with the rider latched on the wall
 			// side, which is what lands it inside.
 			TestNPC host = TestNPC.predator(5.96, 4.5, 0, new Genome())
-					.withEnergy(99).withHeading(0);
+					.withGlycogen(99).withHeading(0);
 			TestNPC rider = TestNPC.grazer(5.99, 4.5, 0);
 			w.spawnEntity(host);
 			w.spawnEntity(rider);
@@ -3138,13 +3138,13 @@ public class SimTests {
 			// And the body barrier agrees with the recognition: identical markers,
 			// different clades, still cannot breed.
 			World w = room(8, 8);
-			// Fed past the breeding threshold: a newborn starts at 0.6 of its tank
+			// Fed past the breeding threshold: a newborn starts at 0.6 of its glycogen
 			// and breeds at 0.75, so an unfed pair is infertile and would pass the
 			// negative assertion for entirely the wrong reason.
 			// Grown and fat: fertile bodies, so the clade is the only thing between them.
-			TestNPC g1 = TestNPC.breeder(2.5, 2.5, 0, grazer.copy()).grown().fattened().withEnergy(99);
-			TestNPC g2 = TestNPC.breeder(3.5, 2.5, 0, twin.copy()).grown().fattened().withEnergy(99);
-			TestNPC p1 = TestNPC.breeder(4.5, 2.5, 0, hunter.copy()).grown().fattened().withEnergy(99);
+			TestNPC g1 = TestNPC.breeder(2.5, 2.5, 0, grazer.copy()).grown().fattened().withGlycogen(99);
+			TestNPC g2 = TestNPC.breeder(3.5, 2.5, 0, twin.copy()).grown().fattened().withGlycogen(99);
+			TestNPC p1 = TestNPC.breeder(4.5, 2.5, 0, hunter.copy()).grown().fattened().withGlycogen(99);
 			for (TestNPC t : new TestNPC[] { g1, g2, p1 }) {
 				w.spawnEntity(t);
 			}
@@ -3426,22 +3426,22 @@ public class SimTests {
 			}
 
 			// --- the worked tables, recomputed ------------------------------------
-			// Resting metabolism: tank over burn is how long a motionless creature
+			// Resting metabolism: glycogen over burn is how long a motionless creature
 			// lasts. Kleiber's 0.75 exponent is the whole point of the section, so a
 			// page that quietly used mass^1.0 would read plausibly and be wrong.
 			for (java.util.List<String> r : tableOf(secs, "metabolism")) {
 				double size = Double.parseDouble(r.get(0));
 				double mass = size / NPC.REF_SIZE;
-				double cap = NPC.BASE_CAPACITY * mass;
+				double cap = NPC.GLYCOGEN_PER_MASS * mass;
 				double burn = NPC.BASE_METABOLISM * Math.pow(mass, 0.75);
 				assertNear("mass at size " + size, mass, Double.parseDouble(r.get(1)), 0.005);
-				assertNear("tank at size " + size, cap, Double.parseDouble(r.get(2)), 0.005);
+				assertNear("glycogen at size " + size, cap, Double.parseDouble(r.get(2)), 0.005);
 				assertNear("burn at size " + size, burn, Double.parseDouble(r.get(3)),
 						burn * 0.01);
 				assertNear("ticks unfed at size " + size, cap / burn,
 						Double.parseDouble(r.get(4)), 1.0);
 			}
-			// A bigger body's tank grows linearly while its burn grows with mass^0.75,
+			// A bigger body's glycogen grows linearly while its burn grows with mass^0.75,
 			// so the fasting window MUST widen with size. If this ever reverses, the
 			// prose above it has become a lie about its own table.
 			java.util.List<java.util.List<String>> meta = tableOf(secs, "metabolism");
@@ -3491,7 +3491,7 @@ public class SimTests {
 					find(secs, "breeding", "Breeds above")
 					.startsWith(pctOf(new Genome().reproFraction)));
 			assertTrue("the born-at fraction is the one the world uses",
-					find(secs, "tank", "Founders hold").startsWith(pctOf(TestNPC.FOUNDER_FRACTION)));
+					find(secs, "glycogen", "Founders hold").startsWith(pctOf(TestNPC.FOUNDER_FRACTION)));
 			assertTrue("the tick rate is the one the world runs at",
 					find(secs, "time", "Tick rate").equals(String.valueOf(
 							net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND)));
@@ -4661,7 +4661,7 @@ public class SimTests {
 			// health a point at a time (VITALS.md) — energy zero is collapse, and
 			// only health decides death, so the decline runs through the health gate.
 			TestNPC breeder = TestNPC.breeder(2.5, 2.5, 0, new Genome())
-					.withHunger(1.0).withEnergy(0.02);
+					.withHunger(1.0).withGlycogen(0.02);
 			w.spawnEntity(breeder);
 			w.think();
 			snapshot(w, "before (barren ground)");
@@ -4749,12 +4749,12 @@ public class SimTests {
 				slowFar.markers = new double[] { 0.5, 0.5, 0.5 };
 				slowFar.speed = 0.02;
 				slowFar.losRange = 20;
-				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).grown().fattened().withEnergy(4.4));
+				colony.spawnEntity(TestNPC.mater(p[0], p[1], 0, slowFar).grown().fattened().withGlycogen(4.4));
 				Genome fastNear = new Genome();
 				fastNear.markers = new double[] { 0.5, 0.5, 0.5 };
 				fastNear.speed = 0.08;
 				fastNear.losRange = 4;
-				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).grown().fattened().withEnergy(4.4));
+				colony.spawnEntity(TestNPC.mater(p[0] + 0.4, p[1], 0, fastNear).grown().fattened().withGlycogen(4.4));
 			}
 			colony.think();
 			int founders = colony.getAliveCount();
@@ -4986,7 +4986,7 @@ public class SimTests {
 	/**
 	 * The hunger sensor reports a fraction of the body's OWN capacity, not an
 	 * absolute constant, so a large body is not pinned at "full". A mind that
-	 * throttles by its hunger reading crawls when the tank is half-empty and races
+	 * throttles by its hunger reading crawls when glycogen is half-empty and races
 	 * when it is full; a big body at half fill therefore travels far less than the
 	 * same body full — which the old fixed-divisor sensor (saturated at ~1 for any
 	 * sizeable body) could never express.
@@ -5001,12 +5001,12 @@ public class SimTests {
 			Mind throttleByHunger = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_THROTTLE] = s[AgentIO.S_ENERGY]; // pace set by how full I am
+					a[AgentIO.A_THROTTLE] = s[AgentIO.S_GLYCOGEN]; // pace set by how full I am
 					a[AgentIO.A_TURN] = 0; // no steering: distance covered reflects throttle alone
 				}
 			};
 			TestNPC agent = TestNPC.minded(15.5, 15.5, 0, g, throttleByHunger);
-			agent.withEnergy(energyFraction * agent.energyCapacity());
+			agent.withGlycogen(energyFraction * agent.glycogenCapacity());
 			double x0 = agent.getX(), y0 = agent.getY();
 			w.spawnEntity(agent);
 			w.think();
@@ -5126,12 +5126,12 @@ public class SimTests {
 					a[AgentIO.A_TURN] = 0;
 				}
 			};
-			TestNPC body = TestNPC.minded(3.5, 4.5, 0, g, ctrl).withMetabolic().withEnergy(5.0);
-			double x0 = body.getX(), e0 = body.getEnergy();
+			TestNPC body = TestNPC.minded(3.5, 4.5, 0, g, ctrl).withMetabolic().withGlycogen(5.0);
+			double x0 = body.getX(), e0 = body.getGlycogen();
 			w.spawnEntity(body);
 			w.think();
 			tick(w, 100);
-			return new double[] { body.getX() - x0, e0 - body.getEnergy() };
+			return new double[] { body.getX() - x0, e0 - body.getGlycogen() };
 		}
 
 		@Override
@@ -5174,7 +5174,7 @@ public class SimTests {
 
 	/**
 	 * An intent reports back. A mind can finally tell whether what it wanted
-	 * happened, instead of inferring it from its tank drifting upward several
+	 * happened, instead of inferring it from its glycogen drifting upward several
 	 * thought-cycles late. Three of the four states are pinned here; the fourth,
 	 * idle, is simply what a mind that names nothing reads.
 	 *
@@ -5215,12 +5215,12 @@ public class SimTests {
 	 */
 
 	/**
-	 * A hunter with a full tank does not kill. The meal would overflow the cap and be
+	 * A hunter with full glycogen does not kill. The meal would overflow the cap and be
 	 * discarded, so the prey would die for nothing.
 	 *
 	 * <p>Pins the boundary rather than the intent, because the first version of this
 	 * gate tested {@code energy >= capacity} and could never fire: run_extended caps
-	 * the tank and then burns metabolism, both before think(), so a metabolic body is
+	 * glycogen and then burns metabolism, both before think(), so a metabolic body is
 	 * never exactly at its cap when it decides anything. A hungry hunter beside the
 	 * same prey must still kill, or this would pass by the hunter simply being broken.
 	 */
@@ -5388,7 +5388,7 @@ public class SimTests {
 			g.markers = new double[] { 0.5, 0.5, 0.5 };
 			g.mateThreshold = 0.1; // compatible with each other
 			TestNPC t = TestNPC.minded(x, y, 0, g, m).withMetabolic().withSpeed(0.08).grown().fattened();
-			t.withEnergy(t.energyCapacity());
+			t.withGlycogen(t.glycogenCapacity());
 			w.spawnEntity(t);
 			return t;
 		}
@@ -7298,7 +7298,7 @@ public class SimTests {
 	 * hunter lands ten. Movement costs the square of speed, so the seed chases
 	 * only with prey in sight and prowls at the amble otherwise: a founder pinned
 	 * at 1.0 burned as fast as the mint could convert its meals and drained with
-	 * a full stomach. The outcome pinned here is kills AND a tank that holds.
+	 * a full stomach. The outcome pinned here is kills AND glycogen that holds.
 	 */
 	static class AFounderHunterChasesFlatOut extends Scenario {
 		@Override
@@ -7328,7 +7328,7 @@ public class SimTests {
 				w.spawnEntity(gr);
 				herd.add(gr);
 			}
-			double e0 = hunter.getEnergy();
+			double e0 = hunter.getGlycogen();
 			tick(w, 6000);
 			int kills = 0;
 			for (TestNPC g : herd) {
@@ -7337,13 +7337,13 @@ public class SimTests {
 				}
 			}
 			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
-			assertGreater("and the chase pays: the tank is well above the crawl reserve after it ("
-					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getEnergy(), hunter.energyCapacity()) + ")",
+			assertGreater("and the chase pays: glycogen is well above the crawl reserve after it ("
+					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
 					// A kill feeds a hunter only while the meat is fresh -- it takes what it
 					// can before the body turns and the rest is the scavengers' -- so a
 					// hunting spell ends less flush than when a kill was the whole animal.
 					// The claim is that the chase pays for itself, well clear of collapse.
-					hunter.getEnergy(), 0.25 * hunter.energyCapacity());
+					hunter.getGlycogen(), 0.25 * hunter.glycogenCapacity());
 			// Fed enough, not stuffed. A kill pays a hunter its fresh third and no
 			// more, a mouthful at a time, and a hunter that moves straight on to the
 			// next animal leaves even some of that lying there for whatever finds it.
@@ -7368,14 +7368,14 @@ public class SimTests {
 	/**
 	 * A founder asks, per child, what that child's childhood actually costs —
 	 * and the sum is right. Hunters used to carry a price of their own (0.8 of
-	 * the tank against a cohort drawing 0.35..0.65) because the cohort draw
+	 * glycogen against a cohort drawing 0.35..0.65) because the cohort draw
 	 * buried their young; the number came from measuring a hunter's childhood
 	 * and rounding. The measuring is now done in the code, from the same
 	 * constants that price a body, its flesh, its meal and its burn, so no
 	 * clade needs a number of its own and the price follows any body a lineage
 	 * evolves into.
 	 *
-	 * <p>Two legs. The arithmetic: a founder's price times its tank is the
+	 * <p>Two legs. The arithmetic: a founder's price times its glycogen is the
 	 * childhood bill. The outcome, which is the one that matters: in a room
 	 * with water and no food whatsoever, a founder's child is still solvent
 	 * when its childhood ends and has all but finished growing — on the
@@ -7390,7 +7390,7 @@ public class SimTests {
 				Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 				founder.size = adult;
 				net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
-				double cap = NPC.BASE_CAPACITY * adult / NPC.REF_SIZE;
+				double cap = NPC.GLYCOGEN_PER_MASS * adult / NPC.REF_SIZE;
 				double bill = TestNPC.endowmentCost(adult, founder.birthSatiation, founder.speed);
 				double asked = founder.reproCostFraction * cap;
 				assertNear("a founder of " + adult + " px asks what the childhood costs ("
@@ -7412,7 +7412,7 @@ public class SimTests {
 					}
 				}
 				TestNPC parent = TestNPC.mindedPredator(8, 8, 0, founder).grown().fattened().withHunger(0.3);
-				parent.withEnergy(parent.energyCapacity());
+				parent.withGlycogen(parent.glycogenCapacity());
 				w.spawnEntity(parent);
 				TestNPC child = (TestNPC) parent.spawnOffspring();
 				assertTrue("the founder can afford a child", child != null);
@@ -7425,8 +7425,8 @@ public class SimTests {
 				tick(w, provisioned);
 				assertGreater("a " + adult + " px founder's child is still solvent when the childhood it was "
 						+ "provisioned for ends, on the endowment alone (" + String.format("%.2f of %.2f",
-						child.getEnergy(), child.energyCapacity()) + ")",
-						child.getEnergy(), NPC.CRAWL_RESERVE * child.energyCapacity() - 0.01); // it spends every spare on growth, down to the reserve
+						child.getGlycogen(), child.glycogenCapacity()) + ")",
+						child.getGlycogen(), NPC.CRAWL_RESERVE * child.glycogenCapacity() - 0.01); // it spends every spare on growth, down to the reserve
 				assertTrue("and has not grown on the endowment: growth is eaten, and there is no food here ("
 						+ child.getPixelSize() + " px of " + String.format("%.1f", child.getGenome().size) + ")",
 						child.getPixelSize() < 0.6 * child.getGenome().size);
@@ -7470,7 +7470,7 @@ public class SimTests {
 				double[] p = net.hedinger.prototype.sim.Worlds.spotNear(w, 8, 16, 0, false);
 				TestNPC h = TestNPC.mindedPredator(p[0], p[1], 0,
 						Genome.child(founder, net.hedinger.prototype.sim.Worlds.KIN_RATE)).grown().fattened().withHunger(0.3);
-				h.withEnergy(h.energyCapacity());
+				h.withGlycogen(h.glycogenCapacity());
 				w.spawnEntity(h);
 				founders.add(h.getID());
 			}
@@ -7524,7 +7524,7 @@ public class SimTests {
 				double gap = k.getGenome().size - born.get(k.getID());
 				if (k.getPixelSize() - born.get(k.getID()) >= 0.25 * gap) {
 					growing++;
-					if (k.getEnergy() > net.hedinger.prototype.entities.NPC.CRAWL_RESERVE * k.energyCapacity()) {
+					if (k.getGlycogen() > net.hedinger.prototype.entities.NPC.CRAWL_RESERVE * k.glycogenCapacity()) {
 						solvent++;
 					}
 				}
@@ -8089,7 +8089,7 @@ public class SimTests {
 				// Interleaved A B A B... in a line so each one's nearest is the
 				// opposite type -> cross-type matings that can recombine.
 				double x = 4.0 + i * 0.4 + (i % 2) * 0.07, y = 5.5;
-				w.spawnEntity(TestNPC.brainedBreeder(x, y, 0, g).grown().fattened().withEnergy(12.0));
+				w.spawnEntity(TestNPC.brainedBreeder(x, y, 0, g).grown().fattened().withGlycogen(12.0));
 			}
 			w.think();
 			int start = w.getAliveCount();
@@ -8230,19 +8230,19 @@ public class SimTests {
 			Genome kg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			kg.metabolism = 0.02;
 			kg.brain = new Brain(deepCopy(idle));
-			// Empty stomachs: nothing digests, so the tank reads the burn alone.
-			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withEnergy(6.0).withHunger(1.0);
-			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withEnergy(6.0).withHunger(1.0);
+			// Empty stomachs: nothing digests, so glycogen reads the burn alone.
+			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withGlycogen(6.0).withHunger(1.0);
+			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withGlycogen(6.0).withHunger(1.0);
 			TestNPC cargo = TestNPC.inert(6.05, 6.0, 0).withSize(6);
 			w.spawnEntity(carrier);
 			w.spawnEntity(control);
 			w.spawnEntity(cargo);
 			tick(w, 6); // let the carrier pick the cargo up and hold it
 			assertTrue("the carrier is holding the cargo", cargo.getAttachTarget() == carrier);
-			double eCarry = carrier.getEnergy(), eFree = control.getEnergy();
+			double eCarry = carrier.getGlycogen(), eFree = control.getGlycogen();
 			tick(w, 100);
-			double lossCarry = eCarry - carrier.getEnergy();
-			double lossFree = eFree - control.getEnergy();
+			double lossCarry = eCarry - carrier.getGlycogen();
+			double lossFree = eFree - control.getGlycogen();
 			assertGreater("carrying a body burns more energy than carrying nothing",
 					lossCarry, lossFree + 0.5);
 		}
@@ -8302,22 +8302,22 @@ public class SimTests {
 			ctrlG.metabolism = 0.02;
 			ctrlG.brain = new Brain(deepCopy(idle));
 			// Both starving: satiation zero switches regeneration off, so the only
-			// thing moving either tank is the burn being compared.
+			// thing moving either glycogen is the burn being compared.
 			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG)
-					.grown().withEnergy(6.0).withHunger(1.0);
+					.grown().withGlycogen(6.0).withHunger(1.0);
 			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
 			TestNPC control = TestNPC.brainedBreeder(10.0, 6.0, 0, ctrlG)
-					.grown().withEnergy(6.0).withHunger(1.0);
+					.grown().withGlycogen(6.0).withHunger(1.0);
 			w.spawnEntity(rider);
 			w.spawnEntity(host);
 			w.spawnEntity(control);
 			tick(w, 6); // let the rider latch on
 			assertTrue("the rider is riding the host",
 					rider.getAttachTarget() == host && !rider.isGrabbed());
-			double eRide = rider.getEnergy(), eWalk = control.getEnergy();
+			double eRide = rider.getGlycogen(), eWalk = control.getGlycogen();
 			tick(w, 100);
-			double lossRide = eRide - rider.getEnergy();
-			double lossWalk = eWalk - control.getEnergy();
+			double lossRide = eRide - rider.getGlycogen();
+			double lossWalk = eWalk - control.getGlycogen();
 			// A rider pays half metabolism, so it should lose meaningfully less than
 			// one under its own power. Assert the ratio, not an absolute margin, so
 			// the check is independent of the model's overall energy scale.
@@ -8344,16 +8344,16 @@ public class SimTests {
 			capAG.brain = new Brain(deepCopy(hold));
 			Genome vicAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicAG.brain = new Brain(deepCopy(fight));
-			TestNPC captorA = TestNPC.brainedBreeder(4.0, 6.0, 0, capAG).grown().withEnergy(9.0);
-			TestNPC struggler = TestNPC.minded(4.05, 6.0, 0, vicAG).grown().withEnergy(6.0);
+			TestNPC captorA = TestNPC.brainedBreeder(4.0, 6.0, 0, capAG).grown().withGlycogen(9.0);
+			TestNPC struggler = TestNPC.minded(4.05, 6.0, 0, vicAG).grown().withGlycogen(6.0);
 			// Pair B (far off): captor + a consenting (limp) captive.
 			Genome capBG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			capBG.metabolism = 0.02;
 			capBG.brain = new Brain(deepCopy(hold));
 			Genome vicBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicBG.brain = new Brain(deepCopy(limp));
-			TestNPC captorB = TestNPC.brainedBreeder(15.0, 6.0, 0, capBG).grown().withEnergy(9.0);
-			TestNPC consenter = TestNPC.minded(15.05, 6.0, 0, vicBG).grown().withEnergy(6.0);
+			TestNPC captorB = TestNPC.brainedBreeder(15.0, 6.0, 0, capBG).grown().withGlycogen(9.0);
+			TestNPC consenter = TestNPC.minded(15.05, 6.0, 0, vicBG).grown().withGlycogen(6.0);
 			w.spawnEntity(captorA);
 			w.spawnEntity(struggler);
 			w.spawnEntity(captorB);
@@ -8361,11 +8361,11 @@ public class SimTests {
 			tick(w, 6); // captors grab their captives and hold
 			assertTrue("the struggler is held", struggler.isGrabbed() && struggler.getAttachTarget() == captorA);
 			assertTrue("the consenter is held", consenter.isGrabbed() && consenter.getAttachTarget() == captorB);
-			double capA0 = captorA.getEnergy(), capB0 = captorB.getEnergy();
-			double vicA0 = struggler.getEnergy(), vicB0 = consenter.getEnergy();
+			double capA0 = captorA.getGlycogen(), capB0 = captorB.getGlycogen();
+			double vicA0 = struggler.getGlycogen(), vicB0 = consenter.getGlycogen();
 			tick(w, 80);
-			double capALoss = capA0 - captorA.getEnergy(), capBLoss = capB0 - captorB.getEnergy();
-			double vicALoss = vicA0 - struggler.getEnergy(), vicBLoss = vicB0 - consenter.getEnergy();
+			double capALoss = capA0 - captorA.getGlycogen(), capBLoss = capB0 - captorB.getGlycogen();
+			double vicALoss = vicA0 - struggler.getGlycogen(), vicBLoss = vicB0 - consenter.getGlycogen();
 			assertGreater("hauling a struggling captive costs the captor more than a consenting one",
 					capALoss, capBLoss + 0.5);
 			assertGreater("struggling drains the captive's own energy too", vicALoss, vicBLoss + 0.5);
@@ -8407,7 +8407,7 @@ public class SimTests {
 			int[][] hold = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_GRAB, 0, 0 } };
 			int[][] limp = { { Brain.NOP, 0, 0, 0 } };
 			// A captor holding little reserve and burning fast: under VITALS an
-			// empty tank no longer kills — it collapses, and a collapsed captor
+			// empty glycogen no longer kills — it collapses, and a collapsed captor
 			// cannot hold. The grip must open while the captor still lives; a
 			// wound then kills it, and death releases nothing it still held.
 			Genome capG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
@@ -8416,14 +8416,14 @@ public class SimTests {
 			Genome vicG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vicG.brain = new Brain(deepCopy(limp));
 			TestNPC captor = TestNPC.brainedBreeder(6.0, 6.0, 0, capG)
-					.grown().withEnergy(0.6).withHunger(1.0); // starving: no regeneration
+					.grown().withGlycogen(0.6).withHunger(1.0); // starving: no regeneration
 			TestNPC captive = TestNPC.minded(6.05, 6.0, 0, vicG).grown();
 			w.spawnEntity(captor);
 			w.spawnEntity(captive);
 			tick(w, 4);
 			assertTrue("the captive is grabbed while the captor lives", captive.isGrabbed());
 			assertTrue("the captor still lives at this point", !captor.isDead());
-			tick(w, 200); // the grip drains the tank to the crawl reserve
+			tick(w, 200); // the grip drains glycogen to the crawl reserve
 			assertTrue("the drained captor still lives — collapse is not death", !captor.isDead());
 			assertTrue("but a collapsed captor cannot hold: the captive walks free",
 					captive.getAttachTarget() == null && !captive.isGrabbed());
@@ -8468,13 +8468,13 @@ public class SimTests {
 			Genome gG = Genome.phenotype(8, 0.12, 5, 6, Math.PI * 2, 100000);
 			gG.metabolism = 0.02;
 			gG.brain = new Brain(deepCopy(walk));
-			// Full tanks and empty stomachs: nothing digests and nothing is clipped,
-			// so the tank reads the burn alone.
-			// Grown, too: a juvenile spends its tank on growth, which would read as haulage.
+			// Full glycogen stores and empty stomachs: nothing digests and nothing is clipped,
+			// so glycogen reads the burn alone.
+			// Grown, too: a juvenile spends its glycogen on growth, which would read as haulage.
 			TestNPC flier = TestNPC.brainedBreeder(15.0, 20.0, 0, fG).grown().withFlying().withHunger(1.0);
 			TestNPC ground = TestNPC.brainedBreeder(45.0, 20.0, 0, gG).grown().withHunger(1.0);
-			flier.withEnergy(flier.energyCapacity());
-			ground.withEnergy(ground.energyCapacity());
+			flier.withGlycogen(flier.glycogenCapacity());
+			ground.withGlycogen(ground.glycogenCapacity());
 			Genome vAG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			vAG.brain = new Brain(deepCopy(cling));
 			Genome vBG = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
@@ -8489,7 +8489,7 @@ public class SimTests {
 			assertTrue("the flier picked up a passenger", riderA.getAttachTarget() == flier);
 			assertTrue("the ground carrier picked up a passenger", riderB.getAttachTarget() == ground);
 
-			double f0 = flier.getEnergy(), g0 = ground.getEnergy();
+			double f0 = flier.getGlycogen(), g0 = ground.getGlycogen();
 			// Ground covered, summed per tick — direction-agnostic, unlike a
 			// start-to-end displacement, which an orbiting body would understate.
 			double fDist = 0, gDist = 0;
@@ -8498,7 +8498,7 @@ public class SimTests {
 				fDist += flier.lastStep();
 				gDist += ground.lastStep();
 			}
-			double fLoss = f0 - flier.getEnergy(), gLoss = g0 - ground.getEnergy();
+			double fLoss = f0 - flier.getGlycogen(), gLoss = g0 - ground.getGlycogen();
 			assertGreater("both carriers actually hauled their passenger somewhere",
 					Math.min(fDist, gDist), 5.0);
 			// A ratio, not a fixed margin: both bills scale with how far they get,
@@ -9330,7 +9330,7 @@ public class SimTests {
 			hunterG.markers = new double[] { 0.9, 0.2, 0.2 };
 			hunterG.size = 14;
 			hunterG.speed = 0.05; // faster: a committed pursuit closes the gap
-			// Hungry on arrival: appetite, not tank headroom, is what hunts (VITALS.md).
+			// Hungry on arrival: appetite, not glycogen headroom, is what hunts (VITALS.md).
 			TestNPC pred = TestNPC.predator(3.5, 6.5, 0, hunterG).withHunger(0.7);
 			TestNPC prey = TestNPC.breeder(11.5, 6.5, 0, preyG).withHerding(); // vigilant: it flees
 			w.spawnEntity(pred);
@@ -9747,7 +9747,7 @@ public class SimTests {
 				w.think(); // never break early: the cohort-bound check below needs the
 				           // full window, and a corpse cannot be culled twice
 				if (seedling.isRemoved() && seedling.getHealth() > 0
-						&& seedling.getEnergy() > 0.001) {
+						&& seedling.getGlycogen() > 0.001) {
 					culledWhileHealthy = true; // healthy AND fed, yet purged: a cull
 					fate = "culled at tick " + i;
 				} else if (seedling.isDead() && fate.startsWith("survived")) {
@@ -9897,10 +9897,10 @@ public class SimTests {
 			room.think();
 			assertEquals("injection admitted exactly one creature", 1, room.getAliveCount());
 
-			// It is born brand-new: a FULL tank (not the ecosystem's 0.6-capacity
+			// It is born brand-new: a FULL glycogen (not the ecosystem's 0.6-capacity
 			// default), giving a hand-placed seed the longest runway before metabolism
 			// can starve it. Energy is read after the one tick that materialized it, so
-			// it sits a hair below a literal full tank; 0.9 cleanly separates "born
+			// it sits a hair below a literal full glycogen; 0.9 cleanly separates "born
 			// full" from the old 0.6 start.
 			net.hedinger.prototype.entities.NPC seed = null;
 			for (net.hedinger.prototype.engine.Entity e : room.getEntities()) {
@@ -9909,8 +9909,8 @@ public class SimTests {
 				}
 			}
 			assertTrue("injected seed materialized", seed != null);
-			assertGreater("injected seed born at a full tank", seed.getEnergy(),
-					0.9 * seed.energyCapacity());
+			assertGreater("injected seed born at full glycogen", seed.getGlycogen(),
+					0.9 * seed.glycogenCapacity());
 
 			// A tap on a wall snaps to open ground rather than dying on it: (0,0) is
 			// the room's border wall, so a land body dropped there would try to climb,
@@ -10188,11 +10188,11 @@ public class SimTests {
 		private double burnOver(World w, Genome g, int ticks) {
 			// Resting: an inert mind never moves. Starving (hunger 1) switches
 			// regeneration off, so energy only falls, by the resting burn.
-			TestNPC b = TestNPC.minded(5.5, 5.5, 0, g).grown().withEnergy(5.0).withHunger(1.0);
+			TestNPC b = TestNPC.minded(5.5, 5.5, 0, g).grown().withGlycogen(5.0).withHunger(1.0);
 			w.spawnEntity(b);
-			double e0 = b.getEnergy();
+			double e0 = b.getGlycogen();
 			tick(w, ticks);
-			return e0 - b.getEnergy();
+			return e0 - b.getGlycogen();
 		}
 
 		@Override
@@ -10239,7 +10239,7 @@ public class SimTests {
 
 	/**
 	 * Life history is a per-lineage strategy, not one number the whole world
-	 * shares. The r/K axis (how full a tank a lineage breeds off, how much it
+	 * shares. The r/K axis (how full glycogen a lineage breeds off, how much it
 	 * spends per child), its evolvability (mutation rate), and a born-in foraging
 	 * instinct are all genes now — safe to free because birth conserves energy, so
 	 * whatever a lineage picks the books still balance.
@@ -10259,7 +10259,7 @@ public class SimTests {
 			kG.reproFraction = 0.9; // bank first
 			TestNPC r = TestNPC.minded(3.5, 3.5, 0, rG).grown();
 			TestNPC k = TestNPC.minded(6.5, 3.5, 0, kG).grown();
-			assertGreater("a K-strategist breeds off a fuller tank than an r-strategist",
+			assertGreater("a K-strategist breeds off a fuller glycogen than an r-strategist",
 					k.reproThreshold(), r.reproThreshold() * 1.5);
 			// And the per-offspring investment is the lineage's gene.
 			Genome cheapG = new Genome();
@@ -10530,9 +10530,9 @@ public class SimTests {
 	}
 
 	/**
-	 * The VITALS core: an empty tank is collapse, never death. A starving body
+	 * The VITALS core: empty glycogen is collapse, never death. A starving body
 	 * that runs its energy dry lies where it is, still alive — and once fed
-	 * again, satiation regenerates the tank and it gets back up. What kills is
+	 * again, satiation regenerates glycogen and it gets back up. What kills is
 	 * health, and health takes minutes of pegged need to erode.
 	 */
 	static class CollapseIsNotDeath extends Scenario {
@@ -10548,17 +10548,17 @@ public class SimTests {
 			// Starving (no regeneration) with a sliver of reserve: the resting burn
 			// drains it to zero within the window.
 			TestNPC g = TestNPC.breeder(4.5, 4.5, 0, new Genome())
-					.withHunger(1.0).withEnergy(0.05).withReproCooldown(100_000_000);
+					.withHunger(1.0).withGlycogen(0.05).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
 			w.think();
 			tick(w, 400);
-			assertNear("the tank ran dry", 0.0, g.getEnergy(), 1e-9);
+			assertNear("glycogen ran dry", 0.0, g.getGlycogen(), 1e-9);
 			assertTrue("and the collapsed body is still alive", !g.isDead());
 			// A meal arrives: satiation switches regeneration back on and the body
 			// recovers — collapse was a state, not a sentence.
 			g.feed(10.0);
 			tick(w, 400);
-			assertGreater("fed again, the body regenerated energy", g.getEnergy(), 0.05);
+			assertGreater("fed again, the body regenerated energy", g.getGlycogen(), 0.05);
 			assertTrue("and lives on", !g.isDead());
 		}
 	}
@@ -10573,7 +10573,7 @@ public class SimTests {
 	 * gates regeneration, a parching body stops digesting and its hunger
 	 * stalls, so one dry body cannot measure both clocks any more: the hunger
 	 * leg is read off a watered body (thirst held at zero by the shore sip)
-	 * and the thirst leg off a dry one, both motionless with full tanks.
+	 * and the thirst leg off a dry one, both motionless with full glycogen stores.
 	 */
 	static class AppetiteReturnsAtHalfThirstsPace extends Scenario {
 		@Override
@@ -10587,14 +10587,14 @@ public class SimTests {
 			}
 			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS); // the drinker's shore
 			// Brainless genomes -> inert minds: metabolic bodies that never move.
-			// Tanks full, so the mint only covers the resting burn.
+			// Glycogen stores full, so the mint only covers the resting burn.
 			// Both already as fat as they can be: a body with room for fat lays a
 			// quarter of its stomach down first, and the rhythm measured here is the
 			// resting one, once there is nothing left to store.
 			TestNPC drinker = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
-					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000);
 			TestNPC dry = TestNPC.brainedBreeder(7.5, 3.5, 0, new Genome())
-					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000);
+					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000);
 			w.spawnEntity(drinker);
 			w.spawnEntity(dry);
 			w.think();
@@ -10619,7 +10619,7 @@ public class SimTests {
 	 * The conservation law: energy is food-backed. Regeneration converts the
 	 * stomach's contents 1:1, so a body can never bank more than it actually
 	 * ate — the mint drains the meal it is minted from. Before this held, the
-	 * tank refilled from the mere state of being fed at ~12 units of energy
+	 * glycogen refilled from the mere state of being fed at ~12 units of energy
 	 * per unit of food (REGEN_RATE * HUNGER_PERIOD / old stomach), and the
 	 * herd evolved straight into the seam: triple-pace metabolisms banked
 	 * surplus three times faster while grass stayed almost free, and the
@@ -10632,11 +10632,11 @@ public class SimTests {
 		public void run() {
 			seed(101);
 
-			// 1) One meal, one body, nothing else: the tank may never rise by
+			// 1) One meal, one body, nothing else: glycogen may never rise by
 			// more than the meal. Motionless (inert mind), watered (shore sip
 			// keeps thirst from stalling digestion), starting hungry with a
-			// near-empty tank. Under the satiation-state mint this crossed the
-			// meal's worth within a few hundred ticks on its way to a full tank.
+			// near-empty glycogen. Under the satiation-state mint this crossed the
+			// meal's worth within a few hundred ticks on its way to full glycogen.
 			World w = room(10, 8);
 			for (int x = 1; x < 9; x++) {
 				for (int y = 1; y < 7; y++) {
@@ -10645,19 +10645,19 @@ public class SimTests {
 			}
 			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
 			TestNPC g = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
-					.grown().withHunger(1.0).withEnergy(0.5).withReproCooldown(100_000_000);
+					.grown().withHunger(1.0).withGlycogen(0.5).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
 			w.think();
 			double meal = 2.0;
 			g.feed(meal);
-			double maxEnergy = g.getEnergy();
+			double maxEnergy = g.getGlycogen();
 			// 6000 ticks: the drain is satiation-gated, so the stomach empties on
 			// an exponential tail (~4200-tick time constant from this hunger).
 			for (int t = 0; t < 6000; t++) {
 				tick(w, 1);
-				maxEnergy = Math.max(maxEnergy, g.getEnergy());
+				maxEnergy = Math.max(maxEnergy, g.getGlycogen());
 			}
-			assertTrue("the tank never banked more than the meal was worth",
+			assertTrue("glycogen never banked more than the meal was worth",
 					maxEnergy < 0.5 + meal);
 			assertGreater("and the mint drained the meal it was minted from "
 					+ "(appetite returned as the stomach emptied)", g.getHunger(), 0.9);
@@ -10903,7 +10903,7 @@ public class SimTests {
 	 * Mending buys back the flesh. A parasite's drain is paid off the living
 	 * flesh ledger, and health used to mend for nothing, so a host that regrew
 	 * what was drunk off it was a flesh mint. Drained flesh is bought back at the
-	 * meat price out of the tank; a wound that took no flesh closes for free.
+	 * meat price out of glycogen; a wound that took no flesh closes for free.
 	 *
 	 * <p>And a hunter's bite takes no flesh. A bite on a living animal is a
 	 * wound and a scream and nothing else: the hunter is paid nothing until the
@@ -10913,7 +10913,7 @@ public class SimTests {
 	 * <p>Three identical, fed, watered grazers in a room with no grass. One is
 	 * bitten by a parked hunter; one is drained of ten hundredths of its
 	 * flesh the way a parasite would; one is the control. All end at full
-	 * health. The bitten one's stored food (tank plus stomach) matches the
+	 * health. The bitten one's stored food (glycogen plus stomach) matches the
 	 * control's; the drained one's is lower by the meat price of the flesh.
 	 */
 	static class MendingBuysBackTheFlesh extends Scenario {
@@ -10926,7 +10926,7 @@ public class SimTests {
 		}
 
 		private static double stored(TestNPC n) {
-			return n.getEnergy() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
+			return n.getGlycogen() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
 		private static TestNPC grazer(double x, double y) {
@@ -10934,7 +10934,7 @@ public class SimTests {
 			// what this scenario audits.
 			TestNPC g = TestNPC.grazer(x, y, 0, body(12)).withMetabolic().grown().fattened().withHunger(0.0)
 					.withHydration(1.0).withReproCooldown(100_000_000); // fat: nothing to lay down, so the stomach drains at the resting rate
-			g.withEnergy(g.energyCapacity());
+			g.withGlycogen(g.glycogenCapacity());
 			return g;
 		}
 
@@ -10973,7 +10973,7 @@ public class SimTests {
 			// The parasite's drain, by hand: thirty points of health and the flesh
 			// those points represent, off the living ledger.
 			// Ten points: at the one price of mass, thirty hundredths of a body is
-			// more than a tank holds, and a wound a body cannot afford to mend stays.
+			// more than glycogen holds, and a wound a body cannot afford to mend stays.
 			double flesh = drained.drainFlesh(0.10);
 			drained.damage(10, "parasites");
 			assertNear("the drain took flesh", 0.10, flesh, 1e-9);
@@ -11000,15 +11000,15 @@ public class SimTests {
 
 	/**
 	 * Birth conserves energy exactly, across both of a parent's books. What a
-	 * child is worth — its tank, the food in its stomach and its meat-priced
+	 * child is worth — its glycogen, the food in its stomach and its meat-priced
 	 * body — equals what its parents lost, where what a parent holds is its
-	 * tank PLUS its undigested stomach. Not "at most": equal. The audit is the
+	 * glycogen PLUS its undigested stomach. Not "at most": equal. The audit is the
 	 * cannibal round trip — a parent that ate its own just-born child would
-	 * lose the tank and the gut with the death and get the body back at its
+	 * lose glycogen and the gut with the death and get the body back at its
 	 * meat price, so the loop can never profit — and the other half of it, a
 	 * birth that quietly burns part of a generous offer, which used to erase
 	 * the whole point of pairing. Before this held, a bud was born holding 0.6
-	 * of a tank its parent paid 0.5 for, plus a stomach nobody paid for at
+	 * of glycogen its parent paid 0.5 for, plus a stomach nobody paid for at
 	 * all; a lineage of budders was a perpetual-motion machine.
 	 *
 	 * <p>Four legs: a budder's books balance; a pair's balance too AND buy a
@@ -11018,17 +11018,17 @@ public class SimTests {
 	 * matter of a body does not get a child at all, rather than minting one.
 	 */
 	static class NoFreeEnergyAtBirth extends Scenario {
-		/** Everything a body holds, in one number: tank, undigested gut, and the
+		/** Everything a body holds, in one number: glycogen, undigested gut, and the
 		 *  fat a child's body is built out of, at the one price of mass. */
 		private static double held(TestNPC n) {
-			return n.getEnergy() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE)
+			return n.getGlycogen() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE)
 					+ NPC.MEAT_ENERGY * n.fat();
 		}
 
-		/** What a newborn is worth: its tank, its stomach, and its body at the
+		/** What a newborn is worth: its glycogen, its stomach, and its body at the
 		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
-			return n.getEnergy() + NPC.MEAT_ENERGY * n.bodyMass()
+			return n.getGlycogen() + NPC.MEAT_ENERGY * n.bodyMass()
 					+ (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
@@ -11067,20 +11067,20 @@ public class SimTests {
 			World w = room(12, 12);
 			Genome g = new Genome();
 			g.sexuality = 0.3; // a budder
-			TestNPC parent = TestNPC.breeder(6.5, 6.5, 0, g).grown().fattened().withEnergy(4.5);
+			TestNPC parent = TestNPC.breeder(6.5, 6.5, 0, g).grown().fattened().withGlycogen(4.5);
 			w.spawnEntity(parent);
 			w.think();
 			double[] beforeBud = new double[1], bidBud = new double[1];
 			TestNPC bud = breedOut(this, w, beforeBud, bidBud, parent);
 			assertTrue("a bud arrived", bud != null);
 			double budSpent = beforeBud[0] - held(parent);
-			assertNear("the bud is worth exactly what its parent gave up, tank and gut together ("
+			assertNear("the bud is worth exactly what its parent gave up, glycogen and gut together ("
 					+ String.format("%.2f against %.2f", worth(bud), budSpent) + ")",
 					worth(bud), budSpent, eps);
 			assertNear("and the whole of what the parent offered in energy landed in its books, none burnt ("
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
 					worth(bud) - NPC.MEAT_ENERGY * bud.bodyMass(), bidBud[0], eps);
-			assertGreater("and the bud is born viable, not bankrupt", bud.getEnergy(), 0.5);
+			assertGreater("and the bud is born viable, not bankrupt", bud.getGlycogen(), 0.5);
 			assertTrue("under the deprivation line, so being born does not hurt",
 					bud.getHunger() < NPC.DEPRIVED);
 
@@ -11091,8 +11091,8 @@ public class SimTests {
 			ga.markers = new double[] { 0.5, 0.5, 0.5 };
 			Genome gb = new Genome();
 			gb.markers = new double[] { 0.5, 0.5, 0.5 };
-			TestNPC pa = TestNPC.mater(6.3, 6.5, 0, ga).grown().fattened().withEnergy(4.4);
-			TestNPC pb = TestNPC.mater(6.7, 6.5, 0, gb).grown().fattened().withEnergy(4.4);
+			TestNPC pa = TestNPC.mater(6.3, 6.5, 0, ga).grown().fattened().withGlycogen(4.4);
+			TestNPC pb = TestNPC.mater(6.7, 6.5, 0, gb).grown().fattened().withGlycogen(4.4);
 			m.spawnEntity(pa);
 			m.spawnEntity(pb);
 			m.think();
@@ -11104,7 +11104,7 @@ public class SimTests {
 					+ String.format("%.2f against %.2f", worth(kid), pairSpent) + ")",
 					worth(kid), pairSpent, eps);
 			assertNear("and the whole of BOTH offers landed in it -- a ceiling on a "
-					+ "newborn's tank used to burn the difference ("
+					+ "newborn's glycogen used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
 					worth(kid) - NPC.MEAT_ENERGY * kid.bodyMass(), bidKid[0], eps);
 			// The point of a mate: two offers pool into one child instead of each
@@ -11119,7 +11119,7 @@ public class SimTests {
 
 			// A price above the line. Both are genes and can drift apart; a parent
 			// whose price is above its line used to pay the whole price out of a
-			// tank that did not hold it, go negative, be clamped to zero next tick,
+			// glycogen that did not hold it, go negative, be clamped to zero next tick,
 			// and endow its child from all of it -- 4.5 energy minted at one birth,
 			// measured. Now it pays what it holds, and the child is worth no more.
 			World r = room(12, 12);
@@ -11128,10 +11128,10 @@ public class SimTests {
 			gr.reproFraction = 0.35;
 			gr.reproCostFraction = 0.9;
 			TestNPC poor = TestNPC.breeder(6.5, 6.5, 0, gr).grown().fattened().withHunger(0.0);
-			poor.withEnergy(0.4 * poor.energyCapacity());
+			poor.withGlycogen(0.4 * poor.glycogenCapacity());
 			r.spawnEntity(poor);
 			r.think();
-			assertLess("the parent's tank holds less than its price", poor.getEnergy(), poor.reproCost());
+			assertLess("the parent's glycogen holds less than its price", poor.getGlycogen(), poor.reproCost());
 			double[] beforeCheap = new double[1], bidCheap = new double[1];
 			TestNPC cheap = breedOut(this, r, beforeCheap, bidCheap, poor);
 			assertTrue("the poor parent still bred", cheap != null);
@@ -11139,11 +11139,11 @@ public class SimTests {
 			assertNear("its child is worth exactly what it gave up ("
 					+ String.format("%.2f against %.2f", worth(cheap), poorSpent) + ")",
 					worth(cheap), poorSpent, eps);
-			assertTrue("and the parent never went below zero (" + String.format("%.2f", poor.getEnergy()) + ")",
-					poor.getEnergy() >= 0);
+			assertTrue("and the parent never went below zero (" + String.format("%.2f", poor.getGlycogen()) + ")",
+					poor.getGlycogen() >= 0);
 
 			// Without the fat for the matter of a body: no child, and nothing charged,
-			// however full the tank. The old books handed such a parent a child anyway,
+			// however full glycogen. The old books handed such a parent a child anyway,
 			// with a body and a birth meal minted out of nothing to make up the difference.
 			World b = room(12, 12);
 			Genome gb2 = new Genome();
@@ -11153,7 +11153,7 @@ public class SimTests {
 			gb2.reproCostFraction = 0.1;
 			TestNPC mean = TestNPC.breeder(6.5, 6.5, 0, gb2).grown().withHunger(0.0)
 					.withFat(0.5 * NPC.birthMass(gb2.size)); // half a child's body in fat: not enough
-			mean.withEnergy(mean.energyCapacity());
+			mean.withGlycogen(mean.glycogenCapacity());
 			b.spawnEntity(mean);
 			b.think();
 			assertLess("its fat will not build the body its child would need",
@@ -11167,7 +11167,7 @@ public class SimTests {
 	}
 
 	/**
-	 * Growing up is paid for: new flesh is matter, bought from the tank at the
+	 * Growing up is paid for: new flesh is matter, bought from glycogen at the
 	 * same {@link NPC#MEAT_ENERGY} an eater would collect for it — so rearing a
 	 * body and eating it can never mint energy between them, and a growing
 	 * child is hungrier than an adult of the same current size (the mint
@@ -11202,15 +11202,15 @@ public class SimTests {
 			Genome big = new Genome();
 			big.size = 16;
 			TestNPC grower = TestNPC.brainedBreeder(2.5, 3.5, 0, big)
-					.withGrowth(16).withEnergy(7.2).withReproCooldown(100_000_000);
+					.withGrowth(16).withGlycogen(7.2).withReproCooldown(100_000_000);
 			Genome same = new Genome(); // size 6
 			TestNPC grown = TestNPC.brainedBreeder(2.5, 3.5, 0, same)
-					.grown().fattened().withEnergy(4.5).withReproCooldown(100_000_000); // grown, and with nothing left to lay down: its stomach drains at the resting rate
+					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000); // grown, and with nothing left to lay down: its stomach drains at the resting rate
 			gw.spawnEntity(grower);
 			aw.spawnEntity(grown);
 			gw.think();
 			aw.think();
-			double e0 = grower.getEnergy(), m0 = grower.maturity();
+			double e0 = grower.getGlycogen(), m0 = grower.maturity();
 			tick(gw, 3000);
 			tick(aw, 3000);
 
@@ -11221,9 +11221,9 @@ public class SimTests {
 			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
 			assertGreater("and the flesh was paid for out of the books ("
-					+ String.format("%.2f", e0 + minted - grower.getEnergy())
+					+ String.format("%.2f", e0 + minted - grower.getGlycogen())
 					+ " spent, flesh worth " + String.format("%.2f", flesh) + ")",
-					e0 + minted - grower.getEnergy(), flesh - 1e-6);
+					e0 + minted - grower.getGlycogen(), flesh - 1e-6);
 
 			// 2) The appetite: the growing body drained far more of its stomach
 			// than the same-size grown body beside it — and is the hungrier.
@@ -11235,7 +11235,7 @@ public class SimTests {
 					grower.getHunger(), grown.getHunger());
 
 			// 3) Growth yields to survival: a destitute juvenile — empty stomach,
-			// tank at the crawl floor — stops growing almost at once, and is
+			// glycogen at the crawl floor — stops growing almost at once, and is
 			// still alive long after; scarcity stretches childhood, it does not
 			// kill through growth.
 			World pw = room(10, 8);
@@ -11243,7 +11243,7 @@ public class SimTests {
 			Genome pauperG = new Genome();
 			pauperG.size = 16;
 			TestNPC pauper = TestNPC.brainedBreeder(2.5, 3.5, 0, pauperG)
-					.withGrowth(16).withEnergy(0.7).withHunger(1.0)
+					.withGrowth(16).withGlycogen(0.7).withHunger(1.0)
 					.withReproCooldown(100_000_000);
 			pw.spawnEntity(pauper);
 			pw.think();
@@ -11253,8 +11253,8 @@ public class SimTests {
 			// Growth is bought from surplus, never from the last of the reserve: a
 			// grower with no food stops at the growth reserve, still able to exert.
 			assertGreater("and the grower, with nothing to eat, kept its growth reserve ("
-					+ String.format("%.2f of %.2f", grower.getEnergy(), grower.energyCapacity()) + ")",
-					grower.getEnergy(), NPC.GROWTH_RESERVE * grower.energyCapacity() - 0.05);
+					+ String.format("%.2f of %.2f", grower.getGlycogen(), grower.glycogenCapacity()) + ")",
+					grower.getGlycogen(), NPC.GROWTH_RESERVE * grower.glycogenCapacity() - 0.05);
 			assertTrue("so it can still exert", grower.canExert());
 			assertTrue("but starvation did not kill it through growth — it is "
 					+ "alive to eat its way out", !pauper.isDead());
@@ -11511,7 +11511,7 @@ public class SimTests {
 	 * Vigor: health scales energy regeneration, so a wounded body is also a
 	 * listless one — wounds and hunger compound instead of being independent
 	 * ledgers. Two identical fed bodies, one badly hurt; the healthy one
-	 * refills its tank decisively faster.
+	 * refills its glycogen decisively faster.
 	 */
 	static class HealthGatesEnergyRegeneration extends Scenario {
 		@Override
@@ -11519,16 +11519,16 @@ public class SimTests {
 			seed(99);
 			World w = room(10, 10);
 			TestNPC whole = TestNPC.breeder(3.5, 3.5, 0, new Genome())
-					.withEnergy(0.5).withReproCooldown(100_000_000);
+					.withGlycogen(0.5).withReproCooldown(100_000_000);
 			TestNPC hurt = TestNPC.breeder(6.5, 6.5, 0, new Genome())
-					.withEnergy(0.5).withReproCooldown(100_000_000);
+					.withGlycogen(0.5).withReproCooldown(100_000_000);
 			w.spawnEntity(whole);
 			w.spawnEntity(hurt);
 			w.think();
 			hurt.damage(80, "misadventure"); // health 20: vigor a fifth of whole
 			tick(w, 400);
 			assertGreater("the healthy body regenerated more energy than the wounded one",
-					whole.getEnergy() - 0.5, (hurt.getEnergy() - 0.5) * 2);
+					whole.getGlycogen() - 0.5, (hurt.getGlycogen() - 0.5) * 2);
 		}
 	}
 
@@ -11569,14 +11569,14 @@ public class SimTests {
 			assertTrue("the parasite is riding its host", para.getAttachTarget() == host);
 			assertGreater("and drinking off it", para.totalSwallowed(), 0.0);
 			// At the one price of mass the drink is a transfer: the host mends what
-			// was drunk at the same price, out of its tank, so a parasite is a tax
+			// was drunk at the same price, out of its glycogen, so a parasite is a tax
 			// its host pays -- in energy if it can afford to mend, in health if not.
 			double drunk = para.totalSwallowed() / NPC.MEAT_ENERGY / host.bodyMass(); // share of the host
 			double mended = (1 - drunk) < host.meatLeft() ? (host.meatLeft() - (1 - drunk)) : 0;
-			double paid = (control.getEnergy() - host.getEnergy()) + (100 - host.getHealth()) * 0; // tank gap
-			assertTrue("the host is worse off than its twin, in tank or in flesh ("
-					+ String.format("tank %.2f against %.2f, flesh %.3f", host.getEnergy(), control.getEnergy(), host.meatLeft()) + ")",
-					host.getEnergy() < control.getEnergy() - 0.05 || host.meatLeft() < 1 - 1e-6 || host.getHealth() < 100);
+			double paid = (control.getGlycogen() - host.getGlycogen()) + (100 - host.getHealth()) * 0; // glycogen gap
+			assertTrue("the host is worse off than its twin, in glycogen or in flesh ("
+					+ String.format("glycogen %.2f against %.2f, flesh %.3f", host.getGlycogen(), control.getGlycogen(), host.meatLeft()) + ")",
+					host.getGlycogen() < control.getGlycogen() - 0.05 || host.meatLeft() < 1 - 1e-6 || host.getHealth() < 100);
 			assertGreater("and what it mended, it paid the one price for", mended + paid, -1); // never negative: nothing minted
 			assertNear("nothing was grazed on the way", 0.0, para.totalIntake(), 1e-9);
 		}
@@ -11798,8 +11798,8 @@ public class SimTests {
 
 	/**
 	 * The other side of the need: in a world with no water at all, a fully fed
-	 * grazer still declines and dies once its tank runs dry — dehydration is a
-	 * slow wear on health, not a starvation clone (the full energy tank rules
+	 * grazer still declines and dies once its glycogen runs dry — dehydration is a
+	 * slow wear on health, not a starvation clone (the full glycogen store rules
 	 * starving out as the cause on this timeline).
 	 */
 	static class DehydrationWearsABodyDown extends Scenario {
@@ -11815,7 +11815,7 @@ public class SimTests {
 			tick(w, 1);
 			TestNPC g = TestNPC.breeder(8.5, 8.5, 0,
 					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
-					.withHydration(0.01).withEnergy(6.0).withReproCooldown(100_000_000);
+					.withHydration(0.01).withGlycogen(6.0).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
 			// Deprivation erodes health a point every DEPRIVATION_PERIOD ticks, so a
 			// pegged need takes ~5000 ticks to kill — slow enough that rescue is real.

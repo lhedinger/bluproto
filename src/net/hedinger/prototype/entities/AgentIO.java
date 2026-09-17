@@ -19,12 +19,12 @@ public final class AgentIO {
 	/** Constant 1.0, so a policy can synthesize thresholds/biases. */
 	public static final int S_BIAS = 0;
 	/** Own hunger/reserve as a fraction of this body's OWN capacity, ~0..1: 1.0
-	 * means a full tank, near 0 means starving. Scaled to the creature's own
+	 * means full glycogen, near 0 means starving. Scaled to the creature's own
 	 * (size-dependent) capacity, not an absolute constant, so the same policy
 	 * reads "how full am I" the same way in a small body or a large one — which is
 	 * what lets appetite-driven behaviour (hunt when hungry, rest when full)
-	 * evolve. 0 when the body keeps no energy tank. */
-	public static final int S_ENERGY = 1;
+	 * evolve. 0 when the body keeps no glycogen store. */
+	public static final int S_GLYCOGEN = 1;
 	/** Vegetation on the tile underfoot, 0..1. */
 	public static final int S_FOOD = 2;
 	/** Pheromone underfoot, squashed 0..1. */
@@ -101,7 +101,7 @@ public final class AgentIO {
 	/**
 	 * How the standing {@link #A_SEEK} intent is going — the only channel that tells
 	 * a mind whether what it wanted actually happened. Without it a brain can infer
-	 * success only from its tank drifting upward, several thought-cycles late.
+	 * success only from its glycogen drifting upward, several thought-cycles late.
 	 *
 	 * <p>Four values, and deliberately not true/false: an intent here is a latched
 	 * <i>level</i>, not a call that returns, so there is no moment at which one
@@ -139,7 +139,7 @@ public final class AgentIO {
 	public static final int S_WATER_BEARING = 33;
 	/** How empty this body is, 0 (sated) .. 1 (starving) — the hunger need
 	 * (VITALS.md), sibling of {@link #S_THIRST} and distinct from
-	 * {@link #S_ENERGY}: hunger is the need for food, energy is what the body
+	 * {@link #S_GLYCOGEN}: hunger is the need for food, energy is what the body
 	 * can currently DO. Appended last so evolved programs indexed against the
 	 * old vector keep their meaning. */
 	public static final int S_HUNGER = 34;
@@ -199,7 +199,7 @@ public final class AgentIO {
 	public static final int S_SOUND_KIND = 40;
 	public static final int NUM_SENSORS = 41;
 	public static final String[] SENSOR_NAMES = {
-			"bias", "energy", "food", "phero", "near_prox", "near_bearing",
+			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
 			"item_prox", "item_bearing", "item_kind",
 			"prey_prox", "prey_bearing", "threat_prox", "threat_bearing", "kin_bearing",

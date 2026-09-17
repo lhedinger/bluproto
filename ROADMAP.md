@@ -66,7 +66,7 @@ small, deterministic, test-backed slices.
   and token-gated injection into the running world.
 
 **The body's economy** — full spec in [GENOME.md](GENOME.md#the-bodys-economy)
-- Resting burn `mass^0.75` (Kleiber) against a linear tank, so endurance goes as
+- Resting burn `mass^0.75` (Kleiber) against a linear store, so endurance goes as
   `mass^0.25`. Movement is kinetic (`mass · v²`), with no separate sprint gear.
 - A carried load is simply extra mass on its carrier; the grip on an unwilling
   captive is the one cost paid standing still.

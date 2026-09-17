@@ -143,7 +143,7 @@ public record EntityState(
 			// (0 just died .. 1 gone). The viewer needs that to draw decay at all --
 			// it renders creatures from an atlas of idle frames and cannot play the
 			// engine's death action. F_DEAD says which reading applies.
-			aux = e.isDead() ? n.decayProgress() : n.getEnergy();
+			aux = e.isDead() ? n.decayProgress() : n.getGlycogen();
 			if (n.getGenome() != null) {
 				pheno = PhenoRegistry.register(n.getGenome()); // procedural body: name its atlas
 			}
