@@ -205,6 +205,20 @@ public abstract class NPC extends Entity {
 	 */
 	@Unit("fertility per energy")
 	public static double EGESTA_FERTILITY = 0.0037;
+	/**
+	 * What building tissue costs over and above what the tissue will hold.
+	 *
+	 * <p>Laying down a unit of flesh is work: the energy in the finished tissue
+	 * is not the energy it took to assemble it, and the difference leaves as
+	 * heat. So a body pays {@code SYNTHESIS_COST} times {@link #LEAN_DENSITY}
+	 * for each unit it grows or mends, and an eater gets
+	 * {@link #FLESH_ASSIMILATION} of {@code LEAN_DENSITY} back out of it. Round
+	 * trips through a body therefore lose about two units in five, which is
+	 * where the trophic pyramid comes from and why conservation is an
+	 * inequality rather than a knife-edge equality.
+	 */
+	@Unit("of the tissue's own energy")
+	public static double SYNTHESIS_COST = 1.35;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
@@ -1130,7 +1144,7 @@ public abstract class NPC extends Entity {
 		// Growth: a juvenile creeps toward its adult body at a fixed ceiling
 		// rate, so the bigger the adult the longer the childhood. New flesh is
 		// matter, and matter is paid for: a metabolic body buys each step at the
-		// meat price an eater would get for it, out of glycogen — which the mint
+		// meat price plus what it costs to assemble it, out of glycogen — which the mint
 		// then refills from the gut, so a growing child is hungrier than an
 		// adult of the same current size. Growth yields to survival: it slows to
 		// what the surplus above the exhaustion floor affords, stretching childhood
@@ -1143,7 +1157,7 @@ public abstract class NPC extends Entity {
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
-				double price = LEAN_DENSITY / REF_SIZE; // energy per pixel grown
+				double price = SYNTHESIS_COST * LEAN_DENSITY / REF_SIZE; // energy per pixel grown, built
 				double spare = glycogen - Math.max(EXHAUSTION, GROWTH_RESERVE) * glycogenCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
 				glycogen -= step * price;
@@ -1261,7 +1275,7 @@ public abstract class NPC extends Entity {
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
 				if (lean < 1.0) {
-					double price = LEAN_DENSITY * leanMass() / 100.0;
+					double price = SYNTHESIS_COST * LEAN_DENSITY * leanMass() / 100.0;
 					if (glycogen >= price) {
 						glycogen -= price;
 						lean = Math.min(1.0, lean + 0.01);
