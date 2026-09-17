@@ -1248,7 +1248,7 @@ public abstract class NPC extends Entity {
 			// corpse still says what killed it; mending happens only under low
 			// needs, at the pace-of-life rate (fast burners heal faster and pay
 			// for it in appetite). Wounds themselves come from combat, as ever.
-			if (hunger >= DEPRIVED && age % DEPRIVATION_PERIOD == 0) {
+			if (hunger >= DEPRIVED && starving() && age % DEPRIVATION_PERIOD == 0) {
 				damage(1, "starvation");
 			}
 			if (thirst >= DEPRIVED && age % DEPRIVATION_PERIOD == DEPRIVATION_PERIOD / 2) {
@@ -1405,6 +1405,20 @@ public abstract class NPC extends Entity {
 	 *  {@link #feed} consumes — what a sated body can still swallow (0). */
 	protected double gutRoom() {
 		return hunger * GUT_PER_MASS * adultMass();
+	}
+
+	/**
+	 * Whether an empty gut is actually starvation.
+	 *
+	 * <p>A body is starving only once it has nothing left to live on: no fat to
+	 * mobilise and no glycogen past the exhaustion floor. Until then an empty
+	 * gut is appetite, and what an animal does about appetite is go and eat.
+	 * Starvation is the body beginning to catabolise itself, which is why it is
+	 * the one hunger state that erodes health, and why a fat animal walks out
+	 * of a famine a lean one dies in.
+	 */
+	public boolean starving() {
+		return fat <= 1e-9 && glycogen <= EXHAUSTION * glycogenCapacity();
 	}
 
 	/** Whether the body has the reserve to act (bite, grab, breed, press):

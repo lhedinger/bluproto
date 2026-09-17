@@ -801,19 +801,40 @@ public class SimTests {
 					.withReproCooldown(100_000_000);
 			TestNPC lean = TestNPC.grazer(6.5, 3.5, 0, body()).withMetabolic().grown().withHunger(0.96).withHydration(1.0)
 					.withReproCooldown(100_000_000);
-			fat.withGlycogen(0.5 * fat.glycogenCapacity());
-			lean.withGlycogen(0.5 * lean.glycogenCapacity());
+			// Both nearly out of glycogen as well as out of gut: an empty gut is
+			// appetite, not starvation, and what decides which of the two this is
+			// is whether the body has anything left to live on. The fat one has;
+			// it draws its store back through the gut and tops the glycogen up
+			// again. The lean one has nothing, and goes under.
+			fat.withGlycogen(0.08 * fat.glycogenCapacity());
+			lean.withGlycogen(0.08 * lean.glycogenCapacity());
 			b.spawnEntity(fat);
 			b.spawnEntity(lean);
 			double f0 = fat.fat();
-			tick(b, 600);
+			tick(b, 1200);
 			assertLess("an empty gut draws on the fat", fat.fat(), f0 - 0.01);
 			assertLess("and the gut never pegs while any is left", fat.getHunger(), NPC.DEPRIVED);
 			assertTrue("so starvation has not touched it past the arrival tick (" + fat.getHealth() + ")",
 					fat.getHealth() >= 99);
 			assertLess("the lean twin is starving", lean.getHealth(), fat.getHealth() - 5);
+			assertTrue("and it is starving because it has nothing left, not because it is hungry",
+					lean.starving() && !fat.starving());
 			assertGreater("and the fat body is the better fed of the two, out of its own store",
 					lean.getHunger(), fat.getHunger());
+
+			// --- an empty gut is not starvation while there is still a store to
+			// live on. A third twin, lean but with its glycogen full, is as hungry
+			// as the other two and takes no harm at all: appetite sends it looking
+			// for food, and only a body with nothing left is eating itself.
+			TestNPC stocked = TestNPC.grazer(4.5, 6.5, 0, body()).withMetabolic().grown()
+					.withHunger(0.96).withHydration(1.0).withReproCooldown(100_000_000);
+			stocked.withGlycogen(stocked.glycogenCapacity());
+			b.spawnEntity(stocked);
+			tick(b, 1200);
+			assertGreater("the stocked twin is just as hungry", stocked.getHunger(), NPC.DEPRIVED);
+			assertEquals("and untouched by it", 100, Math.round(stocked.getHealth()));
+			assertTrue("because an empty gut over a full store is not starvation",
+					!stocked.starving());
 
 			// --- on the carcass: fat is meat, on top of the lean thirds.
 			TestNPC rich = TestNPC.grazer(3.5, 5.5, 0, body()).grown().fattened();

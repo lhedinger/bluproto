@@ -108,7 +108,8 @@ energy'  = +  ASSIMILATION · R · m^0.75 · satiation · vigor  −  action cos
 action costs: movement m·v² per tick, grip, bite, growth, breeding — as priced today
 
 health'  = −  wounds (bites, hazards)
-           −  deprivation trickle while hunger ≥ ~0.95 or thirst ≥ ~0.95
+           −  deprivation trickle while thirst ≥ ~0.95, or while hunger is
+              ≥ ~0.95 AND the body is starving (see below)
            +  slow mend · R  only while hunger < 0.5 AND thirst < 0.5
 ```
 
@@ -291,6 +292,14 @@ glycogen at that price — `LEAN_DENSITY` per unit of mass grown — the one
 price of lean tissue, which also mends a wound, pays a parasite and pays
 every mouth at a carcass, so nothing in the chain mints energy. Fat has its
 own density, `FAT_DENSITY`, equal to it for now.
+
+**Starvation is having nothing left, not having an empty gut.** An empty gut
+is appetite, and what an animal does about appetite is go and eat; the trickle
+that erodes health runs only once the body has no fat to mobilise and no
+glycogen past the exhaustion floor, which is the point at which it starts
+catabolising itself. So hunger is a drive and starvation is a state, a fat
+animal walks out of a famine a lean one dies in, and a newborn with a full
+store and an empty gut is hungry rather than dying.
 
 **And eating is lossy, which is where the pyramid comes from.** A meal is
 swallowed whole but only assimilated in part: `FLESH_ASSIMILATION` 0.85 of
