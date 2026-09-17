@@ -148,13 +148,13 @@ public final class ServerTests {
 		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
 		// A body is three pools, each sent as its share of the whole: the fresh
 		// meat that is the hunters', the decayed meat that is the scavengers', and
-		// the bones. The frame divides in thirds and fat, which a world body dies
+		// the bones. The lean mass divides in thirds and fat, which a world body dies
 		// carrying, goes half to each meat pool -- so just dead, before anything is
-		// eaten or rotted, the two meats are equal, the bones are the frame's third
+		// eaten or rotted, the two meats are equal, the bones are the lean third
 		// or less of the whole, and the three add up to the whole body.
-		check("a just-dead body's fresh and decayed meat are equal: a third of the frame and half the fat each",
+		check("a just-dead body's fresh and decayed meat are equal: a third of the lean mass and half the fat each",
 				fresh > 0.3 && Math.abs(fresh - decayed) < 0.02);
-		check("and its bones are the frame's third, or less of a fat body", bones > 0.2 && bones < 0.34);
+		check("and its bones are the lean third, or less of a fat body", bones > 0.2 && bones < 0.34);
 		check("so the three pools are the whole body", Math.abs(fresh + decayed + bones - 1.0) < 0.02);
 		check("and the meat on it is the edible two thirds", Math.abs(meat - (fresh + decayed)) < 0.02);
 		check("it has ticks left to be eaten in", ((Number) corpse.get("rotsIn")).intValue() > 0);

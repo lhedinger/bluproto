@@ -149,11 +149,11 @@ public abstract class NPC extends Entity {
 	 * per-bite payout, under which a mouse and an animal the hunter's own size
 	 * were worth exactly the same (measured: 2.49 either way).
 	 *
-	 * <p>Sized so a body is a meal, not a snack: a reference frame is three
+	 * <p>Sized so a body is a meal, not a snack: a reference lean mass is three
 	 * stomachs ({@link #STOMACH}), so the fresh third of a lean medium corpse
 	 * fills one same-size hunter, and a fat one ({@link #FAT_CAP}) half as much
 	 * again. The same figure is what growing up costs -- a child buys two
-	 * thirds of its frame out of what it eats -- which is why grazing and
+	 * thirds of its lean mass out of what it eats -- which is why grazing and
 	 * digestion ({@link #REGEN_RATE}) are paced to pay for it in minutes.
 	 */
 	@Unit("energy per mass")
@@ -201,7 +201,7 @@ public abstract class NPC extends Entity {
 	 * stretches this when food is short — and still the right figure for the
 	 * clocks derived from it (rot, breeding cadence), which want the lineage's
 	 * intrinsic scale rather than one individual's luck. Linear in adult size,
-	 * and therefore linear in mass, since {@link #bodyMass()} is just size
+	 * and therefore linear in mass, since {@link #leanMass()} is just size
 	 * normalised to {@link #REF_SIZE}.
 	 *
 	 * <p>Exposed because rotting is pinned to it — a body takes as long to return
@@ -315,13 +315,13 @@ public abstract class NPC extends Entity {
 	 *
 	 *  <p>Public because a body's mass is a fact about it that other creatures act
 	 *  on — a predator has to weigh its quarry to know what the meal is worth. */
-	public double bodyMass() {
+	public double leanMass() {
 		double s = size > 0 ? size : REF_SIZE;
 		return s / REF_SIZE;
 	}
 
 	/**
-	 * Everything this body is hauling, in the same units as {@link #bodyMass()} so
+	 * Everything this body is hauling, in the same units as {@link #leanMass()} so
 	 * the two simply add up.
 	 *
 	 * <p>A load is not a separate bill — it is just extra mass. Whatever a carrier
@@ -332,7 +332,7 @@ public abstract class NPC extends Entity {
 	 * it costs in proportion to how much of it there is and how fast you go.
 	 *
 	 * <p>{@code carriedLoad} accumulates {@code getSize()}, which is in tiles,
-	 * while {@code bodyMass()} is normalised to {@link #REF_SIZE} — hence the
+	 * while {@code leanMass()} is normalised to {@link #REF_SIZE} — hence the
 	 * conversion. Flying counts a load heavier: holding a body up in the air is
 	 * harder than dragging it along the ground.
 	 */
@@ -455,14 +455,14 @@ public abstract class NPC extends Entity {
 	protected double reproThreshold = 2.0; // energy needed to bud an offspring
 	protected double reproCost = 1.0; // energy spent per offspring
 	/**
-	 * How much of this LIVING body's flesh is still on it, 0..1. A parasite's
-	 * drain comes off it and is paid the meat price for exactly that share, and a
-	 * mended wound buys it back (see the mend step). A hunter's bite on a live
-	 * animal takes nothing here: a bite wounds, and the hunter is paid nothing
-	 * until the animal is dead. What is left of this ledger at death is what the
-	 * corpse is made of -- see {@link #kill}.
+	 * How much of this LIVING body's lean tissue is still on it, 0..1 of
+	 * {@link #leanMass()}. A parasite's drain comes off it and is paid the meat
+	 * price for exactly that share, and a mended wound buys it back (see the mend
+	 * step). A hunter's bite on a live animal takes nothing here: a bite wounds,
+	 * and the hunter is paid nothing until the animal is dead. What is left of
+	 * this ledger at death is what the corpse is made of -- see {@link #kill}.
 	 */
-	protected double meat = 1.0;
+	protected double lean = 1.0;
 
 	/*
 	 * A corpse is not all meat. At death the body divides into three pools, in
@@ -505,7 +505,7 @@ public abstract class NPC extends Entity {
 	/** Mass mouths have taken off this corpse, in body-mass units -- the one part
 	 *  of the body the ground never gets. */
 	protected double eaten = 0;
-	/** What the body weighed the instant it died, frame and fat together, in
+	/** What the body weighed the instant it died, lean mass and fat together, in
 	 *  body-mass units: the whole the corpse's pools are shares of. */
 	protected double carcassMass = 0;
 
@@ -519,7 +519,7 @@ public abstract class NPC extends Entity {
 	 * builds a child's body out of. It is the only thing in the economy that can
 	 * turn a long fed life into a rich corpse, and a starved one into bones.
 	 */
-	/** Mass of fat on this body, in body-mass units, on top of the frame. */
+	/** Mass of fat on this body, in body-mass units, on top of the lean mass. */
 	protected double fat = 0;
 	/** Growth spends only the glycogen above this share of the store: a juvenile that grew
 	 *  itself down to the crawl reserve could not exert, and a young hunter or
@@ -527,8 +527,8 @@ public abstract class NPC extends Entity {
 	 *  from surplus, never from the last of the reserve. */
 	@Unit("of glycogen")
 	public static double GROWTH_RESERVE = 0.25;
-	/** How much fat a body can carry, as a share of its frame. */
-	@Unit("of frame mass")
+	/** How much fat a body can carry, as a share of its lean mass. */
+	@Unit("of lean mass")
 	public static double FAT_CAP = 0.5;
 	/** A body lays down fat only while its stomach is fuller than this and its
 	 *  glycogen is full: fat is what is left over once everything else is paid. */
@@ -544,12 +544,12 @@ public abstract class NPC extends Entity {
 		return fat;
 	}
 
-	/** The most fat this frame can carry, in body-mass units. */
+	/** The most fat this body can carry, in body-mass units. */
 	public double fatCap() {
-		return FAT_CAP * bodyMass();
+		return FAT_CAP * leanMass();
 	}
 
-	/** Fat as a share of what the frame could carry, 0..1, for the inspector. */
+	/** Fat as a share of what the body could carry, 0..1, for the inspector. */
 	public double fatLeft() {
 		double c = fatCap();
 		return c <= 0 ? 0 : Math.max(0, Math.min(1, fat / c));
@@ -564,7 +564,7 @@ public abstract class NPC extends Entity {
 	}
 
 	/** Fat this body must hold before it will try to breed: half a child of its
-	 *  own frame, since a pair pools two halves. A budder still needs the whole
+	 *  own lean mass, since a pair pools two halves. A budder still needs the whole
 	 *  at the moment of birth -- see {@code spawnOffspring}. */
 	protected double fatToBreed() {
 		double adult = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
@@ -572,7 +572,7 @@ public abstract class NPC extends Entity {
 	}
 
 	/** Takes up to {@code mass} of fat off this body for a child's birth mass
-	 *  and returns what was actually taken. Fat only: the frame is not for sale,
+	 *  and returns what was actually taken. Fat only: the lean mass is not for sale,
 	 *  so no parent can die of giving birth. */
 	public double payBirthMass(double mass) {
 		double taken = Math.max(0, Math.min(mass, fat));
@@ -580,16 +580,16 @@ public abstract class NPC extends Entity {
 		return taken;
 	}
 
-	/** Everything a living body weighs: its frame plus its fat. On a corpse,
+	/** Everything a living body weighs: its lean mass plus its fat. On a corpse,
 	 *  what it weighed when it died. */
-	public double totalMass() {
-		return isDead() ? carcassMass : bodyMass() + fat;
+	public double bodyMass() {
+		return isDead() ? carcassMass : leanMass() + fat;
 	}
 
-	/** What this corpse weighed the instant it died, frame and fat together;
-	 *  the whole its pools are shares of. The living frame plus fat otherwise. */
+	/** What this corpse weighed the instant it died, lean mass and fat together;
+	 *  the whole its pools are shares of. The living lean mass plus fat otherwise. */
 	public double carcassMass() {
-		return totalMass();
+		return bodyMass();
 	}
 
 	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
@@ -624,7 +624,7 @@ public abstract class NPC extends Entity {
 
 	/** The bones: the part of a corpse nobody eats, in body-mass units. */
 	public double bones() {
-		return isDead() ? bodyMass() * (1 - FRESH_SHARE) * (1 - SCAVENGER_SHARE) : 0;
+		return isDead() ? leanMass() * (1 - FRESH_SHARE) * (1 - SCAVENGER_SHARE) : 0;
 	}
 
 	/** Mass mouths have taken off this corpse so far, in body-mass units. */
@@ -640,7 +640,7 @@ public abstract class NPC extends Entity {
 	/** What is physically left of this body: on a corpse the meat still on it
 	 *  plus the bones; on the living, the whole body, fat and all. */
 	public double remainingMass() {
-		return isDead() ? edibleMass() + bones() : totalMass();
+		return isDead() ? edibleMass() + bones() : bodyMass();
 	}
 
 	/** Fresh meat as a fraction of the whole body, 0..1, for the inspector. */
@@ -654,7 +654,7 @@ public abstract class NPC extends Entity {
 	}
 
 	private double shareOfBody(double mass) {
-		double m = isDead() ? carcassMass : bodyMass();
+		double m = isDead() ? carcassMass : leanMass();
 		return m <= 0 ? 0 : Math.max(0, Math.min(1, mass / m));
 	}
 
@@ -732,7 +732,7 @@ public abstract class NPC extends Entity {
 	/** The flesh still on this body as a fraction of the whole: on the living,
 	 *  the living ledger; on a corpse, the meat anybody could still eat. */
 	public double meatLeft() {
-		return isDead() ? shareOfBody(edibleMass()) : meat;
+		return isDead() ? shareOfBody(edibleMass()) : lean;
 	}
 
 	/**
@@ -745,10 +745,10 @@ public abstract class NPC extends Entity {
 		if (isDead()) {
 			return 0;
 		}
-		double taken = Math.max(0, Math.min(share, meat));
-		meat -= taken;
-		if (meat <= 1e-9) {
-			meat = 0;
+		double taken = Math.max(0, Math.min(share, lean));
+		lean -= taken;
+		if (lean <= 1e-9) {
+			lean = 0;
 		}
 		return taken;
 	}
@@ -869,7 +869,7 @@ public abstract class NPC extends Entity {
 		// Resting burn scales with mass^0.75 (Kleiber). The genome's metabolism is
 		// a heritable efficiency multiplier normalised to META_REF, so an average
 		// genome burns exactly the size-based rate and mutations nudge it.
-		double m34 = Math.pow(bodyMass(), 0.75);
+		double m34 = Math.pow(leanMass(), 0.75);
 		double eff = genome != null ? genome.metabolism / META_REF : 1.0;
 		double base = BASE_METABOLISM * m34 * eff;
 		if (genome == null) {
@@ -1083,7 +1083,7 @@ public abstract class NPC extends Entity {
 			// through the regeneration drain below, so it tracks what the body
 			// actually burns; the resting rhythm anchor (appetite returns in
 			// twice the time thirst does) survives as the STOMACH identity.
-			double pace = Math.pow(bodyMass(), -0.25) * eff;
+			double pace = Math.pow(leanMass(), -0.25) * eff;
 			thirst = Math.min(1.0, thirst + pace / THIRST_PERIOD);
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
@@ -1107,7 +1107,7 @@ public abstract class NPC extends Entity {
 			// Charged on the ground actually covered -- a step cancelled by a
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
-			double travel = MOVE_ENERGY * travelEfficiency() * (bodyMass() + fat + carriedMass()) * lastStep * lastStep;
+			double travel = MOVE_ENERGY * travelEfficiency() * (leanMass() + fat + carriedMass()) * lastStep * lastStep;
 			// Regeneration: the body converts the stomach's contents into energy
 			// over time — food never becomes energy directly (feed() fills the
 			// stomach), and the mint drains the meal it is minted from, 1:1 in
@@ -1116,7 +1116,7 @@ public abstract class NPC extends Entity {
 			// compound with the rest: an unhealthy body is also a listless one.
 			double satiation = 1.0 - Math.max(hunger, thirst);
 			double vigor = Math.max(0, health) / 100.0;
-			double regen = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * satiation * vigor;
+			double regen = REGEN_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor;
 			double out = base + grip + travel;
 			// Only conversion that lands in the books draws down the stomach: at
 			// full glycogen the mint stops instead of burning the meal for nothing.
@@ -1130,7 +1130,7 @@ public abstract class NPC extends Entity {
 			// stomach running empty is refilled out of fat before it can peg; a
 			// stomach that is full against full glycogen is laid down as fat.
 			double stomach = STOMACH * adultMass();
-			double digest = REGEN_RATE * Math.pow(bodyMass(), 0.75) * eff * vigor;
+			double digest = REGEN_RATE * Math.pow(leanMass(), 0.75) * eff * vigor;
 			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
 				double back = Math.min(fat * MEAT_ENERGY, digest);
 				fat -= back / MEAT_ENERGY;
@@ -1164,11 +1164,11 @@ public abstract class NPC extends Entity {
 				// bite is paid per point of health, so a body that regrew what was
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
-				if (meat < 1.0) {
-					double price = MEAT_ENERGY * bodyMass() / 100.0;
+				if (lean < 1.0) {
+					double price = MEAT_ENERGY * leanMass() / 100.0;
 					if (glycogen >= price) {
 						glycogen -= price;
-						meat = Math.min(1.0, meat + 0.01);
+						lean = Math.min(1.0, lean + 0.01);
 						health++;
 					}
 				} else {
@@ -1449,14 +1449,14 @@ public abstract class NPC extends Entity {
 	public void kill() {
 		recordDeath("unknown"); // fallback tag: real causes were recorded first
 		if (age >= 0) {
-			// Freshly dead: the frame divides into its three pools and the decay
+			// Freshly dead: the lean mass divides into its three pools and the decay
 			// clock waits on the fresh one. Flesh drained off it alive is not on it.
 			// Fat is all meat -- bones do not get fatter -- half fresh, half
 			// decayed, so a fed life leaves a richer body for hunter and scavenger
 			// alike, and a starved one leaves bones.
-			double m = bodyMass();
+			double m = leanMass();
 			carcassMass = m + fat;
-			freshFull = FRESH_SHARE * m * meat + fat / 2;
+			freshFull = FRESH_SHARE * m * lean + fat / 2;
 			fresh = freshFull;
 			decayed = (1 - FRESH_SHARE) * SCAVENGER_SHARE * m + fat / 2;
 			fat = 0;

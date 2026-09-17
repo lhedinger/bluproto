@@ -685,7 +685,7 @@ final class WorldHost {
 				}
 				if (!n.isDead()) {
 					d.put("health", n.getHealth()); // the life gate, and it has been passed
-					// The body's store: fat as a share of what its frame can carry, and
+					// The body's store: fat as a share of what the body can carry, and
 					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
 					d.put("fat", round(n.fatLeft()));
 					d.put("fatMass", round(n.fat()));
@@ -693,7 +693,7 @@ final class WorldHost {
 				// What this body weighs to an eater: the body it HAS, not the one its
 				// genome describes. A juvenile is worth its juvenile mass, and the
 				// genome's size is the adult it is still climbing toward.
-				d.put("mass", round(n.bodyMass()));
+				d.put("mass", round(n.leanMass()));
 				// A carcass is a resource, and the inspector said nothing about it.
 				// These four are the whole of what decides whether one is worth
 				// walking to -- the same numbers the scavenger's own scan reads --

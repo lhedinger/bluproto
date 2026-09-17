@@ -260,8 +260,8 @@ door for free energy, and it had three: a bud arrived holding 0.6 of a store
 its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
 full stomach of mintable food. A newborn is now worth exactly what its
 parents lost. **Its body is matter, and comes out of the parents' fat**: the
-birth mass (`BIRTH_SIZE_FRACTION` of the child's adult frame) is taken from
-each parent's fat in proportion to what it holds, never from the frame, so no
+birth mass (`BIRTH_SIZE_FRACTION` of the child's adult lean mass) is taken from
+each parent's fat in proportion to what it holds, never from the lean mass, so no
 parent can die of giving birth and a lean one cannot breed at all. Its books
 — the meal it is born digesting and its glycogen — come out of the parents'
 stores and stomachs, per parent share for a sexual pair. A founder's energy
@@ -293,7 +293,7 @@ mouth at a carcass, so nothing in the chain mints energy. It is sized so a
 body is worth stomachs rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
 for it in minutes. A fed adult with full glycogen lays what it cannot use down
-as fat, mass on top of the frame, and draws it back into the stomach before
+as fat, mass on top of the lean mass, and draws it back into the stomach before
 starvation can bite — the store a long fed life leaves on the carcass. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus
 above the crawl reserve affords, so childhood stretches with scarcity and a

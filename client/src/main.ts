@@ -986,7 +986,7 @@ function genomeTab(d: Record<string, any>): string {
  * look right. Shared now so they cannot disagree again, and when the cap is
  * missing the number is printed rather than a bar drawn against a guess.
  */
-/** The body's store: fat as a share of what its frame can carry, with the
+/** The body's store: fat as a share of what the body can carry, with the
  *  mass it amounts to. A fed life reads as a full bar; a starving body draws
  *  it down before its health goes. */
 function fatRow(d: Record<string, any>): string {

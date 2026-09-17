@@ -365,7 +365,7 @@ public final class Mechanics {
 				row("Mass costs", num(NPC.MEAT_ENERGY) + " × mass grown", "energy",
 						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
 						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
-				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the frame", "mass",
+				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the lean mass", "mass",
 						"Laid down at the digestion rate while the stomach is fuller than "
 						+ pct(1 - NPC.FAT_STORE_BELOW) + " against full glycogen; drawn back into the "
 						+ "stomach once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
