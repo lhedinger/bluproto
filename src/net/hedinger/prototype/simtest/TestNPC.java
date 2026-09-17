@@ -3801,13 +3801,12 @@ public class TestNPC extends NPC {
 	 * and has no descendants left to do any drifting. So a founder starts on
 	 * the generous side of its own arithmetic.
 	 */
-	public static double endowmentCost(double adultSize, double birthSatiation, double speed) {
+	public static double endowmentCost(double adultSize, double speed) {
 		double m = adultSize / NPC.REF_SIZE;
 		double ticks = PROVISION * NPC.growthTicks(adultSize);
-		double meal = Math.max(0, Math.min(1, birthSatiation)) * NPC.GUT_PER_MASS * m;
 		double upkeep = NPC.BASAL_RATE * Math.pow(m, 0.75) * ticks;
 		double travel = NPC.TRANSPORT_COST * m * speed * speed * ticks;
-		return meal + upkeep + travel;
+		return upkeep + travel;
 	}
 
 	/**
@@ -3824,36 +3823,18 @@ public class TestNPC extends NPC {
 	 * birth, which erased the entire advantage of pairing — a paired child and
 	 * a budded one arrived holding the identical fraction of glycogen).
 	 *
-	 * <p>The gut is filled to the lineage's {@link Genome#birthSatiation}, and
-	 * everything still left goes into glycogen — with each book's overflow
-	 * running back into the other, so a lineage that over-fills one does not
-	 * lose the difference and the sum still balances. A child's hunger is
-	 * therefore derived rather than decreed: born to a lineage that provisions
-	 * well it starts digesting, born to one that does not it starts starving,
-	 * and which of those a lineage does to its young is a thing selection can
-	 * finally see.
+	 * <p>It all goes into glycogen, and the newborn's gut starts empty. A gut
+	 * holds food an animal has not digested yet, and there is no way for a
+	 * parent to put food in one but the way every other meal gets there. A
+	 * newborn is therefore hungry from its first tick, which is what a newborn
+	 * is; what its lineage decides is how much it can live on while it goes
+	 * looking, and that is the endowment.
 	 */
-	private static double endow(TestNPC child, double paid, double satiationShare) {
-		double m = child.adultMass();
-		double spare = Math.max(0, paid);
-		double gut = GUT_PER_MASS * m;
-		double glycogen = child.glycogenCapacity();
-		double intoGut = Math.min(spare, satiationShare * gut);
-		double intoGlycogen = Math.min(spare - intoGut, glycogen);
-		intoGut = Math.min(gut, intoGut + (spare - intoGut - intoGlycogen)); // glycogen overflow runs back to the gut
-		child.hunger = gut > 0 ? Math.max(0, 1 - intoGut / gut) : 0;
+	private static double endow(TestNPC child, double paid) {
+		double intoGlycogen = Math.min(Math.max(0, paid), child.glycogenCapacity());
+		child.hunger = 1.0;
 		child.glycogen = intoGlycogen;
-		return intoGut + intoGlycogen;
-	}
-
-	/** A PARENT's {@link Genome#birthSatiation}, clamped to the 0..1 of a
-	 *  gut it means; a body without a genome packs the default. Read off
-	 *  the parents and never off the child: how full a newborn arrives is a
-	 *  decision its parents make, not one it makes for itself. */
-	private static double birthSatiationOf(net.hedinger.prototype.entities.NPC parent) {
-		Genome g = parent == null ? null : parent.getGenome();
-		return g == null ? new Genome().birthSatiation
-				: Math.max(0, Math.min(1, g.birthSatiation));
+		return intoGlycogen;
 	}
 	/**
 	 * The birth transaction, both halves at once: the child's books are opened
@@ -3885,15 +3866,11 @@ public class TestNPC extends NPC {
 				partner.payBirthMass(rest);
 			}
 		}
-		// Then the books: the meal it is born digesting and its glycogen, out of the
-		// parents' glycogen and guts.
+		// Then the book: its glycogen, out of the parents' glycogen.
 		double mine = birthPayment();
 		double theirs = partner == null ? 0 : partner.birthPayment();
 		double offered = mine + theirs;
-		// A pair provisions by the average of what the two lineages would do.
-		double sated = partner == null ? birthSatiationOf(this)
-				: (birthSatiationOf(this) + birthSatiationOf(partner)) / 2;
-		double taken = endow(kid, offered, sated);
+		double taken = endow(kid, offered);
 		// Only what the child could actually hold is charged, so a birth never
 		// burns the remainder of a generous offer either.
 		double share = offered > 0 ? Math.min(1.0, taken / offered) : 0;

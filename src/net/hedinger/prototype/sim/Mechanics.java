@@ -427,13 +427,14 @@ public final class Mechanics {
 						+ "growing, its birth meal, and the burn of the whole childhood. No "
 						+ "clade carries a price of its own; it is a gene from there on."),
 				row("Offspring is worth", "exactly what its parents paid", "",
-						"Meat-priced body + gut + glycogen = the payment, to the penny — "
-						+ "nothing minted, nothing burnt. A pair pools two offers, so "
-						+ "mating genuinely buys a better-funded child."),
-				row("Born sated", pct(new Genome().birthSatiation), "of the gut",
-						"A gene, paid for out of the same endowment: the rest of it goes to "
-						+ "glycogen. Gut food is what the mint runs on, glycogen is "
-						+ "spendable at once — so a newborn's hunger is derived, not decreed."),
+						"Fat-built body + glycogen = the payment, to the penny — nothing "
+						+ "minted, nothing burnt. A pair pools two offers, so mating "
+						+ "genuinely buys a better-funded child."),
+				row("Born hungry", "empty gut, endowed glycogen", "",
+						"A gut holds food nothing has digested yet, and there is no way to "
+						+ "put food in one but the way every other meal gets there. A newborn "
+						+ "is hungry from its first tick; what its lineage decides is how much "
+						+ "it can live on while it goes looking."),
 				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
 						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
 				row("Cooldown", "half the offspring's childhood, at least "
@@ -977,9 +978,6 @@ public final class Mechanics {
 						+ "axis, low is breed-early, high is bank-first."),
 				row("Spends per child", pct(def.reproCostFraction) + " of glycogen", "",
 						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
-				row("Newborns sated to", pct(def.birthSatiation) + " of the gut", "",
-						"How a lineage provisions its young: a full gut regenerates, a full "
-						+ "glycogen spends. Too little of either and its children do not make it."),
 				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
 						"Evolvability, itself heritable — meta-evolution, bounded so a lineage "
 						+ "cannot fossilise or dissolve."),

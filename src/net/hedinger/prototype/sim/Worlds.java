@@ -253,7 +253,7 @@ public final class Worlds {
 		double cap = net.hedinger.prototype.entities.NPC.GLYCOGEN_PER_MASS * g.size
 				/ net.hedinger.prototype.entities.NPC.REF_SIZE;
 		double price = net.hedinger.prototype.simtest.TestNPC.endowmentCost(
-				g.size, g.birthSatiation, g.speed) / cap;
+				g.size, g.speed) / cap;
 		g.reproCostFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproC", price);
 		g.reproFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproF",
 				g.reproCostFraction + 2 * net.hedinger.prototype.entities.NPC.EXHAUSTION);

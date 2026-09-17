@@ -413,31 +413,37 @@ public abstract class NPC extends Entity {
 	}
 
 	/** What this body's lineage asks per offspring — its
-	 *  {@link Genome#reproCostFraction} of the (size-scaled) glycogen, so the price
-	 *  is a property of the body and the lineage rather than of how full the
-	 *  gut happens to be this tick. What BACKS the price is both books (see
-	 *  {@link #reserves()}): a parent with empty glycogen and a full gut can
-	 *  still afford a child, and pays for it out of the meal. Public because
-	 *  birth conservation is audited against it. What is actually handed over
-	 *  is {@link #birthPayment()}. */
+	 *  {@link Genome#reproCostFraction} of the (size-scaled) glycogen, so the
+	 *  price is a property of the body and the lineage rather than of how full
+	 *  the gut happens to be this tick. What backs it is glycogen alone (see
+	 *  {@link #reserves()}). Public because birth conservation is audited
+	 *  against it. What is actually handed over is {@link #birthPayment()}. */
 	public double reproCost() {
 		return genome != null ? genome.reproCostFraction * glycogenCapacity() : reproCost;
 	}
 
 	/** Food energy still undigested in the gut: the complement of
-	 *  {@link #gutRoom()}, in the same units {@link #feed} consumes. Held
-	 *  wealth exactly as glycogen is — it is what the mint runs on — so a birth
-	 *  draws on it too. */
+	 *  {@link #gutRoom()}, in the same units {@link #feed} consumes. What the
+	 *  mint runs on, but not wealth a body can spend: only what has crossed the
+	 *  gut wall is that. */
 	public double gutEnergy() {
 		return (1 - hunger) * GUT_PER_MASS * adultMass();
 	}
 
-	/** Everything this body holds that a child can be made out of: the banked
-	 *  glycogen plus the undigested food in the gut, both already in energy
-	 *  units. The two books a birth debits, and the two a newborn is opened
-	 *  with — which is what makes the transaction conserve. */
+	/**
+	 * Everything this body holds that a child can be made out of: its banked
+	 * glycogen, and nothing else.
+	 *
+	 * <p>The gut used to count too, and that was the crossed-books problem: a
+	 * meal is food an animal has not digested yet, and handing it to a newborn
+	 * moved energy across the gut wall without it passing through any gut. The
+	 * parent paid in gut units and the child received in glycogen, so the same
+	 * energy was worth more on the other side of the transaction. A parent now
+	 * pays for a child out of what it has actually assimilated, which is the
+	 * only book a body can spend from anyway.
+	 */
 	public double reserves() {
-		return Math.max(0, glycogen) + gutEnergy();
+		return Math.max(0, glycogen);
 	}
 
 	/**
@@ -456,26 +462,18 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
-	 * Takes {@code amount} out of this body's books for a birth and returns
-	 * what was actually taken. Drawn proportionally from glycogen and the
-	 * gut, so neither book is a loophole: a parent cannot shelter a birth
-	 * behind a full gut, and paying does not selectively empty the reserve the
-	 * body needs to keep moving. Never takes more than is there.
+	 * Takes {@code amount} out of this body's glycogen for a birth and returns
+	 * what was actually taken. Never takes more than is there, and never
+	 * touches the gut: undigested food is not wealth a parent can hand over.
 	 */
 	public double payBirth(double amount) {
 		double held = reserves();
 		if (amount <= 0 || held <= 0) {
 			return 0;
 		}
-		double share = Math.min(1.0, amount / held);
-		double fromGlycogen = Math.max(0, glycogen) * share;
-		double fromGut = gutEnergy() * share;
-		glycogen = Math.max(0, glycogen) - fromGlycogen;
-		double gut = GUT_PER_MASS * adultMass();
-		if (gut > 0) {
-			hunger = Math.min(1.0, hunger + fromGut / gut);
-		}
-		return fromGlycogen + fromGut;
+		double paid = Math.min(amount, held);
+		glycogen = Math.max(0, glycogen) - paid;
+		return paid;
 	}
 
 	/**

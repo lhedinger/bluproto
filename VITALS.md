@@ -263,12 +263,19 @@ full gut of mintable food. A newborn is now worth exactly what its
 parents lost. **Its body is matter, and comes out of the parents' fat**: the
 birth mass (`BIRTH_SIZE_FRACTION` of the child's adult lean mass) is taken from
 each parent's fat in proportion to what it holds, never from the lean mass, so no
-parent can die of giving birth and a lean one cannot breed at all. Its books
-— the meal it is born digesting and its glycogen — come out of the parents'
-glycogen and guts, per parent share for a sexual pair. A founder's energy
-price is the child's living for a nominal childhood (meal, resting burn,
-travel at top pace), not its growth: a child buys its own flesh out of what
-it eats. The audit is the cannibal round trip: a parent eating its just-born
+parent can die of giving birth and a lean one cannot breed at all. Its one
+book — its glycogen — comes out of the parents' glycogen, per parent share
+for a sexual pair, and **its gut starts empty**: a gut holds food nothing has
+digested yet, and there is no way to put food in one but the way every other
+meal gets there. Handing a gut over was the crossed-books problem — the
+parent paid in gut units and the child received in glycogen, so the same
+energy was worth more on the far side of the transaction, and a newborn got
+a free pass through the gut wall nothing else in the world gets. A newborn is
+therefore hungry from its first tick, which is what a newborn is, and not
+starving, which is what the endowment is for. A founder's price is the
+child's living for a nominal childhood (resting burn and travel at top pace),
+not its growth: a child buys its own flesh out of what it eats. The
+birth-satiation gene retires with the mechanism it decided. The audit is the cannibal round trip: a parent eating its just-born
 child gets back at most the edible share of the mass it gave, and can never
 profit. Pinned by `NoFreeEnergyAtBirth`, which fails against the old books
 at 9.5 conjured per 2.25 paid.

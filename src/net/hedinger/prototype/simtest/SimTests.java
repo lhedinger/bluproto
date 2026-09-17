@@ -7588,7 +7588,7 @@ public class SimTests {
 				founder.size = adult;
 				net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
 				double cap = NPC.GLYCOGEN_PER_MASS * adult / NPC.REF_SIZE;
-				double bill = TestNPC.endowmentCost(adult, founder.birthSatiation, founder.speed);
+				double bill = TestNPC.endowmentCost(adult, founder.speed);
 				double asked = founder.reproCostFraction * cap;
 				assertNear("a founder of " + adult + " px asks what the childhood costs ("
 						+ String.format("%.2f against a bill of %.2f", asked, bill) + ")",
@@ -11279,8 +11279,9 @@ public class SimTests {
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
 					worth(bud) - NPC.LEAN_DENSITY * bud.leanMass(), bidBud[0], eps);
 			assertGreater("and the bud is born viable, not bankrupt", bud.getGlycogen(), 0.5);
-			assertTrue("under the deprivation line, so being born does not hurt",
-					bud.getHunger() < NPC.DEPRIVED);
+			assertTrue("born hungry -- a gut holds food nothing has digested, and there "
+					+ "is no handing that over -- but not starving, which is what the "
+					+ "endowment buys", bud.getHunger() >= NPC.DEPRIVED && !bud.starving());
 
 			// Sexual: the same lineage, paired. Both parents pay, both payments
 			// land in the child, and nothing is thrown away in between.
