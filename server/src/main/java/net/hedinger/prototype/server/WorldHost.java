@@ -664,7 +664,7 @@ final class WorldHost {
 				// not to give it one.
 				//
 				// A corpse is the same case. Death is where the four books stop: the
-				// glycogen and the stomach evaporate with it — that is exactly what the
+				// glycogen and the gut evaporate with it — that is exactly what the
 				// birth ledger audits, a parent eating its own young recovers the
 				// meat and nothing else — so the numbers still sitting in the fields
 				// describe a body that no longer keeps them. Shown, they read as a

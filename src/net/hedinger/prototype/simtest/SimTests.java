@@ -503,7 +503,7 @@ public class SimTests {
 			assertEquals("the body has turned", 0, (long) Math.round(prey.freshLeft() * 1000));
 			double h1 = hunter.totalSwallowed(), s1 = scav.totalSwallowed();
 			tick(m, 20);
-			assertTrue("a hunter cannot stomach a body that has turned",
+			assertTrue("a hunter cannot gut a body that has turned",
 					hunter.totalSwallowed() - h1 < 1e-9);
 			assertGreater("a scavenger eats the dead however old", scav.totalSwallowed() - s1, 0);
 			for (int t = 0; t < 800 && prey.meatLeft() > 0.01; t++) {
@@ -597,7 +597,7 @@ public class SimTests {
 	 * with one number instead of a dozen drifting apart.
 	 *
 	 * <p>The keystone is the energy unit: it is one day of resting burn for a
-	 * reference body, which is to say {@code BASE_METABOLISM * DAY == 1}. That
+	 * reference body, which is to say {@code BASAL_RATE * DAY == 1}. That
 	 * identity is what lets any store be read off as a fasting time -- the
 	 * reference reserve is six days of lying still -- and it is the thing this
 	 * scenario exists to hold, because it is an identity rather than a tuning.
@@ -618,7 +618,7 @@ public class SimTests {
 		public void run() {
 			// The identity the whole scale rests on.
 			assertNear("the energy unit is one day of resting burn for a reference body",
-					1.0, NPC.BASE_METABOLISM * NPC.DAY, 1e-9);
+					1.0, NPC.BASAL_RATE * NPC.DAY, 1e-9);
 			assertEquals("a day is a whole number of ticks", NPC.DAY, NPC.days(1.0));
 			assertEquals("and the conversion is linear", 3 * NPC.DAY, NPC.days(3.0));
 			assertGreater("a day is minutes of watching, not seconds",
@@ -644,21 +644,21 @@ public class SimTests {
 			// On this clock a store's energy IS its day count, which is the whole
 			// point of anchoring the unit to a day of resting burn.
 			inDays("a reference reserve is six days of lying still", 6.0,
-					NPC.GLYCOGEN_PER_MASS / NPC.BASE_METABOLISM);
-			inDays("a reference stomach is nine", 9.0, NPC.STOMACH / NPC.BASE_METABOLISM);
+					NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE);
+			inDays("a reference gut is nine", 9.0, NPC.GUT_PER_MASS / NPC.BASAL_RATE);
 			inDays("a full fat store is thirteen and a half", 13.5,
-					NPC.FAT_CAP * NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
+					NPC.FAT_CAP * NPC.MEAT_ENERGY / NPC.BASAL_RATE);
 			inDays("and the lean body is twenty-seven", 27.0,
-					NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
+					NPC.MEAT_ENERGY / NPC.BASAL_RATE);
 			assertNear("so a store's energy reads straight off as days",
-					NPC.GLYCOGEN_PER_MASS, NPC.GLYCOGEN_PER_MASS / NPC.BASE_METABOLISM / NPC.DAY, 1e-9);
+					NPC.GLYCOGEN_PER_MASS, NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE / NPC.DAY, 1e-9);
 		}
 	}
 
 	/**
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
 	 * lays what glycogen cannot take down as mass, at the one price; a body
-	 * whose stomach runs empty draws that mass back into the stomach at the same
+	 * whose gut runs empty draws that mass back into the gut at the same
 	 * price, so fat is spent before health is. And fat is meat: a fat body's
 	 * carcass carries it, half fresh and half decayed, on top of the lean mass's
 	 * thirds, so a long fed life leaves a rich body and a starved one bones.
@@ -675,7 +675,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(52);
-			// --- laid down: a fed grazer on rich grass, glycogen full, stomach full.
+			// --- laid down: a fed grazer on rich grass, glycogen full, gut full.
 			World w = room(10, 8);
 			for (int x = 1; x < 9; x++) {
 				for (int y = 1; y < 7; y++) {
@@ -695,7 +695,7 @@ public class SimTests {
 			assertTrue("and never more than the body can carry", fed.fat() <= fed.fatCap() + 1e-9);
 			assertGreater("its glycogen is still full: fat is what was left over", fed.getGlycogen(), 0.95 * fed.glycogenCapacity());
 
-			// --- drawn down: on barren ground with an empty stomach, fat feeds the
+			// --- drawn down: on barren ground with an empty gut, fat feeds the
 			// body and health holds; a lean twin starves.
 			World b = room(10, 8);
 			for (int x = 1; x < 9; x++) {
@@ -717,8 +717,8 @@ public class SimTests {
 			b.spawnEntity(lean);
 			double f0 = fat.fat();
 			tick(b, 600);
-			assertLess("an empty stomach draws on the fat", fat.fat(), f0 - 0.01);
-			assertLess("and the stomach never pegs while any is left", fat.getHunger(), NPC.DEPRIVED);
+			assertLess("an empty gut draws on the fat", fat.fat(), f0 - 0.01);
+			assertLess("and the gut never pegs while any is left", fat.getHunger(), NPC.DEPRIVED);
 			assertTrue("so starvation has not touched it past the arrival tick (" + fat.getHealth() + ")",
 					fat.getHealth() >= 99);
 			assertLess("the lean twin is starving", lean.getHealth(), fat.getHealth() - 5);
@@ -856,7 +856,7 @@ public class SimTests {
 
 	/**
 	 * A carcass is a meal. Mass has one price, {@link NPC#MEAT_ENERGY}, sized so
-	 * a body is worth stomachs rather than mouthfuls: the fresh third of a lean
+	 * a body is worth gut-fills rather than mouthfuls: the fresh third of a lean
 	 * medium body fills one same-size hunter, and what it leaves fills a
 	 * scavenger; a fat body ({@link NPC#FAT_CAP}) carries half as much meat
 	 * again and pays out that much more. Every mouth is paid the price for
@@ -864,7 +864,7 @@ public class SimTests {
 	 * between them.
 	 *
 	 * <p>Mouths come to the body one at a time, each eating until it is full
-	 * and then leaving, so what is counted is stomachs filled rather than what
+	 * and then leaving, so what is counted is guts filled rather than what
 	 * an already-full mouth could not hold.
 	 */
 	static class ACarcassIsAMealForSeveral extends Scenario {
@@ -909,7 +909,7 @@ public class SimTests {
 			double mass = body.leanMass();
 			assertNear("of reference mass", 1.0, mass, 0.01);
 			double edible = body.edibleMass();
-			double stomach = NPC.STOMACH * mass; // a same-size eater's
+			double gut = NPC.GUT_PER_MASS * mass; // a same-size eater's
 
 			// Hunters first, on the fresh third.
 			double[] hunters = mouths(w, body, g, Genome.Clade.PREDATOR, 3, 300);
@@ -919,7 +919,7 @@ public class SimTests {
 			double hunterMeat = body.eatenMass();
 			assertTrue("and were paid the price for what they took, less the last bite's overflow",
 					hunters[1] <= NPC.MEAT_ENERGY * hunterMeat + 1e-9
-							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 3 * stomach * 0.15);
+							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 3 * gut * 0.15);
 
 			// Then scavengers, on what is left.
 			double[] scavs = mouths(w, body, g, Genome.Clade.SCAVENGER, 3, 300);
@@ -3433,7 +3433,7 @@ public class SimTests {
 				double size = Double.parseDouble(r.get(0));
 				double mass = size / NPC.REF_SIZE;
 				double cap = NPC.GLYCOGEN_PER_MASS * mass;
-				double burn = NPC.BASE_METABOLISM * Math.pow(mass, 0.75);
+				double burn = NPC.BASAL_RATE * Math.pow(mass, 0.75);
 				assertNear("mass at size " + size, mass, Double.parseDouble(r.get(1)), 0.005);
 				assertNear("glycogen at size " + size, cap, Double.parseDouble(r.get(2)), 0.005);
 				assertNear("burn at size " + size, burn, Double.parseDouble(r.get(3)),
@@ -3454,8 +3454,8 @@ public class SimTests {
 			java.util.List<java.util.List<String>> move = tableOf(secs, "movement");
 			for (java.util.List<String> r : move) {
 				double v = Double.parseDouble(r.get(0));
-				assertNear("move cost at " + v, NPC.MOVE_ENERGY * v * v,
-						Double.parseDouble(r.get(2)), NPC.MOVE_ENERGY * v * v * 0.01 + 1e-9);
+				assertNear("move cost at " + v, NPC.TRANSPORT_COST * v * v,
+						Double.parseDouble(r.get(2)), NPC.TRANSPORT_COST * v * v * 0.01 + 1e-9);
 			}
 			double slow = Double.parseDouble(move.get(0).get(2));
 			double fast = Double.parseDouble(move.get(move.size() - 1).get(2));
@@ -3751,7 +3751,7 @@ public class SimTests {
 		public void run() {
 			seed(4);
 			World w = room(11, 11);
-			TestNPC g = TestNPC.grazer(5.5, 5.5, 0).withHunger(1.0); // an empty stomach eats
+			TestNPC g = TestNPC.grazer(5.5, 5.5, 0).withHunger(1.0); // an empty gut eats
 			w.spawnEntity(g);
 			w.think(); // register the spawn
 			snapshot(w, "before (full grass)");
@@ -5565,7 +5565,7 @@ public class SimTests {
 				}
 			};
 			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withMetabolic()
-					.withHunger(1.0) // an empty stomach, so grazing shows up
+					.withHunger(1.0) // an empty gut, so grazing shows up
 					.withReproCooldown(1000000).withHeading(Math.PI * 0.9); // facing away
 			w.spawnEntity(body);
 			w.think();
@@ -6459,9 +6459,9 @@ public class SimTests {
 		}
 
 		/**
-		 * Food a biter gets into an EMPTY stomach from one carcass's worth of
+		 * Food a biter gets into an EMPTY gut from one carcass's worth of
 		 * biting. The emptying matters: {@code feed} credits only what fits, and a
-		 * body spawns with a full stomach, so measuring a fresh one reads nearly
+		 * body spawns with a full gut, so measuring a fresh one reads nearly
 		 * zero however well it eats. The first cut of this scenario did exactly
 		 * that and reported a hunter eating less than a grazer.
 		 */
@@ -6470,9 +6470,9 @@ public class SimTests {
 			World w = room(12, 12);
 			Genome g = body(16, biter());
 			TestNPC eater = (hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
-					: TestNPC.mindedForager(5.5, 5.5, 0, g)).grown().withHunger(0.85); // born hungry: a grown body's stomach outlasts its thirst in a room with no water
+					: TestNPC.mindedForager(5.5, 5.5, 0, g)).grown().withHunger(0.85); // born hungry: a grown body's gut outlasts its thirst in a room with no water
 			w.spawnEntity(eater);
-			// Starve it first: nothing to bite, so hunger climbs and the stomach
+			// Starve it first: nothing to bite, so hunger climbs and the gut
 			// opens up. Without this every meal is thrown away as overflow.
 			for (int t = 0; t < 20000 && eater.getHunger() < 0.8; t++) {
 				tick(w, 1);
@@ -6515,7 +6515,7 @@ public class SimTests {
 			// than against the grazer: what biteFeeds does that the flat constant
 			// cannot is scale with the animal being eaten, and an absolute
 			// comparison across two eaters drags in how much room each had in its
-			// stomach and how many bites each needed, neither of which is the
+			// gut and how many bites each needed, neither of which is the
 			// claim. Twice the quarry, near twice the meal.
 			double small = swallowedWhenHungry(true, 6);
 			double big = swallowedWhenHungry(true, 12);
@@ -6598,10 +6598,10 @@ public class SimTests {
 	 * <p>Two things make it an honest measurement rather than a hopeful one.
 	 *
 	 * <p>The hunter is starved first. {@link net.hedinger.prototype.entities.NPC#feed}
-	 * credits only what FITS, and a body spawns with a full stomach, so a fresh
+	 * credits only what FITS, and a body spawns with a full gut, so a fresh
 	 * hunter can eat a whole animal and register nothing — an earlier scenario
 	 * measured exactly that and reported a hunter eating less than a grazer. Six
-	 * thousand ticks opens about a third of the stomach while leaving thirst well
+	 * thousand ticks opens about a third of the gut while leaving thirst well
 	 * short of the 0.95 that starts doing harm.
 	 *
 	 * <p>And it runs against a control. Hunger falls only by comparison with the
@@ -6634,7 +6634,7 @@ public class SimTests {
 			World w = room(14, 14);
 			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(16, biter()));
 			w.spawnEntity(hunter);
-			// Open the stomach. A full one credits nothing, whatever it is fed.
+			// Open the gut. A full one credits nothing, whatever it is fed.
 			tick(w, 6000);
 			double before = hunter.getHunger();
 			assertGreater("the hunter is hungry enough to have room for a meal",
@@ -6676,7 +6676,7 @@ public class SimTests {
 			assertLess("hunting leaves it better fed than not hunting", fed[0], starved[0]);
 			// A real dent, not a rounding difference. A kill pays a hunter its fresh
 			// third and no more -- the rest is the scavengers' and the bones -- so
-			// four size-7 carcasses at MEAT_ENERGY 2.5 against a size-16 stomach are
+			// four size-7 carcasses at MEAT_ENERGY 2.5 against a size-16 gut are
 			// worth about 0.15 of it (they were 0.4 when a kill was the whole animal).
 			assertGreater("and the meals are worth something on the hunger clock",
 					starved[0] - fed[0], 0.08);
@@ -7298,7 +7298,7 @@ public class SimTests {
 	 * hunter lands ten. Movement costs the square of speed, so the seed chases
 	 * only with prey in sight and prowls at the amble otherwise: a founder pinned
 	 * at 1.0 burned as fast as the mint could convert its meals and drained with
-	 * a full stomach. The outcome pinned here is kills AND glycogen that holds.
+	 * a full gut. The outcome pinned here is kills AND glycogen that holds.
 	 */
 	static class AFounderHunterChasesFlatOut extends Scenario {
 		@Override
@@ -7337,7 +7337,7 @@ public class SimTests {
 				}
 			}
 			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
-			assertGreater("and the chase pays: glycogen is well above the crawl reserve after it ("
+			assertGreater("and the chase pays: glycogen is well above the exhaustion floor after it ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
 					// A kill feeds a hunter only while the meat is fresh -- it takes what it
 					// can before the body turns and the rest is the scavengers' -- so a
@@ -7426,7 +7426,7 @@ public class SimTests {
 				assertGreater("a " + adult + " px founder's child is still solvent when the childhood it was "
 						+ "provisioned for ends, on the endowment alone (" + String.format("%.2f of %.2f",
 						child.getGlycogen(), child.glycogenCapacity()) + ")",
-						child.getGlycogen(), NPC.CRAWL_RESERVE * child.glycogenCapacity() - 0.01); // it spends every spare on growth, down to the reserve
+						child.getGlycogen(), NPC.EXHAUSTION * child.glycogenCapacity() - 0.01); // it spends every spare on growth, down to the reserve
 				assertTrue("and has not grown on the endowment: growth is eaten, and there is no food here ("
 						+ child.getPixelSize() + " px of " + String.format("%.1f", child.getGenome().size) + ")",
 						child.getPixelSize() < 0.6 * child.getGenome().size);
@@ -7524,14 +7524,14 @@ public class SimTests {
 				double gap = k.getGenome().size - born.get(k.getID());
 				if (k.getPixelSize() - born.get(k.getID()) >= 0.25 * gap) {
 					growing++;
-					if (k.getGlycogen() > net.hedinger.prototype.entities.NPC.CRAWL_RESERVE * k.glycogenCapacity()) {
+					if (k.getGlycogen() > net.hedinger.prototype.entities.NPC.EXHAUSTION * k.glycogenCapacity()) {
 						solvent++;
 					}
 				}
 			}
 			assertGreater("the cohort is growing up on the pack's kills (" + growing + " of "
 					+ kids.size() + " a quarter of the way or more)", growing, 1);
-			assertGreater("and a growing child is still above the crawl reserve", solvent, 0);
+			assertGreater("and a growing child is still above the exhaustion floor", solvent, 0);
 		}
 	}
 
@@ -7974,7 +7974,7 @@ public class SimTests {
 				g.brain = brains[i];
 				double x = 2.5 + (i % 10) * 2.0, y = 2.5 + (i / 10) * 2.4;
 				// Hungry throughout: appetite is what grazes now, and the empty
-				// stomach holds more grass than the best champion ever crops.
+				// gut holds more grass than the best champion ever crops.
 				ag[i] = TestNPC.minded(x, y, 0, g, new LgpMind(brains[i], BUDGET)).grown()
 					.withoutMetabolism().withHunger(1.0);
 				w.spawnEntity(ag[i]);
@@ -8230,7 +8230,7 @@ public class SimTests {
 			Genome kg = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
 			kg.metabolism = 0.02;
 			kg.brain = new Brain(deepCopy(idle));
-			// Empty stomachs: nothing digests, so glycogen reads the burn alone.
+			// Empty guts: nothing digests, so glycogen reads the burn alone.
 			TestNPC carrier = TestNPC.brainedBreeder(6.0, 6.0, 0, cg).grown().withGlycogen(6.0).withHunger(1.0);
 			TestNPC control = TestNPC.brainedBreeder(9.5, 6.0, 0, kg).grown().withGlycogen(6.0).withHunger(1.0);
 			TestNPC cargo = TestNPC.inert(6.05, 6.0, 0).withSize(6);
@@ -8423,7 +8423,7 @@ public class SimTests {
 			tick(w, 4);
 			assertTrue("the captive is grabbed while the captor lives", captive.isGrabbed());
 			assertTrue("the captor still lives at this point", !captor.isDead());
-			tick(w, 200); // the grip drains glycogen to the crawl reserve
+			tick(w, 200); // the grip drains glycogen to the exhaustion floor
 			assertTrue("the drained captor still lives — collapse is not death", !captor.isDead());
 			assertTrue("but a collapsed captor cannot hold: the captive walks free",
 					captive.getAttachTarget() == null && !captive.isGrabbed());
@@ -8468,7 +8468,7 @@ public class SimTests {
 			Genome gG = Genome.phenotype(8, 0.12, 5, 6, Math.PI * 2, 100000);
 			gG.metabolism = 0.02;
 			gG.brain = new Brain(deepCopy(walk));
-			// Full glycogen stores and empty stomachs: nothing digests and nothing is clipped,
+			// Full glycogen and empty guts: nothing digests and nothing is clipped,
 			// so glycogen reads the burn alone.
 			// Grown, too: a juvenile spends its glycogen on growth, which would read as haulage.
 			TestNPC flier = TestNPC.brainedBreeder(15.0, 20.0, 0, fG).grown().withFlying().withHunger(1.0);
@@ -8612,7 +8612,7 @@ public class SimTests {
 			int[][] eat = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 }, { Brain.WRITE, AgentIO.A_EAT, 0, 0 } };
 			Genome g = Genome.phenotype(6, 0.0, 5, 6, Math.PI * 2, 100000);
 			// Hungry, non-metabolic minded body: the swallowed ledger only moves
-			// with what it eats, and the meal (2.0) fits its mass-scaled stomach.
+			// with what it eats, and the meal (2.0) fits its mass-scaled gut.
 			TestNPC eater = TestNPC.minded(6.0, 6.0, 0, g, new LgpMind(new Brain(deepCopy(eat)), 2))
 					.withHunger(1.0);
 			Item food = Item.food(6.1, 6.0, 0).withFoodEnergy(2.0);
@@ -8630,7 +8630,7 @@ public class SimTests {
 					delta = eater.totalSwallowed() - before;
 				}
 			}
-			snapshot(w, "after (food eaten, stomach filled)");
+			snapshot(w, "after (food eaten, gut filled)");
 			assertTrue("the food item was eaten (removed)", food.isRemoved());
 			assertNear("eating the food yielded its foodEnergy", 2.0, delta, 0.1);
 		}
@@ -10568,7 +10568,7 @@ public class SimTests {
 	 * rate, so a body sated and slaked at the same instant wants water in half
 	 * the time it takes to want food. "At rest" is now part of the statement:
 	 * hunger has no clock of its own — appetite arrives as regeneration drains
-	 * the stomach — so the ratio holds by the STOMACH identity only while the
+	 * the gut — so the ratio holds by the GUT_PER_MASS identity only while the
 	 * body spends nothing but its resting burn. And because the worse need
 	 * gates regeneration, a parching body stops digesting and its hunger
 	 * stalls, so one dry body cannot measure both clocks any more: the hunger
@@ -10589,7 +10589,7 @@ public class SimTests {
 			// Brainless genomes -> inert minds: metabolic bodies that never move.
 			// Glycogen stores full, so the mint only covers the resting burn.
 			// Both already as fat as they can be: a body with room for fat lays a
-			// quarter of its stomach down first, and the rhythm measured here is the
+			// quarter of its gut down first, and the rhythm measured here is the
 			// resting one, once there is nothing left to store.
 			TestNPC drinker = TestNPC.brainedBreeder(2.5, 3.5, 0, new Genome())
 					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000);
@@ -10617,10 +10617,10 @@ public class SimTests {
 
 	/**
 	 * The conservation law: energy is food-backed. Regeneration converts the
-	 * stomach's contents 1:1, so a body can never bank more than it actually
+	 * gut's contents 1:1, so a body can never bank more than it actually
 	 * ate — the mint drains the meal it is minted from. Before this held, the
 	 * glycogen refilled from the mere state of being fed at ~12 units of energy
-	 * per unit of food (REGEN_RATE * HUNGER_PERIOD / old stomach), and the
+	 * per unit of food (ASSIMILATION_RATE * HUNGER_PERIOD / old gut), and the
 	 * herd evolved straight into the seam: triple-pace metabolisms banked
 	 * surplus three times faster while grass stayed almost free, and the
 	 * population exploded on land it had visibly stripped. Two legs pin the
@@ -10651,7 +10651,7 @@ public class SimTests {
 			double meal = 2.0;
 			g.feed(meal);
 			double maxEnergy = g.getGlycogen();
-			// 6000 ticks: the drain is satiation-gated, so the stomach empties on
+			// 6000 ticks: the drain is satiation-gated, so the gut empties on
 			// an exponential tail (~4200-tick time constant from this hunger).
 			for (int t = 0; t < 6000; t++) {
 				tick(w, 1);
@@ -10660,10 +10660,10 @@ public class SimTests {
 			assertTrue("glycogen never banked more than the meal was worth",
 					maxEnergy < 0.5 + meal);
 			assertGreater("and the mint drained the meal it was minted from "
-					+ "(appetite returned as the stomach emptied)", g.getHunger(), 0.9);
+					+ "(appetite returned as the gut emptied)", g.getHunger(), 0.9);
 
 			// 2) The evolved exploit is dead: on the same lush grass, a
-			// triple-pace metabolism outruns what a stomach can digest, lands
+			// triple-pace metabolism outruns what a gut can digest, lands
 			// hungry past the breeding gate, and stalls — while a reference
 			// burner keeps its surplus real and multiplies. Under the old mint
 			// the fast burner was strictly better, and selection knew it.
@@ -10861,17 +10861,17 @@ public class SimTests {
 			// it leaves spoils into the scavengers' pool. The invariant is the ledger:
 			// between them the mouths are paid the edible body ONCE, and the bones never.
 			double toHunter = hunter.totalSwallowed();
-			double stomach = NPC.STOMACH * hunter.leanMass(); // the fresh third of a size-12 body overfills a size-16 hunter
+			double gut = NPC.GUT_PER_MASS * hunter.leanMass(); // the fresh third of a size-12 body overfills a size-16 hunter
 			assertGreater("the hunter ate most of the fresh third, bite by bite; the rest spoiled under it ("
-					+ String.format("%.2f of %.2f, stomach %.2f", toHunter, freshMeat, stomach) + ")",
-					toHunter, 0.75 * Math.min(freshMeat, stomach));
+					+ String.format("%.2f of %.2f, gut %.2f", toHunter, freshMeat, gut) + ")",
+					toHunter, 0.75 * Math.min(freshMeat, gut));
 			assertTrue("and never more than the fresh third", toHunter <= freshMeat + 0.01);
 			hunter.remove();
 			double leftovers = scavenged(w, prey, 15.5, 10.5);
 			assertGreater("the scavengers found meat the hunter left", leftovers, 0.0);
 			// The ledger is kept on the carcass: what every mouth took, summed, never
 			// exceeds the edible body, and nobody is paid for more than it took. (Paid
-			// can be less: a full stomach credits nothing, and meat rots.)
+			// can be less: a full gut credits nothing, and meat rots.)
 			double edibleMass = prey.leanMass() * (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
 			assertTrue("between them the mouths took no more than the edible body ("
 					+ String.format("%.2f of %.2f", prey.eatenMass(), edibleMass) + ")",
@@ -10889,11 +10889,11 @@ public class SimTests {
 			tick(w, 1);
 			double whole = TestNPC.MEAT_ENERGY * fallen.leanMass()
 					* (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
-			double stomachs = 3 * NPC.STOMACH * (10 / NPC.REF_SIZE); // three size-10 scavengers
+			double guts = 3 * NPC.GUT_PER_MASS * (10 / NPC.REF_SIZE); // three size-10 scavengers
 			double paid = scavenged(w, fallen, 8.5, 10.5);
 			assertGreater("a whole carcass fills three scavengers ("
-					+ String.format("%.2f of %.2f in stomachs, %.2f on the body", paid, stomachs, whole) + ")",
-					paid, 0.9 * Math.min(stomachs, whole));
+					+ String.format("%.2f of %.2f in gut-fills, %.2f on the body", paid, guts, whole) + ")",
+					paid, 0.9 * Math.min(guts, whole));
 			assertTrue("and never pays more than its meat", paid <= whole + 0.01);
 			assertTrue("nor more than was taken off it", paid <= TestNPC.MEAT_ENERGY * fallen.eatenMass() + 0.01);
 		}
@@ -10913,7 +10913,7 @@ public class SimTests {
 	 * <p>Three identical, fed, watered grazers in a room with no grass. One is
 	 * bitten by a parked hunter; one is drained of ten hundredths of its
 	 * flesh the way a parasite would; one is the control. All end at full
-	 * health. The bitten one's stored food (glycogen plus stomach) matches the
+	 * health. The bitten one's stored food (glycogen plus gut) matches the
 	 * control's; the drained one's is lower by the meat price of the flesh.
 	 */
 	static class MendingBuysBackTheFlesh extends Scenario {
@@ -10926,14 +10926,14 @@ public class SimTests {
 		}
 
 		private static double stored(TestNPC n) {
-			return n.getGlycogen() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
+			return n.getGlycogen() + (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
 		private static TestNPC grazer(double x, double y) {
 			// Metabolic, or nothing mends and nothing is spent: the four books are
 			// what this scenario audits.
 			TestNPC g = TestNPC.grazer(x, y, 0, body(12)).withMetabolic().grown().fattened().withHunger(0.0)
-					.withHydration(1.0).withReproCooldown(100_000_000); // fat: nothing to lay down, so the stomach drains at the resting rate
+					.withHydration(1.0).withReproCooldown(100_000_000); // fat: nothing to lay down, so the gut drains at the resting rate
 			g.withGlycogen(g.glycogenCapacity());
 			return g;
 		}
@@ -11000,15 +11000,15 @@ public class SimTests {
 
 	/**
 	 * Birth conserves energy exactly, across both of a parent's books. What a
-	 * child is worth — its glycogen, the food in its stomach and its meat-priced
+	 * child is worth — its glycogen, the food in its gut and its meat-priced
 	 * body — equals what its parents lost, where what a parent holds is its
-	 * glycogen PLUS its undigested stomach. Not "at most": equal. The audit is the
+	 * glycogen PLUS its undigested gut. Not "at most": equal. The audit is the
 	 * cannibal round trip — a parent that ate its own just-born child would
 	 * lose glycogen and the gut with the death and get the body back at its
 	 * meat price, so the loop can never profit — and the other half of it, a
 	 * birth that quietly burns part of a generous offer, which used to erase
 	 * the whole point of pairing. Before this held, a bud was born holding 0.6
-	 * of glycogen its parent paid 0.5 for, plus a stomach nobody paid for at
+	 * of glycogen its parent paid 0.5 for, plus a gut nobody paid for at
 	 * all; a lineage of budders was a perpetual-motion machine.
 	 *
 	 * <p>Four legs: a budder's books balance; a pair's balance too AND buy a
@@ -11021,15 +11021,15 @@ public class SimTests {
 		/** Everything a body holds, in one number: glycogen, undigested gut, and the
 		 *  fat a child's body is built out of, at the one price of mass. */
 		private static double held(TestNPC n) {
-			return n.getGlycogen() + (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE)
+			return n.getGlycogen() + (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE)
 					+ NPC.MEAT_ENERGY * n.fat();
 		}
 
-		/** What a newborn is worth: its glycogen, its stomach, and its body at the
+		/** What a newborn is worth: its glycogen, its gut, and its body at the
 		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
 			return n.getGlycogen() + NPC.MEAT_ENERGY * n.leanMass()
-					+ (1 - n.getHunger()) * NPC.STOMACH * (n.getGenome().size / NPC.REF_SIZE);
+					+ (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
 		/** Ticks until a child of generation 1 appears, sampling what the
@@ -11171,12 +11171,12 @@ public class SimTests {
 	 * same {@link NPC#MEAT_ENERGY} an eater would collect for it — so rearing a
 	 * body and eating it can never mint energy between them, and a growing
 	 * child is hungrier than an adult of the same current size (the mint
-	 * refills what growth spends, and the mint drains the stomach). Three
+	 * refills what growth spends, and the mint drains the gut). Three
 	 * legs, on motionless bodies so the books are pure: the flesh shows up as
 	 * energy leaving the grower's ledger; the grower eats through its reserves
 	 * far faster than a same-size grown body beside it; and a destitute
 	 * juvenile stops growing before it stops living — growth yields to
-	 * survival at the crawl reserve, so childhood stretches with scarcity
+	 * survival at the exhaustion floor, so childhood stretches with scarcity
 	 * instead of starving its owner.
 	 */
 	static class GrowingUpIsPaidFor extends Scenario {
@@ -11205,7 +11205,7 @@ public class SimTests {
 					.withGrowth(16).withGlycogen(7.2).withReproCooldown(100_000_000);
 			Genome same = new Genome(); // size 6
 			TestNPC grown = TestNPC.brainedBreeder(2.5, 3.5, 0, same)
-					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000); // grown, and with nothing left to lay down: its stomach drains at the resting rate
+					.grown().fattened().withGlycogen(4.5).withReproCooldown(100_000_000); // grown, and with nothing left to lay down: its gut drains at the resting rate
 			gw.spawnEntity(grower);
 			aw.spawnEntity(grown);
 			gw.think();
@@ -11215,9 +11215,9 @@ public class SimTests {
 			tick(aw, 3000);
 
 			// 1) The ledger: what left the grower's books (starting energy plus
-			// everything minted from its stomach, less what it still holds) is
+			// everything minted from its gut, less what it still holds) is
 			// at least the meat price of the flesh it put on.
-			double minted = grower.getHunger() * NPC.STOMACH * (16.0 / NPC.REF_SIZE);
+			double minted = grower.getHunger() * NPC.GUT_PER_MASS * (16.0 / NPC.REF_SIZE);
 			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
 			assertGreater("and the flesh was paid for out of the books ("
@@ -11225,16 +11225,16 @@ public class SimTests {
 					+ " spent, flesh worth " + String.format("%.2f", flesh) + ")",
 					e0 + minted - grower.getGlycogen(), flesh - 1e-6);
 
-			// 2) The appetite: the growing body drained far more of its stomach
+			// 2) The appetite: the growing body drained far more of its gut
 			// than the same-size grown body beside it — and is the hungrier.
-			double grownMinted = grown.getHunger() * NPC.STOMACH * (6.0 / NPC.REF_SIZE);
+			double grownMinted = grown.getHunger() * NPC.GUT_PER_MASS * (6.0 / NPC.REF_SIZE);
 			assertGreater("a growing child eats through its reserves more than "
 					+ "twice as fast as a grown body of the same size",
 					minted, 2 * grownMinted);
 			assertGreater("and is the hungrier of the two",
 					grower.getHunger(), grown.getHunger());
 
-			// 3) Growth yields to survival: a destitute juvenile — empty stomach,
+			// 3) Growth yields to survival: a destitute juvenile — empty gut,
 			// glycogen at the crawl floor — stops growing almost at once, and is
 			// still alive long after; scarcity stretches childhood, it does not
 			// kill through growth.
@@ -11536,7 +11536,7 @@ public class SimTests {
 	 * The parasite's living, end to end: a hungry parasite smells the much
 	 * bigger host, walks to it on the forage intent, latches on with the shared
 	 * attach machinery, and drains it — the host bleeds health with
-	 * "parasites" as the harm while the parasite's stomach fills — and no
+	 * "parasites" as the harm while the parasite's gut fills — and no
 	 * grass anywhere is touched, because a parasite's mouth works on nothing
 	 * but the body it rides.
 	 */

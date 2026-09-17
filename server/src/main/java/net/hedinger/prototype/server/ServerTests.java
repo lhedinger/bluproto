@@ -131,7 +131,7 @@ public final class ServerTests {
 			check("a carcass reports " + k, corpse.get(k) instanceof Number);
 		}
 		check("it is dead", Boolean.TRUE.equals(corpse.get("dead")));
-		// Death is where the four books stop. Glycogen and the stomach evaporate
+		// Death is where the four books stop. Glycogen and the gut evaporate
 		// with it -- which is exactly what the birth ledger audits -- so the
 		// numbers left in those fields describe a body that no longer keeps them,
 		// and the panel drew a carcass with a brimming store that was merely a

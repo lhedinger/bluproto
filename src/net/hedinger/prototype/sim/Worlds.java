@@ -209,7 +209,7 @@ public final class Worlds {
 	 * thousand ticks at 0.25 against ten at 1.0. The chase is gated on sight
 	 * because movement costs the square of speed: a founder pinned at 1.0 while
 	 * searching burned as fast as the mint could convert its meals and drained
-	 * with a full stomach. Whether a lineage keeps the pace is its own to
+	 * with a full gut. Whether a lineage keeps the pace is its own to
 	 * evolve; this is where it starts.
 	 */
 	/**
@@ -232,7 +232,7 @@ public final class Worlds {
 	 * will: the price is what raising that child actually costs (see
 	 * {@link net.hedinger.prototype.simtest.TestNPC#childhoodCost}), as a
 	 * fraction of the founder's own glycogen, and the line sits far enough above
-	 * the price that paying it leaves the parent above the crawl reserve
+	 * the price that paying it leaves the parent above the exhaustion floor
 	 * rather than collapsed the moment it has a newborn beside it.
 	 *
 	 * <p>This replaces a pair of per-clade constants. Hunters had their own
@@ -256,7 +256,7 @@ public final class Worlds {
 				g.size, g.birthSatiation, g.speed) / cap;
 		g.reproCostFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproC", price);
 		g.reproFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproF",
-				g.reproCostFraction + 2 * net.hedinger.prototype.entities.NPC.CRAWL_RESERVE);
+				g.reproCostFraction + 2 * net.hedinger.prototype.entities.NPC.EXHAUSTION);
 		return g;
 	}
 

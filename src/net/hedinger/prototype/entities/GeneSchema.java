@@ -164,10 +164,10 @@ public final class GeneSchema {
 		add("patience", "ticks", Drift.MULT, Genome.PATIENCE_MIN, Genome.PATIENCE_MAX, true,
 				g -> g.patience, (g, v) -> g.patience = (int) v);
 		// Multiplicative, and floored above zero: the useful range sits around a
-		// tenth of a stomach, where an additive step of a whole mutation rate
+		// tenth of a gut, where an additive step of a whole mutation rate
 		// would swing a lineage from feeding its young to starving them in one
 		// birth. A proportional step scales with where the lineage already is.
-		add("bsat", "of the stomach", Drift.MULT, 0.02, 0.9, false,
+		add("bsat", "of the gut", Drift.MULT, 0.02, 0.9, false,
 				g -> g.birthSatiation, (g, v) -> g.birthSatiation = v);
 	}
 
