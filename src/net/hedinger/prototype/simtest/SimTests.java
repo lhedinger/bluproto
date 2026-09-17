@@ -647,9 +647,9 @@ public class SimTests {
 					NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE);
 			inDays("a reference gut is nine", 9.0, NPC.GUT_PER_MASS / NPC.BASAL_RATE);
 			inDays("a full fat store is thirteen and a half", 13.5,
-					NPC.FAT_CAP * NPC.MEAT_ENERGY / NPC.BASAL_RATE);
+					NPC.FAT_CAP * NPC.LEAN_DENSITY / NPC.BASAL_RATE);
 			inDays("and the lean body is twenty-seven", 27.0,
-					NPC.MEAT_ENERGY / NPC.BASAL_RATE);
+					NPC.LEAN_DENSITY / NPC.BASAL_RATE);
 			assertNear("so a store's energy reads straight off as days",
 					NPC.GLYCOGEN_PER_MASS, NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE / NPC.DAY, 1e-9);
 		}
@@ -739,6 +739,41 @@ public class SimTests {
 					(1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * structure + stored / 2, rich.decayedMeat(), 0.01);
 			assertNear("and the bones come off the lean mass alone: fat has none",
 					(1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE) * structure, rich.bones(), 1e-9);
+
+			// --- and fat is priced at fat's own density, not at lean tissue's.
+			// The two constants are equal today, so nothing but this can tell
+			// which one the store is wired to: make fat twice as rich and the
+			// same living must come out of half the mass.
+			double plain = fatDrawnAt(NPC.FAT_DENSITY);
+			double dense = fatDrawnAt(2 * NPC.FAT_DENSITY);
+			assertGreater("a fasting body spends fat at all", plain, 0.01);
+			assertNear("twice the density, half the mass spent for the same living",
+					plain / 2, dense, 0.1 * plain);
+		}
+
+		/** Fat mass a fattened body burns over a fixed fast on barren ground,
+		 *  with fat priced at {@code density}. Restores the constant, so the
+		 *  probe cannot leak into the scenarios that run after it. */
+		private double fatDrawnAt(double density) {
+			double was = NPC.FAT_DENSITY;
+			try {
+				NPC.FAT_DENSITY = density;
+				World f = room(10, 8);
+				for (int x = 1; x < 9; x++) {
+					for (int y = 1; y < 7; y++) {
+						f.getTile(x, y, 0).setFertility(0.0);
+					}
+				}
+				f.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+				TestNPC faster = TestNPC.grazer(4.5, 3.5, 0, body()).withMetabolic().grown().fattened()
+						.withHunger(1.0).withHydration(1.0).withReproCooldown(100_000_000);
+				f.spawnEntity(faster);
+				double before = faster.fat();
+				tick(f, 600);
+				return before - faster.fat();
+			} finally {
+				NPC.FAT_DENSITY = was;
+			}
 		}
 	}
 
@@ -855,7 +890,7 @@ public class SimTests {
 	}
 
 	/**
-	 * A carcass is a meal. Mass has one price, {@link NPC#MEAT_ENERGY}, sized so
+	 * A carcass is a meal. Mass has one price, {@link NPC#LEAN_DENSITY}, sized so
 	 * a body is worth gut-fills rather than mouthfuls: the fresh third of a lean
 	 * medium body fills one same-size hunter, and what it leaves fills a
 	 * scavenger; a fat body ({@link NPC#FAT_CAP}) carries half as much meat
@@ -918,8 +953,8 @@ public class SimTests {
 					body.decayedMeat() >= (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * mass - 1e-9);
 			double hunterMeat = body.eatenMass();
 			assertTrue("and were paid the price for what they took, less the last bite's overflow",
-					hunters[1] <= NPC.MEAT_ENERGY * hunterMeat + 1e-9
-							&& hunters[1] >= NPC.MEAT_ENERGY * hunterMeat - 3 * gut * 0.15);
+					hunters[1] <= NPC.LEAN_DENSITY * hunterMeat + 1e-9
+							&& hunters[1] >= NPC.LEAN_DENSITY * hunterMeat - 3 * gut * 0.15);
 
 			// Then scavengers, on what is left.
 			double[] scavs = mouths(w, body, g, Genome.Clade.SCAVENGER, 3, 300);
@@ -928,7 +963,7 @@ public class SimTests {
 			assertTrue("between them the mouths never took more than the edible body ("
 					+ String.format("%.2f of %.2f", taken, edible) + ")", taken <= edible + 1e-9);
 			assertTrue("nor were paid for more than they took",
-					hunters[1] + scavs[1] <= NPC.MEAT_ENERGY * taken + 1e-9);
+					hunters[1] + scavs[1] <= NPC.LEAN_DENSITY * taken + 1e-9);
 			assertTrue("and the bones are still lying there", !body.isRemoved() && body.bones() > 0);
 			double leanPaid = hunters[1] + scavs[1];
 
@@ -945,7 +980,7 @@ public class SimTests {
 					+ String.format("%.2f against %.2f lean", richHunters[1] + richScavs[1], leanPaid) + ")",
 					richHunters[1] + richScavs[1], 1.2 * leanPaid);
 			assertTrue("still never more than was taken off it",
-					richHunters[1] + richScavs[1] <= NPC.MEAT_ENERGY * rich.eatenMass() + 1e-9);
+					richHunters[1] + richScavs[1] <= NPC.LEAN_DENSITY * rich.eatenMass() + 1e-9);
 		}
 	}
 
@@ -3469,7 +3504,7 @@ public class SimTests {
 			for (java.util.List<String> r : tableOf(secs, "food")) {
 				double size = Double.parseDouble(r.get(0));
 				assertNear("carcass at size " + size,
-						TestNPC.MEAT_ENERGY * (size / NPC.REF_SIZE),
+						TestNPC.LEAN_DENSITY * (size / NPC.REF_SIZE),
 						Double.parseDouble(r.get(2)), 0.005);
 				assertEquals("rot time at size " + size, NPC.growthTicks(size),
 						Long.parseLong(r.get(4)));
@@ -6407,7 +6442,7 @@ public class SimTests {
 	 * per-bite ratio showing up in the population, and it is why the guild sat on
 	 * its steward floor with hunger pinned at 0.9 and never bred: the breeding
 	 * gate wants hunger under 0.5 and they never got close. It also hid the meat
-	 * constant completely — doubling MEAT_ENERGY moved intake from 0.074 to 0.075,
+	 * constant completely — doubling LEAN_DENSITY moved intake from 0.074 to 0.075,
 	 * because this path never read it.
 	 *
 	 * <p>So the scenario asserts the two halves that were conflated: a hunter's
@@ -6676,7 +6711,7 @@ public class SimTests {
 			assertLess("hunting leaves it better fed than not hunting", fed[0], starved[0]);
 			// A real dent, not a rounding difference. A kill pays a hunter its fresh
 			// third and no more -- the rest is the scavengers' and the bones -- so
-			// four size-7 carcasses at MEAT_ENERGY 2.5 against a size-16 gut are
+			// four size-7 carcasses at LEAN_DENSITY 2.5 against a size-16 gut are
 			// worth about 0.15 of it (they were 0.4 when a kill was the whole animal).
 			assertGreater("and the meals are worth something on the hunger clock",
 					starved[0] - fed[0], 0.08);
@@ -10853,7 +10888,7 @@ public class SimTests {
 			for (int t = 0; t < 2000 && prey.freshMeat() > 0 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
 				tick(w, 1);
 			}
-			double meat = TestNPC.MEAT_ENERGY * prey.leanMass();
+			double meat = TestNPC.LEAN_DENSITY * prey.leanMass();
 			double freshMeat = NPC.FRESH_SHARE * meat;
 			double edible = (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) * meat;
 			// Every bite spends fresh meat and spoilage compounds on what is gone, so
@@ -10877,7 +10912,7 @@ public class SimTests {
 					+ String.format("%.2f of %.2f", prey.eatenMass(), edibleMass) + ")",
 					prey.eatenMass() <= edibleMass + 1e-9);
 			assertTrue("and were paid for no more than they took",
-					toHunter + leftovers <= NPC.MEAT_ENERGY * prey.eatenMass() + 1e-9);
+					toHunter + leftovers <= NPC.LEAN_DENSITY * prey.eatenMass() + 1e-9);
 			assertTrue("and the body was worth its meat once, to however many mouths",
 					toHunter + leftovers <= meat + 0.01);
 
@@ -10887,7 +10922,7 @@ public class SimTests {
 			tick(w, 1);
 			fallen.kill();
 			tick(w, 1);
-			double whole = TestNPC.MEAT_ENERGY * fallen.leanMass()
+			double whole = TestNPC.LEAN_DENSITY * fallen.leanMass()
 					* (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE);
 			double guts = 3 * NPC.GUT_PER_MASS * (10 / NPC.REF_SIZE); // three size-10 scavengers
 			double paid = scavenged(w, fallen, 8.5, 10.5);
@@ -10895,7 +10930,7 @@ public class SimTests {
 					+ String.format("%.2f of %.2f in gut-fills, %.2f on the body", paid, guts, whole) + ")",
 					paid, 0.9 * Math.min(guts, whole));
 			assertTrue("and never pays more than its meat", paid <= whole + 0.01);
-			assertTrue("nor more than was taken off it", paid <= TestNPC.MEAT_ENERGY * fallen.eatenMass() + 0.01);
+			assertTrue("nor more than was taken off it", paid <= TestNPC.LEAN_DENSITY * fallen.eatenMass() + 0.01);
 		}
 	}
 
@@ -10989,7 +11024,7 @@ public class SimTests {
 			double controlSpent = controlBefore - stored(control);
 			double biteCost = (bittenBefore - stored(bitten)) - controlSpent;
 			double drainCost = (drainedBefore - stored(drained)) - controlSpent;
-			double price = NPC.MEAT_ENERGY * drained.leanMass() * flesh;
+			double price = NPC.LEAN_DENSITY * drained.leanMass() * flesh;
 			assertNear("a wound that took no flesh closed for free (" + String.format("%.3f", biteCost) + ")",
 					0, biteCost, 0.15 * price + 0.02);
 			assertNear("mending the drain cost the meat price of the flesh (" + String.format("%.2f", drainCost)
@@ -11022,13 +11057,13 @@ public class SimTests {
 		 *  fat a child's body is built out of, at the one price of mass. */
 		private static double held(TestNPC n) {
 			return n.getGlycogen() + (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE)
-					+ NPC.MEAT_ENERGY * n.fat();
+					+ NPC.LEAN_DENSITY * n.fat();
 		}
 
 		/** What a newborn is worth: its glycogen, its gut, and its body at the
 		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
-			return n.getGlycogen() + NPC.MEAT_ENERGY * n.leanMass()
+			return n.getGlycogen() + NPC.LEAN_DENSITY * n.leanMass()
 					+ (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE);
 		}
 
@@ -11079,7 +11114,7 @@ public class SimTests {
 					worth(bud), budSpent, eps);
 			assertNear("and the whole of what the parent offered in energy landed in its books, none burnt ("
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
-					worth(bud) - NPC.MEAT_ENERGY * bud.leanMass(), bidBud[0], eps);
+					worth(bud) - NPC.LEAN_DENSITY * bud.leanMass(), bidBud[0], eps);
 			assertGreater("and the bud is born viable, not bankrupt", bud.getGlycogen(), 0.5);
 			assertTrue("under the deprivation line, so being born does not hurt",
 					bud.getHunger() < NPC.DEPRIVED);
@@ -11106,13 +11141,13 @@ public class SimTests {
 			assertNear("and the whole of BOTH offers landed in it -- a ceiling on a "
 					+ "newborn's glycogen used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
-					worth(kid) - NPC.MEAT_ENERGY * kid.leanMass(), bidKid[0], eps);
+					worth(kid) - NPC.LEAN_DENSITY * kid.leanMass(), bidKid[0], eps);
 			// The point of a mate: two offers pool into one child instead of each
 			// being clipped to the same ceiling. Under the old clamp a paired
 			// child and a budded one were born holding the identical fraction.
 			// In the books it is opened with: the body is the same matter either way.
-			double kidBooks = worth(kid) - NPC.MEAT_ENERGY * kid.leanMass();
-			double budBooks = worth(bud) - NPC.MEAT_ENERGY * bud.leanMass();
+			double kidBooks = worth(kid) - NPC.LEAN_DENSITY * kid.leanMass();
+			double budBooks = worth(bud) - NPC.LEAN_DENSITY * bud.leanMass();
 			assertGreater("and a pair's child is better funded than a budder's ("
 					+ String.format("%.2f against %.2f", kidBooks, budBooks) + ")",
 					kidBooks, budBooks * 1.3);
@@ -11168,7 +11203,7 @@ public class SimTests {
 
 	/**
 	 * Growing up is paid for: new flesh is matter, bought from glycogen at the
-	 * same {@link NPC#MEAT_ENERGY} an eater would collect for it — so rearing a
+	 * same {@link NPC#LEAN_DENSITY} an eater would collect for it — so rearing a
 	 * body and eating it can never mint energy between them, and a growing
 	 * child is hungrier than an adult of the same current size (the mint
 	 * refills what growth spends, and the mint drains the gut). Three
@@ -11218,7 +11253,7 @@ public class SimTests {
 			// everything minted from its gut, less what it still holds) is
 			// at least the meat price of the flesh it put on.
 			double minted = grower.getHunger() * NPC.GUT_PER_MASS * (16.0 / NPC.REF_SIZE);
-			double flesh = NPC.MEAT_ENERGY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
+			double flesh = NPC.LEAN_DENSITY * (grower.maturity() - m0) * 16.0 / NPC.REF_SIZE;
 			assertGreater("it grew", grower.maturity(), m0 + 0.1);
 			assertGreater("and the flesh was paid for out of the books ("
 					+ String.format("%.2f", e0 + minted - grower.getGlycogen())
@@ -11455,9 +11490,9 @@ public class SimTests {
 				}
 				assertGreater("the survey is broad", rows.size(), 40);
 				assertTrue("grass is listed live and tunable",
-						byKey.containsKey("NPC.GRASS_ENERGY")
-						&& !(Boolean) byKey.get("NPC.GRASS_ENERGY").get("frozen")
-						&& (Double) byKey.get("NPC.GRASS_ENERGY").get("value") == NPC.GRASS_ENERGY);
+						byKey.containsKey("NPC.PLANT_DENSITY")
+						&& !(Boolean) byKey.get("NPC.PLANT_DENSITY").get("frozen")
+						&& (Double) byKey.get("NPC.PLANT_DENSITY").get("value") == NPC.PLANT_DENSITY);
 				assertTrue("the size anchor is frozen",
 						(Boolean) byKey.get("NPC.REF_SIZE").get("frozen"));
 				assertTrue("the regrow rate is frozen — tiles copied it at build",
@@ -11467,7 +11502,7 @@ public class SimTests {
 				assertTrue("nor are the status codes",
 						!byKey.containsKey("NPC.STATUS_IDLE"));
 				assertTrue("every row carries its unit",
-						"energy per vegetation".equals(byKey.get("NPC.GRASS_ENERGY").get("unit"))
+						"energy per vegetation".equals(byKey.get("NPC.PLANT_DENSITY").get("unit"))
 						&& "ticks".equals(byKey.get("NPC.THIRST_PERIOD").get("unit")));
 
 				// A frozen constant refuses the command outright.
@@ -11482,28 +11517,28 @@ public class SimTests {
 				// The command round-trips its logged form and takes effect.
 				World w = room(6, 6);
 				net.hedinger.prototype.sim.SimCommand c = net.hedinger.prototype.sim.SimCommands
-						.fromDescribe("tune NPC.GRASS_ENERGY 0.5");
+						.fromDescribe("tune NPC.PLANT_DENSITY 0.5");
 				assertTrue("the logged form parses back", c != null);
 				c.apply(w);
-				assertNear("and the constant moved", 0.5, NPC.GRASS_ENERGY, 1e-12);
+				assertNear("and the constant moved", 0.5, NPC.PLANT_DENSITY, 1e-12);
 				assertTrue("its logged form is stable",
-						"tune NPC.GRASS_ENERGY 0.5".equals(c.describe()));
+						"tune NPC.PLANT_DENSITY 0.5".equals(c.describe()));
 
 				// Replay isolation: a recording that tunes grass to 0.25 replays
 				// under its own tuning, and hands the live world's back after.
-				net.hedinger.prototype.sim.Tuning.set("NPC.GRASS_ENERGY", 0.6);
+				net.hedinger.prototype.sim.Tuning.set("NPC.PLANT_DENSITY", 0.6);
 				var rec = new net.hedinger.prototype.sim.Recording(11, 3, java.util.List.of(
 						new net.hedinger.prototype.sim.Recording.Entry(1,
-								"tune NPC.GRASS_ENERGY 0.25")));
+								"tune NPC.PLANT_DENSITY 0.25")));
 				net.hedinger.prototype.sim.Replays.reconstruct(rec, 3);
 				assertNear("the replay's tuning did not leak into the live world",
-						0.6, NPC.GRASS_ENERGY, 1e-12);
+						0.6, NPC.PLANT_DENSITY, 1e-12);
 			} finally {
 				// Statics are global to the suite: leave exactly what we found.
 				net.hedinger.prototype.sim.Tuning.restoreDefaults();
 			}
 			assertNear("defaults restore the code-level value",
-					0.75, NPC.GRASS_ENERGY, 1e-12);
+					0.75, NPC.PLANT_DENSITY, 1e-12);
 		}
 	}
 
@@ -11571,7 +11606,7 @@ public class SimTests {
 			// At the one price of mass the drink is a transfer: the host mends what
 			// was drunk at the same price, out of its glycogen, so a parasite is a tax
 			// its host pays -- in energy if it can afford to mend, in health if not.
-			double drunk = para.totalSwallowed() / NPC.MEAT_ENERGY / host.leanMass(); // share of the host
+			double drunk = para.totalSwallowed() / NPC.LEAN_DENSITY / host.leanMass(); // share of the host
 			double mended = (1 - drunk) < host.meatLeft() ? (host.meatLeft() - (1 - drunk)) : 0;
 			double paid = (control.getGlycogen() - host.getGlycogen()) + (100 - host.getHealth()) * 0; // glycogen gap
 			assertTrue("the host is worse off than its twin, in glycogen or in flesh ("

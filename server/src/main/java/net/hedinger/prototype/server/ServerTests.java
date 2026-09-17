@@ -167,7 +167,7 @@ public final class ServerTests {
 		// version of it computed in the viewer.
 		double worth = ((Number) corpse.get("worth")).doubleValue();
 		check("its worth is the meat price of the edible meat still on it",
-				Math.abs(worth - net.hedinger.prototype.entities.NPC.MEAT_ENERGY * wholeMass * meat) < 0.03);
+				Math.abs(worth - net.hedinger.prototype.entities.NPC.LEAN_DENSITY * wholeMass * meat) < 0.03);
 	}
 
 	/**

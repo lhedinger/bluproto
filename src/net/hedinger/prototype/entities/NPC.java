@@ -135,11 +135,11 @@ public abstract class NPC extends Entity {
 	@Unit("of base burn")
 	public static double CAPABILITY_FLOOR = 0.5;
 	/**
-	 * The price of mass, per unit of body mass ({@code REF_SIZE} = 1), both ways.
-	 * It is what a metabolic body pays per unit of mass it grows or stores as
-	 * fat, what a wound that took flesh is mended at, what a parasite is paid
-	 * for the flesh it drinks, and what every mouth is paid per unit of carcass
-	 * it takes. One figure on both sides of every transfer, so nothing in the
+	 * Energy per unit of LEAN tissue ({@code REF_SIZE} = 1), the same figure
+	 * both ways. It is what a metabolic body pays per unit of mass it grows,
+	 * what a wound that took flesh is mended at, what a parasite is paid for the
+	 * flesh it drinks, and what every mouth is paid per unit of carcass it
+	 * takes. One figure on both sides of every transfer, so nothing in the
 	 * chain can mint energy: a body is worth exactly what was put into it, and
 	 * everything anyone eats was bought with grass by someone.
 	 *
@@ -157,7 +157,20 @@ public abstract class NPC extends Entity {
 	 * digestion ({@link #ASSIMILATION_RATE}) are paced to pay for it in minutes.
 	 */
 	@Unit("energy per mass")
-	public static double MEAT_ENERGY = 27.0;
+	public static double LEAN_DENSITY = 27.0;
+	/**
+	 * Energy per unit of FAT, the material a body stores its surplus in and
+	 * draws back on when the gut runs dry.
+	 *
+	 * <p>Its own constant because fat and lean tissue are not the same stuff:
+	 * fat carries roughly six times the energy a gram of wet muscle does, muscle
+	 * being three quarters water. It is set equal to {@link #LEAN_DENSITY} here
+	 * so nothing moves as the name lands; the real ratio waits on the corpse
+	 * pools, which today mix a body's fat into its meat and cannot price the
+	 * two apart.
+	 */
+	@Unit("energy per mass")
+	public static double FAT_DENSITY = 27.0;
 
 	// --- growth: born small, grow into the genome's body ----------------------
 	/** Fraction of its adult body a creature is born at. */
@@ -170,7 +183,7 @@ public abstract class NPC extends Entity {
 	 * the largest possible body takes the longest. At {@link Genome#SIZE_MAX}
 	 * (20) the climb from birth size is 13 units, or ~1970 ticks — about one
 	 * minute at 33 ticks/s, the shortest childhood such a body can have. A
-	 * metabolic grower pays {@link #MEAT_ENERGY} for each step's flesh and slows
+	 * metabolic grower pays {@link #LEAN_DENSITY} for each step's flesh and slows
 	 * to what its surplus affords, so real childhoods stretch with scarcity.
 	 */
 	@Unit("px radius/tick")
@@ -511,7 +524,7 @@ public abstract class NPC extends Entity {
 
 	/*
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting, and
-	 * what glycogen cannot take is laid down as mass at MEAT_ENERGY; a body whose
+	 * what glycogen cannot take is laid down as mass at FAT_DENSITY; a body whose
 	 * gut has run empty draws that mass back into the gut at the same
 	 * price, so fat is spent before health is. Both moves run at the body's
 	 * digestion rate. Fat is real mass: it is carried (and paid for) on every
@@ -1047,7 +1060,7 @@ public abstract class NPC extends Entity {
 		if (age >= 0 && adultSize > 0 && grownSize < adultSize) {
 			double step = Math.min(GROWTH_RATE, adultSize - grownSize);
 			if (metabolic) {
-				double price = MEAT_ENERGY / REF_SIZE; // energy per pixel grown
+				double price = LEAN_DENSITY / REF_SIZE; // energy per pixel grown
 				double spare = glycogen - Math.max(EXHAUSTION, GROWTH_RESERVE) * glycogenCapacity();
 				step = Math.max(0, Math.min(step, spare / price));
 				glycogen -= step * price;
@@ -1126,18 +1139,18 @@ public abstract class NPC extends Entity {
 			if (glycogen < 0) {
 				glycogen = 0; // collapse, never death — health is the only gate
 			}
-			// Fat, both ways, at the digestion rate and the one price of mass. A
+			// Fat, both ways, at the digestion rate and fat's own density. A
 			// gut running empty is refilled out of fat before it can peg; a
 			// gut that is full against full glycogen is laid down as fat.
 			double gut = GUT_PER_MASS * adultMass();
 			double digest = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * vigor;
 			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
-				double back = Math.min(fat * MEAT_ENERGY, digest);
-				fat -= back / MEAT_ENERGY;
+				double back = Math.min(fat * FAT_DENSITY, digest);
+				fat -= back / FAT_DENSITY;
 				hunger = Math.max(0, hunger - back / gut);
 			} else if (hunger < FAT_STORE_BELOW && glycogen >= cap - 1e-9 && fat < fatCap()) {
-				double store = Math.min(digest, Math.min((fatCap() - fat) * MEAT_ENERGY, (1 - hunger) * gut));
-				fat += store / MEAT_ENERGY;
+				double store = Math.min(digest, Math.min((fatCap() - fat) * FAT_DENSITY, (1 - hunger) * gut));
+				fat += store / FAT_DENSITY;
 				hunger = Math.min(1.0, hunger + store / gut);
 			}
 			// A collapsed captor cannot hold: restraint is exertion, and below the
@@ -1165,7 +1178,7 @@ public abstract class NPC extends Entity {
 				// bitten off it for nothing was a flesh mint: a parasite riding a
 				// fed host, or a grazer that shook a hunter off, minted meat.
 				if (lean < 1.0) {
-					double price = MEAT_ENERGY * leanMass() / 100.0;
+					double price = LEAN_DENSITY * leanMass() / 100.0;
 					if (glycogen >= price) {
 						glycogen -= price;
 						lean = Math.min(1.0, lean + 0.01);
@@ -2525,7 +2538,7 @@ public abstract class NPC extends Entity {
 	 * re-verifies 0.75 still carries the food chain.
 	 */
 	@Unit("energy per vegetation")
-	public static double GRASS_ENERGY = 0.75;
+	public static double PLANT_DENSITY = 0.75;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
@@ -2534,8 +2547,8 @@ public abstract class NPC extends Entity {
 	 * -- the base of the food chain.
 	 *
 	 * <p>The return value is grass, not energy: callers measure grazing pressure on
-	 * the substrate with it. The conversion into glycogen happens here, at
-	 * {@link #GRASS_ENERGY} per unit.
+	 * the substrate with it. The conversion into food energy happens here, at
+	 * {@link #PLANT_DENSITY} per unit.
 	 */
 	protected double graze(double demand) {
 		World w = getWorld();
@@ -2544,9 +2557,9 @@ public abstract class NPC extends Entity {
 		}
 		// A sated body does not strip ground it cannot digest: the bite is
 		// bounded by the gut room left (converted back to grass units).
-		double room = gutRoom() / GRASS_ENERGY;
+		double room = gutRoom() / PLANT_DENSITY;
 		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, room));
-		feed(eaten * GRASS_ENERGY); // grass -> gut, at grass's poor rate
+		feed(eaten * PLANT_DENSITY); // grass -> gut, at grass's poor rate
 		return eaten;
 	}
 

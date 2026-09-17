@@ -287,9 +287,10 @@ noticing what it means.
 
 **Growth is paid for too.** The flesh a juvenile puts on is the same matter
 an eater collects at the meat price, so each step of growth is bought from
-glycogen at that price — `MEAT_ENERGY` per unit of mass grown — the one
-price of mass, which also mends a wound, pays a parasite and pays every
-mouth at a carcass, so nothing in the chain mints energy. It is sized so a
+glycogen at that price — `LEAN_DENSITY` per unit of mass grown — the one
+price of lean tissue, which also mends a wound, pays a parasite and pays
+every mouth at a carcass, so nothing in the chain mints energy. Fat has its
+own density, `FAT_DENSITY`, equal to it for now. It is sized so a
 body is worth gut-fills rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
 for it in minutes. A fed adult with full glycogen lays what it cannot use down

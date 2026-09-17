@@ -85,10 +85,10 @@ public class TestNPC extends NPC {
 	public static final double PRED_PREY_RATIO_CAP = 2.0;
 	/** Full health, and so the whole of a body: a parasite's drain is priced as the
 	 *  share of this its bite removed. Health is flat across every body size, which
-	 *  is why the <i>meal</i> has to carry the size instead — see {@link #MEAT_ENERGY}. */
+	 *  is why the <i>meal</i> has to carry the size instead — see {@link #LEAN_DENSITY}. */
 	@Unit("hp")
 	public static final int FULL_BODY_HEALTH = 100;
-	// Carrion is priced at MEAT_ENERGY directly. It briefly had a constant of
+	// Carrion is priced at LEAN_DENSITY directly. It briefly had a constant of
 	// its own initialised to the same value — but "meat is meat: a body is
 	// worth the same whether the eater killed it or found it" is an identity,
 	// and once constants became runtime-tunable an alias was an identity that
@@ -262,7 +262,7 @@ public class TestNPC extends NPC {
 	 * which meant a herd erased its pasture faster than it could spread out over it,
 	 * and the substrate behaved like a switch rather than a resource.
 	 *
-	 * <p>This and {@link NPC#GRASS_ENERGY} multiply into a herbivore's income per
+	 * <p>This and {@link NPC#PLANT_DENSITY} multiply into a herbivore's income per
 	 * tick, so slowing the crop without raising the energy per unit starves the herd
 	 * — measured, not assumed. See that constant for the calibration.
 	 */
@@ -775,7 +775,7 @@ public class TestNPC extends NPC {
 		h.damage(PARA_BITE, "parasites");
 		// At the one price of mass: the host mends what was drunk at the same
 		// price, so the pair can never mint energy between them.
-		feed(MEAT_ENERGY * h.leanMass() * share);
+		feed(LEAN_DENSITY * h.leanMass() * share);
 		setAction("eating", true);
 	}
 
@@ -3474,7 +3474,7 @@ public class TestNPC extends NPC {
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
 		double mass = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
-		feed(mass * MEAT_ENERGY); // meat -> gut; satiation powers the body
+		feed(mass * LEAN_DENSITY); // meat -> gut; satiation powers the body
 		setAction("eating", true);
 		return mass;
 	}
@@ -3769,12 +3769,12 @@ public class TestNPC extends NPC {
 	// Genome.child, which keeps the two ways of being born mutating alike.
 
 	/** What a body of this adult mass costs to build, at the
-	 *  {@link NPC#MEAT_ENERGY} price every unit of mass is bought at. Birth size
+	 *  {@link NPC#LEAN_DENSITY} price every unit of mass is bought at. Birth size
 	 *  carries beginGrowth's floor of 1 and the same rounding
 	 *  {@code leanMass()} reads, so the matter is priced as it will be weighed. */
 	static double birthBodyCost(double adultMass) {
 		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultMass * NPC.REF_SIZE));
-		return MEAT_ENERGY * birthSize / NPC.REF_SIZE;
+		return LEAN_DENSITY * birthSize / NPC.REF_SIZE;
 	}
 
 	/** How much of a nominal childhood (the growth ceiling's, in ticks) a

@@ -276,21 +276,28 @@ movement rather than intent.
 Spending is mass-based everywhere above, so income is too.
 
 ```
-meat  = MEAT_ENERGY · mass_taken_off_the_carcass                 // per mouthful, dead only
-grass = GRASS_ENERGY · vegetation_cropped                       // per tick grazing
+flesh = LEAN_DENSITY  · mass_taken_off_the_carcass   // per mouthful, dead only
+plant = PLANT_DENSITY · vegetation_cropped           // per tick grazing
 ```
+
+Food is mass times the density of the material it is made of. Three
+materials, three densities: `LEAN_DENSITY` for tissue, `FAT_DENSITY` for the
+store a body lays down, `PLANT_DENSITY` for what grows on the ground. Lean
+and fat are set to the same figure today — the corpse pools mix a body's fat
+into its meat and cannot price the two apart yet — but they are separate
+knobs, and in life fat carries about six times what wet muscle does.
 
 - **A carcass is worth what it weighs, and a body is not all meat.** Health is
   a flat 100 on every body, so the *meal* has to carry the size instead. At death
   the body divides into three pools by mass: a third is **fresh meat**, the only
   thing a hunter eats; half the rest is **decayed meat**, a scavenger's living;
   the last third is **bone**, food to nobody. Every mouthful is paid
-  `MEAT_ENERGY` per unit of mass it takes, so a whole carcass comes to
-  `MEAT_ENERGY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
-  share is at most the fresh third. `MEAT_ENERGY` is **the one price of mass,
-  both ways**: what a body pays per unit of mass it grows or lays down as
-  fat, what a wound is mended at, what a parasite is paid, and what every
-  mouth at a carcass is paid. Nothing in the chain can mint: a body is worth
+  `LEAN_DENSITY` per unit of mass it takes, so a whole carcass comes to
+  `LEAN_DENSITY · ⅔ · prey_mass` across every mouth that eats it, and a hunter's
+  share is at most the fresh third. `LEAN_DENSITY` is **the one price of lean
+  tissue, both ways**: what a body pays per unit of mass it grows, what a
+  wound is mended at, what a parasite is paid, and what every mouth at a
+  carcass is paid. `FAT_DENSITY` is the same figure for the store. Nothing in the chain can mint: a body is worth
   exactly what was put into it, and everything anyone eats was bought with
   grass by someone. It is sized so a reference lean mass is three gut-fills
   (`3 · GUT_PER_MASS`), so the fresh third of a lean medium corpse fills one
@@ -321,7 +328,7 @@ grass = GRASS_ENERGY · vegetation_cropped                       // per tick gra
 - **Crop rate and energy density are one knob, not two.** They multiply into a
   herbivore's income per tick, so grass cannot be made both slower to eat and
   poorer without starving the herd. Measured over 60k ticks at the current crop
-  rate: below `GRASS_ENERGY` 0.75 predators fall to their floor on empty stores, and
+  rate: below `PLANT_DENSITY` 0.75 predators fall to their floor on empty stores, and
   at 0.25 the herd stops breeding and only the steward keeps it alive. The shipped
   value is the poorest grass the food chain will carry.
 - **A predator will not kill on full glycogen.** The opportunistic bite is gated on
