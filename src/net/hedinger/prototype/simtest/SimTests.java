@@ -592,6 +592,70 @@ public class SimTests {
 	}
 
 	/**
+	 * The world keeps one clock. {@link NPC#DAY} is a day in ticks, and every
+	 * biological duration is a multiple of it, so the whole tempo of life scales
+	 * with one number instead of a dozen drifting apart.
+	 *
+	 * <p>The keystone is the energy unit: it is one day of resting burn for a
+	 * reference body, which is to say {@code BASE_METABOLISM * DAY == 1}. That
+	 * identity is what lets any store be read off as a fasting time -- the
+	 * reference reserve is six days of lying still -- and it is the thing this
+	 * scenario exists to hold, because it is an identity rather than a tuning.
+	 *
+	 * <p>The day counts are asserted in the units biology quotes, so a constant
+	 * cannot be nudged in ticks without someone noticing what it means. A body
+	 * that drinks dry in four and a half days is a body; one that does it in
+	 * four and a half minutes or four and a half months is not.
+	 */
+	static class TheWorldKeepsOneClock extends Scenario {
+		/** A duration in days, with the tolerance its rounding allows. */
+		private void inDays(String what, double days, double ticks) {
+			assertNear(what + " (" + String.format("%.0f", ticks) + " ticks)",
+					days, ticks / NPC.DAY, 0.002);
+		}
+
+		@Override
+		public void run() {
+			// The identity the whole scale rests on.
+			assertNear("the energy unit is one day of resting burn for a reference body",
+					1.0, NPC.BASE_METABOLISM * NPC.DAY, 1e-9);
+			assertEquals("a day is a whole number of ticks", NPC.DAY, NPC.days(1.0));
+			assertEquals("and the conversion is linear", 3 * NPC.DAY, NPC.days(3.0));
+			assertGreater("a day is minutes of watching, not seconds",
+					NPC.DAY / (double) net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND, 30.0);
+
+			// Needs, in the units a physiologist would quote them in.
+			inDays("thirst runs sated to parched in about four days", 4.5, NPC.THIRST_PERIOD);
+			inDays("a full drink takes a couple of hours", 0.066, NPC.DRINK_TICKS);
+			inDays("a pegged need costs a point of health every half hour", 0.025, NPC.DEPRIVATION_PERIOD);
+			inDays("and a wound mends a point every couple of hours", 0.08, NPC.MEND_PERIOD);
+
+			// Acts, which are hours rather than days.
+			inDays("a carcass stays fresh for about two hours", 0.0825, NPC.FRESH_TICKS);
+			inDays("mating is held for about two hours", 0.0825, NPC.BREED_HOLD_TICKS);
+			inDays("a hunter bites every twenty minutes or so", 0.0165, TestNPC.PRED_BITE_PERIOD);
+			inDays("a parasite drinks a little faster", 0.015, TestNPC.PARA_BITE_PERIOD);
+			inDays("a stripped sward rests a day before it recovers", 1.0,
+					net.hedinger.prototype.engine.Tile.REGROW_DELAY);
+
+			// What the stores come to, on this clock. These are the numbers the
+			// metabolic rewrite will move; they are pinned here so the move is a
+			// decision and not a drift.
+			// On this clock a store's energy IS its day count, which is the whole
+			// point of anchoring the unit to a day of resting burn.
+			inDays("a reference reserve is six days of lying still", 6.0,
+					NPC.BASE_CAPACITY / NPC.BASE_METABOLISM);
+			inDays("a reference stomach is nine", 9.0, NPC.STOMACH / NPC.BASE_METABOLISM);
+			inDays("a full fat store is thirteen and a half", 13.5,
+					NPC.FAT_CAP * NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
+			inDays("and the lean body is twenty-seven", 27.0,
+					NPC.MEAT_ENERGY / NPC.BASE_METABOLISM);
+			assertNear("so a store's energy reads straight off as days",
+					NPC.BASE_CAPACITY, NPC.BASE_CAPACITY / NPC.BASE_METABOLISM / NPC.DAY, 1e-9);
+		}
+	}
+
+	/**
 	 * Fat is the body's store. A fed body with a full tank keeps digesting and
 	 * lays what the tank cannot take down as mass, at the one price; a body
 	 * whose stomach runs empty draws that mass back into the stomach at the same
@@ -13849,6 +13913,7 @@ public class SimTests {
 				new ScavengerEatsCarrionButDoesNotRotIt(),
 				new AFreshCarcassSitsBeforeItRots(),
 				new DecayedMeatRotsOnTheClock(),
+				new TheWorldKeepsOneClock(),
 				new FatIsTheBodysStore(),
 				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),
