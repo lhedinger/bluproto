@@ -11937,8 +11937,15 @@ public class SimTests {
 		 *  is an actuator the mind has to keep asserting, so a rider whose brain
 		 *  says nothing lets go on the next tick. */
 		private TestNPC latchOnto(World w, TestNPC h) {
+			return latchOnto(w, h, new Genome().drainRate);
+		}
+
+		/** The same, drinking at {@code rate} host hp per tick. */
+		private TestNPC latchOnto(World w, TestNPC h, double rate) {
 			Mind hold = (sn, act) -> act[AgentIO.A_ATTACH] = 1;
-			TestNPC para = TestNPC.minded(h.getX() + 0.4, h.getY(), 0, rider(), hold)
+			Genome rg = rider();
+			rg.drainRate = rate;
+			TestNPC para = TestNPC.minded(h.getX() + 0.4, h.getY(), 0, rg, hold)
 					.withClade(Genome.Clade.PARASITE).grown().withHunger(1.0)
 					.withReproCooldown(100_000_000);
 			w.spawnEntity(para);
@@ -12002,6 +12009,36 @@ public class SimTests {
 			assertTrue("and the host is alive under it", !ridden.isDead());
 			assertGreater("with its health held, not sliding to nothing ("
 					+ ridden.getHealth() + " hp)", ridden.getHealth(), 89);
+
+			// --- and how hard to drink is the rider's own gene. Two lineages on
+			// two identical hosts, neither host able to mend a point back, over a
+			// window short enough that neither gut has filled: what separates them
+			// is the pace alone.
+			World g = room(14, 12);
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 11; y++) {
+					g.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			TestNPC slowHost = TestNPC.breeder(4.5, 5.5, 0, host(6, 0)).grown()
+					.withHunger(0.9).withReproCooldown(100_000_000);
+			TestNPC fastHost = TestNPC.breeder(9.5, 5.5, 0, host(6, 0)).grown()
+					.withHunger(0.9).withReproCooldown(100_000_000);
+			g.spawnEntity(slowHost);
+			g.spawnEntity(fastHost);
+			tick(g, 1);
+			TestNPC temperate = latchOnto(g, slowHost, 0.01);
+			TestNPC greedy = latchOnto(g, fastHost, 0.0333);
+			tick(g, 600);
+			double sipped = 1 - slowHost.meatLeft(), gulped = 1 - fastHost.meatLeft();
+			assertGreater("the greedy lineage drank more off its host ("
+					+ String.format("%.3f against %.3f of a body", gulped, sipped) + ")",
+					gulped, 2.5 * sipped);
+			assertGreater("and banked more for it", greedy.totalSwallowed(),
+					2.5 * temperate.totalSwallowed());
+			assertLess("and its host is the worse off ("
+					+ fastHost.getHealth() + " hp against " + slowHost.getHealth() + ")",
+					fastHost.getHealth(), slowHost.getHealth() - 5);
 		}
 	}
 

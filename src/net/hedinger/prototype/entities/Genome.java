@@ -269,6 +269,24 @@ public class Genome {
 	 * decision it will make about its own young.
 	 */
 	public double birthSize = 0.35; // NPC.BIRTH_SIZE_FRACTION, the reference lineage's
+	/**
+	 * How hard a parasite drinks, in host health per tick — the drain's pace,
+	 * and the fourth life-history gene. Latent in a lineage that does not ride:
+	 * it is expressed only by the parasite niche, the way the brain is latent in
+	 * a scripted body.
+	 *
+	 * <p>Drinking harder is not simply better, because a gut has a size. Past
+	 * the pace it can digest, a fast drinker takes flesh it has no room for —
+	 * which the drain now refuses to do, so the extra speed buys nothing at all
+	 * once the gut is full. What it does buy is the climb back after a fast, and
+	 * a living off a small host that pays little per point. What it costs is the
+	 * host: drink faster than the animal mends and it dies under you, and a
+	 * parasite drinks lives, not corpses, so its own ride ends with it.
+	 *
+	 * <p>Somewhere between those is a pace that keeps a host alive indefinitely
+	 * while filling its rider, and finding it is selection's problem.
+	 */
+	public double drainRate = 0.0333; // one point per 30 ticks: TestNPC.PARA_BITE_PERIOD
 	/** How hard this lineage mutates its own offspring, per gene at birth — meta-
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */

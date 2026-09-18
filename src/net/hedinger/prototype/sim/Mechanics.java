@@ -972,6 +972,9 @@ public final class Mechanics {
 				row("Markers", num(Genome.MARKER_DIMS), "genes",
 						"The neutral barcode: similarity in marker space is kinship, and the "
 						+ "first three map to the body's colour, so relatedness is visible."),
+				row("Drinks at", num(def.drainRate) + " host hp/tick", "",
+						"A parasite's pace, latent in anything that does not ride. Faster buys "
+						+ "nothing once its gut is full, and costs it the host it is riding."),
 				row("Builds young at", pct(def.birthSize) + " of the adult body", "",
 						"The third life-history gene: what a child costs in fat, and how much "
 						+ "of its life it spends small. Dear-and-quickly-grown against "
