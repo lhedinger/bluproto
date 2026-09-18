@@ -163,6 +163,12 @@ public final class GeneSchema {
 				g -> g.instinct, (g, v) -> g.instinct = v);
 		add("patience", "ticks", Drift.MULT, Genome.PATIENCE_MIN, Genome.PATIENCE_MAX, true,
 				g -> g.patience, (g, v) -> g.patience = (int) v);
+		// How big a lineage builds its young. Bounded below where the 1px floor in
+		// beginGrowth would flatten the gene out for every body in the world, and
+		// above well short of 1: a child born its parents' size would be a body
+		// bought entirely out of stored fat, which no amount of fat can cover.
+		add("born", "of the adult body", Drift.ADD, 0.12, 0.6, false,
+				g -> g.birthSize, (g, v) -> g.birthSize = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},

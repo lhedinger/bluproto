@@ -11198,6 +11198,108 @@ public class SimTests {
 	}
 
 	/**
+	 * How big a lineage builds its young is a decision it makes, and the decision
+	 * cuts both ways.
+	 *
+	 * <p>The matter comes out of the parents' fat, so a big newborn is a dear one
+	 * — a lineage that builds them big has to save longer for each. What it buys
+	 * is a child that starts closer to its adult body and is therefore done being
+	 * small sooner: less of its life cheap to run but easy prey, with a short
+	 * reach and a small reserve, and breeding age arrives earlier. Neither end of
+	 * the gene is free and neither is strictly better, which is what makes it
+	 * worth handing to selection rather than choosing here.
+	 *
+	 * <p>Two budding lineages, identical but for {@link Genome#birthSize} and
+	 * both mutating at zero so the gene is the only difference between the two
+	 * children. Measured: what the child arrives weighing, what it cost the
+	 * parent in fat, and how long it then takes to finish growing on the same
+	 * ground.
+	 */
+	static class ALineageDecidesHowBigItsYoungAreBorn extends Scenario {
+		private static Genome lineage(double bornAt) {
+			Genome g = new Genome();
+			g.size = 12;
+			g.sexuality = 0.3; // a budder: one parent, one decision, no averaging
+			g.mutationRate = 0; // no jitter, so the two children differ only by the gene
+			g.birthSize = bornAt;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		/** A room that will feed a growing child: grass everywhere and a shore. */
+		private World meadow() {
+			World w = room(14, 12);
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.setTile(1, 5, 0, Tile.TileType.TYPE_SHALLOWS);
+			return w;
+		}
+
+		/** Buds one child off a fattened parent of this lineage and grows it up
+		 *  alone: {mass at birth, fat the parent spent, ticks to finish growing}. */
+		private double[] budAndRaise(double bornAt) {
+			World w = meadow();
+			TestNPC parent = TestNPC.breeder(6.5, 5.5, 0, lineage(bornAt))
+					.grown().fattened().withHunger(0.0).withHydration(1.0);
+			parent.withGlycogen(parent.glycogenCapacity());
+			w.spawnEntity(parent);
+			tick(w, 1);
+			double fatBefore = parent.fat();
+			TestNPC child = null;
+			for (int t = 0; t < 4000 && child == null; t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC n && !n.isDead() && n.generation() == 1) {
+						child = n;
+					}
+				}
+			}
+			assertTrue("the lineage bred at all (born at " + bornAt + ")", child != null);
+			double spent = fatBefore - parent.fat();
+			double born = child.leanMass();
+			// Alone from here: the parent would otherwise keep breeding off the
+			// same meadow and eat into the grass the child is growing on.
+			parent.remove();
+			int grew = -1;
+			for (int t = 0; t < 40000 && grew < 0; t++) {
+				tick(w, 1);
+				if (child.isDead() || child.isRemoved()) {
+					break;
+				}
+				if (child.maturity() >= 1.0) {
+					grew = t;
+				}
+			}
+			assertGreater("and the child grew up (born at " + bornAt + ")", grew, -1);
+			return new double[] { born, spent, grew };
+		}
+
+		@Override
+		public void run() {
+			seed(77);
+			double[] small = budAndRaise(0.20);
+			double[] big = budAndRaise(0.45);
+
+			assertGreater("a lineage that builds its young big starts them bigger ("
+					+ String.format("%.3f against %.3f", big[0], small[0]) + ")",
+					big[0], small[0] + 0.05);
+			assertGreater("and pays more fat for each one ("
+					+ String.format("%.3f against %.3f", big[1], small[1]) + ")",
+					big[1], small[1] + 0.05);
+			assertNear("exactly the matter the child arrived as, either way",
+					big[0], big[1], 1e-9);
+			assertNear("and the same for the small one: a body is what its parent gave up",
+					small[0], small[1], 1e-9);
+			assertLess("and the big one is done being a child sooner ("
+					+ String.format("%.0f ticks against %.0f", big[2], small[2]) + ")",
+					big[2], small[2] * 0.9);
+		}
+	}
+
+	/**
 	 * Birth conserves energy exactly, across both of a parent's books. What a
 	 * child is worth — its glycogen, the food in its gut and its meat-priced
 	 * body — equals what its parents lost, where what a parent holds is its
@@ -11276,9 +11378,14 @@ public class SimTests {
 			assertNear("the bud is worth exactly what its parent gave up, glycogen and gut together ("
 					+ String.format("%.2f against %.2f", worth(bud), budSpent) + ")",
 					worth(bud), budSpent, eps);
+			// What the parent offered lands in the child, up to the only thing that
+			// can stop it: a newborn's own glycogen ceiling. What will not fit is
+			// not taken and therefore not charged either, so it stays with the
+			// parent -- burnt nowhere, which is the whole of the claim.
 			assertNear("and the whole of what the parent offered in energy landed in its books, none burnt ("
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
-					worth(bud) - NPC.LEAN_DENSITY * bud.leanMass(), bidBud[0], eps);
+					worth(bud) - NPC.LEAN_DENSITY * bud.leanMass(),
+					Math.min(bidBud[0], bud.glycogenCapacity()), eps);
 			assertGreater("and the bud is born viable, not bankrupt", bud.getGlycogen(), 0.5);
 			assertTrue("born hungry -- a gut holds food nothing has digested, and there "
 					+ "is no handing that over -- but not starving, which is what the "
@@ -11306,7 +11413,8 @@ public class SimTests {
 			assertNear("and the whole of BOTH offers landed in it -- a ceiling on a "
 					+ "newborn's glycogen used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
-					worth(kid) - NPC.LEAN_DENSITY * kid.leanMass(), bidKid[0], eps);
+					worth(kid) - NPC.LEAN_DENSITY * kid.leanMass(),
+					Math.min(bidKid[0], kid.glycogenCapacity()), eps);
 			// The point of a mate: two offers pool into one child instead of each
 			// being clipped to the same ceiling. Under the old clamp a paired
 			// child and a budded one were born holding the identical fraction.
@@ -14122,6 +14230,7 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new FatIsTheBodysStore(),
+				new ALineageDecidesHowBigItsYoungAreBorn(),
 				new WhatIsNotAbsorbedFeedsTheGround(),
 				new OtherHuntersJoinTheKill(),
 				new ScavengerForagesTowardBodies(),

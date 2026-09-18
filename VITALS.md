@@ -261,9 +261,12 @@ door for free energy, and it had three: a bud arrived holding 0.6 of a store
 its parent paid 0.5 for, a body nobody paid for, and — much the largest — a
 full gut of mintable food. A newborn is now worth exactly what its
 parents lost. **Its body is matter, and comes out of the parents' fat**: the
-birth mass (`BIRTH_SIZE_FRACTION` of the child's adult lean mass) is taken from
-each parent's fat in proportion to what it holds, never from the lean mass, so no
-parent can die of giving birth and a lean one cannot breed at all. Its one
+birth mass (`Genome.birthSize` of the child's adult lean mass, a gene the
+PARENTS carry and a pair averages) is taken from each parent's fat in
+proportion to what it holds, never from the lean mass, so no parent can die of
+giving birth and a lean one cannot breed at all. How big to build a child is
+therefore a decision under selection: dear and quickly grown, against cheap
+and long vulnerable. Its one
 book — its glycogen — comes out of the parents' glycogen, per parent share
 for a sexual pair, and **its gut starts empty**: a gut holds food nothing has
 digested yet, and there is no way to put food in one but the way every other
