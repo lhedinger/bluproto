@@ -250,6 +250,25 @@ public class Genome {
 	 *  in each child. Paired with {@link #reproFraction} this is the whole r/K
 	 *  trade: cheap-and-many against dear-and-few. */
 	public double reproCostFraction = 0.5;
+	/**
+	 * How big a share of its adult body this lineage builds its young at, 0..1 —
+	 * the third life-history gene, and the one that decides both what a child
+	 * costs and how long it stays a child.
+	 *
+	 * <p>The matter comes out of the parents' fat, so a big newborn is a dear
+	 * one: a lineage that builds them big saves longer between births and can
+	 * carry fewer of them. What it buys is a child that starts closer to its
+	 * adult body — less of its life spent small, which is to say cheap to run
+	 * but easy prey with a short reach and a small reserve — and that therefore
+	 * reaches breeding sooner. Build them small and they are quick to afford and
+	 * then have a long childhood to survive. Which way that pays depends on how
+	 * dangerous and how rich the world is, which is a question for selection.
+	 *
+	 * <p>Read off the PARENTS at every birth, never off the child: this is a
+	 * decision made about a body, not by it. What the child carries is the
+	 * decision it will make about its own young.
+	 */
+	public double birthSize = 0.35; // NPC.BIRTH_SIZE_FRACTION, the reference lineage's
 	/** How hard this lineage mutates its own offspring, per gene at birth — meta-
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */

@@ -963,6 +963,7 @@ function genomeTab(d: Record<string, any>): string {
       : `${gm.sexual ? 'sexual' : 'asexual'} · ${gm.sexuality}`),
     row('mate thresh', g(gm.mateThreshold)),
     row('breeds at', g(gm.reproFraction)), row('spends', g(gm.reproCostFraction)),
+    row('young born at', g(gm.birthSize)),
     row('mutation', g(gm.mutationRate)),
   ]) + group('mind', [
     // Instinct is in the genome and deliberation is in the mind, so the newborn

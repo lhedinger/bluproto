@@ -372,7 +372,10 @@ public final class Mechanics {
 				+ "takes as long to return to the world as it took to build — one constant, "
 				+ "not two that can drift apart.");
 		rows(s,
-				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body", ""),
+				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body",
+						"A gene, and the reference lineage's value. The parents decide it: a "
+						+ "bigger newborn costs them more fat and so comes less often, and "
+						+ "spends less of its life small."),
 				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
 						"The well-fed ceiling, not a guarantee."),
 				row("Mass costs", num(NPC.LEAN_DENSITY) + " × mass grown", "energy",
@@ -384,9 +387,11 @@ public final class Mechanics {
 						+ "gut once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
 						+ "before health does. Carried on every step, and on the carcass, half "
 						+ "fresh and half decayed."),
-				row("Childhood", "(1 − " + num(NPC.BIRTH_SIZE_FRACTION) + ") × adult size ÷ "
-						+ num(NPC.GROWTH_RATE), "ticks", "Nominal; also how long "
-						+ "the corpse lasts."));
+				row("Childhood", "(1 − born at) × adult size ÷ "
+						+ num(NPC.GROWTH_RATE), "ticks", "How long an individual grows for "
+						+ "depends on how big its parents built it. The figures below are the "
+						+ "reference lineage's, and are what rot and breeding cadence are "
+						+ "pinned to: the lineage's scale, not one body's luck."));
 		List<List<String>> t = new ArrayList<>();
 		for (double size : SAMPLE_SIZES) {
 			int ticks = NPC.growthTicks(size);
@@ -967,6 +972,10 @@ public final class Mechanics {
 				row("Markers", num(Genome.MARKER_DIMS), "genes",
 						"The neutral barcode: similarity in marker space is kinship, and the "
 						+ "first three map to the body's colour, so relatedness is visible."),
+				row("Builds young at", pct(def.birthSize) + " of the adult body", "",
+						"The third life-history gene: what a child costs in fat, and how much "
+						+ "of its life it spends small. Dear-and-quickly-grown against "
+						+ "cheap-and-long-vulnerable."),
 				row("Sexuality", "0 – 1, sexual at " + num(0.5) + "+", "",
 						"Continuous so a lineage can drift across the boundary; a sexual body "
 						+ "courts and waits, an asexual one buds alone."),

@@ -367,12 +367,28 @@ knobs, and in life fat carries about six times what wet muscle does.
 
 ### Growth
 
-A creature is born at `BIRTH_SIZE_FRACTION` of its adult body and grows in at a
+A creature is born at `Genome.birthSize` of its adult body and grows in at a
 fixed `GROWTH_RATE`. Because the *rate* is fixed and the *distance* is not,
 childhood length scales with adult size at the well-fed ceiling; in practice
 growth is bought out of what the child eats, at the one price of mass, so a
 childhood is measured in minutes of grazing (about two and a half for a small
 body, three and a half for the largest) and stretches with scarcity.
+
+**How big to build a child is the parents' decision, and a gene.** `birthSize`
+is read off the parents at every birth — a pair averages the two — never off
+the child, because it is a decision made about a body rather than by it. It
+cuts both ways, which is why it is selection's to make and not this file's:
+
+- the matter comes out of the parents' fat, so a big newborn is a **dear** one.
+  A lineage that builds them big saves longer between births and carries fewer;
+- but it starts closer to its adult body, so it is done **being small** sooner
+  — less of its life cheap to run but easy prey, short of reach and short of
+  reserve — and it reaches breeding age earlier.
+
+Rot and breeding cadence stay pinned to the *nominal* childhood
+(`BIRTH_SIZE_FRACTION`, the reference lineage's value): those want the
+lineage's intrinsic scale rather than one individual's luck, and a corpse
+should not last less because somebody's parents were generous.
 
 Growth is deliberately **physical, not economic**. Everything derived from the
 body a creature has *right now* follows it down — resting burn, movement cost,

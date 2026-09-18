@@ -221,7 +221,21 @@ public abstract class NPC extends Entity {
 	public static double SYNTHESIS_COST = 1.35;
 
 	// --- growth: born small, grow into the genome's body ----------------------
-	/** Fraction of its adult body a creature is born at. */
+	/**
+	 * The REFERENCE fraction of its adult body a creature is born at — what a
+	 * lineage carries before drift moves it, and what a body without a genome
+	 * uses.
+	 *
+	 * <p>How big to build a child is a decision, not a constant, so the live
+	 * value is {@link Genome#birthSize} and the parents' copy of it is what a
+	 * birth reads. The trade it opens is a real one and points both ways: a big
+	 * newborn costs its parents more fat, so they breed less often, but it
+	 * spends less of its life small — less time as easy prey, with a smaller
+	 * reach and a smaller reserve — and reaches breeding sooner. A small one is
+	 * cheap and quick to save up for, and then has a long childhood to survive.
+	 * Which of those pays is a question about the world a lineage lives in, and
+	 * therefore a question for selection rather than for this file.
+	 */
 	@Unit("of adult size")
 	public static double BIRTH_SIZE_FRACTION = 0.35;
 	/**
@@ -242,6 +256,11 @@ public abstract class NPC extends Entity {
 	/** Continuous size while growing — {@link #size} is this, rounded, because the
 	 *  body radius itself is an integer. */
 	protected double grownSize = 0;
+	/** The radius this body actually started at, in px: its parents' decision,
+	 *  and the matter they paid for. Kept because it is a fact about this body
+	 *  and not derivable from its own genome — how big it was born is something
+	 *  that happened TO it. */
+	protected double bornSize = 0;
 
 	/**
 	 * Starts this body as a juvenile that will grow into {@code adult}. The
@@ -250,8 +269,15 @@ public abstract class NPC extends Entity {
 	 * smaller reserve and easy prey.
 	 */
 	protected void beginGrowth(double adult) {
+		beginGrowth(adult, BIRTH_SIZE_FRACTION);
+	}
+
+	/** As {@link #beginGrowth(double)}, but born at {@code fraction} of the adult
+	 *  body — the parents' decision, and what they were charged for. */
+	protected void beginGrowth(double adult, double fraction) {
 		adultSize = adult;
-		grownSize = Math.max(1, adult * BIRTH_SIZE_FRACTION);
+		grownSize = Math.max(1, adult * fraction);
+		bornSize = grownSize;
 		size = (int) Math.round(grownSize);
 	}
 
@@ -498,7 +524,7 @@ public abstract class NPC extends Entity {
 	 */
 	protected void settleBirth(NPC child, NPC partner) {
 		payBirth(birthPayment());
-		double mass = child.getGenome() != null ? birthMass(child.getGenome().size) : 0;
+		double mass = child.bornMass();
 		double rest = mass - payBirthMass(mass);
 		if (partner != null) {
 			partner.payBirth(partner.birthPayment());
@@ -626,20 +652,44 @@ public abstract class NPC extends Entity {
 		return c <= 0 ? 0 : Math.max(0, Math.min(1, fat / c));
 	}
 
-	/** Mass a newborn of {@code adultSize} px arrives with, in body-mass units,
-	 *  with the same floor and rounding {@code beginGrowth} applies -- so the
-	 *  matter is priced as it will be weighed. It comes out of its parents' fat:
-	 *  a body is built of what its parents stored, not conjured. */
+	/** Mass a newborn of {@code adultSize} px arrives with when its parents give
+	 *  it {@code fraction} of that body, in body-mass units, with the same floor
+	 *  and rounding {@code beginGrowth} applies -- so the matter is priced as it
+	 *  will be weighed. It comes out of its parents' fat: a body is built of what
+	 *  its parents stored, not conjured. */
+	public static double birthMass(double adultSize, double fraction) {
+		return Math.round(Math.max(1, fraction * adultSize)) / REF_SIZE;
+	}
+
+	/** What a reference lineage's newborn of {@code adultSize} weighs -- for
+	 *  fixtures, founder pricing and the mechanics page, where no parents have
+	 *  made the decision yet. */
 	public static double birthMass(double adultSize) {
-		return Math.round(Math.max(1, BIRTH_SIZE_FRACTION * adultSize)) / REF_SIZE;
+		return birthMass(adultSize, BIRTH_SIZE_FRACTION);
+	}
+
+	/** The matter this body was actually born as, in body-mass units: exactly
+	 *  what its parents were charged, read off the body rather than recomputed,
+	 *  so the charge and the child can never disagree. */
+	public double bornMass() {
+		return Math.round(Math.max(1, bornSize)) / REF_SIZE;
+	}
+
+	/** How big a share of the adult body this body's lineage gives its young --
+	 *  {@link Genome#birthSize}, or the reference for a body without a genome.
+	 *  Read off the PARENT, always: how big a newborn arrives is a decision its
+	 *  parents make, not one it makes for itself. */
+	public double birthFraction() {
+		return genome != null ? genome.birthSize : BIRTH_SIZE_FRACTION;
 	}
 
 	/** Fat this body must hold before it will try to breed: half a child of its
-	 *  own lean mass, since a pair pools two halves. A budder still needs the whole
-	 *  at the moment of birth -- see {@code spawnOffspring}. */
+	 *  own lean mass at its own lineage's birth size, since a pair pools two
+	 *  halves. A budder still needs the whole at the moment of birth -- see
+	 *  {@code spawnOffspring}. */
 	protected double fatToBreed() {
 		double adult = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
-		return birthMass(adult) / 2;
+		return birthMass(adult, birthFraction()) / 2;
 	}
 
 	/** Takes up to {@code mass} of fat off this body for a child's birth mass

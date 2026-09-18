@@ -845,7 +845,10 @@ public class TestNPC extends NPC {
 		// every birth, so the invariant holds for the whole lineage and not just
 		// the founder whose genome was once clamped.
 		double adult = Niche.of(g.clade).expressedSize(g.size);
-		t.beginGrowth(adult);
+		// No parents to decide, so a founder is born at what its own lineage would
+		// give. A child's start is overwritten in spawnOffspring by what ITS
+		// parents chose, which is the only place the decision is actually made.
+		t.beginGrowth(adult, g.birthSize);
 		// A body takes as long to rot away as it took to build: the corpse span IS
 		// the childhood, read off the same two growth constants rather than a
 		// separate figure that could drift out of step. Both are linear in adult
@@ -3769,12 +3772,18 @@ public class TestNPC extends NPC {
 	// Genome.child, which keeps the two ways of being born mutating alike.
 
 	/** What a body of this adult mass costs to build, at the
-	 *  {@link NPC#LEAN_DENSITY} price every unit of mass is bought at. Birth size
-	 *  carries beginGrowth's floor of 1 and the same rounding
-	 *  {@code leanMass()} reads, so the matter is priced as it will be weighed. */
+	 *  {@link NPC#LEAN_DENSITY} price every unit of mass is bought at, when its
+	 *  parents give it {@code fraction} of that body. Birth size carries
+	 *  beginGrowth's floor of 1 and the same rounding {@code leanMass()} reads,
+	 *  so the matter is priced as it will be weighed. */
+	static double birthBodyCost(double adultMass, double fraction) {
+		double born = Math.round(Math.max(1, fraction * adultMass * NPC.REF_SIZE));
+		return LEAN_DENSITY * born / NPC.REF_SIZE;
+	}
+
+	/** The reference lineage's version, for fixtures and founder pricing. */
 	static double birthBodyCost(double adultMass) {
-		double birthSize = Math.round(Math.max(1, NPC.BIRTH_SIZE_FRACTION * adultMass * NPC.REF_SIZE));
-		return LEAN_DENSITY * birthSize / NPC.REF_SIZE;
+		return birthBodyCost(adultMass, NPC.BIRTH_SIZE_FRACTION);
 	}
 
 	/** How much of a nominal childhood (the growth ceiling's, in ticks) a
@@ -3857,7 +3866,7 @@ public class TestNPC extends NPC {
 		// The body first: matter, out of fat, from each parent in proportion to
 		// the fat it holds -- so a lean parent can pair with a fat one and the
 		// child is still whole. The lean mass is never touched: nobody dies of it.
-		double mass = NPC.birthMass(kid.getGenome().size);
+		double mass = kid.bornMass();
 		double myFat = fat, theirFat = partner == null ? 0 : partner.fat();
 		double pooled = myFat + theirFat;
 		if (pooled > 0) {
@@ -3888,7 +3897,10 @@ public class TestNPC extends NPC {
 		// Asexual: a mutated copy of this genome, born at the parent's spot. When the
 		// genome carries a brain, Genome.child mutates the inherited program too.
 		Genome childG = Genome.child(genome, genome.mutationRate);
-		if (fat < NPC.birthMass(childG.size)) {
+		// How big to build it is the PARENT's gene, not the child's copy of it.
+		double adult = Niche.of(childG.clade).expressedSize(childG.size);
+		double share = birthFraction();
+		if (fat < NPC.birthMass(adult, share)) {
 			return null; // not the fat to build the body out of: no child, and nothing is charged
 		}
 		TestNPC child;
@@ -3900,6 +3912,7 @@ public class TestNPC extends NPC {
 			child = behavior == Behavior.NEST ? nester(X, Y, Z, childG) : breeder(X, Y, Z, childG);
 		}
 		passBodyTraitsTo(child);
+		child.beginGrowth(adult, share);
 		// The books are opened in settleBirth, against what the parent is charged.
 		return child.withGeneration(generation + 1);
 	}
@@ -3913,11 +3926,15 @@ public class TestNPC extends NPC {
 		// crossed minds, when both carry a brain), born at this spot.
 		net.hedinger.prototype.entities.Genome childG =
 				net.hedinger.prototype.entities.Genome.child(genome, partner.getGenome(), genome.mutationRate);
-		if (fat + partner.fat() < NPC.birthMass(childG.size)) {
+		// A pair builds its young at the average of what the two lineages would.
+		double adult = Niche.of(childG.clade).expressedSize(childG.size);
+		double share = (birthFraction() + partner.birthFraction()) / 2;
+		if (fat + partner.fat() < NPC.birthMass(adult, share)) {
 			return null; // between them the pair has not the fat to build the body out of
 		}
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);
 		passBodyTraitsTo(child); // a pair breeds within its clade, so either parent's will do
+		child.beginGrowth(adult, share);
 		// A crossover child is one deeper than the more-advanced parent's lineage.
 		int parentGen = generation;
 		if (partner instanceof TestNPC tp) {

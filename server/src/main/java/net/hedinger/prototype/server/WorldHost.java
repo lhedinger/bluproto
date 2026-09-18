@@ -787,6 +787,7 @@ final class WorldHost {
 					gm.put("sexual", g.isSexual());
 					gm.put("reproFraction", round(g.reproFraction));
 					gm.put("reproCostFraction", round(g.reproCostFraction));
+					gm.put("birthSize", round(g.birthSize));
 					gm.put("mutationRate", round(g.mutationRate));
 					gm.put("instinct", round(g.instinct));
 					// WHICH mind this lineage inherited, not whether it has the one the
