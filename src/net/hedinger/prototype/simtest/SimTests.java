@@ -11898,6 +11898,114 @@ public class SimTests {
 	}
 
 	/**
+	 * A parasite drinks only what it has room for, and what it takes goes
+	 * somewhere.
+	 *
+	 * <p>Grazing has always bounded its mouthful by the gut; the drain did not.
+	 * Its only appetite gate was a gut EXACTLY full, which the mint reopens a
+	 * sliver of every tick, so a sated parasite went on taking a whole point of
+	 * its host every period and {@code feed} clamped away everything that would
+	 * not fit. That flesh came off a living animal and reached no gut and no
+	 * ground: measured on a well-fed host, 44.4 energy drunk against 14.2
+	 * banked, with the host dead in 3700 ticks. Nothing caught it because
+	 * destroying energy is not minting it, and every audit in the suite watches
+	 * the mint.
+	 *
+	 * <p>Two legs. The ledger: on a host that cannot afford to mend, what the
+	 * parasite banked is exactly the flesh that left its host, less the share
+	 * that egesta return to the ground — an identity, not an inequality. And
+	 * the pace: on a host that CAN mend, the drain throttles to what the
+	 * parasite digests, which is slower than the host heals, so the ride is a
+	 * tax rather than a sentence.
+	 */
+	static class AParasiteDrinksOnlyWhatItHasRoomFor extends Scenario {
+		private static Genome host(double size, double speed) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = speed;
+			return g;
+		}
+
+		private static Genome rider() {
+			Genome g = new Genome();
+			g.size = 4;
+			g.speed = 0;
+			return g;
+		}
+
+		/** A parasite latched onto {@code h}, riding from this tick on. Holding on
+		 *  is an actuator the mind has to keep asserting, so a rider whose brain
+		 *  says nothing lets go on the next tick. */
+		private TestNPC latchOnto(World w, TestNPC h) {
+			Mind hold = (sn, act) -> act[AgentIO.A_ATTACH] = 1;
+			TestNPC para = TestNPC.minded(h.getX() + 0.4, h.getY(), 0, rider(), hold)
+					.withClade(Genome.Clade.PARASITE).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(para);
+			tick(w, 1);
+			assertTrue("the parasite latched on", para.attachTo(h));
+			return para;
+		}
+
+		@Override
+		public void run() {
+			seed(84);
+
+			// --- the ledger, on a host too hungry to mend: nothing it loses can
+			// be bought back, so the flesh missing off it IS the flesh drunk.
+			World b = room(12, 10);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 9; y++) {
+					b.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			// Parked, since the ride is the only thing that should happen to it.
+			TestNPC bled = TestNPC.breeder(6.5, 5.5, 0, host(14, 0)).grown()
+					.withHunger(0.9).withReproCooldown(100_000_000);
+			b.spawnEntity(bled);
+			tick(b, 1);
+			TestNPC drinker = latchOnto(b, bled);
+			tick(b, 2000);
+			double drunk = 1 - bled.meatLeft();
+			assertGreater("the parasite drank off its host", drunk, 0.01);
+			assertNear("and the host could not mend a point of it back", 1.0,
+					bled.meatLeft() + drunk, 1e-9);
+			double took = NPC.LEAN_DENSITY * bled.leanMass() * drunk;
+			assertNear("what it banked is the flesh that left the host, less what "
+					+ "egesta gave the ground ("
+					+ String.format("%.3f banked against %.3f taken", drinker.totalSwallowed(), took) + ")",
+					took * NPC.FLESH_ASSIMILATION, drinker.totalSwallowed(), 0.02 * took + 1e-9);
+
+			// --- the pace, on a host that can actually mend: pasture it can roam
+			// and a shore to drink at, so the only question left is whether the
+			// drain outruns the healing.
+			World m = room(18, 12);
+			for (int x = 1; x < 17; x++) {
+				for (int y = 1; y < 11; y++) {
+					m.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			for (int y = 4; y <= 7; y++) {
+				m.setTile(1, y, 0, Tile.TileType.TYPE_SHALLOWS);
+			}
+			TestNPC ridden = TestNPC.breeder(8.5, 5.5, 0, host(14, 0.03)).grown()
+					.withHunger(0.0).withHydration(1.0).withReproCooldown(100_000_000);
+			m.spawnEntity(ridden);
+			tick(m, 1);
+			TestNPC passenger = latchOnto(m, ridden);
+			tick(m, 6000);
+			assertTrue("the parasite is still aboard", passenger.getAttachTarget() == ridden);
+			assertGreater("and still drinking", passenger.totalSwallowed(), 0.0);
+			assertTrue("its gut is full, which is what paces it ("
+					+ String.format("%.2f hunger", passenger.getHunger()) + ")",
+					passenger.getHunger() < 0.25);
+			assertTrue("and the host is alive under it", !ridden.isDead());
+			assertGreater("with its health held, not sliding to nothing ("
+					+ ridden.getHealth() + " hp)", ridden.getHealth(), 89);
+		}
+	}
+
+	/**
 	 * Rocky grassland is grazing country, just poor grazing country. It grows a
 	 * real sward on the same regrowth model as the meadow — so a grazer can make
 	 * a living on it — but its fertility caps that sward far below what pasture
@@ -14319,6 +14427,7 @@ public class SimTests {
 				new TuningRidesTheCommandLog(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
+				new AParasiteDrinksOnlyWhatItHasRoomFor(),
 				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
 				new AGrownBodyIsBigEnoughToRide(),
