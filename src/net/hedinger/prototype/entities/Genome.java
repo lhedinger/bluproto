@@ -329,6 +329,33 @@ public class Genome {
 	 */
 	public double searchCast = 1.0;
 
+	/**
+	 * Draws this genome's search strategy, spread wide on purpose.
+	 *
+	 * <p>A gene responds to selection in proportion to the variance there is to
+	 * select ON, so a founding population that is clonal in a trait does not
+	 * evolve it -- it drifts. Measured over forty thousand ticks with every
+	 * founder at the reference pair: leg held at 25.0 and cast at 1.000, while
+	 * greed, which founders DO differ in, moved a tenth in the same run. The
+	 * draw is the difference between a gene the world owns and one a lineage
+	 * does.
+	 *
+	 * <p>A method rather than four lines inside {@link #random()} because the
+	 * seeded world does not found its herds there. Herbivore and hunter founders
+	 * are copied from fixed species pools; only the minded cohort and the
+	 * steward's reseeds come through {@code random()}. Put in one place and
+	 * called from both, or the trait is evolvable for a third of the world and
+	 * hardcoded for the rest -- which is what the first version of this did, and
+	 * the population's own founding histogram is what gave it away.
+	 *
+	 * <p>The range spans both real strategies: a long leg with a narrow cast is
+	 * a transect across empty ground, a short leg with a wide cast combs a patch.
+	 */
+	public static void spreadSearch(Genome g) {
+		g.searchLeg = (int) Math.round(SEARCH_LEG_MIN + Utils.random() * 160);
+		g.searchCast = 0.15 + Utils.random() * 2.0;
+	}
+
 	/** True if this genome reproduces sexually; false if it buds. */
 	public boolean isSexual() {
 		return sexuality >= 0.5;
@@ -378,6 +405,7 @@ public class Genome {
 		g.reproCostFraction = 0.35 + Utils.random() * 0.3;
 		g.mutationRate = 0.05 + Utils.random() * 0.1;
 		g.instinct = 0.5 + Utils.random() * 0.5;
+		spreadSearch(g);
 		return g;
 	}
 
