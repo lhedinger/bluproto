@@ -2712,6 +2712,13 @@ public final class Worlds {
 		for (int i = 0; i < sc(32, scale); i++) { // with the two broods below, the herd founds AT its floor
 			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
+			// A species pool is a BODY plan -- one barcode, one size, one speed --
+			// so every founder drawn from it is a clone in everything else. That is
+			// right for what makes a herd read as a herd and wrong for how each
+			// animal looks for food, which is the one thing here selection is meant
+			// to settle. Without this the herd, the bulk of the ecosystem, could
+			// only ever drift away from a single hardcoded search.
+			net.hedinger.prototype.entities.Genome.spreadSearch(g);
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
@@ -2724,6 +2731,7 @@ public final class Worlds {
 		for (int i = 0; i < sc(4, scale); i++) {
 			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = hunterFounder(pred[i % pred.length].copy());
+			net.hedinger.prototype.entities.Genome.spreadSearch(g); // as the herd, above
 			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
