@@ -293,6 +293,13 @@ public class TestNPC extends NPC {
 	/** Max steering per tick (radians) applied by the mind's turn actuator. */
 	@Unit("radians/tick")
 	public static final double MAX_TURN = 0.35;
+
+	/** The heading this body is searching along, or NaN before it has picked one.
+	 *  Held for a whole leg, so a search is a walk with corners rather than a
+	 *  turn rate re-decided every tick. */
+	private double searchHeading = Double.NaN;
+	/** The tick the current search leg runs out. */
+	private long searchLegEnd = Long.MIN_VALUE;
 	/** Reach (tiles, beyond touching) of the mind's attack actuator. */
 	@Unit("tiles beyond touching")
 	public static final double ATTACK_REACH = 0.5;
@@ -3004,12 +3011,11 @@ public class TestNPC extends NPC {
 				t = clamp(bearing / MAX_TURN, -1, 1); // as far around as one tick allows
 			} else {
 				// Wanting something you cannot see is a reason to go looking, not a
-				// reason to stand still. The body drifts on the same oscillator the
-				// mind reads as S_CLOCK, so the search is a deterministic wander
-				// rather than a freeze -- "forage" means find food, not merely walk at
-				// food already in view.
+				// reason to stand still -- "forage" means find food, not merely walk
+				// at food already in view. HOW to look is the lineage's to decide:
+				// see searchSteer.
 				searching = true;
-				t = clamp(sensors[AgentIO.S_CLOCK], -1, 1);
+				t = searchSteer(getWorld().getTick());
 			}
 		}
 		// Speed is deliberately NOT the intent's business. An intent says where to go
@@ -3600,6 +3606,45 @@ public class TestNPC extends NPC {
 
 	private static double clampUnit(double v) {
 		return v < 0 ? 0 : (v > 1 ? 1 : v);
+	}
+
+	/**
+	 * Steering while searching: how far to turn this tick, as a fraction of the
+	 * max turn rate, toward a heading the body HOLDS for a whole leg.
+	 *
+	 * <p>The shape of a search is two genes and nothing else.
+	 * {@link Genome#searchLeg} is how many ticks a bearing is kept;
+	 * {@link Genome#searchCast} is how far the bearing swings when the leg runs
+	 * out. A long leg and a small cast is a straight transect, which is how you
+	 * cross ground with nothing on it; a short leg and a wide cast is
+	 * area-restricted search, which is how you comb the patch you have just
+	 * lost. Both are real strategies, which one pays depends on how the food is
+	 * spread, and so neither is written down here.
+	 *
+	 * <p>What this replaced was {@code t = S_CLOCK}: the turn RATE read off a
+	 * sine every tick. A sine on the rate integrates to a sawtooth on the
+	 * heading -- about a hundred and thirty degrees each way on a twenty-one
+	 * tick beat -- so every creature in the world zig-zagged, on the same
+	 * period, for most of its life. Nobody chose that; it was the shape of the
+	 * arithmetic. The comment there was right that a search must not freeze and
+	 * must not draw a random, and both still hold: the cast comes off a hash of
+	 * the leg index and the body's id, so a world replays identically.
+	 */
+	private double searchSteer(long now) {
+		int leg = genome == null ? 25
+				: Math.max(Genome.SEARCH_LEG_MIN, genome.searchLeg);
+		if (Double.isNaN(searchHeading) || now >= searchLegEnd) {
+			double cast = genome == null ? 1.0 : genome.searchCast;
+			double from = Double.isNaN(searchHeading) ? D : searchHeading;
+			// Deterministic, not random: a hash of which leg this is and whose
+			// it is. Two bodies side by side cast differently, the same body
+			// casts differently each leg, and the whole thing replays exactly.
+			long i = Math.floorDiv(now, leg);
+			double h = Math.sin(i * 12.9898 + getID() * 78.233) * 43758.5453;
+			searchHeading = wrap(from + cast * (2 * (h - Math.floor(h)) - 1));
+			searchLegEnd = now + leg;
+		}
+		return clamp(wrap(searchHeading - D) / MAX_TURN, -1, 1);
 	}
 
 	private static double wrap(double a) {

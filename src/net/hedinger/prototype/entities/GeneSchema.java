@@ -174,6 +174,15 @@ public final class GeneSchema {
 		// through zero and out the other side.
 		add("drain", "host hp/tick", Drift.MULT, 0.005, 0.2, false,
 				g -> g.drainRate, (g, v) -> g.drainRate = v);
+		// How a lineage looks for what it cannot see. Appended, so every draw
+		// before them is unshifted.
+		add("leg", "ticks", Drift.MULT, Genome.SEARCH_LEG_MIN, Genome.SEARCH_LEG_MAX, true,
+				g -> g.searchLeg, (g, v) -> g.searchLeg = (int) v);
+		// Additive and floored AT zero: a dead straight searcher is a strategy,
+		// not a degenerate case, and a multiplicative step could never carry a
+		// lineage back off that bound once it reached it.
+		add("cast", "radians", Drift.ADD, 0, Genome.SEARCH_CAST_MAX, false,
+				g -> g.searchCast, (g, v) -> g.searchCast = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},
