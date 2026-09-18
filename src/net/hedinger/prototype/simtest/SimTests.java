@@ -5842,6 +5842,110 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * How a creature looks for what it cannot see is the lineage's, not the
+	 * world's.
+	 *
+	 * <p>It used to be one line with nothing behind it: the turn RATE was read
+	 * off the S_CLOCK oscillator every tick, and a sine on the rate integrates to
+	 * a sawtooth on the heading — about a hundred and thirty degrees each way on
+	 * a twenty-one tick beat. Every creature in the world zig-zagged, all on the
+	 * same period, through the state a forager spends most of its life in. Nobody
+	 * decided that; it was the shape of the arithmetic.
+	 *
+	 * <p>Two genes replace it, and this pins what they have to buy: that the ends
+	 * of their range are genuinely different ways of searching, and that a
+	 * default searcher no longer saws. The numbers are floors with room in them,
+	 * not the measurements — a scenario that asserted the measurement would fail
+	 * on any honest retune of the pair.
+	 */
+	static class SearchShapeIsTheLineagesOwn extends Scenario {
+		/** Straightness (net displacement over path walked, 0..1) and total turning
+		 *  in radians per hundred ticks, for a body that can never see its goal. */
+		private double[] shape(int leg, double cast) {
+			seed(90);
+			World w = room(160, 160);
+			for (int x = 0; x < 160; x++) {
+				for (int y = 0; y < 160; y++) {
+					w.getTile(x, y, 0).setFertility(0); // barren: always searching
+				}
+			}
+			Genome g = new Genome();
+			g.size = 6;
+			g.losRange = 6;
+			g.searchLeg = leg;
+			g.searchCast = cast;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_SEEK] = 0.1; // forage: always wanted, never in sight
+				}
+			};
+			TestNPC b = TestNPC.minded(80.5, 80.5, 0, g, ctrl).withSpeed(0.2);
+			w.spawnEntity(b);
+			w.think();
+			double px = b.getX(), py = b.getY(), path = 0, turned = 0, last = Double.NaN;
+			int ticks = 1500;
+			for (int i = 0; i < ticks; i++) {
+				tick(w, 1);
+				double dx = b.getX() - px, dy = b.getY() - py;
+				double step = Math.hypot(dx, dy);
+				path += step;
+				if (step > 1e-6) {
+					double h = Math.atan2(dy, dx);
+					if (!Double.isNaN(last)) {
+						double dd = h - last;
+						while (dd > Math.PI) {
+							dd -= 2 * Math.PI;
+						}
+						while (dd < -Math.PI) {
+							dd += 2 * Math.PI;
+						}
+						turned += Math.abs(dd);
+					}
+					last = h;
+				}
+				px = b.getX();
+				py = b.getY();
+			}
+			double net = Math.hypot(b.getX() - 80.5, b.getY() - 80.5);
+			return new double[] { path == 0 ? 0 : net / path, turned / ticks * 100 };
+		}
+
+		@Override
+		public void run() {
+			// A long leg and a narrow cast is a transect: it commits to a bearing and
+			// covers ground. A short leg and a wide cast combs the same patch over.
+			double[] transect = shape(200, Math.toRadians(30));
+			double[] combing = shape(8, Math.toRadians(170));
+			assertGreater("a long leg with a narrow cast runs straighter than a short "
+					+ "one with a wide cast (" + String.format("%.2f", transect[0]) + " vs "
+					+ String.format("%.2f", combing[0]) + ")", transect[0] - combing[0], 0.2);
+			assertGreater("and the combing lineage turns more for it ("
+					+ String.format("%.1f", combing[1]) + " vs "
+					+ String.format("%.1f", transect[1]) + " rad/100t)",
+					combing[1] - transect[1], 5.0);
+
+			// And the default searcher does not saw. The old per-tick steer measured
+			// 22.5 rad/100t here; anything near that is a zig-zag whoever wrote it.
+			Genome fresh = new Genome();
+			double[] plain = shape(fresh.searchLeg, fresh.searchCast);
+			assertLess("a default searcher walks rather than saws ("
+					+ String.format("%.1f", plain[1]) + " rad/100t)", plain[1], 12.0);
+
+			// Both genes are heritable, bounded and drifting -- the schema owns that,
+			// so this only checks they were actually declared to it.
+			boolean leg = false, cast = false;
+			for (var gene : net.hedinger.prototype.entities.GeneSchema.genes()) {
+				leg |= gene.key.equals("leg");
+				cast |= gene.key.equals("cast");
+			}
+			assertTrue("the search leg is a gene the schema knows", leg);
+			assertTrue("and so is the cast", cast);
+		}
+	}
+
 	static class SeekWalksToAPatchWithoutSteering extends Scenario {
 		private static final int PATCH_X = 32, PATCH_Y = 7;
 
@@ -14775,6 +14879,7 @@ public class SimTests {
 				new IntentReportsHowItWent(),
 				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
+				new SearchShapeIsTheLineagesOwn(),
 				new OneIntentIsAWholeBehaviour(),
 				new HuntIntentClosesAndBites(),
 				new WaypointRemembersAPlace(),

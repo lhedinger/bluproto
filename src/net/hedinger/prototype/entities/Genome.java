@@ -300,6 +300,34 @@ public class Genome {
 	 * unaffected. Instinct in the genome, deliberation in the mind.
 	 */
 	public double instinct = 0.0;
+	/**
+	 * How long a search leg is held, in ticks, before the body casts about for a
+	 * new heading. With {@link #searchCast} this is the whole of how a lineage
+	 * looks for what it cannot see.
+	 *
+	 * <p>Searching used to be one line with no gene behind it: the turn rate was
+	 * read straight off the {@code S_CLOCK} oscillator every tick, and a sine on
+	 * the TURN RATE integrates to a sawtooth HEADING -- so every creature swung
+	 * about a hundred and thirty degrees each way on a fixed twenty-one tick
+	 * beat. That is the zig-zag, and it was not a decision anyone made; it was
+	 * the shape of the arithmetic. Worse, it was the same shape for every
+	 * lineage in the world, and searching is the state a forager spends most of
+	 * its life in.
+	 *
+	 * <p>As a pair of genes it is a correlated walk and the ends of the range
+	 * are both real strategies: a long leg with a small cast is a straight
+	 * transect, which is how you cross barren ground, and a short leg with a
+	 * wide cast is area-restricted search, which is how you comb the patch you
+	 * have just lost. Which one pays depends on how food is spread, so it is
+	 * exactly the sort of thing to let selection answer rather than decree.
+	 */
+	public int searchLeg = 25;
+	/**
+	 * How far the heading swings at the end of a search leg, in radians. Zero is
+	 * a lineage that searches in a dead straight line; {@link Math#PI} is one
+	 * that may double back. See {@link #searchLeg}.
+	 */
+	public double searchCast = 1.0;
 
 	/** True if this genome reproduces sexually; false if it buds. */
 	public boolean isSexual() {
@@ -435,6 +463,16 @@ public class Genome {
 	 *  ceiling is a few minutes, past which a chase is a career. */
 	@Unit("ticks")
 	public static final int PATIENCE_MIN = 30, PATIENCE_MAX = 6000;
+	/** Bounds on the search leg. The floor is a handful of ticks -- shorter than
+	 *  that and a leg is not a leg, it is the per-tick steering this replaced --
+	 *  and the ceiling is a few hundred, long enough to cross the map on one
+	 *  bearing. */
+	@Unit("ticks")
+	public static final int SEARCH_LEG_MIN = 4, SEARCH_LEG_MAX = 400;
+	/** Ceiling on the search cast. Half a turn: past that a swing is the same
+	 *  angle measured the other way round. */
+	@Unit("radians")
+	public static final double SEARCH_CAST_MAX = Math.PI;
 
 	/**
 	 * Ceiling on the speed gene (tiles/tick). Speed was the one magnitude with no

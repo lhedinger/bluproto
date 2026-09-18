@@ -791,6 +791,10 @@ final class WorldHost {
 					gm.put("drainRate", round(g.drainRate));
 					gm.put("mutationRate", round(g.mutationRate));
 					gm.put("instinct", round(g.instinct));
+					// How this lineage looks for what it cannot see: the length of a
+					// search leg and how far the heading swings at the end of one.
+					gm.put("searchLeg", g.searchLeg);
+					gm.put("searchCast", round(g.searchCast));
 					// WHICH mind this lineage inherited, not whether it has the one the
 					// viewer happened to know about. There are two substrates behind one
 					// seam — an LGP program and an MLP network — and this said
