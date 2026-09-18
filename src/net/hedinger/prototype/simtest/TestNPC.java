@@ -753,10 +753,21 @@ public class TestNPC extends NPC {
 	 * host while hungry IS eating. Every {@link #PARA_BITE_PERIOD} ticks it
 	 * takes {@link #PARA_BITE} health off the host and digests the share of the
 	 * body that health represented — the same meat arithmetic as a hunter's
-	 * bite, so a bigger host is a richer ride. The drain stops on its own when
-	 * the gut is full or the body is collapsed, and a host that dies under
-	 * it is let go of: a parasite drinks lives, not corpses (the carrion niche
-	 * is the scavenger's).
+	 * bite, so a bigger host is a richer ride. A host that dies under it is let
+	 * go of: a parasite drinks lives, not corpses (the carrion niche is the
+	 * scavenger's).
+	 *
+	 * <p><b>It takes only what it has room for.</b> Grazing has always bounded
+	 * its mouthful by {@link #gutRoom()}; this did not, and the {@code hunger
+	 * <= 0} guard could only stop a gut that was EXACTLY full, which the mint
+	 * reopens a sliver of every tick. So a sated parasite went on taking a whole
+	 * point of its host every period, and {@link #feed} clamped away everything
+	 * that would not fit — flesh off a living animal that reached no gut and no
+	 * ground. Measured on a well-fed host: 44.4 energy drunk, 14.2 banked, the
+	 * rest destroyed, and the host dead in 3700 ticks against a mend rate five
+	 * times slower than the drain. Bounded, the drain paces itself to what the
+	 * parasite can actually digest, and the ride becomes the tax its host pays
+	 * — in glycogen if it can afford to mend, in health if it cannot.
 	 */
 	private void parasiteFeed() {
 		net.hedinger.prototype.engine.Entity mount = getAttachTarget();
@@ -770,9 +781,19 @@ public class TestNPC extends NPC {
 		if (hunger <= 0 || !canExert() || age % PARA_BITE_PERIOD != 0) {
 			return;
 		}
-		int consumed = Math.max(0, Math.min(PARA_BITE, h.getHealth()));
+		// What one point of this host is worth once it is across the gut wall,
+		// which is the currency the room is measured in.
+		double perPoint = LEAN_DENSITY * h.leanMass() * FLESH_ASSIMILATION / FULL_BODY_HEALTH;
+		int room = perPoint <= 0 ? PARA_BITE : (int) Math.floor(gutRoom() / perPoint);
+		int consumed = Math.max(0, Math.min(Math.min(PARA_BITE, room), h.getHealth()));
+		if (consumed <= 0) {
+			return; // full: riding, not drinking
+		}
 		double share = h.drainFlesh(consumed / (double) FULL_BODY_HEALTH); // off the living ledger
-		h.damage(PARA_BITE, "parasites");
+		// Charged for what was actually taken, not for what a bite nominally is:
+		// the two were separate numbers, so a bite clamped by the host's last
+		// point of health still billed the whole of it.
+		h.damage(consumed, "parasites");
 		// At the one price of mass: the host mends what was drunk at the same
 		// price, so the pair can never mint energy between them.
 		ingest(LEAN_DENSITY * h.leanMass() * share, FLESH_ASSIMILATION);
