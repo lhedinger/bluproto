@@ -169,6 +169,11 @@ public final class GeneSchema {
 		// bought entirely out of stored fat, which no amount of fat can cover.
 		add("born", "of the adult body", Drift.ADD, 0.12, 0.6, false,
 				g -> g.birthSize, (g, v) -> g.birthSize = v);
+		// The drain's pace. Multiplicative over a fortyfold range, where an
+		// additive step sized for the fast end would carry the slow end straight
+		// through zero and out the other side.
+		add("drain", "host hp/tick", Drift.MULT, 0.005, 0.2, false,
+				g -> g.drainRate, (g, v) -> g.drainRate = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},

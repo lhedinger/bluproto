@@ -769,6 +769,14 @@ public class TestNPC extends NPC {
 	 * parasite can actually digest, and the ride becomes the tax its host pays
 	 * — in glycogen if it can afford to mend, in health if it cannot.
 	 */
+	/** Ticks this body waits between drinks: its lineage's {@link Genome#drainRate}
+	 *  turned into a cadence, since health is whole points and a bite cannot be a
+	 *  fraction of one. A body without a genome drinks at the reference pace. */
+	private int bitePeriod() {
+		double rate = genome != null ? genome.drainRate : PARA_BITE / (double) PARA_BITE_PERIOD;
+		return Math.max(1, (int) Math.round(PARA_BITE / Math.max(1e-9, rate)));
+	}
+
 	private void parasiteFeed() {
 		net.hedinger.prototype.engine.Entity mount = getAttachTarget();
 		if (!(mount instanceof NPC h) || isGrabbed()) {
@@ -778,7 +786,7 @@ public class TestNPC extends NPC {
 			detach();
 			return;
 		}
-		if (hunger <= 0 || !canExert() || age % PARA_BITE_PERIOD != 0) {
+		if (hunger <= 0 || !canExert() || age % bitePeriod() != 0) {
 			return;
 		}
 		// What one point of this host is worth once it is across the gut wall,
@@ -973,7 +981,9 @@ public class TestNPC extends NPC {
  *  with, and what it looks like. Writes through to the genome, which is the
  *  source of truth. */
 	// --- parasitism ---------------------------------------------------------
-	/** Ticks between a riding parasite's bites of its host. */
+	/** Ticks between a riding parasite's bites of its host, for the REFERENCE
+	 *  lineage: the pace itself is {@link Genome#drainRate}, and this is the
+	 *  value that gene is born carrying. */
 	@Unit("ticks")
 	public static final int PARA_BITE_PERIOD = NPC.days(0.015); // ~22 min between drinks
 	/** Health a parasite's bite takes off the host — a slow drain, not an
