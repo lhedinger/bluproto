@@ -56,6 +56,34 @@ Rebase the feature branch onto trunk and resolve there. Do not merge trunk *into
 the feature branch to fix a conflict — that leaves a merge commit inside a branch
 that is about to be rebased, and the conflict comes back.
 
+## Balance work: tune the system, not the seed
+
+Generation-zero creatures are **not** meant to be well configured. Founders are
+noisy seeding — a spread of genomes to start selection from — and a default that
+happens to sit at an optimum is a coincidence, not a goal. So when a constant
+looks wrong, the question is never "what value would make the default creature
+behave well", it is "does the system have a shape that lets a population find
+its own way there, and does it survive while it looks".
+
+Two consequences worth holding on to:
+
+- **Do not move a gene's default to make it optimal.** If founders sit on the
+  wasteful side of some curve, that is a gradient for selection to climb, which
+  is the machine working. Move a default only when the seed is *unviable* — when
+  gen-0 cannot make a living at all, the niche dies before selection can act,
+  and nothing adapts to anything.
+- **Judge a calibration on the population, not on the fixture.** A constant is
+  right when the world stays alive across a range of it and the behaviour bends
+  in the direction the mechanism implies. Run the demo world either side of the
+  change and read the guild counts; a scenario passing is necessary and nowhere
+  near sufficient.
+
+Viability of the seed is therefore the real constraint on how hard a knob can be
+turned, and it is worth measuring directly rather than inferring. When travel
+cost was recalibrated, the ceiling turned out to be a founder predator's ability
+to run prey down at all — healthy at 0.8, gone by 1.0 — and that, not the
+arithmetic, is what picked the number.
+
 ## Pull requests
 
 - Do not open a PR unless it was asked for.
