@@ -256,10 +256,22 @@ movement rather than intent.
   linearly with v — twice as fast is four times as expensive per tick and twice as
   expensive per tile. Covering ground is cheapest slowly, so speed has to buy
   something real (escaping, catching) to be worth its price.
+- **Resting is cheapest, moving costs more than resting, and of two travelling
+  paces the slower one covers ground cheaper.** The first is free — travel is
+  never negative. The other two are a calibration, because a tile costs
+  `basal/v + TRANSPORT_COST·mass·v`: the second term rewards going slowly and the
+  first punishes it, since dawdling means paying to exist for longer. Their sum
+  bottoms out at **`v* = √(basal / TRANSPORT_COST)`** and rises again below it.
+  No setting of the constants removes that — anything that pays to exist has a
+  worst-of-both-worlds crawl — so `TRANSPORT_COST` is set to put `v*` *below* the
+  speeds bodies actually travel at. Measured on the live world, 60% of all ground
+  covered is above `v*` at 0.625, against 32% at the old 0.2. Both remaining
+  orderings are the same statement: `moving costs more than resting` and `slower
+  is cheaper per tile` each hold exactly when `v > v*`.
 - **Travel is mass-neutral in glycogen terms.** `travel / capacity` reduces to
-  `distance / 600` with the mass cancelling: crossing the map costs *every*
-  creature the same fraction of its reserve. Being big buys endurance at rest and
-  nothing at all for covering ground.
+  `distance · TRANSPORT_COST · v / GLYCOGEN_PER_MASS` with the mass cancelling:
+  crossing the map costs *every* creature the same fraction of its reserve. Being
+  big buys endurance at rest and nothing at all for covering ground.
 - **A load is simply extra mass.** Carrying has no separate toll; whatever a
   creature hauls makes it heavier and is billed through movement. Standing still
   under a load is nearly free; walking off with it costs in proportion. Flight
