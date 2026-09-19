@@ -364,7 +364,7 @@ public abstract class NPC extends Entity {
 	 * several times over rather than merely proportionally.
 	 */
 	@Unit("energy/tick at mass 1, speed 1")
-	public static double TRANSPORT_COST = 0.2;
+	public static double TRANSPORT_COST = 0.625;
 
 	/** This creature's clade ("herbivore", "predator", ...), or "" for
 	 *  species outside the eco simulation. Virtual so the engine's per-tick

@@ -746,6 +746,95 @@ public class SimTests {
 	}
 
 	/**
+	 * Resting is the cheapest thing a body can do, moving costs more than
+	 * resting, and among paces that are actually travel, the slower one is the
+	 * cheaper way to cover ground.
+	 *
+	 * <p>The last of those is not free, and it is worth saying why. Travel is
+	 * charged per tick and so is the resting burn, so the cost of a TILE is
+	 * {@code basal/v + TRANSPORT_COST·mass·v}: the second term rewards going
+	 * slowly and the first punishes it, because dawdling means paying to exist
+	 * for longer. Their sum bottoms out at {@code v* = sqrt(basal /
+	 * TRANSPORT_COST)} and rises again below it. There is no setting of the
+	 * constants that removes that — an animal that pays to exist always has a
+	 * worst-of-both-worlds crawl — so the calibration puts {@code v*} BELOW the
+	 * speeds bodies actually travel at, and the assertion that it is there is
+	 * the third one here: at the reference body's own pace, moving costs more
+	 * than resting, which is the same statement as {@code v* < that pace}.
+	 *
+	 * <p>Measured on twins in a barren corridor with their glycogen topped up
+	 * each tick, so this weighs the bill rather than the range.
+	 */
+	static class RestingIsCheapestAndWalkingBeatsRunning extends Scenario {
+		private static final int TICKS = 2000;
+
+		/** {distance, glycogen burned} for a body of {@code top} speed at
+		 *  {@code throttle}, over a fixed span of ticks. */
+		private double[] gait(double top, double throttle) {
+			seed(41);
+			World w = room(300, 12);
+			for (int x = 1; x < 299; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // nothing to eat: the books only go out
+				}
+			}
+			Genome g = new Genome();
+			g.size = 8;
+			g.speed = top;
+			Mind drive = (sn, act) -> act[AgentIO.A_THROTTLE] = throttle;
+			TestNPC n = TestNPC.minded(3.5, 5.5, 0, g, drive).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000).withHeading(0);
+			w.spawnEntity(n);
+			tick(w, 1);
+			double cap = n.glycogenCapacity(), dist = 0, burn = 0;
+			for (int t = 0; t < TICKS; t++) {
+				n.withGlycogen(cap).withHydration(1.0); // topped up: the bill, not the range
+				tick(w, 1);
+				burn += cap - n.getGlycogen();
+				dist += n.lastStep();
+			}
+			return new double[] { dist, burn };
+		}
+
+		@Override
+		public void run() {
+			// A travelling pace and half of it. Both are above v*, which is where
+			// the claim lives -- see the note above.
+			double[] rest = gait(0.12, 0.0);
+			double[] walk = gait(0.12, 0.5);
+			double[] run = gait(0.12, 1.0);
+
+			assertNear("a resting body goes nowhere", 0, rest[0], 1e-9);
+			assertGreater("a walking body covers ground", walk[0], 100);
+			assertGreater("and a running one covers more", run[0], 1.9 * walk[0]);
+
+			// 1. Per tick: resting is the cheapest thing a body can do.
+			assertGreater("walking burns more per tick than resting ("
+					+ String.format("%.4f against %.4f", walk[1] / TICKS, rest[1] / TICKS) + ")",
+					walk[1], 1.5 * rest[1]);
+			assertGreater("and running more than walking ("
+					+ String.format("%.4f against %.4f", run[1] / TICKS, walk[1] / TICKS) + ")",
+					run[1], 1.5 * walk[1]);
+
+			// 2. Per tile: of two travelling paces, the slower is the cheaper way
+			// to cover ground. This is the one that was the wrong way round.
+			double perTileWalk = walk[1] / walk[0], perTileRun = run[1] / run[0];
+			assertLess("walking is the cheaper way to cover a tile ("
+					+ String.format("%.4f against %.4f", perTileWalk, perTileRun) + ")",
+					perTileWalk, 0.9 * perTileRun);
+
+			// 3. And moving costs more than existing, at the pace a reference body
+			// actually travels at -- which is what puts v* below ordinary travel.
+			double reference = new Genome().speed;
+			double travelAtPace = NPC.TRANSPORT_COST * reference * reference;
+			double restingBurn = NPC.BASAL_RATE;
+			assertGreater("at the reference body's own pace, moving costs more than resting ("
+					+ String.format("%.5f against %.5f per tick", travelAtPace, restingBurn) + ")",
+					travelAtPace, 1.5 * restingBurn);
+		}
+	}
+
+	/**
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
 	 * lays what glycogen cannot take down as mass, at the one price; a body
 	 * whose gut runs empty draws that mass back into the gut at the same
@@ -3054,10 +3143,12 @@ public class SimTests {
 			// A fixed growth rate over the longest possible climb: ~1 minute at
 			// 33 ticks/s. Bounded on both sides so the rate cannot drift unnoticed.
 			// A child buys two thirds of its lean mass out of what it eats, at the one
-			// price of mass, so a childhood is measured in minutes of grazing.
+			// price of mass, so a childhood is measured in minutes of grazing -- and
+			// in walking between patches, which is why the bound moved out when
+			// getting about got dearer.
 			int oneMinute = 60 * net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
 			assertGreater("the longest childhood takes minutes (" + large + " ticks)", large, oneMinute);
-			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 7);
+			assertLess("but only a few (" + large + " ticks)", large, oneMinute * 8);
 
 			// Growth is physical, not economic: glycogen is anchored on the adult
 			// body, so a newborn's breeding economy matches a grown one's.
@@ -14374,6 +14465,7 @@ public class SimTests {
 				new AFreshCarcassSitsBeforeItRots(),
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
+				new RestingIsCheapestAndWalkingBeatsRunning(),
 				new FatIsTheBodysStore(),
 				new ALineageDecidesHowBigItsYoungAreBorn(),
 				new WhatIsNotAbsorbedFeedsTheGround(),
