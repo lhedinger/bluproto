@@ -7911,16 +7911,20 @@ public class SimTests {
 			return out;
 		}
 
+		/** How far apart two markers are, as the widest gap on any axis. */
+		private static double separation(TestNPC a, TestNPC b) {
+			double[] ma = a.getGenome().markers, mb = b.getGenome().markers;
+			double worst = 0;
+			for (int i = 0; i < ma.length; i++) {
+				worst = Math.max(worst, Math.abs(ma[i] - mb[i]));
+			}
+			return worst;
+		}
+
 		/** Same species: markers within one kin step of each other on every axis
 		 *  -- exact copies (the founding herds) and a kin group's siblings alike. */
 		private static boolean sameSpecies(TestNPC a, TestNPC b) {
-			double[] ma = a.getGenome().markers, mb = b.getGenome().markers;
-			for (int i = 0; i < ma.length; i++) {
-				if (Math.abs(ma[i] - mb[i]) > 2 * net.hedinger.prototype.sim.Worlds.KIN_RATE + 1e-9) {
-					return false;
-				}
-			}
-			return true;
+			return separation(a, b) <= 2 * net.hedinger.prototype.sim.Worlds.KIN_RATE + 1e-9;
 		}
 
 		/** Share of {@code bodies} that have a same-species body within {@code r}
@@ -8002,10 +8006,24 @@ public class SimTests {
 					+ newcomers.size() + ")", newcomers.size() < 2 * floor + group);
 			assertEquals("in whole groups", 0, newcomers.size() % group);
 			java.util.List<java.util.List<TestNPC>> groups = new java.util.ArrayList<>();
+			// Sorted into the group it is CLOSEST to, not the last one it happens
+			// to be within a kin step of. A reseed draws its founders from the
+			// standing population, so two of the groups can be near neighbours in
+			// marker space, and a newcomer then matches both: measured on seed 11,
+			// five of eighty newcomers matched more than one group. Taking the
+			// last match made the sorting depend on the order the groups were
+			// discovered in, which is the RNG stream -- so this assertion passed or
+			// failed on changes nowhere near it, and reported a reseed that had
+			// emitted sixteen clean groups of five as four and six. Nearest is
+			// deterministic and order-free, and it is what "which group is this
+			// one's" actually means.
 			for (TestNPC n : newcomers) {
 				java.util.List<TestNPC> mine = null;
+				double best = Double.MAX_VALUE;
 				for (java.util.List<TestNPC> g : groups) {
-					if (sameSpecies(g.get(0), n)) {
+					double d = separation(g.get(0), n);
+					if (sameSpecies(g.get(0), n) && d < best) {
+						best = d;
 						mine = g;
 					}
 				}
