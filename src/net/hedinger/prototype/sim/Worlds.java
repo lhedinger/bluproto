@@ -549,6 +549,25 @@ public final class Worlds {
 					t = detail > 0.78 ? Tile.TileType.TYPE_QUICKSAND
 							: detail > 0.44 && detail < 0.58 ? Tile.TileType.TYPE_SCRUB
 							: Tile.TileType.TYPE_SAND;
+					// And the cactus, which until now existed everywhere except in
+					// the world: it had a tile type, a painter, a ramp row and a
+					// catalog entry, and demo() never placed one. Four seeds
+					// checked, not a single cactus in any of them -- the desert's
+					// one STANDING plant was art nobody had ever seen.
+					//
+					// Scattered on a FAST field rather than carved out of `detail`
+					// like its neighbours. A cactus is a specimen where the scrub
+					// is a field, so it wants a thin slice -- and a thin slice of a
+					// slow noise is an isoline, which is to say a contour: the
+					// first attempt put them in tidy rows across the pan and read
+					// as an orchard someone had planted. A fast field thresholded
+					// high scatters instead of contouring. Only plain sand is
+					// eligible, so a cactus never displaces the pan's cover or
+					// stands in quicksand.
+					if (t == Tile.TileType.TYPE_SAND
+							&& Utils.noise2(x + 2200, y + 60, 0.95) > 0.72) {
+						t = Tile.TileType.TYPE_CACTUS;
+					}
 					fert = 0;
 				} else if (elev > 0.58 && moist < 0.40) {
 					t = Tile.TileType.TYPE_FLOOR;
