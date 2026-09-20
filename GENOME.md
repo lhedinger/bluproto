@@ -283,6 +283,33 @@ movement rather than intent.
   for a mind) and the quadratic law prices that choice continuously at every
   speed, rather than only above a threshold.
 
+### How long a body gets
+
+```
+lifespan = maxAge · mass^0.25 / (metabolism / META_REF)
+```
+
+`maxAge` is the life of a body at the **reference** mass and the reference
+pace — 15 days for a default genome, 12 to 25 days across a founder draw. What
+a body actually gets is that scaled by the two things that set the length of a
+life:
+
+- **Mass buys time**, on `mass^0.25` — the same exponent, for the same reason,
+  that already gives a bigger body its longer fast: capacities grow with mass
+  while the Kleiber burn only grows with `mass^0.75`.
+- **Pace spends it**, on `1 / eff` — a body running every rate at twice the
+  reference wears out in half the years. This is the rate-of-living trade, and
+  it is what stops a fast metabolism being free. It was already not free in
+  income terms (a fast burner breeds *worse* than the reference on good ground,
+  because income is limited by how fast a mouth finds food rather than by how
+  fast a gut can take it); now it is not free in years either.
+
+The span is anchored on the **adult** body, not on the body today: how long a
+lineage lives is a fact about the animal it grows into. Ageing is a hard stop,
+not a decline — there is no senescence yet, so nothing charges for growing old,
+which is why `maxAge` carries a ceiling in the schema. Without one the gene
+strictly dominates upward and would ratchet to whatever it were allowed.
+
 ### The income side — what food is worth
 
 Spending is mass-based everywhere above, so income is too.
