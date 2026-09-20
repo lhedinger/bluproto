@@ -20,9 +20,6 @@ import net.hedinger.prototype.engine.World;
  */
 public abstract class Scenario {
 
-	private final java.util.List<String> shotLabels = new java.util.ArrayList<String>();
-	private final java.util.List<java.awt.image.BufferedImage> shots = new java.util.ArrayList<java.awt.image.BufferedImage>();
-
 	/** Short name shown in the runner output. */
 	public String name() {
 		return getClass().getSimpleName();
@@ -30,42 +27,6 @@ public abstract class Scenario {
 
 	/** Runs the scenario; throws AssertionError on failure. */
 	public abstract void run();
-
-	// ---- snapshots ---------------------------------------------------------
-
-	/** True when the runner asked for snapshots (-Dsimtest.shots=&lt;dir&gt;). */
-	static boolean captureEnabled() {
-		return System.getProperty("simtest.shots") != null;
-	}
-
-	/** True when snapshots should be the single-field atlas (-Dsimtest.atlas). */
-	static boolean atlasEnabled() {
-		return System.getProperty("simtest.atlas") != null;
-	}
-
-	/**
-	 * Captures a labelled screenshot of the world (all levels, side by side)
-	 * with the debug overlay: heading arrows, state labels, carry links and
-	 * closed-door markers. A no-op (zero cost) unless capture is enabled, so
-	 * scenarios can call {@code snapshot(w, "before")} / {@code snapshot(w,
-	 * "after")} freely and normal test runs stay fast. The runner composes the
-	 * captures for a scenario into one before/after strip.
-	 */
-	protected void snapshot(World w, String label) {
-		if (!captureEnabled()) {
-			return;
-		}
-		shots.add(atlasEnabled() ? FieldAtlas.render(w) : SnapshotRenderer.render(w));
-		shotLabels.add(label);
-	}
-
-	java.util.List<String> shotLabels() {
-		return shotLabels;
-	}
-
-	java.util.List<java.awt.image.BufferedImage> shots() {
-		return shots;
-	}
 
 	// ---- world building ---------------------------------------------------
 
@@ -108,58 +69,6 @@ public abstract class Scenario {
 	protected void tick(World w, int n) {
 		for (int i = 0; i < n; i++) {
 			w.think();
-			if (recording()) {
-				captureFrame(w);
-			}
-		}
-	}
-
-	// ---- real-time recording ----------------------------------------------
-	// The live simulation steps ~every 30 ms (SimulationRunner's fixed
-	// cadence), so ~33 ticks/sec. Recording captures every tick; encode the
-	// frames at this rate for true real-time.
-	public static final int REALTIME_FPS = 33;
-
-	private int recFrame = -1;
-	private java.io.File recDir;
-
-	/** In-process frame tap for the {@link RecordScenario} tool: when set,
-	 *  every tick of a running scenario hands its world here (the tool
-	 *  renders and subsamples as it pleases) instead of streaming PNGs the
-	 *  {@code -Dsimtest.record} way. */
-	static java.util.function.Consumer<World> frameSink;
-
-	/** Whether to record every tick of this scenario, via
-	 *  {@code -Dsimtest.record=<ScenarioName>} (or {@code *} for all). */
-	private boolean recording() {
-		if (frameSink != null) {
-			return true;
-		}
-		String want = System.getProperty("simtest.record");
-		return want != null && (want.equals("*") || want.equalsIgnoreCase(name()));
-	}
-
-	/** Writes one full-world frame per tick to {@code out/rec/<name>/}. */
-	private void captureFrame(World w) {
-		if (frameSink != null) {
-			frameSink.accept(w);
-			return;
-		}
-		try {
-			if (recFrame < 0) {
-				recDir = new java.io.File("out/rec/" + name());
-				recDir.mkdirs();
-				for (java.io.File f : recDir.listFiles()) {
-					f.delete();
-				}
-				recFrame = 0;
-				System.out.println("recording " + name() + " -> " + recDir.getPath()
-						+ "  (encode at " + REALTIME_FPS + " fps for real time)");
-			}
-			javax.imageio.ImageIO.write(SnapshotRenderer.render(w), "png",
-					new java.io.File(recDir, String.format("f%05d.png", recFrame++)));
-		} catch (java.io.IOException e) {
-			throw new RuntimeException(e);
 		}
 	}
 
