@@ -7733,9 +7733,25 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(77);
-			for (int adult : new int[] { 8, 13, 20 }) {
+			// Size AND pace are pinned, and the three cases span the founder band
+			// (mindedGenome draws 0.04..0.07) rather than sampling one point of it
+			// at random. The subject here is whether the endowment PRICES the
+			// childhood, and movement costs mass times v squared -- so a speed left
+			// to the draw is a variable the scenario does not control, sitting
+			// underneath the one it is asserting. It cost about seventy per cent
+			// either way on the child's final glycogen, which is the difference
+			// between this passing and failing, and it fired on stream shifts from
+			// changes nowhere near it: two extra Utils.random() calls in
+			// Genome.random(), with no behaviour attached at all, are enough to
+			// fail it. Pinned, the three cases test the pricing across the whole
+			// speed range instead of one arbitrary point of it.
+			double[] paces = { 0.04, 0.055, 0.07 };
+			int[] adults = { 8, 13, 20 };
+			for (int c = 0; c < adults.length; c++) {
+				int adult = adults[c];
 				Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 				founder.size = adult;
+				founder.speed = paces[c];
 				net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
 				double cap = NPC.GLYCOGEN_PER_MASS * adult / NPC.REF_SIZE;
 				double bill = TestNPC.endowmentCost(adult, founder.speed);
