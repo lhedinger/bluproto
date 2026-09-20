@@ -1155,6 +1155,7 @@ public final class ServerTests {
 		// number that changes -- so "the kind bit" became a kind FIELD, and a test
 		// that checked one flag would have passed while a whole plant vanished.
 		int levelsWithPlants = 0, seenFungus = 0, seenCactus = 0;
+		java.util.Map<Integer, Integer> seenFlora = new java.util.TreeMap<>();
 		for (int z = 0; z < host.levelsForTest(); z++) {
 			byte[] kinds = host.vegKinds(z);
 			if (kinds == null) {
@@ -1193,6 +1194,9 @@ public final class ServerTests {
 				if (kind == VegFeed.KIND_CACTUS) {
 					seenCactus++;
 				}
+				if (kind != VegFeed.KIND_FUNGUS && kind != VegFeed.KIND_CACTUS) {
+					seenFlora.merge(kind, 1, Integer::sum);
+				}
 				// The stage must survive alongside the kind, or every plant would
 				// draw as "nothing stands here" and the fix would swap one blank
 				// for another.
@@ -1211,6 +1215,17 @@ public final class ServerTests {
 		// the client is invisible to every other check in this suite, so if it
 		// stops being marked on the wire nothing else fails.
 		check("and so do cacti (" + seenCactus + ")", seenCactus > 0);
+		// The surface floras ride the same field as an index above the stage.
+		// Each has to arrive, and nothing may arrive that no painter knows: an
+		// index the client has no sprite for draws as grass and the plant is
+		// simply gone, which is how the mushroom went unseen for months.
+		for (int k : new int[] { VegFeed.KIND_FERN, VegFeed.KIND_FLOWERS,
+				VegFeed.KIND_HEATHER, VegFeed.KIND_MOSS }) {
+			check("flora " + (k >> VegFeed.KIND_SHIFT) + " reaches the viewer " + seenFlora,
+					seenFlora.getOrDefault(k, 0) > 0);
+		}
+		check("and no kind arrives that has no plant behind it " + seenFlora,
+				seenFlora.keySet().stream().allMatch(k -> k >= VegFeed.KIND_FERN && k <= VegFeed.KIND_MOSS));
 	}
 
 	/**

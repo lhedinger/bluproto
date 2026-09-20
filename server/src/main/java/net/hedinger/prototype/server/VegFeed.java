@@ -67,16 +67,29 @@ final class VegFeed {
 	 */
 	static final int KIND_FUNGUS = 0x80;
 
-	/** The second kind bit. Grass is 0, a fungus bed 0x80, a cactus 0x40 -- two
-	 *  bits, so the field has room for a fourth plant before the byte has to be
-	 *  rethought. The fungus keeps the value it already had rather than being
-	 *  renumbered into a tidier order: nothing is gained by moving it, and a
-	 *  wire value that changes for aesthetic reasons is a wire value that can
-	 *  change again. */
+	/** The cactus. It and the fungus keep the wire values they already had
+	 *  rather than being renumbered into a tidier order: nothing is gained by
+	 *  moving them, and a wire value that changes for aesthetic reasons is a
+	 *  wire value that can change again. */
 	static final int KIND_CACTUS = 0x40;
 
-	/** Both kind bits, for a reader that wants the field rather than one flag. */
-	static final int KIND_MASK = KIND_FUNGUS | KIND_CACTUS;
+	/**
+	 * The surface floras: the meadow's one crop drawn as four plants
+	 * ({@link net.hedinger.prototype.engine.Tile#getFlora}). The field was two
+	 * flag bits and had room for exactly one more plant, so it became a five-bit
+	 * INDEX above the three stage bits -- {@code kind << KIND_SHIFT} -- with the
+	 * fungus (16) and cactus (8) landing on the same bytes they always sent.
+	 * The floras take the low indices, so the client can read them straight off
+	 * the tile's own {@code FLORA_*} numbering.
+	 */
+	static final int KIND_SHIFT = 3;
+	static final int KIND_FERN = 1 << KIND_SHIFT;
+	static final int KIND_FLOWERS = 2 << KIND_SHIFT;
+	static final int KIND_HEATHER = 3 << KIND_SHIFT;
+	static final int KIND_MOSS = 4 << KIND_SHIFT;
+
+	/** The whole kind field, for a reader that wants it rather than one flag. */
+	static final int KIND_MASK = 0xF8;
 
 	/** The stage bits: 0 nothing stands here, 1..5 the sprite to draw. */
 	static final int STAGE_MASK = 0x07;

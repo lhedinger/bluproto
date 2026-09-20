@@ -725,6 +725,7 @@ function renderTileInspect(d: Record<string, any>): void {
     row('type', d.type),
     row('flags', flags),
     row('fertility', Number(d.fertility).toFixed(3)),
+    ...(d.flora ? [row('flora', String(d.flora))] : []),
     bar('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`, pct),
   ];
   inspectEl.innerHTML =

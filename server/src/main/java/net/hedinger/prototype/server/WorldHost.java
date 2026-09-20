@@ -848,6 +848,13 @@ final class WorldHost {
 		// creature standing in it can't be seen.
 		d.put("blocksSight", t.blocksSight());
 		d.put("fertility", round(t.getFertility()));
+		// What the crop is drawn as, for a tile that grows one. The viewer's
+		// tile card names it, because a fern bed and a meadow feed a grazer the
+		// same and nothing else about the card would say why they look different.
+		if (t.growsVegetation()) {
+			d.put("flora", t.getType() == Tile.TileType.TYPE_FUNGUS ? "fungus"
+					: new String[] { "grass", "fern", "wildflowers", "heather", "moss" }[t.getFlora()]);
+		}
 		d.put("food", round(t.getVegetation(tick)));
 		d.put("foodCap", round(t.vegetationCap()));
 		return d;
@@ -1071,10 +1078,13 @@ final class WorldHost {
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
 				Tile t = w.getTile(x, y, z);
+				// A bed and a cactus are tile types; everything else that grows
+				// says which plant it is on its own flora byte, and the wire index
+				// IS that byte, shifted above the stage.
 				k[y * cols + x] = (byte) (t == null ? 0
 						: t.getType() == Tile.TileType.TYPE_FUNGUS ? VegFeed.KIND_FUNGUS
 						: t.getType() == Tile.TileType.TYPE_CACTUS ? VegFeed.KIND_CACTUS
-						: 0);
+						: t.getFlora() << VegFeed.KIND_SHIFT);
 			}
 		}
 		return k;
