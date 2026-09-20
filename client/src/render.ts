@@ -114,7 +114,7 @@ function vegLayerUpdate(meta: WorldMeta, chunkTiles: number,
         // along, and visible in the catalog — never reached the world.
         const stage = s & VEG_STAGE_MASK;
         if (stage > 0) {
-          const kind: VegKind = (s & VEG_KIND_MASK) !== 0 ? 'mushroom' : 'grass';
+          const kind: VegKind = vegKindOf(s);
           cg.drawImage(vegetationTileFor(kind, stage, vegVariant(gx, gy)), tx * ART, ty * ART);
         }
       }
@@ -1543,14 +1543,25 @@ export function ductLidTile(vertical: boolean): HTMLCanvasElement {
 // integration (drawing these over the baked ground per tile, replacing the
 // baked-in grass) comes later; the sprites and this painter are the record.
 
-/** High bit of a vegetation byte: this tile grows fungus rather than grass.
- *  Set by the server in the full grid only (VegFeed.KIND_FUNGUS); deltas carry
- *  density alone, because terrain never changes underfoot. */
-export const VEG_KIND_MASK = 0x80;
-/** The low bits: growth stage, 0 = nothing grows here, 1..5 = trampled to lush. */
+/** The kind bits of a vegetation byte: which plant a tile carries. Grass is 0,
+ *  a fungus bed 0x80, a cactus 0x40 (VegFeed.KIND_*). Set by the server in the
+ *  full grid only; deltas carry density alone, because terrain never changes
+ *  underfoot. Two bits, so there is room for a fourth plant before the byte has
+ *  to be rethought. */
+export const VEG_KIND_FUNGUS = 0x80;
+export const VEG_KIND_CACTUS = 0x40;
+export const VEG_KIND_MASK = VEG_KIND_FUNGUS | VEG_KIND_CACTUS;
+/** The low bits: growth stage, 0 = nothing stands here, 1..5. For a crop that
+ *  is how much has grown; for a cactus it is how old the plant is. */
 export const VEG_STAGE_MASK = 0x07;
-export type VegKind = 'grass' | 'mushroom';
-export const VEG_KINDS: VegKind[] = ['grass', 'mushroom'];
+export type VegKind = 'grass' | 'mushroom' | 'cactus';
+export const VEG_KINDS: VegKind[] = ['grass', 'mushroom', 'cactus'];
+
+/** Which plant a vegetation byte describes. */
+export function vegKindOf(b: number): VegKind {
+  return (b & VEG_KIND_FUNGUS) !== 0 ? 'mushroom'
+    : (b & VEG_KIND_CACTUS) !== 0 ? 'cactus' : 'grass';
+}
 export const VEG_STAGES = 5;
 export const VEG_VARIANTS = 4;
 
@@ -1577,6 +1588,54 @@ const SHROOM_DEAD = '#6e5f42';     // sand shadow: what a grazed bed leaves
 /** §4's contact shadow, at the same weight the loader's stands on. */
 const SHADE = 'rgba(0,0,0,0.42)';
 
+// The cactus: the flora family's green, verbatim from the ground ramp it used
+// to be baked with (GroundTextures.RAMP[CLS_CACTUS]), plus the bloom red every
+// other flowering thing in this world wears.
+const CACTUS = ['#2a4d24', '#3f7a38', '#5f9850'];
+const CACTUS_BLOOM = '#e0455f';
+
+/**
+ * Five authored stamps, ordered YOUNGEST TO OLDEST: a shoot, a bare column,
+ * one arm, two arms, and a veteran carrying three.
+ *
+ * <p>These were baked into the ground until now, and the ground bake is static
+ * — so a cactus could only ever be as old as its POSITION said, and a growing
+ * one would have needed the whole chunk re-baked to show it. Here, on the
+ * vegetation sprite layer beside the mushroom, the stage arrives per tile on
+ * the veg feed and changes whenever the server says it does. Nothing about the
+ * drawing had to change for that; only which layer it lives in.
+ *
+ * <p>The order is the point. A cactus does not have five looks, it has one life
+ * with five moments in it, and the stage indexes them — so when vegetation
+ * starts growing, a real age lands on a ladder that already climbs.
+ *
+ * <p>Marks: `h` a lit tip, `b` the body, `d` the sunk flank, `x` the contact
+ * shadow on the sand, `.` nothing. Silhouettes double by mirroring, which is
+ * lossless on a square grid and, unlike a rotation, keeps the sun where it is.
+ */
+const CACTUS_FORMS = [
+  // a shoot: this year's growth, no arms yet
+  ['............', '............', '............', '............',
+   '............', '............', '.....hh.....', '.....bb.....',
+   '.....bb.....', '.....dd.....', '.....xx.....', '............'],
+  // a bare column, grown tall but still unbranched
+  ['............', '............', '....hh......', '....bb......',
+   '....bb......', '....bb......', '....bb......', '....bb......',
+   '....bb......', '....dd......', '....xx......', '............'],
+  // the first arm
+  ['............', '....hh......', '....bb......', '....bb......',
+   '....bb.hh...', '....bb.bb...', '....bbbbb...', '....bb.d....',
+   '....bb......', '....dd......', '....xx......', '............'],
+  // two arms
+  ['............', '....hh......', '....bb......', '.hh.bb......',
+   '.bb.bb.hh...', '.dbbbb.bb...', '....bbbbb...', '....bb.d....',
+   '....bb......', '....dd......', '....xx......', '............'],
+  // a veteran: three arms, the oldest thing standing in the pan
+  ['....hh......', '....bb......', '.hh.bb.hh...', '.bb.bb.bb...',
+   '.bbbbbbbb...', '.d..bb..d...', '....bb.hh...', '....bbbbb...',
+   '....bb.d....', '....dd......', '....xx......', '............'],
+];
+
 /**
  * Paints one vegetation tile at (x, y) with `px` screen pixels per art pixel.
  * Deterministic per (kind, stage, variant): the same triple always paints the
@@ -1591,6 +1650,10 @@ export function drawVegetationTile(g: CanvasRenderingContext2D, kind: VegKind,
     g.fillStyle = col;
     g.fillRect(x + ax * px, y + ay * px, px, px);
   };
+  if (kind === 'cactus') {
+    drawCactus(g, stage, variant, x, y, px);
+    return;
+  }
   if (kind === 'grass') {
     if (stage <= 1) {
       // Trampled leftovers: flattened dry strokes lying sideways, a few crumbs.
@@ -1679,6 +1742,32 @@ export function drawVegetationTile(g: CanvasRenderingContext2D, kind: VegKind,
     shroom(bx <= 4 ? bx + 5 : bx - 4, by <= 5 ? by + 4 : by - 3, true);
     shroom(Math.min(10, ox + 1), Math.min(10, oy + 1), false);
     if (rnd(55) > 0.3) bud((bx + ox) % 10 + 1, 9);
+  }
+}
+
+/**
+ * One cactus, at the moment of its life `stage` puts it in.
+ *
+ * <p>Mirror and bloom are taken from the VARIANT rather than from a position,
+ * because the sprite is baked once per (kind, stage, variant) and cached: a
+ * mark that depended on anything else would be drawn once and then reused
+ * everywhere, which is the same cache serving two different plants.
+ */
+function drawCactus(g: CanvasRenderingContext2D, stage: number, variant: number,
+    x: number, y: number, px: number): void {
+  const form = CACTUS_FORMS[Math.max(0, Math.min(CACTUS_FORMS.length - 1, stage - 1))];
+  const mirror = (variant & 1) !== 0;
+  const flowers = (variant & 2) !== 0 && stage >= 3; // only a grown plant blooms
+  for (let ay = 0; ay < 12; ay++) {
+    for (let ax = 0; ax < 12; ax++) {
+      const c = form[ay][mirror ? 11 - ax : ax];
+      if (c === '.') continue;
+      g.fillStyle = c === 'h' ? (flowers && ay <= 2 ? CACTUS_BLOOM : CACTUS[2])
+        : c === 'b' ? CACTUS[1]
+        : c === 'd' ? CACTUS[0]
+        : SHADE; // 'x', the contact shadow: it stands on the sand
+      g.fillRect(x + ax * px, y + ay * px, px, px);
+    }
   }
 }
 

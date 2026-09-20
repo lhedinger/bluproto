@@ -384,7 +384,13 @@ for (const kind of VEG_KINDS) {
   pair(vegSec, bed ? `${kind} growing on flat tone and on its own bed`
       : `${kind} growing on two grounds`, D * 2 + 12, D, (g, t) => {
     const stage = 1 + Math.floor((t % 7.5) / 1.5);
-    for (const [gx, tone] of [[0, '#3f7a38'], [D + 12, '#584430']] as const) {
+    // Each plant over the ground it actually stands on: grass and mushroom on
+    // soil, the cactus on sand. A cactus shown over loam is a picture of a
+    // plant somewhere it would die.
+    const tones: readonly [number, string][] = kind === 'cactus'
+      ? [[0, '#98865c'], [D + 12, '#6e5f42']]
+      : [[0, '#3f7a38'], [D + 12, '#584430']];
+    for (const [gx, tone] of tones) {
       g.imageSmoothingEnabled = false;
       if (bed && gx > 0) {
         g.drawImage(bed, 0, 0, bed.width, bed.height, gx, 0, D, D);
