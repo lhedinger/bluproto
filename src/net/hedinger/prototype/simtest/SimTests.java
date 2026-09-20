@@ -1558,6 +1558,102 @@ public class SimTests {
 	}
 
 	/**
+	 * The cactus is a life with five moments in it, and the desert holds all of
+	 * them.
+	 *
+	 * <p>It was one stamp, so every cactus in the world was the same cactus,
+	 * and the world contained none of them anyway — demo() never placed one, so
+	 * the tile type, the painter, the ramp row and the catalog entry were all
+	 * art nobody had seen. Both halves are pinned here because each would pass
+	 * silently without the other: a growth ladder nothing plants is still
+	 * invisible, and a planted desert of identical plants is still wallpaper.
+	 *
+	 * <p>The ORDER of the table is the part that will still matter when
+	 * vegetation stops being static. {@code maturity} indexes it, and today
+	 * that argument carries a world-space field; later it carries an age. So
+	 * this asserts the ladder actually climbs — each form drawn with more of
+	 * the plant in it than the one before — because a table whose order means
+	 * nothing is a table that will quietly mean nothing when a real age is
+	 * plugged into it.
+	 */
+	static class ACactusIsALifeNotAStamp extends Scenario {
+		@Override
+		public void run() {
+			final int A = net.hedinger.prototype.engine.GroundTextures.ART;
+			assertEquals("five moments of a cactus's life", 5,
+					GroundTextures.CACTUS_FORMS_N);
+
+			// ---- the ladder climbs ---------------------------------------
+			int prev = -1;
+			java.util.Set<String> shapes = new java.util.HashSet<>();
+			for (int i = 0; i < GroundTextures.CACTUS_FORMS_N; i++) {
+				String[] f = GroundTextures.cactusForm(i);
+				assertEquals("form " + i + " is a full tile tall", A, f.length);
+				int plant = 0, shadow = 0;
+				StringBuilder flat = new StringBuilder();
+				for (String row : f) {
+					assertEquals("form " + i + " is a full tile wide", A, row.length());
+					for (char c : row.toCharArray()) {
+						assertTrue("only authored marks, never a blend: " + c,
+								c == '.' || c == 'h' || c == 'b' || c == 'd' || c == 'x');
+						if (c == 'h' || c == 'b' || c == 'd') {
+							plant++;
+						}
+						if (c == 'x') {
+							shadow++;
+						}
+					}
+					flat.append(row);
+				}
+				assertGreater("form " + i + " is older than the one before it", plant, prev);
+				assertGreater("and it stands on the sand rather than floating", shadow, 0);
+				assertTrue("form " + i + " is a shape of its own", shapes.add(flat.toString()));
+				prev = plant;
+			}
+
+			// ---- the desert actually holds them --------------------------
+			// Both ends of the ladder, and the middle, have to occur: a field
+			// that only ever resolves to one form is the single stamp again
+			// wearing a table.
+			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			int z = w.getSurfaceZ(), standing = 0;
+			java.util.Set<Integer> agesSeen = new java.util.HashSet<>();
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, z);
+					if (t == null || t.getType() != Tile.TileType.TYPE_CACTUS) {
+						continue;
+					}
+					standing++;
+					double m = net.hedinger.prototype.engine.Utils.noise2(
+							x + 0.5 + 131, y + 0.5 + 17, 0.07);
+					agesSeen.add((int) (Math.max(0, Math.min(0.999, m))
+							* GroundTextures.CACTUS_FORMS_N));
+					assertTrue("a cactus stands on sand, never in quicksand or cover",
+							!t.isWalkable());
+				}
+			}
+			assertGreater("the desert has cacti standing in it", standing, 10);
+			assertGreater("of more than one age", agesSeen.size(), 2);
+
+			// ---- and it is a specimen, not a crop ------------------------
+			// Sparser than the cover it shares the pan with. A cactus every few
+			// paces reads as an orchard somebody planted.
+			int scrub = 0;
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, z);
+					if (t != null && t.getType() == Tile.TileType.TYPE_SCRUB) {
+						scrub++;
+					}
+				}
+			}
+			assertLess("a cactus is a specimen: rarer than the scrub around it",
+					standing, scrub);
+		}
+	}
+
+	/**
 	 * The fungus bed is a mat, and it leaves room for the crop standing in it.
 	 *
 	 * <p>This is a regression guard with a number behind it. The bed used to
@@ -14477,6 +14573,7 @@ public class SimTests {
 				new EveryBodyStaysInItsCell(),
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
+				new ACactusIsALifeNotAStamp(),
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
