@@ -1,10 +1,6 @@
 package net.hedinger.prototype.render;
 
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 
-import net.hedinger.prototype.engine.View;
-import net.hedinger.prototype.entities.NPC;
 
 /**
  * Paints the facility loader: the same livery and the same stamp machinery as
@@ -138,25 +134,6 @@ public final class LoaderPainter {
 		return MachineStamp.DIRS;
 	}
 
-	public static void draw(NPC n, Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-		double z = n.getZ();
-		if (v.pixelX(n.getX() + 1, z, 0) - v.pixelX(n.getX(), z, 0) <= 0) {
-			return;
-		}
-		int cgx = (int) Math.round(n.getX() * MachineStamp.A);
-		int cgy = (int) Math.round(n.getY() * MachineStamp.A);
-
-		// A standing body casts its own silhouette one art-pixel south, not the
-		// flyer's oval: an oval small enough to read as a shadow disappears
-		// entirely under a body this wide, and one wide enough to show is a
-		// second object on the floor. What shows here is a hard dark edge along
-		// the bottom of the machine, which is exactly what contact looks like.
-		MachineStamp.blit(g2, FACING[MachineStamp.bucket(n.getDirection())], cgx - N / 2,
-				cgy - N / 2 + DROP, z, v, MachineStamp.CONTACT);
-		MachineStamp.blit(g2, FACING[MachineStamp.bucket(n.getDirection())], cgx - N / 2,
-				cgy - N / 2, z, v, null);
-	}
 
 	private LoaderPainter() {
 	}

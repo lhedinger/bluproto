@@ -26,10 +26,7 @@ public final class RenderFx {
 	public static boolean grassTufts = true;
 	/** Memoise rendered creature sprites (vs redrawing every entity each frame). */
 	public static boolean cacheSprites = true;
-	/** Re-stamp foliage over creatures standing in walkable sight-blockers
-	 * (thicket cover, reed beds), so hidden creatures render part-hidden. */
-	public static boolean concealFoliage = true;
-	/** Render holes as translucent pits, so the layer beneath shows through. */
+		/** Render holes as translucent pits, so the layer beneath shows through. */
 	public static boolean holeTranslucent = true;
 	/** Opacity of the flat black veil over a pit's interior (0 clear .. 1
 	 * solid dark): the floor below reads through the whole opening at
