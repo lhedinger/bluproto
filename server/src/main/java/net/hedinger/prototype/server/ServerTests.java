@@ -36,6 +36,7 @@ public final class ServerTests {
 		fertilityCapsTheGrassSpriteStage();
 		aFungusBedTopsOutAtStageThree();
 		vegetationFeedCarriesTheKind();
+		everyRungOfTheCactusLadderOccurs();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
@@ -1092,25 +1093,83 @@ public final class ServerTests {
 	 * change at runtime, so a delta has neither room for the kind nor any need of
 	 * it. This pins both halves.
 	 */
-	static void vegetationFeedCarriesTheKind() {
+	/**
+	 * Every rung of the cactus's ladder actually occurs in the world.
+	 *
+	 * <p>This is the third time this shape of bug has turned up, so it gets its
+	 * own check. A sprite has five stages; the number that selects them is
+	 * quantised by {@link VegFeed#stateOf}, which is built for a CROP — its ends
+	 * mean stripped bare and fully grown, and it only reaches them at the
+	 * extremes of its input. Feed it anything whose range merely spans MOST of
+	 * that, and both ends of the ladder are shaved off silently: the art exists,
+	 * the data exists, and two of the five stages simply never appear.
+	 *
+	 * <p>The mushroom lost its top two stages to this for as long as it existed —
+	 * a fertility ceiling of 0.6 meant no bed in the game ever exceeded stage 3,
+	 * so every bed drew as buds or one three-pixel cap. The cactus was heading
+	 * the same way when it moved to this layer: raw ages came out as rungs 2, 3
+	 * and 4 only. It now picks its rung directly and encodes the level that rung
+	 * round-trips from, which is why this can assert all five.
+	 */
+	static void everyRungOfTheCactusLadderOccurs() {
 		net.hedinger.prototype.engine.Utils.seed(42);
 		WorldHost host = new WorldHost(42);
-		int fungusLevels = 0;
-		for (int z = 0; z < 2; z++) {
+		java.util.Map<Integer, Integer> rungs = new java.util.TreeMap<>();
+		int cacti = 0;
+		for (int z = 0; z < host.levelsForTest(); z++) {
 			byte[] kinds = host.vegKinds(z);
 			if (kinds == null) {
 				continue;
 			}
-			int fungus = 0;
-			for (byte k : kinds) {
-				if (k != 0) {
-					fungus++;
-				}
-			}
-			if (fungus == 0) {
+			@SuppressWarnings("unchecked")
+			java.util.Map<String, Object> full =
+					(java.util.Map<String, Object>) host.vegetationSince(z, -1);
+			Object states = full.get("states");
+			if (!(states instanceof String packed)) {
 				continue;
 			}
-			fungusLevels++;
+			byte[] grid = java.util.Base64.getDecoder().decode(packed);
+			for (byte v : grid) {
+				if ((v & VegFeed.KIND_MASK) != VegFeed.KIND_CACTUS) {
+					continue;
+				}
+				cacti++;
+				rungs.merge(v & VegFeed.STAGE_MASK, 1, Integer::sum);
+			}
+		}
+		check("the world has cacti on the wire (" + cacti + ")", cacti > 10);
+		for (int r = 1; r <= VegFeed.STAGES; r++) {
+			check("rung " + r + " of the ladder is reachable and occurs " + rungs,
+					rungs.getOrDefault(r, 0) > 0);
+		}
+		check("and nothing lands off the ladder " + rungs,
+				rungs.keySet().stream().allMatch(r -> r >= 1 && r <= VegFeed.STAGES));
+	}
+
+	static void vegetationFeedCarriesTheKind() {
+		net.hedinger.prototype.engine.Utils.seed(42);
+		WorldHost host = new WorldHost(42);
+		// Every kind the wire can carry has to actually arrive on it. The field is
+		// two bits now, because the cactus moved off the static ground bake and
+		// onto this feed -- the only channel in the renderer that can carry a
+		// number that changes -- so "the kind bit" became a kind FIELD, and a test
+		// that checked one flag would have passed while a whole plant vanished.
+		int levelsWithPlants = 0, seenFungus = 0, seenCactus = 0;
+		for (int z = 0; z < host.levelsForTest(); z++) {
+			byte[] kinds = host.vegKinds(z);
+			if (kinds == null) {
+				continue;
+			}
+			int marked = 0;
+			for (byte k : kinds) {
+				if (k != 0) {
+					marked++;
+				}
+			}
+			if (marked == 0) {
+				continue;
+			}
+			levelsWithPlants++;
 			@SuppressWarnings("unchecked")
 			java.util.Map<String, Object> full =
 					(java.util.Map<String, Object>) host.vegetationSince(z, -1);
@@ -1119,24 +1178,39 @@ public final class ServerTests {
 					.decode((String) full.get("states"));
 			check("the grid covers the level", grid.length == kinds.length);
 
-			int marked = 0, markedButBare = 0;
+			int carried = 0, bare = 0;
+			boolean exact = true;
 			for (int i = 0; i < grid.length; i++) {
-				boolean bit = (grid[i] & VegFeed.KIND_FUNGUS) != 0;
-				check("the kind bit is set exactly on the fungus tiles",
-						bit == (kinds[i] != 0));
-				if (bit) {
-					marked++;
-					if ((grid[i] & 0x07) == 0) {
-						markedButBare++;
-					}
+				int kind = grid[i] & VegFeed.KIND_MASK;
+				exact &= kind == (kinds[i] & VegFeed.KIND_MASK);
+				if (kind == 0) {
+					continue;
+				}
+				carried++;
+				if (kind == VegFeed.KIND_FUNGUS) {
+					seenFungus++;
+				}
+				if (kind == VegFeed.KIND_CACTUS) {
+					seenCactus++;
+				}
+				// The stage must survive alongside the kind, or every plant would
+				// draw as "nothing stands here" and the fix would swap one blank
+				// for another.
+				if ((grid[i] & VegFeed.STAGE_MASK) == 0) {
+					bare++;
 				}
 			}
-			check("the fungus beds are marked (" + marked + ")", marked == fungus);
-			// The stage must survive alongside the kind, or every bed would draw as
-			// "nothing grows here" and the fix would swap one blank for another.
-			check("and they still carry a growth stage", markedButBare < marked);
+			check("the kind field on level " + z + " is exactly what the world says", exact);
+			check("the plants on level " + z + " are marked (" + carried + ")",
+					carried == marked);
+			check("and they still carry a stage on level " + z, bare < carried);
 		}
-		check("the world has a level that grows fungus", fungusLevels > 0);
+		check("the world has levels that grow something", levelsWithPlants > 0);
+		check("fungus beds reach the viewer (" + seenFungus + ")", seenFungus > 0);
+		// The one that would have gone unnoticed: a plant whose art lives only in
+		// the client is invisible to every other check in this suite, so if it
+		// stops being marked on the wire nothing else fails.
+		check("and so do cacti (" + seenCactus + ")", seenCactus > 0);
 	}
 
 	/**

@@ -1558,96 +1558,59 @@ public class SimTests {
 	}
 
 	/**
-	 * The cactus is a life with five moments in it, and the desert holds all of
-	 * them.
+	 * The desert has cacti standing in it, of more than one age.
 	 *
-	 * <p>It was one stamp, so every cactus in the world was the same cactus,
-	 * and the world contained none of them anyway — demo() never placed one, so
-	 * the tile type, the painter, the ramp row and the catalog entry were all
-	 * art nobody had seen. Both halves are pinned here because each would pass
-	 * silently without the other: a growth ladder nothing plants is still
-	 * invisible, and a planted desert of identical plants is still wallpaper.
+	 * <p>demo() had never placed one: the cactus had a tile type, a painter, a
+	 * ramp row and a catalog entry, and four seeds produced zero of them. It
+	 * lived only in BlackMesa, so the desert's one STANDING plant was art nobody
+	 * had seen in the live world.
 	 *
-	 * <p>The ORDER of the table is the part that will still matter when
-	 * vegetation stops being static. {@code maturity} indexes it, and today
-	 * that argument carries a world-space field; later it carries an age. So
-	 * this asserts the ladder actually climbs — each form drawn with more of
-	 * the plant in it than the one before — because a table whose order means
-	 * nothing is a table that will quietly mean nothing when a real age is
-	 * plugged into it.
+	 * <p>The plant itself is no longer drawn by anything this suite can read —
+	 * it moved to the vegetation sprite layer, which is client-only, the same
+	 * place the mushroom lives. What is still checkable here, and still the part
+	 * that would silently rot, is the world's side of it: that the plants exist,
+	 * that they are solid, that they are specimens rather than a crop, and that
+	 * the age field spreads them across the whole ladder instead of resolving to
+	 * one rung. A ladder every plant sits on the same rung of is a single stamp
+	 * wearing a table, which is exactly what this replaced.
 	 */
-	static class ACactusIsALifeNotAStamp extends Scenario {
+	static class TheDesertStandsCactiOfEveryAge extends Scenario {
 		@Override
 		public void run() {
-			final int A = net.hedinger.prototype.engine.GroundTextures.ART;
-			assertEquals("five moments of a cactus's life", 5,
-					GroundTextures.CACTUS_FORMS_N);
-
-			// ---- the ladder climbs ---------------------------------------
-			int prev = -1;
-			java.util.Set<String> shapes = new java.util.HashSet<>();
-			for (int i = 0; i < GroundTextures.CACTUS_FORMS_N; i++) {
-				String[] f = GroundTextures.cactusForm(i);
-				assertEquals("form " + i + " is a full tile tall", A, f.length);
-				int plant = 0, shadow = 0;
-				StringBuilder flat = new StringBuilder();
-				for (String row : f) {
-					assertEquals("form " + i + " is a full tile wide", A, row.length());
-					for (char c : row.toCharArray()) {
-						assertTrue("only authored marks, never a blend: " + c,
-								c == '.' || c == 'h' || c == 'b' || c == 'd' || c == 'x');
-						if (c == 'h' || c == 'b' || c == 'd') {
-							plant++;
-						}
-						if (c == 'x') {
-							shadow++;
-						}
-					}
-					flat.append(row);
-				}
-				assertGreater("form " + i + " is older than the one before it", plant, prev);
-				assertGreater("and it stands on the sand rather than floating", shadow, 0);
-				assertTrue("form " + i + " is a shape of its own", shapes.add(flat.toString()));
-				prev = plant;
-			}
-
-			// ---- the desert actually holds them --------------------------
-			// Both ends of the ladder, and the middle, have to occur: a field
-			// that only ever resolves to one form is the single stamp again
-			// wearing a table.
 			World w = net.hedinger.prototype.sim.Worlds.demo(42);
-			int z = w.getSurfaceZ(), standing = 0;
-			java.util.Set<Integer> agesSeen = new java.util.HashSet<>();
+			int z = w.getSurfaceZ(), standing = 0, scrub = 0;
+			java.util.Set<Integer> rungs = new java.util.HashSet<>();
+			double lowest = 1, highest = 0;
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
 					Tile t = w.getTile(x, y, z);
-					if (t == null || t.getType() != Tile.TileType.TYPE_CACTUS) {
+					if (t == null) {
+						continue;
+					}
+					if (t.getType() == Tile.TileType.TYPE_SCRUB) {
+						scrub++;
+					}
+					if (t.getType() != Tile.TileType.TYPE_CACTUS) {
 						continue;
 					}
 					standing++;
-					double m = net.hedinger.prototype.engine.Utils.noise2(
-							x + 0.5 + 131, y + 0.5 + 17, 0.07);
-					agesSeen.add((int) (Math.max(0, Math.min(0.999, m))
-							* GroundTextures.CACTUS_FORMS_N));
-					assertTrue("a cactus stands on sand, never in quicksand or cover",
-							!t.isWalkable());
+					assertTrue("a cactus is solid: the sprite cannot stop a body, so "
+							+ "the tile still has to", !t.isWalkable());
+					double age = GroundTextures.cactusMaturity(x + 0.5, y + 0.5);
+					assertTrue("an age is an age: " + age, age >= 0 && age <= 1);
+					lowest = Math.min(lowest, age);
+					highest = Math.max(highest, age);
+					rungs.add(Math.min(4, (int) (age * 5)));
 				}
 			}
 			assertGreater("the desert has cacti standing in it", standing, 10);
-			assertGreater("of more than one age", agesSeen.size(), 2);
-
-			// ---- and it is a specimen, not a crop ------------------------
+			assertGreater("of more than one age", rungs.size(), 2);
+			assertLess("and there are seedlings among them", lowest, 0.3);
+			assertGreater("and veterans", highest, 0.7);
 			// Sparser than the cover it shares the pan with. A cactus every few
-			// paces reads as an orchard somebody planted.
-			int scrub = 0;
-			for (int x = 0; x < w.getColums(); x++) {
-				for (int y = 0; y < w.getRows(); y++) {
-					Tile t = w.getTile(x, y, z);
-					if (t != null && t.getType() == Tile.TileType.TYPE_SCRUB) {
-						scrub++;
-					}
-				}
-			}
+			// paces reads as an orchard somebody planted -- which is what the
+			// first placement did, by carving a thin slice out of a SLOW noise
+			// and getting an isoline instead of a scatter.
 			assertLess("a cactus is a specimen: rarer than the scrub around it",
 					standing, scrub);
 		}
@@ -14573,7 +14536,7 @@ public class SimTests {
 				new EveryBodyStaysInItsCell(),
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
-				new ACactusIsALifeNotAStamp(),
+				new TheDesertStandsCactiOfEveryAge(),
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
