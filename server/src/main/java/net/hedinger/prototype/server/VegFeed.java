@@ -56,7 +56,7 @@ final class VegFeed {
 	/** Builds the JSON response for a client holding {@code since} (-1 = none),
 	 *  refreshing the quantised grid from {@code raw} when it is due. */
 	/**
-	 * The vegetation KIND bit, set on tiles that grow fungus rather than grass.
+	 * The vegetation KIND field: which plant a tile grows, if any.
 	 *
 	 * <p>It rides only in the full grid, never in a delta. Terrain does not change
 	 * at runtime, so the kind is a constant per tile: a client that has the full
@@ -66,6 +66,24 @@ final class VegFeed {
 	 * and widening the entry would cost every poll for a fact that never moves.
 	 */
 	static final int KIND_FUNGUS = 0x80;
+
+	/** The second kind bit. Grass is 0, a fungus bed 0x80, a cactus 0x40 -- two
+	 *  bits, so the field has room for a fourth plant before the byte has to be
+	 *  rethought. The fungus keeps the value it already had rather than being
+	 *  renumbered into a tidier order: nothing is gained by moving it, and a
+	 *  wire value that changes for aesthetic reasons is a wire value that can
+	 *  change again. */
+	static final int KIND_CACTUS = 0x40;
+
+	/** Both kind bits, for a reader that wants the field rather than one flag. */
+	static final int KIND_MASK = KIND_FUNGUS | KIND_CACTUS;
+
+	/** The stage bits: 0 nothing stands here, 1..5 the sprite to draw. */
+	static final int STAGE_MASK = 0x07;
+
+	/** How many rungs a plant's ladder has. Named because a caller that wants a
+	 *  particular rung has to know how many there are to land on one. */
+	static final int STAGES = 5;
 
 	synchronized Map<String, Object> respond(byte[] raw, byte[] kinds, long since, long now,
 			int cols, int rows) {
@@ -97,7 +115,10 @@ final class VegFeed {
 		if (kinds != null && kinds.length == states.length) {
 			out = new byte[states.length];
 			for (int i = 0; i < out.length; i++) {
-				out[i] = (byte) (states[i] | (kinds[i] != 0 ? KIND_FUNGUS : 0));
+				// kinds[] already carries the bits; it used to carry a flag the
+				// caller had to translate here, which only worked while there
+				// was exactly one thing to translate it into.
+				out[i] = (byte) (states[i] | (kinds[i] & KIND_MASK));
 			}
 		}
 		return Map.of("cols", cols, "rows", rows, "seq", seq,

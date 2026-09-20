@@ -999,6 +999,43 @@ final class WorldHost {
 				w.getColums(), w.getRows());
 	}
 
+	/**
+	 * What is standing on a tile, on the 0..100 scale the viewer quantises into
+	 * sprite stages — or 255 where nothing stands at all.
+	 *
+	 * <p>For anything that grows, that is its vegetation against the world's
+	 * maximum ({@link #grassLevel}). A cactus grows nothing: it is a fixture, not
+	 * a crop, and no grazer can eat it. What it has instead is an AGE, and the
+	 * sprite layer draws it at the moment of its life that age puts it in — so the
+	 * age rides the same channel, because that channel's real subject is what a
+	 * tile looks like right now, and the kind bits already say which of the two a
+	 * reader is holding.
+	 *
+	 * <p>The age comes from {@link net.hedinger.prototype.engine.GroundTextures#cactusMaturity},
+	 * which is where it lives so nothing computes a second copy of it. It is a
+	 * function of position today; when vegetation grows, this is the line that
+	 * starts reading a number the world keeps, and the viewer needs no change at
+	 * all — which is the whole reason the plant moved off the static bake.
+	 */
+	static int levelOf(Tile t, int x, int y, long tick) {
+		if (t != null && t.getType() == Tile.TileType.TYPE_CACTUS) {
+			double age = net.hedinger.prototype.engine.GroundTextures
+					.cactusMaturity(x + 0.5, y + 0.5);
+			// Straight to a rung, then back out to the level that rung round-trips
+			// from. Sending the age as a raw 0..100 put every cactus in the world on
+			// rungs 2, 3 and 4: {@link VegFeed#stateOf} is shaped for a CROP, where
+			// the ends mean stripped and fully grown, and it reaches them only at
+			// the extremes of its input -- so an age that merely spans most of its
+			// range comes out with both ends of the ladder shaved off. The mushroom
+			// sprite lost its top two stages to exactly this and nobody noticed for
+			// as long as it existed, so it is worth saying plainly: a quantiser
+			// built for one quantity silently rescales another.
+			int rung = (int) (Math.max(0, Math.min(0.999, age)) * VegFeed.STAGES);
+			return rung * (100 / (VegFeed.STAGES - 1));
+		}
+		return grassLevel(t, tick);
+	}
+
 	/** One tile's grass level on the absolute scale (see {@link #vegetation}):
 	 *  255 where nothing ever grows, else 0..100 of the world's maximum. */
 	static int grassLevel(Tile t, long tick) {
@@ -1030,11 +1067,19 @@ final class WorldHost {
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
 				Tile t = w.getTile(x, y, z);
-				k[y * cols + x] = (byte) (t != null
-						&& t.getType() == Tile.TileType.TYPE_FUNGUS ? 1 : 0);
+				k[y * cols + x] = (byte) (t == null ? 0
+						: t.getType() == Tile.TileType.TYPE_FUNGUS ? VegFeed.KIND_FUNGUS
+						: t.getType() == Tile.TileType.TYPE_CACTUS ? VegFeed.KIND_CACTUS
+						: 0);
 			}
 		}
 		return k;
+	}
+
+	/** How many levels the world has, so a test can sweep all of them rather
+	 *  than the two it happened to be written against. */
+	int levelsForTest() {
+		return runner.world().getLevels();
 	}
 
 	byte[] vegetation(int z) {
@@ -1047,7 +1092,7 @@ final class WorldHost {
 		byte[] v = new byte[cols * rows];
 		for (int y = 0; y < rows; y++) {
 			for (int x = 0; x < cols; x++) {
-				v[y * cols + x] = (byte) grassLevel(w.getTile(x, y, z), tick);
+				v[y * cols + x] = (byte) levelOf(w.getTile(x, y, z), x, y, tick);
 			}
 		}
 		return v;
