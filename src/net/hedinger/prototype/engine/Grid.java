@@ -718,14 +718,6 @@ public class Grid {
 							// A cave column is a fixture like a crystal prism: it
 							// shades itself and casts its own contact shadow.
 							col = GroundTextures.stalagmite(ai, aj, wx, wy, gx, gy);
-						} else if (cl == GroundTextures.CLS_CACTUS) {
-							// Age from a slow world-space field, so a stand of them
-							// is a population of different ages rather than one
-							// plant stamped over and over. The field is the static
-							// stand-in for an age the bake cannot know; see the
-							// painter for what replaces it when vegetation moves.
-							col = GroundTextures.cactus(wx, wy,
-									Utils.noise2(wx + 131, wy + 17, 0.07), ai, aj, gx, gy);
 						} else if (cl == GroundTextures.CLS_CRYSTAL) {
 							// A dense formation is a thicket of standing prisms on
 							// the cave floor -- each prism self-shaded with its own

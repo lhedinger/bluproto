@@ -231,7 +231,12 @@ public final class GroundTextures {
 		case TYPE_STALAGMITE:
 			return CLS_STALAGMITE;
 		case TYPE_CACTUS:
-			return CLS_CACTUS;
+			// A cactus tile IS sand, with a plant standing on it. The plant is
+			// the vegetation sprite layer's now -- the only layer that can carry
+			// a live number -- so the ground under it bakes as what it is, and
+			// the tile type survives for the one thing the sprite cannot do:
+			// stop a body walking through the trunk.
+			return CLS_SAND;
 		case TYPE_BONES:
 			return CLS_BONES;
 		case TYPE_HAZARD:
@@ -1818,143 +1823,25 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * The cactus, as five authored stamps ordered YOUNGEST TO OLDEST: a shoot,
-	 * a bare column, one arm, two arms, and a veteran carrying three.
+	 * How old the cactus standing on a tile is, 0 (a seedling) .. 1 (a veteran),
+	 * from a slow world-space field.
 	 *
-	 * <p>It was one stamp, so every cactus in the world was the same cactus.
-	 * That is the flat-field mistake in its purest form — a standing plant is a
-	 * discrete object, and a desert of identical ones reads as wallpaper rather
-	 * than as a population.
+	 * <p>The plant itself is no longer drawn here. It was five authored stamps
+	 * in this file, baked into the ground, and the ground bake is static -- so
+	 * the age could never be anything but a function of position, and a growing
+	 * cactus would have needed the whole chunk re-baked to show it. It moved to
+	 * the vegetation sprite layer, beside the mushroom, which is the only layer
+	 * in the renderer that carries a live number.
 	 *
-	 * <p>The order is the point, and it is not decoration. A cactus does not
-	 * have five looks, it has ONE life with five moments in it, so the table is
-	 * a growth ladder and {@link #cactus}'s {@code maturity} argument indexes
-	 * it. Today that argument is a slow world-space field — the ground bake is
-	 * static and cannot know live state, which is exactly the lesson the fungus
-	 * bed taught when it drew its own crop — so what the field buys today is a
-	 * desert whose plants are visibly of different ages. What it buys later is
-	 * the seam: when vegetation stops being static, a real age arrives at this
-	 * same argument and nothing else about the painter changes. It will have to
-	 * arrive through the sprite layer or a re-bake, because a chunk bake still
-	 * cannot know it; the shape of the call is what is being settled here.
-	 *
-	 * <p>Silhouettes double for free by MIRRORING: the stamps are flipped
-	 * horizontally on a hash, which is lossless on a square grid and, unlike a
-	 * rotation, keeps the sun where it is — north stays north, so an arm on the
-	 * left is lit exactly as an arm on the right (§4, and the rotated-sentinel
-	 * case law in §7).
-	 *
-	 * <p>Marks: {@code h} a lit tip, {@code b} the body, {@code d} the sunk
-	 * flank, {@code x} the contact shadow on the sand, {@code .} bare sand.
-	 * One bloom accent at the crown, hash-gated rare, in the shared flora red
-	 * so the desert's one flower is the flower the meadow shrubs carry.
+	 * <p>What stayed is this: the field, in one place, because the server reads
+	 * it to decide which stage each plant is at and nothing else should be
+	 * computing a second copy of it. When vegetation starts growing, this is the
+	 * function that gets replaced by an age the world actually keeps -- and it
+	 * is the only thing that has to change, because the layer the plant is drawn
+	 * in is already the one that can be told.
 	 */
-	private static final String[][] CACTUS_FORMS = {
-			// a shoot: this year's growth, no arms yet
-			{ "............",
-			  "............",
-			  "............",
-			  "............",
-			  "............",
-			  "............",
-			  ".....hh.....",
-			  ".....bb.....",
-			  ".....bb.....",
-			  ".....dd.....",
-			  ".....xx.....",
-			  "............" },
-			// a bare column, grown tall but still unbranched
-			{ "............",
-			  "............",
-			  "....hh......",
-			  "....bb......",
-			  "....bb......",
-			  "....bb......",
-			  "....bb......",
-			  "....bb......",
-			  "....bb......",
-			  "....dd......",
-			  "....xx......",
-			  "............" },
-			// the first arm
-			{ "............",
-			  "....hh......",
-			  "....bb......",
-			  "....bb......",
-			  "....bb.hh...",
-			  "....bb.bb...",
-			  "....bbbbb...",
-			  "....bb.d....",
-			  "....bb......",
-			  "....dd......",
-			  "....xx......",
-			  "............" },
-			// two arms: the one this replaced, kept verbatim as the reference
-			{ "............",
-			  "....hh......",
-			  "....bb......",
-			  ".hh.bb......",
-			  ".bb.bb.hh...",
-			  ".dbbbb.bb...",
-			  "....bbbbb...",
-			  "....bb.d....",
-			  "....bb......",
-			  "....dd......",
-			  "....xx......",
-			  "............" },
-			// a veteran: three arms, the oldest thing standing in the pan
-			{ "....hh......",
-			  "....bb......",
-			  ".hh.bb.hh...",
-			  ".bb.bb.bb...",
-			  ".bbbbbbbb...",
-			  ".d..bb..d...",
-			  "....bb.hh...",
-			  "....bbbbb...",
-			  "....bb.d....",
-			  "....dd......",
-			  "....xx......",
-			  "............" },
-	};
-
-	/** How many moments of a cactus's life the desert can show. */
-	public static final int CACTUS_FORMS_N = 5;
-
-	/** One cactus form's 12x12 stamp rows, copied — the same contract as
-	 *  {@link #reedForm}: the scenario pins authored data, not pixels. */
-	public static String[] cactusForm(int i) {
-		return CACTUS_FORMS[i].clone();
-	}
-
-	/**
-	 * One cactus, at the age {@code maturity} in [0,1] puts it.
-	 *
-	 * <p>{@code wx}/{@code wy} place the plant in the world, and are what
-	 * decides which way it faces: mirroring is per-TILE, not per-pixel, or a
-	 * plant would be flipped halfway across its own trunk.
-	 */
-	public static int cactus(double wx, double wy, double maturity, int ai, int aj,
-			int px, int py) {
-		int tx = (int) Math.floor(wx), ty = (int) Math.floor(wy);
-		int form = (int) (Math.max(0, Math.min(0.999, maturity)) * CACTUS_FORMS_N);
-		boolean mirror = hash01(tx, ty, 61) > 0.5;
-		char c = CACTUS_FORMS[form][aj].charAt(mirror ? 11 - ai : ai);
-		switch (c) {
-		case 'h':
-			// The crown: rarely, the bloom instead of the lit tip. Gated on the
-			// tile rather than on the pixel block, so a plant either flowers or
-			// does not -- the old gate could bloom one tip of a crown and not
-			// its neighbour.
-			return hash01(tx, ty, 59) > 0.82 && aj <= 2 ? BLOOM_RED : RAMP[CLS_CACTUS][2];
-		case 'b':
-			return RAMP[CLS_CACTUS][1];
-		case 'd':
-			return RAMP[CLS_CACTUS][0];
-		case 'x':
-			return darken(sand(px, py), 0.65); // contact shadow on the sand
-		default:
-			return sand(px, py);
-		}
+	public static double cactusMaturity(double wx, double wy) {
+		return Utils.noise2(wx + 131, wy + 17, 0.07);
 	}
 
 	/**
