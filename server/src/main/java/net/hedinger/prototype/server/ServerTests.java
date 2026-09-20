@@ -626,14 +626,22 @@ public final class ServerTests {
 		boolean kindOk = true, soundOk = true, deathOk = true;
 		String firstKindless = null, firstWrongDeath = null;
 		// A world at rest is silent, so the subject of this test does not exist
-		// until the world has run -- and it is only ever there for a MOMENT. A
-		// sound leaves the world the tick after it is heard, so it exists for 20
-		// ticks out of however many pass between one scream and the next, and a
-		// single sweep after N ticks lands on one or does not. This scanned once
-		// and asserted it had found a sound: it passed reliably only because
-		// spent sounds used to litter the world in their hundreds, and it began
-		// failing about half the time the moment they stopped. So sweep every
-		// tick and accumulate -- the assertion is over the run, not an instant.
+		// until the world has run -- and whether it ever exists is a LOTTERY.
+		// The only mouths in the demo world that make a noise are a human or a
+		// zombie with the other already in sight, each rolling a 1-in-1000
+		// chance per tick; measured over 30 runs of this window, 7 of them were
+		// silent from end to end, and the check below failed outright on every
+		// one of those. Sweeping every tick instead of once at the end, which
+		// is what this did before, accumulates more sounds in the runs that
+		// have any and none at all in the runs that do not.
+		//
+		// So plant one rather than hope for one. What is under test is the
+		// PAYLOAD the inspector builds for a sound, and a sound spawned here
+		// travels exactly the path one screamed by a body does: the same
+		// entity, the same lifespan, the same "old age" death that started
+		// this. The organic ones are still swept and counted on top of it.
+		host.runner().world().spawnEntity(
+				new net.hedinger.prototype.entities.Sound(4.5, 4.5, 0));
 		for (int t = 0; t < 600; t++) {
 			host.runner().world().think();
 			for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
@@ -664,8 +672,8 @@ public final class ServerTests {
 		}
 		// The world has to have contained the thing under test, or this passes by
 		// looking at nothing -- which is how it would pass again after a
-		// regression that stopped streaming sounds for some other reason.
-		check("the world was making noise to test against", sounds > 0);
+		// regression that dropped sounds from the world's entities entirely.
+		check("there was a sound in the world to test against", sounds > 0);
 		check("every entity tells the inspector what it is"
 				+ (firstKindless == null ? "" : " (first: #" + firstKindless + ")"), kindOk);
 		check("a sound is a sound, names its event, and dies of nothing", soundOk);
