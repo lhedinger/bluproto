@@ -127,7 +127,6 @@ final class SpriteCatalog {
 		ground("waste_sludge", Tile.TileType.TYPE_SLUDGE);
 		ground("mesa_rock", Tile.TileType.TYPE_MESA);
 		ground("stalagmite", Tile.TileType.TYPE_STALAGMITE);
-		ground("cactus", Tile.TileType.TYPE_CACTUS);
 		ground("bone_field", Tile.TileType.TYPE_BONES);
 		ground("hazard_striping", Tile.TileType.TYPE_HAZARD);
 		ground("conveyor", Tile.TileType.TYPE_CONVEYOR);
@@ -918,13 +917,12 @@ final class SpriteCatalog {
 			fixtureVariant(out, t, "on cave stone", Tile.TileType.TYPE_STONE);
 			return;
 		case TYPE_CACTUS:
-			// A cactus is drawn at the age a slow world field puts it, so one
-			// swatch would show one moment of a life and call it the plant. The
-			// two ends of that field are a seedling and a three-armed veteran,
-			// and a desert holds both at once.
-			agedVariant(out, t, "a young shoot", 9, 6);
-			agedVariant(out, t, "grown, still unbranched", 6, 6);
-			agedVariant(out, t, "an old three-armed stand", 52, 6);
+			// The ground under a cactus is sand, and that is all this page can
+			// honestly show: the plant moved to the vegetation sprite layer, so
+			// it is drawn by the client over this bake rather than into it. The
+			// five ages it grows through are in the sprite section of /help,
+			// beside the mushroom, drawn by the same code the viewer runs.
+			fieldVariant(out, t, "sand — the plant is drawn live, over this", 0);
 			return;
 		case TYPE_SWITCH:
 			fixtureVariant(out, t, "seat on deck", Tile.TileType.TYPE_PLATE);
@@ -1064,33 +1062,6 @@ final class SpriteCatalog {
 		fill(w, base);
 		w.setTile(3, 3, 0, t);
 		bakeVariant(out, w, t, cap);
-	}
-
-	/**
-	 * A standing fixture staged at a CHOSEN place in the world, for art whose
-	 * look depends on where it grows.
-	 *
-	 * <p>{@link #fixtureVariant} always stages an 8x8 and puts the fixture at
-	 * the same tile, which is right for a thing that looks the same everywhere
-	 * and wrong for one that does not: the cactus reads its age off a slow
-	 * world-space field, so that helper could only ever show whichever age
-	 * happens to grow at the origin. The field is a pure function of position,
-	 * so the same coordinates always bake the same plant.
-	 */
-	private void agedVariant(StringBuilder out, Tile.TileType t, String cap, int atX, int atY) {
-		World w = stage(atX + 6, atY + 6);
-		fill(w, Tile.TileType.TYPE_SAND);
-		w.setTile(atX, atY, 0, t);
-		w.alignTiles();
-		BufferedImage img = frame(w, LayerBaker.chunkRenderer(w));
-		int ts = ResourceManager.tileSize;
-		String file = "tile_" + t.name().toLowerCase(java.util.Locale.ROOT) + "_"
-				+ cap.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", "-") + ".png";
-		// Crop so the plant sits one tile in from the corner of the swatch.
-		assets.put(file, png(img.getSubimage((atX - 1) * ts, (atY - 1) * ts, 4 * ts, 4 * ts)));
-		out.append("<figure><img src=\"/tiles/").append(file)
-				.append("\" loading=lazy><figcaption>").append(cap)
-				.append("</figcaption></figure>");
 	}
 
 	private void rampVariant(StringBuilder out, Tile.TileType t, String cap) {
