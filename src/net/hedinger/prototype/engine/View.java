@@ -32,7 +32,6 @@ public class View {
 	World world;
 	LayerRenderer layerRenderer;
 
-	Minimap minimap;
 
 	public View(World world, LayerRenderer layerRenderer) {
 		overlays = new HashMap<Integer, Integer>();
@@ -45,15 +44,12 @@ public class View {
 		camY = world.rows * 0.5f;
 		camZ = 0;
 
-		minimap = new Minimap(world, this);
-		minimap.init(layerRenderer);
 	}
 
 	public void resize() {
 		chunkX = Math.floorDiv(windowX, chunkSize) + 1;
 		chunkY = Math.floorDiv(windowY, chunkSize) + 1;
 
-		minimap.resize();
 	}
 
 	public void think(Graphics g, float cx, float cy, float cz, int mx, int my) {
@@ -92,32 +88,12 @@ public class View {
 
 	}
 
-	public void render(Graphics g) {
-		clearScreen(g);
-		renderWorld(g);
-		renderEffects(g);
-		minimap.render(g);
-		renderEntityCount(g);
-	}
+	// render() and the entity-count overlay went with the minimap. They were
+	// the desktop viewer's composite -- clear, world, grain, minimap, counter --
+	// and the only thing still calling them was a scenario-snapshot tool whose
+	// pictures had stopped containing creatures. What the bake needs is the two
+	// passes below, called directly.
 
-	/** Entity-count overlay, top-right corner. Part of render() so it also
-	 * appears in headless captures, not just the live loop. */
-	public void renderEntityCount(Graphics g) {
-		Graphics2D g2 = (Graphics2D) g;
-		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		g2.setFont(font);
-		g2.setColor(Color.white);
-		String s = "Entities: " + world.getAliveCount();
-		int w = g2.getFontMetrics().stringWidth(s);
-		g2.drawString(s, windowX - w - 15, 18);
-	}
-
-	public void clearScreen(Graphics g) {
-		Graphics2D graphics = (Graphics2D) g;
-		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		graphics.setColor(bg);
-		graphics.fillRect(0, 0, windowX, windowY);
-	}
 
 	/** Film grain over the finished frame. Composited SRC_ATOP: the grain is a
 	 *  surface treatment ON the art, so it lands only where art was painted and

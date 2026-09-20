@@ -66,9 +66,7 @@ public class SimTests {
 			TestNPC r = TestNPC.roamer(4.5, 4.5, 0);
 			w.spawnEntity(r);
 			w.think(); // register the spawn so it draws
-			snapshot(w, "before (tick 0)");
 			tick(w, 200);
-			snapshot(w, "after (tick 200)");
 			double moved = Math.hypot(r.getX() - 4.5, r.getY() - 4.5);
 			assertGreater("roamer moved from spawn", moved, 0.5);
 			assertTrue("roamer stays inside the room",
@@ -95,9 +93,7 @@ public class SimTests {
 			w.spawnEntity(hunter);
 			w.spawnEntity(prey);
 			w.think();
-			snapshot(w, "before (tick 0)");
 			tick(w, 300);
-			snapshot(w, "after (tick 300)");
 			double after = Math.hypot(hunter.getX() - prey.getX(), hunter.getY() - prey.getY());
 			assertLess("chaser reached its prey (started 1.2 apart)", after, 0.5);
 			assertGreater("chaser actually travelled toward the prey", hunter.getX(), 3.0);
@@ -139,10 +135,8 @@ public class SimTests {
 			w.spawnEntity(h);
 			tick(w, 2);
 			assertEquals("one living actor before the hit", 1, w.getAliveCount());
-			snapshot(w, "alive");
 			h.damage(200); // health is 100
 			tick(w, 1);
-			snapshot(w, "corpse");
 			assertTrue("dead after lethal damage", h.isDead());
 			assertEquals("no living actors after the kill", 0, w.getAliveCount());
 			// Freshly dead first: the decay clock waits until the fresh meat has
@@ -1125,7 +1119,6 @@ public class SimTests {
 			w.spawnEntity(scav);
 			w.spawnEntity(grazer);
 			tick(w, 1);
-			snapshot(w, "a carcass east, a scavenger and a grazer west");
 			tick(w, 2); // let both sense at least once after being admitted
 
 			assertGreater("the scavenger senses the carcass as its forage",
@@ -2346,7 +2339,6 @@ public class SimTests {
 			TestNPC forager = TestNPC.minded(4.5, 8.5, 0, g, still).withHeading(0);
 			w.spawnEntity(forager);
 			tick(w, 4);
-			snapshot(w, "wall east, rich ground beyond it, a patch north");
 
 			double prox = forager.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
 			double bearing = forager.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
@@ -2441,9 +2433,7 @@ public class SimTests {
 			w.spawnEntity(walker);
 			w.spawnEntity(flyer);
 			w.think();
-			snapshot(w, "before (both on level 1 holes)");
 			tick(w, 5);
-			snapshot(w, "after (walker fell, flyer hovers)");
 			assertEquals("walker fell through the hole to the level below", 0, walker.getLvl());
 			assertEquals("flyer hovers over the hole", 1, flyer.getLvl());
 			tick(w, 50);
@@ -2688,14 +2678,12 @@ public class SimTests {
 			w.spawnEntity(carrier);
 			w.spawnEntity(cargo);
 			w.think();
-			snapshot(w, "before grab");
 			assertTrue("grab succeeds on a smaller, in-reach entity", carrier.grab(cargo));
 
 			double offset = (carrier.getSize() + cargo.getSize()) / 2.0;
 			double cargoStartX = cargo.getX();
 			double cargoStartY = cargo.getY();
 			tick(w, 200);
-			snapshot(w, "carrying (tick 200)");
 			double carried = Math.hypot(cargo.getX() - carrier.getX(), cargo.getY() - carrier.getY());
 			assertNear("carried cargo is pinned at the attachment offset", offset, carried, 0.01);
 			assertGreater("cargo was dragged along as the carrier roamed",
@@ -2711,7 +2699,6 @@ public class SimTests {
 			}
 			assertGreater("after drop the carrier roams away from the inert cargo "
 					+ "(while attached their distance is pinned)", maxDist, offset + 0.5);
-			snapshot(w, "after drop (tick 500)");
 		}
 	}
 
@@ -2762,11 +2749,9 @@ public class SimTests {
 			TestNPC m = TestNPC.mover(2.5, 2.5, 0, 0); // heading east
 			w.spawnEntity(m);
 			tick(w, 250); // 250 * 0.04 = 10 tiles of travel if unobstructed
-			snapshot(w, "halted at closed door (red bar)");
 			assertLess("mover halted at the closed door", m.getX(), 6.0);
 			w.getTile(5, 2, 0).openDoor(1);
 			tick(w, 150);
-			snapshot(w, "passed after opening");
 			assertGreater("mover passed through the opened door", m.getX(), 6.0);
 		}
 	}
@@ -2795,9 +2780,7 @@ public class SimTests {
 			w.spawnEntity(climber);
 			w.spawnEntity(control);
 			w.think();
-			snapshot(w, "before (both on level 0)");
 			tick(w, 400);
-			snapshot(w, "after (climber up the ramp, control blocked)");
 			assertEquals("climber ascended to the level above", 1, climber.getLvl());
 			assertGreater("climber kept walking on the upper floor", climber.getX(), 6.5);
 			assertEquals("control (no ramp) is still on the ground level", 0, control.getLvl());
@@ -2979,11 +2962,9 @@ public class SimTests {
 			w.spawnEntity(kin);
 			w.spawnEntity(prey);
 			w.think();
-			snapshot(w, "before (predator, kin, prey)");
 
 			double dPreyStart = Math.hypot(predator.getX() - prey.getX(), predator.getY() - prey.getY());
 			tick(w, 400);
-			snapshot(w, "after (hunts prey, ignores kin)");
 
 			double dPrey = Math.hypot(predator.getX() - prey.getX(), predator.getY() - prey.getY());
 			assertLess("predator closed on the prey", dPrey, dPreyStart * 0.6);
@@ -4117,13 +4098,11 @@ public class SimTests {
 			TestNPC g = TestNPC.grazer(5.5, 5.5, 0).withHunger(1.0); // an empty gut eats
 			w.spawnEntity(g);
 			w.think(); // register the spawn
-			snapshot(w, "before (full grass)");
 			// 600, not 120: a grazer crops a sixteenth of what it used to per tick, so
 			// the same window fed it 0.27 against a 0.5 bar. The fact under test -- a
 			// grazer draws real food off the substrate and leaves ground visibly bare --
 			// is unchanged; it just takes longer to do.
 			tick(w, 600);
-			snapshot(w, "after (grazed patch)");
 
 			assertGreater("grazer fed on the substrate", g.totalIntake(), 0.5);
 
@@ -4209,7 +4188,6 @@ public class SimTests {
 			World w = room(20, 20);
 			w.generateFertility(0.22);
 			w.think(); // advance the clock so grass sits at its per-tile cap
-			snapshot(w, "patchy fertility");
 
 			double min = 1, max = 0;
 			for (int c = 1; c < w.getColums() - 1; c++) {
@@ -4241,9 +4219,7 @@ public class SimTests {
 			w.spawnEntity(land);
 			w.spawnEntity(flyer);
 			w.think();
-			snapshot(w, "before (both west of the lake)");
 			tick(w, 150);
-			snapshot(w, "after (land halts, flyer crosses)");
 
 			assertLess("land entity is stopped at the shore", land.getX(), 6.0);
 			assertGreater("land entity walked up to the shore", land.getX(), 5.0);
@@ -4265,9 +4241,7 @@ public class SimTests {
 			w.spawnEntity(muddy);
 			w.spawnEntity(clear);
 			w.think();
-			snapshot(w, "before");
 			tick(w, 200);
-			snapshot(w, "after (muddy lags behind)");
 
 			assertGreater("both movers advanced", muddy.getX(), 2.5);
 			assertGreater("clear mover is well ahead of the muddy one",
@@ -4307,9 +4281,7 @@ public class SimTests {
 			w.spawnEntity(walkerOverMud);
 			w.spawnEntity(walkerOverFloor);
 			w.think();
-			snapshot(w, "before (two flyers, two walkers, two mud strips)");
 			tick(w, 200);
-			snapshot(w, "after (only the walker was held up)");
 
 			// Compared as gaps rather than as equality: move() jitters each step
 			// by a tenth, so two identical bodies drift apart a little over 200
@@ -4357,9 +4329,7 @@ public class SimTests {
 			w.spawnEntity(loose);
 			w.spawnEntity(clear);
 			w.think();
-			snapshot(w, "before (formation / bed x3 / sparse / floor lanes)");
 			tick(w, 200);
-			snapshot(w, "after (stopped / by-size / kept out / normal / normal)");
 
 			assertLess("the formation stops a walker", blocked.getX(), 5.0);
 			assertLess("a body over clearance is stopped at the bed's edge", big.getX(), 5.0);
@@ -4393,9 +4363,7 @@ public class SimTests {
 			w.spawnEntity(small);
 			w.spawnEntity(big);
 			w.think();
-			snapshot(w, "before (both west of the duct)");
 			tick(w, 300);
-			snapshot(w, "after (small crawled in, big stopped at the grille)");
 
 			assertGreater("a small body crawls into the duct", small.getX(), 5.0);
 			assertLess("a big body is stopped at the grille", big.getX(), 5.0);
@@ -4428,9 +4396,7 @@ public class SimTests {
 			w.spawnEntity(slider);
 			double startY = slider.getY();
 			w.think();
-			snapshot(w, "before (heading north-east into a wall)");
 			tick(w, 300);
-			snapshot(w, "after (pressed to the wall, still travelling north)");
 
 			assertLess("the wall still stops the eastward half", slider.getX(), 8.0);
 			assertGreater("but the northward half survives the block",
@@ -4458,14 +4424,12 @@ public class SimTests {
 			TestNPC grower = TestNPC.mover(2.5, 2.5, 0, 0).withSize(10);
 			w.spawnEntity(grower);
 			tick(w, 200);
-			snapshot(w, "juvenile walked into the bed");
 			assertGreater("the juvenile got into the bed", grower.getX(), 5.0);
 
 			grower.withSize(17); // grew past the clearance while inside
 			grower.withHeading(Math.PI); // turn back the way it came
 			double trapped = grower.getX();
 			tick(w, 600);
-			snapshot(w, "grown body walked back out westward");
 
 			assertGreater("a body that outgrew the bed can still walk out",
 					trapped - grower.getX(), 1.0);
@@ -4504,9 +4468,7 @@ public class SimTests {
 			w.spawnEntity(crosser);
 			w.spawnEntity(barred);
 			w.think();
-			snapshot(w, "before (plate at x=4 wired to the y=2 doorway)");
 			tick(w, 400);
-			snapshot(w, "after (crosser through; barred lane still sealed)");
 
 			assertGreater("the plate parted the door for its mover", crosser.getX(), 8.0);
 			assertLess("the switchless wired door stayed shut", barred.getX(), 8.0);
@@ -4548,9 +4510,7 @@ public class SimTests {
 			w.spawnEntity(presser);
 			w.spawnEntity(walker);
 			w.think();
-			snapshot(w, "before (buttons at x=4, one deliberate presser)");
 			tick(w, 400);
-			snapshot(w, "after (presser through; walker barred over its button)");
 
 			assertGreater("the deliberate press parted the door", presser.getX(), 8.0);
 			assertLess("weight alone never operated the button", walker.getX(), 8.0);
@@ -4607,9 +4567,7 @@ public class SimTests {
 			w.spawnEntity(minded);
 			w.spawnEntity(barred);
 			w.think();
-			snapshot(w, "before (two brains, one writes A_INTERACT)");
 			tick(w, 400);
-			snapshot(w, "after (interacting brain through; silent one barred)");
 
 			assertGreater("a brain writing A_INTERACT opened its door and crossed",
 					minded.getX(), 8.0);
@@ -4657,9 +4615,7 @@ public class SimTests {
 					new LgpMind(new Brain(seeker), seeker.length));
 			w.spawnEntity(seekerBody);
 			w.think();
-			snapshot(w, "before (random heading; button at x=4, door at x=7)");
 			tick(w, 300);
-			snapshot(w, "after (steered to the button; door held open)");
 
 			double d = Math.hypot(seekerBody.getX() - 4.5, seekerBody.getY() - 2.5);
 			assertLess("the seek steered the body to the button", d, 1.6);
@@ -4693,9 +4649,7 @@ public class SimTests {
 			w.spawnEntity(walker);
 			w.spawnEntity(faller);
 			w.think();
-			snapshot(w, "before (catwalk lane and open-void lane)");
 			tick(w, 250);
-			snapshot(w, "after (walker across; faller gone entirely)");
 
 			assertGreater("the catwalk carries a walker over the void", walker.getX(), 9.0);
 			assertTrue("the void removed the faller from the world", faller.isRemoved());
@@ -4968,9 +4922,7 @@ public class SimTests {
 			w.spawnEntity(lands);
 			w.spawnEntity(blocked);
 			w.think();
-			snapshot(w, "before (one hole over floor, one over rock)");
 			tick(w, 60);
-			snapshot(w, "after (one lands below; the other is gone, not embedded)");
 
 			assertTrue("open floor below still catches a falling body", !lands.isRemoved());
 			assertEquals("and it lands on the level the floor is on", 0, lands.getLvl());
@@ -4995,9 +4947,7 @@ public class SimTests {
 			w.spawnEntity(visible);
 			w.spawnEntity(hidden);
 			w.think();
-			snapshot(w, "before (prey N in open, prey S in cover)");
 			tick(w, 300);
-			snapshot(w, "after (chaser took the visible prey)");
 
 			double dVisible = Math.hypot(chaser.getX() - visible.getX(), chaser.getY() - visible.getY());
 			double dHidden = Math.hypot(chaser.getX() - hidden.getX(), chaser.getY() - hidden.getY());
@@ -5027,9 +4977,7 @@ public class SimTests {
 					.withHunger(1.0).withGlycogen(0.02);
 			w.spawnEntity(breeder);
 			w.think();
-			snapshot(w, "before (barren ground)");
 			tick(w, 5300);
-			snapshot(w, "after (starved)");
 			assertTrue("breeder starved with no food", breeder.isDead());
 		}
 	}
@@ -5051,13 +4999,11 @@ public class SimTests {
 			}
 			w.think();
 			int start = w.getAliveCount();
-			snapshot(w, "founders");
 			// 3000, not 600: grass became bulk food (a quarter of the old energy per
 			// unit, cropped at a quarter of the old rate), so banking a breeding takes
 			// roughly sixteen times as long. The fact under test is unchanged -- a fed
 			// population still grows -- only the clock it grows on.
 			tick(w, 3000);
-			snapshot(w, "after (population grew)");
 			int end = w.getAliveCount();
 			assertGreater("a fed breeder population grows by reproduction", end, start);
 		}
@@ -5081,7 +5027,6 @@ public class SimTests {
 			solo.markers = new double[] { 0.5, 0.5, 0.5 };
 			lone.spawnEntity(TestNPC.mater(6.5, 6.5, 0, solo).grown().fattened());
 			lone.think();
-			snapshot(lone, "lone mater (no partner)");
 			tick(lone, 400);
 			assertEquals("a lone mater cannot reproduce without a partner", 1, lone.getAliveCount());
 
@@ -5121,7 +5066,6 @@ public class SimTests {
 			}
 			colony.think();
 			int founders = colony.getAliveCount();
-			snapshot(colony, "founders (two compatible gene-types)");
 
 			// Sexual breeders must cluster to pair, so a colony breeds fast and then
 			// overgrazes back down -- the lasting proof is that it rose above the
@@ -5139,7 +5083,6 @@ public class SimTests {
 				peak = Math.max(peak, colony.getAliveCount());
 				sawRecombinant |= hasRecombinant(colony);
 			}
-			snapshot(colony, "after (bred sexually)");
 
 			assertGreater("a compatible mater colony reproduces sexually "
 					+ "(population rose above the founders)", peak, founders);
@@ -5334,11 +5277,9 @@ public class SimTests {
 			w.spawnEntity(target);
 			w.think();
 			if (mind == firstMind) {
-				snapshot(w, "before (agent SW of target)");
 			}
 			tick(w, 250);
 			if (mind == firstMind) {
-				snapshot(w, "after (brain steered onto the target)");
 			}
 			return Math.hypot(agent.getX() - target.getX(), agent.getY() - target.getY());
 		}
@@ -5666,9 +5607,7 @@ public class SimTests {
 			w.spawnEntity(inCover);
 			w.spawnEntity(inOpen);
 			w.think();
-			snapshot(w, "before (prey in the open, prey in the thicket)");
 			tick(w, 600);
-			snapshot(w, "after (the hunter took the one it could see)");
 
 			assertLess("the hunter is hurt or dead in the open", inOpen.getHealth(), 100);
 			assertEquals("the prey in cover was never touched", 100, inCover.getHealth());
@@ -8450,7 +8389,6 @@ public class SimTests {
 			}
 			w.think();
 			int start = w.getAliveCount();
-			snapshot(w, "founders (one shared mind)");
 
 			// Brain-driven reproduction is spiky (boom then bust), so track the peak
 			// population and every distinct mind seen across the run.
@@ -8470,7 +8408,6 @@ public class SimTests {
 					}
 				}
 			}
-			snapshot(w, "after (bred; minds mutated apart)");
 			assertGreater("brained foragers reproduced (population rose above the founders)", peak, start);
 			assertGreater("inherited minds diversified by mutation", minds.size(), 1);
 		}
@@ -8631,13 +8568,11 @@ public class SimTests {
 			w.spawnEntity(attacker);
 			w.spawnEntity(victim);
 			w.think();
-			snapshot(w, "before (attacker beside victim)");
 			assertTrue("victim starts alive", !victim.isDead());
 			// A plain bite is four damage on the one-second period, so a hundred
 			// health is twenty-five seconds of gnawing — 120 ticks used to be
 			// plenty when every tick carried a bite.
 			tick(w, 900);
-			snapshot(w, "after (victim bitten to death)");
 			assertTrue("the mind's attack actuator killed the neighbour", victim.isDead());
 			assertTrue("the attacker survived", !attacker.isDead());
 		}
@@ -8676,7 +8611,6 @@ public class SimTests {
 			}
 			w.think();
 			int start = w.getAliveCount();
-			snapshot(w, "founders (two brain types, shared markers)");
 
 			// These minds mate but don't forage, so they breed then starve; measure
 			// the peak population and whether a recombinant mind ever appeared.
@@ -8691,7 +8625,6 @@ public class SimTests {
 				peak = Math.max(peak, w.getAliveCount());
 				recombinant |= hasRecombinantMind(w);
 			}
-			snapshot(w, "after (mated: recombinant minds)");
 			assertGreater("the mate actuator drove reproduction (population rose)", peak, start);
 			assertTrue("a child carries both parents' signatures -- sexual crossover via A_MATE",
 					recombinant);
@@ -8741,11 +8674,9 @@ public class SimTests {
 			w.spawnEntity(grabber);
 			w.spawnEntity(cargo);
 			w.think();
-			snapshot(w, "before (grabber beside a smaller creature)");
 
 			double startX = cargo.getX(), startY = cargo.getY();
 			tick(w, 60);
-			snapshot(w, "after (smaller creature seized and carried)");
 			assertTrue("the mind's grab actuator seized the smaller neighbour",
 					cargo.getAttachTarget() == grabber);
 			assertTrue("the captive is marked grabbed", cargo.isGrabbed());
@@ -8781,11 +8712,9 @@ public class SimTests {
 			w.spawnEntity(rider);
 			w.spawnEntity(host);
 			w.think();
-			snapshot(w, "before (small creature beside a larger one)");
 
 			double startX = rider.getX(), startY = rider.getY();
 			tick(w, 80);
-			snapshot(w, "after (riding the larger host)");
 			assertTrue("the mind's attach actuator latched onto the larger host",
 					rider.getAttachTarget() == host);
 			assertTrue("it rides voluntarily, not as a captive", !rider.isGrabbed());
@@ -9177,7 +9106,6 @@ public class SimTests {
 			double sx = seer.getX(), sy = seer.getY();
 			double cx = control.getX(), cy = control.getY();
 			tick(w, 40);
-			snapshot(w, "seer walks toward the crate; control sits idle");
 			assertGreater("the creature that senses a nearby item moves",
 					Math.hypot(seer.getX() - sx, seer.getY() - sy), 0.2);
 			assertLess("the control with no item in range stays put",
@@ -9202,7 +9130,6 @@ public class SimTests {
 			w.spawnEntity(eater);
 			w.spawnEntity(food);
 			w.think();
-			snapshot(w, "before (beside a food item)");
 			// Tick until the food is consumed, measuring the energy jump on that very
 			// tick so a stray graze from the ground can't inflate the reading.
 			double delta = 0;
@@ -9213,7 +9140,6 @@ public class SimTests {
 					delta = eater.totalSwallowed() - before;
 				}
 			}
-			snapshot(w, "after (food eaten, gut filled)");
 			assertTrue("the food item was eaten (removed)", food.isRemoved());
 			assertNear("eating the food yielded its foodEnergy", 2.0, delta, 0.1);
 		}
@@ -9233,7 +9159,6 @@ public class SimTests {
 			w.spawnEntity(smasher);
 			w.spawnEntity(crate);
 			w.think();
-			snapshot(w, "before (beside an intact crate)");
 			// Tick until the crate shatters, then count the food it spilled right away
 			// (the smasher would otherwise start destroying the loose food next).
 			int foodCount = -1;
@@ -9243,7 +9168,6 @@ public class SimTests {
 					foodCount = countFood(w);
 				}
 			}
-			snapshot(w, "after (crate broken, food spilled)");
 			assertTrue("the crate broke under repeated attacks", crate.isRemoved());
 			assertEquals("the broken crate spilled its food", 4, foodCount);
 		}
@@ -9297,10 +9221,8 @@ public class SimTests {
 			w.spawnEntity(striker);
 			w.spawnEntity(hazard);
 			w.think();
-			snapshot(w, "before (striker beside a hazard)");
 			int hpBefore = striker.getHealth();
 			tick(w, 30); // hardy hazard survives, biting back on every strike
-			snapshot(w, "after (attacker wounded by the hazard)");
 			assertTrue("the tough hazard survived the strikes", !hazard.isRemoved());
 			assertLess("striking the hazard wounded the attacker", striker.getHealth(), hpBefore);
 		}
@@ -9321,10 +9243,8 @@ public class SimTests {
 			w.spawnEntity(crate);
 			w.spawnEntity(walker);
 			w.think();
-			snapshot(w, "before (crate in the walker's path)");
 			double startX = crate.getX(), startY = crate.getY();
 			tick(w, 400);
-			snapshot(w, "after (crate shoved aside)");
 			double moved = Math.hypot(crate.getX() - startX, crate.getY() - startY);
 			assertGreater("the passer-by shoved the crate along", moved, 0.3);
 			assertTrue("the crate was displaced, not picked up", crate.getAttachTarget() == null);
@@ -9350,9 +9270,7 @@ public class SimTests {
 			w.spawnEntity(crate);
 			w.spawnEntity(courier);
 			w.think();
-			snapshot(w, "before (hauler far from the crate)");
 			tick(w, 1100); // fetch, haul to the drop-off, return home
-			snapshot(w, "after (crate delivered, hauler back home)");
 			assertNear("the crate was delivered to the drop-off (x)", dropX, crate.getX(), 1.5);
 			assertNear("the crate was delivered to the drop-off (y)", dropY, crate.getY(), 1.5);
 			assertTrue("the crate was set down, not still held", crate.getAttachTarget() == null);
@@ -9504,7 +9422,6 @@ public class SimTests {
 			}
 			w.think();
 			int start = w.getAliveCount();
-			snapshot(w, "founders");
 			// A nest is a process, not a state: it waxes while the colony breeds and
 			// fades as the pheromone decays. So sample it as the run goes and keep the
 			// strongest it ever got, rather than reading whatever happened to be
@@ -9529,7 +9446,6 @@ public class SimTests {
 					total = c[1];
 				}
 			}
-			snapshot(w, "after (colony around the nest)");
 			assertGreater("the population grew by breeding", w.getAliveCount(), start);
 			assertGreater("a pheromone nest built up", nestIntensity, 4.0);
 			// The physical fixture matches the scent: births claimed a Nest.
@@ -9875,7 +9791,6 @@ public class SimTests {
 			w.spawnEntity(herb);
 			w.think();
 			tick(w, 25);
-			snapshot(w, vigilant ? "vigilant herbivore flees" : "plain grazer stays");
 			return Math.hypot(herb.getX() - pred.getX(), herb.getY() - pred.getY());
 		}
 
@@ -9928,7 +9843,6 @@ public class SimTests {
 			for (int i = 0; i < 3000 && !prey.isDead(); i++) {
 				tick(w, 1);
 			}
-			snapshot(w, "after the chase");
 			assertTrue("the hunter ran down the fleeing prey and killed it", prey.isDead());
 		}
 	}
@@ -11053,9 +10967,7 @@ public class SimTests {
 					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
 					.withHydration(0.2).withReproCooldown(100_000_000);
 			w.spawnEntity(g);
-			snapshot(w, "parched, with the lake behind a rib of rock");
 			tick(w, 2500);
-			snapshot(w, "after");
 
 			assertTrue("the parched grazer is still alive", !g.isDead() && !g.isRemoved());
 			assertGreater("it found its way round the rib and drank",
@@ -11277,8 +11189,6 @@ public class SimTests {
 			// the thrifty line needs the longer race to pull clearly ahead.
 			tick(slowW, 16000);
 			tick(fastW, 16000);
-			snapshot(slowW, "reference metabolism: a real, food-backed surplus");
-			snapshot(fastW, "triple pace: appetite, not offspring");
 			assertGreater("the reference burner multiplied past the fast one — "
 					+ "pace of life now buys appetite, not offspring",
 					slowW.getAliveCount(), fastW.getAliveCount());
@@ -12772,11 +12682,9 @@ public class SimTests {
 					new net.hedinger.prototype.sim.StewardDrone(3.5, 3.5, 0, order);
 			w.spawnEntity(drone);
 			w.think();
-			snapshot(w, "before (12 grazers, order: leave 7)");
 			assertTrue("the drone starts parked on its dock", drone.isBerthed());
 
 			tick(w, 3000);
-			snapshot(w, "after (culled to 7, drone back on the pad)");
 
 			assertEquals("culled to exactly the ordered headcount", 7, order.standing());
 			assertTrue("the order cleared once the target was met", order.cullRole() == null);
@@ -12839,7 +12747,6 @@ public class SimTests {
 				w.spawnEntity(d);
 			}
 			w.think();
-			snapshot(w, "before (20 grazers, four drones on the rank)");
 
 			int sawFourApart = 0, hunting = 0;
 			for (int t = 0; t < 3000; t++) {
@@ -12861,7 +12768,6 @@ public class SimTests {
 					sawFourApart++;
 				}
 			}
-			snapshot(w, "after (culled to four, the rank home)");
 			assertLess("the rank actually hunted", 0, hunting);
 			assertLess("and was seen working four animals at once", 0, sawFourApart);
 			assertEquals("culled to exactly the ordered headcount", 4, order.standing());
@@ -12888,13 +12794,11 @@ public class SimTests {
 			Order order = new Order(w, "herbivore", 0);
 			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
 			w.think();
-			snapshot(w, "before (one grazer, one drone)");
 			int died = 0;
 			for (int t = 1; t <= 600 && !victim.isDead(); t++) {
 				tick(w, 1);
 				died = t;
 			}
-			snapshot(w, "after (a remnant, nine tenths gone)");
 
 			assertTrue("the drone killed it", victim.isDead());
 			assertEquals("the corpse says what killed it", "culled".hashCode(),
@@ -12935,9 +12839,7 @@ public class SimTests {
 			w.spawnEntity(hunter);
 			w.spawnEntity(rider);
 			w.think();
-			snapshot(w, "before (a starving hunter and a parasite, both touching it)");
 			tick(w, 500);
-			snapshot(w, "after (both went hungry; the drone is unmarked)");
 
 			assertEquals("nothing bit the machine", 100, drone.getHealth());
 			assertTrue("the parasite never latched onto it", rider.getAttachTarget() != drone);
@@ -12982,7 +12884,6 @@ public class SimTests {
 					new net.hedinger.prototype.sim.StewardDrone(3.5, 4.5, 0, order);
 			w.spawnEntity(drone);
 			w.think();
-			snapshot(w, "before (drone berthed west, quarry east, blast door shut)");
 			assertTrue("the door starts sealed", blast.isClosed());
 
 			double furthestEast = drone.getX();
@@ -12990,7 +12891,6 @@ public class SimTests {
 				tick(w, 1);
 				furthestEast = Math.max(furthestEast, drone.getX());
 			}
-			snapshot(w, "after (the drone crossed and came home; the walker never did)");
 
 			assertTrue("the drone got through the door and killed its quarry", quarry.isDead());
 			assertGreater("the drone crossed east of the partition", furthestEast, 12.0);
@@ -13091,9 +12991,7 @@ public class SimTests {
 			Order order = new Order(w, "herbivore", 0); // kill everything it can
 			w.spawnEntity(new net.hedinger.prototype.sim.StewardDrone(2.5, 2.5, 0, order));
 			w.think();
-			snapshot(w, "before (one grazer in the open, one down a duct)");
 			tick(w, 2500);
-			snapshot(w, "after (the open one is gone; the ducted one is not)");
 
 			assertTrue("the grazer in the open was culled", exposed.isDead());
 			assertTrue("the grazer down the duct was out of reach", !sheltered.isDead());
@@ -13138,7 +13036,6 @@ public class SimTests {
 					new net.hedinger.prototype.sim.StewardDrone(5.5, 5.5, 1, order);
 			w.spawnEntity(drone);
 			w.think();
-			snapshot(w, "before (one grazer across the room, one through the floor)");
 
 			tick(w, 2);
 			assertTrue("it went for the one on its own floor, not the one under it",
@@ -13179,14 +13076,12 @@ public class SimTests {
 					new net.hedinger.prototype.sim.StewardDrone(10.5, 6.5, 1, order);
 			w.spawnEntity(drone);
 			w.think();
-			snapshot(w, "before (a big grazer one floor below the drone's dock)");
 
 			double radii = (drone.getSize() + below.getSize()) / 2.0;
 			assertLess("the test is worth running: it is inside the emitter by distance",
 					1.0 - radii, net.hedinger.prototype.sim.StewardDrone.strikeReach());
 
 			tick(w, 1200);
-			snapshot(w, "after (still there)");
 			assertTrue("the grazer below was not shot through the deck", !below.isDead());
 		}
 	}
@@ -13364,7 +13259,6 @@ public class SimTests {
 					new net.hedinger.prototype.sim.StewardDrone(10.5, 5.5, 0, order);
 			w.spawnEntity(drone);
 			w.think();
-			snapshot(w, "before (a grazer one tile inside the duct, the drone at the door)");
 
 			double closest = Double.MAX_VALUE;
 			for (int t = 0; t < 3000 && !ducted.isDead(); t++) {
@@ -13372,7 +13266,6 @@ public class SimTests {
 				closest = Math.min(closest, Math.hypot(drone.getX() - ducted.getX(),
 						drone.getY() - ducted.getY()));
 			}
-			snapshot(w, "after (still there)");
 
 			assertTrue("the ducted grazer was never shot", !ducted.isDead());
 			// And the test earned it: the drone really did come close enough that
@@ -13685,9 +13578,7 @@ public class SimTests {
 			w.spawnEntity(ashore);
 			w.spawnEntity(overhead);
 			w.think();
-			snapshot(w, "before (one in the spill, one on deck, one above it)");
 			tick(w, 400);
-			snapshot(w, "after (only the wader is burned)");
 
 			assertLess("the body in the spill was burned", waders.getHealth(), 100);
 			assertEquals("the body on clean deck was untouched", 100, ashore.getHealth());
@@ -13720,7 +13611,6 @@ public class SimTests {
 			w.spawnEntity(away);
 			w.think();
 			tick(w, 2);
-			snapshot(w, "a mind one tile short of a waste channel");
 
 			double[] sensedAt = facing.sensorSnapshot();
 			double[] sensedAway = away.sensorSnapshot();
@@ -13764,9 +13654,7 @@ public class SimTests {
 			w.spawnEntity(onRun);
 			w.spawnEntity(onDeck);
 			w.think();
-			snapshot(w, "before (one on the run, one on the deck)");
 			tick(w, 200);
-			snapshot(w, "after (neither gained on the other)");
 
 			// A gap rather than equality: move() jitters each step by a tenth,
 			// so identical bodies drift a little whatever the ground under them.
@@ -13821,7 +13709,6 @@ public class SimTests {
 			}
 			w.setTile(16, 5, 0, Tile.TileType.TYPE_RAIL);     // a stub off the spur's end
 			w.alignTiles();
-			snapshot(w, "a yard: loop, spur, crossing, points and a buffer stop");
 
 			assertEquals("the loop's north-west corner turns two ways", 2, arms(w, 3, 3));
 			assertEquals("its north-east corner too", 2, arms(w, 13, 3));
@@ -13884,9 +13771,7 @@ public class SimTests {
 			w.spawnEntity(blocked);
 			w.spawnEntity(through);
 			w.think();
-            snapshot(w, "before (a rack row with one aisle)");
 			tick(w, 400);
-			snapshot(w, "after (stopped at the racks; through the aisle)");
 
 			assertLess("the racks stopped the body", blocked.getX(), 8.0);
 			assertGreater("the aisle let the other through", through.getX(), 9.0);
@@ -14303,11 +14188,9 @@ public class SimTests {
 			w.spawnEntity(ld);
 			w.spawnEntity(crate);
 			w.think();
-			snapshot(w, "before (a crate on the floor, the loader berthed)");
 
 			assertTrue("it starts parked", ld.isBerthed());
 			tick(w, 3000);
-			snapshot(w, "after (the crate is in the vault)");
 
 			assertLess("the crate ends up at the vault",
 					Math.hypot(crate.getX() - 17.5, crate.getY() - 5.5), 2.5);
@@ -14356,7 +14239,6 @@ public class SimTests {
 			w.spawnEntity(across);
 			w.spawnEntity(below);
 			w.think();
-			snapshot(w, "before (a crate across the hall, a crate through the floor)");
 
 			// The pick itself, not where the machine ends up. Asked at the end
 			// this scenario passes with the metric reverted, because the
@@ -14367,7 +14249,6 @@ public class SimTests {
 			assertTrue("it chose the crate on its own floor", ld.target() == across);
 
 			tick(w, 3000);
-			snapshot(w, "after (the hall's crate is in the vault)");
 			assertLess("and fetched and stowed it",
 					Math.hypot(across.getX() - 20.5, across.getY() - 11.5), 2.5);
 			assertEquals("the crate through the floor was left on its own floor",
@@ -14421,10 +14302,8 @@ public class SimTests {
 			w.spawnEntity(ld);
 			w.spawnEntity(below);
 			w.think();
-			snapshot(w, "before (the only crate is through the floor)");
 
 			tick(w, 1500);
-			snapshot(w, "after (given up on it)");
 
 			// That it let the crate GO, not where it is standing. The berth has
 			// to be over the crate for the stall to be reachable at all, so a
@@ -14586,9 +14465,7 @@ public class SimTests {
 			w.spawnEntity(Item.crate(14.5, 3.5, 0));
 			w.spawnEntity(Item.crate(14.5, 6.5, 0));
 			w.think();
-			snapshot(w, "before (one lane fouled, one clean)");
 			tick(w, 900);
-			snapshot(w, "after (the wader is behind)");
 
 			assertGreater("the clean lane got further", clear.getX(), wading.getX());
 		}
@@ -14949,10 +14826,6 @@ public class SimTests {
 		// Behaviour tests render clean: no decorative grass/shrubs cluttering the
 		// subject (scenario worlds are fully fertile, so foliage would blanket them).
 		net.hedinger.prototype.engine.RenderFx.foliage = false;
-		String shotsDir = System.getProperty("simtest.shots");
-		if (shotsDir != null) {
-			new java.io.File(shotsDir).mkdirs();
-		}
 		for (Scenario s : all()) {
 			if (args.length > 0 && !s.name().equalsIgnoreCase(args[0])) {
 				continue;
@@ -14970,7 +14843,6 @@ public class SimTests {
 				e.printStackTrace(System.out);
 				failed++;
 			}
-			writeShots(shotsDir, s);
 		}
 		System.out.println("----");
 		System.out.println(passed + " passed, " + failed + " failed");
@@ -14979,19 +14851,4 @@ public class SimTests {
 		}
 	}
 
-	/** Composes a scenario's captured frames into one before/after strip PNG. */
-	private static void writeShots(String shotsDir, Scenario s) {
-		if (shotsDir == null || s.shots().isEmpty()) {
-			return;
-		}
-		try {
-			java.awt.image.BufferedImage strip =
-					SnapshotRenderer.strip(s.name(), s.shotLabels(), s.shots());
-			java.io.File out = new java.io.File(shotsDir, s.name() + ".png");
-			javax.imageio.ImageIO.write(strip, "png", out);
-			System.out.println("      shot -> " + out.getPath());
-		} catch (Exception e) {
-			System.out.println("      shot FAILED: " + e);
-		}
-	}
 }
