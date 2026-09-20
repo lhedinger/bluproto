@@ -352,7 +352,12 @@ const vegSec = section('Vegetation sprites',
   + 'resolution by the exported drawVegetationTile the world will stamp with. '
   + 'The stage is measured on an absolute scale, so a tile’s fertility is a '
   + 'ceiling on it: half-fertile ground fully regrown stops around stage 3 and '
-  + 'never wears the tall tufts, matching the sward baked underneath it.');
+  + 'never wears the tall tufts, matching the sward baked underneath it. '
+  + 'Fern, wildflowers, heather and moss are the meadow’s one crop drawn as four '
+  + 'plants — which one a tile grows is set by the ground’s moisture at worldgen, '
+  + 'fern in the damp, heather on the dry margin, moss on rocky grit — and they '
+  + 'feed a grazer exactly as grass does. Stage 1, what grazing leaves, is the '
+  + 'same trampled remains for all of them: a plant only shows once it regrows.');
 
 for (const kind of VEG_KINDS) {
   const S = 44, PAD = 6;
@@ -385,10 +390,11 @@ for (const kind of VEG_KINDS) {
       : `${kind} growing on two grounds`, D * 2 + 12, D, (g, t) => {
     const stage = 1 + Math.floor((t % 7.5) / 1.5);
     // Each plant over the ground it actually stands on: grass and mushroom on
-    // soil, the cactus on sand. A cactus shown over loam is a picture of a
-    // plant somewhere it would die.
+    // soil, the cactus on sand, moss on the grit of rocky grassland. A cactus
+    // shown over loam is a picture of a plant somewhere it would die.
     const tones: readonly [number, string][] = kind === 'cactus'
       ? [[0, '#98865c'], [D + 12, '#6e5f42']]
+      : kind === 'moss' ? [[0, '#6b6353'], [D + 12, '#584430']]
       : [[0, '#3f7a38'], [D + 12, '#584430']];
     for (const [gx, tone] of tones) {
       g.imageSmoothingEnabled = false;
