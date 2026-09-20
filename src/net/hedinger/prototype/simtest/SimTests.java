@@ -829,6 +829,96 @@ public class SimTests {
 	}
 
 	/**
+	 * Bodies die of old age, and how long they get is mass over pace.
+	 *
+	 * <p>{@link Genome#maxAge} was a gene that mutated, drifted and was shown in
+	 * the viewer while being read by nothing: {@code Entity.lifespan} stayed at
+	 * -1 for every genomed body, so nothing in the world had ever died of age.
+	 * Verified before the fix by handing a body a maxAge of 100 and watching it
+	 * stroll past tick 5000 in good health.
+	 *
+	 * <p>What it buys now is {@code maxAge · mass^0.25 / eff}. <b>Mass buys
+	 * time</b>, on the same exponent that already gives a big body its longer
+	 * fast, because capacities grow with mass and the Kleiber burn only with
+	 * mass^0.75. <b>Pace spends it</b>: a body running every rate at twice the
+	 * reference wears out in half the years, which is the rate-of-living trade
+	 * and the thing that stops a fast metabolism being free.
+	 *
+	 * <p>Measured on a full store in a barren room, with the span set short
+	 * enough that old age arrives well before hunger or thirst could -- so what
+	 * is under test is the clock and not the larder.
+	 */
+	static class OldAgeIsMassOverPace extends Scenario {
+		private static final int SPAN = 4000;
+
+		private static Genome body(double size, double metabolism) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0;
+			g.metabolism = metabolism;
+			g.maxAge = SPAN;
+			return g;
+		}
+
+		/** {tick it died, age at death}, or nulls if it outlived the window. */
+		private TestNPC run(World w, double size, double metabolism) {
+			TestNPC n = TestNPC.breeder(5.5 + size / 8.0, 5.5, 0, body(size, metabolism))
+					.grown().withHunger(1.0).withHydration(1.0).withReproCooldown(100_000_000);
+			n.withGlycogen(n.glycogenCapacity());
+			w.spawnEntity(n);
+			return n;
+		}
+
+		@Override
+		public void run() {
+			seed(46);
+			World w = room(14, 12);
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // nothing to eat: age is the only clock
+				}
+			}
+			TestNPC ref = run(w, 8, NPC.META_REF);          // mass 1.00, eff 1.0
+			TestNPC fast = run(w, 8, 2 * NPC.META_REF);     // mass 1.00, eff 2.0
+			TestNPC big = run(w, 20, NPC.META_REF);         // mass 2.50, eff 1.0
+			TestNPC small = run(w, 4, NPC.META_REF);        // mass 0.50, eff 1.0
+			tick(w, 1);
+
+			int refDied = -1, fastDied = -1, bigDied = -1, smallDied = -1;
+			double refMeat = 0; // read at the moment of death: a carcass rots away after
+			for (int t = 1; t <= 12000; t++) {
+				tick(w, 1);
+				if (refDied < 0 && ref.isDead()) { refDied = t; refMeat = ref.meatLeft(); }
+				if (fastDied < 0 && fast.isDead()) { fastDied = t; }
+				if (bigDied < 0 && big.isDead()) { bigDied = t; }
+				if (smallDied < 0 && small.isDead()) { smallDied = t; }
+			}
+
+			assertGreater("a body dies of old age at all -- the gene was read by nothing", refDied, 0);
+			assertTrue("and its cause says so (" + ref.getDeathCause() + ")",
+					"old age".equals(ref.getDeathCause()));
+			assertGreater("leaving a carcass, like any other death ("
+					+ String.format("%.2f of meat on it", refMeat) + ")", refMeat, 0.0);
+
+			// The reference body gets exactly its lineage's span.
+			assertNear("a reference body gets its lineage's span (" + refDied + " of " + SPAN + ")",
+					SPAN, refDied, 2);
+
+			// Pace spends it: twice the rate, half the life.
+			assertNear("a body that lives twice as fast gets half as long ("
+					+ fastDied + " against " + refDied + ")",
+					refDied / 2.0, fastDied, 2);
+
+			// Mass buys it, as mass^0.25.
+			assertNear("a big body gets mass^0.25 longer (" + bigDied + " against " + refDied + ")",
+					SPAN * Math.pow(2.5, 0.25), bigDied, 2);
+			assertNear("and a small one that much less (" + smallDied + " against " + refDied + ")",
+					SPAN * Math.pow(0.5, 0.25), smallDied, 2);
+			assertGreater("so the big body outlives the small by half again", bigDied, 1.4 * smallDied);
+		}
+	}
+
+	/**
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
 	 * lays what glycogen cannot take down as mass, at the one price; a body
 	 * whose gut runs empty draws that mass back into the gut at the same
@@ -14813,6 +14903,7 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new RestingIsCheapestAndWalkingBeatsRunning(),
+				new OldAgeIsMassOverPace(),
 				new FatIsTheBodysStore(),
 				new ALineageDecidesHowBigItsYoungAreBorn(),
 				new WhatIsNotAbsorbedFeedsTheGround(),

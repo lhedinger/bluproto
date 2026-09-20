@@ -38,7 +38,17 @@ public class Genome {
 	public double losRange = 10;
 	public double losFov = Math.PI * 0.5;
 	public double metabolism = 0.02;
-	public int maxAge = 3000;
+	/**
+	 * Ticks a body of the REFERENCE mass and the REFERENCE pace lives before old
+	 * age takes it — 15 days of world time. What a body actually gets is this
+	 * scaled by {@code mass^0.25 / eff} (see {@code NPC.lifespanFor}).
+	 *
+	 * <p>The old 3000 predates the metabolic model and was never expressed
+	 * anywhere: a body took about 7 days to produce its first child, so a
+	 * lifespan of 1.5 days would have emptied the world the moment it was
+	 * wired up.
+	 */
+	public int maxAge = 30000;
 	public boolean flying = false; // locomotion: airborne (a detached shadow) vs ground
 
 	// --- mind (optional evolvable behaviour; null = no brain) ---
@@ -406,6 +416,11 @@ public class Genome {
 		g.mutationRate = 0.05 + Utils.random() * 0.1;
 		g.instinct = 0.5 + Utils.random() * 0.5;
 		spreadSearch(g);
+		// Lifespan: 12 to 25 days at the reference body and pace, which spans one
+		// short career to a dozen children. Deliberately a spread and not an
+		// optimum -- founders are seeding, not a configuration to get right.
+		// Drawn LAST so every draw above it keeps the stream it had.
+		g.maxAge = (int) Math.round(24000 + Utils.random() * 26000);
 		return g;
 	}
 

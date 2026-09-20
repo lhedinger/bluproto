@@ -279,6 +279,40 @@ public abstract class NPC extends Entity {
 		grownSize = Math.max(1, adult * fraction);
 		bornSize = grownSize;
 		size = (int) Math.round(grownSize);
+		lifespan = lifespanFor(adult / REF_SIZE);
+	}
+
+	/**
+	 * Ticks this body gets before old age takes it: its lineage's
+	 * {@link Genome#maxAge} — a life at the reference body and the reference
+	 * pace — scaled by the two things that actually set the length of one.
+	 *
+	 * <p><b>Mass buys time</b>, as {@code mass^0.25}: the same exponent the rest
+	 * of the economy already runs on, because capacities grow with mass while
+	 * the Kleiber burn only grows with {@code mass^0.75}. It is what already
+	 * makes a big body fast longer between meals, and it is the same reason a
+	 * big body lasts longer in years.
+	 *
+	 * <p><b>Pace spends it</b>, as {@code 1/eff}: a body running every rate at
+	 * {@code eff} times the reference wears out {@code eff} times sooner. That
+	 * is the rate-of-living trade, and it is why a fast metabolism is not
+	 * simply free — measured, a fast burner already breeds worse than the
+	 * reference on good ground, because income is limited by how fast a mouth
+	 * finds food rather than by how fast a gut can take it; this stops it being
+	 * free in years as well.
+	 *
+	 * <p>Anchored on the ADULT body, like {@link #glycogenCapacity()}: how long
+	 * a lineage lives is a fact about the animal it grows into, not about how
+	 * big it happens to be today. A body with no genome keeps the {@code -1}
+	 * that means it never dies of age.
+	 */
+	protected int lifespanFor(double adultMass) {
+		if (genome == null) {
+			return -1;
+		}
+		double eff = Math.max(1e-6, genome.metabolism / META_REF);
+		double span = genome.maxAge * Math.pow(Math.max(1e-9, adultMass), 0.25) / eff;
+		return (int) Math.max(1, Math.round(span));
 	}
 
 	/**

@@ -128,7 +128,14 @@ public final class GeneSchema {
 				g -> g.sexuality, (g, v) -> g.sexuality = v);
 		add("metab", "gene = pace 1", Drift.MULT, 0, INF, false,
 				g -> g.metabolism, (g, v) -> g.metabolism = v);
-		add("maxAge", "ticks", Drift.MULT, 1, INF, true,
+		// Bounded at both ends. Below the floor a lineage dies before it can
+		// breed -- which is selection's business and not a bound's, but 5 days is
+		// low enough to be that edge rather than a number with no meaning. The
+		// CEILING is the load-bearing one: nothing here charges for living
+		// longer, so a long-lived genome strictly dominates and the gene would
+		// ratchet to whatever it is allowed to reach. Fifty days is that limit
+		// until age costs something real.
+		add("maxAge", "ticks", Drift.MULT, 10000, 100000, true,
 				g -> g.maxAge, (g, v) -> g.maxAge = (int) v);
 		add("flying", "", Drift.NONE, 0, 1, true,
 				g -> g.flying ? 1 : 0, (g, v) -> g.flying = v != 0);
