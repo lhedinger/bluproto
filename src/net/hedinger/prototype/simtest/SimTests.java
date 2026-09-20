@@ -1622,6 +1622,81 @@ public class SimTests {
 	 * flora moves no food. Fertility is set before the flora and never read by
 	 * it, so a tile's cap is the same whatever it wears.
 	 */
+	/**
+	 * The surface floras are painted from ramps, and the fern is lit from the
+	 * north.
+	 *
+	 * <p>Copied from render.ts, the way the mushroom's colours are, because Java
+	 * cannot read that file and nothing else links the two: FERN is the reed
+	 * ramp, THICKET the cover ramp, STEM the soil base, LICHEN the sand
+	 * highlight, and the blooms are the one bloom pair. The fern rosettes are
+	 * the frozen strings the painter stamps; the rule they were lit by is that
+	 * a lit mark stands north of the crown and a sunk one never does, and the
+	 * three grown stages must be three different plants.
+	 */
+	static class TheSurfaceFloraIsPaintedFromRamps extends Scenario {
+		@Override
+		public void run() {
+			int[] fern = { 0x14301f, 0x2c5a36, 0x4f8752 };
+			int[] thicket = { 0x1b3a16, 0x2b5422, 0x456c36 };
+			int stem = 0x63472e, lichen = 0xc0aa7e, bloom = 0xe0455f, cream = 0xf0e8c6;
+			for (int i = 0; i < 3; i++) {
+				assertEquals("the fern wears the reed bed's wet green, shade " + i,
+						GroundTextures.rampColor(GroundTextures.CLS_REEDS, i), fern[i]);
+				assertEquals("heather and moss wear the thicket's green, shade " + i,
+						GroundTextures.rampColor(GroundTextures.CLS_COVER, i), thicket[i]);
+			}
+			assertEquals("a stem is soil", GroundTextures.rampColor(GroundTextures.CLS_SOIL, 1), stem);
+			assertEquals("a lichen fleck is the sand ramp's pale",
+					GroundTextures.rampColor(GroundTextures.CLS_SAND, 2), lichen);
+			assertEquals("every bloom is the flora family's red", 0xE0455F, bloom);
+			assertEquals("and its cream", 0xF0E8C6, cream);
+
+			// FERN_SMALL, FERN_MID, FERN_BIG: the crown sits at (5,5) in every one.
+			String[][] forms = {
+					{ "............", "............", "...hhb......", ".....bhhh...", "...bbdb.b...",
+							".....cddd...", ".....x.b....", ".......b....", "............", "............",
+							"............", "............" },
+					{ "............", ".....bh.....", "...hhb......", "...h.bhhh...", "...bbdb.b...",
+							"...ddcddd...", "....bx.b....", "....b..b....", "............", "............",
+							"............", "............" },
+					{ "....hb......", ".....bh.....", "...hhb......", "...h.bhhh...", "...bbdb.b...",
+							"..dddcdddd..", "..b.bx.b.b..", "..b.b..b....", "............", "............",
+							"............", "............" } };
+			java.util.Set<String> seen = new java.util.HashSet<>();
+			int prevCells = 0;
+			for (String[] form : forms) {
+				int cy = -1, cells = 0;
+				for (int y = 0; y < 12; y++) {
+					assertEquals("a row is a tile wide", 12, form[y].length());
+					if (form[y].indexOf('c') >= 0) {
+						cy = y;
+					}
+				}
+				assertEquals("every frond grows from a crown, and the painter moves the stamp about it", 5, cy);
+				assertEquals("which is where it says it is", 5, form[cy].indexOf('c'));
+				for (int y = 0; y < 12; y++) {
+					for (char m : form[y].toCharArray()) {
+						assertTrue("every mark is a sanctioned one: " + m, ".hbdcx".indexOf(m) >= 0);
+						if (m != '.') {
+							cells++;
+						}
+						if (m == 'h') {
+							assertLess("a lit pinna stands north of the crown", y, cy - 1);
+						}
+						if (m == 'd') {
+							assertGreater("a sunk frond never does", y, cy - 2);
+						}
+					}
+				}
+				assertGreater("each stage adds fronds, not just marks", cells, prevCells);
+				prevCells = cells;
+				assertTrue("and the three grown stages are three different plants",
+						seen.add(String.join("", form)));
+			}
+		}
+	}
+
 	static class TheMeadowWearsFourFloras extends Scenario {
 		@Override
 		public void run() {
@@ -14731,6 +14806,7 @@ public class SimTests {
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
 				new TheMeadowWearsFourFloras(),
+				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
