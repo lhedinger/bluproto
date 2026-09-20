@@ -91,20 +91,17 @@ live in a simpler idiom, but the two must agree.
 
 You cannot judge pixel art by reading it.
 
-For anything the **Java** renderer draws, use `EntityShot` — it builds a real
-world and calls `renderWorld`, the same entry point the live app uses, so it
-shows the art through the real dispatch rather than through the painter you
-hoped was being called:
+**Everything except the ground is drawn by the client.** The Java renderer's
+only remaining job is the chunk bake — the ground PNGs the server ships — plus
+the staged ground bakes behind `/tiles`. Entities, furniture, machines, the
+concealment veil and the vegetation sprites are all `client/src/render.ts`, and
+a Java picture of any of them would be a picture of what the art ought to be,
+down a path nobody looks at. `EntityShot` used to be the tool here and is gone
+with the painters it drove.
 
-```bash
-./gradlew compileJava -q
-java -cp engine/build/classes/java/main net.hedinger.prototype.simtest.EntityShot \
-  out.png --focus StewardDrone --sweep --ticks 3000 --span 12000 --cell 3
-```
-
-`--sweep` collects one frame per heading the body is actually seen in and tells
-you how many of the eight it managed. A short strip is information, not a bug:
-an entity that stays parked is only ever drawn one way.
+So: for **ground**, bake it and look at the PNG — a scratch `main` that builds a
+world, calls `LayerBaker.bakeLevelImage`, and writes the result is a dozen lines
+and shows exactly what a viewer will be served.
 
 For client-side glyphs, extract the painter into a scratch page and screenshot
 it:

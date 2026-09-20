@@ -76,139 +76,15 @@ public class Grid {
 			}
 		}
 
-		// Structural furniture first, under the haze and the bodies: switch
-		// wiring lowest (a door leaf may slide over its conduit), then doors.
-		for (Entity e : world.entities.values()) {
-			if ((e instanceof net.hedinger.prototype.entities.Switch
-					|| e instanceof net.hedinger.prototype.entities.Nest) && e.getLvl() == level) {
-				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
-			}
-		}
-		for (Entity e : world.entities.values()) {
-			if (e instanceof net.hedinger.prototype.entities.Door && e.getLvl() == level) {
-				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
-			}
-		}
-		// Pheromone clouds next, so the haze sits under the creatures.
-		for (Entity e : world.entities.values()) {
-			if (e instanceof PheromoneCloud && e.getLvl() == level) {
-				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
-			}
-		}
-		for (Entity e : world.entities.values()) {
-			if (e != null && !(e instanceof PheromoneCloud)
-					&& !(e instanceof net.hedinger.prototype.entities.Door)
-					&& !(e instanceof net.hedinger.prototype.entities.Switch)
-				&& !(e instanceof net.hedinger.prototype.entities.Nest)
-					&& e.getLvl() == level) {
-				net.hedinger.prototype.render.EntityPainters.render(e, g, v);
-			}
-		}
-		// What perception cannot see, the eye should only half see: re-stamp
-		// foliage over creatures standing in walkable sight-blockers.
-		if (camDepth == 0 && RenderFx.pixelGround && RenderFx.concealFoliage) {
-			renderConcealment(g2, ox, oy);
-		}
+		// Entities are not drawn here any more, and neither is the concealment
+		// veil that went over them. Both were the desktop viewer's, and there is
+		// no desktop viewer: what this render path still exists for is the chunk
+		// bake, and a chunk is baked from an ENTITY-FREE twin of the world
+		// (Worlds.demoTerrain) precisely so the ground can be shipped once and
+		// have bodies drawn over it live. The client draws the bodies, and runs
+		// its own veil over the baked pixels.
 	}
 
-	/**
-	 * Concealment overlay, matching the web client's canopy pass: wherever a
-	 * living creature stands in (or overlaps) a walkable sight-blocking tile
-	 * -- thicket cover or a reed bed -- part of that tile's own foliage is
-	 * re-stamped over the entity layer. Reeds redraw exactly their stalk
-	 * pixels, so a body shows between the stalks; the closed canopy redraws
-	 * clustered 2x2 blocks at roughly half coverage, so a body reads through
-	 * gaps in the leaves rather than vanishing. Pixels regenerate from the
-	 * same pure texture functions as the ground, so the overlay is invisible
-	 * where it lands on identical ground pixels.
-	 */
-	private void renderConcealment(Graphics2D g2, int ox, int oy) {
-		java.util.HashSet<Integer> veiled = new java.util.HashSet<Integer>();
-		for (Entity e : world.entities.values()) {
-			if (e == null || e instanceof PheromoneCloud || e.getLvl() != level || e.isDead()) {
-				continue;
-			}
-			int ex = (int) e.getX(), ey = (int) e.getY();
-			for (int dy = -1; dy <= 1; dy++) {
-				for (int dx = -1; dx <= 1; dx++) {
-					int tx = ex + dx, ty = ey + dy;
-					if (tx < 0 || ty < 0 || tx >= world.cols || ty >= world.rows) {
-						continue;
-					}
-					Tile t = tiles[tx][ty];
-					if (t.blocksSight() && !t.isSolid()) {
-						veiled.add(ty * world.cols + tx);
-					}
-				}
-			}
-		}
-		int ts = ResourceManager.tileSize;
-		int A = GroundTextures.ART;
-		int reedGap = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 0);
-		int bladeTip = GroundTextures.rampColor(GroundTextures.CLS_GRASS, 2);
-		int scrubWood = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 1);
-		int scrubThorn = GroundTextures.rampColor(GroundTextures.CLS_CACTUS, 0);
-		// The design system's cover translucency: the whole veil draws at
-		// VEIL_ALPHA, so the body underneath always half-reads through it.
-		java.awt.Composite oldComposite = g2.getComposite();
-		g2.setComposite(java.awt.AlphaComposite.getInstance(
-				java.awt.AlphaComposite.SRC_OVER, GroundTextures.VEIL_ALPHA));
-		for (int key : veiled) {
-			int x = key % world.cols, y = key / world.cols;
-			boolean reedBed = tiles[x][y].getType() == Tile.TileType.TYPE_REEDS;
-			boolean tall = tiles[x][y].getType() == Tile.TileType.TYPE_TALLGRASS;
-			boolean scrub = tiles[x][y].getType() == Tile.TileType.TYPE_SCRUB;
-			boolean duct = tiles[x][y].getType() == Tile.TileType.TYPE_DUCT;
-			boolean ductVert = duct && (isType(x, y - 1, Tile.TileType.TYPE_DUCT)
-					|| isType(x, y + 1, Tile.TileType.TYPE_DUCT));
-			int sx = ox + x * ts, sy = oy + y * ts;
-			for (int aj = 0; aj < A; aj++) {
-				for (int ai = 0; ai < A; ai++) {
-					int gx = x * A + ai, gy = y * A + aj;
-					int col;
-					if (duct) {
-						// The duct's ribbed lid: the crawler shows in the slots.
-						Integer lid = ductVert
-								? GroundTextures.ductLid(gy, ai, gx, gy)
-								: GroundTextures.ductLid(gx, aj, gx, gy);
-						if (lid == null) {
-							continue;
-						}
-						col = lid;
-					} else if (reedBed) {
-						col = GroundTextures.reeds(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
-						if (col == reedGap) {
-							continue; // the body shows between the stalks
-						}
-					} else if (tall) {
-						// Only the lit TIPS come back over the body — the loosest
-						// of the four veils, which is what makes tall grass cover
-						// you are partly visible in rather than hidden by.
-						col = GroundTextures.tallGrass(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
-						if (col != bladeTip) {
-							continue;
-						}
-					} else if (scrub) {
-						// The wood only: a stand of thorn is mostly sand, and it
-						// hides about as much as it looks like it does.
-						col = GroundTextures.scrub(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
-						if (col != scrubWood && col != scrubThorn) {
-							continue;
-						}
-					} else {
-						if (GroundTextures.hash01(gx >> 1, gy >> 1, 61) > 0.55) {
-							continue; // clustered gaps in the leaf veil
-						}
-						col = GroundTextures.canopy(x + (ai + 0.5) / A, y + (aj + 0.5) / A, gx, gy);
-					}
-					g2.setColor(new Color(col));
-					g2.fillRect(sx + ai * ts / A, sy + aj * ts / A,
-							(ai + 1) * ts / A - ai * ts / A, (aj + 1) * ts / A - aj * ts / A);
-				}
-			}
-		}
-		g2.setComposite(oldComposite);
-	}
 
 	/**
 	 * Draws the cosmetic tall-grass overlay as a top-down field: on every

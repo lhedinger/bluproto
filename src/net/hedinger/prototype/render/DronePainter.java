@@ -1,10 +1,6 @@
 package net.hedinger.prototype.render;
 
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 
-import net.hedinger.prototype.engine.View;
-import net.hedinger.prototype.entities.NPC;
 
 /**
  * Paints the steward's drone per the design system (ART-STYLE.md): a
@@ -205,24 +201,6 @@ public final class DronePainter {
 		return MachineStamp.bucket(dir);
 	}
 
-	public static void draw(NPC n, Graphics g, View v) {
-		Graphics2D g2 = (Graphics2D) g;
-		double z = n.getZ();
-		// One art-pixel on screen. Below a pixel there is nothing to draw.
-		if (v.pixelX(n.getX() + 1, z, 0) - v.pixelX(n.getX(), z, 0) <= 0) {
-			return;
-		}
-		// Anchor on the world art-pixel lattice, exactly as the nest stamp
-		// does: nothing positions itself off-lattice to look smoother.
-		int cgx = (int) Math.round(n.getX() * MachineStamp.A);
-		int cgy = (int) Math.round(n.getY() * MachineStamp.A);
-
-		int sh = SHADOW_OVAL.length, sw = SHADOW_OVAL[0].length();
-		MachineStamp.blit(g2, MachineStamp.grid(SHADOW_OVAL, sh, sw), cgx - sw / 2,
-				cgy - sh / 2 + LIFT, z, v, MachineStamp.SHADOW);
-		MachineStamp.blit(g2, FACING[MachineStamp.bucket(n.getDirection())], cgx - N / 2,
-				cgy - N / 2, z, v, null);
-	}
 
 	private DronePainter() {
 	}
