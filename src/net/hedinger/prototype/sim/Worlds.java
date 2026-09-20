@@ -599,6 +599,7 @@ public final class Worlds {
 				}
 				w.setTile(x, y, SURFACE_Z, t);
 				w.getTile(x, y, SURFACE_Z).setFertility(fert);
+				w.getTile(x, y, SURFACE_Z).setFlora(surfaceFlora(t, x, y, moist));
 			}
 		}
 
@@ -1911,6 +1912,37 @@ public final class Worlds {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Which plant the sward at (x, y) is drawn as (see {@link Tile#getFlora}).
+	 *
+	 * <p>The species follows the same moisture that decides where water and
+	 * thicket go, so a walk toward the lakes passes from heather through flowers
+	 * into fern -- the meadow reads as one gradient rather than a random tiling
+	 * of four looks. Within its band each plant comes in STANDS, cut from a slow
+	 * patch noise, because a fern bed is a place and a fern every fourth tile is
+	 * confetti. Rocky ground grows moss on about half its grit and keeps its
+	 * thin tufts on the rest. Tall grass stays grass: it is what it says it is.
+	 *
+	 * <p>None of this moves food. The plant is a look on the same crop, at the
+	 * fertility the band already gave the tile.
+	 */
+	static int surfaceFlora(Tile.TileType t, int x, int y, double moist) {
+		double patch = Utils.noise2(x + 3100, y + 450, 0.09);
+		if (t == Tile.TileType.TYPE_ROCKY) {
+			return patch > 0.50 ? Tile.FLORA_MOSS : Tile.FLORA_GRASS;
+		}
+		if (t != Tile.TileType.TYPE_FLOOR) {
+			return Tile.FLORA_GRASS;
+		}
+		if (moist > 0.50) {
+			return patch > 0.60 ? Tile.FLORA_FERN : Tile.FLORA_GRASS;
+		}
+		if (moist > 0.36) {
+			return patch > 0.62 ? Tile.FLORA_FLOWERS : Tile.FLORA_GRASS;
+		}
+		return patch > 0.58 ? Tile.FLORA_HEATHER : Tile.FLORA_GRASS;
 	}
 
 	/** Whether the surface at (x, y) may become ravine: natural open ground,

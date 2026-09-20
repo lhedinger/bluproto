@@ -1610,6 +1610,84 @@ public class SimTests {
 	}
 
 	/**
+	 * The surface grows more than grass, and grows it where the ground says.
+	 *
+	 * <p>Four floras share the meadow's one crop: fern in the damp, flowers in
+	 * the middle, heather on the dry margin, moss on rocky grit. This pins that
+	 * every one of them actually occurs, that each stays in its own moisture
+	 * band, that a flora only ever sits on a tile that grows vegetation (a
+	 * flora on rock would draw a plant on nothing), and that grass is still the
+	 * meadow's majority -- variety is seasoning, and a meadow that is mostly
+	 * fern is a fern bed with a meadow's name. And the load-bearing one: the
+	 * flora moves no food. Fertility is set before the flora and never read by
+	 * it, so a tile's cap is the same whatever it wears.
+	 */
+	static class TheMeadowWearsFourFloras extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			int z = w.getSurfaceZ();
+			int[] count = new int[5];
+			int meadow = 0, rocky = 0, offCrop = 0;
+			double fernMoistMin = 1, heatherMoistMax = 0;
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, z);
+					if (t == null) {
+						continue;
+					}
+					int f = t.getFlora();
+					if (f != Tile.FLORA_GRASS && !t.growsVegetation()) {
+						offCrop++;
+					}
+					if (t.getType() == Tile.TileType.TYPE_FLOOR) {
+						meadow++;
+					} else if (t.getType() == Tile.TileType.TYPE_ROCKY) {
+						rocky++;
+					}
+					count[f]++;
+					double moist = net.hedinger.prototype.engine.Utils.noise2(x + 500, y + 300, 0.075);
+					if (f == Tile.FLORA_FERN) {
+						fernMoistMin = Math.min(fernMoistMin, moist);
+					}
+					if (f == Tile.FLORA_HEATHER) {
+						heatherMoistMax = Math.max(heatherMoistMax, moist);
+					}
+					if (f == Tile.FLORA_MOSS) {
+						assertTrue("moss grows on rocky ground and nowhere else",
+								t.getType() == Tile.TileType.TYPE_ROCKY);
+					}
+				}
+			}
+			assertEquals("a flora is never put on a tile that grows nothing", 0, offCrop);
+			for (int f = 1; f <= 4; f++) {
+				assertGreater("flora " + f + " occurs in stands, not as a rumour", count[f], 100);
+			}
+			assertGreater("fern is the damp meadow's plant", fernMoistMin, 0.5);
+			assertLess("heather is the dry margin's", heatherMoistMax, 0.36);
+			int meadowFloras = count[Tile.FLORA_FERN] + count[Tile.FLORA_FLOWERS]
+					+ count[Tile.FLORA_HEATHER];
+			assertGreater("a good share of the meadow is not grass (" + meadowFloras
+					+ " of " + meadow + ")", meadowFloras, meadow / 5);
+			assertLess("but grass is still its majority", meadowFloras, meadow / 2);
+			assertGreater("moss covers a real share of the rocky ground",
+					count[Tile.FLORA_MOSS], rocky / 4);
+			// The flora is a look, not a diet: the same world generated again reads
+			// the same fertility on every tile whatever it wears, and a tile's cap
+			// is fertility alone.
+			for (int x = 0; x < w.getColums(); x++) {
+				for (int y = 0; y < w.getRows(); y++) {
+					Tile t = w.getTile(x, y, z);
+					if (t != null && t.getFlora() != Tile.FLORA_GRASS) {
+						assertTrue("the cap ignores the flora",
+								Math.abs(Tile.VEG_MAX * t.getFertility() - t.vegetationCap()) < 1e-12);
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * The fungus bed is a mat, and it leaves room for the crop standing in it.
 	 *
 	 * <p>This is a regression guard with a number behind it. The bed used to
@@ -14652,6 +14730,7 @@ public class SimTests {
 				new TheDesertStandsCactiOfEveryAge(),
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
+				new TheMeadowWearsFourFloras(),
 				new ASoundIsHeardAndThenGone(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),

@@ -54,6 +54,8 @@ public final class Tuning {
 	 */
 	private static final java.util.Set<String> CODES = java.util.Set.of(
 			"Tile.DIR_N", "Tile.DIR_E", "Tile.DIR_S", "Tile.DIR_W",
+			"Tile.FLORA_GRASS", "Tile.FLORA_FERN", "Tile.FLORA_FLOWERS",
+			"Tile.FLORA_HEATHER", "Tile.FLORA_MOSS",
 			"NPC.STATUS_SLEEP", "NPC.STATUS_IDLE", "NPC.STATUS_ALERT",
 			"NPC.STATUS_THREAT");
 

@@ -63,6 +63,35 @@ public class Tile {
 	// so the map has rich and poor habitats instead of uniform pasture.
 	private double fertility = 1.0;
 
+	// --- flora ----------------------------------------------------------------
+	/**
+	 * WHICH plant this tile's vegetation is drawn as. The crop underneath is one
+	 * quantity -- density against a fertility ceiling, grazed and regrown by the
+	 * same logistic model whatever it looks like -- so this changes nothing a
+	 * grazer can measure. It is the surface's variety: the meadow's own sward
+	 * standing up as fern in the damp, as flowers in the middle, as heather on
+	 * the dry margin, as moss cushions on the grit of rocky ground.
+	 *
+	 * <p>It is a field on the tile rather than a function of position because
+	 * a function of position can never change, and this is meant to: when
+	 * vegetation stops being static, succession is a write to this byte. Set at
+	 * worldgen today; read by the viewer's vegetation feed as the sprite kind.
+	 * Fungus beds and cacti are not floras -- they are tile TYPES, because the
+	 * ground under them is different and the cactus is solid.
+	 */
+	public static final int FLORA_GRASS = 0, FLORA_FERN = 1, FLORA_FLOWERS = 2,
+			FLORA_HEATHER = 3, FLORA_MOSS = 4;
+	private int flora = FLORA_GRASS;
+
+	/** Which plant the sward here is drawn as (one of the {@code FLORA_*}). */
+	public int getFlora() {
+		return flora;
+	}
+
+	public void setFlora(int f) {
+		flora = f;
+	}
+
 	// --- ramp orientation ---------------------------------------------------
 	/**
 	 * Which way this ramp's HIGH side faces, as a cardinal (see {@link #DIR_N}).
