@@ -1923,8 +1923,24 @@ public class SimTests {
 			} catch (ReflectiveOperationException e) {
 				throw new AssertionError("Entity no longer records what it heard", e);
 			}
+			// The scenario makes its own noise rather than waiting for the world
+			// to. What is under test is that a SPENT sound leaves the stream the
+			// moment it is spent; the two lines about the world being noisy are
+			// guards against that passing vacuously, and they were guarding by
+			// hope -- they needed a bite to land somewhere in the first twelve
+			// hundred ticks of the demo world. Whether one does is a question
+			// about how quickly predation gets going on one seed, which any shift
+			// of the random stream moves, and it is not what this is asking. A
+			// scream every hundred ticks, in a quiet corner of the map, makes the
+			// guards mean what they say. The world's own kills still count toward
+			// them; this only ensures there is something to count.
 			int listeners = 0, worstSpent = 0, everLive = 0;
 			for (int t = 0; t < 1200; t++) {
+				if (t % 100 == 0) {
+					w.spawnEntity(new net.hedinger.prototype.entities.Sound(
+							w.getColums() / 2.0, w.getRows() / 2.0, 0,
+							12, net.hedinger.prototype.entities.Sound.FIGHT));
+				}
 				w.think();
 				int spent = 0, live = 0, hearers = 0;
 				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
