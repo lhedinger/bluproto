@@ -1818,33 +1818,134 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * A cactus: authored stamp of a standing trunk and two arms over sand --
-	 * north tips lit, dark green flanks, contact shadow south. One bloom
-	 * accent at the crown, hash-gated rare, in the shared flora red so the
-	 * desert's one flower is the same flower the meadow shrubs carry.
+	 * The cactus, as five authored stamps ordered YOUNGEST TO OLDEST: a shoot,
+	 * a bare column, one arm, two arms, and a veteran carrying three.
+	 *
+	 * <p>It was one stamp, so every cactus in the world was the same cactus.
+	 * That is the flat-field mistake in its purest form — a standing plant is a
+	 * discrete object, and a desert of identical ones reads as wallpaper rather
+	 * than as a population.
+	 *
+	 * <p>The order is the point, and it is not decoration. A cactus does not
+	 * have five looks, it has ONE life with five moments in it, so the table is
+	 * a growth ladder and {@link #cactus}'s {@code maturity} argument indexes
+	 * it. Today that argument is a slow world-space field — the ground bake is
+	 * static and cannot know live state, which is exactly the lesson the fungus
+	 * bed taught when it drew its own crop — so what the field buys today is a
+	 * desert whose plants are visibly of different ages. What it buys later is
+	 * the seam: when vegetation stops being static, a real age arrives at this
+	 * same argument and nothing else about the painter changes. It will have to
+	 * arrive through the sprite layer or a re-bake, because a chunk bake still
+	 * cannot know it; the shape of the call is what is being settled here.
+	 *
+	 * <p>Silhouettes double for free by MIRRORING: the stamps are flipped
+	 * horizontally on a hash, which is lossless on a square grid and, unlike a
+	 * rotation, keeps the sun where it is — north stays north, so an arm on the
+	 * left is lit exactly as an arm on the right (§4, and the rotated-sentinel
+	 * case law in §7).
+	 *
+	 * <p>Marks: {@code h} a lit tip, {@code b} the body, {@code d} the sunk
+	 * flank, {@code x} the contact shadow on the sand, {@code .} bare sand.
+	 * One bloom accent at the crown, hash-gated rare, in the shared flora red
+	 * so the desert's one flower is the flower the meadow shrubs carry.
 	 */
-	private static final String[] CACTUS_STAMP = {
-			"............",
-			"....hh......",
-			"....bb......",
-			".hh.bb......",
-			".bb.bb.hh...",
-			".dbbbb.bb...",
-			"....bbbbb...",
-			"....bb.d....",
-			"....bb......",
-			"....dd......",
-			"....xx......",
-			"............",
+	private static final String[][] CACTUS_FORMS = {
+			// a shoot: this year's growth, no arms yet
+			{ "............",
+			  "............",
+			  "............",
+			  "............",
+			  "............",
+			  "............",
+			  ".....hh.....",
+			  ".....bb.....",
+			  ".....bb.....",
+			  ".....dd.....",
+			  ".....xx.....",
+			  "............" },
+			// a bare column, grown tall but still unbranched
+			{ "............",
+			  "............",
+			  "....hh......",
+			  "....bb......",
+			  "....bb......",
+			  "....bb......",
+			  "....bb......",
+			  "....bb......",
+			  "....bb......",
+			  "....dd......",
+			  "....xx......",
+			  "............" },
+			// the first arm
+			{ "............",
+			  "....hh......",
+			  "....bb......",
+			  "....bb......",
+			  "....bb.hh...",
+			  "....bb.bb...",
+			  "....bbbbb...",
+			  "....bb.d....",
+			  "....bb......",
+			  "....dd......",
+			  "....xx......",
+			  "............" },
+			// two arms: the one this replaced, kept verbatim as the reference
+			{ "............",
+			  "....hh......",
+			  "....bb......",
+			  ".hh.bb......",
+			  ".bb.bb.hh...",
+			  ".dbbbb.bb...",
+			  "....bbbbb...",
+			  "....bb.d....",
+			  "....bb......",
+			  "....dd......",
+			  "....xx......",
+			  "............" },
+			// a veteran: three arms, the oldest thing standing in the pan
+			{ "....hh......",
+			  "....bb......",
+			  ".hh.bb.hh...",
+			  ".bb.bb.bb...",
+			  ".bbbbbbbb...",
+			  ".d..bb..d...",
+			  "....bb.hh...",
+			  "....bbbbb...",
+			  "....bb.d....",
+			  "....dd......",
+			  "....xx......",
+			  "............" },
 	};
 
-	public static int cactus(int ai, int aj, int px, int py) {
-		char c = CACTUS_STAMP[aj].charAt(ai);
+	/** How many moments of a cactus's life the desert can show. */
+	public static final int CACTUS_FORMS_N = 5;
+
+	/** One cactus form's 12x12 stamp rows, copied — the same contract as
+	 *  {@link #reedForm}: the scenario pins authored data, not pixels. */
+	public static String[] cactusForm(int i) {
+		return CACTUS_FORMS[i].clone();
+	}
+
+	/**
+	 * One cactus, at the age {@code maturity} in [0,1] puts it.
+	 *
+	 * <p>{@code wx}/{@code wy} place the plant in the world, and are what
+	 * decides which way it faces: mirroring is per-TILE, not per-pixel, or a
+	 * plant would be flipped halfway across its own trunk.
+	 */
+	public static int cactus(double wx, double wy, double maturity, int ai, int aj,
+			int px, int py) {
+		int tx = (int) Math.floor(wx), ty = (int) Math.floor(wy);
+		int form = (int) (Math.max(0, Math.min(0.999, maturity)) * CACTUS_FORMS_N);
+		boolean mirror = hash01(tx, ty, 61) > 0.5;
+		char c = CACTUS_FORMS[form][aj].charAt(mirror ? 11 - ai : ai);
 		switch (c) {
 		case 'h':
-			// The crown: rarely, the bloom instead of the lit tip.
-			return hash01(px >> 3, py >> 3, 59) > 0.9 && aj == 1
-					? BLOOM_RED : RAMP[CLS_CACTUS][2];
+			// The crown: rarely, the bloom instead of the lit tip. Gated on the
+			// tile rather than on the pixel block, so a plant either flowers or
+			// does not -- the old gate could bloom one tip of a crown and not
+			// its neighbour.
+			return hash01(tx, ty, 59) > 0.82 && aj <= 2 ? BLOOM_RED : RAMP[CLS_CACTUS][2];
 		case 'b':
 			return RAMP[CLS_CACTUS][1];
 		case 'd':
