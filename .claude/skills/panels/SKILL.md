@@ -195,15 +195,36 @@ Two corollaries, both learned here:
 
 ### A filter must not be able to lie
 
-The Sankey filters to one clade at a time. That is safe for a specific reason
-worth checking before copying it: **a clade is inherited and never mutated**, so
-no flow ever crosses clades, and filtering can only omit whole ribbons — never
-sever one. A filter that can cut a flow in half would make the diagram wrong
-rather than smaller.
+The Sankey shows one clade at a time, and has no "all". That is safe for a
+specific reason worth checking before copying it: **a clade is inherited and
+never mutated**, so no flow ever crosses clades, and filtering can only omit
+whole ribbons — never sever one. A filter that can cut a flow in half would make
+the diagram wrong rather than smaller. And "all" was not a view at all: four
+lineages that never touch, interleaved into one picture, is four diagrams
+drawn over each other.
 
 The same reasoning is why the role lens lets the legend hide a series and the
 Sankey does not: hiding a line only rescales an axis, but hiding a species would
 break the conservation that IS the diagram.
+
+### A diagram answers a question, and its flows are chosen for it
+
+The Sankey exists to answer one thing: is a line breeding on, or is the warden
+reseeding it? Its first version followed *ids* between stages — present in
+both, born, died — which is the obvious diff and answered nothing: drawn stages
+sit three-quarters of an hour apart and a body rarely lives that long, so on the
+live world every ribbon was born or died and every column was an island.
+
+The flows now follow *descent*: each head of the later stage is `held` (the same
+body), `bred` (traced up its parent line to an ancestor standing in the earlier
+stage, through however many generations came and went between), or `reseed` (a
+parentless founder record — which the warden now writes, because a reseed that
+wrote nothing was indistinguishable from a record that had aged out). A body
+that died leaving descendants is not reported dead; its line is what the diagram
+follows. Two rules out of it: **when a diagram says nothing, check what its
+flows are flows *of*** before touching the drawing; and **a pseudo-source
+never wears a species tint** — a reseed ribbon in the species' own colour would
+read as that species breeding, the exact lie the kinds exist to stop.
 
 ## Before you finish
 
