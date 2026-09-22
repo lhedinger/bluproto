@@ -829,6 +829,227 @@ public class SimTests {
 	}
 
 	/**
+	 * A fed body can walk on its digestion, and cannot run on it.
+	 *
+	 * <p>Every scenario that weighs the cost of travel weighs it with an empty
+	 * gut -- {@code withHunger(1.0)} on barren ground -- so what they prove is
+	 * that the bill exists, and none of them asks whether it is ever VISIBLE
+	 * against income. In the live world the gut is rarely empty, and the mint
+	 * was running at twelve times the resting burn: a body with food in it
+	 * regenerated glycogen faster than running spent it at every speed anything
+	 * actually travels at, so glycogen sat pinned at cap however far a body
+	 * went. Measured: a fed body flat out at 0.08 tiles/tick for 3000 ticks --
+	 * 240 tiles -- ended on exactly the glycogen it started with, at every
+	 * size, and the break-even was near 0.10 while founders run at 0.04 to
+	 * 0.06. Glycogen was a store nothing could ever draw on.
+	 *
+	 * <p>The shape wanted is the one animals have: digestion tops out at a few
+	 * times the resting burn, so a walk is sustainable on what the gut
+	 * delivers and a run is not -- a run is paid out of the store, and the
+	 * store is what a chase or a flight has to spend. The break-even therefore
+	 * has to sit between the reference walk and a running pace, and that is
+	 * what is pinned here. The last assertion pins the mint's own anchor,
+	 * which its javadoc had stated wrong and nothing had checked: an idle fed
+	 * body refills from empty in about half a day of world time.
+	 *
+	 * <p>Measured on a gut that never empties (topped up every tick) in a
+	 * barren corridor, so this weighs the mint against the bill and nothing
+	 * else -- and on a mass-cancelling pair of sizes, because the mint goes as
+	 * mass^0.75 and travel as mass, so the break-even barely moves with size
+	 * and the claim has to hold at both ends of the body range.
+	 */
+	static class AFedBodyCanWalkOnItsDigestionButNotRun extends Scenario {
+		private static final int TICKS = 3000;
+		private static final double RUN = 0.08;
+
+		/** Glycogen left as a fraction of cap after {@code TICKS} at {@code throttle}
+		 *  of a body whose top speed is {@code RUN}, fed the whole way. */
+		private double[] fed(double size, double throttle) {
+			World w = room(400, 12);
+			for (int x = 1; x < 399; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0); // the gut is filled by hand below, not by grazing
+				}
+			}
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = RUN;
+			g.metabolism = NPC.META_REF;
+			Mind drive = (sn, act) -> act[AgentIO.A_THROTTLE] = throttle;
+			TestNPC n = TestNPC.minded(3.5, 5.5, 0, g, drive).grown().withHunger(0.0).withHydration(1.0)
+					.withReproCooldown(100_000_000).withHeading(0);
+			n.withGlycogen(n.glycogenCapacity());
+			w.spawnEntity(n);
+			tick(w, 1);
+			double dist = 0;
+			for (int t = 0; t < TICKS; t++) {
+				n.withHunger(0.0).withHydration(1.0); // a gut that never empties: the mint at its best
+				tick(w, 1);
+				dist += n.lastStep();
+			}
+			return new double[] { n.getGlycogen() / n.glycogenCapacity(), dist };
+		}
+
+		@Override
+		public void run() {
+			seed(43);
+			double reference = new Genome().speed;
+			assertNear("the walk here is the reference body's own pace", reference, RUN * 0.5, 1e-9);
+
+			for (double size : new double[] { 8, 20 }) {
+				double[] walk = fed(size, 0.5);
+				double[] run = fed(size, 1.0);
+				assertGreater("a " + (int) size + " px body walks a real distance", walk[1], 100);
+				// Not "twice as far": a runner that spends its store collapses and
+				// crawls the rest of the window, which is the mechanism, not a flaw
+				// in the fixture. Only that it got further than the walk.
+				assertGreater("and runs further than it walks", run[1], walk[1]);
+				// 1. Sustainable: a fed body walking at the reference pace lives on
+				// what its gut delivers and touches its store not at all.
+				assertGreater("a fed " + (int) size + " px body walking at the reference pace keeps its "
+						+ "glycogen (" + String.format("%.0f%% of cap after %d ticks", 100 * walk[0], TICKS) + ")",
+						walk[0], 0.95);
+				// 2. Not sustainable: the same body running is spending its store,
+				// visibly, on a full stomach.
+				assertLess("but running at " + RUN + " it draws the store down ("
+						+ String.format("%.0f%% of cap after %d ticks", 100 * run[0], TICKS) + ")",
+						run[0], 0.5);
+			}
+
+			// 3. The mint's own anchor: an idle, fed reference body refills from
+			// empty in about half a day of world time (half a minute of watching)
+			// -- not in an instant, and not in a week.
+			World w = room(12, 12);
+			Genome g = new Genome();
+			g.size = 8;
+			g.metabolism = NPC.META_REF;
+			TestNPC idle = TestNPC.breeder(5.5, 5.5, 0, g).grown().withHunger(0.0).withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			idle.withGlycogen(0);
+			w.spawnEntity(idle);
+			int half = NPC.days(0.25), full = NPC.days(0.6);
+			for (int t = 0; t < half; t++) {
+				idle.withHunger(0.0).withHydration(1.0);
+				tick(w, 1);
+			}
+			double atHalf = idle.getGlycogen() / idle.glycogenCapacity();
+			for (int t = half; t < full; t++) {
+				idle.withHunger(0.0).withHydration(1.0);
+				tick(w, 1);
+			}
+			double atFull = idle.getGlycogen() / idle.glycogenCapacity();
+			assertLess("halfway through the refill the store is still filling ("
+					+ String.format("%.0f%% of cap", 100 * atHalf) + ")", atHalf, 0.75);
+			assertGreater("and half a day of rest refills it ("
+					+ String.format("%.0f%% of cap", 100 * atFull) + ")", atFull, 0.85);
+		}
+	}
+
+	/**
+	 * How long a fed body can sprint, and how far it gets.
+	 *
+	 * <p>The plain version of the question the scenario above answers in the
+	 * abstract: bodies of three sizes, at the reference pace of life, fully fed
+	 * -- full gut, full glycogen, watered throughout -- set off east down a
+	 * corridor and are not fed again. One walks at the reference pace, one runs
+	 * at twice it, one sprints at three times it. What is measured is the tick
+	 * each one collapses on (glycogen down to the exhaustion floor, where a body
+	 * can only crawl) and the ground it covered getting there.
+	 *
+	 * <p>Two stores make the answer, and they are why it is worth a fixture
+	 * rather than an arithmetic. The gut is the slow one: the mint turns a meal
+	 * into glycogen at a bounded rate, and a sprint's bill is well above that
+	 * rate, so a sprinter collapses with most of its meal still in it -- the
+	 * store paid, and the gut could not pay fast enough to matter. Measured at
+	 * the reference body, a sprinter falls at about half a day with half or
+	 * more of its gut untouched. A walk is the other way round: the mint keeps
+	 * up, the gut drains slowly, and the store only follows once the gut is
+	 * dry. A body that is not fed again runs out eventually at ANY pace -- the
+	 * claim is the ordering. Walking outlasts running outlasts sprinting, and a
+	 * sprint is short: it ends within a day, at every size. Only the sprint's
+	 * own length is pinned; the walk and the run are measured so the table
+	 * reads as one, but a walk that lasts the whole window is the expected
+	 * shape, not a requirement.
+	 *
+	 * <p>Size is measured and deliberately not asserted on. Fasting, mass buys
+	 * endurance as mass^0.25 (see the vitals). Fed and sprinting it does not,
+	 * because travel goes as mass and so does the store while the mint that
+	 * helps goes as mass^0.75: the biggest body gets the least help per unit of
+	 * bill and runs out first. That is a consequence of the books, not a target.
+	 */
+	static class HowLongAFedBodyCanSprint extends Scenario {
+		static final int WINDOW = NPC.days(3);
+		static final double SPRINT = 0.12; // three times the reference pace
+		static final double[] SIZES = { 4, 8, 20 };
+		static final double[] THROTTLES = { 1.0 / 3, 2.0 / 3, 1.0 };
+		static final String[] GAITS = { "walk", "run", "sprint" };
+
+		/** {tick of collapse or -1, distance at collapse or at the window's end,
+		 *  glycogen fraction at the window's end, gut fraction left at collapse}. */
+		static double[] measure(double size, double throttle) {
+			World w = new World(600, 12, 1);
+			for (int x = 1; x < 599; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR);
+					w.getTile(x, y, 0).setFertility(0.0); // fed once, never again
+				}
+			}
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = SPRINT;
+			g.metabolism = NPC.META_REF;
+			Mind drive = (sn, act) -> act[AgentIO.A_THROTTLE] = throttle;
+			TestNPC n = TestNPC.minded(3.5, 5.5, 0, g, drive).grown().withHunger(0.0).withHydration(1.0)
+					.withReproCooldown(100_000_000).withHeading(0);
+			n.withGlycogen(n.glycogenCapacity());
+			w.spawnEntity(n);
+			w.think();
+			double floor = NPC.EXHAUSTION * n.glycogenCapacity();
+			double dist = 0, collapsed = -1, gutAtCollapse = Double.NaN;
+			for (int t = 1; t <= WINDOW; t++) {
+				n.withHydration(1.0); // thirst is not the variable
+				w.think();
+				dist += n.lastStep();
+				if (collapsed < 0 && n.getGlycogen() <= floor + 1e-9) {
+					collapsed = t;
+					gutAtCollapse = 1 - n.getHunger();
+				}
+			}
+			return new double[] { collapsed, dist, n.getGlycogen() / n.glycogenCapacity(), gutAtCollapse };
+		}
+
+		@Override
+		public void run() {
+			seed(44);
+			for (double size : SIZES) {
+				double[] walk = measure(size, THROTTLES[0]);
+				double[] run = measure(size, THROTTLES[1]);
+				double[] sprint = measure(size, THROTTLES[2]);
+				String body = (int) size + " px";
+				assertGreater("a fed " + body + " sprinter runs out at all (glycogen "
+						+ String.format("%.0f%% of cap at the window's end", 100 * sprint[2]) + ")",
+						sprint[0], 0);
+				assertLess("and within a day (" + (int) sprint[0] + " ticks, " + String.format("%.0f tiles", sprint[1]) + ")",
+						sprint[0], NPC.days(1));
+				// The ordering: each faster gait gives out sooner than the one below
+				// it. A gait that lasted the whole window counts as later than any
+				// that did not.
+				double tWalk = walk[0] < 0 ? Double.MAX_VALUE : walk[0];
+				double tRun = run[0] < 0 ? Double.MAX_VALUE : run[0];
+				assertLess("a " + body + " sprint gives out before a run (" + (int) sprint[0] + " against "
+						+ (run[0] < 0 ? "never" : (int) run[0] + "") + " ticks)", sprint[0], tRun);
+				assertLess("and a run before a walk (" + (run[0] < 0 ? "never" : (int) run[0] + "") + " against "
+						+ (walk[0] < 0 ? "never" : (int) walk[0] + "") + " ticks)", tRun, tWalk + 1);
+				// And it was the store that ran out, not the meal: a sprinter falls
+				// with most of its gut still full, because the mint cannot turn a
+				// meal into glycogen anywhere near as fast as a sprint spends it.
+				assertGreater("the " + body + " sprinter fell with its meal still in it ("
+						+ String.format("%.0f%% of the gut left", 100 * sprint[3]) + ")", sprint[3], 0.25);
+			}
+		}
+	}
+
+	/**
 	 * Bodies die of old age, and how long they get is mass over pace.
 	 *
 	 * <p>{@link Genome#maxAge} was a gene that mutated, drifted and was shown in
@@ -8083,13 +8304,22 @@ public class SimTests {
 				}
 			}
 			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
-			assertGreater("and the chase pays: glycogen is well above the exhaustion floor after it ("
+			// The chase is paid from the STORE, and the kills pay it back through the
+			// gut. This used to assert the hunter's glycogen ended well above the
+			// exhaustion floor, which was a claim about the mint and not about
+			// hunting: the mint out-earned a flat-out chase, so a hunter that chased
+			// for three days without a pause -- which is what twelve grazers in a
+			// room this size make it do -- never drew on its store at all. Traced,
+			// its gut was full the whole way (hunger 0.04 to 0.15) while its
+			// glycogen went 7.2 -> 2.0 and sat on the floor for a thousand ticks in
+			// the middle, its kills stalling until it had recovered. That is the
+			// shape wanted: a chase spends the store, a collapsed hunter cannot
+			// hunt, and a rested one can again. What is pinned is that three days
+			// of it leaves the hunter alive and fed and its store DRAWN.
+			assertTrue("and the hunter is alive at the end of it", !hunter.isDead());
+			assertLess("the chase was paid from the store ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
-					// A kill feeds a hunter only while the meat is fresh -- it takes what it
-					// can before the body turns and the rest is the scavengers' -- so a
-					// hunting spell ends less flush than when a kill was the whole animal.
-					// The claim is that the chase pays for itself, well clear of collapse.
-					hunter.getGlycogen(), 0.25 * hunter.glycogenCapacity());
+					hunter.getGlycogen(), e0);
 			// Fed enough, not stuffed. A kill pays a hunter its fresh third and no
 			// more, a mouthful at a time, and a hunter that moves straight on to the
 			// next animal leaves even some of that lying there for whatever finds it.
@@ -15093,6 +15323,8 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new RestingIsCheapestAndWalkingBeatsRunning(),
+				new AFedBodyCanWalkOnItsDigestionButNotRun(),
+				new HowLongAFedBodyCanSprint(),
 				new OldAgeIsMassOverPace(),
 				new FatIsTheBodysStore(),
 				new ALineageDecidesHowBigItsYoungAreBorn(),
