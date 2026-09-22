@@ -173,6 +173,23 @@ const LAYER_LOW = 3; // px per tile of every low mirror
 // is blocky at near zoom -- it is the far-zoom mirror's resolution -- and the
 // chunk replaces it the moment it decodes.
 let getLowMap: (z: number) => HTMLCanvasElement | null = () => null;
+/** A chunk lookup. `fetch` false is a peek: the chunk if it has been decoded,
+ *  and no request otherwise. Chunks are requested only for the viewport at
+ *  near zoom; everything else is the low map's job. */
+export type ChunkSource = (cx: number, cy: number, z: number, fetch: boolean) => HTMLCanvasElement | null;
+/** The chunk range a view wants, inclusive, one chunk of margin for panning --
+ *  or null at far zoom, where the low map is the ground and no chunk is
+ *  fetched at all. The doubled world is 198 chunks and 3.7 MB a level; at fit
+ *  zoom on a phone that is 25 seconds of downloading for a picture the 34 KB
+ *  low map already shows at 2 px a tile. */
+export function wantedChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+    chunkTiles: number): [number, number, number, number] | null {
+  if (cam.scale < ART || chunkTiles <= 0) return null;
+  const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
+  const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
+  return [Math.max(0, Math.floor(tl.x / chunkTiles) - 1), Math.max(0, Math.floor(tl.y / chunkTiles) - 1),
+    Math.min(cxN - 1, Math.floor(br.x / chunkTiles) + 1), Math.min(cyN - 1, Math.floor(br.y / chunkTiles) + 1)];
+}
 let lowMapLevel = -1; // the level the placeholder has been painted for, or -1
 /** The host wires up the low map fetch; drawing never fetches by itself. */
 export function setLowMapSource(fn: (z: number) => HTMLCanvasElement | null): void {
@@ -192,24 +209,26 @@ function refreshGroundLow(meta: WorldMeta): void {
 }
 
 function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
-    level: number, nowMs: number): HTMLCanvasElement | null {
+    getChunk: ChunkSource, level: number, nowMs: number,
+    want: [number, number, number, number] | null): HTMLCanvasElement | null {
   const fresh = level !== groundLevel || !groundCv
     || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART;
   if (!fresh && (groundHoles.length === 0 || nowMs < groundRetryAt)) return groundCv;
+  const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
   const chunkRect = (cx: number, cy: number): [number, number, number, number] => {
     const wTiles = Math.min(chunkTiles, meta.cols - cx * chunkTiles);
     const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
     return [cx * chunkTiles * ART, cy * chunkTiles * ART, wTiles * ART, hTiles * ART];
   };
-  // The low map, scaled up into one hole: its pixels are LAYER_LOW per tile
-  // whatever the PNG says, read off its own width so the two can never
-  // disagree.
+  // The low map, scaled up into one chunk's rect: its pixels are whatever
+  // the JPEG says per tile, read off its own width so the two never disagree.
   const lowInto = (ctx: CanvasRenderingContext2D, low: HTMLCanvasElement,
       [dx, dy, dw, dh]: [number, number, number, number]) => {
-    const s = low.width / groundCv!.width; // low px per art px
-    ctx.drawImage(low, dx * s, dy * s, dw * s, dh * s, dx, dy, dw, dh);
+    const sc = low.width / groundCv!.width; // low px per art px
+    ctx.drawImage(low, dx * sc, dy * sc, dw * sc, dh * sc, dx, dy, dw, dh);
   };
+  const wanted = (cx: number, cy: number) =>
+    want !== null && cx >= want[0] && cx <= want[2] && cy >= want[1] && cy <= want[3];
   if (fresh) {
     if (!groundCv || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART) {
       groundCv = document.createElement('canvas');
@@ -222,13 +241,15 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     groundHoles = [];
     lowMapLevel = -1;
     const low = getLowMap(level);
-    const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
+    if (low) lowMapLevel = level;
     for (let cy = 0; cy < cyN; cy++) {
       for (let cx = 0; cx < cxN; cx++) {
-        const chunk = getChunk(cx, cy, level);
+        // Only a chunk the view wants is requested; one already decoded is
+        // used wherever it is, since it costs nothing now.
+        const chunk = getChunk(cx, cy, level, wanted(cx, cy));
         if (!chunk) {
           groundHoles.push([cx, cy]);
-          if (low) { lowInto(ctx, low, chunkRect(cx, cy)); lowMapLevel = level; }
+          if (low) lowInto(ctx, low, chunkRect(cx, cy));
           continue;
         }
         const [dx, dy, dw, dh] = chunkRect(cx, cy);
@@ -250,7 +271,7 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     const low = lowMapLevel === level ? null : getLowMap(level);
     if (low) lowMapLevel = level;
     groundHoles = groundHoles.filter(([cx, cy]) => {
-      const chunk = getChunk(cx, cy, level);
+      const chunk = getChunk(cx, cy, level, wanted(cx, cy));
       const r = chunkRect(cx, cy);
       if (!chunk) {
         if (low) { lowInto(ctx, low, r); filled.push(r); }
@@ -343,7 +364,7 @@ function hasHoles(chunk: HTMLCanvasElement): boolean {
  *  floor. */
 function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     chunkTiles: number, level: number,
-    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
+    getChunk: ChunkSource,
 ): Array<[number, number, HTMLCanvasElement, number, number, number, number]> {
   const out: Array<[number, number, HTMLCanvasElement, number, number, number, number]> = [];
   if (level - 1 < 0 || chunkTiles <= 0) return out;
@@ -375,13 +396,16 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   };
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
-      const top = getChunk(cx, cy, level);
+      // A peek, never a request: the top chunk is fetched by the ground pass
+      // for the viewport at near zoom, and only a decoded chunk knows its
+      // holes. The chunk beneath is requested only for a holed top.
+      const top = getChunk(cx, cy, level, false);
       if (!top || !hasHoles(top)) continue;
-      const below = getChunk(cx, cy, level - 1);
+      const below = getChunk(cx, cy, level - 1, true);
       if (!below) continue;
       const key = cx + cy * cxN;
       if (level - 2 >= 0 && hasHoles(below)) {
-        const below2 = getChunk(cx, cy, level - 2);
+        const below2 = getChunk(cx, cy, level - 2, true);
         if (below2) {
           out.push([key, level - 2, below2,
               ...rect(cx, cy, parallaxFactor() * parallaxFactor())]);
@@ -449,7 +473,7 @@ export function render(
   meta: WorldMeta | null,
   chunkTiles: number,
   tilePx: number,
-  getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
+  getChunk: ChunkSource,
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
@@ -469,7 +493,7 @@ export function render(
   // (see groundLayer); near zoom draws the full-resolution chunks in view.
   // Both nearest-neighbour, so pixels stay fat and crisp either way.
   if (chunkTiles > 0 && cam.scale < ART) {
-    const layer = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
+    const layer = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs, null);
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       g.imageSmoothingEnabled = false;
@@ -497,9 +521,16 @@ export function render(
       g.drawImage(img, bx, by, bw, bh);
     }
     drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the chunks next
+    // The low map under everything, so a chunk not yet landed shows the map
+    // at the JPEG's resolution rather than the background.
+    const low = getLowMap(level);
+    if (low) {
+      const o = cam.worldToScreen(0, 0);
+      g.drawImage(low, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
+    }
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
-        const img = getChunk(cx, cy, level); // lazily fetches + caches this chunk
+        const img = getChunk(cx, cy, level, true); // lazily fetches + caches this chunk
         if (!img) continue;
         const wx = cx * chunkTiles, wy = cy * chunkTiles;
         const cw = Math.min(chunkTiles, meta.cols - wx);
@@ -1169,7 +1200,7 @@ export function renderGL(
   meta: WorldMeta | null,
   chunkTiles: number,
   tilePx: number,
-  getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
+  getChunk: ChunkSource,
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
@@ -1207,7 +1238,8 @@ export function renderGL(
     glLayerLevel = level;
   }
   if (chunkTiles > 0 && tilePx > 0) {
-    const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs);
+    const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs,
+      wantedChunks(cam, cv.width, cv.height, meta, chunkTiles));
     // The floor below goes down FIRST, under its own parallax, so the ground
     // layer's holes look onto it (see belowChunks). Its chunks never change
     // once decoded, so each is a permanent texture at rev 0.
@@ -2025,7 +2057,7 @@ function refreshCanopyLow(meta: WorldMeta): void {
 }
 
 function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
-    getChunk: (cx: number, cy: number, z: number) => HTMLCanvasElement | null,
+    getChunk: ChunkSource,
     cover: Uint8Array, level: number, nowMs: number): HTMLCanvasElement {
   const fresh = cover !== canopySrc || level !== canopyLevel || !canopyCv
     || canopyCv.width !== meta.cols * ART;
@@ -2034,7 +2066,11 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     const tx = i % meta.cols, ty = Math.floor(i / meta.cols);
     const v = cover[i];
     const ccx = Math.floor(tx / chunkTiles), ccy = Math.floor(ty / chunkTiles);
-    const chunk = getChunk(ccx, ccy, level);
+    // A peek: the veil re-stamps a chunk's own pixels, so it exists only where
+    // a chunk has been decoded -- the viewport at near zoom -- and fills in as
+    // chunks arrive. At far zoom a hidden body is a dot the size of a tile's
+    // cover anyway.
+    const chunk = getChunk(ccx, ccy, level, false);
     if (!chunk) return false;
     veilTile(ctx, v, tx, ty, tx * ART, ty * ART, chunk,
       (tx - ccx * chunkTiles) * tilePx, (ty - ccy * chunkTiles) * tilePx, tilePx);

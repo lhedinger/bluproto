@@ -221,7 +221,7 @@ let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 // on software-rendered canvases), while a canvas source blits at memcpy speed.
 // One copy per chunk at decode time buys back every frame thereafter.
 const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
-function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null {
+function chunkImage(cx: number, cy: number, z: number, fetch: boolean): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
   // The bake carries no vegetation (server ground classes are type-only) —
   // vegetation renders as one-tile sprites stamped over these chunks by the
@@ -230,6 +230,7 @@ function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null
   const key = `${v}/${z}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;
+  if (!fetch) return null; // a peek: what is decoded, and no request
   // The low map goes first. While the viewed level's is in flight no chunk is
   // requested at all: fetched side by side, one small picture queued behind
   // fifty-four bigger ones and landed after most of them, which made it
@@ -263,8 +264,8 @@ function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null
 /** The renderer asks by level, not just by chunk: the level in view needs its
  *  own chunks, and the one below it needs the few its holes look down onto
  *  (render.belowChunks). Both live in the same cache, keyed by level. */
-function getChunk(cx: number, cy: number, z: number): HTMLCanvasElement | null {
-  return chunkImage(cx, cy, z);
+function getChunk(cx: number, cy: number, z: number, fetch: boolean): HTMLCanvasElement | null {
+  return chunkImage(cx, cy, z, fetch);
 }
 /** The level's low map -- the whole floor in one small JPEG -- fetched and
  *  cached exactly like a chunk, under the same build tag. The renderer paints
