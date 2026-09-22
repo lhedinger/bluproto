@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { VEG_KIND_MASK, drawSenseHeat, render, renderGL, type WorldMeta } from './render';
+import { VEG_KIND_MASK, drawSenseHeat, render, renderGL, setLowMapSource, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 
@@ -230,6 +230,14 @@ function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null
   const key = `${v}/${z}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;
+  // The low map goes first. While the viewed level's is in flight no chunk is
+  // requested at all: fetched side by side, one small picture queued behind
+  // fifty-four bigger ones and landed after most of them, which made it
+  // pointless. The gate has a deadline, so a lost low map costs a moment and
+  // not the ground.
+  if (lowMapCache.get(`${v}/${currentLevel}`) === null && performance.now() < lowMapGateUntil) {
+    return null;
+  }
   chunkCache.set(key, null); // mark in-flight so we fetch once
   const img = new Image();
   img.onload = () => {
@@ -258,6 +266,31 @@ function chunkImage(cx: number, cy: number, z: number): HTMLCanvasElement | null
 function getChunk(cx: number, cy: number, z: number): HTMLCanvasElement | null {
   return chunkImage(cx, cy, z);
 }
+/** The level's low map -- the whole floor in one small JPEG -- fetched and
+ *  cached exactly like a chunk, under the same build tag. The renderer paints
+ *  it into whatever chunks have not landed (render.setLowMapSource). */
+const lowMapCache = new Map<string, HTMLCanvasElement | null>();
+let lowMapGateUntil = 0; // chunk fetches wait for the low map until this
+function lowMapImage(z: number): HTMLCanvasElement | null {
+  const v = hello ? hello.build : '0';
+  const key = `${v}/${z}`;
+  const hit = lowMapCache.get(key);
+  if (hit !== undefined) return hit;
+  lowMapCache.set(key, null);
+  if (z === currentLevel) lowMapGateUntil = performance.now() + 2000;
+  const img = new Image();
+  img.onload = () => {
+    const copy = document.createElement('canvas');
+    copy.width = img.naturalWidth;
+    copy.height = img.naturalHeight;
+    copy.getContext('2d')!.drawImage(img, 0, 0);
+    lowMapCache.set(key, copy);
+  };
+  img.onerror = () => { setTimeout(() => { if (lowMapCache.get(key) === null) lowMapCache.delete(key); }, 8000); };
+  img.src = `/api/world/layers/${z}/low.jpg?v=${v}`;
+  return null;
+}
+setLowMapSource(lowMapImage);
 
 /** Which index is the ground. The server says so; only a server too old to say
  *  makes us guess, and for that server the guess is right by construction. */
@@ -1958,7 +1991,11 @@ let lastMini = 0;
 let miniCx = NaN, miniCy = NaN, miniScale = NaN;
 function frame(now: number): void {
   const cb0 = performance.now();
-  const renderTime = now - RENDER_DELAY_MS;
+  // A fixed fraction behind the interval the stream is actually sending at:
+  // the server halves its rate for a big world, and a delay tuned to 10 Hz
+  // would run out of interpolation and hold every body still for the second
+  // half of each 200 ms gap.
+  const renderTime = now - Math.max(RENDER_DELAY_MS, 1.5 * Net.streamStats.intervalMs);
 
   // Follow: glue the camera to the tracked creature's interpolated position.
   if (cam.followId !== null) {
