@@ -191,6 +191,73 @@ final class LayerBaker {
 		}
 	}
 
+	/** Pixels per tile in the low map: the whole level in one small picture,
+	 *  the resolution the client's own far-zoom mirror uses (render.ts
+	 *  LAYER_LOW), so what the map shows before the chunks land is what it
+	 *  shows after them at the same zoom. */
+	static final int LOW_PX = 3;
+
+	/** JPEG quality of the low map. At 0.6 the surface is seventeen kilobytes;
+	 *  as a PNG the same picture was 164 -- the film grain the bake lays over
+	 *  every tile is noise, and noise is what PNG cannot compress. */
+	static final float LOW_QUALITY = 0.6f;
+
+	/**
+	 * The whole level as ONE small JPEG, {@link #LOW_PX} pixels per tile: a
+	 * 144x88 world comes out at 432x264 and under twenty kilobytes, against the
+	 * megabyte its fifty-four chunks weigh. The client paints it first, so the
+	 * map is on screen after one request, and the chunks replace it as they
+	 * arrive. A phone on a mobile link used to sit on a black world for as long
+	 * as the chunk queue took behind the entity stream -- ten seconds and more
+	 * on a thousand-body world -- with nothing to look at but the dots.
+	 *
+	 * <p>Bilinear from the render-resolution bands, which is exactly what the
+	 * client's {@code refreshGroundLow} does to the chunks it has, so the
+	 * placeholder and the real mirror are the same picture. JPEG has no alpha,
+	 * so a pit is painted as its veil over the page background rather than as
+	 * a window: for the second or so before its chunk lands, the floor below
+	 * is not seen through it. That is the trade for a map that arrives at all.
+	 */
+	/** A blank low map for a level, on the page's own background: the bands
+	 *  are drawn into it one at a time ({@link #lowBand}), because a whole
+	 *  level's image no longer fits the deploy heap and never needs to. */
+	static BufferedImage lowCanvas(int cols, int rows) {
+		BufferedImage low = new BufferedImage(cols * LOW_PX, rows * LOW_PX, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = low.createGraphics();
+		g.setColor(new java.awt.Color(0x14161a));
+		g.fillRect(0, 0, low.getWidth(), low.getHeight());
+		g.dispose();
+		return low;
+	}
+
+	/** Draws one baked band (its top at tile row {@code tileY0}) into its strip
+	 *  of the low map, bilinear. */
+	static void lowBand(BufferedImage low, BufferedImage band, int tileY0) {
+		int ts = ResourceManager.tileSize;
+		int y0 = tileY0 * LOW_PX, h = band.getHeight() / ts * LOW_PX;
+		Graphics2D g = low.createGraphics();
+		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g.drawImage(band, 0, y0, low.getWidth(), y0 + h, 0, 0, band.getWidth(), band.getHeight(), null);
+		g.dispose();
+	}
+
+	/** Encodes a finished low map. */
+	static byte[] lowJpeg(BufferedImage low) {
+		try {
+			javax.imageio.ImageWriter w = ImageIO.getImageWritersByFormatName("jpeg").next();
+			javax.imageio.ImageWriteParam prm = w.getDefaultWriteParam();
+			prm.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+			prm.setCompressionQuality(LOW_QUALITY);
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 15);
+			w.setOutput(new javax.imageio.stream.MemoryCacheImageOutputStream(out));
+			w.write(null, new javax.imageio.IIOImage(low, null, null), prm);
+			w.dispose();
+			return out.toByteArray();
+		} catch (IOException e) {
+			throw new IllegalStateException("low map encode failed", e);
+		}
+	}
+
 	/** Builds a chunked-bake renderer: per-tile base sprites only, no whole-level
 	 *  image. Built once and reused across every chunk of every level. */
 	static net.hedinger.prototype.engine.LayerRenderer chunkRenderer(World terrain) {

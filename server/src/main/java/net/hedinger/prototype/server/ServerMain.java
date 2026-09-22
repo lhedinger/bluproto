@@ -516,6 +516,18 @@ public final class ServerMain {
 
 		// {chunk} is "cx_cy". The bake carries no vegetation (ground classes are
 		// type-only); the client stamps its vegetation sprite layer on top.
+		// The whole level small (LayerBaker.lowJpeg): the first picture a
+		// viewer draws, replaced chunk by chunk as those arrive.
+		app.get("/api/world/layers/{z}/low.jpg", ctx -> {
+			byte[] jpg = host.lowMap(Integer.parseInt(ctx.pathParam("z")));
+			if (jpg == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.contentType("image/jpeg")
+					.header("Cache-Control", "public, max-age=86400")
+					.result(jpg);
+		});
 		app.get("/api/world/layers/{z}/{chunk}.png", ctx -> {
 			int z = Integer.parseInt(ctx.pathParam("z").replace(".png", ""));
 			String[] p = ctx.pathParam("chunk").replace(".png", "").split("_");
