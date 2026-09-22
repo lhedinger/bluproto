@@ -1713,6 +1713,75 @@ public class SimTests {
 	 * it, so a tile's cap is the same whatever it wears.
 	 */
 	/**
+	 * A near scan is the census scan cut, not changed.
+	 *
+	 * <p>Every body that senses walks the level asking who is within its
+	 * range. The bucketed near scans answer with the bodies of the cells the
+	 * range touches -- a superset of the disc -- in the census's own order, so
+	 * once the consumer applies its range the two walks yield the same bodies
+	 * in the same order, and a nearest found by strict less-than or a kin
+	 * centroid summed in floating point comes out bit for bit the same. This
+	 * pins that on a real world, for every list kind, at every range a
+	 * creature actually uses, over hundreds of random points -- including
+	 * points off the map, which the cells clamp rather than reject.
+	 */
+	static class NearScansAreTheCensusScansCut extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(42, 144, 88);
+			tick(w, 300);
+			World.Census c = w.census();
+			java.util.Random rnd = new java.util.Random(7); // the test's own dice, not the sim's
+			double[] ranges = { 3, 5, 8, 12, 24, 40 };
+			int compared = 0, nonEmpty = 0;
+			for (int z = 0; z < w.getLevels(); z++) {
+				for (int q = 0; q < 150; q++) {
+					double x = rnd.nextDouble() * (w.getColums() + 20) - 10;
+					double y = rnd.nextDouble() * (w.getRows() + 20) - 10;
+					double r = ranges[rnd.nextInt(ranges.length)];
+					for (int kind = 0; kind < 4; kind++) {
+						java.util.List<NPC> full = kind == 0 ? c.creatures(z) : kind == 1 ? c.predators(z)
+								: kind == 2 ? c.prey(z) : c.corpses(z);
+						java.util.List<NPC> near = kind == 0 ? c.creaturesNear(z, x, y, r)
+								: kind == 1 ? c.predatorsNear(z, x, y, r)
+								: kind == 2 ? c.preyNear(z, x, y, r) : c.corpsesNear(z, x, y, r);
+						java.util.List<NPC> a = new java.util.ArrayList<>(), b = new java.util.ArrayList<>();
+						for (NPC n : full) {
+							if (Math.hypot(n.getX() - x, n.getY() - y) <= r) {
+								a.add(n);
+							}
+						}
+						for (NPC n : near) {
+							if (Math.hypot(n.getX() - x, n.getY() - y) <= r) {
+								b.add(n);
+							}
+						}
+						compared++;
+						if (!a.isEmpty()) {
+							nonEmpty++;
+						}
+						assertTrue("kind " + kind + " at (" + x + "," + y + ") r=" + r + " on level " + z
+								+ ": the same bodies in the same order (" + a.size() + " vs " + b.size() + ")",
+								a.size() == b.size() && sameOrder(a, b));
+						// And the superset never repeats a body.
+						assertTrue("no body is listed twice", new java.util.HashSet<>(near).size() == near.size());
+					}
+				}
+			}
+			assertGreater("the comparison saw bodies, not empty lists", nonEmpty, compared / 10);
+		}
+
+		private static boolean sameOrder(java.util.List<NPC> a, java.util.List<NPC> b) {
+			for (int i = 0; i < a.size(); i++) {
+				if (a.get(i) != b.get(i)) {
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+
+	/**
 	 * The surface floras are painted from ramps, and the fern is lit from the
 	 * north.
 	 *
@@ -15040,6 +15109,7 @@ public class SimTests {
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
 				new TheMeadowWearsFourFloras(),
+				new NearScansAreTheCensusScansCut(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
