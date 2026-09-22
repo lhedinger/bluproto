@@ -2178,7 +2178,7 @@ public class SimTests {
 	static class ASoundIsHeardAndThenGone extends Scenario {
 		@Override
 		public void run() {
-			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			World w = demoAtTheSizeItWasWrittenFor(42);
 			java.lang.reflect.Field heard;
 			try {
 				heard = net.hedinger.prototype.engine.Entity.class
@@ -4243,7 +4243,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(23);
-			World w = net.hedinger.prototype.sim.Worlds.demo(23);
+			World w = demoAtTheSizeItWasWrittenFor(23);
 			tick(w, 2000); // settle: creatures are grazing, hunting, breeding
 
 			int withAction = 0, creatures = 0, minded = 0;
@@ -6712,7 +6712,7 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			World w = net.hedinger.prototype.sim.Worlds.demo(13);
+			World w = demoAtTheSizeItWasWrittenFor(13);
 			assertGreater("the founding cohort has program minds", minds(w), 0);
 			assertEquals("and no network among them", 0, networks(w));
 
@@ -6799,7 +6799,7 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			World w = net.hedinger.prototype.sim.Worlds.demo(7);
+			World w = demoAtTheSizeItWasWrittenFor(7);
 			assertGreater("the demo world seeds a minded cohort", countMinded(w), 0);
 			assertEquals("and seeds no scripted creature at all", 0, countScripted(w));
 
@@ -10514,7 +10514,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(11);
-			World w = net.hedinger.prototype.sim.Worlds.demo(11);
+			World w = demoAtTheSizeItWasWrittenFor(11);
 			// Settle until the minded cohort has actually saturated its (generous)
 			// ceiling — otherwise the cull never fires and the test proves nothing.
 			for (int i = 0; i < 2000; i++) {
@@ -12717,7 +12717,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(29);
-			World w = net.hedinger.prototype.sim.Worlds.demo(29);
+			World w = demoAtTheSizeItWasWrittenFor(29);
 			tick(w, 400); // let the herds grow into adult bodies
 
 			int wiped = 0;
@@ -12761,7 +12761,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(29);
-			World w = net.hedinger.prototype.sim.Worlds.demo(29);
+			World w = demoAtTheSizeItWasWrittenFor(29);
 			tick(w, 400);
 			java.util.Set<Integer> before = new java.util.HashSet<>();
 			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
@@ -15208,6 +15208,22 @@ public class SimTests {
 				new CommandLogReplayReproduces(),
 				new SameSeedSameOutcome(),
 		};
+	}
+
+
+	/**
+	 * The demo world at 144x88, the size these long-running scenarios were
+	 * written and calibrated on. They are about a population's dynamics over
+	 * thousands of ticks -- a cohort sustained, a niche reseeded, a glyph
+	 * riding the wire -- not about the shape of the map. When the world
+	 * doubled to 288x176 the tick went from 0.8 ms to 12 (the sense pass is
+	 * quadratic in bodies), and the seven scenarios that tick a demo world
+	 * for thousands of ticks went from seconds to minutes -- 111 s for one --
+	 * while asserting exactly what they asserted before. World-gen scenarios
+	 * keep building the real world; this is only for the ones that run it.
+	 */
+	static World demoAtTheSizeItWasWrittenFor(long seed) {
+		return net.hedinger.prototype.sim.Worlds.demo(seed, 144, 88);
 	}
 
 	public static void main(String[] args) {

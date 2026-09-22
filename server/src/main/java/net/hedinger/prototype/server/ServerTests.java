@@ -20,6 +20,20 @@ public final class ServerTests {
 
 	private static int failed = 0;
 
+
+	/**
+	 * A host on the 144x88 demo world, the size every test here was written
+	 * on. A host bakes its whole world at construction -- four levels, 792
+	 * chunks, 26 seconds on the doubled 288x176 map, and the suite builds ten
+	 * of them -- so the doubling turned a minute of server tests into five.
+	 * Nothing these tests claim is about the map's extent: the cactus ladder,
+	 * the fungus beds, the kind field, the low map and the bake's alpha are
+	 * all facts about how a demo world is served, and the smaller demo is one.
+	 */
+	static WorldHost hostAtTheSizeTheTestsWereWrittenFor(long seed) {
+		return new WorldHost(seed, 144, 88, "demo");
+	}
+
 	public static void main(String[] args) throws Exception {
 		deltaDiffFindsChangesAdditionsRemovals();
 		deltaOfIdenticalSnapshotsIsEmpty();
@@ -66,7 +80,7 @@ public final class ServerTests {
 	 * matters is that a machine is not given one.
 	 */
 	static void machineryIsNotInspectedForFoodAndWater() {
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 
 		int machines = 0, creatures = 0;
 		for (int id : host.liveMachineIds()) {
@@ -107,7 +121,7 @@ public final class ServerTests {
 	 * carries the ADULT size and a body dies at whatever size it had reached.
 	 */
 	static void aCarcassSaysWhatItIsWorth() {
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 		java.util.Map<String, Object> corpse = null;
 		// Kill something and read it back through the same endpoint the panel uses.
 		for (int id : host.liveCreatureIds()) {
@@ -212,7 +226,7 @@ public final class ServerTests {
 		java.util.Map<String, String> elsewhere = java.util.Map.of(
 				"clade", "role", "brain", "mind", "mlp", "mind");
 
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 		java.util.Map<String, Object> genome = null;
 		java.util.Map<String, Object> detail = null;
 		for (int id : host.liveCreatureIds()) {
@@ -277,7 +291,7 @@ public final class ServerTests {
 	 * the button go and get one.
 	 */
 	static void theDroneRankIsDronesAndOnlyDrones() {
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 
 		java.util.List<java.util.Map<String, Object>> rank = host.droneRank();
 		check("the rank is the world's full complement of drones",
@@ -609,7 +623,7 @@ public final class ServerTests {
 	 */
 	static void theLowMapIsTheLevelInOnePicture() throws Exception {
 		net.hedinger.prototype.engine.Utils.seed(42);
-		WorldHost host = new WorldHost(42);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(42);
 		int levels = host.levelsForTest();
 		check("the world has levels", levels > 0);
 		for (int z = 0; z < levels; z++) {
@@ -742,7 +756,7 @@ public final class ServerTests {
 	 * reports a cause of death.
 	 */
 	static void anEventIsNotInspectedAsABody() {
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 		int sounds = 0, corpses = 0;
 		boolean kindOk = true, soundOk = true, deathOk = true;
 		String firstKindless = null, firstWrongDeath = null;
@@ -824,7 +838,7 @@ public final class ServerTests {
 	 * ceiling below a floor without anything else noticing.
 	 */
 	static void theChartIsSentTheBoundsActuallyEnforced() {
-		WorldHost host = new WorldHost(11);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 		Object raw = host.population().get("bounds");
 		check("the population series carries the steward's bounds",
 				raw instanceof java.util.Map<?, ?>);
@@ -890,7 +904,7 @@ public final class ServerTests {
 		// species is derived at read time from the markers -- nothing stores it --
 		// so this is the only place the plumbing gets checked.
 		// Its own world rather than the one above: WorldHost builds and owns one.
-		WorldHost host = new WorldHost(7);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(7);
 		java.util.Map<String, Object> detail = null;
 		for (int id : host.liveCreatureIds()) {
 			detail = host.entityDetail(id);
@@ -1287,6 +1301,9 @@ public final class ServerTests {
 	 */
 	static void everyRungOfTheCactusLadderOccurs() {
 		net.hedinger.prototype.engine.Utils.seed(42);
+		// The real, full-size world: this claim is about what the served world
+		// contains -- a cactus of every age -- and on the 144x88 demo the
+		// desert is small enough that a rung can simply not occur.
 		WorldHost host = new WorldHost(42);
 		java.util.Map<Integer, Integer> rungs = new java.util.TreeMap<>();
 		int cacti = 0;
@@ -1322,7 +1339,7 @@ public final class ServerTests {
 
 	static void vegetationFeedCarriesTheKind() {
 		net.hedinger.prototype.engine.Utils.seed(42);
-		WorldHost host = new WorldHost(42);
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(42);
 		// Every kind the wire can carry has to actually arrive on it. The field is
 		// two bits now, because the cactus moved off the static ground bake and
 		// onto this feed -- the only channel in the renderer that can carry a
