@@ -34,6 +34,8 @@ public final class ServerTests {
 		lineageCensusIsTheSameWorldFiner();
 		lineageFlowsConserveEveryHead();
 		lineageFlowsTellBredFromReseeded();
+		theLowMapIsTheLevelInOnePicture();
+		aBigStreamBeatsAtHalfRate();
 		fertilityCapsTheGrassSpriteStage();
 		aFungusBedTopsOutAtStageThree();
 		vegetationFeedCarriesTheKind();
@@ -593,6 +595,92 @@ public final class ServerTests {
 			}
 		}
 		check("a stage against itself has only held flows", true);
+	}
+
+	/**
+	 * The low map is the level, small: one JPEG per level at LayerBaker.LOW_PX
+	 * per tile, the same picture the chunks make -- checked by comparing the
+	 * mean colour of a chunk against the mean of the low map's matching patch.
+	 * It is what a viewer paints before the chunks land, so a low map that
+	 * showed some other picture would be a lie that the chunks then correct,
+	 * chunk by chunk, in front of the viewer. And it has to be SMALL: at 164 KB
+	 * (the PNG it first was) it landed after most of the chunks it was meant
+	 * to stand in for, and the whole point of it was gone.
+	 */
+	static void theLowMapIsTheLevelInOnePicture() throws Exception {
+		net.hedinger.prototype.engine.Utils.seed(42);
+		WorldHost host = new WorldHost(42);
+		int levels = host.levelsForTest();
+		check("the world has levels", levels > 0);
+		for (int z = 0; z < levels; z++) {
+			byte[] png = host.lowMap(z);
+			check("level " + z + " has a low map", png != null);
+			java.awt.image.BufferedImage low = javax.imageio.ImageIO.read(
+					new java.io.ByteArrayInputStream(png));
+			byte[] c00 = host.chunk(z, 0, 0);
+			java.awt.image.BufferedImage chunk = javax.imageio.ImageIO.read(
+					new java.io.ByteArrayInputStream(c00));
+			int cols = low.getWidth() / LayerBaker.LOW_PX, rows = low.getHeight() / LayerBaker.LOW_PX;
+			check("level " + z + "'s low map is LOW_PX per tile (" + low.getWidth() + "x" + low.getHeight() + ")",
+					low.getWidth() % LayerBaker.LOW_PX == 0 && low.getHeight() % LayerBaker.LOW_PX == 0
+					&& cols > 0 && rows > 0);
+			check("and small enough to land first on a phone (" + png.length + " bytes)",
+					png.length < 40_000);
+			// Mean colour of chunk (2,1) against its patch of the low map.
+			int cx = 2, cy = 1;
+			byte[] cpng = host.chunk(z, cx, cy);
+			if (cpng == null) {
+				continue;
+			}
+			java.awt.image.BufferedImage ch = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(cpng));
+			int tiles = ch.getWidth() / LayerBaker.CHUNK_PX;
+			double[] a = mean(ch, 0, 0, ch.getWidth(), ch.getHeight());
+			double[] b = mean(low, cx * tiles * LayerBaker.LOW_PX, cy * tiles * LayerBaker.LOW_PX,
+					tiles * LayerBaker.LOW_PX, (ch.getHeight() / LayerBaker.CHUNK_PX) * LayerBaker.LOW_PX);
+			double d = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+			check("the low map's patch is the chunk's colour on level " + z + " (delta " + Math.round(d) + ")", d < 30);
+		}
+	}
+
+	/** Mean colour over a rect, each pixel composited over the page background
+	 *  the way the low map is encoded -- a transparent pixel IS the background
+	 *  there, so an open sky level compares as the dark it is drawn as. */
+	private static double[] mean(java.awt.image.BufferedImage img, int x0, int y0, int w, int h) {
+		final int bgR = 0x14, bgG = 0x16, bgB = 0x1a;
+		double r = 0, g = 0, b = 0, n = 0;
+		for (int y = y0; y < y0 + h && y < img.getHeight(); y++) {
+			for (int x = x0; x < x0 + w && x < img.getWidth(); x++) {
+				int p = img.getRGB(x, y);
+				double a = ((p >>> 24) & 255) / 255.0;
+				r += ((p >> 16) & 255) * a + bgR * (1 - a);
+				g += ((p >> 8) & 255) * a + bgG * (1 - a);
+				b += (p & 255) * a + bgB * (1 - a);
+				n++;
+			}
+		}
+		return n == 0 ? new double[] { 0, 0, 0 } : new double[] { r / n, g / n, b / n };
+	}
+
+	/**
+	 * A big message halves the beat, globally. Small messages never skip; big
+	 * ones skip exactly the odd beats; and the rule is a function of the LAST
+	 * broadcast's size, so the first big one still goes out on time.
+	 */
+	static void aBigStreamBeatsAtHalfRate() {
+		int small = WorldHost.BIG_MSG_BYTES, big = WorldHost.BIG_MSG_BYTES + 1;
+		int sentSmall = 0, sentBig = 0;
+		for (long beat = 0; beat < 20; beat++) {
+			if (!WorldHost.skipBeat(beat, small)) {
+				sentSmall++;
+			}
+			if (!WorldHost.skipBeat(beat, big)) {
+				sentBig++;
+			}
+		}
+		check("a small message goes out every beat (" + sentSmall + "/20)", sentSmall == 20);
+		check("a big one every other beat (" + sentBig + "/20)", sentBig == 10);
+		check("and the even beats are the ones kept, so a run never starts with a gap",
+				!WorldHost.skipBeat(0, big) && WorldHost.skipBeat(1, big));
 	}
 
 	/**
