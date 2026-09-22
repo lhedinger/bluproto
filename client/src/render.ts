@@ -165,6 +165,20 @@ let groundRetryAt = 0;
 let groundPatchRects: Array<[number, number, number, number]> | null = null;
 const LAYER_LOW = 3; // px per tile of every low mirror
 
+// The level's low map (LayerBaker.lowJpeg): one small JPEG of the whole floor,
+// painted into every hole the chunks have not filled yet, so the map is on
+// screen after ONE request instead of after fifty-four. It used to be black
+// until the chunks landed, and on a phone behind the entity stream that was
+// ten seconds and more of dots on nothing. Where it stands in for a chunk it
+// is blocky at near zoom -- it is the far-zoom mirror's resolution -- and the
+// chunk replaces it the moment it decodes.
+let getLowMap: (z: number) => HTMLCanvasElement | null = () => null;
+let lowMapLevel = -1; // the level the placeholder has been painted for, or -1
+/** The host wires up the low map fetch; drawing never fetches by itself. */
+export function setLowMapSource(fn: (z: number) => HTMLCanvasElement | null): void {
+  getLowMap = fn;
+}
+
 function refreshGroundLow(meta: WorldMeta): void {
   if (!groundLowCv || groundLowCv.width !== meta.cols * LAYER_LOW) {
     groundLowCv = document.createElement('canvas');
@@ -188,6 +202,14 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     const hTiles = Math.min(chunkTiles, meta.rows - cy * chunkTiles);
     return [cx * chunkTiles * ART, cy * chunkTiles * ART, wTiles * ART, hTiles * ART];
   };
+  // The low map, scaled up into one hole: its pixels are LAYER_LOW per tile
+  // whatever the PNG says, read off its own width so the two can never
+  // disagree.
+  const lowInto = (ctx: CanvasRenderingContext2D, low: HTMLCanvasElement,
+      [dx, dy, dw, dh]: [number, number, number, number]) => {
+    const s = low.width / groundCv!.width; // low px per art px
+    ctx.drawImage(low, dx * s, dy * s, dw * s, dh * s, dx, dy, dw, dh);
+  };
   if (fresh) {
     if (!groundCv || groundCv.width !== meta.cols * ART || groundCv.height !== meta.rows * ART) {
       groundCv = document.createElement('canvas');
@@ -198,11 +220,17 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, groundCv.width, groundCv.height);
     groundHoles = [];
+    lowMapLevel = -1;
+    const low = getLowMap(level);
     const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
     for (let cy = 0; cy < cyN; cy++) {
       for (let cx = 0; cx < cxN; cx++) {
         const chunk = getChunk(cx, cy, level);
-        if (!chunk) { groundHoles.push([cx, cy]); continue; }
+        if (!chunk) {
+          groundHoles.push([cx, cy]);
+          if (low) { lowInto(ctx, low, chunkRect(cx, cy)); lowMapLevel = level; }
+          continue;
+        }
         const [dx, dy, dw, dh] = chunkRect(cx, cy);
         ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
       }
@@ -214,16 +242,23 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
   } else {
     // Retry pass: blit only the holes whose chunks have arrived, and ship
     // exactly those rects as texture patches. Nothing arrived = nothing
-    // repainted, no rev bump, no upload.
+    // repainted, no rev bump, no upload. A low map that has arrived since
+    // the layer was built fills every hole still open, once.
     const ctx = groundCv!.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
     const filled: Array<[number, number, number, number]> = [];
+    const low = lowMapLevel === level ? null : getLowMap(level);
+    if (low) lowMapLevel = level;
     groundHoles = groundHoles.filter(([cx, cy]) => {
       const chunk = getChunk(cx, cy, level);
-      if (!chunk) return true;
-      const [dx, dy, dw, dh] = chunkRect(cx, cy);
+      const r = chunkRect(cx, cy);
+      if (!chunk) {
+        if (low) { lowInto(ctx, low, r); filled.push(r); }
+        return true;
+      }
+      const [dx, dy, dw, dh] = r;
       ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
-      filled.push([dx, dy, dw, dh]);
+      filled.push(r);
       return false;
     });
     if (filled.length > 0) {
@@ -232,7 +267,10 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
       refreshGroundLow(meta);
     }
   }
-  groundRetryAt = nowMs + 1000; // holes still open: look again shortly
+  // Holes still open: look again soon. A quarter second, not the second it
+  // was -- the pass is a handful of cache lookups when nothing has arrived,
+  // and a chunk that has landed should not wait most of a second to show.
+  groundRetryAt = nowMs + 250;
   return groundCv;
 }
 

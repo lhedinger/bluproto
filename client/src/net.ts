@@ -58,6 +58,11 @@ export class Net {
       stats.msgMs += (performance.now() - t0 - stats.msgMs) * 0.2;
       const bytes = bin ? (ev.data as ArrayBuffer).byteLength : ev.data.length;
       stats.msgKb += (bytes / 1024 - stats.msgKb) * 0.2;
+      // The interval the server is actually sending at. It halves its rate
+      // for big messages, and the renderer samples a fixed fraction behind
+      // whatever the interval is, so a slower stream stays smooth.
+      if (stats.lastAt > 0) stats.intervalMs += (t0 - stats.lastAt - stats.intervalMs) * 0.2;
+      stats.lastAt = t0;
       stats.count++;
     };
     ws.onclose = () => {
@@ -68,7 +73,7 @@ export class Net {
   }
 
   /** EMA cost/size of stream messages (parse + state apply), for the HUD. */
-  static streamStats = { msgMs: 0, msgKb: 0, count: 0 };
+  static streamStats = { msgMs: 0, msgKb: 0, count: 0, intervalMs: 100, lastAt: 0 };
 
   send(cmd: Command): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
