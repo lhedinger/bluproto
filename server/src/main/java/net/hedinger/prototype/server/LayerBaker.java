@@ -191,21 +191,21 @@ final class LayerBaker {
 		}
 	}
 
-	/** Pixels per tile in the low map: the whole level in one small picture,
-	 *  the resolution the client's own far-zoom mirror uses (render.ts
-	 *  LAYER_LOW), so what the map shows before the chunks land is what it
-	 *  shows after them at the same zoom. */
-	static final int LOW_PX = 3;
+	/** Pixels per tile in the low map: the whole level in one small picture.
+	 *  Two, not the three of the client's far-zoom mirror: a phone fits the
+	 *  288-tile world into some 400 CSS pixels, under two per tile, and at
+	 *  three the JPEG was 77 KB against 35 at two. The bytes are the point. */
+	static final int LOW_PX = 2;
 
-	/** JPEG quality of the low map. At 0.6 the surface is seventeen kilobytes;
-	 *  as a PNG the same picture was 164 -- the film grain the bake lays over
-	 *  every tile is noise, and noise is what PNG cannot compress. */
+	/** JPEG quality of the low map. As a PNG the same picture was five times
+	 *  the size -- the film grain the bake lays over every tile is noise, and
+	 *  noise is what PNG cannot compress. */
 	static final float LOW_QUALITY = 0.6f;
 
 	/**
-	 * The whole level as ONE small JPEG, {@link #LOW_PX} pixels per tile: a
-	 * 144x88 world comes out at 432x264 and under twenty kilobytes, against the
-	 * megabyte its fifty-four chunks weigh. The client paints it first, so the
+	 * The whole level as ONE small JPEG, {@link #LOW_PX} pixels per tile: the
+	 * 288x176 world comes out at 576x352 and under forty kilobytes, against
+	 * the several megabytes its two hundred chunks weigh. The client paints it first, so the
 	 * map is on screen after one request, and the chunks replace it as they
 	 * arrive. A phone on a mobile link used to sit on a black world for as long
 	 * as the chunk queue took behind the entity stream -- ten seconds and more
