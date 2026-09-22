@@ -174,6 +174,12 @@ public final class Mechanics {
 						+ " × mass^0.75 × efficiency × satiation × vigor", "energy/tick",
 						"satiation = 1 − the worse of hunger and thirst; vigor = health/100. "
 						+ "Every unit minted drains a unit from the gut."),
+				row("Exertion", "full up to " + num(NPC.EXERTION_WALK) + " × basal of travel, then "
+						+ num(NPC.EXERTION_WALK) + " × basal ÷ travel", "of regeneration",
+						"Digestion suffers past a walk: the mint runs at full rate while the travel "
+						+ "bill is at most twice the resting burn (the reference pace) and falls in "
+						+ "proportion beyond it. A walk lives on the gut; a run is paid from the "
+						+ "store, on a stomach that is still full."),
 				row("Exhaustion floor", pct(NPC.EXHAUSTION), "of glycogen",
 						"Below it: collapse. A crawl at " + pct(NPC.CRAWL_SPEED)
 						+ " of top speed, and nothing else."),

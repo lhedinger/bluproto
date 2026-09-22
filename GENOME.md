@@ -282,6 +282,20 @@ movement rather than intent.
 - **There is no sprint gear.** A creature asks for the speed it wants (throttle,
   for a mind) and the quadratic law prices that choice continuously at every
   speed, rather than only above a threshold.
+- **A walk lives on the gut; a run is paid from the store.** The mint that
+  turns a meal into glycogen runs at `ASSIMILATION_RATE · mass^0.75` at rest
+  and at a walk, and **exertion suppresses it**: once the travel bill passes
+  `EXERTION_WALK` (2×) the resting burn — the reference pace — it falls as
+  `2·basal/travel`. Without this the mint out-earned a flat-out run at every
+  speed anything actually travels, so a fed body's glycogen sat pinned at cap
+  however far it went. Measured, fully fed and never fed again: a walk at 0.04
+  never collapses in three days; a run at 0.08 collapses in about 0.9 days with
+  three quarters of its gut still full; a sprint at 0.12 in a third of a day
+  with the gut untouched. The break-even sits between the walk and the run at
+  every size, because the mint goes as mass^0.75 and travel as mass. Growth and
+  the refill (empty to full in about half a day at rest) happen at rest and
+  are untouched — slowing the mint itself instead made childhood longer than
+  a life.
 
 ### How long a body gets
 

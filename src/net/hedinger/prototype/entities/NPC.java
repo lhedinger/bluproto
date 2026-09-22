@@ -1310,7 +1310,21 @@ public abstract class NPC extends Entity {
 			// compound with the rest: an unhealthy body is also a listless one.
 			double satiation = 1.0 - Math.max(hunger, thirst);
 			double vigor = Math.max(0, health) / 100.0;
-			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor;
+			// Exertion suppresses digestion. The mint runs at its full rate at rest
+			// and at a walk -- until the travel bill reaches twice the resting one,
+			// which is the reference pace -- and falls in proportion beyond that,
+			// as the blood that would serve the gut serves the legs instead. This
+			// is what makes running a thing the STORE pays for: without it the mint
+			// out-earned a flat-out run at every speed anything actually travels,
+			// so a fed body's glycogen sat pinned at cap however far it went, and a
+			// hunter could chase for three days on a full stomach without drawing
+			// on it once. A walk still lives on the gut; a run spends glycogen and
+			// a sprint spends it fast, on a stomach that is still full -- see
+			// AFedBodyCanWalkOnItsDigestionButNotRun and HowLongAFedBodyCanSprint.
+			// Growth and the refill happen at rest and are untouched: slowing the
+			// mint itself instead made childhood longer than a life.
+			double exertion = Math.min(1.0, EXERTION_WALK * base / Math.max(travel, 1e-12));
+			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor * exertion;
 			double out = base + grip + travel;
 			// Only conversion that lands in the books draws down the gut: at
 			// full glycogen the mint stops instead of burning the meal for nothing.
@@ -1401,11 +1415,25 @@ public abstract class NPC extends Entity {
 	 *  of its own. Change either factor and this must follow. */
 	@Unit("food energy at mass 1")
 	public static double GUT_PER_MASS = 9.0;
-	/** Energy regenerated per tick by a fed, watered, healthy reference body —
-	 *  before the resting burn nets it down. Anchored so an idle ideal body
-	 *  refills empty glycogen in roughly a minute and a half. */
+	/** Energy regenerated per tick by a fed, watered, healthy reference body at
+	 *  rest — before the resting burn nets it down. Twelve times that burn, so an
+	 *  idle ideal body refills empty glycogen in about half a day of world time
+	 *  (half a minute of watching; the javadoc used to say a minute and a half,
+	 *  which predates the store's resize and was never checked). It is also the
+	 *  pace growth is funded at, which is why it is this high rather than the
+	 *  few-times-basal an animal's gut manages: slowing it makes childhood
+	 *  longer than a life. Exertion scales it down instead, see
+	 *  {@link #EXERTION_WALK}. */
 	@Unit("energy/tick at mass 1")
 	public static double ASSIMILATION_RATE = 0.006;
+	/** How hard a body can work before its digestion suffers, as a multiple of
+	 *  the resting burn: the mint runs at full rate while the travel bill is at
+	 *  most this many times basal — which is the reference walk, whose bill is
+	 *  exactly twice basal at the reference pace — and falls as
+	 *  {@code EXERTION_WALK · basal / travel} beyond it. Break-even between the
+	 *  mint and the bill lands between the walk and a run, at every size. */
+	@Unit("of basal")
+	public static double EXERTION_WALK = 2.0;
 	/** Fraction of glycogen kept as the exhaustion floor: below it the body is
 	 *  collapsed — it can only crawl (see {@link #move}), not act. Collapse is
 	 *  recoverable; death is health's decision alone. */
