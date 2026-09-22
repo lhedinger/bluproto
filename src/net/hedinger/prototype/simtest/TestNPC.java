@@ -1672,7 +1672,7 @@ public class TestNPC extends NPC {
 		}
 		NPC best = null;
 		double bestD = HOST_SENSE_R;
-		for (NPC n : getWorld().census().creatures(getLvl())) {
+		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, HOST_SENSE_R)) {
 			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
 					|| !n.isOrganic() // no blood in a machine: nothing to ride and nothing to drink
 					|| (nicheOf(n) != null && nicheOf(n).drains())) {
@@ -1920,7 +1920,7 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bar = held == null ? 0 : preyScore(held) * determination();
 		// Census walk: live same-level non-item bodies only.
-		for (NPC n : getWorld().census().creatures(getLvl())) {
+		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
 			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
@@ -1938,7 +1938,7 @@ public class TestNPC extends NPC {
 		}
 		// And the fresh dead: a carcass with fresh meat on it is food to a hunter
 		// on the same terms as living prey, which is how other hunters join a kill.
-		for (NPC n : getWorld().census().corpses(getLvl())) {
+		for (NPC n : getWorld().census().corpsesNear(getLvl(), X, Y, LOS_RANGE)) {
 			if (!edibleQuarry(n, cannibal) || distance(n.getX(), n.getY(), n.getZ()) > LOS_RANGE) {
 				continue;
 			}
@@ -1971,7 +1971,7 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestD = radius;
 		// Census walk: live same-level non-item bodies only.
-		for (NPC n : getWorld().census().creatures(getLvl())) {
+		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, radius)) {
 			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
@@ -1981,7 +1981,7 @@ public class TestNPC extends NPC {
 				best = n;
 			}
 		}
-		for (NPC n : getWorld().census().corpses(getLvl())) { // the fresh dead are quarry too
+		for (NPC n : getWorld().census().corpsesNear(getLvl(), X, Y, radius)) { // the fresh dead are quarry too
 			if (!edibleQuarry(n, cannibal)) {
 				continue;
 			}
@@ -2282,7 +2282,7 @@ public class TestNPC extends NPC {
 		double kinX = 0, kinY = 0, kinWeight = 0;
 		// Census walk: live same-level bodies, then line of sight (cover and
 		// walls hide neighbours; hasLOS range-gates before it raycasts).
-		for (NPC n : getWorld().census().creatures(getLvl())) {
+		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
 			if (n == this || n.isDead() || n.isRemoved() || !isInLOS(n)) {
 				continue;
 			}
@@ -2512,7 +2512,7 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestScore = held == null ? 0 : carrionScore(held) * determination();
 		// Census walk: this level's corpses only.
-		for (NPC n : getWorld().census().corpses(getLvl())) {
+		for (NPC n : getWorld().census().corpsesNear(getLvl(), X, Y, CARRION_SCENT_R)) {
 			if (!edibleCarrion(n)) {
 				continue; // a body still too fresh to gut is not yet a meal to walk to
 			}
@@ -2833,7 +2833,7 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestD = LOS_RANGE;
 		// Census walk: live same-level bodies (see World.Census).
-		for (NPC n : getWorld().census().creatures(getLvl())) {
+		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
 			if (n == this || n.isDead() || n.isRemoved() || !canMateWith(n)
 					|| !isInLOS(n)) {
 				continue;
@@ -3756,7 +3756,7 @@ public class TestNPC extends NPC {
 		double bestD = radius;
 		// Census walk (see World.Census): the predators of this level only —
 		// same level only, no fleeing a hunter a floor away.
-		for (NPC t : getWorld().census().predators(getLvl())) {
+		for (NPC t : getWorld().census().predatorsNear(getLvl(), X, Y, radius)) {
 			if (t == this || t.isDead() || t.isRemoved()) {
 				continue;
 			}
@@ -3776,7 +3776,7 @@ public class TestNPC extends NPC {
 		double sx = 0, sy = 0;
 		int k = 0;
 		// Census walk: this level's prey — herd with kin you can actually reach.
-		for (NPC t : getWorld().census().prey(getLvl())) {
+		for (NPC t : getWorld().census().preyNear(getLvl(), X, Y, radius)) {
 			if (t == this || t.isDead() || t.isRemoved()) {
 				continue;
 			}

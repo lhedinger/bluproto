@@ -92,8 +92,13 @@ public class World {
 		private final java.util.List<java.util.List<NPC>> predators = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<NPC>> prey = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<NPC>> corpses = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<PheromoneCloud>> clouds = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<net.hedinger.prototype.entities.Switch>> switches =
 				new java.util.ArrayList<>();
+		private final java.util.List<Buckets> creatureBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets> predatorBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets> preyBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets> corpseBuckets = new java.util.ArrayList<>();
 
 		private Census(int levels) {
 			for (int z = 0; z < levels; z++) {
@@ -101,6 +106,7 @@ public class World {
 				predators.add(new java.util.ArrayList<>());
 				prey.add(new java.util.ArrayList<>());
 				corpses.add(new java.util.ArrayList<>());
+				clouds.add(new java.util.ArrayList<>());
 				switches.add(new java.util.ArrayList<>());
 			}
 		}
@@ -119,6 +125,10 @@ public class World {
 					c.switches.get(z).add(sw);
 					continue;
 				}
+				if (e instanceof PheromoneCloud pc) {
+					c.clouds.get(z).add(pc);
+					continue;
+				}
 				if (!(e instanceof NPC n) || e instanceof net.hedinger.prototype.entities.Item) {
 					continue;
 				}
@@ -133,6 +143,12 @@ public class World {
 				} else if ("herbivore".equals(role)) {
 					c.prey.get(z).add(n);
 				}
+			}
+			for (int z = 0; z < c.creatures.size(); z++) {
+				c.creatureBuckets.add(new Buckets(c.creatures.get(z), w.cols, w.rows));
+				c.predatorBuckets.add(new Buckets(c.predators.get(z), w.cols, w.rows));
+				c.preyBuckets.add(new Buckets(c.prey.get(z), w.cols, w.rows));
+				c.corpseBuckets.add(new Buckets(c.corpses.get(z), w.cols, w.rows));
 			}
 			return c;
 		}
@@ -154,8 +170,131 @@ public class World {
 			return corpses.get(z);
 		}
 
+		/** The pheromone clouds on the level, in entity order. */
+		public java.util.List<PheromoneCloud> clouds(int z) {
+			return clouds.get(z);
+		}
+
+		// ---- the near scans ---------------------------------------------------
+		//
+		// Every consumer of these lists asks the same question -- who is within
+		// r of me -- and used to answer it by walking the whole level, which made
+		// a tick quadratic in bodies: on a thousand-body world the line-of-sight
+		// sense pass alone was forty percent of the tick, and most of it was
+		// range checks that failed. Each near scan returns the bodies of the
+		// cells a radius touches, a SUPERSET of the disc, in exactly the order
+		// the full list holds them -- so a consumer that filters by its own
+		// range, as every one of them does, sees the same bodies in the same
+		// order and computes the same answer to the last bit. A nearest found by
+		// strict less-than keeps its tie-break; a kin centroid summed in floating
+		// point keeps its rounding. That is what makes this a cut and not a
+		// change: NearScansAreTheCensusScansCut pins it against the full walk.
+
+		public java.util.List<NPC> creaturesNear(int z, double x, double y, double r) {
+			return creatureBuckets.get(z).near(x, y, r);
+		}
+
+		public java.util.List<NPC> predatorsNear(int z, double x, double y, double r) {
+			return predatorBuckets.get(z).near(x, y, r);
+		}
+
+		public java.util.List<NPC> preyNear(int z, double x, double y, double r) {
+			return preyBuckets.get(z).near(x, y, r);
+		}
+
+		public java.util.List<NPC> corpsesNear(int z, double x, double y, double r) {
+			return corpseBuckets.get(z).near(x, y, r);
+		}
+
 		public java.util.List<net.hedinger.prototype.entities.Switch> switches(int z) {
 			return switches.get(z);
+		}
+	}
+
+	/**
+	 * One level's bodies binned into square cells, in list order: a counting
+	 * sort by cell, so the bodies of any cell are a run of ascending list
+	 * indices. A query gathers the runs of the cells a square of radius r
+	 * touches and sorts the indices once, which restores list order across
+	 * cells; sorting a few dozen ints is nothing next to the walk it replaces.
+	 * Rebuilt with the census every tick, O(bodies).
+	 */
+	static final class Buckets {
+		/** Cell side in tiles. Sense ranges run from 3 to 24; at 8 a long look
+		 *  touches at most 7x7 cells and a short one usually 1x1 or 2x2. */
+		static final int CELL = 8;
+		private final java.util.List<NPC> all;
+		private final int cw, ch;
+		private final int[] start; // start[c]..start[c+1] is cell c's run in idx
+		private final int[] idx;   // list indices, ascending within a cell
+
+		Buckets(java.util.List<NPC> all, int cols, int rows) {
+			this.all = all;
+			cw = Math.max(1, (cols + CELL - 1) / CELL);
+			ch = Math.max(1, (rows + CELL - 1) / CELL);
+			int n = all.size();
+			int[] cellOf = new int[n];
+			start = new int[cw * ch + 1];
+			for (int i = 0; i < n; i++) {
+				NPC b = all.get(i);
+				cellOf[i] = cell(b.getX(), b.getY());
+				start[cellOf[i] + 1]++;
+			}
+			for (int c = 0; c < cw * ch; c++) {
+				start[c + 1] += start[c];
+			}
+			idx = new int[n];
+			int[] fill = start.clone();
+			for (int i = 0; i < n; i++) {
+				idx[fill[cellOf[i]]++] = i;
+			}
+		}
+
+		private int cx(double x) {
+			int c = (int) Math.floor(x / CELL);
+			return c < 0 ? 0 : (c >= cw ? cw - 1 : c);
+		}
+
+		private int cy(double y) {
+			int c = (int) Math.floor(y / CELL);
+			return c < 0 ? 0 : (c >= ch ? ch - 1 : c);
+		}
+
+		private int cell(double x, double y) {
+			return cy(y) * cw + cx(x);
+		}
+
+		java.util.List<NPC> near(double x, double y, double r) {
+			if (all.isEmpty()) {
+				return all;
+			}
+			int x0 = cx(x - r), x1 = cx(x + r), y0 = cy(y - r), y1 = cy(y + r);
+			int count = 0;
+			for (int yy = y0; yy <= y1; yy++) {
+				for (int xx = x0; xx <= x1; xx++) {
+					int c = yy * cw + xx;
+					count += start[c + 1] - start[c];
+				}
+			}
+			if (count == all.size()) {
+				return all; // the whole level: the list itself, in its own order
+			}
+			int[] got = new int[count];
+			int k = 0;
+			for (int yy = y0; yy <= y1; yy++) {
+				for (int xx = x0; xx <= x1; xx++) {
+					int c = yy * cw + xx;
+					for (int j = start[c]; j < start[c + 1]; j++) {
+						got[k++] = idx[j];
+					}
+				}
+			}
+			java.util.Arrays.sort(got);
+			java.util.ArrayList<NPC> out = new java.util.ArrayList<>(count);
+			for (int i : got) {
+				out.add(all.get(i));
+			}
+			return out;
 		}
 	}
 
@@ -208,6 +347,11 @@ public class World {
 				}
 			}
 			spawnQueue = new LinkedHashSet<Entity>();
+			// The census again, now that the queue has drained: a reader between
+			// ticks -- the viewer's pheromone field, a scenario that deposits and
+			// looks -- sees what the world holds, not what it held a tick ago. In
+			// the next tick this is exactly the census its start would build.
+			census = Census.build(this);
 		}
 
 		for (int z = 0; z < lvls; z++) {
@@ -418,10 +562,13 @@ public class World {
 	/** Pheromone concentration sensed at a world point: the sum of every cloud on
 	 *  this level, each with its radial falloff. */
 	public double pheromoneAt(double x, double y, int z) {
+		// The census's clouds, in entity order -- the same sum in the same order
+		// as walking every entity, without the walk: this was called once per
+		// body per tick and iterated a thousand bodies to find a dozen clouds.
 		double sum = 0;
-		for (Entity e : entities.values()) {
-			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
-				sum += ((PheromoneCloud) e).concentrationAt(x, y);
+		for (PheromoneCloud c : census().clouds(z)) {
+			if (!c.isRemoved()) {
+				sum += c.concentrationAt(x, y);
 			}
 		}
 		return sum;
@@ -436,9 +583,8 @@ public class World {
 	public double pheromoneDirection(double x, double y, int z, double radius) {
 		PheromoneCloud best = null;
 		double bestStr = 0, rr = radius * radius;
-		for (Entity e : entities.values()) {
-			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
-				PheromoneCloud c = (PheromoneCloud) e;
+		for (PheromoneCloud c : census().clouds(z)) {
+			if (!c.isRemoved()) {
 				double dx = c.getX() - x, dy = c.getY() - y;
 				if (dx * dx + dy * dy <= rr && c.getStrength() > bestStr) {
 					bestStr = c.getStrength();
