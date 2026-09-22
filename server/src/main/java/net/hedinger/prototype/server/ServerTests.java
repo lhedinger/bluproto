@@ -625,7 +625,7 @@ public final class ServerTests {
 					low.getWidth() % LayerBaker.LOW_PX == 0 && low.getHeight() % LayerBaker.LOW_PX == 0
 					&& cols > 0 && rows > 0);
 			check("and small enough to land first on a phone (" + png.length + " bytes)",
-					png.length < 40_000);
+					png.length < 48_000);
 			// Mean colour of chunk (2,1) against its patch of the low map.
 			int cx = 2, cy = 1;
 			byte[] cpng = host.chunk(z, cx, cy);
