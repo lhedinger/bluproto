@@ -2058,8 +2058,20 @@ type PopData = {
 type FlowData = {
   tps: number; stageSec: number;
   stages: Array<{ tick: number; species: Array<{ key: string; rgb: number; count: number }> }>;
-  flows: Array<{ stage: number; from: string; to: string; n: number }>;
+  /** Each head of the later stage traced to ONE source: `held` (the same body,
+   *  still alive), `bred` (descended from a head of the earlier stage, through
+   *  however many generations came and went between), `reseed` (a founder the
+   *  warden landed since), `unknown` (a line the registry cannot follow); and
+   *  `died` for a line of the earlier stage that ended -- a body that died
+   *  leaving descendants is carried by their ribbon, not reported dead. */
+  flows: Array<{ stage: number; kind: FlowKind; from: string; to: string; n: number }>;
 };
+type FlowKind = 'held' | 'bred' | 'reseed' | 'unknown' | 'died';
+/** The warden's own colour on the diagram: the facility's hazard yellow, which
+ *  is what its drones wear. A reseed ribbon in a species tint would read as
+ *  that species breeding, which is exactly the lie the kinds exist to stop. */
+const WARDEN = '#d8b028';
+const UNKNOWN_TINT = '#8b93a3';
 
 let popOn = flagOn('pop');
 /** Which lens the panel shows: the four trophic roles over time, or the
@@ -2067,14 +2079,14 @@ let popOn = flagOn('pop');
  *  where it actually went, which is the view that shows a lineage dying out
  *  (its ribbon ends) and the niche being reseeded (a new one begins). */
 let popMode: 'roles' | 'lineages' = 'roles';
-/** Which clade the Sankey shows. One at a time is far more legible than all
- *  twenty-odd species stacked into one diagram — and the cut is free of
- *  charge: a clade is inherited and never mutated, so no flow ever crosses
- *  clades and filtering can never sever a ribbon. */
-const LIN_CLADES = ['all', 'herbivore', 'predator', 'scavenger', 'parasite'] as const;
-let linClade: (typeof LIN_CLADES)[number] = 'all';
+/** Which clade the Sankey shows. Always one: a lineage never crosses clades
+ *  (a clade is inherited and never mutated), so a diagram of all of them is
+ *  four unrelated diagrams interleaved, and the cut is free of charge -- no
+ *  ribbon can ever be severed by it. */
+const LIN_CLADES = ['herbivore', 'predator', 'scavenger', 'parasite'] as const;
+let linClade: (typeof LIN_CLADES)[number] = 'herbivore';
 function linCladeMatch(key: string): boolean {
-  return linClade === 'all' || key.startsWith(linClade + '/');
+  return key.startsWith(linClade + '/');
 }
 /** Which ROLE series are drawn. Prey outnumber predators by an order of
  *  magnitude on one shared axis, so the legend lets a viewer drop the big
@@ -2307,7 +2319,7 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   }
   const K = d.stages.length;
   const nodeW = 9 * dpr, gap = 4 * dpr;
-  const real = (k: string) => k !== 'born' && k !== 'died';
+  const real = (k: string) => k !== 'reseed' && k !== 'unknown' && k !== 'died';
 
   // The clade filter, applied to columns and flows alike.
   const specs = d.stages.map(st => st.species.filter(sp => linCladeMatch(sp.key)));
@@ -2350,7 +2362,7 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   }
   if (!anything) {
     gathering(ctx, dpr, padX + 4 * dpr, padT + gh / 2);
-    ctx.fillText(`no ${linClade === 'all' ? 'creatures' : linClade + 's'} in this window`,
+    ctx.fillText(`no ${linClade}s in this window`,
         padX + 4 * dpr, padT + gh / 2 + 14 * dpr);
     return;
   }
@@ -2400,12 +2412,18 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
         ctx.lineTo(x1, dy + hpx);
         ctx.bezierCurveTo(mx, dy + hpx, mx, sy + hpx, x0, sy + hpx);
         ctx.closePath();
+        // A ribbon keeps its SOURCE tint, so a lineage crossing into another
+        // label is seen leaving. Bred is drawn solid and held faint: a column
+        // that is mostly faint is the same bodies still standing there, and one
+        // that is mostly solid is a line making generations.
         ctx.fillStyle = src.rgb;
-        ctx.globalAlpha = 0.45; // a drift ribbon keeps its SOURCE tint, so a
-        ctx.fill();             // lineage crossing into another label is seen leaving
+        ctx.globalAlpha = f.kind === 'bred' ? 0.7 : 0.28;
+        ctx.fill();
         ctx.globalAlpha = 1;
       } else if (dst) {
-        // Born: a ribbon from nothing, opening out of the gap.
+        // From nothing, opening out of the gap: a reseed in the warden's
+        // yellow, a line the registry lost in grey. Never the species' own
+        // tint -- that would read as the species breeding.
         const dy = dst.inCur;
         dst.inCur += hpx;
         const xb = x0 + (x1 - x0) * 0.45, ym = dy + hpx / 2;
@@ -2415,12 +2433,12 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
         ctx.lineTo(x1, dy + hpx);
         ctx.bezierCurveTo(mx, dy + hpx, mx, dy + hpx, xb, ym);
         ctx.closePath();
-        ctx.fillStyle = dst.rgb;
-        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = f.kind === 'reseed' ? WARDEN : UNKNOWN_TINT;
+        ctx.globalAlpha = f.kind === 'reseed' ? 0.75 : 0.4;
         ctx.fill();
         ctx.globalAlpha = 1;
       } else if (src) {
-        // Died: the ribbon closes to nothing before the next stage.
+        // Ended: the line closes to nothing before the next stage.
         const sy = src.outCur;
         src.outCur += hpx;
         const xd = x0 + (x1 - x0) * 0.55, ym = sy + hpx / 2;
@@ -2470,12 +2488,15 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   ctx.fillText('width ≈ 1+log₁₀ heads', padX, padT + gh + 11 * dpr);
   ctx.textAlign = 'center';
   const roomy = (gw - nodeW) / (K - 1) >= 46 * dpr;
+  const noteEnd = padX + ctx.measureText('width ≈ 1+log₁₀ heads').width + 6 * dpr;
   for (let c = 0; c < K; c++) {
     if (!roomy && c !== 0 && c !== K - 1) continue;
     if (c === 0) continue; // its slot holds the scale note
     const ago = (lastTick - d.stages[c].tick) / d.tps;
-    ctx.fillText(c === K - 1 ? 'now' : `-${fmtSpan(ago)}`,
-        colX(c) + nodeW / 2, padT + gh + 11 * dpr);
+    const label = c === K - 1 ? 'now' : `-${fmtSpan(ago)}`;
+    const x = colX(c) + nodeW / 2;
+    if (x - ctx.measureText(label).width / 2 < noteEnd) continue; // under the note
+    ctx.fillText(label, x, padT + gh + 11 * dpr);
   }
   ctx.textAlign = 'left';
   popWin.textContent =
@@ -2518,13 +2539,37 @@ function popKeyDraw(): void {
   }
   const st = linData && linData.stages.length
       ? linData.stages[linData.stages.length - 1] : null;
+  // What the ribbons mean, first: the reading is in the kinds.
+  for (const [fill, label, title] of [
+    ['#c8cdd580', 'bred', 'descended from a head of the previous stage'],
+    ['#c8cdd530', 'held', 'the same body, still alive'],
+    [WARDEN, 'reseeded', 'a founder the warden landed since the previous stage'],
+  ] as const) {
+    const el = document.createElement('span');
+    el.style.cursor = 'default';
+    el.title = title;
+    el.appendChild(keySwatch(fill, '#c8cdd560'));
+    el.appendChild(document.createTextNode(label));
+    popKey.appendChild(el);
+  }
+  // Then each species of the latest stage with its count, and over the whole
+  // window how many of its heads were bred against how many the warden put
+  // back -- the diagram's question, answered in numbers where the widths are
+  // not additive enough to be read as any.
+  const bred = new Map<string, number>(), reseed = new Map<string, number>();
+  for (const f of linData ? linData.flows : []) {
+    if (f.kind === 'bred') bred.set(f.to, (bred.get(f.to) ?? 0) + f.n);
+    if (f.kind === 'reseed') reseed.set(f.to, (reseed.get(f.to) ?? 0) + f.n);
+  }
   for (const sp of (st ? st.species : []).filter(x => linCladeMatch(x.key))) {
     const el = document.createElement('span');
     el.style.cursor = 'default';
-    el.title = sp.key;
+    el.title = `${sp.key}: over the window, ${bred.get(sp.key) ?? 0} heads bred, `
+      + `${reseed.get(sp.key) ?? 0} reseeded by the warden`;
     const rgb = liftForDark(sp.rgb);
     el.appendChild(keySwatch(rgb, rgb));
-    el.appendChild(document.createTextNode(`${speciesLabel(sp.key)} ${sp.count}`));
+    el.appendChild(document.createTextNode(
+      `${speciesLabel(sp.key)} ${sp.count} · bred ${bred.get(sp.key) ?? 0} · reseeded ${reseed.get(sp.key) ?? 0}`));
     popKey.appendChild(el);
   }
 }
@@ -2578,8 +2623,7 @@ popModeLin.onclick = () => popSetMode('lineages');
 const popCladeBtn = document.getElementById('popClade') as HTMLButtonElement;
 popCladeBtn.onclick = () => {
   linClade = LIN_CLADES[(LIN_CLADES.indexOf(linClade) + 1) % LIN_CLADES.length];
-  popCladeBtn.textContent = linClade === 'all' ? 'all clades' : linClade + 's';
-  popCladeBtn.classList.toggle('on', linClade !== 'all');
+  popCladeBtn.textContent = linClade;
   popDraw();
 };
 // The chart is the one panel that has to repaint when it changes size: its
