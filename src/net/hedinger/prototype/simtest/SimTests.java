@@ -1788,13 +1788,29 @@ public class SimTests {
 	}
 
 	static class TheMeadowWearsFourFloras extends Scenario {
+		/** The flora surfaceFlora picks at the given moisture, on a tile whose
+		 *  patch noise is high enough to carry a plant at all -- the bands are
+		 *  about moisture, and the patch is the separate question of whether this
+		 *  particular tile is inside a stand. */
+		private static int floraAtPatchPeak(int x0, int y0, double moist) {
+			for (int x = x0; x < x0 + 64; x++) {
+				for (int y = y0; y < y0 + 64; y++) {
+					int f = net.hedinger.prototype.sim.Worlds.surfaceFlora(
+							Tile.TileType.TYPE_FLOOR, x, y, moist);
+					if (f != Tile.FLORA_GRASS) {
+						return f;
+					}
+				}
+			}
+			throw new AssertionError("no tile in the window carries a plant at moisture " + moist);
+		}
+
 		@Override
 		public void run() {
 			World w = net.hedinger.prototype.sim.Worlds.demo(42);
 			int z = w.getSurfaceZ();
 			int[] count = new int[5];
 			int meadow = 0, rocky = 0, offCrop = 0;
-			double fernMoistMin = 1, heatherMoistMax = 0;
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
 					Tile t = w.getTile(x, y, z);
@@ -1811,13 +1827,6 @@ public class SimTests {
 						rocky++;
 					}
 					count[f]++;
-					double moist = net.hedinger.prototype.engine.Utils.noise2(x + 500, y + 300, 0.075);
-					if (f == Tile.FLORA_FERN) {
-						fernMoistMin = Math.min(fernMoistMin, moist);
-					}
-					if (f == Tile.FLORA_HEATHER) {
-						heatherMoistMax = Math.max(heatherMoistMax, moist);
-					}
 					if (f == Tile.FLORA_MOSS) {
 						assertTrue("moss grows on rocky ground and nowhere else",
 								t.getType() == Tile.TileType.TYPE_ROCKY);
@@ -1828,8 +1837,27 @@ public class SimTests {
 			for (int f = 1; f <= 4; f++) {
 				assertGreater("flora " + f + " occurs in stands, not as a rumour", count[f], 100);
 			}
-			assertGreater("fern is the damp meadow's plant", fernMoistMin, 0.5);
-			assertLess("heather is the dry margin's", heatherMoistMax, 0.36);
+			// Which plant belongs to which dampness is asked of surfaceFlora
+			// directly, because it is a pure function of (tile, position,
+			// moisture) and that is the whole of the rule. It used to be asked of
+			// the finished map by RE-DERIVING each tile's moisture here as
+			// noise2(x + 500, y + 300, 0.075) -- a second copy of the world's
+			// formula, living in the assertion. The moment the world's moisture
+			// grew a term the copy did not have (a region's moistBias), the copy
+			// stopped describing the number that had actually chosen the plant,
+			// and a fern standing in a damp region read as a fern in a dry one.
+			// A test that recomputes what it is checking can only ever pin the
+			// version of the formula it was written against.
+			int px = 40, py = 40; // any meadow tile: the bands do not depend on where
+			assertEquals("above the damp line the meadow wears fern", Tile.FLORA_FERN,
+					floraAtPatchPeak(px, py, 0.60));
+			assertEquals("between the lines it wears flowers", Tile.FLORA_FLOWERS,
+					floraAtPatchPeak(px, py, 0.40));
+			assertEquals("below the dry line it wears heather", Tile.FLORA_HEATHER,
+					floraAtPatchPeak(px, py, 0.20));
+			assertEquals("and dry rocky ground is moss's, not heather's", Tile.FLORA_MOSS,
+					net.hedinger.prototype.sim.Worlds.surfaceFlora(
+							Tile.TileType.TYPE_ROCKY, px, py, 0.20));
 			int meadowFloras = count[Tile.FLORA_FERN] + count[Tile.FLORA_FLOWERS]
 					+ count[Tile.FLORA_HEATHER];
 			assertGreater("a good share of the meadow is not grass (" + meadowFloras
