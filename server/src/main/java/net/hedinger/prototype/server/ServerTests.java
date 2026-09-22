@@ -33,6 +33,7 @@ public final class ServerTests {
 		theChartIsSentTheBoundsActuallyEnforced();
 		lineageCensusIsTheSameWorldFiner();
 		lineageFlowsConserveEveryHead();
+		lineageFlowsTellBredFromReseeded();
 		fertilityCapsTheGrassSpriteStage();
 		aFungusBedTopsOutAtStageThree();
 		vegetationFeedCarriesTheKind();
@@ -512,13 +513,12 @@ public final class ServerTests {
 	}
 
 	/**
-	 * The Sankey's one law: every head is accounted for on both sides of every
-	 * stage boundary. For each species, flows out (continuations + drifts +
-	 * deaths) must sum to its count in the earlier stage, and flows in
-	 * (continuations + drifts + births) to its count in the later one. Checked
-	 * against a REAL interval — the world runs a thousand ticks between the two
-	 * snapshots, so births, deaths and whatever drift occurs are all in play,
-	 * not staged.
+	 * The Sankey's one law, restated for descent: every head of the later stage
+	 * has exactly one source, so the inflows sum to its count; and a head of the
+	 * earlier stage is held, or has ended, or is carried by its descendants --
+	 * never counted twice. Checked against a REAL interval -- the world runs a
+	 * thousand ticks between the two snapshots, so births, deaths and whatever
+	 * drift occurs are all in play, not staged.
 	 */
 	static void lineageFlowsConserveEveryHead() {
 		net.hedinger.prototype.engine.Utils.seed(7);
@@ -527,74 +527,106 @@ public final class ServerTests {
 		for (int t = 0; t < 1000; t++) {
 			w.think();
 		}
-		// One guaranteed death. Whether a small world's thousand ticks happen to
-		// bury anyone is the random stream's business — an assertion on it broke
-		// the day an unrelated change shifted the stream and the interval came
-		// out quiet. Killing one body ourselves makes the died-flow (and, read
-		// backwards, the born-flow) a certainty instead of a bet.
-		//
-		// It has to be a body the EARLIER stage knows: a died-flow is an id in
-		// `a` that is not in `b`, so killing something born during the interval
-		// is a death nobody can see, and the certainty goes back to being a bet.
+		// One guaranteed death of a body the EARLIER stage knows, so the
+		// died-flow is a certainty instead of a bet on the random stream. It has
+		// to be one with no descendants, or its line is carried and no death
+		// shows -- so the freshest body is chosen: nothing has had time to be
+		// born of it.
 		java.util.Set<Integer> beforeIds = new java.util.HashSet<Integer>();
 		for (int id : a.ids()) {
 			beforeIds.add(id);
 		}
+		net.hedinger.prototype.simtest.TestNPC victim = null;
 		for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 			if (e instanceof net.hedinger.prototype.simtest.TestNPC t
 					&& !t.isDead() && !t.isRemoved() && t.getGenome() != null
-					&& beforeIds.contains(e.getID())) {
-				t.kill();
-				break;
+					&& beforeIds.contains(e.getID()) && w.childrenOf(e.getID()).isEmpty()) {
+				victim = t;
 			}
 		}
+		check("a childless body of the earlier stage exists to kill", victim != null);
+		victim.kill();
 		WorldHost.StageSnap b = WorldHost.stageOf(w, 1000);
 		check("the interval has heads on both sides (" + a.ids().length + " -> "
 				+ b.ids().length + ")", a.ids().length > 0 && b.ids().length > 0);
 
-		java.util.Map<String, Integer> flows = WorldHost.flowsBetween(a, b);
-		java.util.TreeMap<String, Integer> outOf = new java.util.TreeMap<String, Integer>();
+		java.util.Map<WorldHost.FlowKey, Integer> flows = WorldHost.flowsBetween(a, b, w::birthOf);
+		java.util.TreeMap<String, Integer> heldOrDied = new java.util.TreeMap<String, Integer>();
 		java.util.TreeMap<String, Integer> into = new java.util.TreeMap<String, Integer>();
-		int born = 0, died = 0;
-		for (java.util.Map.Entry<String, Integer> en : flows.entrySet()) {
-			int arrow = en.getKey().indexOf("->");
-			String from = en.getKey().substring(0, arrow), to = en.getKey().substring(arrow + 2);
-			if (from.equals("born")) {
-				born += en.getValue();
-			} else {
-				outOf.merge(from, en.getValue(), Integer::sum);
-			}
-			if (to.equals("died")) {
+		int died = 0, bred = 0, unknown = 0;
+		for (java.util.Map.Entry<WorldHost.FlowKey, Integer> en : flows.entrySet()) {
+			WorldHost.FlowKey k = en.getKey();
+			if (k.kind().equals(WorldHost.DIED)) {
 				died += en.getValue();
-			} else {
-				into.merge(to, en.getValue(), Integer::sum);
+				heldOrDied.merge(k.from(), en.getValue(), Integer::sum);
+				continue;
 			}
+			if (k.kind().equals(WorldHost.HELD)) {
+				heldOrDied.merge(k.from(), en.getValue(), Integer::sum);
+			}
+			if (k.kind().equals(WorldHost.BRED)) {
+				bred += en.getValue();
+			}
+			if (k.kind().equals(WorldHost.UNKNOWN)) {
+				unknown += en.getValue();
+			}
+			into.merge(k.to(), en.getValue(), Integer::sum);
 		}
 		java.util.TreeMap<String, Integer> beforeCounts = countsOf(a), afterCounts = countsOf(b);
-		check("every species' outflows sum to its earlier count",
-				outOf.equals(beforeCounts));
-		check("every species' inflows sum to its later count",
-				into.equals(afterCounts));
-		check("the kill shows as a died-flow (born " + born + ", died " + died + ")",
-				died >= 1);
-		// The same diff read backwards classifies that body as born — both open
-		// ends of the flow arithmetic exercised from one deterministic event.
-		boolean reverseBorn = false;
-		for (String k : WorldHost.flowsBetween(b, a).keySet()) {
-			reverseBorn |= k.startsWith("born->");
+		check("every species' inflows sum to its later count", into.equals(afterCounts));
+		for (java.util.Map.Entry<String, Integer> en : heldOrDied.entrySet()) {
+			check("held plus ended never exceeds the earlier count of " + en.getKey(),
+					en.getValue() <= beforeCounts.getOrDefault(en.getKey(), 0));
 		}
-		check("read backwards, it is a born-flow", reverseBorn);
+		check("the kill shows as a line ending (died " + died + ")", died >= 1);
+		check("a world that breeds shows bred ribbons (" + bred + ")", bred > 0);
+		check("and with a full registry nothing is of unknown descent (" + unknown + ")",
+				unknown == 0);
 
-		// And an id that never moved is a continuation, not a birth plus a
-		// death: diffing a stage against itself must be pure self-flows.
-		for (java.util.Map.Entry<String, Integer> en : WorldHost.flowsBetween(b, b).entrySet()) {
-			int arrow = en.getKey().indexOf("->");
-			if (!en.getKey().substring(0, arrow).equals(en.getKey().substring(arrow + 2))) {
-				check("a stage against itself has only self-flows (" + en.getKey() + ")", false);
+		// An id that never moved is held, not born plus died: a stage against
+		// itself must be pure held flows.
+		for (WorldHost.FlowKey k : WorldHost.flowsBetween(b, b, w::birthOf).keySet()) {
+			if (!k.kind().equals(WorldHost.HELD) || !k.from().equals(k.to())) {
+				check("a stage against itself has only held flows (" + k + ")", false);
 				return;
 			}
 		}
-		check("a stage against itself has only self-flows", true);
+		check("a stage against itself has only held flows", true);
+	}
+
+	/**
+	 * Bred, reseeded, unknown, ended: the four readings, staged exactly.
+	 *
+	 * <p>A synthetic registry, because the distinction is in the records: a
+	 * child of a stage-a head is bred from it; a grandchild whose parent came
+	 * and went between the stages is bred from the grandparent; a parentless
+	 * record is a founder the warden landed, a reseed; no record at all is
+	 * unknown; and a stage-a head that neither survives nor has descendants has
+	 * ended -- while one that died leaving a child is NOT reported dead, because
+	 * its line is what the diagram follows.
+	 */
+	static void lineageFlowsTellBredFromReseeded() {
+		record B(int child, int parent) { }
+		java.util.Map<Integer, net.hedinger.prototype.engine.World.Birth> reg = new java.util.HashMap<>();
+		for (B x : new B[] { new B(3, 1), new B(4, 2), new B(5, 4), new B(7, -1) }) {
+			reg.put(x.child(), new net.hedinger.prototype.engine.World.Birth(
+					x.child(), x.parent(), -1, 500, x.parent() < 0 ? 0 : 1, "h/x"));
+		}
+		WorldHost.StageSnap a = new WorldHost.StageSnap(0,
+				new int[] { 1, 2, 6 }, new String[] { "h/x", "h/y", "h/x" });
+		WorldHost.StageSnap b = new WorldHost.StageSnap(1000,
+				new int[] { 1, 3, 5, 7, 9 }, new String[] { "h/x", "h/x", "h/y", "h/x", "h/x" });
+		java.util.Map<WorldHost.FlowKey, Integer> f = WorldHost.flowsBetween(a, b, reg::get);
+		java.util.Map<WorldHost.FlowKey, Integer> want = new java.util.TreeMap<>();
+		want.put(new WorldHost.FlowKey(WorldHost.HELD, "h/x", "h/x"), 1);   // 1 survives
+		want.put(new WorldHost.FlowKey(WorldHost.BRED, "h/x", "h/x"), 1);   // 3, child of 1
+		want.put(new WorldHost.FlowKey(WorldHost.BRED, "h/y", "h/y"), 1);   // 5, grandchild of 2 via 4
+		want.put(new WorldHost.FlowKey(WorldHost.RESEED, WorldHost.RESEED, "h/x"), 1); // 7, a founder
+		want.put(new WorldHost.FlowKey(WorldHost.UNKNOWN, WorldHost.UNKNOWN, "h/x"), 1); // 9, no record
+		want.put(new WorldHost.FlowKey(WorldHost.DIED, "h/x", WorldHost.DIED), 1); // 6, no line
+		check("the four readings and the ending come out exactly: " + f, f.equals(want));
+		check("2 died leaving a line and is not reported dead",
+				!f.containsKey(new WorldHost.FlowKey(WorldHost.DIED, "h/y", WorldHost.DIED)));
 	}
 
 	private static java.util.TreeMap<String, Integer> countsOf(WorldHost.StageSnap s) {

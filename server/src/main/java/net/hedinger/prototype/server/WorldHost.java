@@ -525,10 +525,12 @@ final class WorldHost {
 				c.put("tick", b.tick());
 				children.add(c);
 			}
-			// The chain's far end is a root only if a record proved it; a chain
-			// that ended because the registry no longer remembers says so.
-			boolean rooted = !chain.isEmpty()
-					&& w.birthOf((Integer) chain.get(chain.size() - 1).get("id")) == null && !faded;
+			// The chain's far end is a root only if a record proved it -- no record
+			// (world-seeded) or a parentless one (a founder the warden landed); a
+			// chain that ended because the registry no longer remembers says so.
+			net.hedinger.prototype.engine.World.Birth last = chain.isEmpty() ? null
+					: w.birthOf((Integer) chain.get(chain.size() - 1).get("id"));
+			boolean rooted = !chain.isEmpty() && !faded && (last == null || last.parentA() < 0);
 			return java.util.Map.of("id", id, "chain", chain, "children", children,
 					"rooted", rooted, "tick", runner.snapshot().tick());
 		}
@@ -1414,33 +1416,90 @@ final class WorldHost {
 		stageHistory = java.util.List.copyOf(next);
 	}
 
-	/**
-	 * Exact flows between two stages, by following each id: present in both is
-	 * a continuation (same species) or a drift (relabelled — a lineage actually
-	 * moving through marker space); only in the first died; only in the second
-	 * was born. Keys are {@code from -> to} with the pseudo-species
-	 * {@code "born"} and {@code "died"} at the open ends, so every head of
-	 * every node is accounted for on both sides — the conservation a Sankey is.
-	 */
-	static java.util.Map<String, Integer> flowsBetween(StageSnap a, StageSnap b) {
-		java.util.TreeMap<String, Integer> f = new java.util.TreeMap<String, Integer>();
-		int i = 0, j = 0;
-		while (i < a.ids().length || j < b.ids().length) {
-			int ai = i < a.ids().length ? a.ids()[i] : Integer.MAX_VALUE;
-			int bj = j < b.ids().length ? b.ids()[j] : Integer.MAX_VALUE;
-			String key;
-			if (ai == bj) {
-				key = a.species()[i] + "->" + b.species()[j];
-				i++;
-				j++;
-			} else if (ai < bj) {
-				key = a.species()[i] + "->died";
-				i++;
-			} else {
-				key = "born->" + b.species()[j];
-				j++;
+	/** The kinds of passage a head can make between two stages. */
+	static final String HELD = "held", BRED = "bred", RESEED = "reseed", UNKNOWN = "unknown",
+			DIED = "died";
+
+	/** One passage: how, from which species (or the pseudo-source {@code reseed}
+	 *  / {@code unknown}), to which (or {@code died}). */
+	record FlowKey(String kind, String from, String to) implements Comparable<FlowKey> {
+		@Override
+		public int compareTo(FlowKey o) {
+			int c = from.compareTo(o.from);
+			if (c == 0) {
+				c = to.compareTo(o.to);
 			}
-			f.merge(key, 1, Integer::sum);
+			return c == 0 ? kind.compareTo(o.kind) : c;
+		}
+	}
+
+	/**
+	 * Exact flows between two stages, by DESCENT rather than by id alone.
+	 *
+	 * <p>The first version followed ids: present in both was a continuation,
+	 * only in the second was born, only in the first died. On the live world
+	 * that drew nothing but births and deaths -- drawn stages sit three quarters
+	 * of an hour apart and a body rarely lives that long -- so every column was
+	 * an island and the one question the diagram exists to answer, whether a
+	 * line is breeding on or the warden keeps putting it back, was invisible.
+	 *
+	 * <p>So every head in the later stage is traced to ONE source. Still alive
+	 * from the earlier stage: {@code held}. Otherwise its primary line
+	 * (parentA, as the inspector walks it) is climbed until an ancestor that
+	 * stood in the earlier stage: {@code bred}, from that ancestor's species
+	 * then -- a child, a grandchild through a parent that came and went between
+	 * the two, it makes no difference. A line that climbs to a parentless
+	 * record is a founder the warden landed since: {@code reseed}. A line the
+	 * registry cannot follow is {@code unknown}, said rather than guessed. And
+	 * a head of the earlier stage that is neither held nor anyone's ancestor at
+	 * the later one {@code died}: its line ended, which is what a death means
+	 * here -- a body that died leaving descendants is carried by their ribbon.
+	 *
+	 * <p>Inflows still sum to the later count exactly. Outflows do not sum to
+	 * the earlier one: a bred ribbon is as wide as the descendants, not the
+	 * ancestors, which is the reading wanted, and the diagram's widths were
+	 * never additive anyway.
+	 */
+	static java.util.Map<FlowKey, Integer> flowsBetween(StageSnap a, StageSnap b,
+			java.util.function.IntFunction<net.hedinger.prototype.engine.World.Birth> birthOf) {
+		java.util.HashMap<Integer, String> was = new java.util.HashMap<Integer, String>();
+		for (int i = 0; i < a.ids().length; i++) {
+			was.put(a.ids()[i], a.species()[i]);
+		}
+		java.util.HashSet<Integer> still = new java.util.HashSet<Integer>();
+		java.util.HashSet<Integer> ancestors = new java.util.HashSet<Integer>();
+		java.util.TreeMap<FlowKey, Integer> f = new java.util.TreeMap<FlowKey, Integer>();
+		for (int j = 0; j < b.ids().length; j++) {
+			int id = b.ids()[j];
+			String to = b.species()[j];
+			still.add(id);
+			String at = was.get(id);
+			if (at != null) {
+				f.merge(new FlowKey(HELD, at, to), 1, Integer::sum);
+				continue;
+			}
+			FlowKey k = null;
+			int cur = id;
+			for (int hop = 0; hop < 4096 && k == null; hop++) {
+				net.hedinger.prototype.engine.World.Birth rec = birthOf.apply(cur);
+				if (rec == null) {
+					k = new FlowKey(UNKNOWN, UNKNOWN, to);
+				} else if (rec.parentA() < 0) {
+					k = new FlowKey(RESEED, RESEED, to);
+				} else if (was.containsKey(rec.parentA())) {
+					k = new FlowKey(BRED, was.get(rec.parentA()), to);
+					ancestors.add(rec.parentA());
+				} else {
+					cur = rec.parentA();
+				}
+			}
+			f.merge(k == null ? new FlowKey(UNKNOWN, UNKNOWN, to) : k, 1, Integer::sum);
+		}
+		for (int i = 0; i < a.ids().length; i++) {
+			int id = a.ids()[i];
+			if (!still.contains(id) && !ancestors.contains(id)) {
+				f.merge(new FlowKey(DIED, a.species()[i], DIED), 1, Integer::sum);
+			}
 		}
 		return f;
 	}
@@ -1482,13 +1541,12 @@ final class WorldHost {
 		}
 		java.util.List<java.util.Map<String, Object>> flows =
 				new java.util.ArrayList<java.util.Map<String, Object>>();
+		var w = runner.world();
 		for (int c = 0; c + 1 < cols.size(); c++) {
-			for (java.util.Map.Entry<String, Integer> en
-					: flowsBetween(cols.get(c), cols.get(c + 1)).entrySet()) {
-				int arrow = en.getKey().indexOf("->");
-				flows.add(java.util.Map.of("stage", c,
-						"from", en.getKey().substring(0, arrow),
-						"to", en.getKey().substring(arrow + 2),
+			for (java.util.Map.Entry<FlowKey, Integer> en
+					: flowsBetween(cols.get(c), cols.get(c + 1), w::birthOf).entrySet()) {
+				flows.add(java.util.Map.of("stage", c, "kind", en.getKey().kind(),
+						"from", en.getKey().from(), "to", en.getKey().to(),
 						"n", en.getValue()));
 			}
 		}
