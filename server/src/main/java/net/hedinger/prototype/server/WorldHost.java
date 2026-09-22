@@ -275,7 +275,35 @@ final class WorldHost {
 	/** ~10 Hz: send what changed since the last broadcast to every viewer,
 	 *  filtered to the levels each viewer watches. Messages are encoded once
 	 *  per DISTINCT subscription in use, not per viewer. */
+	/**
+	 * A message this big halves the stream's rate. A thousand-body world sends
+	 * twelve kilobytes ten times a second -- a megabit, continuously -- and on a
+	 * mobile link that is the whole connection: the ground chunks queued
+	 * behind it for as long as the stream ran, which is forever, and a phone
+	 * sat on a black world watching dots. Five hertz of a big message is the
+	 * same picture with half the bandwidth; the client samples a fixed
+	 * fraction behind the interval it actually observes, so nothing stutters.
+	 */
+	static final int BIG_MSG_BYTES = 6 * 1024;
+	private long beat = 0;
+	private int lastMaxBytes = 0;
+
+	/**
+	 * Whether this beat is skipped: odd beats are, while the last broadcast's
+	 * biggest message was big. Global, never per viewer, and that is the load
+	 * bearing part -- every delta is diffed against ONE {@code lastSent}, so a
+	 * viewer that missed a delta would miss the ids that left in it and keep
+	 * ghosts forever. Skipping the whole beat just makes the next delta span
+	 * two intervals, which is exactly what a delta is for.
+	 */
+	static boolean skipBeat(long beat, int lastMaxBytes) {
+		return lastMaxBytes > BIG_MSG_BYTES && (beat & 1) == 1;
+	}
+
 	private void broadcast() {
+		if (skipBeat(beat++, lastMaxBytes)) {
+			return;
+		}
 		try {
 			// Encoded once per DISTINCT (level, below, format) in use, not per
 			// viewer: the key packs the level with the below flag.
@@ -343,6 +371,14 @@ final class WorldHost {
 				}
 				lastSent = now;
 			}
+			int biggest = 0;
+			for (byte[] m : binByLevel.values()) {
+				biggest = Math.max(biggest, m.length);
+			}
+			for (String m : jsonByLevel.values()) {
+				biggest = Math.max(biggest, m.length());
+			}
+			lastMaxBytes = biggest;
 			for (WsContext ctx : sessions) {
 				if (!ctx.session.isOpen()) {
 					continue;
