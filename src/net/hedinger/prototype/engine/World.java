@@ -301,11 +301,12 @@ public class World {
 	// growing without limit. A chain walked past the horizon ends with "records
 	// fade here", which is the truth.
 
-	/** One birth: who, from whom (parentB -1 for an asexual birth, both -1
-	 *  never — a spawn with no parents writes no record), when, and what the
-	 *  child was at birth. The species is stored because it is the one fact
-	 *  that can change afterwards: markers drift, and the label a creature
-	 *  DIED under is not always the one it was born under. */
+	/** One birth: who, from whom (parentB -1 for an asexual birth; both -1 for
+	 *  a FOUNDER the steward landed, which is the record that lets a reseed be
+	 *  told from a line that bred), when, and what the child was at birth. The
+	 *  species is stored because it is the one fact that can change afterwards:
+	 *  markers drift, and the label a creature DIED under is not always the one
+	 *  it was born under. */
 	public record Birth(int child, int parentA, int parentB, long tick, int generation,
 			String species) { }
 
@@ -331,8 +332,9 @@ public class World {
 		}
 	}
 
-	/** The birth record of {@code id}, or null: never born (world-seeded, or a
-	 *  steward reseed), or the record has aged out of the registry. */
+	/** The birth record of {@code id}, or null: world-seeded at the start, or
+	 *  the record has aged out of the registry. A steward reseed HAS a record,
+	 *  parentless (see {@link Birth}). */
 	public Birth birthOf(int id) {
 		synchronized (births) {
 			return births.get(id);
