@@ -128,9 +128,11 @@ final class WorldHost {
 		net.hedinger.prototype.engine.LayerRenderer lr = LayerBaker.chunkRenderer(terrain);
 		java.util.Map<String, byte[]> baked = new java.util.HashMap<String, byte[]>();
 		for (int z = 0; z < r.world().getLevels(); z++) {
+			java.awt.image.BufferedImage low = LayerBaker.lowCanvas(cols, rows);
 			for (int cy = 0; cy < cyN; cy++) {
 				java.awt.image.BufferedImage band =
 						LayerBaker.bakeBandImage(terrain, lr, z, cy * CHUNK_TILES, CHUNK_TILES);
+				LayerBaker.lowBand(low, band, cy * CHUNK_TILES);
 				for (int cx = 0; cx < cxN; cx++) {
 					int x0 = cx * CHUNK_TILES * ts;
 					int cw = Math.min(CHUNK_TILES * ts, cols * ts - x0);
@@ -139,6 +141,9 @@ final class WorldHost {
 				}
 				band = null; // free this band before baking the next
 			}
+			// And the level whole, small: the picture a viewer gets first,
+			// accumulated band by band into one low image, never a level image.
+			baked.put(z + "/low", LayerBaker.lowJpeg(low));
 		}
 		// The bake is free of LIVE state by construction — ground pixels read
 		// only tile type and the static fertility potential (grassland's
@@ -1701,6 +1706,11 @@ final class WorldHost {
 	/** A baked ground chunk PNG at (level z, chunk cx, cy), or null if none. */
 	byte[] chunk(int z, int cx, int cy) {
 		return chunks.get(z + "/" + cx + "_" + cy);
+	}
+
+	/** The whole of level z as one small JPEG ({@link LayerBaker#lowJpeg}), or null. */
+	byte[] lowMap(int z) {
+		return chunks.get(z + "/low");
 	}
 
 	int viewers() {
