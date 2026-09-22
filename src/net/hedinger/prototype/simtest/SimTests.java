@@ -12694,6 +12694,53 @@ public class SimTests {
 	}
 
 	/**
+	 * The warden signs its founders into the birth registry.
+	 *
+	 * <p>A reseed used to write nothing, so a founder and a record that had aged
+	 * out of the registry were the same absence -- and the lineage diagram could
+	 * not tell a line that bred from one the warden kept putting back, which is
+	 * the one thing it is for. Now every founder carries a parentless record at
+	 * generation zero, under the species it landed as.
+	 */
+	static class TheWardenSignsItsFounders extends Scenario {
+		@Override
+		public void run() {
+			seed(29);
+			World w = net.hedinger.prototype.sim.Worlds.demo(29);
+			tick(w, 400);
+			java.util.Set<Integer> before = new java.util.HashSet<>();
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && t.ecoRole().equals("parasite")) {
+					before.add(e.getID());
+					if (!t.isDead() && !t.isRemoved()) {
+						t.kill();
+					}
+				}
+			}
+			tick(w, 400);
+			int founders = 0, unsigned = 0;
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (!(e instanceof TestNPC t) || t.isDead() || t.isRemoved()
+						|| !t.ecoRole().equals("parasite") || before.contains(e.getID())) {
+					continue;
+				}
+				World.Birth b = w.birthOf(e.getID());
+				if (b == null) {
+					unsigned++;
+				} else if (b.parentA() < 0) {
+					founders++;
+					assertEquals("a founder is generation zero", 0, b.generation());
+					assertTrue("under the species it landed as",
+							b.species().equals(Species.of(t.getGenome()).key()));
+					assertTrue("with no other parent either", b.parentB() < 0);
+				}
+			}
+			assertGreater("the warden landed founders", founders, 0);
+			assertEquals("and every new parasite is on the record", 0, unsigned);
+		}
+	}
+
+	/**
 	 * An ordinary grown body is big enough to ride, and a parasite is not. The
 	 * units are the whole point: sizes come off the genome in PIXELS, and
 	 * {@code getSize()} reports the same radius in TILES — a 48th of the number.
@@ -14919,6 +14966,7 @@ public class SimTests {
 				new TheFungusBedLeavesRoomForItsCrop(),
 				new TheMushroomIsPaintedFromRamps(),
 				new TheMeadowWearsFourFloras(),
+				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
 				new AFlyerAndAWalkerDoNotShoveEachOther(),

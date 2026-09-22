@@ -321,6 +321,15 @@ public final class WorldSteward extends Entity implements CullOrders {
 			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
 			};
 			getWorld().spawnEntity(body.grown().fattened()); // arrives grown and fed, an adult with the fat to breed from; its corpse lasts as long as its body took to build
+			// Signed into the birth registry as a FOUNDER: no parents, generation
+			// zero, the tick it landed. A founder used to write nothing, which made
+			// a reseed indistinguishable from a record that had aged out -- and
+			// "did this line breed, or did the warden keep putting it back" is the
+			// one question the lineage diagram exists to answer.
+			if (body.getID() >= 0 && body.getGenome() != null) {
+				getWorld().recordBirth(body.getID(), -1, -1, 0,
+						net.hedinger.prototype.entities.Species.of(body.getGenome()).key());
+			}
 		}
 	}
 
