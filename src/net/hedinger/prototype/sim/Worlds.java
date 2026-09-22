@@ -1928,7 +1928,7 @@ public final class Worlds {
 	 * <p>None of this moves food. The plant is a look on the same crop, at the
 	 * fertility the band already gave the tile.
 	 */
-	static int surfaceFlora(Tile.TileType t, int x, int y, double moist) {
+	public static int surfaceFlora(Tile.TileType t, int x, int y, double moist) {
 		double patch = Utils.noise2(x + 3100, y + 450, 0.09);
 		if (t == Tile.TileType.TYPE_ROCKY) {
 			return patch > 0.50 ? Tile.FLORA_MOSS : Tile.FLORA_GRASS;
