@@ -5865,9 +5865,16 @@ public class SimTests {
 	}
 
 	/**
-	 * Brain heredity: unequal crossover splices a slice of one parent into the
-	 * other, so children mix both parents' code and their length varies; mutation
-	 * then changes the program. Pins the genetic operators the evolving mind uses.
+	 * Brain heredity: crossover splices a slice of one parent into the other at
+	 * the same positions in both, so children mix both parents' code, two copies
+	 * of one program make that program, and length varies only when the parents'
+	 * lengths do; mutation then changes the program. Pins the genetic operators
+	 * the evolving mind uses.
+	 *
+	 * <p>The crossover used to be unequal -- independent cut points in each
+	 * parent -- and this scenario pinned that its children VARIED in length even
+	 * from two parents of one length. That was the scramble: see the note on
+	 * {@code Brain.child} for what it did to a sexual grazer's calf.
 	 */
 	static class BrainHeredityCrossesAndMutates extends Scenario {
 		@Override
@@ -5877,15 +5884,20 @@ public class SimTests {
 			int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
 			int[][] aCode = new int[5][];
 			int[][] bCode = new int[5][];
+			int[][] longCode = new int[9][];
 			for (int i = 0; i < 5; i++) {
 				aCode[i] = new int[] { NOP, 0, 0, 0 };   // parent A: all nop
 				bCode[i] = new int[] { WRITE, 1, 2, 0 };  // parent B: all write
 			}
+			for (int i = 0; i < 9; i++) {
+				longCode[i] = new int[] { WRITE, 1, 2, 0 }; // a longer parent, all write
+			}
 			net.hedinger.prototype.entities.Brain A = new net.hedinger.prototype.entities.Brain(aCode);
 			net.hedinger.prototype.entities.Brain B = new net.hedinger.prototype.entities.Brain(bCode);
+			net.hedinger.prototype.entities.Brain L = new net.hedinger.prototype.entities.Brain(longCode);
 
-			boolean sawMixedChild = false, sawVariedLength = false;
-			for (int i = 0; i < 100 && !(sawMixedChild && sawVariedLength); i++) {
+			boolean sawMixedChild = false, sameLength = true;
+			for (int i = 0; i < 100; i++) {
 				net.hedinger.prototype.entities.Brain ch =
 						net.hedinger.prototype.entities.Brain.child(A, B, 0.0); // crossover only
 				String dis = String.join("\n", ch.disassemble(null, null));
@@ -5893,17 +5905,151 @@ public class SimTests {
 					sawMixedChild = true; // carries code from both parents
 				}
 				if (ch.length() != 5) {
-					sawVariedLength = true; // unequal crossover changed the length
+					sameLength = false;
 				}
 			}
 			assertTrue("crossover produces children carrying code from both parents", sawMixedChild);
-			assertTrue("unequal crossover varies the child's program length", sawVariedLength);
+			assertTrue("and two parents of one length make a child of that length: the cuts are homologous",
+					sameLength);
+			// Two copies of one program make that program: crossover of a program
+			// with itself is the identity, every time.
+			String parent = String.join("\n", B.disassemble(null, null));
+			for (int i = 0; i < 100; i++) {
+				net.hedinger.prototype.entities.Brain ch = net.hedinger.prototype.entities.Brain.child(B, B, 0.0);
+				assertTrue("two copies of one program make that program (draw " + i + ")",
+						parent.equals(String.join("\n", ch.disassemble(null, null))));
+			}
+			// Length drifts from parents of different lengths, not from the cut.
+			boolean sawVariedLength = false;
+			for (int i = 0; i < 100 && !sawVariedLength; i++) {
+				if (net.hedinger.prototype.entities.Brain.child(A, L, 0.0).length() != 5) {
+					sawVariedLength = true;
+				}
+			}
+			assertTrue("parents of different lengths make children of lengths between them", sawVariedLength);
 
 			net.hedinger.prototype.entities.Brain m = net.hedinger.prototype.entities.Brain.random(6);
 			String before = String.join("\n", m.disassemble(null, null));
 			m.mutate(1.0);
 			String after = String.join("\n", m.disassemble(null, null));
 			assertTrue("mutation changes the program", !before.equals(after));
+		}
+	}
+
+	/**
+	 * Two of a mind make that mind: a sexual pair's calf can forage.
+	 *
+	 * <p>Nothing in this world had a grazer lineage past its first generation,
+	 * and the parasites -- budders, all of them -- ran to two hundred. Traced on a
+	 * calf beside its herd: born with a five-instruction program that wrote no
+	 * throttle, no seek and no eat, it stood on bare ground with grass in sight
+	 * for three thousand ticks and starved. Its parents were two copies of one
+	 * program. The crossover was unequal -- independent cut points in each
+	 * parent -- so two identical programs made a scramble of themselves.
+	 * Measured on the starter forager: two identical copies crossed with no
+	 * mutation produced a child that still sought forage and moved 53 per cent
+	 * of the time, against 76 per cent for a budded copy at the founders' rate.
+	 *
+	 * <p>Three pins. Two identical starter brains crossed with no mutation
+	 * reproduce the parent's outputs exactly, every time. At the founders'
+	 * mutation rate a sexual child forages as often as a budded one -- sex is no
+	 * worse than budding on a lineage that has not yet diverged. And the thing
+	 * itself: a sexual pair's calf on a meadow, its brain the pair's own, eats
+	 * and grows.
+	 */
+	static class TwoOfAMindMakeThatMind extends Scenario {
+		/** The actuators a brain settles on when shown a hungry grazer's senses. */
+		private static double[] outputs(Brain b) {
+			LgpMind m = new LgpMind(b);
+			double[] s = new double[AgentIO.NUM_SENSORS], a = new double[AgentIO.NUM_ACT];
+			s[AgentIO.S_BIAS] = 1;
+			s[AgentIO.S_FORAGE_PROX] = 0.58;
+			s[AgentIO.S_HUNGER] = 1.0;
+			s[AgentIO.S_THIRST] = 0.3;
+			s[AgentIO.S_GLYCOGEN] = 0.25;
+			for (int t = 0; t < 4 * Brain.MAX_LEN; t++) {
+				m.think(s, a);
+			}
+			return a;
+		}
+
+		private static boolean forages(double[] a) {
+			return AgentIO.seekTarget(a[AgentIO.A_SEEK]) == AgentIO.SEEK_FORAGE && a[AgentIO.A_THROTTLE] > 0.02;
+		}
+
+		@Override
+		public void run() {
+			seed(63);
+			Brain starter = net.hedinger.prototype.sim.Worlds.starterBrain();
+			double[] ref = outputs(starter);
+			assertTrue("the starter brain forages", forages(ref));
+
+			// 1. Identity: two copies of one program make that program.
+			for (int i = 0; i < 200; i++) {
+				double[] a = outputs(Brain.child(starter, starter, 0.0));
+				assertNear("a child of two identical minds throttles as they do (draw " + i + ")",
+						ref[AgentIO.A_THROTTLE], a[AgentIO.A_THROTTLE], 1e-12);
+				assertNear("and seeks what they seek", ref[AgentIO.A_SEEK], a[AgentIO.A_SEEK], 1e-12);
+			}
+
+			// 2. At the founders' mutation rate, sex is no worse than budding.
+			final double RATE = 0.05;
+			final int N = 600;
+			int budded = 0, sexual = 0;
+			for (int i = 0; i < N; i++) {
+				Brain bud = starter.copy();
+				bud.mutate(RATE);
+				if (forages(outputs(bud))) {
+					budded++;
+				}
+				if (forages(outputs(Brain.child(starter, starter, RATE)))) {
+					sexual++;
+				}
+			}
+			assertGreater("most budded children still forage (" + budded + " of " + N + ")", budded, 0.6 * N);
+			assertGreater("and sexual children of one lineage forage as often (" + sexual + " against " + budded + ")",
+					sexual, 0.9 * budded);
+
+			// 3. The calf: a sexual pair of one line on a meadow; their child eats and grows.
+			World w = room(20, 14);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 13; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.setTile(1, 7, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome line = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE);
+			line.sexuality = 0.96; // a pair, not a budder
+			line.mutationRate = 0; // the calf's brain is the pair's own
+			line.brain = starter.copy();
+			TestNPC dam = TestNPC.mindedForager(9.5, 7.0, 0, Genome.child(line, 0.0)).grown().fattened();
+			TestNPC sire = TestNPC.mindedForager(10.5, 7.0, 0, Genome.child(line, 0.0)).grown().fattened();
+			w.spawnEntity(dam);
+			w.spawnEntity(sire);
+			TestNPC calf = null;
+			for (int t = 0; t < 8000 && calf == null; t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC n && n.generation() == 1 && !n.isDead()) {
+						calf = n;
+					}
+				}
+			}
+			assertTrue("the pair bred", calf != null);
+			assertEquals("and the calf carries the pair's program, instruction for instruction",
+					starter.length(), calf.getGenome().brain.length());
+			double born = calf.maturity();
+			boolean ate = false;
+			for (int t = 0; t < 4000 && !calf.isDead(); t++) {
+				tick(w, 1);
+				if (calf.totalSwallowed() > 0.5) {
+					ate = true;
+				}
+			}
+			assertTrue("the calf is alive after two days beside its parents", !calf.isDead());
+			assertTrue("it has eaten (" + String.format("%.2f swallowed", calf.totalSwallowed()) + ")", ate);
+			assertGreater("and it has grown (" + String.format("%.2f from %.2f", calf.maturity(), born) + ")",
+					calf.maturity(), born + 0.01);
 		}
 	}
 
@@ -9116,6 +9262,15 @@ public class SimTests {
 				Genome g = new Genome();
 				g.markers = new double[] { 0.2, 0.6, 0.9 };
 				g.brain = new Brain(deepCopy(graze));
+				// Mutation is what is under test, so it is set high enough to show
+				// in a short run: at the default rate a six-instruction program
+				// changes on about a third of births, and a run with a handful of
+				// them can come up all copies. It used to pass regardless, because
+				// the crossover of two identical programs scrambled them by itself
+				// -- diversity that was damage, not mutation. Crossover is
+				// homologous now (see Brain.child), so what diversifies a lineage
+				// is mutation alone, and this asks for exactly that.
+				g.mutationRate = 0.2;
 				w.spawnEntity(TestNPC.brainedBreeder(6.5 + i * 3, 6.5 + i * 3, 0, g).grown().fattened());
 			}
 			w.think();
@@ -15575,6 +15730,7 @@ public class SimTests {
 				new BrainMemoryIsDeterministic(),
 				new BrainLengthSetsThoughtRate(),
 				new BrainHeredityCrossesAndMutates(),
+				new TwoOfAMindMakeThatMind(),
 				new MindDrivesAgent(),
 				new MindSensesHungerByCapacity(),
 				new MindHuntsViaPreyChannel(),
