@@ -312,7 +312,7 @@ public final class Mechanics {
 				row("A whole carcass", num(TestNPC.LEAN_DENSITY) + " × the dead body's mass",
 						"energy, if every mouth got its share", "Reference-mass body: " + round(refBody, 2)
 						+ ", of which " + round(refBody * NPC.FLESH_ASSIMILATION, 2) + " is absorbed."
-						+ " A third of it is bone and worth nothing to anyone."),
+						+ " " + pct((1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE)) + " of it is bone and worth nothing to anyone."),
 				row("What a body is made of", pct(NPC.FRESH_SHARE) + " fresh meat, "
 						+ pct((1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) + " decayed meat, "
 						+ pct((1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE)) + " bone", "of the mass at death",
@@ -322,7 +322,7 @@ public final class Mechanics {
 				row("A bite of carrion", pct(TestNPC.CARRION_BITE), "of the body per tick",
 						"~" + Math.round(1 / TestNPC.CARRION_BITE) + " ticks ("
 						+ round(1 / TestNPC.CARRION_BITE / TPS, 1) + " s) to strip a whole body; "
-						+ "the edible two thirds go in proportion."),
+						+ "the edible " + pct(NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) + " go in proportion."),
 				row("Fresh meat", "spoils on its own, slowly then fast", "by mass",
 						"The rate is set by the value alone: about " + num(NPC.FRESH_TICKS) + " ticks ("
 						+ round(NPC.FRESH_TICKS / (double) NPC.DAY, 1) + " days) on a reference body, longer on a heavier "
