@@ -358,14 +358,19 @@ public class SimTests {
 			assertTrue("a scavenger is its own trophic level", "scavenger".equals(scav.ecoRole()));
 
 			double fed = scav.totalSwallowed();
-			tick(w, 30);
-			tick(w2, 30);
+			// Ten bites: a meal, not the whole fresh pool. A scavenger left standing
+			// on it eats the fresh meat out in twenty-odd ticks and the body turns
+			// on the spot -- true, but then it has dissolved before the control has
+			// turned at all, and the pace of rot cannot be compared.
+			tick(w, 10);
+			tick(w2, 10);
 			assertGreater("carrion feeds the scavenger, fresh or not", scav.totalSwallowed() - fed, 0);
 			assertLess("and the flesh comes off the body", body.meatLeft(), alone.meatLeft());
 			assertLess("every bite took fresh meat with it, so the eaten body is closer to turning",
 					body.freshMeat(), alone.freshMeat());
+			scav.remove();
 			// Let both turn.
-			for (int t = 0; t < 1000 && (body.freshMeat() > 0 || alone.freshMeat() > 0); t++) {
+			for (int t = 0; t < 3 * NPC.FRESH_TICKS && (body.freshMeat() > 0 || alone.freshMeat() > 0); t++) {
 				tick(w, 1);
 				tick(w2, 1);
 			}
@@ -503,7 +508,7 @@ public class SimTests {
 	 *
 	 * <p>Fresh meat is full at death and sized by the body's mass. It declines
 	 * on its own, slowly at first and then fast, at a rate set by the value
-	 * alone: about five seconds for a reference body, longer for a heavier one.
+	 * alone: about a day for a reference body, longer for a heavier one.
 	 * Every bite off the corpse takes fresh meat with it and leaves the rest as
 	 * fresh as it found it -- see ABiteDoesNotTurnTheRest. Decay does not start
 	 * until the fresh meat is gone; then it runs on its own time-only clock until the body
@@ -533,7 +538,7 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(45);
-			// --- the clock: full at death, slow then fast, five seconds, then decay.
+			// --- the clock: full at death, slow then fast, a day, then decay.
 			World w = barren();
 			TestNPC ref = TestNPC.grazer(4.5, 4.5, 0, body(8)).grown(); // reference mass
 			TestNPC big = TestNPC.grazer(9.5, 4.5, 0, body(16)).grown(); // twice it
@@ -563,7 +568,7 @@ public class SimTests {
 					freshAtDeath + decayedAtDeath, ref.freshMeat() + ref.decayedMeat(), 0.01);
 			assertLess("and the body is still not rotting", ref.decayProgress(), 0.01);
 			tick(w, NPC.FRESH_TICKS - half + 2);
-			assertEquals("a reference body has turned after about five seconds",
+			assertEquals("a reference body has turned after about a day",
 					0, (long) Math.round(ref.freshLeft() * 1000));
 			assertNear("and everything that was fresh is decayed meat: two thirds of the body",
 					freshAtDeath + decayedAtDeath, ref.decayedMeat(), 0.02);
@@ -571,7 +576,7 @@ public class SimTests {
 			double turned = ref.decayProgress();
 			tick(w, 50);
 			assertGreater("once turned, it rots on its own clock", ref.decayProgress(), turned + 0.02);
-			for (int t = 0; t < 400 && big.freshMeat() > 0; t++) {
+			for (int t = 0; t < NPC.FRESH_TICKS && big.freshMeat() > 0; t++) {
 				tick(w, 1);
 			}
 			assertEquals("and the heavy one turns too, a while later", 0, (long) Math.round(big.freshLeft() * 1000));
@@ -651,7 +656,7 @@ public class SimTests {
 			whole.kill();
 			bitten.kill();
 			double mass = whole.leanMass();
-			for (int t = 0; t < 2000 && (whole.freshMeat() > 0 || bitten.freshMeat() > 0); t++) {
+			for (int t = 0; t < 3 * NPC.FRESH_TICKS && (whole.freshMeat() > 0 || bitten.freshMeat() > 0); t++) {
 				tick(w, 1); // freshly dead: the decay clock waits
 			}
 			double d0 = whole.decayedMeat();
@@ -740,7 +745,7 @@ public class SimTests {
 			inDays("and a wound mends a point every couple of hours", 0.08, NPC.MEND_PERIOD);
 
 			// Acts, which are hours rather than days.
-			inDays("a carcass stays fresh for about two hours", 0.0825, NPC.FRESH_TICKS);
+			inDays("a carcass stays fresh for about a day", 1.0, NPC.FRESH_TICKS);
 			inDays("mating is held for about two hours", 0.0825, NPC.BREED_HOLD_TICKS);
 			inDays("a hunter bites every twenty minutes or so", 0.0165, TestNPC.PRED_BITE_PERIOD);
 			inDays("a parasite drinks a little faster", 0.015, TestNPC.PARA_BITE_PERIOD);
@@ -8411,14 +8416,30 @@ public class SimTests {
 				herd.add(gr);
 			}
 			double e0 = hunter.getGlycogen();
-			tick(w, 6000);
-			int kills = 0;
-			for (TestNPC g : herd) {
-				if (g.isDead()) {
-					kills++;
+			int kills = 0, firstKill = -1;
+			for (int t = 1; t <= 6000; t++) {
+				tick(w, 1);
+				int k = 0;
+				for (TestNPC g : herd) {
+					if (g.isDead()) {
+						k++;
+					}
 				}
+				if (k > 0 && firstKill < 0) {
+					firstKill = t;
+				}
+				kills = k;
 			}
-			assertGreater("a founder hunter runs its prey down (kills in 6000 ticks)", kills, 4);
+			// Running prey down is a matter of PACE, so what is pinned is how soon
+			// the first kill comes and that it is not the only one. This used to ask
+			// for five kills in the window, which a hunter delivered only because a
+			// kill turned to scavenger food in five seconds and it was hungry again
+			// within the hour; with a carcass fresh for a day it fills up on its
+			// second kill (measured: kills at ticks 254 and 518, gut full by 1000)
+			// and has no reason to make a third.
+			assertGreater("a founder hunter runs its prey down: a kill at all", kills, 0);
+			assertLess("and the first one soon (tick " + firstKill + ")", firstKill, 1000);
+			assertGreater("and it is not a fluke: a second kill in the window (" + kills + " in 6000 ticks)", kills, 1);
 			// The chase is paid from the STORE, and the kills pay it back through the
 			// gut. This used to assert the hunter's glycogen ended well above the
 			// exhaustion floor, which was a claim about the mint and not about

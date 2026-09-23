@@ -755,12 +755,16 @@ public abstract class NPC extends Entity {
 	}
 
 	/** How long a reference-mass body stays fresh, in ticks -- the one tunable.
-	 *  About two hours of world time, which is five seconds of watching. A
-	 *  heavier body sits fresh longer, a lighter one less,
-	 *  because the spoilage rate is set by the amount of fresh meat itself and
-	 *  not by the fraction of it: a big carcass has more to turn. */
+	 *  About a day of world time, a minute of watching. It was two hours (five
+	 *  seconds), which was shorter than the walk to a kill: a hunter that made
+	 *  one ate alone, because by the time a pack-mate arrived the meat had
+	 *  turned into scavenger food it may not touch. A day is long enough for a
+	 *  kill to be found and shared and short enough that a body still spoils
+	 *  before the next one is made. A heavier body sits fresh longer, a lighter
+	 *  one less, because the spoilage rate is set by the amount of fresh meat
+	 *  itself and not by the fraction of it: a big carcass has more to turn. */
 	@Unit("ticks")
-	public static int FRESH_TICKS = days(0.0825); // about two hours
+	public static int FRESH_TICKS = days(1.0);
 	/** What gets spoilage going on a body with nothing yet spoiled, as a share of
 	 *  a reference body's fresh meat: the rate is proportional to what has already
 	 *  turned plus this seed, so it starts at a crawl and compounds. */

@@ -325,7 +325,7 @@ public final class Mechanics {
 						+ "the edible two thirds go in proportion."),
 				row("Fresh meat", "spoils on its own, slowly then fast", "by mass",
 						"The rate is set by the value alone: about " + num(NPC.FRESH_TICKS) + " ticks ("
-						+ round(NPC.FRESH_TICKS / TPS, 1) + " s) on a reference body, longer on a heavier "
+						+ round(NPC.FRESH_TICKS / (double) NPC.DAY, 1) + " days) on a reference body, longer on a heavier "
 						+ "one. What spoils uneaten becomes decayed meat. A bite takes fresh meat off and "
 						+ "leaves the rest as fresh as it found it: the rate runs on what has spoiled, "
 						+ "not on what is gone. Decay does not start until it is gone."),
