@@ -365,20 +365,23 @@ knobs, and in life fat carries about six times what wet muscle does.
 
 - **A carcass is worth what it weighs, and a body is not all meat.** Health is
   a flat 100 on every body, so the *meal* has to carry the size instead. At death
-  the body divides into three pools by mass: a third is **fresh meat**, the only
-  thing a hunter eats; half the rest is **decayed meat**, a scavenger's living;
-  the last third is **bone**, food to nobody. Every mouthful is paid
+  the body divides into three pools by mass: half is **fresh meat**, the only
+  thing a hunter eats; three tenths is **decayed meat**, a scavenger's living;
+  the last fifth is **bone**, food to nobody. Every mouthful is paid
   `LEAN_DENSITY · FLESH_ASSIMILATION` per unit of mass it takes, so a whole
-  carcass comes to `0.85 · LEAN_DENSITY · ⅔ · prey_mass` across every mouth
+  carcass comes to `0.85 · LEAN_DENSITY · 0.8 · prey_mass` across every mouth
   that eats it and the rest goes to the ground under them, and a hunter's
-  share is at most the fresh third. `LEAN_DENSITY` is **the one price of lean
+  share is at most the fresh half. Fresh meat keeps for about a day
+  (`FRESH_TICKS`), spoiling slowly then fast on its own clock — a bite takes
+  meat off and leaves the rest as fresh as it found it — so a large kill is a
+  meal for a pack that gathers, not only for the hunter that made it. `LEAN_DENSITY` is **the one price of lean
   tissue, both ways**: what a body pays per unit of mass it grows, what a
   wound is mended at, what a parasite is paid, and what every mouth at a
   carcass is paid. `FAT_DENSITY` is the same figure for the store. Nothing in the chain can mint: a body is worth
   exactly what was put into it, and everything anyone eats was bought with
   grass by someone. It is sized so a reference lean mass is three gut-fills
-  once absorbed (`0.85 · LEAN_DENSITY = 3 · GUT_PER_MASS`), so the fresh third
-  of a lean medium corpse fills one same-size hunter. **Fat is the body's store**: a fed body with full glycogen
+  once absorbed (`0.85 · LEAN_DENSITY = 3 · GUT_PER_MASS`), so the fresh half
+  of a lean medium corpse fills one same-size hunter and half of a second. **Fat is the body's store**: a fed body with full glycogen
   lays what it cannot use down as mass, up to `FAT_CAP` of its lean mass, and
   draws it back into the gut before starvation can bite. Fat is carried
   on every step and it is on the carcass, half fresh and half decayed, so a

@@ -150,9 +150,9 @@ public abstract class NPC extends Entity {
 	 * were worth exactly the same (measured: 2.49 either way).
 	 *
 	 * <p>Sized so a body is a meal, not a snack: a reference lean mass is three
-	 * gut-fills ({@link #GUT_PER_MASS}), so the fresh third of a lean medium corpse
-	 * fills one same-size hunter, and a fat one ({@link #FAT_CAP}) half as much
-	 * again. The same figure is what growing up costs -- a child buys two
+	 * gut-fills ({@link #GUT_PER_MASS}), so the fresh half of a lean medium corpse
+	 * fills one same-size hunter and half of a second, and a fat one
+	 * ({@link #FAT_CAP}) half as much again. The same figure is what growing up costs -- a child buys two
 	 * thirds of its lean mass out of what it eats -- which is why grazing and
 	 * digestion ({@link #ASSIMILATION_RATE}) are paced to pay for it in minutes.
 	 */
@@ -609,13 +609,17 @@ public abstract class NPC extends Entity {
 	 * the ground when the corpse dissolves.
 	 */
 
-	/** Share of a body that is fresh meat at death: the hunters' third. */
+	/** Share of a body that is fresh meat at death: the hunters' half. It was a
+	 *  third, which made a lean 20 px body 1.7 gut-fills of a 12 px hunter --
+	 *  a large kill that could never feed a pack however it was shared. */
 	@Unit("of body mass")
-	public static final double FRESH_SHARE = 1.0 / 3;
+	public static final double FRESH_SHARE = 0.5;
 	/** Share of the NON-fresh remainder that is decayed meat a scavenger can eat;
-	 *  the rest of it is bone. */
+	 *  the rest of it is bone. Three fifths, so of the whole body three tenths
+	 *  is the scavengers' at death and a fifth is bone (it was a third, a third
+	 *  and a third). */
 	@Unit("of the non-fresh mass")
-	public static final double SCAVENGER_SHARE = 0.5;
+	public static final double SCAVENGER_SHARE = 0.6;
 
 	/** Fresh meat on this corpse, in body-mass units; 0 for the living. */
 	protected double fresh = 0;

@@ -167,15 +167,25 @@ public final class ServerTests {
 		check("a fresh carcass has barely rotted", decay >= 0 && decay < 0.2);
 		// A body is three pools, each sent as its share of the whole: the fresh
 		// meat that is the hunters', the decayed meat that is the scavengers', and
-		// the bones. The lean mass divides in thirds and fat, which a world body dies
-		// carrying, goes half to each meat pool -- so just dead, before anything is
-		// eaten or rotted, the two meats are equal, the bones are the lean third
-		// or less of the whole, and the three add up to the whole body.
-		check("a just-dead body's fresh and decayed meat are equal: a third of the lean mass and half the fat each",
-				fresh > 0.3 && Math.abs(fresh - decayed) < 0.02);
-		check("and its bones are the lean third, or less of a fat body", bones > 0.2 && bones < 0.34);
+		// the bones. The lean mass divides by NPC.FRESH_SHARE and SCAVENGER_SHARE
+		// and fat, which a world body dies carrying, goes half to each meat pool.
+		// The wire does not say how much of the body was fat, but the bones do:
+		// they are all lean, so the lean share of the whole is bones over the
+		// bone share of lean, and the two meats follow from it. Read from the
+		// constants rather than restated -- this asserted thirds, and lied the
+		// day the shares moved.
+		double boneOfLean = (1 - net.hedinger.prototype.entities.NPC.FRESH_SHARE) * (1 - net.hedinger.prototype.entities.NPC.SCAVENGER_SHARE);
+		double leanShare = bones / boneOfLean;
+		double fatShare = 1 - leanShare;
+		check("a just-dead body's bones are the bone share of its lean mass, and no more of a fat body",
+				bones > 0.05 && bones <= boneOfLean + 0.01 && leanShare <= 1.01);
+		check("its fresh meat is the fresh share of the lean plus half the fat ("
+				+ String.format("%.3f against %.3f", fresh, net.hedinger.prototype.entities.NPC.FRESH_SHARE * leanShare + fatShare / 2) + ")",
+				Math.abs(fresh - (net.hedinger.prototype.entities.NPC.FRESH_SHARE * leanShare + fatShare / 2)) < 0.02);
+		check("and its decayed meat the scavengers' share of the lean plus the other half",
+				Math.abs(decayed - ((1 - net.hedinger.prototype.entities.NPC.FRESH_SHARE) * net.hedinger.prototype.entities.NPC.SCAVENGER_SHARE * leanShare + fatShare / 2)) < 0.02);
 		check("so the three pools are the whole body", Math.abs(fresh + decayed + bones - 1.0) < 0.02);
-		check("and the meat on it is the edible two thirds", Math.abs(meat - (fresh + decayed)) < 0.02);
+		check("and the meat on it is everything but the bones", Math.abs(meat - (fresh + decayed)) < 0.02);
 		check("it has ticks left to be eaten in", ((Number) corpse.get("rotsIn")).intValue() > 0);
 		double mass = ((Number) corpse.get("mass")).doubleValue();
 		double wholeMass = ((Number) corpse.get("wholeMass")).doubleValue();

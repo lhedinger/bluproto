@@ -475,6 +475,9 @@ public class SimTests {
 					second, 0.0);
 			assertGreater("what the first hunter left, and not a scrap the clock had taken ("
 					+ String.format("%.1f of %.1f on the body", second, worth) + ")", second, 0.85 * Math.min(worth, first));
+			assertGreater("and that is a meal, not a scrap: a 20 px kill feeds a second 12 px hunter most of a gut ("
+					+ String.format("%.1f of %.1f", second, NPC.GUT_PER_MASS * 12 / NPC.REF_SIZE) + ")",
+					second, 0.6 * NPC.GUT_PER_MASS * 12 / NPC.REF_SIZE);
 
 			// The once-bitten body spoils on the same curve as the twin: it runs out
 			// earlier only because it has less to lose. At the tick it runs out, the
@@ -548,15 +551,15 @@ public class SimTests {
 			ref.kill();
 			big.kill();
 			tick(w, 1);
-			// A body is not all meat: a third of it is fresh meat, the hunters'; half
-			// of the rest is decayed meat, the scavengers'; the last third is bone.
+			// A body is not all meat: half of it is fresh meat, the hunters'; three
+			// fifths of the rest is decayed meat, the scavengers'; the last fifth is bone.
 			double mass = ref.leanMass();
 			double freshAtDeath = NPC.FRESH_SHARE * mass;
 			double decayedAtDeath = (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * mass;
 			double bones = (1 - NPC.FRESH_SHARE) * (1 - NPC.SCAVENGER_SHARE) * mass;
-			assertNear("fresh meat is a third of the body at death", NPC.FRESH_SHARE, ref.freshLeft(), 0.02);
+			assertNear("fresh meat is half the body at death", NPC.FRESH_SHARE, ref.freshLeft(), 0.02);
 			assertNear("by mass", freshAtDeath, ref.freshMeat(), 0.01);
-			assertNear("decayed meat is half of the rest", decayedAtDeath, ref.decayedMeat(), 0.01);
+			assertNear("decayed meat is three fifths of the rest", decayedAtDeath, ref.decayedMeat(), 0.01);
 			assertNear("and the bones the remainder", bones, ref.bones(), 0.01);
 			assertNear("so the whole body is still lying there", mass, ref.remainingMass(), 0.01);
 			assertLess("and the decay clock has not started", ref.decayProgress(), 0.01);
@@ -570,7 +573,7 @@ public class SimTests {
 			tick(w, NPC.FRESH_TICKS - half + 2);
 			assertEquals("a reference body has turned after about a day",
 					0, (long) Math.round(ref.freshLeft() * 1000));
-			assertNear("and everything that was fresh is decayed meat: two thirds of the body",
+			assertNear("and everything that was fresh is decayed meat: four fifths of the body",
 					freshAtDeath + decayedAtDeath, ref.decayedMeat(), 0.02);
 			assertGreater("a heavier body sits fresh longer", big.freshMeat(), 0.0);
 			double turned = ref.decayProgress();
@@ -1566,9 +1569,9 @@ public class SimTests {
 
 	/**
 	 * A carcass is a meal. Mass has one price, {@link NPC#LEAN_DENSITY}, sized so
-	 * a body is worth gut-fills rather than mouthfuls: the fresh third of a lean
-	 * medium body fills one same-size hunter, and what it leaves fills a
-	 * scavenger; a fat body ({@link NPC#FAT_CAP}) carries half as much meat
+	 * a body is worth gut-fills rather than mouthfuls: the fresh half of a lean
+	 * medium body fills one same-size hunter and half of a second, and what it
+	 * leaves fills most of a scavenger; a fat body ({@link NPC#FAT_CAP}) carries half as much meat
 	 * again and pays out that much more. Every mouth is paid the price for
 	 * exactly the mass it takes, and no more than the edible body is ever taken
 	 * between them.
@@ -1621,9 +1624,9 @@ public class SimTests {
 			double edible = body.edibleMass();
 			double gut = NPC.GUT_PER_MASS * mass; // a same-size eater's
 
-			// Hunters first, on the fresh third.
+			// Hunters first, on the fresh half.
 			double[] hunters = mouths(w, body, g, Genome.Clade.PREDATOR, 3, 300);
-			assertGreater("the fresh third of a lean medium body fills a same-size hunter", hunters[0], 0);
+			assertGreater("the fresh half of a lean medium body fills a same-size hunter", hunters[0], 0);
 			assertTrue("and the hunters left the decayed meat alone",
 					body.decayedMeat() >= (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE * mass - 1e-9);
 			double hunterMeat = body.eatenMass();
@@ -8456,7 +8459,7 @@ public class SimTests {
 			assertLess("the chase was paid from the store ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
 					hunter.getGlycogen(), e0);
-			// Fed enough, not stuffed. A kill pays a hunter its fresh third and no
+			// Fed enough, not stuffed. A kill pays a hunter its fresh half and no
 			// more, a mouthful at a time, and a hunter that moves straight on to the
 			// next animal leaves even some of that lying there for whatever finds it.
 			// What this pins is that the chase keeps it clear of starving, not that
@@ -12096,7 +12099,7 @@ public class SimTests {
 			assertEquals("and was paid nothing for the bites that killed it: a wound feeds nobody",
 					0, (long) Math.round(paidAlive * 1000));
 			// Killing is not the meal. The hunter eats the body where it lies, a
-			// mouthful at a time, off the fresh meat only -- a third of the body -- and
+			// mouthful at a time, off the fresh meat only -- half the body -- and
 			// only for as long as it stays fresh, which is the hunter's whole window.
 			for (int t = 0; t < 2000 && prey.freshMeat() > 0 && prey.meatLeft() > 0.01 && !prey.isRemoved(); t++) {
 				tick(w, 1);
@@ -12105,15 +12108,15 @@ public class SimTests {
 			double freshMeat = NPC.FRESH_SHARE * meat;
 			double edible = (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) * meat;
 			// Every bite spends fresh meat; a lone hunter fills up before it finishes
-			// the fresh third, and what it leaves spoils into the scavengers' pool on
+			// the fresh half, and what it leaves spoils into the scavengers' pool on
 			// the clock. The invariant is the ledger: between them the mouths are
 			// paid the edible body ONCE, and the bones never.
 			double toHunter = hunter.totalSwallowed();
-			double gut = NPC.GUT_PER_MASS * hunter.leanMass(); // the fresh third of a size-12 body overfills a size-16 hunter
-			assertGreater("the hunter ate most of the fresh third, bite by bite; the rest spoiled under it ("
+			double gut = NPC.GUT_PER_MASS * hunter.leanMass(); // the fresh half of a size-12 body overfills a size-16 hunter
+			assertGreater("the hunter ate most of the fresh half, bite by bite; the rest spoiled under it ("
 					+ String.format("%.2f of %.2f, gut %.2f", toHunter, freshMeat, gut) + ")",
 					toHunter, 0.75 * Math.min(freshMeat, gut));
-			assertTrue("and never more than the fresh third", toHunter <= freshMeat + 0.01);
+			assertTrue("and never more than the fresh half", toHunter <= freshMeat + 0.01);
 			hunter.remove();
 			double leftovers = scavenged(w, prey, 15.5, 10.5);
 			assertGreater("the scavengers found meat the hunter left", leftovers, 0.0);
