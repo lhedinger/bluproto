@@ -441,6 +441,19 @@ cuts both ways, which is why it is selection's to make and not this file's:
   — less of its life cheap to run but easy prey, short of reach and short of
   reserve — and it reaches breeding age earlier.
 
+**What form the endowment takes is a gene too.** `milk` is the share of the
+parents' energy offer that arrives in the newborn's **gut**, as a meal it is
+born digesting, the rest arriving as glycogen — read off the parents, averaged
+for a pair, like `birthSize`. Both halves are the same energy the parents paid,
+so the birth ledger is unchanged; what the gene changes is the calf's first day.
+Its mint runs on how full its gut is, so a calf endowed in glycogen alone mints
+nothing until its first mouthful lands and lives on a fixed sum while it looks
+for grass, and one endowed all in milk digests from its first tick but is born
+with an empty store — collapsed, able only to crawl, until the mint lifts it.
+Where between those a lineage should sit depends on how far the grass is from
+where it drops its young, which is selection's to find; founders draw a fifth
+to four fifths.
+
 Rot and breeding cadence stay pinned to the *nominal* childhood
 (`BIRTH_SIZE_FRACTION`, the reference lineage's value): those want the
 lineage's intrinsic scale rather than one individual's luck, and a corpse

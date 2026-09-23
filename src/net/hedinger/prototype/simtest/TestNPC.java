@@ -3908,18 +3908,28 @@ public class TestNPC extends NPC {
 	 * birth, which erased the entire advantage of pairing — a paired child and
 	 * a budded one arrived holding the identical fraction of glycogen).
 	 *
-	 * <p>It all goes into glycogen, and the newborn's gut starts empty. A gut
-	 * holds food an animal has not digested yet, and there is no way for a
-	 * parent to put food in one but the way every other meal gets there. A
-	 * newborn is therefore hungry from its first tick, which is what a newborn
-	 * is; what its lineage decides is how much it can live on while it goes
-	 * looking, and that is the endowment.
+	 * <p>The endowment arrives in two forms, and the parents' {@link
+	 * Genome#milk} decides the split: {@code milk} of it as a meal in the
+	 * newborn's gut, the rest as glycogen. Both are the same energy the parents
+	 * paid out of their glycogen -- the parent ate the meal that became the
+	 * milk, so nothing is minted -- and the ledger counts a gut and a store
+	 * alike. What the form changes is the newborn's first day: its mint runs on
+	 * how full its gut is, so a calf endowed in glycogen alone mints nothing
+	 * until its first mouthful lands and lives on a fixed sum while it looks
+	 * for grass, and one endowed all in milk digests from its first tick but
+	 * is born with an empty store, collapsed until the mint lifts it. It used
+	 * to be glycogen alone, always -- "there is no way for a parent to put food
+	 * in a gut but the way every other meal gets there" -- and every newborn
+	 * started hungry at 1.0 with its mint stopped.
 	 */
-	private static double endow(TestNPC child, double paid) {
-		double intoGlycogen = Math.min(Math.max(0, paid), child.glycogenCapacity());
-		child.hunger = 1.0;
+	private static double endow(TestNPC child, double paid, double milk) {
+		double offer = Math.max(0, paid);
+		double gut = NPC.GUT_PER_MASS * child.adultMass();
+		double intoGut = Math.min(offer * Math.max(0, Math.min(1, milk)), gut);
+		double intoGlycogen = Math.min(offer - intoGut, child.glycogenCapacity());
+		child.hunger = gut > 0 ? Math.max(0, 1.0 - intoGut / gut) : 1.0;
 		child.glycogen = intoGlycogen;
-		return intoGlycogen;
+		return intoGut + intoGlycogen;
 	}
 	/**
 	 * The birth transaction, both halves at once: the child's books are opened
@@ -3955,7 +3965,9 @@ public class TestNPC extends NPC {
 		double mine = birthPayment();
 		double theirs = partner == null ? 0 : partner.birthPayment();
 		double offered = mine + theirs;
-		double taken = endow(kid, offered);
+		// The form of the endowment is the parents' gene, averaged for a pair.
+		double milk = partner == null ? milkShare() : (milkShare() + partner.milkShare()) / 2;
+		double taken = endow(kid, offered, milk);
 		// Only what the child could actually hold is charged, so a birth never
 		// burns the remainder of a generous offer either.
 		double share = offered > 0 ? Math.min(1.0, taken / offered) : 0;

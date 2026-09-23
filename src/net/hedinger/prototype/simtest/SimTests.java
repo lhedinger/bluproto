@@ -2082,6 +2082,18 @@ public class SimTests {
 				for (int q = 0; q < 150; q++) {
 					double x = rnd.nextDouble() * (w.getColums() + 20) - 10;
 					double y = rnd.nextDouble() * (w.getRows() + 20) - 10;
+					// Every other sample is taken AT a live body rather than at a
+					// random point, so the comparison is guaranteed to see bodies
+					// on a level that has any. Random points alone made "saw bodies"
+					// a draw against a mostly empty four-level map: a change to the
+					// founder genome draw moved every founder and took it from 11
+					// to 6 per cent of samples.
+					java.util.List<NPC> living = c.creatures(z);
+					if (q % 2 == 1 && !living.isEmpty()) {
+						NPC at = living.get(rnd.nextInt(living.size()));
+						x = at.getX();
+						y = at.getY();
+					}
 					double r = ranges[rnd.nextInt(ranges.length)];
 					for (int kind = 0; kind < 4; kind++) {
 						java.util.List<NPC> full = kind == 0 ? c.creatures(z) : kind == 1 ? c.predators(z)
@@ -6036,8 +6048,14 @@ public class SimTests {
 				}
 			}
 			assertTrue("the pair bred", calf != null);
-			assertEquals("and the calf carries the pair's program, instruction for instruction",
-					starter.length(), calf.getGenome().brain.length());
+			// The mutation gene is floored at 0.01 by the schema, so a birth still
+			// carries a 1.5 per cent chance of an inserted or deleted instruction
+			// and a small one of a changed field; exact identity is a lottery at
+			// that margin. What is pinned is that the program is the pair's own
+			// give or take that floor -- and, below, that it works.
+			assertTrue("and the calf carries the pair's program, give or take the schema's floor on mutation ("
+					+ calf.getGenome().brain.length() + " instructions against " + starter.length() + ")",
+					Math.abs(calf.getGenome().brain.length() - starter.length()) <= 1);
 			double born = calf.maturity();
 			boolean ate = false;
 			for (int t = 0; t < 4000 && !calf.isDead(); t++) {
@@ -12509,6 +12527,136 @@ public class SimTests {
 	}
 
 	/**
+	 * Milk is a meal the calf is born digesting, and how much of one is its
+	 * lineage's decision.
+	 *
+	 * <p>A newborn's endowment used to arrive in glycogen alone, its gut empty:
+	 * "there is no way for a parent to put food in a gut but the way every other
+	 * meal gets there". The consequence went unreckoned. A body's mint runs on
+	 * how full its gut is, so a calf born at hunger 1.0 minted nothing until its
+	 * first mouthful landed -- its endowment was a fixed sum it could only
+	 * spend, not a store it could top up -- and traced beside its herd it was
+	 * dropped with that sum into a pocket the herd had grazed bare. The parent
+	 * ate the meal that becomes the milk, so handing it over mints nothing; what
+	 * changes is the calf's first day.
+	 *
+	 * <p>{@link Genome#milk} is the share of the offer that arrives in the gut,
+	 * read off the parents and averaged for a pair like {@code birthSize}. Pinned
+	 * here: the split lands where the gene says, at both corners and between;
+	 * the ledger is unchanged, the calf worth exactly the offer in every case; a
+	 * pair averages; and the thing itself -- on barren ground, a milked calf's
+	 * glycogen RISES over its first hundreds of ticks while a milkless twin's
+	 * only falls, because one is digesting and the other is not. And the corner
+	 * the gene can reach: a calf endowed all in milk is born with an empty store,
+	 * collapsed, which is the reason a lineage would not want to live there.
+	 */
+	static class MilkIsAMealTheCalfIsBornDigesting extends Scenario {
+		private static Genome line(double milk, double sexuality) {
+			Genome g = new Genome();
+			g.size = 10;
+			g.sexuality = sexuality;
+			g.mutationRate = 0;
+			g.milk = milk;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		private static World barren() {
+			World w = new World(12, 12, 1);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR);
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			return w;
+		}
+
+		/** Buds one calf off a fattened parent of {@code line} on barren ground and
+		 *  returns {calf, the offer it was made}. */
+		private Object[] bud(World w, Genome line) {
+			TestNPC parent = TestNPC.breeder(5.5, 5.5, 0, line).grown().fattened().withHunger(0.0).withHydration(1.0);
+			parent.withGlycogen(parent.glycogenCapacity());
+			w.spawnEntity(parent);
+			tick(w, 1);
+			double offer = parent.birthPayment();
+			TestNPC calf = (TestNPC) parent.spawnOffspring();
+			assertTrue("the parent could afford a calf", calf != null);
+			parent.settleBirth(calf, null);
+			w.spawnEntity(calf);
+			parent.remove();
+			return new Object[] { calf, offer };
+		}
+
+		@Override
+		public void run() {
+			seed(64);
+			// 1. The split lands where the gene says, and the ledger holds at every setting.
+			double[] settings = { 0.0, 0.5, 1.0 };
+			TestNPC[] calves = new TestNPC[settings.length];
+			for (int i = 0; i < settings.length; i++) {
+				World w = barren();
+				Object[] r = bud(w, line(settings[i], 0.3));
+				TestNPC calf = (TestNPC) r[0];
+				double offer = (Double) r[1];
+				double gutCap = NPC.GUT_PER_MASS * calf.glycogenCapacity() / NPC.GLYCOGEN_PER_MASS; // the body's own gut
+				double inGut = (1 - calf.getHunger()) * gutCap;
+				assertNear("milk " + settings[i] + ": that share of the offer is in the gut ("
+						+ String.format("%.2f of an offer of %.2f", inGut, offer) + ")",
+						settings[i] * offer, inGut, 0.02);
+				assertNear("and the rest is glycogen", (1 - settings[i]) * offer, calf.getGlycogen(), 0.02);
+				assertNear("so the calf holds exactly the offer, in one form or the other: nothing minted, nothing burnt",
+						offer, inGut + calf.getGlycogen(), 0.02);
+				calves[i] = calf;
+			}
+			assertTrue("a calf endowed all in glycogen is born hungry", calves[0].getHunger() >= NPC.DEPRIVED);
+			assertTrue("and one endowed all in milk is born collapsed: an empty store, however full the gut",
+					!calves[2].canExert());
+			assertTrue("while one endowed half and half is born able to stand", calves[1].canExert());
+
+			// 2. A pair averages the gene.
+			World m = barren();
+			TestNPC dam = TestNPC.mater(5.0, 5.5, 0, line(0.2, 0.9)).grown().fattened().withHunger(0.0).withHydration(1.0);
+			TestNPC sire = TestNPC.mater(6.0, 5.5, 0, line(0.8, 0.9)).grown().fattened().withHunger(0.0).withHydration(1.0);
+			dam.withGlycogen(dam.glycogenCapacity());
+			sire.withGlycogen(sire.glycogenCapacity());
+			m.spawnEntity(dam);
+			m.spawnEntity(sire);
+			tick(m, 1);
+			double offer = dam.birthPayment() + sire.birthPayment();
+			TestNPC kid = (TestNPC) dam.spawnOffspring(sire);
+			assertTrue("the pair could afford a calf", kid != null);
+			dam.settleBirth(kid, sire);
+			double kidGut = (1 - kid.getHunger()) * NPC.GUT_PER_MASS * kid.glycogenCapacity() / NPC.GLYCOGEN_PER_MASS;
+			assertNear("a pair's calf gets the average of the two milks (0.2 and 0.8: half the pooled offer in the gut)",
+					0.5 * offer, kidGut, 0.02);
+
+			// 3. The point of it: on barren ground a milked calf DIGESTS from its
+			// first tick and a milkless one only spends.
+			World a = barren(), b = barren();
+			TestNPC milkless = (TestNPC) bud(a, line(0.0, 0.3))[0];
+			TestNPC milked = (TestNPC) bud(b, line(0.6, 0.3))[0];
+			double g0 = milkless.getGlycogen(), g1 = milked.getGlycogen();
+			for (int t = 0; t < 300; t++) {
+				milkless.withHydration(1.0);
+				milked.withHydration(1.0);
+				tick(a, 1);
+				tick(b, 1);
+			}
+			double spentMilkless = g0 - milkless.getGlycogen(), spentMilked = g1 - milked.getGlycogen();
+			assertGreater("a milkless calf's glycogen only falls: it has nothing to digest ("
+					+ String.format("%.2f -> %.2f", g0, milkless.getGlycogen()) + ")", spentMilkless, 0.0);
+			// The milked calf lives the same three hundred ticks on the same ground
+			// and pays the same bill, but it is digesting: what its mint returns
+			// is the difference between the two, and it is the whole point.
+			assertLess("a milked calf's glycogen falls less, or rises: it is digesting its milk ("
+					+ String.format("%.2f -> %.2f, against the milkless calf's %.2f -> %.2f", g1, milked.getGlycogen(),
+							g0, milkless.getGlycogen()) + ")", spentMilked, spentMilkless - 0.1);
+			assertTrue("and it is standing, not collapsed, all the while", milked.canExert());
+		}
+	}
+
+	/**
 	 * Birth conserves energy exactly, across both of a parent's books. What a
 	 * child is worth — its glycogen, the food in its gut and its meat-priced
 	 * body — equals what its parents lost, where what a parent holds is its
@@ -12531,15 +12679,22 @@ public class SimTests {
 		/** Everything a body holds, in one number: glycogen, undigested gut, and the
 		 *  fat a child's body is built out of, at the one price of mass. */
 		private static double held(TestNPC n) {
-			return n.getGlycogen() + (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE)
-					+ NPC.LEAN_DENSITY * n.fat();
+			return n.getGlycogen() + (1 - n.getHunger()) * gutOf(n) + NPC.LEAN_DENSITY * n.fat();
+		}
+
+		/** The gut a body was sized for: GUT_PER_MASS at the ADULT mass the niche
+		 *  expresses, which a niche floor or cap can move off the genome's size.
+		 *  Read off the store, which is anchored on the same body. This used to be
+		 *  the genome's size, which was harmless while every newborn's gut was
+		 *  empty and wrong the day it held milk. */
+		private static double gutOf(TestNPC n) {
+			return NPC.GUT_PER_MASS * n.glycogenCapacity() / NPC.GLYCOGEN_PER_MASS;
 		}
 
 		/** What a newborn is worth: its glycogen, its gut, and its body at the
 		 *  flesh price it was built for. */
 		private static double worth(TestNPC n) {
-			return n.getGlycogen() + NPC.LEAN_DENSITY * n.leanMass()
-					+ (1 - n.getHunger()) * NPC.GUT_PER_MASS * (n.getGenome().size / NPC.REF_SIZE);
+			return n.getGlycogen() + NPC.LEAN_DENSITY * n.leanMass() + (1 - n.getHunger()) * gutOf(n);
 		}
 
 		/** Ticks until a child of generation 1 appears, sampling what the
@@ -12591,14 +12746,25 @@ public class SimTests {
 			// can stop it: a newborn's own glycogen ceiling. What will not fit is
 			// not taken and therefore not charged either, so it stays with the
 			// parent -- burnt nowhere, which is the whole of the claim.
+			// The only thing that can stop the offer landing is the newborn's own
+			// room: its glycogen ceiling AND its gut, now that milk fills the one
+			// as glycogen fills the other. What will not fit is not taken and not
+			// charged, so it stays with the parent -- burnt nowhere.
 			assertNear("and the whole of what the parent offered in energy landed in its books, none burnt ("
 					+ String.format("%.2f against an offer of %.2f", worth(bud), bidBud[0]) + ")",
 					worth(bud) - NPC.LEAN_DENSITY * bud.leanMass(),
-					Math.min(bidBud[0], bud.glycogenCapacity()), eps);
+					Math.min(bidBud[0], bud.glycogenCapacity() + gutOf(bud)), eps);
 			assertGreater("and the bud is born viable, not bankrupt", bud.getGlycogen(), 0.5);
-			assertTrue("born hungry -- a gut holds food nothing has digested, and there "
-					+ "is no handing that over -- but not starving, which is what the "
-					+ "endowment buys", bud.getHunger() >= NPC.DEPRIVED && !bud.starving());
+			// The FORM of the endowment is the parent's milk gene: that share of the
+			// offer is a meal in the gut, the rest is glycogen. Either way the calf is
+			// not starving, which is what the endowment buys -- see
+			// MilkIsAMealTheCalfIsBornDigesting for the split itself.
+			double gutCap = gutOf(bud);
+			assertNear("born digesting the milk its parent gave it, and no more ("
+					+ String.format("gut %.0f%% full against milk %.2f of an offer of %.2f",
+							100 * (1 - bud.getHunger()), parent.milkShare(), bidBud[0]) + ")",
+					parent.milkShare() * bidBud[0] / gutCap, 1 - bud.getHunger(), eps);
+			assertTrue("and not starving", !bud.starving());
 
 			// Sexual: the same lineage, paired. Both parents pay, both payments
 			// land in the child, and nothing is thrown away in between.
@@ -12623,7 +12789,7 @@ public class SimTests {
 					+ "newborn's glycogen used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
 					worth(kid) - NPC.LEAN_DENSITY * kid.leanMass(),
-					Math.min(bidKid[0], kid.glycogenCapacity()), eps);
+					Math.min(bidKid[0], kid.glycogenCapacity() + gutOf(kid)), eps); // room is store AND gut, since milk
 			// The point of a mate: two offers pool into one child instead of each
 			// being clipped to the same ceiling. Under the old clamp a paired
 			// child and a budded one were born holding the identical fraction.
@@ -15707,6 +15873,7 @@ public class SimTests {
 				new ABodyIsEatenOnce(),
 				new WhatIsLeftIsNotHowItDied(),
 				new MendingBuysBackTheFlesh(),
+				new MilkIsAMealTheCalfIsBornDigesting(),
 				new NoFreeEnergyAtBirth(),
 				new GrowingUpIsPaidFor(),
 				new AQueryLeavesTheStreamAlone(),

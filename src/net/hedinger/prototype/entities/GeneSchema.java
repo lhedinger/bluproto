@@ -190,6 +190,12 @@ public final class GeneSchema {
 		// lineage back off that bound once it reached it.
 		add("cast", "radians", Drift.ADD, 0, Genome.SEARCH_CAST_MAX, false,
 				g -> g.searchCast, (g, v) -> g.searchCast = v);
+		// The form of a newborn's endowment: how much of it is a meal in the gut
+		// and how much is glycogen. Additive over the whole unit range, both
+		// corners reachable, because both corners are strategies that lose for
+		// a reason the world can teach.
+		add("milk", "of the endowment", Drift.ADD, 0, 1, false,
+				g -> g.milk, (g, v) -> g.milk = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},
