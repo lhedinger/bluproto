@@ -2065,35 +2065,58 @@ public class SimTests {
 	 * once the consumer applies its range the two walks yield the same bodies
 	 * in the same order, and a nearest found by strict less-than or a kin
 	 * centroid summed in floating point comes out bit for bit the same. This
-	 * pins that on a real world, for every list kind, at every range a
-	 * creature actually uses, over hundreds of random points -- including
-	 * points off the map, which the cells clamp rather than reject.
+	 * pins that for every list kind, at every range a creature actually uses,
+	 * over hundreds of random points -- including points off the map, which
+	 * the cells clamp rather than reject.
+	 *
+	 * <p>The bodies are placed by the test's own dice: two levels, a scatter
+	 * across the map and a few dense herds, grazers and hunters and the dead of
+	 * both. This used to run on the demo world, which is a spatial index's
+	 * fixture only by accident of where world-gen happened to drop its founders
+	 * -- every founder is drawn genome-first, so adding a gene moved every
+	 * body and a test of the census went red for a change to milk.
 	 */
 	static class NearScansAreTheCensusScansCut extends Scenario {
 		@Override
 		public void run() {
-			World w = net.hedinger.prototype.sim.Worlds.demo(42, 144, 88);
-			tick(w, 300);
-			World.Census c = w.census();
 			java.util.Random rnd = new java.util.Random(7); // the test's own dice, not the sim's
+			World w = room(144, 88, 2);
+			for (int z = 0; z < 2; z++) {
+				// A scatter over the whole map, and a few herds packed into a cell or two.
+				for (int i = 0; i < 90; i++) {
+					place(w, rnd, z, 1 + rnd.nextDouble() * 142, 1 + rnd.nextDouble() * 86, i % 4 == 0);
+				}
+				for (int herd = 0; herd < 4; herd++) {
+					double hx = 10 + rnd.nextDouble() * 124, hy = 10 + rnd.nextDouble() * 68;
+					for (int i = 0; i < 20; i++) {
+						place(w, rnd, z, hx + (rnd.nextDouble() - 0.5) * 3, hy + (rnd.nextDouble() - 0.5) * 3, i % 5 == 0);
+					}
+				}
+			}
+			tick(w, 3);
+			// The dead of both kinds, lying where they fell.
+			int killed = 0;
+			java.util.List<TestNPC> bodies = new java.util.ArrayList<>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC tn && !tn.isDead()) {
+					bodies.add(tn);
+				}
+			}
+			for (TestNPC tn : bodies) {
+				if (rnd.nextInt(6) == 0) {
+					tn.kill();
+					killed++;
+				}
+			}
+			assertGreater("there are corpses to scan for", killed, 10);
+			tick(w, 2);
+			World.Census c = w.census();
 			double[] ranges = { 3, 5, 8, 12, 24, 40 };
 			int compared = 0, nonEmpty = 0;
 			for (int z = 0; z < w.getLevels(); z++) {
 				for (int q = 0; q < 150; q++) {
 					double x = rnd.nextDouble() * (w.getColums() + 20) - 10;
 					double y = rnd.nextDouble() * (w.getRows() + 20) - 10;
-					// Every other sample is taken AT a live body rather than at a
-					// random point, so the comparison is guaranteed to see bodies
-					// on a level that has any. Random points alone made "saw bodies"
-					// a draw against a mostly empty four-level map: a change to the
-					// founder genome draw moved every founder and took it from 11
-					// to 6 per cent of samples.
-					java.util.List<NPC> living = c.creatures(z);
-					if (q % 2 == 1 && !living.isEmpty()) {
-						NPC at = living.get(rnd.nextInt(living.size()));
-						x = at.getX();
-						y = at.getY();
-					}
 					double r = ranges[rnd.nextInt(ranges.length)];
 					for (int kind = 0; kind < 4; kind++) {
 						java.util.List<NPC> full = kind == 0 ? c.creatures(z) : kind == 1 ? c.predators(z)
@@ -2125,6 +2148,15 @@ public class SimTests {
 				}
 			}
 			assertGreater("the comparison saw bodies, not empty lists", nonEmpty, compared / 10);
+		}
+
+		/** One body at (x, y) on level z: a hunter or a grazer, parked. */
+		private static void place(World w, java.util.Random rnd, int z, double x, double y, boolean hunter) {
+			Genome g = new Genome();
+			g.size = 6 + rnd.nextInt(10);
+			g.speed = 0;
+			TestNPC n = hunter ? TestNPC.predator(x, y, z, g) : TestNPC.grazer(x, y, z, g);
+			w.spawnEntity(n.grown().withReproCooldown(100_000_000));
 		}
 
 		private static boolean sameOrder(java.util.List<NPC> a, java.util.List<NPC> b) {
