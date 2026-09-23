@@ -97,33 +97,48 @@ public final class Brain {
 	}
 
 	/**
-	 * Variable-length crossover of two parents: a slice of B is spliced into A
-	 * (unequal two-point), then the child is mutated. Length drifts naturally, so
-	 * brains grow and shrink under selection instead of being fixed.
+	 * Crossover of two parents, HOMOLOGOUS: two cut points are drawn once and
+	 * applied at the same positions in both programs, so the child is A's head,
+	 * B's middle and A's tail with every instruction keeping the place it had.
+	 * Two copies of one program make that program, every time; the child of two
+	 * different programs mixes them position for position. Length still drifts
+	 * -- from the insertion and deletion in {@link #mutate}, and from parents of
+	 * different lengths, since the cuts range over the longer of the two and
+	 * each parent contributes what it has at those positions.
+	 *
+	 * <p>It used to be unequal: A's cut points and B's were drawn independently,
+	 * so a random slice of B replaced a random and differently-placed slice of A.
+	 * For a program whose instructions depend on each other's registers that is
+	 * not a mix but a scramble. Measured on the starter forager: two IDENTICAL
+	 * copies of it, crossed with no mutation at all, produced a child that still
+	 * sought forage and moved 53 per cent of the time, against 76 per cent for a
+	 * budded copy mutated at the founders' rate. Sex was a coin flip on whether
+	 * the child could eat, which is why the budding parasites ran to two hundred
+	 * generations while no sexual grazer lineage got past its first: a calf was
+	 * born with a five-instruction program that wrote nothing, and sat on bare
+	 * ground beside its herd until it starved.
 	 */
 	public static Brain child(Brain a, Brain b, double rate) {
 		int[][] A = a.code, B = b.code;
-		int i1 = randInt(A.length + 1), i2 = randInt(A.length + 1);
+		int span = Math.max(A.length, B.length);
+		int i1 = randInt(span + 1), i2 = randInt(span + 1);
 		if (i1 > i2) {
 			int t = i1;
 			i1 = i2;
 			i2 = t;
 		}
-		int j1 = randInt(B.length + 1), j2 = randInt(B.length + 1);
-		if (j1 > j2) {
-			int t = j1;
-			j1 = j2;
-			j2 = t;
-		}
-		int[][] c = new int[(i1) + (j2 - j1) + (A.length - i2)][];
+		int head = Math.min(i1, A.length);
+		int mid1 = Math.min(i1, B.length), mid2 = Math.min(i2, B.length);
+		int tail = Math.min(i2, A.length);
+		int[][] c = new int[head + (mid2 - mid1) + (A.length - tail)][];
 		int k = 0;
-		for (int i = 0; i < i1; i++) {
+		for (int i = 0; i < head; i++) {
 			c[k++] = A[i].clone();
 		}
-		for (int j = j1; j < j2; j++) {
+		for (int j = mid1; j < mid2; j++) {
 			c[k++] = B[j].clone();
 		}
-		for (int i = i2; i < A.length; i++) {
+		for (int i = tail; i < A.length; i++) {
 			c[k++] = A[i].clone();
 		}
 		Brain ch = new Brain(trimLen(c));
