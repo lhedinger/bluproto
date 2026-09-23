@@ -599,11 +599,14 @@ public abstract class NPC extends Entity {
 	 *
 	 * While any fresh meat is left the body is FRESHLY dead and the decay clock
 	 * has not started; when it is gone the body is DECAYING on a time-only clock
-	 * to the point it dissolves. Bites never move the clock: a fresh bite brings
-	 * the turn on sooner (the spoilage rate runs on how much of the fresh pool is
-	 * gone), a decayed bite simply leaves less to rot. What was eaten is gone;
-	 * everything else -- meat that rotted uneaten, and the bones -- feeds the
-	 * ground when the corpse dissolves.
+	 * to the point it dissolves. Bites never move either clock: spoilage runs on
+	 * what has SPOILED, not on what is gone, so a mouth at the fresh meat takes
+	 * its share and leaves the rest as fresh as it found it, and a decayed bite
+	 * simply leaves less to rot. (It used to run on what was gone, bites
+	 * included, so the first hunter's meal turned the rest within a second and
+	 * a pack-mate three seconds behind found scavenger food.) What was eaten is
+	 * gone; everything else -- meat that rotted uneaten, and the bones -- feeds
+	 * the ground when the corpse dissolves.
 	 */
 
 	/** Share of a body that is fresh meat at death: the hunters' third. */
@@ -633,6 +636,10 @@ public abstract class NPC extends Entity {
 	protected double freshFat = 0;
 	/** Fat within {@link #decayed}, in body-mass units. */
 	protected double decayedFat = 0;
+	/** Fresh meat that has SPOILED off this corpse so far, in body-mass units:
+	 *  the quantity the spoilage rate compounds on. Not what is gone -- bites
+	 *  are not spoilage. */
+	protected double spoiled = 0;
 	/** Mass mouths have taken off this corpse, in body-mass units -- the one part
 	 *  of the body the ground never gets. */
 	protected double eaten = 0;
@@ -823,25 +830,31 @@ public abstract class NPC extends Entity {
 	}
 
 	/**
-	 * One tick of spoilage. The rate depends on the fresh-meat value alone: it is
-	 * proportional to how much of the fresh pool is already gone (spoiled or
-	 * eaten), plus a seed, so a just-dead body spoils very slowly and a
-	 * half-turned one quickly. Solved for a reference-mass body it reaches zero at
-	 * exactly {@link #FRESH_TICKS}; a body of mass m takes
+	 * One tick of spoilage. The rate depends on the spoilage alone: it is
+	 * proportional to how much of the fresh pool has already SPOILED, plus a
+	 * seed, so a just-dead body spoils very slowly and a half-turned one
+	 * quickly. Solved for a reference-mass body it reaches zero at exactly
+	 * {@link #FRESH_TICKS}; a body of mass m takes
 	 * ln((m + seed)/seed) / ln((1 + seed)/seed) times as long -- twice the mass is
 	 * about a fifth longer, not twice. What spoils joins the decayed meat.
+	 *
+	 * <p>Bites are not spoilage. This used to compound on everything gone from
+	 * the pool, eaten included, and measured on a 20 px body the fresh meat --
+	 * good for 213 ticks untouched -- was gone 36 ticks after one hunter sat
+	 * down, 41 per cent of it turned uneaten the moment that hunter was full.
+	 * The meal a hunter takes leaves the rest exactly as fresh as it found it.
 	 */
 	private void spoil() {
 		double k = Math.log((1 + FRESH_SEED) / FRESH_SEED) / Math.max(1, FRESH_TICKS);
 		double seed = FRESH_SEED * FRESH_SHARE; // a share of a reference body's fresh meat
-		double gone = Math.max(0, freshFull - fresh);
-		double turned = Math.min(fresh, k * (gone + seed));
+		double turned = Math.min(fresh, k * (spoiled + seed));
 		if (fresh - turned < 1e-9) {
 			turned = fresh;
 		}
 		double turnedFat = fresh > 0 ? turned * (freshFat / fresh) : 0;
 		fresh -= turned;
 		freshFat = Math.max(0, freshFat - turnedFat);
+		spoiled += turned;
 		decayed += turned; // spoiled, not lost: it is the scavengers' now
 		decayedFat += turnedFat;
 	}
@@ -1716,6 +1729,7 @@ public abstract class NPC extends Entity {
 			decayedFat = fat / 2;
 			fat = 0;
 			eaten = 0;
+			spoiled = 0;
 		}
 		age = -1;
 	}

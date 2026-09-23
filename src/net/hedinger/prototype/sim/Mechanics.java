@@ -326,8 +326,9 @@ public final class Mechanics {
 				row("Fresh meat", "spoils on its own, slowly then fast", "by mass",
 						"The rate is set by the value alone: about " + num(NPC.FRESH_TICKS) + " ticks ("
 						+ round(NPC.FRESH_TICKS / TPS, 1) + " s) on a reference body, longer on a heavier "
-						+ "one. What spoils uneaten becomes decayed meat. Every bite of it brings the turn "
-						+ "on sooner. Decay does not start until it is gone."),
+						+ "one. What spoils uneaten becomes decayed meat. A bite takes fresh meat off and "
+						+ "leaves the rest as fresh as it found it: the rate runs on what has spoiled, "
+						+ "not on what is gone. Decay does not start until it is gone."),
 				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
 						"Holds together early and thins out late, reaching nothing exactly as the corpse "
 						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "
