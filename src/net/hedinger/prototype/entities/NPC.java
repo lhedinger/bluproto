@@ -728,6 +728,15 @@ public abstract class NPC extends Entity {
 		return genome != null ? genome.birthSize : BIRTH_SIZE_FRACTION;
 	}
 
+	/** The share of a newborn's endowment this body hands over as milk -- a
+	 *  meal in the child's gut -- rather than as glycycogen: its lineage's
+	 *  {@link Genome#milk}, read off the PARENT like {@link #birthFraction()}.
+	 *  A body with no genome gives none: its young are born as they always
+	 *  were, hungry and endowed in glycogen alone. */
+	public double milkShare() {
+		return genome != null ? genome.milk : 0;
+	}
+
 	/** Fat this body must hold before it will try to breed: half a child of its
 	 *  own lean mass at its own lineage's birth size, since a pair pools two
 	 *  halves. A budder still needs the whole at the moment of birth -- see

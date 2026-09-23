@@ -998,7 +998,7 @@ function genomeTab(d: Record<string, any>): string {
       : `${gm.sexual ? 'sexual' : 'asexual'} · ${gm.sexuality}`),
     row('mate thresh', g(gm.mateThreshold)),
     row('breeds at', g(gm.reproFraction)), row('spends', g(gm.reproCostFraction)),
-    row('young born at', g(gm.birthSize)),
+    row('young born at', g(gm.birthSize)), row('milk', g(gm.milk)),
     row('drinks at', g(gm.drainRate)),
     row('mutation', g(gm.mutationRate)),
   ]) + group('mind', [

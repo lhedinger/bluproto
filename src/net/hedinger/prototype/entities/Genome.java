@@ -280,6 +280,23 @@ public class Genome {
 	 */
 	public double birthSize = 0.35; // NPC.BIRTH_SIZE_FRACTION, the reference lineage's
 	/**
+	 * Milk: the share of a newborn's energy endowment that arrives in its GUT
+	 * as a meal it is born digesting, the rest arriving as glycogen. Read off
+	 * the PARENTS like {@link #birthSize} -- a pair averages the two -- because
+	 * it is a decision made about a body, not by it.
+	 *
+	 * <p>Both halves are the same energy the parents paid; what the gene
+	 * decides is its FORM. A newborn's mint runs on how full its gut is, so a
+	 * calf endowed all in glycogen mints nothing until its first mouthful
+	 * lands and lives on a fixed sum while it looks for grass; one endowed all
+	 * in milk mints from its first tick but is born with an empty store, which
+	 * is a collapsed body that can only crawl until the mint lifts it. Somewhere
+	 * between is a calf that can both walk and digest, and where that is
+	 * depends on how far the grass is from where its lineage drops it, which is
+	 * selection's to find.
+	 */
+	public double milk = 0.5;
+	/**
 	 * How hard a parasite drinks, in host health per tick — the drain's pace,
 	 * and the fourth life-history gene. Latent in a lineage that does not ride:
 	 * it is expressed only by the parasite niche, the way the brain is latent in
@@ -421,6 +438,11 @@ public class Genome {
 		// optimum -- founders are seeding, not a configuration to get right.
 		// Drawn LAST so every draw above it keeps the stream it had.
 		g.maxAge = (int) Math.round(24000 + Utils.random() * 26000);
+		// Milk: a fifth to four fifths of the endowment as a meal in the gut, the
+		// rest as glycogen. A spread that avoids only the corners where a calf
+		// is born either unable to digest or unable to stand. Drawn after maxAge
+		// for the same reason maxAge is drawn after everything before it.
+		g.milk = 0.2 + Utils.random() * 0.6;
 		return g;
 	}
 

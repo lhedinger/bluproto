@@ -837,6 +837,7 @@ final class WorldHost {
 					gm.put("reproFraction", round(g.reproFraction));
 					gm.put("reproCostFraction", round(g.reproCostFraction));
 					gm.put("birthSize", round(g.birthSize));
+					gm.put("milk", round(g.milk));
 					gm.put("drainRate", round(g.drainRate));
 					gm.put("mutationRate", round(g.mutationRate));
 					gm.put("instinct", round(g.instinct));
