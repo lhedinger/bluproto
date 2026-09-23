@@ -383,15 +383,130 @@ public class SimTests {
 
 
 	/**
+	 * A bite does not turn the rest: the meal one hunter takes off a kill leaves
+	 * what it did not eat as fresh as it found it.
+	 *
+	 * <p>Spoilage compounds on what has spoiled. It used to compound on what was
+	 * GONE from the fresh pool, and bites counted: measured on a 20 px body,
+	 * whose fresh meat is good for about 213 ticks untouched, one 12 px hunter
+	 * sat down, filled its gut, and the fresh pool was gone at tick 36 -- 41 per
+	 * cent of it turned uneaten the moment the hunter was full, and a second
+	 * hunter arriving a hundred ticks behind it ate nothing at all. A large
+	 * kill could feed exactly one hunter, and only the one that made it.
+	 *
+	 * <p>Twin carcasses. One is eaten from by a hunter that fills up and leaves;
+	 * the other is untouched. Both keep fresh meat for the same span, the
+	 * bitten one holds what the hunter left, and a second hunter that arrives
+	 * a hundred ticks after the first eats its fill off it.
+	 */
+	static class ABiteDoesNotTurnTheRest extends Scenario {
+		private static Genome body(double size) {
+			return Genome.phenotype(size, 0.0, 5, 6, Math.PI * 2, 100000);
+		}
+
+		/** A 12 px hunter that eats its fill off {@code carcass} and leaves;
+		 *  returns what it swallowed. */
+		private double meal(World w, TestNPC carcass) {
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			TestNPC h = TestNPC.minded(carcass.getX(), carcass.getY(), 0, body(12), feeder)
+					.withClade(Genome.Clade.PREDATOR).withHunger(1.0).withReproCooldown(100_000_000);
+			w.spawnEntity(h);
+			for (int t = 0; t < 100 && h.getHunger() > TestNPC.PRED_FULL_HUNGER && carcass.freshMeat() > 0; t++) {
+				tick(w, 1);
+			}
+			h.remove();
+			return h.totalSwallowed();
+		}
+
+		@Override
+		public void run() {
+			seed(46);
+			World w = room(36, 12);
+			for (int x = 1; x < 35; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			// Three 20 px bodies: one untouched, one bitten once and left, one
+			// bitten once and visited again a hundred ticks later.
+			TestNPC twin = TestNPC.grazer(6.5, 5.5, 0, body(20)).grown();
+			TestNPC bitten = TestNPC.grazer(18.5, 5.5, 0, body(20)).grown();
+			TestNPC shared = TestNPC.grazer(30.5, 5.5, 0, body(20)).grown();
+			w.spawnEntity(twin);
+			w.spawnEntity(bitten);
+			w.spawnEntity(shared);
+			tick(w, 2);
+			twin.kill();
+			bitten.kill();
+			shared.kill();
+			tick(w, 1);
+			double freshAtDeath = twin.freshMeat();
+			assertNear("triplets: the same fresh meat at death", freshAtDeath, bitten.freshMeat(), 1e-9);
+
+			double twinBefore = twin.freshMeat();
+			double first = meal(w, bitten);
+			meal(w, shared);
+			double clockTook = twinBefore - twin.freshMeat();
+			double ate = bitten.eatenMass();
+			assertGreater("the first hunter ate its fill (" + String.format("%.2f of %.2f fresh", ate, freshAtDeath) + ")",
+					ate, 0.3 * freshAtDeath);
+			assertLess("and left fresh meat behind it", ate, 0.8 * freshAtDeath);
+			assertNear("what it left is the fresh meat less its meal less the clock's share -- nothing turned on "
+					+ "the bite's account (" + String.format("%.3f fresh; the clock took %.3f", bitten.freshMeat(), clockTook) + ")",
+					freshAtDeath - ate - clockTook, bitten.freshMeat(), 0.01);
+
+			// A hundred ticks later a second hunter comes to the shared kill and eats.
+			double sharedLeft = shared.freshMeat();
+			twinBefore = twin.freshMeat();
+			tick(w, 100);
+			clockTook = twinBefore - twin.freshMeat();
+			assertNear("a hundred ticks on, the shared kill has what the first hunter left less the clock's share ("
+					+ String.format("%.3f of %.3f", shared.freshMeat(), sharedLeft) + ")",
+					sharedLeft - clockTook, shared.freshMeat(), 0.01);
+			double worth = shared.freshMeat() * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
+			double second = meal(w, shared);
+			assertGreater("and a second hunter eats off the same kill ("
+					+ String.format("%.1f swallowed, against the first's %.1f", second, first) + ")",
+					second, 0.0);
+			assertGreater("what the first hunter left, and not a scrap the clock had taken ("
+					+ String.format("%.1f of %.1f on the body", second, worth) + ")", second, 0.85 * Math.min(worth, first));
+
+			// The once-bitten body spoils on the same curve as the twin: it runs out
+			// earlier only because it has less to lose. At the tick it runs out, the
+			// clock has taken the same mass off the untouched twin as the bitten
+			// body had left after the meal -- and not within a second of the bite,
+			// which is what the old rule did.
+			double freshAfterMeal = freshAtDeath - ate;
+			double twinAtStart = twin.freshMeat();
+			int bittenTurned = -1;
+			double twinLostByThen = Double.NaN;
+			for (int t = 1; t <= 4 * NPC.FRESH_TICKS && bittenTurned < 0; t++) {
+				tick(w, 1);
+				if (bitten.freshMeat() <= 0) {
+					bittenTurned = t;
+					twinLostByThen = freshAtDeath - twin.freshMeat();
+				}
+			}
+			assertGreater("the bitten body turns in the end", bittenTurned, 0);
+			assertGreater("and not within a second of the bite (" + bittenTurned + " ticks after the second visit)",
+					bittenTurned, 30);
+			assertNear("when it does, the clock has taken the same mass off the untouched twin as the meal left ("
+					+ String.format("%.3f against %.3f", twinLostByThen, freshAfterMeal) + ")",
+					freshAfterMeal, twinLostByThen, 0.05 * freshAtDeath);
+			assertGreater("while the twin, with more to lose, is still fresh", twin.freshMeat(), 0.0);
+		}
+	}
+
+	/**
 	 * A creature is alive, then freshly dead, then decaying, then gone -- and
 	 * the middle two are decided by two different books.
 	 *
 	 * <p>Fresh meat is full at death and sized by the body's mass. It declines
 	 * on its own, slowly at first and then fast, at a rate set by the value
 	 * alone: about five seconds for a reference body, longer for a heavier one.
-	 * Every bite off the corpse takes fresh meat with it, so eating during the
-	 * window brings the rot on sooner. Decay does not start until the fresh
-	 * meat is gone; then it runs on its own time-only clock until the body
+	 * Every bite off the corpse takes fresh meat with it and leaves the rest as
+	 * fresh as it found it -- see ABiteDoesNotTurnTheRest. Decay does not start
+	 * until the fresh meat is gone; then it runs on its own time-only clock until the body
 	 * dissolves. Who may eat the dead is a hard rule of the body's clade: a
 	 * hunter takes only fresh meat, a scavenger takes any corpse however old,
 	 * a parasite takes only the living.
@@ -11968,10 +12083,10 @@ public class SimTests {
 			double meat = TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * prey.leanMass();
 			double freshMeat = NPC.FRESH_SHARE * meat;
 			double edible = (NPC.FRESH_SHARE + (1 - NPC.FRESH_SHARE) * NPC.SCAVENGER_SHARE) * meat;
-			// Every bite spends fresh meat and spoilage compounds on what is gone, so
-			// a lone hunter does not finish even the fresh third before it turns; what
-			// it leaves spoils into the scavengers' pool. The invariant is the ledger:
-			// between them the mouths are paid the edible body ONCE, and the bones never.
+			// Every bite spends fresh meat; a lone hunter fills up before it finishes
+			// the fresh third, and what it leaves spoils into the scavengers' pool on
+			// the clock. The invariant is the ledger: between them the mouths are
+			// paid the edible body ONCE, and the bones never.
 			double toHunter = hunter.totalSwallowed();
 			double gut = NPC.GUT_PER_MASS * hunter.leanMass(); // the fresh third of a size-12 body overfills a size-16 hunter
 			assertGreater("the hunter ate most of the fresh third, bite by bite; the rest spoiled under it ("
@@ -15319,6 +15434,7 @@ public class SimTests {
 				new LethalDamageAndScavenging(),
 				new ForageIgnoresFoodBehindWalls(),
 				new ScavengerEatsCarrionButDoesNotRotIt(),
+				new ABiteDoesNotTurnTheRest(),
 				new AFreshCarcassSitsBeforeItRots(),
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
