@@ -308,6 +308,16 @@ pace — 15 days for a default genome, 12 to 25 days across a founder draw. What
 a body actually gets is that scaled by the two things that set the length of a
 life:
 
+- **A grazer walks off a patch at a line its greed sets.** `greed` is the
+  exponent on value in every food scan; for a grazer it is also the share of a
+  tile's cap below which the ground is not worth standing on
+  (`GRAZE_LEAVE_PER_GREED · greed`): the scripted grazer walks off at that line
+  and the forage scan does not point a mind at ground below it. Founders' lines
+  run from a tenth to two fifths of a tile, either side of the range's own cliff
+  — a tile grazed below a quarter of its cap rests a day before it regrows — so
+  some lineages strip a patch into the cliff and some leave before it, and the
+  range selects. Measured before there was a line, half of every herbivore's
+  ticks were spent on a tile past the cliff.
 - **Mass buys time**, on `mass^0.25` — the same exponent, for the same reason,
   that already gives a bigger body its longer fast: capacities grow with mass
   while the Kleiber burn only grows with `mass^0.75`.
