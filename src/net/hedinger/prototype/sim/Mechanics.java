@@ -573,6 +573,11 @@ public final class Mechanics {
 								+ "need for food, sibling of thirst and distinct from energy."),
 						sense(AgentIO.S_THIRST, "How dry it is, 0 slaked to 1 parched."),
 						sense(AgentIO.S_CARRIED, "+1 held captive, −1 riding willingly, 0 free."),
+						sense(AgentIO.S_RIDDEN, "What rides it: the weight of its voluntary riders "
+								+ "— a parasite, a hitchhiker — as a share of its own size, 0 for "
+								+ "nothing, clamped at 1. A captive it holds is not a rider. The one "
+								+ "channel that tells a host a parasite is on it, so it can buck when "
+								+ "ridden rather than never or always."),
 						sense(AgentIO.S_CLOCK, "A slow oscillator from tick and identity. The "
 								+ "world is deterministic and a mind draws no dice, so this is "
 								+ "where rhythm and wandering have to come from."),

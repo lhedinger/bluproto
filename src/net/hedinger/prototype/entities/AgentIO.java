@@ -197,7 +197,14 @@ public final class AgentIO {
 	 *  unambiguously "nothing typed". Which sign a lineage walks toward is
 	 *  for selection to settle. */
 	public static final int S_SOUND_KIND = 40;
-	public static final int NUM_SENSORS = 41;
+	/** The weight riding on this body, as a share of its own size: 0 when
+	 *  nothing is on it, the rider's size over this body's for one, more for
+	 *  more, clamped at 1. Voluntary riders only -- a parasite drinking, a
+	 *  hitchhiker taking a lift -- and never a captive this body is holding.
+	 *  The one channel that tells a host something is on it, so a mind can
+	 *  buck ({@link #A_STRUGGLE}) when it is ridden instead of never, or always. */
+	public static final int S_RIDDEN = 41;
+	public static final int NUM_SENSORS = 42;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -208,7 +215,7 @@ public final class AgentIO {
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
-			"sound_kind" };
+			"sound_kind", "ridden" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

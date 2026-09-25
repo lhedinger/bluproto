@@ -13935,6 +13935,136 @@ public class SimTests {
 	}
 
 	/**
+	 * A host feels its riders, and can learn to buck them when it does.
+	 *
+	 * <p>A herbivore had no way to know a parasite was on it. The threat channel
+	 * reports the nearest body BIGGER than itself, which a parasite never is;
+	 * the carry channel reports only the body's own state -- held, riding, free
+	 * -- and never what rides it. All a host felt was its health and glycogen
+	 * falling, with nothing tying either to a rider. The defence already
+	 * existed -- the struggle actuator bucks riders off, paying only while it
+	 * shakes -- but a mind could only find it blind, by holding struggle on at
+	 * all times, and none of the seed brains or the leading generation-6
+	 * herbivore programs did.
+	 *
+	 * <p>{@link AgentIO#S_RIDDEN} is the weight riding on this body as a share of
+	 * its own size: 0 unridden, the rider's size over the host's for one, more
+	 * for more, clamped at 1. A captive the body is holding is not a rider, and
+	 * does not count. Pinned on a 12 px host: nothing on it reads 0; one 5 px
+	 * parasite reads 5/12; a second nearly doubles it; a hunter holding a captive
+	 * reads 0; and a host whose mind bucks only while the channel reads above
+	 * zero throws a parasite off.
+	 */
+	static class AHostFeelsItsRiders extends Scenario {
+		private static TestNPC parasite(double x, double y) {
+			Genome g = new Genome();
+			g.size = 5;
+			g.speed = 0.06;
+			Mind ride = (sn, a) -> {
+				a[AgentIO.A_SEEK] = 0.1; // forage: for a parasite, a host
+				a[AgentIO.A_THROTTLE] = 0.6;
+				a[AgentIO.A_ATTACH] = 1;
+			};
+			return TestNPC.minded(x, y, 0, g, ride).withClade(Genome.Clade.PARASITE).grown().withHunger(1.0);
+		}
+
+		private static double ridden(TestNPC n) {
+			return n.sensorSnapshot()[AgentIO.S_RIDDEN];
+		}
+
+		@Override
+		public void run() {
+			seed(85);
+			// The host keeps still and, in the first leg, never bucks.
+			Genome hg = new Genome();
+			hg.size = 12;
+			hg.speed = 0.04;
+			Mind still = (sn, a) -> a[AgentIO.A_THROTTLE] = 0;
+			World w = room(20, 12);
+			TestNPC host = TestNPC.minded(10.5, 6.0, 0, hg, still).grown().withHydration(1.0).withReproCooldown(100_000_000);
+			w.spawnEntity(host);
+			tick(w, 3);
+			assertNear("a host with nothing on it feels nothing", 0.0, ridden(host), 1e-12);
+
+			TestNPC first = parasite(6.5, 6.0);
+			w.spawnEntity(first);
+			for (int t = 0; t < 900 && first.getAttachTarget() != host; t++) {
+				tick(w, 1);
+			}
+			assertTrue("a parasite latched on", first.getAttachTarget() == host);
+			tick(w, 2);
+			double one = ridden(host);
+			assertNear("one 5 px rider on a 12 px host reads its share of the host's size ("
+					+ String.format("%.3f", one) + ")", first.getSize() / host.getSize(), one, 1e-6); // sizes are floats
+
+			TestNPC second = parasite(14.5, 6.0);
+			w.spawnEntity(second);
+			for (int t = 0; t < 900 && second.getAttachTarget() != host; t++) {
+				tick(w, 1);
+			}
+			assertTrue("a second latched on", second.getAttachTarget() == host);
+			tick(w, 2);
+			assertNear("and two read twice as much (" + String.format("%.3f", ridden(host)) + ")",
+					Math.min(1.0, 2 * one), ridden(host), 1e-6);
+
+			// A captive is not a rider: a hunter holding one feels nothing on its back.
+			World c = room(12, 12);
+			Genome pg = new Genome();
+			pg.size = 14;
+			pg.speed = 0.04;
+			Mind hold = (sn, a) -> a[AgentIO.A_GRAB] = 1;
+			TestNPC captor = TestNPC.minded(6.0, 6.0, 0, pg, hold).withClade(Genome.Clade.PREDATOR).grown()
+					.withHydration(1.0).withReproCooldown(100_000_000);
+			Genome sg = new Genome();
+			sg.size = 6;
+			sg.speed = 0;
+			TestNPC small = TestNPC.breeder(6.15, 6.0, 0, sg).grown(); // touching: a grab needs contact
+			c.spawnEntity(captor);
+			c.spawnEntity(small);
+			for (int t = 0; t < 60 && !small.isGrabbed(); t++) {
+				tick(c, 1);
+			}
+			assertTrue("the hunter is holding a captive", small.isGrabbed());
+			tick(c, 2);
+			assertNear("and feels no rider for it", 0.0, ridden(captor), 1e-12);
+
+			// The point of it: a mind that bucks only while it feels a rider.
+			World b = room(20, 12);
+			Mind buckWhenRidden = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+				a[AgentIO.A_STRUGGLE] = sn[AgentIO.S_RIDDEN] > 0 ? 1 : 0;
+			};
+			TestNPC bucker = TestNPC.minded(10.5, 6.0, 0, hg, buckWhenRidden).grown().withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			b.spawnEntity(bucker);
+			World t2 = room(20, 12);
+			TestNPC twin = TestNPC.minded(10.5, 6.0, 0, hg, still).grown().withHydration(1.0)
+					.withReproCooldown(100_000_000); // the same body, no reflex
+			t2.spawnEntity(twin);
+			tick(b, 3);
+			tick(t2, 3);
+			double bb = bucker.getGlycogen(), tb = twin.getGlycogen();
+			tick(b, 60);
+			tick(t2, 60);
+			assertNear("unridden, it never shakes and pays nothing for the reflex",
+					tb - twin.getGlycogen(), bb - bucker.getGlycogen(), 1e-9);
+			TestNPC pest = parasite(6.5, 6.0);
+			b.spawnEntity(pest);
+			boolean latched = false, thrown = false;
+			for (int t = 0; t < 2000 && !thrown; t++) {
+				tick(b, 1);
+				if (pest.getAttachTarget() == bucker) {
+					latched = true;
+				} else if (latched) {
+					thrown = true;
+				}
+			}
+			assertTrue("the parasite got on", latched);
+			assertTrue("and a host that bucks while it feels a rider threw it off", thrown);
+		}
+	}
+
+	/**
 	 * A parasite drinks only what it has room for, and what it takes goes
 	 * somewhere.
 	 *
@@ -16555,6 +16685,7 @@ public class SimTests {
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new APredatoryParasiteSettlesForASmallerHost(),
+				new AHostFeelsItsRiders(),
 				new AParasiteDrinksOnlyWhatItHasRoomFor(),
 				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
