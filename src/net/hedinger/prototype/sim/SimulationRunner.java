@@ -56,6 +56,28 @@ public final class SimulationRunner {
 	private volatile boolean running = false;
 	private Thread loop;
 
+	/**
+	 * What a tick threw, if one ever did, and how many have since. The loop used
+	 * to call tickOnce() bare: an exception out of a tick ended the thread, and
+	 * because it is a daemon with no uncaught handler, nothing else noticed.
+	 * {@code running} stayed true, the HTTP server kept answering, and
+	 * /api/health went on serving the last snapshot -- the tick frozen, and
+	 * tickMillis frozen with it at whatever the world managed in the instant
+	 * before it died. A dead world advertised keepingUp: true for a day and a
+	 * half. Measured on the live server: tick 2141088, exactly eighteen hours of
+	 * a two-day uptime, with tickMillis reading a healthy 28.2.
+	 */
+	private volatile Throwable tickError;
+	private final java.util.concurrent.atomic.AtomicLong tickErrors =
+			new java.util.concurrent.atomic.AtomicLong();
+	private int consecutiveErrors;
+
+	/** How many ticks a world is allowed to throw in a row before the loop gives
+	 *  up on it. One bad tick may be a blip worth surviving; a world that cannot
+	 *  complete a tick at all is not going to fix itself, and spinning on it
+	 *  fills the log and burns the box. */
+	private static final int MAX_CONSECUTIVE_TICK_ERRORS = 60;
+
 	public SimulationRunner(World world) {
 		this.world = world;
 		this.latest = WorldSnapshot.of(world);
@@ -198,6 +220,61 @@ public final class SimulationRunner {
 	}
 
 	/**
+	 * One tick, with whatever it throws caught and recorded rather than allowed
+	 * to end the thread. Returns false when the loop should stop.
+	 *
+	 * <p>An Error -- OutOfMemoryError above all, on a 512 MB heap -- stops it at
+	 * once: the world's state after one is not worth advancing, and the useful
+	 * thing is that it is visible. An exception is survivable often enough to be
+	 * worth surviving, so those are counted and the loop carries on until
+	 * {@link #MAX_CONSECUTIVE_TICK_ERRORS} in a row say otherwise.
+	 *
+	 * <p>Either way the throwable is kept, so {@link #tickError} can say what
+	 * happened and the health endpoint can stop calling a stopped world healthy.
+	 */
+	private boolean tickGuarded() {
+		try {
+			tickOnce();
+			consecutiveErrors = 0;
+			return true;
+		} catch (Throwable e) {
+			tickError = e;
+			long n = tickErrors.incrementAndGet();
+			consecutiveErrors++;
+			// The first one in full, then sparingly: a tick that throws every
+			// tick would otherwise write thirty-three stack traces a second.
+			if (n == 1 || consecutiveErrors == MAX_CONSECUTIVE_TICK_ERRORS) {
+				System.err.println("sim tick " + world.getTick() + " threw (" + n + " so far)");
+				e.printStackTrace();
+			}
+			if (e instanceof Error || consecutiveErrors >= MAX_CONSECUTIVE_TICK_ERRORS) {
+				System.err.println("sim loop stopping after " + n + " failed tick(s)");
+				running = false;
+				return false;
+			}
+			return true;
+		}
+	}
+
+	/** What the last failing tick threw, or null if none ever has. */
+	public Throwable tickError() {
+		return tickError;
+	}
+
+	/** How many ticks have thrown over this run. */
+	public long tickErrorCount() {
+		return tickErrors.get();
+	}
+
+	/** Whether the loop is actually still advancing the world. False once it has
+	 *  stopped or been stopped -- which is the question /api/health exists to
+	 *  answer and could not, because every figure it served came from the last
+	 *  snapshot and stayed plausible forever. */
+	public boolean ticking() {
+		return running && loop != null && loop.isAlive();
+	}
+
+	/**
 	 * Fixed-timestep accumulator: wall-clock elapsed (scaled by speed) is
 	 * banked and spent in whole ticks, so the tick rate stays honest even when
 	 * a tick occasionally runs long. The bank is capped to avoid a spiral of
@@ -215,7 +292,9 @@ public final class SimulationRunner {
 					bank = cap;
 				}
 				while (bank >= TICK_NANOS && running) {
-					tickOnce();
+					if (!tickGuarded()) {
+						return; // the world is not going to recover; see tickGuarded
+					}
 					bank -= TICK_NANOS;
 				}
 			}

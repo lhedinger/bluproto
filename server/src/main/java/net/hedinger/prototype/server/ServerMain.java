@@ -109,13 +109,33 @@ public final class ServerMain {
 		app.get("/api/health", ctx -> {
 			double tickMs = host.runner().avgTickMillis();
 			double budgetMs = 1000.0 / net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND;
-			ctx.json(Map.of("ok", true, "tick", host.runner().snapshot().tick(),
-					"entities", host.runner().snapshot().entities().size(),
-					"tickMillis", Math.round(tickMs * 1000) / 1000.0,
-					"tickBudgetMillis", Math.round(budgetMs * 1000) / 1000.0,
-					"tickLoad", budgetMs <= 0 ? 0 : Math.round(tickMs / budgetMs * 1000) / 1000.0,
-					"keepingUp", tickMs < budgetMs,
-					"commit", commitShort, "deployedAt", deployedAt));
+			// Whether the loop is still ADVANCING the world, asked of the loop
+			// rather than inferred from its numbers. Every figure below comes from
+			// the last snapshot and the running average, and both of those stay
+			// exactly as they were the moment a tick throws -- so a world whose sim
+			// thread had been dead for a day and a half served tick 2141088 with
+			// tickMillis 28.2 and keepingUp true, which is the one thing this
+			// endpoint exists to have caught.
+			boolean ticking = host.runner().ticking();
+			Throwable died = host.runner().tickError();
+			java.util.Map<String, Object> body = new java.util.LinkedHashMap<String, Object>();
+			body.put("ok", ticking);
+			body.put("ticking", ticking);
+			body.put("tick", host.runner().snapshot().tick());
+			body.put("entities", host.runner().snapshot().entities().size());
+			body.put("tickMillis", Math.round(tickMs * 1000) / 1000.0);
+			body.put("tickBudgetMillis", Math.round(budgetMs * 1000) / 1000.0);
+			body.put("tickLoad", budgetMs <= 0 ? 0 : Math.round(tickMs / budgetMs * 1000) / 1000.0);
+			// Keeping up is a claim about a world that is running. A stopped one is
+			// not keeping up with anything.
+			body.put("keepingUp", ticking && tickMs < budgetMs);
+			body.put("tickErrors", host.runner().tickErrorCount());
+			body.put("tickError", died == null ? null
+					: died.getClass().getName() + (died.getMessage() == null
+							? "" : ": " + died.getMessage()));
+			body.put("commit", commitShort);
+			body.put("deployedAt", deployedAt);
+			ctx.status(ticking ? 200 : 503).json(body);
 		});
 
 		// Ops metrics: sim cost, world size, viewers, uptime, heap.

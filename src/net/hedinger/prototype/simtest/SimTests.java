@@ -7155,6 +7155,72 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A tick that throws stops the world visibly, instead of killing the loop
+	 * and leaving the last snapshot to be served forever.
+	 *
+	 * <p>This is a regression guard with an outage behind it. The live server ran
+	 * eighteen hours of a two-day uptime and then stopped: the loop called
+	 * tickOnce() bare, a tick threw, the exception ended a daemon thread that had
+	 * no uncaught handler, and nothing anywhere noticed. {@code running} stayed
+	 * true, Javalin kept answering, and /api/health went on reporting tick
+	 * 2141088 with tickMillis 28.2 and keepingUp true -- every figure frozen at
+	 * the instant before death, every one of them plausible. The endpoint built
+	 * to make exactly this failure visible from outside was the thing hiding it.
+	 *
+	 * <p>So: an Error stops the loop at once, the throwable is kept, and
+	 * {@code ticking()} tells the truth afterwards.
+	 */
+	static class AThrownTickStopsTheWorldLoudly extends Scenario {
+		/** A world that fails on its nth tick, the way a real one fails: from
+		 *  inside think(), on the sim thread, with nobody catching it. */
+		private static final class FailingWorld extends World {
+			private final int failAt;
+			private int ticks;
+
+			FailingWorld(int failAt) {
+				super(16, 16, 1);
+				this.failAt = failAt;
+			}
+
+			@Override
+			public void think() {
+				if (++ticks >= failAt) {
+					throw new OutOfMemoryError("pretend heap exhaustion");
+				}
+				super.think();
+			}
+		}
+
+		@Override
+		public void run() {
+			seed(4242);
+			FailingWorld w = new FailingWorld(3);
+			net.hedinger.prototype.sim.SimulationRunner r =
+					new net.hedinger.prototype.sim.SimulationRunner(w);
+			assertTrue("a runner that has not started is not ticking", !r.ticking());
+			r.start();
+			// The loop banks wall-clock and spends it in whole ticks, so three
+			// ticks take about a tenth of a second. Two seconds is room enough for
+			// a slow box without waiting on one.
+			long deadline = System.currentTimeMillis() + 2000;
+			while (r.ticking() && System.currentTimeMillis() < deadline) {
+				try {
+					Thread.sleep(5);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+			r.stop();
+			assertTrue("a thrown tick stops the loop rather than ending its thread "
+					+ "in silence", !r.ticking());
+			assertGreater("and the failure is counted", (double) r.tickErrorCount(), 0.0);
+			assertTrue("and kept, so the server can say what happened ("
+					+ r.tickError() + ")", r.tickError() instanceof OutOfMemoryError);
+		}
+	}
+
 	static class SeekWalksToAPatchWithoutSteering extends Scenario {
 		private static final int PATCH_X = 32, PATCH_Y = 7;
 
@@ -16517,6 +16583,7 @@ public class SimTests {
 				new IntentReportsHowItWent(),
 				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
+				new AThrownTickStopsTheWorldLoudly(),
 				new SearchShapeIsTheLineagesOwn(),
 				new OneIntentIsAWholeBehaviour(),
 				new HuntIntentClosesAndBites(),
