@@ -2280,6 +2280,209 @@ public class SimTests {
 		}
 	}
 
+	// ---- the sense clock: visibility under a situational cadence ------------
+
+	/**
+	 * A threat is sensed the tick it comes into range, however idle the body
+	 * was. The situation is read every tick from the census's cell counts,
+	 * which cost no ray, so a body dozing on the idle clock takes a full pass
+	 * the moment a predator stands within its range -- and the threat is on
+	 * its channel that same tick, not up to sixteen ticks later.
+	 */
+	static class AThreatIsSensedTheTickItArrives extends Scenario {
+		@Override
+		public void run() {
+			seed(61);
+			World w = room(30, 30);
+			Genome g = new Genome();
+			g.losRange = 12;
+			g.size = 8; // a small grazer...
+			TestNPC grazer = TestNPC.minded(10.5, 15.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0; // stands still and watches
+			}).withHeading(0); // facing east
+			w.spawnEntity(grazer);
+			w.think();
+			tick(w, 40);
+			assertEquals("alone, the body senses on the idle clock", 2, grazer.senseTier());
+			int before = grazer.fullSenses;
+			Genome pg = new Genome();
+			pg.losRange = 12;
+			pg.size = 24; // ...and a hunter big enough to be a threat to it
+			pg.speed = 0; // a hunter that cannot close, so the geometry holds
+			TestNPC hunter = TestNPC.mindedPredator(16.5, 15.5, 0, pg).grown();
+			w.spawnEntity(hunter);
+			w.think(); // the spawn lands at the end of this tick
+			w.think(); // and the grazer's next tick reads it
+			assertEquals("a predator within range makes the tick urgent", 0, grazer.senseTier());
+			assertGreater("a full pass was taken now, not on the idle clock",
+					grazer.fullSenses, before);
+			assertGreater("and the threat is on the channel the tick it is in view",
+					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
+		}
+	}
+
+	/**
+	 * Urgency is proximity; sight is still line of sight. A predator behind a
+	 * wall puts the body on the urgent clock -- the cell count cannot see walls
+	 * and is meant not to, it is a wake-up, not a sighting -- and the threat
+	 * channel stays silent, because the full pass it triggers casts the ray
+	 * and the ray stops at the wall. The cadence never leaks visibility.
+	 */
+	static class AThreatBehindAWallIsUrgentButUnseen extends Scenario {
+		@Override
+		public void run() {
+			seed(62);
+			World w = room(30, 30);
+			for (int y = 10; y <= 20; y++) {
+				w.setTile(13, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			Genome g = new Genome();
+			g.losRange = 12;
+			g.size = 8; // a small grazer...
+			TestNPC grazer = TestNPC.minded(10.5, 15.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			}).withHeading(0);
+			Genome pg = new Genome();
+			pg.losRange = 12;
+			pg.size = 24; // ...and a hunter big enough to be a threat to it
+			pg.speed = 0;
+			TestNPC hunter = TestNPC.mindedPredator(16.5, 15.5, 0, pg).grown();
+			w.spawnEntity(grazer);
+			w.spawnEntity(hunter);
+			w.think();
+			tick(w, 20);
+			assertEquals("the predator's nearness makes every tick urgent", 0, grazer.senseTier());
+			assertTrue("but through a wall it is not seen",
+					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX] == 0);
+			// And the same wall, removed: seen at once.
+			for (int y = 10; y <= 20; y++) {
+				w.setTile(13, y, 0, Tile.TileType.TYPE_FLOOR);
+			}
+			tick(w, 2);
+			assertGreater("with the wall gone the same predator is on the channel",
+					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
+		}
+	}
+
+	/**
+	 * The three clocks, counted. Over 64 ticks a body with nothing in range
+	 * takes a full pass about every 16, one with company and no danger about
+	 * every 4, and one with a predator in range every tick. The counts are the
+	 * saving the cadence exists for, and the ceilings are the latency it costs.
+	 */
+	static class ACalmBodySensesOnTheClock extends Scenario {
+		@Override
+		public void run() {
+			seed(63);
+			World w = room(60, 40);
+			Genome g = new Genome();
+			g.losRange = 8;
+			Mind still = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			};
+			TestNPC alone = TestNPC.minded(8.5, 8.5, 0, g, still);
+			TestNPC company = TestNPC.minded(30.5, 8.5, 0, g, still);
+			TestNPC kin = TestNPC.inert(33.5, 8.5, 0);
+			TestNPC endangered = TestNPC.minded(8.5, 30.5, 0, g, still);
+			Genome pg = new Genome();
+			pg.losRange = 8;
+			pg.speed = 0;
+			TestNPC hunter = TestNPC.mindedPredator(13.5, 30.5, 0, pg);
+			for (TestNPC b : new TestNPC[] { alone, company, kin, endangered, hunter }) {
+				w.spawnEntity(b);
+			}
+			w.think();
+			int a0 = alone.fullSenses, c0 = company.fullSenses, e0 = endangered.fullSenses;
+			tick(w, 64);
+			int a = alone.fullSenses - a0, c = company.fullSenses - c0, e = endangered.fullSenses - e0;
+			assertEquals("alone: on the idle clock", 2, alone.senseTier());
+			assertTrue("alone: about one pass in sixteen ticks (" + a + ")", a >= 3 && a <= 6);
+			assertEquals("company: on the calm clock", 1, company.senseTier());
+			assertTrue("company: about one pass in four ticks (" + c + ")", c >= 14 && c <= 18);
+			assertEquals("endangered: urgent", 0, endangered.senseTier());
+			assertTrue("endangered: a pass every tick (" + e + ")", e >= 62);
+		}
+	}
+
+	/**
+	 * What is held between passes is a point in the world, read off the
+	 * current pose -- so a body that turns does not carry a stale bearing
+	 * round with it. Kin due east reads as dead ahead facing east and as
+	 * behind facing west, whether or not this tick took a pass.
+	 */
+	static class HeldSightTurnsWithTheBody extends Scenario {
+		@Override
+		public void run() {
+			seed(64);
+			World w = room(20, 20);
+			Genome g = new Genome();
+			g.losRange = 10;
+			TestNPC body = TestNPC.minded(6.5, 10.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			}).withHeading(0);
+			Genome kg = g.copy();
+			TestNPC kin = TestNPC.minded(10.5, 10.5, 0, kg, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			});
+			w.spawnEntity(body);
+			w.spawnEntity(kin);
+			w.think();
+			tick(w, 3);
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			body.senseInto(s);
+			assertLess("facing east, kin due east is dead ahead", Math.abs(s[AgentIO.S_KIN_BEARING]), 0.05);
+			assertGreater("and near", s[AgentIO.S_KIN_PROX], 0);
+			body.withHeading(Math.PI);
+			body.senseInto(s);
+			assertGreater("facing west, the same kin is behind", Math.abs(s[AgentIO.S_KIN_BEARING]), 0.95);
+		}
+	}
+
+	/**
+	 * The clock is a function of the tick and the id and nothing else, so two
+	 * runs of the same world take their passes on the same ticks and see the
+	 * same things: the cadence costs no determinism.
+	 */
+	static class TheSenseClockReplays extends Scenario {
+		private double[][] runOnce(int[] passes) {
+			seed(65);
+			World w = room(40, 40);
+			Genome g = new Genome();
+			g.losRange = 10;
+			TestNPC[] bodies = new TestNPC[6];
+			for (int i = 0; i < bodies.length; i++) {
+				bodies[i] = TestNPC.mindedForager(8.5 + 4 * i, 8.5 + 3 * (i % 2), 0, g.copy());
+				w.spawnEntity(bodies[i]);
+			}
+			w.think();
+			tick(w, 120);
+			double[][] out = new double[bodies.length][];
+			for (int i = 0; i < bodies.length; i++) {
+				out[i] = bodies[i].sensorSnapshot();
+				passes[i] = bodies[i].fullSenses;
+			}
+			return out;
+		}
+
+		@Override
+		public void run() {
+			int[] p1 = new int[6], p2 = new int[6];
+			double[][] a = runOnce(p1), b = runOnce(p2);
+			assertTrue("the passes fall on the same ticks", java.util.Arrays.equals(p1, p2));
+			for (int i = 0; i < a.length; i++) {
+				assertTrue("and body " + i + " senses the same things",
+						java.util.Arrays.equals(a[i], b[i]));
+			}
+			int total = 0;
+			for (int n : p1) {
+				total += n;
+			}
+			assertLess("and a calm herd spent far fewer than one pass a tick each (" + total + ")",
+					total, 6 * 121 / 2);
+		}
+	}
+
+
 	/**
 	 * The surface floras are painted from ramps, and the fern is lit from the
 	 * north.
@@ -15953,6 +16156,11 @@ public class SimTests {
 				new TheMushroomIsPaintedFromRamps(),
 				new TheMeadowWearsFourFloras(),
 				new NearScansAreTheCensusScansCut(),
+				new AThreatIsSensedTheTickItArrives(),
+				new AThreatBehindAWallIsUrgentButUnseen(),
+				new ACalmBodySensesOnTheClock(),
+				new HeldSightTurnsWithTheBody(),
+				new TheSenseClockReplays(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
