@@ -787,6 +787,13 @@ public final class ServerTests {
 		// this. The organic ones are still swept and counted on top of it.
 		host.runner().world().spawnEntity(
 				new net.hedinger.prototype.entities.Sound(4.5, 4.5, 0));
+		// And one in a body's voice, which the inspector names; the plain one
+		// above, made by nobody, must name no one.
+		net.hedinger.prototype.entities.Genome singer = new net.hedinger.prototype.entities.Genome();
+		singer.clade = net.hedinger.prototype.entities.Genome.Clade.PREDATOR;
+		host.runner().world().spawnEntity(new net.hedinger.prototype.entities.Sound(
+				5.5, 4.5, 0, 5, net.hedinger.prototype.entities.Sound.PLAIN, singer));
+		boolean voiceOk = true;
 		for (int t = 0; t < 600; t++) {
 			host.runner().world().think();
 			for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
@@ -805,6 +812,12 @@ public final class ServerTests {
 					sounds++;
 					soundOk &= "sound".equals(d.get("kind")) && !d.containsKey("diedOf")
 							&& d.get("subtype") instanceof String;
+					net.hedinger.prototype.entities.Genome v =
+							((net.hedinger.prototype.entities.Sound) e).getVoice();
+					voiceOk &= v == null ? !d.containsKey("species")
+							: v.clade.wireName().equals(d.get("clade"))
+									&& net.hedinger.prototype.entities.Species.of(v).fullName()
+											.equals(d.get("species"));
 				}
 				if (d.containsKey("diedOf")) {
 					corpses++;
@@ -822,6 +835,7 @@ public final class ServerTests {
 		check("every entity tells the inspector what it is"
 				+ (firstKindless == null ? "" : " (first: #" + firstKindless + ")"), kindOk);
 		check("a sound is a sound, names its event, and dies of nothing", soundOk);
+		check("a voiced sound names whose voice it is, and a plain one no one", voiceOk);
 		check("only a body has a cause of death"
 				+ (firstWrongDeath == null ? "" : " (saw: " + firstWrongDeath + ")"), deathOk);
 		check("and there were deaths to check that against", corpses >= 0);

@@ -28,6 +28,11 @@ public class Sound extends Entity {
 
 	private int code = 0;
 
+	/** Whose voice this is: the genome of the body that made the sound, or
+	 *  null when no body made it. A listener hears it against its own genome
+	 *  — the clade, and the markers — so it knows who, as well as what. */
+	private Genome voice;
+
 	public Sound(double x, double y, double z) {
 		this(x, y, z, DEFAULT_RADIUS);
 	}
@@ -49,9 +54,17 @@ public class Sound extends Entity {
 	/** A typed sound: the same event with {@link #PLAIN}/{@link #FIGHT}/
 	 *  {@link #KILL} attached, so a listener knows WHAT it heard. */
 	public Sound(double x, double y, double z, double radius, int code) {
+		this(x, y, z, radius, code, null);
+	}
+
+	/** A typed sound in a body's voice: {@code voice} is the genome of whoever
+	 *  made it, or null for a sound no body made. Held by reference — a genome
+	 *  is fixed for the life of its body — so a voice costs nothing to carry. */
+	public Sound(double x, double y, double z, double radius, int code, Genome voice) {
 		super(x, y, z, 0.0); // direction-taking ctor: no RNG draw
 		this.radius = radius;
 		this.code = code;
+		this.voice = voice;
 		lifespan = TRAVEL_TICKS;
 		// Gone the moment it has been heard, like the other one-shot ephemeral:
 		// Bullet sets this to 0 too. It used to be 2048 -- a hundred times the
@@ -97,6 +110,11 @@ public class Sound extends Entity {
 	/** The event code — {@link #PLAIN}, {@link #FIGHT} or {@link #KILL}. */
 	public int getCode() {
 		return code;
+	}
+
+	/** The genome of the body that made this sound, or null if none did. */
+	public Genome getVoice() {
+		return voice;
 	}
 
 	/** How far along its travel this sound is, 0 (just made) .. 1 (reaching

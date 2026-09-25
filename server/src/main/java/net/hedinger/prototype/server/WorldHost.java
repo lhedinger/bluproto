@@ -694,6 +694,13 @@ final class WorldHost {
 				default -> "a noise";
 				});
 				d.put("earshot", round(snd.getRadius()));
+				// Whose voice, when a body made it: the clade and the species
+				// label, which is how a person reads the markers a listener
+				// hears as kinship. A sound no body made has neither.
+				if (snd.getVoice() != null) {
+					d.put("clade", snd.getVoice().clade.wireName());
+					d.put("species", net.hedinger.prototype.entities.Species.of(snd.getVoice()).fullName());
+				}
 				d.put("heard", e.isDead()); // broadcast once, then spent
 			} else if (e instanceof net.hedinger.prototype.entities.NPC n) {
 				d.put("kind", "npc." + n.getNpcTypeName().toLowerCase());

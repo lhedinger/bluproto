@@ -204,7 +204,20 @@ public final class AgentIO {
 	 *  The one channel that tells a host something is on it, so a mind can
 	 *  buck ({@link #A_STRUGGLE}) when it is ridden instead of never, or always. */
 	public static final int S_RIDDEN = 41;
-	public static final int NUM_SENSORS = 42;
+	/** WHOSE voice the heard sound was, by clade: {@code +1} my own kind,
+	 *  {@code -1} another, 0 when nothing is ringing or no body made it. The
+	 *  categorical half of a voice, read exactly as {@link #S_NEAR_CLADE}
+	 *  reads a body in sight: a scream is the quarry's, so this is how a grazer
+	 *  tells one of its own going down from a hunter's quarry of another kind. */
+	public static final int S_SOUND_CLADE = 42;
+	/** How close the heard voice's markers are to this body's own, 1
+	 *  identical .. 0 as far apart as markers go — the species axis within a
+	 *  clade, read as {@link #S_NEAR_SIM} reads it by sight. 0 when nothing is
+	 *  ringing or no body made the sound. Raw, not gated on clade: a voice of
+	 *  another kind wearing near markers reads high here and -1 on
+	 *  {@link #S_SOUND_CLADE}, and telling the two apart is the mind's job. */
+	public static final int S_SOUND_KIN = 43;
+	public static final int NUM_SENSORS = 44;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -215,7 +228,7 @@ public final class AgentIO {
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
-			"sound_kind", "ridden" };
+			"sound_kind", "ridden", "sound_clade", "sound_kin" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */

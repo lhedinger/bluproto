@@ -171,6 +171,7 @@ public class TestNPC extends NPC {
 	 *  a body with a mind has anything to do with it. */
 	private double heardX, heardY;
 	private int heardCode;
+	private net.hedinger.prototype.entities.Genome heardVoice;
 	private long heardAt = Long.MIN_VALUE;
 
 	@Unit("tiles")
@@ -1467,6 +1468,7 @@ public class TestNPC extends NPC {
 		heardX = sound.getX();
 		heardY = sound.getY();
 		heardCode = sound.getCode();
+		heardVoice = sound.getVoice();
 		heardAt = getWorld() == null ? 0 : getWorld().getTick();
 	}
 
@@ -1596,7 +1598,8 @@ public class TestNPC extends NPC {
 					prey.getX(), prey.getY(), prey.getLvl(),
 					KILL_LOUDNESS * prey.leanMass(),
 					fatal ? net.hedinger.prototype.entities.Sound.KILL
-							: net.hedinger.prototype.entities.Sound.FIGHT));
+							: net.hedinger.prototype.entities.Sound.FIGHT,
+					prey.getGenome())); // the quarry's voice: it is the one screaming
 		}
 	}
 
@@ -2265,12 +2268,20 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_SOUND_KIND] =
 					heardCode == net.hedinger.prototype.entities.Sound.KILL ? 1.0
 					: heardCode == net.hedinger.prototype.entities.Sound.FIGHT ? -1.0 : 0.0;
+			// WHO: the voice against this body's own genome, on the two axes
+			// sight reads a neighbour on -- clade categorically, markers as the
+			// species distance within it. A sound no body made has no voice.
+			boolean voiced = heardVoice != null && genome != null;
+			s[AgentIO.S_SOUND_CLADE] = !voiced ? 0 : heardVoice.clade == genome.clade ? 1 : -1;
+			s[AgentIO.S_SOUND_KIN] = voiced ? genome.similarityTo(heardVoice) : 0;
 		} else {
 			s[AgentIO.S_SOUND_PROX] = 0;
 			s[AgentIO.S_SOUND_BEARING] = 0;
 			s[AgentIO.S_SOUND_FWD] = 0;
 			s[AgentIO.S_SOUND_SIDE] = 0;
 			s[AgentIO.S_SOUND_KIND] = 0;
+			s[AgentIO.S_SOUND_CLADE] = 0;
+			s[AgentIO.S_SOUND_KIN] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
