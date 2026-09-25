@@ -158,7 +158,11 @@ public class Genome {
 	public Clade clade = Genome.Clade.HERBIVORE;
 
 	// --- dispositions (interpretable response weights, >= 0) ---
-	public double predatory = 0; // attack smaller & dissimilar
+	/** Attack smaller and dissimilar bodies (a mindless body's reaction; the
+	 *  gain on a mind's prey channel). For a PARASITE it is also the standard it
+	 *  holds a host to: the less predatory, the bigger than itself a body has to
+	 *  be before it will ride it -- see {@code TestNPC.PARA_PICKINESS}. */
+	public double predatory = 0;
 	public double xenophobia = 0; // flee bigger & dissimilar
 	public double gregariousness = 0; // approach the similar
 	public double boldness = 0; // reduces flight

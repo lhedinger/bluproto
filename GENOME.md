@@ -308,6 +308,13 @@ pace — 15 days for a default genome, 12 to 25 days across a founder draw. What
 a body actually gets is that scaled by the two things that set the length of a
 life:
 
+- **A parasite holds its host to a size line its predatory drive sets.** It
+  rides only a body bigger than itself by `1 + PARA_PICKINESS · (1 − predatory)`:
+  twice its size at no predatory drive, anything bigger at all at 1. A big host
+  pays more per point of health drunk and outlasts the drain; any host is easier
+  to find. The host scan and the latch apply the same line, so what a parasite
+  goes looking for and what it will climb onto agree; a hitchhiker, after a lift
+  rather than a meal, still climbs on anything bigger.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on
