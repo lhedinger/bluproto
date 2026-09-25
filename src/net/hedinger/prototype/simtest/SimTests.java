@@ -2484,6 +2484,76 @@ public class SimTests {
 
 
 	/**
+	 * The pheromone field is the clouds, rasterised: at every tile the field
+	 * reads the sum of every cloud reaching the tile's centre, and homing finds
+	 * the same strongest cloud the full walk finds -- on a level carrying
+	 * thousands of clouds, where a sniff used to be a walk over all of them.
+	 * The one thing the raster changes is that a body reads its tile's centre
+	 * rather than its own point, which is the trade the field is for.
+	 */
+	static class ThePheromoneFieldIsTheCloudsRasterised extends Scenario {
+		@Override
+		public void run() {
+			seed(66);
+			World w = room(60, 40);
+			java.util.Random rnd = new java.util.Random(3); // the test's own dice
+			for (int i = 0; i < 3000; i++) {
+				w.depositPheromone(1 + rnd.nextDouble() * 58, 1 + rnd.nextDouble() * 38, 0,
+						0.5 + rnd.nextDouble() * 20);
+				if (i % 200 == 199) {
+					tick(w, 1); // land the spawn queue so later deposits can merge into these
+				}
+			}
+			tick(w, 1);
+			java.util.List<net.hedinger.prototype.engine.PheromoneCloud> clouds = new java.util.ArrayList<>();
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.engine.PheromoneCloud c && !c.isRemoved()) {
+					clouds.add(c);
+				}
+			}
+			assertGreater("the level carries many clouds (" + clouds.size() + ")", clouds.size(), 300);
+			int lit = 0;
+			for (int q = 0; q < 400; q++) {
+				double x = rnd.nextDouble() * 60, y = rnd.nextDouble() * 40;
+				double cx = Math.floor(x) + 0.5, cy = Math.floor(y) + 0.5;
+				double brute = 0;
+				for (var c : clouds) {
+					brute += c.concentrationAt(cx, cy);
+				}
+				double field = w.pheromoneAt(x, y, 0);
+				assertLess("the field at (" + x + "," + y + ") is the clouds' sum at the tile centre",
+						Math.abs(field - brute), 1e-9);
+				if (field > 0) {
+					lit++;
+				}
+				double radius = 3 + rnd.nextInt(6);
+				net.hedinger.prototype.engine.PheromoneCloud best = null;
+				double bestStr = 0;
+				for (var c : clouds) {
+					double dx = c.getX() - x, dy = c.getY() - y;
+					if (dx * dx + dy * dy <= radius * radius && c.getStrength() > bestStr) {
+						bestStr = c.getStrength();
+						best = c;
+					}
+				}
+				double dir = w.pheromoneDirection(x, y, 0, radius);
+				if (best == null) {
+					assertTrue("nothing in range: no heading", Double.isNaN(dir));
+				} else {
+					double bx = best.getX() - x, by = best.getY() - y;
+					if (bx * bx + by * by < 0.36) {
+						assertTrue("at the nest: no heading", Double.isNaN(dir));
+					} else {
+						assertLess("homing points at the strongest cloud the full walk finds",
+								Math.abs(dir - Math.atan2(by, bx)), 1e-12);
+					}
+				}
+			}
+			assertGreater("and the comparison saw a lit field, not zeros", lit, 100);
+		}
+	}
+
+	/**
 	 * The surface floras are painted from ramps, and the fern is lit from the
 	 * north.
 	 *
@@ -16161,6 +16231,7 @@ public class SimTests {
 				new ACalmBodySensesOnTheClock(),
 				new HeldSightTurnsWithTheBody(),
 				new TheSenseClockReplays(),
+				new ThePheromoneFieldIsTheCloudsRasterised(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
