@@ -14,6 +14,9 @@ public class Sound extends Entity {
 	 * is a death, which means a carcass now exists where the scream was.
 	 */
 	public static final int PLAIN = 0, FIGHT = 1, KILL = 2;
+	/** A sound a body made on purpose: a call ({@code AgentIO.A_CALL}), which
+	 *  carries its type in {@link #getCall()}. Appended, like every code. */
+	public static final int CALL = 3;
 
 	/** Earshot of a plain sound, in tiles. */
 	public static final double DEFAULT_RADIUS = 5;
@@ -32,6 +35,13 @@ public class Sound extends Entity {
 	 *  null when no body made it. A listener hears it against its own genome
 	 *  — the clade, and the markers — so it knows who, as well as what. */
 	private Genome voice;
+
+	/** Which call this is, 1..{@code AgentIO.CALL_TYPES}; 0 when it is not one. */
+	private int call;
+
+	/** The body that called, which does not hear its own call; null for a
+	 *  sound that is not a call. */
+	private Entity caller;
 
 	public Sound(double x, double y, double z) {
 		this(x, y, z, DEFAULT_RADIUS);
@@ -93,8 +103,9 @@ public class Sound extends Entity {
 				for (Entity e : entities.values()) {
 					// Everything in earshot is told, except other sounds: the radial
 					// query is untyped (it has to be, so nothing is hidden by a wall)
-					// and a sound has no use for what it can hear.
-					if (e != null && !(e instanceof Sound)) {
+					// and a sound has no use for what it can hear. Nor is a caller
+					// told of its own call.
+					if (e != null && !(e instanceof Sound) && e != caller) {
 						e.hear(this);
 					}
 				}
@@ -110,6 +121,24 @@ public class Sound extends Entity {
 	/** The event code — {@link #PLAIN}, {@link #FIGHT} or {@link #KILL}. */
 	public int getCode() {
 		return code;
+	}
+
+	/**
+	 * A call: {@code caller} makes a sound of type {@code type} in its own voice.
+	 * Everything in earshot hears it but the caller — a body has no use for news
+	 * of its own call, and hearing it would overwrite whatever it last heard
+	 * with itself.
+	 */
+	public static Sound call(Entity caller, double radius, int type, Genome voice) {
+		Sound s = new Sound(caller.getX(), caller.getY(), caller.getLvl(), radius, CALL, voice);
+		s.call = type;
+		s.caller = caller;
+		return s;
+	}
+
+	/** The call type, 1..{@code AgentIO.CALL_TYPES}, or 0 when this is not a call. */
+	public int getCall() {
+		return call;
 	}
 
 	/** The genome of the body that made this sound, or null if none did. */

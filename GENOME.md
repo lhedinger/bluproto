@@ -95,6 +95,18 @@ you are, wander off, come back. **The coordinate lives in the body**, not in the
 mind's registers — necessarily so, because the instruction set has no divide and
 no `atan2`, so a mind holding two numbers could never turn them into a heading.
 
+`A_CALL` makes a sound on purpose, in the caller's own voice: a call carries the
+caller's clade and markers, as every sound a body makes does (a scream carries
+the quarry's), and its magnitude names one of four calls on the same bands —
+`0.25`, `0.5`, `1`, `2` or above; `0.1` and below are silence. A listener hears
+*which* call on `sound_call` and *whose* on `sound_clade` (+1 its own kind, −1
+another) and `sound_kin` (marker similarity to its own). What a call means is not
+decided anywhere: the four types are signals and nothing more, and whether one
+comes to mean food, company or danger is for the lineages that make and hear
+them. It is priced — glycogen per call in proportion to the body, one call per
+period however long the actuator is held, none from a collapsed body — and the
+larger price is the audience, because hunters hear it too.
+
 Note what this does to the economy above: an intent packs more behaviour into one
 instruction than `A_TURN` does, so a seeking lineage buys capability without
 paying the usual reaction-time price for it. In practice the seeds came out about

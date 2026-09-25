@@ -691,9 +691,13 @@ final class WorldHost {
 				d.put("subtype", switch (snd.getCode()) {
 				case net.hedinger.prototype.entities.Sound.KILL -> "a death";
 				case net.hedinger.prototype.entities.Sound.FIGHT -> "a fight";
+				case net.hedinger.prototype.entities.Sound.CALL -> "a call";
 				default -> "a noise";
 				});
 				d.put("earshot", round(snd.getRadius()));
+				if (snd.getCall() > 0) {
+					d.put("call", snd.getCall()); // which of the calls, 1..CALL_TYPES
+				}
 				// Whose voice, when a body made it: the clade and the species
 				// label, which is how a person reads the markers a listener
 				// hears as kinship. A sound no body made has neither.

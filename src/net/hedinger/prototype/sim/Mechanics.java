@@ -656,7 +656,11 @@ public final class Mechanics {
 								+ "clade, the ear's version of what sight reads as "
 								+ "similarity. Not gated on clade: a stranger wearing near "
 								+ "markers reads high here and −1 above, and telling the two "
-								+ "apart is the mind's job.")),
+								+ "apart is the mind's job."),
+						sense(AgentIO.S_SOUND_CALL, "WHICH call it heard, when the sound "
+								+ "was one: the type over " + AgentIO.CALL_TYPES + ", so the "
+								+ "calls read 0.25, 0.5, 0.75 and 1. 0 for a scream, which "
+								+ "says what it is on the kind channel instead.")),
 				group("Places worth going",
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
@@ -746,7 +750,20 @@ public final class Mechanics {
 								+ "coordinate anyway, having neither divide nor atan2."),
 						act(AgentIO.A_INTERACT, "Operate whatever fixture it is standing at. "
 								+ "Standing on a button does nothing by itself; pressing it is a "
-								+ "choice, which is the entire point.")),
+								+ "choice, which is the entire point."),
+						act(AgentIO.A_CALL, "Make a sound, in its own voice: the call "
+								+ "carries its clade and markers as every sound a body makes "
+								+ "does, and the magnitude names which of "
+								+ AgentIO.CALL_TYPES + " calls — 0.25, 0.5, 1 and 2 or "
+								+ "more; below 0.175 is silence. What a call means is not "
+								+ "decided: four signals, and the lineages that make and "
+								+ "hear them settle the rest. Each costs "
+								+ num(TestNPC.CALL_COST) + " glycogen per unit of lean "
+								+ "mass, a held call sounds once every "
+								+ TestNPC.CALL_PERIOD + " ticks, it carries "
+								+ num(TestNPC.CALL_LOUDNESS) + " tiles per unit of lean "
+								+ "mass, a collapsed body cannot call, and the caller does "
+								+ "not hear itself. Hunters hear it too.")),
 				group("Retired, and inert",
 						act(AgentIO.A_VERTICAL, "There is no vertical intent to express: a ramp "
 								+ "is floor that spans two levels, so you change level by "

@@ -150,14 +150,18 @@ public final class MlpBrain {
 	public static MlpBrain fromWeights(double[] all) {
 		MlpBrain m = sized();
 		int need = m.w1.length + m.b1.length + m.w2.length + m.b2.length;
-		// Sensors are only ever APPENDED, so weights encoded when a mind had
-		// fewer of them are the same net with the newer inputs missing from the
-		// end of each hidden row. Read them as a mind born blind to those senses
-		// -- weight 0 -- rather than refusing a genome that was valid when it was
-		// written (an injected founder, a recorded spawn replayed).
-		int missing = (need - all.length) % HIDDEN == 0 ? (need - all.length) / HIDDEN : -1;
-		if (missing > 0 && missing < AgentIO.NUM_SENSORS) {
-			all = widen(all, AgentIO.NUM_SENSORS - missing, AgentIO.NUM_SENSORS);
+		// Sensors and actuators are only ever APPENDED, so weights encoded when
+		// a mind had fewer of either are the same net with the newer inputs
+		// missing from the end of each hidden row and the newer outputs missing
+		// from the end of the output layer. Read them as a mind born blind to
+		// those senses and mute on those acts -- weight 0 -- rather than refusing
+		// a genome that was valid when it was written (an injected founder, a
+		// recorded spawn replayed).
+		if (all.length < need) {
+			int[] old = shapeOf(all.length);
+			if (old != null) {
+				all = widen(all, old[0], old[1]);
+			}
 		}
 		if (all.length != need) {
 			throw new IllegalArgumentException("mlp weight count " + all.length
@@ -171,20 +175,37 @@ public final class MlpBrain {
 		return m;
 	}
 
-	/** The weight vector of a net with {@code oldIn} inputs, re-laid for
-	 *  {@code newIn}: each hidden row keeps its weights and gains zeros for the
-	 *  inputs it never had; everything after the first layer is unchanged. */
-	private static double[] widen(double[] all, int oldIn, int newIn) {
-		double[] out = new double[all.length + HIDDEN * (newIn - oldIn)];
+	/** The input and output counts of an older net whose weight vector has
+	 *  {@code length} entries, or null if no such net fits. Outputs are tried
+	 *  from the live count down, so the newest shape that fits wins. */
+	private static int[] shapeOf(int length) {
+		for (int out = AgentIO.NUM_ACT; out >= 1; out--) {
+			int rest = length - HIDDEN - out * (HIDDEN + 1); // w1 is what is left
+			if (rest > 0 && rest % HIDDEN == 0 && rest / HIDDEN <= AgentIO.NUM_SENSORS) {
+				return new int[] { rest / HIDDEN, out };
+			}
+		}
+		return null;
+	}
+
+	/** The weight vector of a net with {@code oldIn} inputs and {@code oldOut}
+	 *  outputs, re-laid for the live topology: each hidden row keeps its weights
+	 *  and gains zeros for the inputs it never had, and the output layer keeps
+	 *  its rows and gains zero rows, and zero biases, for the acts it never had. */
+	private static double[] widen(double[] all, int oldIn, int oldOut) {
+		int in = AgentIO.NUM_SENSORS, out = AgentIO.NUM_ACT;
+		double[] w = new double[HIDDEN * in + HIDDEN + out * HIDDEN + out];
 		int k = 0, j = 0;
 		for (int h = 0; h < HIDDEN; h++) {
-			for (int i = 0; i < oldIn; i++) {
-				out[j++] = all[k++];
-			}
-			j += newIn - oldIn; // the senses this row never had: weight 0
+			System.arraycopy(all, k, w, j, oldIn);
+			k += oldIn;
+			j += in; // the senses this row never had: weight 0
 		}
-		System.arraycopy(all, k, out, j, all.length - k);
-		return out;
+		System.arraycopy(all, k, w, j, HIDDEN + oldOut * HIDDEN); // b1, then w2's old rows
+		k += HIDDEN + oldOut * HIDDEN;
+		j += HIDDEN + out * HIDDEN; // the acts it never had: rows of 0
+		System.arraycopy(all, k, w, j, oldOut); // b2
+		return w;
 	}
 
 	/** Weight count — a fixed cost, for the inspector and any capability pricing. */
