@@ -150,6 +150,15 @@ public final class MlpBrain {
 	public static MlpBrain fromWeights(double[] all) {
 		MlpBrain m = sized();
 		int need = m.w1.length + m.b1.length + m.w2.length + m.b2.length;
+		// Sensors are only ever APPENDED, so weights encoded when a mind had
+		// fewer of them are the same net with the newer inputs missing from the
+		// end of each hidden row. Read them as a mind born blind to those senses
+		// -- weight 0 -- rather than refusing a genome that was valid when it was
+		// written (an injected founder, a recorded spawn replayed).
+		int missing = (need - all.length) % HIDDEN == 0 ? (need - all.length) / HIDDEN : -1;
+		if (missing > 0 && missing < AgentIO.NUM_SENSORS) {
+			all = widen(all, AgentIO.NUM_SENSORS - missing, AgentIO.NUM_SENSORS);
+		}
 		if (all.length != need) {
 			throw new IllegalArgumentException("mlp weight count " + all.length
 					+ " != topology " + need);
@@ -160,6 +169,22 @@ public final class MlpBrain {
 		k = take(all, k, m.w2);
 		take(all, k, m.b2);
 		return m;
+	}
+
+	/** The weight vector of a net with {@code oldIn} inputs, re-laid for
+	 *  {@code newIn}: each hidden row keeps its weights and gains zeros for the
+	 *  inputs it never had; everything after the first layer is unchanged. */
+	private static double[] widen(double[] all, int oldIn, int newIn) {
+		double[] out = new double[all.length + HIDDEN * (newIn - oldIn)];
+		int k = 0, j = 0;
+		for (int h = 0; h < HIDDEN; h++) {
+			for (int i = 0; i < oldIn; i++) {
+				out[j++] = all[k++];
+			}
+			j += newIn - oldIn; // the senses this row never had: weight 0
+		}
+		System.arraycopy(all, k, out, j, all.length - k);
+		return out;
 	}
 
 	/** Weight count — a fixed cost, for the inspector and any capability pricing. */

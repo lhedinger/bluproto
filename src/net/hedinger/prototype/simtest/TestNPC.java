@@ -2530,6 +2530,11 @@ public class TestNPC extends NPC {
 
 		s[AgentIO.S_HEALTH] = clampUnit(getHealth() / 100.0);
 		s[AgentIO.S_CARRIED] = isGrabbed() ? 1.0 : (getAttachTarget() != null ? -1.0 : 0.0);
+		// What rides this body: its carried load less any captive it is holding,
+		// against its own size. Without this a host could feel its health and
+		// glycogen falling and had nothing to tie either to a rider.
+		double riding = getCarriedLoad() - (grabbing != null ? grabbing.getSize() : 0);
+		s[AgentIO.S_RIDDEN] = getSize() > 0 ? clampUnit(riding / getSize()) : 0;
 
 		// Obstacle whiskers 45 deg off each shoulder, and a drowning/falling hazard
 		// dead ahead (non-flyer only): the sensed half of the survival reflex.
