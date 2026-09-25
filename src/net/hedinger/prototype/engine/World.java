@@ -95,12 +95,18 @@ public class World {
 		private final java.util.List<java.util.List<PheromoneCloud>> clouds = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<net.hedinger.prototype.entities.Switch>> switches =
 				new java.util.ArrayList<>();
-		private final java.util.List<Buckets> creatureBuckets = new java.util.ArrayList<>();
-		private final java.util.List<Buckets> predatorBuckets = new java.util.ArrayList<>();
-		private final java.util.List<Buckets> preyBuckets = new java.util.ArrayList<>();
-		private final java.util.List<Buckets> corpseBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<NPC>> creatureBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<NPC>> predatorBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<NPC>> preyBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<NPC>> corpseBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<PheromoneCloud>> cloudBuckets = new java.util.ArrayList<>();
+		/** The pheromone field, one concentration per tile per level. */
+		private final java.util.List<double[]> phero = new java.util.ArrayList<>();
+		private final int cols, rows;
 
-		private Census(int levels) {
+		private Census(int levels, int cols, int rows) {
+			this.cols = cols;
+			this.rows = rows;
 			for (int z = 0; z < levels; z++) {
 				creatures.add(new java.util.ArrayList<>());
 				predators.add(new java.util.ArrayList<>());
@@ -112,7 +118,7 @@ public class World {
 		}
 
 		static Census build(World w) {
-			Census c = new Census(w.getLevels());
+			Census c = new Census(w.getLevels(), w.cols, w.rows);
 			for (Entity e : w.entities.values()) {
 				if (e == null || e.isRemoved()) {
 					continue;
@@ -145,10 +151,12 @@ public class World {
 				}
 			}
 			for (int z = 0; z < c.creatures.size(); z++) {
-				c.creatureBuckets.add(new Buckets(c.creatures.get(z), w.cols, w.rows));
-				c.predatorBuckets.add(new Buckets(c.predators.get(z), w.cols, w.rows));
-				c.preyBuckets.add(new Buckets(c.prey.get(z), w.cols, w.rows));
-				c.corpseBuckets.add(new Buckets(c.corpses.get(z), w.cols, w.rows));
+				c.creatureBuckets.add(new Buckets<>(c.creatures.get(z), w.cols, w.rows));
+				c.predatorBuckets.add(new Buckets<>(c.predators.get(z), w.cols, w.rows));
+				c.preyBuckets.add(new Buckets<>(c.prey.get(z), w.cols, w.rows));
+				c.corpseBuckets.add(new Buckets<>(c.corpses.get(z), w.cols, w.rows));
+				c.cloudBuckets.add(new Buckets<>(c.clouds.get(z), w.cols, w.rows));
+				c.phero.add(rasterise(c.clouds.get(z), w.cols, w.rows));
 			}
 			return c;
 		}
@@ -173,6 +181,53 @@ public class World {
 		/** The pheromone clouds on the level, in entity order. */
 		public java.util.List<PheromoneCloud> clouds(int z) {
 			return clouds.get(z);
+		}
+
+		/** The clouds in the cells within r, in entity order (a superset). */
+		public java.util.List<PheromoneCloud> cloudsNear(int z, double x, double y, double r) {
+			return cloudBuckets.get(z).near(x, y, r);
+		}
+
+		// ---- the pheromone field ----------------------------------------------
+		//
+		// Pheromone is sensed as a FIELD: one concentration per tile, the sum at
+		// the tile's centre of every cloud whose radius reaches it, rasterised
+		// once per census. A cloud is a few tiles across, so stamping the whole
+		// level costs a few dozen tile writes per cloud however many bodies
+		// then sniff it, and a body's sniff is one array read whatever the
+		// cloud count -- where it used to sum every cloud on the level, per
+		// body, per tick. The price is precision: a body reads its tile's
+		// centre, not its own point, so within a tile the field is flat. Many
+		// clouds may cover one tile; they add, as they always did.
+
+		static double[] rasterise(java.util.List<PheromoneCloud> clouds, int cols, int rows) {
+			double[] f = new double[cols * rows];
+			for (PheromoneCloud c : clouds) {
+				if (c.isRemoved()) {
+					continue;
+				}
+				double r = c.getSize();
+				int x0 = Math.max(0, (int) Math.floor(c.getX() - r)), x1 = Math.min(cols - 1, (int) Math.floor(c.getX() + r));
+				int y0 = Math.max(0, (int) Math.floor(c.getY() - r)), y1 = Math.min(rows - 1, (int) Math.floor(c.getY() + r));
+				for (int ty = y0; ty <= y1; ty++) {
+					for (int tx = x0; tx <= x1; tx++) {
+						double v = c.concentrationAt(tx + 0.5, ty + 0.5);
+						if (v > 0) {
+							f[ty * cols + tx] += v;
+						}
+					}
+				}
+			}
+			return f;
+		}
+
+		/** The field's reading at the tile under a world point; 0 off the map. */
+		public double pheromoneAt(int z, double x, double y) {
+			int tx = (int) Math.floor(x), ty = (int) Math.floor(y);
+			if (z < 0 || z >= phero.size() || tx < 0 || ty < 0 || tx >= cols || ty >= rows) {
+				return 0;
+			}
+			return phero.get(z)[ty * cols + tx];
 		}
 
 		// ---- the near scans ---------------------------------------------------
@@ -235,16 +290,16 @@ public class World {
 	 * cells; sorting a few dozen ints is nothing next to the walk it replaces.
 	 * Rebuilt with the census every tick, O(bodies).
 	 */
-	static final class Buckets {
+	static final class Buckets<T extends Entity> {
 		/** Cell side in tiles. Sense ranges run from 3 to 24; at 8 a long look
 		 *  touches at most 7x7 cells and a short one usually 1x1 or 2x2. */
 		static final int CELL = 8;
-		private final java.util.List<NPC> all;
+		private final java.util.List<T> all;
 		private final int cw, ch;
 		private final int[] start; // start[c]..start[c+1] is cell c's run in idx
 		private final int[] idx;   // list indices, ascending within a cell
 
-		Buckets(java.util.List<NPC> all, int cols, int rows) {
+		Buckets(java.util.List<T> all, int cols, int rows) {
 			this.all = all;
 			cw = Math.max(1, (cols + CELL - 1) / CELL);
 			ch = Math.max(1, (rows + CELL - 1) / CELL);
@@ -252,7 +307,7 @@ public class World {
 			int[] cellOf = new int[n];
 			start = new int[cw * ch + 1];
 			for (int i = 0; i < n; i++) {
-				NPC b = all.get(i);
+				T b = all.get(i);
 				cellOf[i] = cell(b.getX(), b.getY());
 				start[cellOf[i] + 1]++;
 			}
@@ -296,7 +351,7 @@ public class World {
 			return count;
 		}
 
-		java.util.List<NPC> near(double x, double y, double r) {
+		java.util.List<T> near(double x, double y, double r) {
 			if (all.isEmpty()) {
 				return all;
 			}
@@ -322,7 +377,7 @@ public class World {
 				}
 			}
 			java.util.Arrays.sort(got);
-			java.util.ArrayList<NPC> out = new java.util.ArrayList<>(count);
+			java.util.ArrayList<T> out = new java.util.ArrayList<>(count);
 			for (int i : got) {
 				out.add(all.get(i));
 			}
@@ -379,16 +434,20 @@ public class World {
 				}
 			}
 			spawnQueue = new LinkedHashSet<Entity>();
-			// The census again, now that the queue has drained: a reader between
-			// ticks -- the viewer's pheromone field, a scenario that deposits and
-			// looks -- sees what the world holds, not what it held a tick ago. In
-			// the next tick this is exactly the census its start would build.
-			census = Census.build(this);
 		}
 
 		for (int z = 0; z < lvls; z++) {
 			levels[z].think(this);
 		}
+		// The census again, now the tick is over: a reader between ticks -- the
+		// viewer's pheromone field, a scenario that deposits and looks -- sees
+		// what the world holds, not what it held at the tick's start; the
+		// pheromone field in particular is stamped from the clouds AFTER they
+		// have decayed this tick, which is what the next tick's noses sniff. In
+		// the next tick this is exactly the census its start would build, and
+		// the start still builds one so a body killed or moved between ticks
+		// by a hand outside the world is counted where it now stands.
+		census = Census.build(this);
 	}
 
 	/**
@@ -575,12 +634,14 @@ public class World {
 	public void depositPheromone(double x, double y, int z, double amount) {
 		PheromoneCloud nearest = null;
 		double best = PheromoneCloud.MERGE_RADIUS * PheromoneCloud.MERGE_RADIUS;
-		for (Entity e : entities.values()) {
-			if (e instanceof PheromoneCloud && !e.isRemoved() && e.getLvl() == z) {
-				double dx = e.getX() - x, dy = e.getY() - y, d = dx * dx + dy * dy;
+		// The census's nearby clouds, in entity order: the same nearest with the
+		// same tie-break as walking every entity, without the walk.
+		for (PheromoneCloud c : census().cloudsNear(z, x, y, PheromoneCloud.MERGE_RADIUS)) {
+			if (!c.isRemoved()) {
+				double dx = c.getX() - x, dy = c.getY() - y, d = dx * dx + dy * dy;
 				if (d < best) {
 					best = d;
-					nearest = (PheromoneCloud) e;
+					nearest = c;
 				}
 			}
 		}
@@ -591,19 +652,12 @@ public class World {
 		}
 	}
 
-	/** Pheromone concentration sensed at a world point: the sum of every cloud on
-	 *  this level, each with its radial falloff. */
+	/** Pheromone concentration sensed at a world point: the field's reading at
+	 *  that tile (Census.rasterise) -- the sum of every cloud reaching the
+	 *  tile's centre, as of the last census. A deposit made this tick shows
+	 *  from the next tick's field. */
 	public double pheromoneAt(double x, double y, int z) {
-		// The census's clouds, in entity order -- the same sum in the same order
-		// as walking every entity, without the walk: this was called once per
-		// body per tick and iterated a thousand bodies to find a dozen clouds.
-		double sum = 0;
-		for (PheromoneCloud c : census().clouds(z)) {
-			if (!c.isRemoved()) {
-				sum += c.concentrationAt(x, y);
-			}
-		}
-		return sum;
+		return census().pheromoneAt(z, x, y);
 	}
 
 	/**
@@ -615,7 +669,7 @@ public class World {
 	public double pheromoneDirection(double x, double y, int z, double radius) {
 		PheromoneCloud best = null;
 		double bestStr = 0, rr = radius * radius;
-		for (PheromoneCloud c : census().clouds(z)) {
+		for (PheromoneCloud c : census().cloudsNear(z, x, y, radius)) {
 			if (!c.isRemoved()) {
 				double dx = c.getX() - x, dy = c.getY() - y;
 				if (dx * dx + dy * dy <= rr && c.getStrength() > bestStr) {
