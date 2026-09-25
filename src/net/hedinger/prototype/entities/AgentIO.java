@@ -217,7 +217,12 @@ public final class AgentIO {
 	 *  another kind wearing near markers reads high here and -1 on
 	 *  {@link #S_SOUND_CLADE}, and telling the two apart is the mind's job. */
 	public static final int S_SOUND_KIN = 43;
-	public static final int NUM_SENSORS = 44;
+	/** WHICH call was heard, when the sound was one: the call type over
+	 *  {@link #CALL_TYPES}, so the four calls read 0.25, 0.5, 0.75 and 1. 0 for
+	 *  a sound that was not a call — a scream says what it is on
+	 *  {@link #S_SOUND_KIND} instead — and when nothing is ringing. */
+	public static final int S_SOUND_CALL = 44;
+	public static final int NUM_SENSORS = 45;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -228,7 +233,7 @@ public final class AgentIO {
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
-			"sound_kind", "ridden", "sound_clade", "sound_kin" };
+			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -375,10 +380,50 @@ public final class AgentIO {
 	 *  button does nothing by itself: interaction is a choice, which is the
 	 *  entire point. */
 	public static final int A_INTERACT = 13;
-	public static final int NUM_ACT = 14;
+	/**
+	 * <b>Make a sound.</b> A call in the body's own voice — its clade and its
+	 * markers, the signature every sound a body makes carries — of the type the
+	 * magnitude names, on the pool-midpoint bands {@link #callType} decodes:
+	 * {@code 0.25}, {@code 0.5}, {@code 1} and {@code 2} (or above) are calls 1 to
+	 * 4, and anything under the first band is silence. The sign is not read.
+	 *
+	 * <p>What a call MEANS is not decided here: the types are four distinct
+	 * signals and nothing more, and whether one comes to mean "here is food",
+	 * "I am here" or "run" is for the lineages that make and hear them to
+	 * settle. A call is priced, because it is also heard by whatever would like
+	 * to eat the caller: it costs glycogen, a held actuator calls once per
+	 * period rather than every tick, and a collapsed body cannot call.
+	 */
+	public static final int A_CALL = 14;
+	public static final int NUM_ACT = 15;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"tile", "prey", "seek", "mark", "interact" };
+			"tile", "prey", "seek", "mark", "interact", "call" };
+
+	/** How many distinct calls a body can make ({@link #A_CALL}). */
+	public static final int CALL_TYPES = 4;
+
+	/** Decodes {@link #A_CALL} into a call type, 1..{@link #CALL_TYPES}, or 0 for
+	 *  silence — on the geometric-midpoint bands {@link #seekTarget} uses, so
+	 *  each pool constant a mind can emit names one call squarely. 0.1 is
+	 *  silent, like 0: the quietest constant in the pool does not make a sound,
+	 *  so a mind has to mean it. */
+	public static int callType(double v) {
+		double m = Math.abs(v);
+		if (m < 0.175) {
+			return 0;
+		}
+		if (m < 0.375) {
+			return 1;
+		}
+		if (m < 0.75) {
+			return 2;
+		}
+		if (m < 1.5) {
+			return 3;
+		}
+		return 4;
+	}
 
 	// ---- seek targets (the decoding of A_SEEK's magnitude) ------------------
 	public static final int SEEK_NONE = 0;

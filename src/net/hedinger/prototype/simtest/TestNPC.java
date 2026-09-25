@@ -166,12 +166,47 @@ public class TestNPC extends NPC {
 	@Unit("tiles earshot")
 	public static final double KILL_LOUDNESS = 12.0;
 
+	/**
+	 * How far a call carries, in tiles per unit of the caller's lean mass.
+	 *
+	 * <p>Two thirds of a scream's {@link #KILL_LOUDNESS}: a reference body's call
+	 * reaches eight tiles, past what it can see in most country and round the
+	 * walls, which is the regime where a call tells a listener something its eyes
+	 * cannot. Scaled by the caller like a scream by its quarry, so a big animal
+	 * is heard further — and by more of what hunts it.
+	 */
+	@Unit("tiles earshot")
+	public static final double CALL_LOUDNESS = 8.0;
+	/**
+	 * What one call costs, in glycogen per unit of lean mass.
+	 *
+	 * <p>Two and a half ticks of bucking ({@code BUCK_SELF_COST}), under one per
+	 * cent of a full store: cheap enough that a lineage can afford to say
+	 * something, dear enough that a mind which calls at every chance pays for it
+	 * against one that calls when it matters. The larger price is not this one
+	 * but the listeners, since a call is heard by hunters too.
+	 */
+	@Unit("glycogen per lean mass")
+	public static final double CALL_COST = 0.05;
+	/**
+	 * The fewest ticks between two calls. A held actuator calls once per period
+	 * rather than every tick: two seconds, about three times a sound's travel,
+	 * so calls held down are a rhythm a listener can hear as one rather than a
+	 * continuous roar that would drown every other sound it could have heard.
+	 */
+	@Unit("ticks")
+	public static final int CALL_PERIOD = 60;
+
+	/** When this body last called, for {@link #CALL_PERIOD}. */
+	private long calledAt = Long.MIN_VALUE;
+
 	/** The most recent sound to reach this body, and when — the sensed half of
 	 *  {@link AgentIO#S_SOUND_PROX}. Held here rather than on Entity because only
 	 *  a body with a mind has anything to do with it. */
 	private double heardX, heardY;
 	private int heardCode;
 	private net.hedinger.prototype.entities.Genome heardVoice;
+	private int heardCall;
 	private long heardAt = Long.MIN_VALUE;
 
 	@Unit("tiles")
@@ -1469,6 +1504,7 @@ public class TestNPC extends NPC {
 		heardY = sound.getY();
 		heardCode = sound.getCode();
 		heardVoice = sound.getVoice();
+		heardCall = sound.getCall();
 		heardAt = getWorld() == null ? 0 : getWorld().getTick();
 	}
 
@@ -2274,6 +2310,9 @@ public class TestNPC extends NPC {
 			boolean voiced = heardVoice != null && genome != null;
 			s[AgentIO.S_SOUND_CLADE] = !voiced ? 0 : heardVoice.clade == genome.clade ? 1 : -1;
 			s[AgentIO.S_SOUND_KIN] = voiced ? genome.similarityTo(heardVoice) : 0;
+			// WHICH call, when it was one: the type over the count, so the calls
+			// are four steady levels a mind can compare against the pool.
+			s[AgentIO.S_SOUND_CALL] = heardCall / (double) AgentIO.CALL_TYPES;
 		} else {
 			s[AgentIO.S_SOUND_PROX] = 0;
 			s[AgentIO.S_SOUND_BEARING] = 0;
@@ -2282,6 +2321,7 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_SOUND_KIND] = 0;
 			s[AgentIO.S_SOUND_CLADE] = 0;
 			s[AgentIO.S_SOUND_KIN] = 0;
+			s[AgentIO.S_SOUND_CALL] = 0;
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
@@ -3249,6 +3289,10 @@ public class TestNPC extends NPC {
 			wpLvl = -1; // forget it
 		}
 		interactIntent = a[AgentIO.A_INTERACT] > 0.5; // deliberately operate a fixture
+		int call = AgentIO.callType(a[AgentIO.A_CALL]);
+		if (call > 0) {
+			call(call);
+		}
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
 		// genome's top speed. There is no separate gear to engage — the movement
@@ -3429,6 +3473,25 @@ public class TestNPC extends NPC {
 		if (getCarriedLoad() > 0 && getAttachTarget() == null && a[AgentIO.A_STRUGGLE] > 0) {
 			buckRiders(clampUnit(a[AgentIO.A_STRUGGLE]));
 		}
+	}
+
+	/**
+	 * Makes a call of the given type in this body's own voice, if it can: not
+	 * within {@link #CALL_PERIOD} of the last one, and not collapsed. Pays
+	 * {@link #CALL_COST} for it out of glycogen.
+	 */
+	private void call(int type) {
+		if (getWorld() == null || !canExert()) {
+			return; // collapsed bodies are silent (VITALS.md)
+		}
+		long now = getWorld().getTick();
+		if (calledAt != Long.MIN_VALUE && now - calledAt < CALL_PERIOD) {
+			return;
+		}
+		calledAt = now;
+		glycogen = Math.max(0, glycogen - CALL_COST * leanMass());
+		getWorld().spawnEntity(net.hedinger.prototype.entities.Sound.call(
+				this, CALL_LOUDNESS * leanMass(), type, genome));
 	}
 
 	/** Shakes at riders clinging to this creature. Bucking costs energy every tick;

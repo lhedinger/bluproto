@@ -13746,6 +13746,170 @@ public class SimTests {
 	}
 
 	/**
+	 * Any creature can make a sound on purpose. Writing {@link AgentIO#A_CALL}
+	 * makes a call in the caller's own voice — its clade and its markers, the
+	 * signature a scream carries — and of the type the mind named, read off the
+	 * magnitude on the pool-midpoint bands every other named choice uses.
+	 * Listeners in earshot hear which call it was on the call channel and whose
+	 * voice on the voice channels; the caller does not hear itself, and a
+	 * listener past earshot hears nothing.
+	 *
+	 * <p>Calling is priced, because a call is also an advertisement to anything
+	 * listening that would like to eat the caller: each one costs glycogen in
+	 * proportion to the body, a held actuator calls once per period rather than
+	 * every tick, and a collapsed body cannot call at all.
+	 */
+	static class ACreatureCallsInItsOwnVoice extends Scenario {
+		/** An MLP genome written before the call existed — fewer sensors, one
+		 *  actuator short — still loads, as the same net with the newer senses
+		 *  unread and the newer act unwritten: every old weight lands where it
+		 *  was, and everything new is zero. It must, or a saved founder or a
+		 *  recorded spawn from before this change is a genome nothing can read. */
+		private void anOlderNetStillLoads() {
+			int H = net.hedinger.prototype.entities.MlpBrain.HIDDEN;
+			int in = AgentIO.NUM_SENSORS, out = AgentIO.NUM_ACT;
+			int oldIn = in - 3, oldOut = out - 1; // before the voice and the call
+			double[] old = new double[H * oldIn + H + oldOut * H + oldOut];
+			for (int i = 0; i < old.length; i++) {
+				old[i] = i + 1; // every weight distinct, none zero
+			}
+			double[] w = net.hedinger.prototype.entities.MlpBrain.fromWeights(old).weights();
+			boolean ok = w.length == H * in + H + out * H + out;
+			int k = 0;
+			for (int h = 0; h < H; h++) {
+				for (int i = 0; i < in; i++) {
+					ok &= w[h * in + i] == (i < oldIn ? old[k++] : 0);
+				}
+			}
+			int b1 = H * in, w2 = b1 + H, b2 = w2 + out * H;
+			for (int h = 0; h < H; h++) {
+				ok &= w[b1 + h] == old[k++];
+			}
+			for (int o = 0; o < out; o++) {
+				for (int h = 0; h < H; h++) {
+					ok &= w[w2 + o * H + h] == (o < oldOut ? old[k++] : 0);
+				}
+			}
+			for (int o = 0; o < out; o++) {
+				ok &= w[b2 + o] == (o < oldOut ? old[k++] : 0);
+			}
+			assertTrue("an older net loads with its weights in place and the new "
+					+ "senses and act at zero", ok && k == old.length);
+		}
+
+		/** What one staging produced. */
+		private static final class Heard {
+			double[] self, kin, hunter, far;
+			int calls;
+			double glycogen, leanMass;
+			boolean collapsed;
+		}
+
+		private static double[] ear(World w, double x, Genome g, Genome.Clade clade) {
+			final double[] heard = new double[AgentIO.NUM_SENSORS];
+			Mind capture = (sn, a) -> System.arraycopy(sn, 0, heard, 0, sn.length);
+			w.spawnEntity(TestNPC.minded(x, 3.5, 0, g, capture).withClade(clade)
+					.withoutMetabolism());
+			return heard;
+		}
+
+		private static Genome voice() {
+			Genome g = new Genome();
+			g.markers = new double[] { 0.1, 0.9, 0.2 };
+			return g;
+		}
+
+		/** A caller holding {@code call} on its actuator for {@code ticks}. */
+		private Heard stage(double call, int ticks, double glycogenShare) {
+			seed(109);
+			World w = room(40, 7);
+			final double[] self = new double[AgentIO.NUM_SENSORS];
+			Mind caller = (sn, a) -> {
+				System.arraycopy(sn, 0, self, 0, sn.length);
+				java.util.Arrays.fill(a, 0);
+				a[AgentIO.A_CALL] = call; // and nothing else: it stands and calls
+			};
+			// Grown: a newborn's call carries a couple of tiles, and what is under
+			// test is the call, not how little of one a calf can make.
+			TestNPC c = TestNPC.minded(3.5, 3.5, 0, voice(), caller).grown();
+			c.withGlycogen(glycogenShare * c.glycogenCapacity());
+			if (glycogenShare < NPC.EXHAUSTION) {
+				c.withFat(0).withHunger(1.0); // nothing to climb back out on
+			}
+			w.spawnEntity(c);
+			Heard h = new Heard();
+			h.self = self;
+			h.leanMass = c.leanMass();
+			double earshot = TestNPC.CALL_LOUDNESS * c.leanMass();
+			h.kin = ear(w, 6.5, voice(), Genome.Clade.HERBIVORE);
+			h.hunter = ear(w, 7.5, voice(), Genome.Clade.PREDATOR);
+			h.far = ear(w, 3.5 + earshot + 2, voice(), Genome.Clade.HERBIVORE);
+			w.think();
+			java.util.Set<Integer> calls = new java.util.HashSet<>();
+			for (int t = 0; t < ticks; t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof Sound s && s.getCode() == Sound.CALL) {
+						calls.add(e.getID());
+					}
+				}
+			}
+			// Counted and weighed over the same window, and that window ends
+			// mid-period, so no call sits on its edge. The last call has long
+			// since reached the ears, which read it now.
+			h.calls = calls.size();
+			h.glycogen = c.getGlycogen();
+			h.collapsed = !c.canExert();
+			return h;
+		}
+
+		@Override
+		public void run() {
+			int periods = 3;
+			// The first call is on the first thought, then one each period: three
+			// of them, and the window stops half a period short of a fourth.
+			int span = periods * TestNPC.CALL_PERIOD - TestNPC.CALL_PERIOD / 2;
+
+			Heard calling = stage(0.5, span, 0.8);
+			assertTrue("holding the actuator calls once a period, not every tick ("
+					+ calling.calls + " calls in " + span + " ticks)", calling.calls == periods);
+			assertGreater("the caller's own kind heard it", calling.kin[AgentIO.S_SOUND_PROX], 0);
+			assertNear("as the call the mind named: 0.5 is the second of four",
+					2.0 / AgentIO.CALL_TYPES, calling.kin[AgentIO.S_SOUND_CALL], 1e-9);
+			assertNear("a call is not a scream: nothing on the kind channel",
+					0.0, calling.kin[AgentIO.S_SOUND_KIND], 1e-9);
+			assertNear("in its own kind's voice", 1.0, calling.kin[AgentIO.S_SOUND_CLADE], 1e-9);
+			assertNear("and its own stock's", 1.0, calling.kin[AgentIO.S_SOUND_KIN], 1e-9);
+			assertNear("a hunter in earshot hears the same call",
+					2.0 / AgentIO.CALL_TYPES, calling.hunter[AgentIO.S_SOUND_CALL], 1e-9);
+			assertNear("in another kind's voice", -1.0, calling.hunter[AgentIO.S_SOUND_CLADE], 1e-9);
+			assertNear("past earshot, nothing", 0.0, calling.far[AgentIO.S_SOUND_PROX], 1e-9);
+			assertNear("and the caller does not hear itself",
+					0.0, calling.self[AgentIO.S_SOUND_PROX], 1e-9);
+
+			Heard silent = stage(0.0, span, 0.8);
+			assertTrue("a silent twin made no call", silent.calls == 0);
+			assertNear("and a quiet mind hears no call", 0.0, silent.kin[AgentIO.S_SOUND_PROX], 1e-9);
+			assertNear("each call cost its glycogen, in proportion to the body",
+					periods * TestNPC.CALL_COST * calling.leanMass,
+					silent.glycogen - calling.glycogen, 1e-6);
+
+			Heard loudest = stage(2.0, span, 0.8);
+			assertNear("2 names the fourth call, and the ear tells it from the second",
+					1.0, loudest.kin[AgentIO.S_SOUND_CALL], 1e-9);
+			Heard whisper = stage(0.1, span, 0.8);
+			assertTrue("0.1 is below the first band: no call at all", whisper.calls == 0);
+
+			anOlderNetStillLoads();
+
+			Heard spent = stage(0.5, span, NPC.EXHAUSTION * 0.5);
+			assertTrue("the spent body is still collapsed at the end: it had nothing to recover on",
+					spent.collapsed);
+			assertTrue("and a collapsed body cannot call", spent.calls == 0);
+		}
+	}
+
+	/**
 	 * A sound rides the wire as itself: the snapshot names it (kind "sound"
 	 * rather than the anonymous "entity" it used to travel as), carries its
 	 * earshot in the size slot and its travel progress in aux — everything a
@@ -16769,6 +16933,7 @@ public class SimTests {
 				new AQueryLeavesTheStreamAlone(),
 				new AScreamSaysWhatHappened(),
 				new AScreamSaysWhoScreamed(),
+				new ACreatureCallsInItsOwnVoice(),
 				new ASoundRidesTheWire(),
 				new MindHearsInBodyCoordinates(),
 				new TuningRidesTheCommandLog(),
