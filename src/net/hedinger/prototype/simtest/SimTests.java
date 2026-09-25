@@ -13657,6 +13657,95 @@ public class SimTests {
 	}
 
 	/**
+	 * A scream says WHO screamed: the sound carries the voice of the body that
+	 * made it — its clade, and its markers — and a listener hears that voice
+	 * against its own, on the same two axes sight reads a neighbour on. Clade
+	 * is categorical (+1 my own kind, -1 another), the markers are the species
+	 * axis within it (how close the voice is to mine, 1 identical .. 0 as far
+	 * as markers go).
+	 *
+	 * <p>Staged live, through a wall: a hunter bites a grazer in the west
+	 * chamber, and three listeners stand in the east one, where no eye reaches
+	 * the fight but the scream does. The grazer's own kind reads its clade and
+	 * the full kinship; a grazer of a distant stock reads its clade and the
+	 * markers' actual distance; a hunter wearing the quarry's very markers reads
+	 * the kinship and the wrong clade, because the markers alone do not make a
+	 * creature kin. None of them hears the hunter: the scream is the quarry's.
+	 * A sound no body made carries no voice, and both channels read nothing.
+	 */
+	static class AScreamSaysWhoScreamed extends Scenario {
+		private static double[] ear(World w, double x, double y, Genome g, Genome.Clade clade) {
+			final double[] heard = new double[AgentIO.NUM_SENSORS];
+			Mind capture = (sn, a) -> System.arraycopy(sn, 0, heard, 0, sn.length);
+			w.spawnEntity(TestNPC.minded(x, y, 0, g, capture).withClade(clade));
+			return heard;
+		}
+
+		private static Genome wearing(double... markers) {
+			Genome g = new Genome();
+			g.markers = markers.clone();
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(108);
+			World w = room(14, 8);
+			for (int y = 0; y < 8; y++) {
+				w.setTile(7, y, 0, Tile.TileType.TYPE_WALL); // sight stops here; sound does not
+			}
+			Genome pg = new Genome();
+			pg.size = 16; // the hunter's markers are the default zeros
+			TestNPC hunter = TestNPC.predator(4.5, 3.5, 0, pg)
+					.withHunger(0.8).withReproCooldown(100_000_000);
+			Genome gg = wearing(0.1, 0.9, 0.2);
+			gg.size = 20;
+			TestNPC prey = TestNPC.breeder(5.1, 3.5, 0, gg)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			Genome strangers = wearing(0.9, 0.1, 0.8);
+			double[] kin = ear(w, 8.5, 3.5, wearing(0.1, 0.9, 0.2), Genome.Clade.HERBIVORE);
+			double[] stranger = ear(w, 8.5, 2.5, strangers, Genome.Clade.HERBIVORE);
+			double[] mimic = ear(w, 8.5, 4.5, wearing(0.1, 0.9, 0.2), Genome.Clade.PREDATOR);
+			w.think();
+			for (int t = 0; t < 2000 && !prey.isDead(); t++) {
+				tick(w, 1);
+			}
+			assertTrue("the prey was killed", prey.isDead());
+			tick(w, 30); // past the travel: the last scream has reached them
+
+			assertGreater("the grazer's kind heard the scream through the wall",
+					kin[AgentIO.S_SOUND_PROX], 0);
+			assertNear("and hears its own clade in it", 1.0, kin[AgentIO.S_SOUND_CLADE], 1e-9);
+			assertNear("and its own stock — the quarry's voice, not the hunter's",
+					1.0, kin[AgentIO.S_SOUND_KIN], 1e-9);
+
+			assertGreater("the distant grazer heard it too",
+					stranger[AgentIO.S_SOUND_PROX], 0);
+			assertNear("its clade is its own", 1.0, stranger[AgentIO.S_SOUND_CLADE], 1e-9);
+			assertNear("and the kinship is exactly the markers' distance",
+					gg.similarityTo(strangers), stranger[AgentIO.S_SOUND_KIN], 1e-9);
+			assertLess("which is far", stranger[AgentIO.S_SOUND_KIN], 0.5);
+
+			assertGreater("the hunter in grazer's markers heard it",
+					mimic[AgentIO.S_SOUND_PROX], 0);
+			assertNear("and reads the markers as its own", 1.0, mimic[AgentIO.S_SOUND_KIN], 1e-9);
+			assertNear("but the clade as another's: markers do not make kin",
+					-1.0, mimic[AgentIO.S_SOUND_CLADE], 1e-9);
+
+			World quiet = room(12, 12);
+			double[] plain = ear(quiet, 5.5, 5.5, wearing(0.1, 0.9, 0.2), Genome.Clade.HERBIVORE);
+			quiet.spawnEntity(new Sound(7.5, 5.5, 0, 6.0));
+			quiet.think();
+			tick(quiet, 30);
+			assertGreater("a sound no body made is heard", plain[AgentIO.S_SOUND_PROX], 0);
+			assertNear("but carries no clade", 0.0, plain[AgentIO.S_SOUND_CLADE], 1e-9);
+			assertNear("and no voice to be kin to", 0.0, plain[AgentIO.S_SOUND_KIN], 1e-9);
+		}
+	}
+
+	/**
 	 * A sound rides the wire as itself: the snapshot names it (kind "sound"
 	 * rather than the anonymous "entity" it used to travel as), carries its
 	 * earshot in the size slot and its travel progress in aux — everything a
@@ -16679,6 +16768,7 @@ public class SimTests {
 				new GrowingUpIsPaidFor(),
 				new AQueryLeavesTheStreamAlone(),
 				new AScreamSaysWhatHappened(),
+				new AScreamSaysWhoScreamed(),
 				new ASoundRidesTheWire(),
 				new MindHearsInBodyCoordinates(),
 				new TuningRidesTheCommandLog(),

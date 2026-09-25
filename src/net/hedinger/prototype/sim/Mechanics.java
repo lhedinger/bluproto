@@ -646,7 +646,17 @@ public final class Mechanics {
 								+ "kill — a carcass now exists where the scream was — and −1 "
 								+ "a bite the quarry survived: violence still in progress. "
 								+ "Dinner bell and warning ride one channel, and which sign a "
-								+ "lineage walks toward is for selection to settle.")),
+								+ "lineage walks toward is for selection to settle."),
+						sense(AgentIO.S_SOUND_CLADE, "WHOSE voice it was, by clade: +1 its "
+								+ "own kind, −1 another, 0 for a sound no body made. A scream "
+								+ "is the quarry's, so this is what tells a grazer one of its "
+								+ "own went down rather than some other hunter's meal."),
+						sense(AgentIO.S_SOUND_KIN, "How close the voice's markers are to its "
+								+ "own, 1 identical down to 0 — the species axis within a "
+								+ "clade, the ear's version of what sight reads as "
+								+ "similarity. Not gated on clade: a stranger wearing near "
+								+ "markers reads high here and −1 above, and telling the two "
+								+ "apart is the mind's job.")),
 				group("Places worth going",
 						sense(AgentIO.S_FORAGE_PROX, "The best patch of ground in sight, scored "
 								+ "by how rich it is against how far off. Unlike the tile "
