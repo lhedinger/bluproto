@@ -1943,6 +1943,76 @@ public class TestNPC extends NPC {
 	 *  Scratch, not memory: {@link #preyTarget} is what persists. */
 	private NPC huntPick = null;
 
+	// ---- the sense clock ----------------------------------------------------
+	//
+	// A full sense pass -- the neighbour walk with a line-of-sight ray per
+	// body, the hunt scan, the mate scan -- is the dear part of a tick, and
+	// most bodies most of the time have nothing new to see. So a body pays for
+	// it on a SITUATIONAL cadence: every tick while anything about it is
+	// urgent (a predator within its range, prey within a hunter's, a courtship
+	// in progress), every SENSE_CALM ticks while it has company and no danger,
+	// every SENSE_IDLE ticks while nothing at all stands within its range --
+	// and that last one loses nothing, since an empty range senses as empty.
+	// Between passes the body keeps what it last saw as POINTS in the world,
+	// and reads bearing and distance to them off its current pose, so turning
+	// does not drag a held bearing round with it; only the other body's own
+	// movement is stale, by at most the cadence. The situation itself is
+	// checked every tick from the census's cell counts, which cost no ray, so
+	// a threat arriving in range is sensed the tick it arrives.
+	//
+	// The clock is a function of the tick and the id, never of wall time, so a
+	// replay is bit-identical; and the tier is a function of the situation,
+	// never of a heritable trait, so the scheduler is not a selective force.
+	/** Ticks between full passes for a body with company and no danger. */
+	@net.hedinger.prototype.engine.Unit("ticks")
+	public static final int SENSE_CALM = 4;
+	/** Ticks between full passes for a body with nothing within its range. */
+	@net.hedinger.prototype.engine.Unit("ticks")
+	public static final int SENSE_IDLE = 16;
+	private long lastFullSense = -1;
+	private boolean sensedThisTick;
+	private int senseTier;
+	/** Full passes taken, a test seam for the cadence. */
+	int fullSenses;
+	/** What the last pass saw, as points; NaN for nothing. */
+	private double heldPreyX = Double.NaN, heldPreyY = Double.NaN;
+	private double heldThreatX = Double.NaN, heldThreatY = Double.NaN;
+	private double heldKinX = Double.NaN, heldKinY = Double.NaN;
+	private NPC heldMate;
+
+	/** The situation this tick: 0 urgent, 1 company, 2 alone. */
+	int senseTier() {
+		return senseTier;
+	}
+
+	private int situation() {
+		var c = getWorld().census();
+		int z = getLvl();
+		if (matingWith != null || preyTarget != null) {
+			return 0;
+		}
+		if (niche().hunts() && c.preyNearCount(z, X, Y, LOS_RANGE) > 0) {
+			return 0;
+		}
+		if (!"predator".equals(ecoRole()) && c.predatorsNearCount(z, X, Y, LOS_RANGE) > 0) {
+			return 0;
+		}
+		return c.creaturesNearCount(z, X, Y, LOS_RANGE) > 1 ? 1 : 2; // one is this body
+	}
+
+	/** Decides, once per tick, whether this tick takes a full sense pass. */
+	private boolean senseDue() {
+		senseTier = situation();
+		long now = getWorld().getTick();
+		if (senseTier == 0 || lastFullSense < 0) {
+			return true;
+		}
+		int every = senseTier == 1 ? SENSE_CALM : SENSE_IDLE;
+		// Never longer than the cadence since the last pass, and spread across
+		// ticks by id so a herd that formed together does not sense in lockstep.
+		return now - lastFullSense >= every || Math.floorMod(now + getID(), every) == 0;
+	}
+
 	/**
 	 * Points the hunt at the best quarry in sight and keeps it there: the held
 	 * target stands unless something clears its score times
@@ -2230,7 +2300,14 @@ public class TestNPC extends NPC {
 		// separately they are two hunting policies wearing one animal's face:
 		// whichever word a lineage happens to evolve decides whether it commits to
 		// a quarry or chases whatever drifted closest.
-		huntPick = niche().hunts() ? scanPrey(false) : null;
+		sensedThisTick = senseDue();
+		if (sensedThisTick) {
+			lastFullSense = now;
+			fullSenses++;
+			huntPick = niche().hunts() ? scanPrey(false) : null;
+		} else if (huntPick != null && (huntPick.isDead() || huntPick.isRemoved())) {
+			huntPick = null; // a held quarry that is gone is not a quarry
+		}
 		senseFieldAndBody(s); // wider hunt/flee/kin channels, body state, obstacle whiskers
 		attentionDropped.clear();
 		limitAttention(s); // ...of which only as many as this mind can hold survive
@@ -2317,9 +2394,29 @@ public class TestNPC extends NPC {
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
 		double kinX = 0, kinY = 0, kinWeight = 0;
+		if (!sensedThisTick) {
+			// Between passes: what was last seen, read off the current pose.
+			if (!Double.isNaN(heldPreyX)) {
+				preyDx = heldPreyX - X;
+				preyDy = heldPreyY - Y;
+				preyD = Math.hypot(preyDx, preyDy);
+			}
+			if (!Double.isNaN(heldThreatX)) {
+				threatDx = heldThreatX - X;
+				threatDy = heldThreatY - Y;
+				threatD = Math.hypot(threatDx, threatDy);
+			}
+			if (!Double.isNaN(heldKinX)) {
+				kinX = heldKinX - X;
+				kinY = heldKinY - Y;
+				kinWeight = 1;
+			}
+		}
 		// Census walk: live same-level bodies, then line of sight (cover and
 		// walls hide neighbours; hasLOS range-gates before it raycasts).
-		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
+		for (NPC n : sensedThisTick
+				? getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)
+				: java.util.List.<NPC>of()) {
 			if (n == this || n.isDead() || n.isRemoved() || !isInLOS(n)) {
 				continue;
 			}
@@ -2350,6 +2447,15 @@ public class TestNPC extends NPC {
 				kinY += sim * dy;
 				kinWeight += sim;
 			}
+		}
+		if (sensedThisTick) {
+			// Keep what this pass saw, as points in the world.
+			heldPreyX = preyD < Double.MAX_VALUE ? X + preyDx : Double.NaN;
+			heldPreyY = preyD < Double.MAX_VALUE ? Y + preyDy : Double.NaN;
+			heldThreatX = threatD < Double.MAX_VALUE ? X + threatDx : Double.NaN;
+			heldThreatY = threatD < Double.MAX_VALUE ? Y + threatDy : Double.NaN;
+			heldKinX = kinWeight > 0 ? X + kinX / kinWeight : Double.NaN;
+			heldKinY = kinWeight > 0 ? Y + kinY / kinWeight : Double.NaN;
 		}
 		// A hunter's prey channel is its hunt, not a proximity reading: it shows
 		// the quarry scanPrey settled on, the same body the forage channel points
@@ -2941,7 +3047,13 @@ public class TestNPC extends NPC {
 			}
 			breakOffMating(); // partner left, died, or stopped being willing
 		}
-		NPC p = nearestMate();
+		// The mate scan rides the sense clock: rescanned on a full pass, and
+		// held between them unless the held partner is gone or unwilling.
+		if (sensedThisTick || heldMate == null || heldMate.isDead() || heldMate.isRemoved()
+				|| !canMateWith(heldMate)) {
+			heldMate = nearestMate();
+		}
+		NPC p = heldMate;
 		if (p == null) {
 			return AgentIO.INTENT_INVALID; // nobody here to breed with
 		}

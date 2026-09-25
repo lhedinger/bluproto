@@ -206,6 +206,22 @@ public class World {
 			return corpseBuckets.get(z).near(x, y, r);
 		}
 
+		/** How many creatures / predators / prey the cells within r hold -- a
+		 *  superset count, never an undercount, and no allocation: the per-tick
+		 *  situation check every minded body makes before deciding whether to
+		 *  spend a full sense pass. */
+		public int creaturesNearCount(int z, double x, double y, double r) {
+			return creatureBuckets.get(z).countNear(x, y, r);
+		}
+
+		public int predatorsNearCount(int z, double x, double y, double r) {
+			return predatorBuckets.get(z).countNear(x, y, r);
+		}
+
+		public int preyNearCount(int z, double x, double y, double r) {
+			return preyBuckets.get(z).countNear(x, y, r);
+		}
+
 		public java.util.List<net.hedinger.prototype.entities.Switch> switches(int z) {
 			return switches.get(z);
 		}
@@ -262,6 +278,22 @@ public class World {
 
 		private int cell(double x, double y) {
 			return cy(y) * cw + cx(x);
+		}
+
+		/** The bodies in the cells a radius touches, counted without gathering. */
+		int countNear(double x, double y, double r) {
+			if (all.isEmpty()) {
+				return 0;
+			}
+			int x0 = cx(x - r), x1 = cx(x + r), y0 = cy(y - r), y1 = cy(y + r);
+			int count = 0;
+			for (int yy = y0; yy <= y1; yy++) {
+				for (int xx = x0; xx <= x1; xx++) {
+					int c = yy * cw + xx;
+					count += start[c + 1] - start[c];
+				}
+			}
+			return count;
 		}
 
 		java.util.List<NPC> near(double x, double y, double r) {
