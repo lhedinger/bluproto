@@ -380,8 +380,11 @@ public class Tile {
 	 *
 	 * @param dir
 	 *            which door to open
+	 * @return whether the flag changed -- a caller that has just altered what
+	 *         sight can cross tells the world so ({@link World#sightChanged})
 	 */
-	public void openDoor(int dir) {
+	public boolean openDoor(int dir) {
+		boolean was = isDoorClosed(dir);
 		if (dir == 0) {
 			door_N = false;
 		}
@@ -393,8 +396,8 @@ public class Tile {
 		}
 		if (dir == 3) {
 			door_W = false;
-			// calcConnected(world);
 		}
+		return was;
 	}
 
 	/**
@@ -402,8 +405,10 @@ public class Tile {
 	 *
 	 * @param dir
 	 *            which door to close
+	 * @return whether the flag changed (see {@link #openDoor})
 	 */
-	public void closeDoor(int dir) {
+	public boolean closeDoor(int dir) {
+		boolean was = isDoorClosed(dir);
 		if (dir == 0) {
 			door_N = true;
 		}
@@ -415,8 +420,8 @@ public class Tile {
 		}
 		if (dir == 3) {
 			door_W = true;
-			// calcConnected(world);
 		}
+		return !was;
 	}
 
 	/** True if the door on the given edge is closed (0=N, 1=E, 2=S, 3=W). */
