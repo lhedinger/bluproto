@@ -1034,17 +1034,29 @@ public class SimTests {
 						}
 					}
 				}
-				TestNPC m = TestNPC.mindedForager(6.5, 5.5, 0, line(greed)).grown().withHunger(1.0).withHydration(1.0)
+				Genome minded = line(greed);
+				minded.brain = net.hedinger.prototype.sim.Worlds.starterBrain(); // seeks forage; a mindless body wants nothing
+				TestNPC m = TestNPC.mindedForager(6.5, 5.5, 0, minded).grown().withHunger(1.0).withHydration(1.0)
 						.withReproCooldown(100_000_000).withHeading(0);
 				w.spawnEntity(m);
 				tick(w, 2);
 				double prox = m.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
+				// And the mouth honours the line as the scan does: a greedy mind
+				// crossing the sunk pocket takes no bite off it, so the ground can
+				// rest; an unhurried one eats what it walks over. The starter
+				// brain runs an instruction a tick and names its forage seek some
+				// twenty ticks in, so the window is long enough for it to act.
+				tick(w, 120);
 				if (greed > 1) {
 					assertLess("a greedy mind's forage scan points past the sunk pocket at fresh ground ("
 							+ String.format("prox %.2f", prox) + ")", prox, 1.0 / (1.0 + 4.0));
+					assertNear("and it takes no bite off the sunk ground it crosses ("
+							+ String.format("%.3f swallowed", m.totalSwallowed()) + ")", 0, m.totalSwallowed(), 1e-9);
 				} else {
 					assertGreater("an unhurried mind's forage scan points at the ground underfoot ("
 							+ String.format("prox %.2f", prox) + ")", prox, 0.5);
+					assertGreater("and it eats what it stands on (" + String.format("%.3f swallowed", m.totalSwallowed()) + ")",
+							m.totalSwallowed(), 0.0);
 				}
 			}
 		}

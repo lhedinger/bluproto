@@ -3153,9 +3153,17 @@ public class TestNPC extends NPC {
 			// A hunter takes nothing HERE either: its mouth belongs on meat, and
 			// letting it graze would hand it an income the scripted hunter has
 			// never had. Its own kill is handled below, off the same ledger.
+			// A grazer does not bite ground below its greed's line, on the way to
+			// its target or anywhere else: a patch thin by its lineage's standard
+			// is left, not finished. This is the half of the line that matters to
+			// the range. A bite resets a tile's day-long rest (Tile.graze stamps
+			// the tick), so a herd crossing and recrossing its own grazed-out
+			// pocket held every tile in it at nothing for as long as it stayed --
+			// measured, half of every herbivore's ticks on a tile past the cliff,
+			// with the line honoured by the scan and not by the mouth.
 			eaten = niche().scavenges() ? scavenge()
 					: niche().drains() || niche().hunts() ? 0
-							: graze(grazeDemand());
+							: standingUnderfoot() < leaveLevel() ? 0 : graze(grazeDemand());
 			totalIntake += eaten;
 		}
 		eaten += finishTheKill();
