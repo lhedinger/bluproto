@@ -181,6 +181,16 @@ public class Genome {
 	 * world, and different in every one. Choosing a number here would be deciding
 	 * on selection's behalf what it is for selection to find out.
 	 *
+	 * <p>For a grazer it is also the line at which a patch stops being worth
+	 * standing on: a lineage walks off ground grazed below {@code
+	 * TestNPC.GRAZE_LEAVE_PER_GREED} times its greed, as a share of the tile's
+	 * cap, and its forage scan does not point it at ground below that line.
+	 * The same disposition, read the other way: a greedy lineage crosses the
+	 * field for richer ground and leaves thin ground sooner; an unhurried one
+	 * takes what is underfoot down to the roots. Where the line sits against
+	 * the range's own cliff -- a tile grazed below a quarter of its cap rests a
+	 * day before it regrows -- is what the range selects on.
+	 *
 	 * @see net.hedinger.prototype.entities.AgentIO#A_PREY
 	 */
 	public double greed = 1.0;

@@ -269,6 +269,43 @@ public class TestNPC extends NPC {
 	@Unit("vegetation/tick at mass 1")
 	public static double GRAZE_DEMAND = 0.009;
 
+	/**
+	 * Where a grazer's greed puts the line it walks off a patch at, as a share
+	 * of the tile's cap per unit of greed. Founders draw greed from 0.5 to 2,
+	 * so their lines run from a tenth to two fifths of a tile -- either side
+	 * of the range's own cliff, the quarter below which a grazed tile rests a
+	 * day before it regrows ({@code Tile.DEPLETION_LEVEL}). That is the point:
+	 * some lineages strip a patch into the cliff and some leave before it, and
+	 * the range does the selecting. Measured before there was a line, half of
+	 * every herbivore's ticks were spent standing on a tile past the cliff,
+	 * and a bite in six was taken off one, on a map that was nine tenths grass.
+	 */
+	@Unit("of a tile's cap, per unit of greed")
+	public static double GRAZE_LEAVE_PER_GREED = 0.2;
+	/** The most of a tile any lineage walks off at: a line above this is a
+	 *  grazer that never stands still, which is a strategy the range can
+	 *  teach it about without help. */
+	@Unit("of a tile's cap")
+	public static double GRAZE_LEAVE_CAP = 0.9;
+
+	/** The share of a tile's cap below which this lineage walks off it -- its
+	 *  greed's line ({@link #GRAZE_LEAVE_PER_GREED}). A body with no genome
+	 *  leaves at the reference greed. */
+	private double leaveLevel() {
+		double greed = genome == null ? 1.0 : genome.greed;
+		return Math.min(GRAZE_LEAVE_CAP, GRAZE_LEAVE_PER_GREED * greed);
+	}
+
+	/** How much of the tile underfoot is standing, as a share of its cap: 0 on
+	 *  ground that grows nothing. */
+	private double standingUnderfoot() {
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(X, Y, Z);
+		if (t == null || !t.growsVegetation() || t.vegetationCap() <= 0) {
+			return 0;
+		}
+		return t.getVegetation(getWorld().getTick()) / t.vegetationCap();
+	}
+
 	/** This grazer's per-tick appetite: {@link #GRAZE_DEMAND} scaled by body size,
 	 *  so a bigger grazer takes bigger bites (and depletes a patch faster). A
 	 *  sated body has no appetite at all — graze() additionally bounds every
@@ -2485,7 +2522,18 @@ public class TestNPC extends NPC {
 			return t.isWater()
 					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE ? 1 : 0;
 		default:
-			return t.isWalkable() ? t.getVegetation(now) : 0;
+			if (!t.isWalkable()) {
+				return 0;
+			}
+			// Ground grazed below this lineage's line is not forage: the scan
+			// points past it, so a body on a sunk pocket walks out to fresh
+			// ground instead of finishing what is underfoot because it is
+			// nearest. Without this the distance discount held a grazer on its
+			// own tile until a neighbour was a third richer, and in a herd every
+			// neighbour was being eaten down at the same time.
+			double standing = t.getVegetation(now);
+			double cap = t.vegetationCap();
+			return cap > 0 && standing / cap >= leaveLevel() ? standing : 0;
 		}
 	}
 
@@ -3719,8 +3767,13 @@ public class TestNPC extends NPC {
 		}
 		// A full creature stops cropping: grazing past glycogen just wastes the
 		// intake and needlessly holds the grass down, so it grazes only when it
-		// has room to fill.
-		double intake = sated() ? 0 : graze(grazeDemand());
+		// has room to fill. Nor does it bite ground it is walking off: a patch
+		// thin by this lineage's standard is left, not finished -- the leave
+		// decision comes before the bite, or a slow walker cropped its patch a
+		// further sixth of a tile on the way out and crossed the cliff it was
+		// leaving to avoid.
+		boolean leaving = standingUnderfoot() < leaveLevel();
+		double intake = sated() || leaving ? 0 : graze(grazeDemand());
 		totalIntake += intake;
 		if (tryReproduce()) {
 			setAction("breeding", true);
@@ -3732,7 +3785,11 @@ public class TestNPC extends NPC {
 			roam(speed, turn);
 			return;
 		}
-		if (intake < grazeDemand() * 0.15) {
+		// The patch is thin by this lineage's standard -- its greed's line -- so
+		// walk off it. This used to be "a bite returns under 15% of demand",
+		// which is a tile grazed to nothing: every scripted grazer ate its patch
+		// through the cliff below which the ground rests a day.
+		if (leaving) {
 			double herd = vigilant ? herdDir(HERD_R) : Double.NaN;
 			if (!Double.isNaN(herd)) {
 				setAction("herding", false);

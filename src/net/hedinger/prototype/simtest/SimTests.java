@@ -952,6 +952,105 @@ public class SimTests {
 	}
 
 	/**
+	 * A greedy grazer leaves a patch before it is bare; an unhurried one eats it
+	 * to the roots. Where the line sits is greed's.
+	 *
+	 * <p>A tile grazed below a quarter of its cap rests a day before it regrows
+	 * ({@code Tile.DEPLETION_LEVEL}), and nothing a grazer did reckoned with
+	 * that cliff. The scripted grazer left a patch when a bite returned under
+	 * 15 per cent of its demand -- a tile grazed to nothing -- and the minded
+	 * one's forage scan held it on its own tile until a neighbour was a third
+	 * richer, which in a herd never comes, because every neighbour is being
+	 * eaten down at once. Measured on the demo world: half of every
+	 * herbivore's ticks on a tile past the cliff, a bite in six taken off one,
+	 * on a map nine tenths grass.
+	 *
+	 * <p>The line is greed's: {@code GRAZE_LEAVE_PER_GREED} times the gene, as
+	 * a share of the tile's cap. Pinned on both paths. Two scripted grazers,
+	 * greed 0.5 and 2.0, alone on identical full meadows: the greedy one walks
+	 * off its first tile while it still stands above the cliff and the
+	 * unhurried one grazes it through. Two minded grazers on a sunk pocket
+	 * with fresh ground six tiles off: the greedy one's forage scan points at
+	 * the fresh ground and the unhurried one's at the tile underfoot.
+	 */
+	static class AGreedyGrazerLeavesAPatchBeforeItIsBare extends Scenario {
+		private static Genome line(double greed) {
+			Genome g = new Genome();
+			g.size = 8;
+			g.speed = 0.04;
+			g.greed = greed;
+			g.sexuality = 0.3;
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			return g;
+		}
+
+		/** The vegetation, as a share of cap, on the tile a scripted grazer of
+		 *  {@code greed} started on at the moment it first walks a tile away. */
+		private double leftAt(double greed) {
+			World w = room(16, 16);
+			for (int x = 1; x < 15; x++) {
+				for (int y = 1; y < 15; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			TestNPC g = TestNPC.breeder(8.5, 8.5, 0, line(greed)).grown().withHunger(1.0).withHydration(1.0)
+					.withReproCooldown(100_000_000);
+			g.withGlycogen(0.5 * g.glycogenCapacity()); // hungry and not sated: it grazes
+			w.spawnEntity(g);
+			double x0 = g.getX(), y0 = g.getY();
+			Tile home = w.getTile(x0, y0, 0);
+			for (int t = 0; t < 6000; t++) {
+				tick(w, 1);
+				g.withHydration(1.0);
+				if (Math.hypot(g.getX() - x0, g.getY() - y0) > 1.0) {
+					return home.getVegetation(w.getTick()) / home.vegetationCap();
+				}
+			}
+			return -1;
+		}
+
+		@Override
+		public void run() {
+			seed(65);
+			double greedyLeft = leftAt(2.0), unhurriedLeft = leftAt(0.5);
+			assertTrue("the greedy grazer walked off its patch", greedyLeft >= 0.0);
+			assertTrue("the unhurried grazer walked off its patch too, in the end", unhurriedLeft >= 0.0);
+			assertGreater("the greedy one left while the patch still stood above the cliff ("
+					+ String.format("%.2f of cap", greedyLeft) + ")", greedyLeft, 0.25);
+			assertLess("and the unhurried one grazed its patch through the cliff ("
+					+ String.format("%.2f of cap", unhurriedLeft) + ")", unhurriedLeft, 0.25);
+			assertGreater("the greedy one leaves at its greed's line, near enough (" + String.format("%.2f", greedyLeft) + ")",
+					greedyLeft, TestNPC.GRAZE_LEAVE_PER_GREED * 2.0 - 0.05);
+
+			// The minded path: a sunk pocket, fresh ground six tiles east.
+			for (double greed : new double[] { 2.0, 0.5 }) {
+				World w = room(24, 12);
+				for (int x = 1; x < 23; x++) {
+					for (int y = 1; y < 11; y++) {
+						Tile t = w.getTile(x, y, 0);
+						t.setFertility(1.0);
+						if (x < 12) {
+							t.graze(0, 0.7); // the pocket: everything west stands at 0.3 of cap
+						}
+					}
+				}
+				TestNPC m = TestNPC.mindedForager(6.5, 5.5, 0, line(greed)).grown().withHunger(1.0).withHydration(1.0)
+						.withReproCooldown(100_000_000).withHeading(0);
+				w.spawnEntity(m);
+				tick(w, 2);
+				double prox = m.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
+				if (greed > 1) {
+					assertLess("a greedy mind's forage scan points past the sunk pocket at fresh ground ("
+							+ String.format("prox %.2f", prox) + ")", prox, 1.0 / (1.0 + 4.0));
+				} else {
+					assertGreater("an unhurried mind's forage scan points at the ground underfoot ("
+							+ String.format("prox %.2f", prox) + ")", prox, 0.5);
+				}
+			}
+		}
+	}
+
+	/**
 	 * A fed body can walk on its digestion, and cannot run on it.
 	 *
 	 * <p>Every scenario that weighs the cost of travel weighs it with an empty
@@ -3905,7 +4004,13 @@ public class SimTests {
 			assertTrue("a newborn is a juvenile", t.isJuvenile());
 			assertLess("a newborn is markedly smaller than its adult body",
 					t.getPixelSize(), adultSize * 0.6);
-			for (int i = 0; i < 15000; i++) {
+			// The window is the claim's own bound and a little over: the claim is
+			// "a few minutes", asserted below as under eight, so the loop runs to
+			// ten. It used to stop at 15000 -- under the eight-minute bound it
+			// was meant to feed -- and the biggest body matured at 14786, so a
+			// change that moved a childhood by a few hundred ticks read as a
+			// body that never grew up.
+			for (int i = 0; i < 20000; i++) {
 				w.think();
 				if (!t.isJuvenile()) {
 					assertEquals("a grown body reaches exactly its genome size",
@@ -15816,6 +15921,7 @@ public class SimTests {
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new RestingIsCheapestAndWalkingBeatsRunning(),
+				new AGreedyGrazerLeavesAPatchBeforeItIsBare(),
 				new AFedBodyCanWalkOnItsDigestionButNotRun(),
 				new HowLongAFedBodyCanSprint(),
 				new OldAgeIsMassOverPace(),
