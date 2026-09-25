@@ -1698,8 +1698,37 @@ public class TestNPC extends NPC {
 	 *  close on fleeing prey — it would lose sight of them the instant they bolted.
 	 *  Sensing prey out to its full sight range (which out-ranges the flee radius)
 	 *  lets a faster hunter actually run prey down, mirroring {@link #nearestThreat}. */
-	/** The nearest body a parasite could ride: bigger than itself, alive, and
-	 *  not itself a parasite (they do not stack), within {@link #HOST_SENSE_R}.
+	/**
+	 * How much bigger than itself a host has to be before a parasite with no
+	 * predatory drive will ride it, as a share of its own size: the line runs
+	 * from {@code 1 + PARA_PICKINESS} at {@code predatory} 0 down to 1 -- any
+	 * body bigger at all -- at {@code predatory} 1 and above.
+	 *
+	 * <p>Neither end is free, which is why it is a gene and not a number. A big
+	 * host pays more per point of health drunk (the flesh behind a point scales
+	 * with its mass) and outlasts the drain; a small one is everywhere. Founders
+	 * draw {@code predatory} from 0 to 1, so their lines run from twice their
+	 * size to anything bigger.
+	 */
+	@Unit("of the rider's size, at no predatory drive")
+	public static double PARA_PICKINESS = 1.0;
+
+	/** The least a host may outsize this parasite by, as a ratio of the two
+	 *  sizes: {@link #PARA_PICKINESS} scaled down by its predatory drive. */
+	private double minHostRatio() {
+		double predatory = genome == null ? 0 : genome.predatory;
+		return 1.0 + PARA_PICKINESS * Math.max(0, 1 - predatory);
+	}
+
+	/** Whether this parasite would ride {@code n} for its size: bigger than
+	 *  itself by at least its {@link #minHostRatio()}. */
+	private boolean bigEnoughHost(NPC n) {
+		return n.getSize() > getSize() * minHostRatio();
+	}
+
+	/** The nearest body a parasite could ride: bigger than itself by its
+	 *  predatory drive's line ({@link #minHostRatio()}), alive, and not itself
+	 *  a parasite (they do not stack), within {@link #HOST_SENSE_R}.
 	 *  The host it is already riding counts — and is trivially nearest — so the
 	 *  forage channel keeps reading "here" for as long as the meal lasts. */
 	private NPC nearestHost() {
@@ -1710,7 +1739,7 @@ public class TestNPC extends NPC {
 		NPC best = null;
 		double bestD = HOST_SENSE_R;
 		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, HOST_SENSE_R)) {
-			if (n == this || n.isDead() || n.isRemoved() || n.getSize() <= getSize()
+			if (n == this || n.isDead() || n.isRemoved() || !bigEnoughHost(n)
 					|| !n.isOrganic() // no blood in a machine: nothing to ride and nothing to drink
 					|| (nicheOf(n) != null && nicheOf(n).drains())) {
 				continue;
@@ -3453,7 +3482,12 @@ public class TestNPC extends NPC {
 			if (niche().drains() && nicheOf(n) != null && nicheOf(n).drains()) {
 				continue;
 			}
-			if (n.getSize() > getSize() && attachTo(n)) {
+			// A parasite latches only on a host that meets its standard -- the same
+			// line its host scan applies, so what it goes looking for and what it
+			// will climb onto agree. Anything else that rides takes any body bigger
+			// than itself: a hitchhiker is after a lift, not a meal.
+			boolean bigEnough = niche().drains() ? bigEnoughHost(n) : n.getSize() > getSize();
+			if (bigEnough && attachTo(n)) {
 				return;
 			}
 		}

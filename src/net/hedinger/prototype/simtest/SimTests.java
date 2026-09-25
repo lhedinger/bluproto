@@ -13773,6 +13773,102 @@ public class SimTests {
 	}
 
 	/**
+	 * How small a host a parasite will settle for is its {@link Genome#predatory}.
+	 *
+	 * <p>The gene was read by nothing a parasite does: only the prey channel's
+	 * gain, which no parasite program reads, and the reaction of mindless
+	 * bodies, which a parasite is not. Measured on the live world, every one of
+	 * the generation-22 parasites carried it between 0 and 0.06 and none of
+	 * their programs looked at the prey sensor -- a gene drifting on nothing.
+	 *
+	 * <p>Now it is the parasite's standard for a host: it rides only a body
+	 * bigger than itself by {@code 1 + PARA_PICKINESS * (1 - predatory)}, so an
+	 * unpredatory lineage holds out for a host twice its size and a predatory
+	 * one takes anything bigger at all. Neither is free. A big host pays more
+	 * per point of health drunk and outlasts the drain; any host is easier to
+	 * find. Where that balances is selection's.
+	 *
+	 * <p>Pinned on a 5 px parasite beside a parked host: a fully predatory one
+	 * rides an 8 px body and an unpredatory one will not, nor even point its
+	 * forage channel at it; halfway, the line sits at one and a half times, so
+	 * a 7 px body is refused and an 8 px one taken; an unpredatory one passes
+	 * the nearer 8 px body for a 14 px one; and the line is a parasite's alone
+	 * -- a hitchhiker with no predatory drive still climbs on anything bigger.
+	 */
+	static class APredatoryParasiteSettlesForASmallerHost extends Scenario {
+		private static Genome body(double size, double predatory) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.06;
+			g.predatory = predatory;
+			return g;
+		}
+
+		private static TestNPC parked(double x, double y, double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0;
+			return TestNPC.breeder(x, y, 0, g).grown().withReproCooldown(100_000_000);
+		}
+
+		private static final Mind RIDE = (sn, a) -> {
+			a[AgentIO.A_SEEK] = 0.1; // forage: for a parasite, a host
+			a[AgentIO.A_THROTTLE] = 0.6;
+			a[AgentIO.A_ATTACH] = 1; // latch the moment something acceptable is in reach
+		};
+
+		/** A 5 px rider of {@code clade} with {@code predatory}, walked at hosts of
+		 *  the given sizes placed further and further east; returns what it rides
+		 *  after 900 ticks (null for nothing) and the rider. */
+		private Object[] ride(Genome.Clade clade, double predatory, double... hostSizes) {
+			return ride(4.5, clade, predatory, hostSizes);
+		}
+
+		private Object[] ride(double startX, Genome.Clade clade, double predatory, double... hostSizes) {
+			World w = room(30, 10);
+			TestNPC[] hosts = new TestNPC[hostSizes.length];
+			for (int i = 0; i < hostSizes.length; i++) {
+				hosts[i] = parked(8.5 + 8 * i, 5.5, hostSizes[i]);
+				w.spawnEntity(hosts[i]);
+			}
+			TestNPC rider = TestNPC.minded(startX, 5.5, 0, body(5, predatory), RIDE)
+					.withClade(clade).grown().withHunger(1.0);
+			w.spawnEntity(rider);
+			w.think();
+			tick(w, 2);
+			double sensed = rider.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
+			tick(w, 900);
+			return new Object[] { rider.getAttachTarget(), sensed, hosts };
+		}
+
+		@Override
+		public void run() {
+			seed(84);
+			Object[] eager = ride(Genome.Clade.PARASITE, 1.0, 8);
+			assertTrue("a fully predatory 5 px parasite rides an 8 px host", eager[0] == ((TestNPC[]) eager[2])[0]);
+
+			Object[] choosy = ride(Genome.Clade.PARASITE, 0.0, 8);
+			assertTrue("an unpredatory one will not: it holds out for twice its size", choosy[0] == null);
+			assertNear("and its forage channel does not even point at the 8 px body", 0.0, (Double) choosy[1], 1e-12);
+
+			Object[] halfNo = ride(Genome.Clade.PARASITE, 0.5, 7);
+			assertTrue("halfway, the line is one and a half times: a 7 px body is refused", halfNo[0] == null);
+			Object[] halfYes = ride(Genome.Clade.PARASITE, 0.5, 8);
+			assertTrue("and an 8 px one taken", halfYes[0] == ((TestNPC[]) halfYes[2])[0]);
+
+			Object[] passes = ride(Genome.Clade.PARASITE, 0.0, 8, 14);
+			assertTrue("an unpredatory parasite passes the nearer 8 px body for a 14 px one",
+					passes[0] == ((TestNPC[]) passes[2])[1]);
+
+			// Started beside the body: a scavenger's forage is a carcass, so nothing
+			// walks it to a living one -- the claim is only about what it climbs on.
+			Object[] hitch = ride(8.1, Genome.Clade.SCAVENGER, 0.0, 8);
+			assertTrue("and the line is a parasite's alone: a hitchhiker with no predatory drive still climbs on",
+					hitch[0] == ((TestNPC[]) hitch[2])[0]);
+		}
+	}
+
+	/**
 	 * A parasite drinks only what it has room for, and what it takes goes
 	 * somewhere.
 	 *
@@ -16392,6 +16488,7 @@ public class SimTests {
 				new TuningRidesTheCommandLog(),
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
+				new APredatoryParasiteSettlesForASmallerHost(),
 				new AParasiteDrinksOnlyWhatItHasRoomFor(),
 				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
