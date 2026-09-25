@@ -1128,11 +1128,30 @@ public class World {
 			return false;
 		}
 		openings = null; // a written tile may have been, or become, a way through
+		sightEpoch++;
 		return levels[l].setTile(c, r, l, t);
 	}
 
 	public void setTile(int c, int r, int l) {
+		sightEpoch++;
 		levels[l].setTile(c, r, l);
+	}
+
+	/**
+	 * Which map the sightlines were traced on. Advances on every change to
+	 * what a ray can cross -- a tile written, a door swung -- so a sightline
+	 * remembered from before the change is traced afresh (see
+	 * {@link Grid#sightBetween}). Anything that alters what blocks sight
+	 * outside those two paths must call {@link #sightChanged()}.
+	 */
+	private int sightEpoch = 0;
+
+	public int sightEpoch() {
+		return sightEpoch;
+	}
+
+	public void sightChanged() {
+		sightEpoch++;
 	}
 
 	/**

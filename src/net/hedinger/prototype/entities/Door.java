@@ -186,24 +186,28 @@ public class Door extends Entity {
 	 *  spans (a wide door seals its whole doorway). */
 	private void applyFlags(boolean open) {
 		int r = (int) (this.D % (Math.PI / 2));
+		boolean changed = false;
 		for (int s = 0; s < span; s++) {
 			if (r == 0) {
 				if (open) {
-					getWorld().getTile(X + s, Y, Z).openDoor(0);
-					getWorld().getTile(X + s, Y - 1, Z).openDoor(2);
+					changed |= getWorld().getTile(X + s, Y, Z).openDoor(0);
+					changed |= getWorld().getTile(X + s, Y - 1, Z).openDoor(2);
 				} else {
-					getWorld().getTile(X + s, Y, Z).closeDoor(0);
-					getWorld().getTile(X + s, Y - 1, Z).closeDoor(2);
+					changed |= getWorld().getTile(X + s, Y, Z).closeDoor(0);
+					changed |= getWorld().getTile(X + s, Y - 1, Z).closeDoor(2);
 				}
 			} else {
 				if (open) {
-					getWorld().getTile(X - 1, Y + s, Z).openDoor(1);
-					getWorld().getTile(X, Y + s, Z).openDoor(3);
+					changed |= getWorld().getTile(X - 1, Y + s, Z).openDoor(1);
+					changed |= getWorld().getTile(X, Y + s, Z).openDoor(3);
 				} else {
-					getWorld().getTile(X - 1, Y + s, Z).closeDoor(1);
-					getWorld().getTile(X, Y + s, Z).closeDoor(3);
+					changed |= getWorld().getTile(X - 1, Y + s, Z).closeDoor(1);
+					changed |= getWorld().getTile(X, Y + s, Z).closeDoor(3);
 				}
 			}
+		}
+		if (changed) {
+			getWorld().sightChanged(); // a swung door is a map change to the eye
 		}
 	}
 

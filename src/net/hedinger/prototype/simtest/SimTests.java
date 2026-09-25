@@ -10608,6 +10608,84 @@ public class SimTests {
 		}
 	}
 
+	/** Sight is decided tile to tile: whether B can be seen from A is the ray
+	 * between the two tile CENTRES, so every body in A gets the same answer
+	 * about every body in B wherever each stands inside its tile, A sees B
+	 * exactly when B sees A, and two bodies in one tile always see each
+	 * other. Range and the eye's cone stay the body's own. Checked over a
+	 * random rubble field from random points, against the centre-to-centre
+	 * answer and the reverse query. */
+	static class SightIsTheTilePairs extends Scenario {
+		@Override
+		public void run() {
+			seed(1101);
+			World w = room(24, 24);
+			for (int i = 0; i < 70; i++) { // scattered rubble: ~12% of the floor
+				w.setTile(2 + net.hedinger.prototype.engine.Utils.random(20), 2 + net.hedinger.prototype.engine.Utils.random(20), 0, Tile.TileType.TYPE_WALL);
+			}
+			int clear = 0, blocked = 0;
+			for (int n = 0; n < 600; n++) {
+				int ca = 1 + net.hedinger.prototype.engine.Utils.random(22), ra = 1 + net.hedinger.prototype.engine.Utils.random(22);
+				int cb = 1 + net.hedinger.prototype.engine.Utils.random(22), rb = 1 + net.hedinger.prototype.engine.Utils.random(22);
+				if (w.getTile(ca, ra, 0).isSolid() || w.getTile(cb, rb, 0).isSolid()) {
+					continue;
+				}
+				boolean centres = w.hasLOS(ca + 0.5, ra + 0.5, 0, 0, cb + 0.5, rb + 0.5, 0, -1, Math.PI);
+				double ax = ca + net.hedinger.prototype.engine.Utils.random(), ay = ra + net.hedinger.prototype.engine.Utils.random();
+				double bx = cb + net.hedinger.prototype.engine.Utils.random(), by = rb + net.hedinger.prototype.engine.Utils.random();
+				assertTrue("sight from anywhere in a tile is the tile's sight", centres == w.hasLOS(ax, ay, 0, 0, bx, by, 0, -1, Math.PI));
+				assertTrue("sight is symmetric", centres == w.hasLOS(bx, by, 0, 0, ax, ay, 0, -1, Math.PI));
+				if (centres) {
+					clear++;
+				} else {
+					blocked++;
+				}
+			}
+			assertGreater("the field had clear sightlines to check", clear, 40);
+			assertGreater("the field had blocked sightlines to check", blocked, 100);
+			// Two bodies in one tile see each other whatever the tile's edges hold.
+			w.setTile(9, 9, 0, Tile.TileType.TYPE_WALL);
+			w.setTile(11, 11, 0, Tile.TileType.TYPE_WALL);
+			assertTrue("one tile, two bodies: seen", w.hasLOS(10.05, 10.05, 0, 0, 10.95, 10.95, 0, -1, Math.PI));
+			// A remembered sightline is per tile pair, so the range and the cone
+			// still belong to the asker: the same pair, out of range or behind
+			// the eye, is unseen.
+			assertTrue("in range and ahead: seen", w.hasLOS(3.5, 3.5, 0, 0, 5.5, 3.5, 0, 3, Math.PI / 4));
+			assertTrue("the same pair, out of range: unseen", !w.hasLOS(3.5, 3.5, 0, 0, 5.5, 3.5, 0, 1.5, Math.PI / 4));
+			assertTrue("the same pair, behind the eye: unseen", !w.hasLOS(3.5, 3.5, 0, Math.PI, 5.5, 3.5, 0, 3, Math.PI / 4));
+		}
+	}
+
+	/** A sightline is remembered per tile pair, so the memory must follow the
+	 * map: a door that swings shut between two tiles hides what it hid the
+	 * tick it shuts, and shows it again when it opens -- through the same
+	 * door entity a facility builds, not a hand on the tile flags. */
+	static class ASwungDoorChangesTheSightline extends Scenario {
+		@Override
+		public void run() {
+			seed(1102);
+			World w = room(16, 16);
+			for (int x = 1; x < 15; x++) {
+				if (x != 8) {
+					w.setTile(x, 8, 0, Tile.TileType.TYPE_WALL);
+				}
+			}
+			Door door = new Door(8, 8, 0, 0);
+			door.snap(true);
+			w.spawnEntity(door);
+			tick(w, 2);
+			assertTrue("through the open doorway: seen", w.hasLOS(8.5, 3.5, 0, 0, 8.5, 12.5, 0, -1, Math.PI));
+			door.snap(false);
+			tick(w, 2);
+			assertTrue("the door shut: unseen", !w.hasLOS(8.5, 3.5, 0, 0, 8.5, 12.5, 0, -1, Math.PI));
+			assertTrue("and unseen from the other side", !w.hasLOS(8.5, 12.5, 0, 0, 8.5, 3.5, 0, -1, Math.PI));
+			door.snap(true);
+			tick(w, 2);
+			assertTrue("the door open again: seen", w.hasLOS(8.5, 3.5, 0, 0, 8.5, 12.5, 0, -1, Math.PI));
+			assertTrue("a wall that was never a door still blocks", !w.hasLOS(5.5, 3.5, 0, 0, 5.5, 12.5, 0, -1, Math.PI));
+		}
+	}
+
 	/** Line-of-sight over open floor must carry in every direction -- rows, columns
 	 * AND diagonals -- and a wall on the line must block it. Guards the sight
 	 * raycast, which historically traced correctly only along pure rows/columns and
@@ -16232,6 +16310,8 @@ public class SimTests {
 				new HeldSightTurnsWithTheBody(),
 				new TheSenseClockReplays(),
 				new ThePheromoneFieldIsTheCloudsRasterised(),
+				new SightIsTheTilePairs(),
+				new ASwungDoorChangesTheSightline(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
