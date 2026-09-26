@@ -13754,21 +13754,26 @@ public class SimTests {
 	 * voice on the voice channels; the caller does not hear itself, and a
 	 * listener past earshot hears nothing.
 	 *
+	 * <p>How loud is the caller's choice, on {@link AgentIO#A_LOUDNESS}: a
+	 * whisper carries three tiles whatever the body, and the loudest call
+	 * twenty-four tiles per unit of lean mass, up to sixty for the largest body.
+	 *
 	 * <p>Calling is priced, because a call is also an advertisement to anything
-	 * listening that would like to eat the caller: each one costs glycogen in
-	 * proportion to the body, a held actuator calls once per period rather than
-	 * every tick, and a collapsed body cannot call at all.
+	 * listening that would like to eat the caller: each one costs a share of
+	 * the glycogen store rising with the square of the loudness, a hundredth
+	 * for a whisper to a quarter for the loudest; a held actuator calls once per
+	 * period rather than every tick; and a collapsed body cannot call at all.
 	 */
 	static class ACreatureCallsInItsOwnVoice extends Scenario {
-		/** An MLP genome written before the call existed — fewer sensors, one
-		 *  actuator short — still loads, as the same net with the newer senses
+		/** An MLP genome written before the call existed — fewer sensors, two
+		 *  actuators short — still loads, as the same net with the newer senses
 		 *  unread and the newer act unwritten: every old weight lands where it
 		 *  was, and everything new is zero. It must, or a saved founder or a
 		 *  recorded spawn from before this change is a genome nothing can read. */
 		private void anOlderNetStillLoads() {
 			int H = net.hedinger.prototype.entities.MlpBrain.HIDDEN;
 			int in = AgentIO.NUM_SENSORS, out = AgentIO.NUM_ACT;
-			int oldIn = in - 3, oldOut = out - 1; // before the voice and the call
+			int oldIn = in - 3, oldOut = out - 2; // before the voice and the call
 			double[] old = new double[H * oldIn + H + oldOut * H + oldOut];
 			for (int i = 0; i < old.length; i++) {
 				old[i] = i + 1; // every weight distinct, none zero
@@ -13799,9 +13804,10 @@ public class SimTests {
 
 		/** What one staging produced. */
 		private static final class Heard {
-			double[] self, kin, hunter, far;
+			double[] self, kin, hunter;
+			double[][] at; // one herbivore ear per requested distance
 			int calls;
-			double glycogen, leanMass;
+			double glycogen, capacity;
 			boolean collapsed;
 		}
 
@@ -13813,25 +13819,30 @@ public class SimTests {
 			return heard;
 		}
 
-		private static Genome voice() {
+		private static Genome voice(double size) {
 			Genome g = new Genome();
 			g.markers = new double[] { 0.1, 0.9, 0.2 };
+			g.size = size;
 			return g;
 		}
 
-		/** A caller holding {@code call} on its actuator for {@code ticks}. */
-		private Heard stage(double call, int ticks, double glycogenShare) {
+		/** A grown caller of {@code size} px holding {@code call} on its call
+		 *  actuator and {@code loud} on its loudness for {@code ticks}, with a
+		 *  herbivore ear at each of {@code distances} tiles east of it. */
+		private Heard stage(double call, double loud, double size, int ticks,
+				double glycogenShare, double... distances) {
 			seed(109);
-			World w = room(40, 7);
+			World w = room(72, 7);
 			final double[] self = new double[AgentIO.NUM_SENSORS];
 			Mind caller = (sn, a) -> {
 				System.arraycopy(sn, 0, self, 0, sn.length);
 				java.util.Arrays.fill(a, 0);
 				a[AgentIO.A_CALL] = call; // and nothing else: it stands and calls
+				a[AgentIO.A_LOUDNESS] = loud;
 			};
-			// Grown: a newborn's call carries a couple of tiles, and what is under
-			// test is the call, not how little of one a calf can make.
-			TestNPC c = TestNPC.minded(3.5, 3.5, 0, voice(), caller).grown();
+			// Grown: what is under test is the call, not how little of one a calf
+			// can make.
+			TestNPC c = TestNPC.minded(3.5, 3.5, 0, voice(size), caller).grown();
 			c.withGlycogen(glycogenShare * c.glycogenCapacity());
 			if (glycogenShare < NPC.EXHAUSTION) {
 				c.withFat(0).withHunger(1.0); // nothing to climb back out on
@@ -13839,11 +13850,13 @@ public class SimTests {
 			w.spawnEntity(c);
 			Heard h = new Heard();
 			h.self = self;
-			h.leanMass = c.leanMass();
-			double earshot = TestNPC.CALL_LOUDNESS * c.leanMass();
-			h.kin = ear(w, 6.5, voice(), Genome.Clade.HERBIVORE);
-			h.hunter = ear(w, 7.5, voice(), Genome.Clade.PREDATOR);
-			h.far = ear(w, 3.5 + earshot + 2, voice(), Genome.Clade.HERBIVORE);
+			h.capacity = c.glycogenCapacity();
+			h.kin = ear(w, 6.5, voice(6), Genome.Clade.HERBIVORE);
+			h.hunter = ear(w, 7.5, voice(6), Genome.Clade.PREDATOR);
+			h.at = new double[distances.length][];
+			for (int i = 0; i < distances.length; i++) {
+				h.at[i] = ear(w, 3.5 + distances[i], voice(6), Genome.Clade.HERBIVORE);
+			}
 			w.think();
 			java.util.Set<Integer> calls = new java.util.HashSet<>();
 			for (int t = 0; t < ticks; t++) {
@@ -13863,17 +13876,22 @@ public class SimTests {
 			return h;
 		}
 
+		private static boolean heard(double[] ear) {
+			return ear[AgentIO.S_SOUND_PROX] > 0;
+		}
+
 		@Override
 		public void run() {
 			int periods = 3;
 			// The first call is on the first thought, then one each period: three
 			// of them, and the window stops half a period short of a fourth.
 			int span = periods * TestNPC.CALL_PERIOD - TestNPC.CALL_PERIOD / 2;
+			int one = TestNPC.CALL_PERIOD / 2; // a window holding exactly one call
 
-			Heard calling = stage(0.5, span, 0.8);
+			Heard calling = stage(0.5, 0.5, 6, span, 0.8);
 			assertTrue("holding the actuator calls once a period, not every tick ("
 					+ calling.calls + " calls in " + span + " ticks)", calling.calls == periods);
-			assertGreater("the caller's own kind heard it", calling.kin[AgentIO.S_SOUND_PROX], 0);
+			assertTrue("the caller's own kind heard it", heard(calling.kin));
 			assertNear("as the call the mind named: 0.5 is the second of four",
 					2.0 / AgentIO.CALL_TYPES, calling.kin[AgentIO.S_SOUND_CALL], 1e-9);
 			assertNear("a call is not a scream: nothing on the kind channel",
@@ -13883,26 +13901,52 @@ public class SimTests {
 			assertNear("a hunter in earshot hears the same call",
 					2.0 / AgentIO.CALL_TYPES, calling.hunter[AgentIO.S_SOUND_CALL], 1e-9);
 			assertNear("in another kind's voice", -1.0, calling.hunter[AgentIO.S_SOUND_CLADE], 1e-9);
-			assertNear("past earshot, nothing", 0.0, calling.far[AgentIO.S_SOUND_PROX], 1e-9);
 			assertNear("and the caller does not hear itself",
 					0.0, calling.self[AgentIO.S_SOUND_PROX], 1e-9);
 
-			Heard silent = stage(0.0, span, 0.8);
+			Heard silent = stage(0.0, 0.0, 6, span, 0.8);
 			assertTrue("a silent twin made no call", silent.calls == 0);
-			assertNear("and a quiet mind hears no call", 0.0, silent.kin[AgentIO.S_SOUND_PROX], 1e-9);
-			assertNear("each call cost its glycogen, in proportion to the body",
-					periods * TestNPC.CALL_COST * calling.leanMass,
-					silent.glycogen - calling.glycogen, 1e-6);
+			assertTrue("and a quiet mind hears no call", !heard(silent.kin));
 
-			Heard loudest = stage(2.0, span, 0.8);
+			Heard loudest = stage(2.0, 0.5, 6, span, 0.8);
 			assertNear("2 names the fourth call, and the ear tells it from the second",
 					1.0, loudest.kin[AgentIO.S_SOUND_CALL], 1e-9);
-			Heard whisper = stage(0.1, span, 0.8);
-			assertTrue("0.1 is below the first band: no call at all", whisper.calls == 0);
+			Heard mute = stage(0.1, 0.5, 6, span, 0.8);
+			assertTrue("0.1 is below the first band: no call at all", mute.calls == 0);
+
+			// How far is the loudness's to choose, and the limits are three and
+			// sixty tiles: a whisper carries three whatever the body, and the
+			// loudest call carries twenty-four tiles per unit of lean mass, so a
+			// 6 px body's reaches eighteen and the largest body's sixty.
+			Heard whisper = stage(0.5, 0.0, 6, one, 0.8, 2.5, 4);
+			assertTrue("a whisper is heard at two and a half tiles", heard(whisper.at[0]));
+			assertTrue("and not at four: it carries three", !heard(whisper.at[1]));
+			Heard shout = stage(0.5, 1.0, 6, one, 0.8, 17, 19);
+			assertTrue("a 6 px body's loudest call is heard at seventeen tiles", heard(shout.at[0]));
+			assertTrue("and not at nineteen: it carries eighteen", !heard(shout.at[1]));
+			Heard roar = stage(0.5, 1.0, Genome.SIZE_MAX, one, 0.8, 58, 62);
+			assertTrue("the largest body's loudest call is heard at fifty-eight", heard(roar.at[0]));
+			assertTrue("and not at sixty-two: it carries sixty", !heard(roar.at[1]));
+			Heard half = stage(0.5, 0.5, 6, one, 0.8, 8, 10);
+			assertTrue("half loudness carries half as far: nine tiles, heard at eight",
+					heard(half.at[0]));
+			assertTrue("and not at ten", !heard(half.at[1]));
+
+			// And the louder, the dearer: a call costs a share of the full
+			// glycogen store that rises with the square of the loudness, as
+			// moving costs the square of the speed -- a hundredth for a whisper,
+			// a quarter for the loudest call.
+			Heard hush = stage(0.0, 0.0, 6, one, 0.8);
+			assertNear("a whisper costs a hundredth of the store",
+					0.01 * whisper.capacity, hush.glycogen - whisper.glycogen, 1e-6);
+			assertNear("half loudness a quarter of the way up the square: 0.07",
+					0.07 * half.capacity, hush.glycogen - half.glycogen, 1e-6);
+			assertNear("and the loudest call a quarter of the whole store",
+					0.25 * shout.capacity, hush.glycogen - shout.glycogen, 1e-6);
 
 			anOlderNetStillLoads();
 
-			Heard spent = stage(0.5, span, NPC.EXHAUSTION * 0.5);
+			Heard spent = stage(0.5, 0.5, 6, span, NPC.EXHAUSTION * 0.5);
 			assertTrue("the spent body is still collapsed at the end: it had nothing to recover on",
 					spent.collapsed);
 			assertTrue("and a collapsed body cannot call", spent.calls == 0);

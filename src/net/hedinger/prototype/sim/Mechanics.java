@@ -757,13 +757,20 @@ public final class Mechanics {
 								+ AgentIO.CALL_TYPES + " calls — 0.25, 0.5, 1 and 2 or "
 								+ "more; below 0.175 is silence. What a call means is not "
 								+ "decided: four signals, and the lineages that make and "
-								+ "hear them settle the rest. Each costs "
-								+ num(TestNPC.CALL_COST) + " glycogen per unit of lean "
-								+ "mass, a held call sounds once every "
-								+ TestNPC.CALL_PERIOD + " ticks, it carries "
-								+ num(TestNPC.CALL_LOUDNESS) + " tiles per unit of lean "
-								+ "mass, a collapsed body cannot call, and the caller does "
-								+ "not hear itself. Hunters hear it too.")),
+								+ "hear them settle the rest. How loud is the loudness "
+								+ "slot's to say. A held call sounds once every "
+								+ TestNPC.CALL_PERIOD + " ticks, a collapsed body cannot "
+								+ "call, and the caller does not hear itself. Hunters hear "
+								+ "it too."),
+						act(AgentIO.A_LOUDNESS, "How loud a call is, 0 to 1, read when it "
+								+ "is made. A whisper carries " + num(TestNPC.CALL_MIN_REACH)
+								+ " tiles whatever the body; the loudest call "
+								+ num(TestNPC.CALL_REACH) + " tiles per unit of lean mass. "
+								+ "Loudness is also the price, a share of the glycogen store "
+								+ "rising with its square: " + pct(TestNPC.CALL_COST_WHISPER)
+								+ " for a whisper, " + pct(TestNPC.callCost(0.5))
+								+ " at half, " + pct(TestNPC.CALL_COST_LOUD) + " for the "
+								+ "loudest. A mind that never writes here whispers.")),
 				group("Retired, and inert",
 						act(AgentIO.A_VERTICAL, "There is no vertical intent to express: a ramp "
 								+ "is floor that spans two levels, so you change level by "

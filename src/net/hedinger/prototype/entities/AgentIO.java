@@ -390,15 +390,26 @@ public final class AgentIO {
 	 * <p>What a call MEANS is not decided here: the types are four distinct
 	 * signals and nothing more, and whether one comes to mean "here is food",
 	 * "I am here" or "run" is for the lineages that make and hear them to
-	 * settle. A call is priced, because it is also heard by whatever would like
-	 * to eat the caller: it costs glycogen, a held actuator calls once per
-	 * period rather than every tick, and a collapsed body cannot call.
+	 * settle. How loud is {@link #A_LOUDNESS}'s to say. A call is priced,
+	 * because it is also heard by whatever would like to eat the caller: it
+	 * costs glycogen, the more the louder, a held actuator calls once per period
+	 * rather than every tick, and a collapsed body cannot call.
 	 */
 	public static final int A_CALL = 14;
-	public static final int NUM_ACT = 15;
+	/**
+	 * <b>How loud to call</b>, 0 (a whisper) .. 1 (as loud as the body can),
+	 * read when {@link #A_CALL} makes a call and not otherwise. Loudness is
+	 * reach: a whisper carries a few tiles whatever the body, the loudest call
+	 * carries in proportion to the body's mass. It is also the price, rising
+	 * with the square of the loudness as movement's does with speed, so being
+	 * heard far away is something a lineage pays for. A mind that never writes
+	 * here whispers.
+	 */
+	public static final int A_LOUDNESS = 15;
+	public static final int NUM_ACT = 16;
 	public static final String[] ACT_NAMES = {
 			"turn", "throttle", "eat", "deposit", "attack", "mate", "grab", "attach", "struggle",
-			"tile", "prey", "seek", "mark", "interact", "call" };
+			"tile", "prey", "seek", "mark", "interact", "call", "loudness" };
 
 	/** How many distinct calls a body can make ({@link #A_CALL}). */
 	public static final int CALL_TYPES = 4;
