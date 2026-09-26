@@ -167,27 +167,36 @@ public class TestNPC extends NPC {
 	public static final double KILL_LOUDNESS = 12.0;
 
 	/**
-	 * How far a call carries, in tiles per unit of the caller's lean mass.
+	 * How far the loudest call carries, in tiles per unit of the caller's lean
+	 * mass: a reference body's reaches twenty-four tiles and the largest body's
+	 * sixty. How much of that a call uses is the caller's choice
+	 * ({@link AgentIO#A_LOUDNESS}), scaling the reach down to
+	 * {@link #CALL_MIN_REACH}.
 	 *
-	 * <p>Two thirds of a scream's {@link #KILL_LOUDNESS}: a reference body's call
-	 * reaches eight tiles, past what it can see in most country and round the
-	 * walls, which is the regime where a call tells a listener something its eyes
-	 * cannot. Scaled by the caller like a scream by its quarry, so a big animal
-	 * is heard further — and by more of what hunts it.
+	 * <p>Twice a scream's {@link #KILL_LOUDNESS}. A scream is involuntary and
+	 * free; a call is chosen and paid for, and paying for the most of it should
+	 * buy a sound that reaches past anything a body could see.
+	 */
+	@Unit("tiles earshot per lean mass")
+	public static final double CALL_REACH = 24.0;
+	/**
+	 * How far the quietest call carries, in tiles, whatever the body: a whisper
+	 * reaches its neighbours and no further. A floor rather than a share of the
+	 * reach, so a calf that whispers is heard by the mother standing by it.
 	 */
 	@Unit("tiles earshot")
-	public static final double CALL_LOUDNESS = 8.0;
+	public static final double CALL_MIN_REACH = 3.0;
+	/** What a whisper costs, as a share of the full glycogen store. */
+	@Unit("of the glycogen store")
+	public static final double CALL_COST_WHISPER = 0.01;
 	/**
-	 * What one call costs, in glycogen per unit of lean mass.
-	 *
-	 * <p>Two and a half ticks of bucking ({@code BUCK_SELF_COST}), under one per
-	 * cent of a full store: cheap enough that a lineage can afford to say
-	 * something, dear enough that a mind which calls at every chance pays for it
-	 * against one that calls when it matters. The larger price is not this one
-	 * but the listeners, since a call is heard by hunters too.
+	 * What the loudest call costs, as a share of the full glycogen store. A
+	 * call between costs between, rising with the square of the loudness as
+	 * movement does with the speed, so the last stretch of reach is the dearest:
+	 * half loudness is half the reach for 0.07 of the store against 0.25.
 	 */
-	@Unit("glycogen per lean mass")
-	public static final double CALL_COST = 0.05;
+	@Unit("of the glycogen store")
+	public static final double CALL_COST_LOUD = 0.25;
 	/**
 	 * The fewest ticks between two calls. A held actuator calls once per period
 	 * rather than every tick: two seconds, about three times a sound's travel,
@@ -3291,7 +3300,7 @@ public class TestNPC extends NPC {
 		interactIntent = a[AgentIO.A_INTERACT] > 0.5; // deliberately operate a fixture
 		int call = AgentIO.callType(a[AgentIO.A_CALL]);
 		if (call > 0) {
-			call(call);
+			call(call, clampUnit(a[AgentIO.A_LOUDNESS]));
 		}
 		D = wrap(D + t * MAX_TURN); // steer
 		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
@@ -3476,11 +3485,13 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * Makes a call of the given type in this body's own voice, if it can: not
-	 * within {@link #CALL_PERIOD} of the last one, and not collapsed. Pays
-	 * {@link #CALL_COST} for it out of glycogen.
+	 * Makes a call of the given type and loudness (0..1) in this body's own
+	 * voice, if it can: not within {@link #CALL_PERIOD} of the last one, and not
+	 * collapsed. The loudness sets both the reach, from {@link #CALL_MIN_REACH}
+	 * up to {@link #CALL_REACH} per unit of lean mass, and the price, paid out
+	 * of glycogen.
 	 */
-	private void call(int type) {
+	private void call(int type, double loud) {
 		if (getWorld() == null || !canExert()) {
 			return; // collapsed bodies are silent (VITALS.md)
 		}
@@ -3489,9 +3500,19 @@ public class TestNPC extends NPC {
 			return;
 		}
 		calledAt = now;
-		glycogen = Math.max(0, glycogen - CALL_COST * leanMass());
+		glycogen = Math.max(0, glycogen - callCost(loud) * glycogenCapacity());
 		getWorld().spawnEntity(net.hedinger.prototype.entities.Sound.call(
-				this, CALL_LOUDNESS * leanMass(), type, genome));
+				this, callReach(loud), type, genome));
+	}
+
+	/** How far a call of this loudness carries from this body, in tiles. */
+	public double callReach(double loud) {
+		return Math.max(CALL_MIN_REACH, CALL_REACH * leanMass() * loud);
+	}
+
+	/** What a call of this loudness costs, as a share of the glycogen store. */
+	public static double callCost(double loud) {
+		return CALL_COST_WHISPER + (CALL_COST_LOUD - CALL_COST_WHISPER) * loud * loud;
 	}
 
 	/** Shakes at riders clinging to this creature. Bucking costs energy every tick;

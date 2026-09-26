@@ -103,9 +103,13 @@ the quarry's), and its magnitude names one of four calls on the same bands —
 another) and `sound_kin` (marker similarity to its own). What a call means is not
 decided anywhere: the four types are signals and nothing more, and whether one
 comes to mean food, company or danger is for the lineages that make and hear
-them. It is priced — glycogen per call in proportion to the body, one call per
-period however long the actuator is held, none from a collapsed body — and the
-larger price is the audience, because hunters hear it too.
+them. How loud is a second slot, `A_LOUDNESS` (0 to 1): a whisper carries 3
+tiles whatever the body, the loudest call 24 tiles per unit of lean mass — 18
+for a founder-sized body, 60 for the largest. Loudness is the price as well, a
+share of the glycogen store rising with its square: 1% for a whisper, 7% at half,
+a quarter of the store for the loudest. One call per period however long the
+actuator is held, none from a collapsed body, and the larger price is the
+audience, because hunters hear it too.
 
 Note what this does to the economy above: an intent packs more behaviour into one
 instruction than `A_TURN` does, so a seeking lineage buys capability without
