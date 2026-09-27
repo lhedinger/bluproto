@@ -2837,7 +2837,7 @@ public abstract class NPC extends Entity {
 	 * re-verifies 0.75 still carries the food chain.
 	 */
 	@Unit("energy per vegetation")
-	public static double PLANT_DENSITY = 1.875;
+	public static double PLANT_DENSITY = 15.0;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
