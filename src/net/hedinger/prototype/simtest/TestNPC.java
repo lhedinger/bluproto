@@ -2085,6 +2085,14 @@ public class TestNPC extends NPC {
 	// The clock is a function of the tick and the id, never of wall time, so a
 	// replay is bit-identical; and the tier is a function of the situation,
 	// never of a heritable trait, so the scheduler is not a selective force.
+	/** How close a predator must be to put a body on the urgent clock. A
+	 *  hunter at the edge of a twelve-tile range is a hundred ticks away at
+	 *  a walk; one this close is a few seconds away, and every tick counts.
+	 *  Beyond it the body is on the calm clock, and the threat point it
+	 *  holds between passes is at most the cadence stale -- under half a
+	 *  tile against six or more of gap. */
+	@net.hedinger.prototype.engine.Unit("tiles")
+	public static final int SENSE_URGENT_R = 6;
 	/** Ticks between full passes for a body with company and no danger. */
 	@net.hedinger.prototype.engine.Unit("ticks")
 	public static final int SENSE_CALM = 4;
@@ -2116,10 +2124,27 @@ public class TestNPC extends NPC {
 		if (niche().hunts() && c.preyNearCount(z, X, Y, LOS_RANGE) > 0) {
 			return 0;
 		}
-		if (!"predator".equals(ecoRole()) && c.predatorsNearCount(z, X, Y, LOS_RANGE) > 0) {
+		if (!"predator".equals(ecoRole()) && predatorWithin(c, z, Math.min(LOS_RANGE, SENSE_URGENT_R))) {
 			return 0;
 		}
 		return c.creaturesNearCount(z, X, Y, LOS_RANGE) > 1 ? 1 : 2; // one is this body
+	}
+
+	/** Whether a predator stands within {@code r} tiles, measured, not
+	 *  counted by cell: the cells are eight tiles wide, so a count by cell
+	 *  would call a hunter two cells off "close". Predators are a tenth of
+	 *  the bodies, so the walk is short. */
+	private boolean predatorWithin(net.hedinger.prototype.engine.World.Census c, int z, double r) {
+		for (NPC p : c.predatorsNear(z, X, Y, r)) {
+			if (p == this) {
+				continue;
+			}
+			double dx = p.getX() - X, dy = p.getY() - Y;
+			if (dx * dx + dy * dy <= r * r) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Decides, once per tick, whether this tick takes a full sense pass. */
