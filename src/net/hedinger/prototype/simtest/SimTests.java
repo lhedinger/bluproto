@@ -14141,6 +14141,13 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(104);
+			// What the code ships, read before anything here tunes it. Captured
+			// rather than written down: the assertion at the bottom is that
+			// restoreDefaults puts back what it found, and a literal here would
+			// pin the constant's VALUE instead — a second copy of a number that
+			// lives in NPC, failing this scenario every time grass is recalibrated
+			// for reasons that have nothing to do with the command log.
+			final double shipped = NPC.PLANT_DENSITY;
 			try {
 				// The survey: a tunable, and two kinds of frozen — an anchor,
 				// and a value tiles copy out at construction.
@@ -14199,7 +14206,7 @@ public class SimTests {
 				net.hedinger.prototype.sim.Tuning.restoreDefaults();
 			}
 			assertNear("defaults restore the code-level value",
-					1.875, NPC.PLANT_DENSITY, 1e-12);
+					shipped, NPC.PLANT_DENSITY, 1e-12);
 		}
 	}
 
