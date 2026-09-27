@@ -10674,6 +10674,45 @@ public class SimTests {
 		}
 	}
 
+	/** Urgency is nearness, measured: a predator standing well inside a body's
+	 * range but outside SENSE_URGENT_R leaves it on the calm clock, one within
+	 * that radius puts every tick on the urgent clock -- and the test is the
+	 * distance, not the census cell, so a hunter two cells off does not count
+	 * as close. The threat is still on the channel either way, at most the
+	 * calm cadence late. */
+	static class AFarPredatorIsWatchedOnTheCalmClock extends Scenario {
+		@Override
+		public void run() {
+			seed(64);
+			World w = room(40, 30);
+			Genome g = new Genome();
+			g.losRange = 12;
+			g.size = 8;
+			TestNPC grazer = TestNPC.minded(10.5, 15.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			}).withHeading(0);
+			Genome pg = new Genome();
+			pg.losRange = 12;
+			pg.size = 24;
+			pg.speed = 0;
+			// Ten tiles off: in range, in the next census cell but one, not close.
+			TestNPC far = TestNPC.mindedPredator(20.5, 15.5, 0, pg).grown();
+			w.spawnEntity(grazer);
+			w.spawnEntity(far);
+			w.think();
+			tick(w, TestNPC.SENSE_CALM + 1);
+			assertEquals("a predator ten tiles off: the calm clock", 1, grazer.senseTier());
+			assertGreater("but on the threat channel all the same",
+					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
+			// Five tiles off: close.
+			TestNPC near = TestNPC.mindedPredator(15.5, 15.5, 0, pg).grown();
+			w.spawnEntity(near);
+			w.think();
+			w.think();
+			assertEquals("a predator five tiles off: urgent", 0, grazer.senseTier());
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -17051,6 +17090,7 @@ public class SimTests {
 				new ThePheromoneFieldIsTheCloudsRasterised(),
 				new SightIsTheTilePairs(),
 				new ASwungDoorChangesTheSightline(),
+				new AFarPredatorIsWatchedOnTheCalmClock(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
