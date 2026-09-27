@@ -14091,6 +14091,13 @@ public class SimTests {
 			// can make.
 			TestNPC c = TestNPC.minded(3.5, 3.5, 0, voice(size), caller).grown();
 			c.withGlycogen(glycogenShare * c.glycogenCapacity());
+			// Carrying a full fat store, so the store branch is shut and the only
+			// thing moving in the books is the call. The price is read by
+			// differencing two of these against each other, and fat storage is
+			// glycogen-dependent -- a body that just paid for a call holds less,
+			// so it would bank a different amount and the two runs would stop
+			// cancelling. What is under test is the call, not the body's thrift.
+			c.fattened();
 			if (glycogenShare < NPC.EXHAUSTION) {
 				c.withFat(0).withHunger(1.0); // nothing to climb back out on
 			}
@@ -14442,6 +14449,11 @@ public class SimTests {
 		}
 
 		private Object[] ride(double startX, Genome.Clade clade, double predatory, double... hostSizes) {
+			// Its own stream per staging. Five of these run in a row, and without
+			// this the fifth's outcome rides on how many draws the previous four
+			// happened to take -- so an unrelated change anywhere upstream moved
+			// which host a parasite picked, which is not what this is measuring.
+			seed(84);
 			World w = room(30, 10);
 			TestNPC[] hosts = new TestNPC[hostSizes.length];
 			for (int i = 0; i < hostSizes.length; i++) {
