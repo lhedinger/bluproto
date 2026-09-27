@@ -680,6 +680,48 @@ public abstract class NPC extends Entity {
 	 *  gut never pegs -- and starvation never bites -- while any fat is left. */
 	@Unit("hunger")
 	public static double FAT_DRAW_ABOVE = 0.75;
+	/**
+	 * Where fat storage starts, as a share of the glycogen store: below this the
+	 * body banks nothing, and from here to full the share of its digestion that
+	 * goes to fat ramps from none to all of it.
+	 *
+	 * <p>This exists to give selection a gradient. Storing used to need glycogen
+	 * at cap exactly, which is a cliff with no partial credit: a body holding 82%
+	 * of its store banked the same nothing as one holding 25%, and the only way
+	 * across was to arrive at the top. Nothing about that is climbable. A lineage
+	 * that evolved a slightly better surplus -- cheaper travel, a better gut, more
+	 * efficient tissue -- got no fat for it at all until the surplus was large
+	 * enough to fill a store worth {@link #GLYCOGEN_PER_MASS} times its adult mass,
+	 * so the trait that would eventually pay was invisible the whole way up.
+	 * Measured: a grazer at pace 0.10 fattened to its cap in three days, one at
+	 * 0.15 never stored a gram in a lifetime, and one at 0.30 peaked at 82% of
+	 * glycogen and still stored nothing.
+	 *
+	 * <p>Half, because glycogen is the fast store and fat is the slow one: a body
+	 * keeps the reserve it can actually spend half-filled before committing
+	 * anything to mass it has to carry. Above that the two fill together, and at
+	 * cap the behaviour is exactly what it was -- fat takes the whole digestion
+	 * rate, which is what makes this a widening of the old gate rather than a
+	 * different rule.
+	 */
+	@Unit("of glycogen")
+	public static double FAT_STORE_FROM = 0.5;
+
+	/**
+	 * The share of digestion that goes to fat at this glycogen level: 0 at and
+	 * below {@link #FAT_STORE_FROM}, 1 at cap, linear between. Static and total
+	 * so the shape is one expression a scenario can read off directly.
+	 */
+	public static double fatStoreShare(double glycogen, double cap) {
+		if (cap <= 0) {
+			return 1; // no store to fill: everything spare is fat
+		}
+		double over = glycogen / cap - FAT_STORE_FROM;
+		if (over <= 0) {
+			return 0;
+		}
+		return Math.min(1.0, over / Math.max(1e-9, 1.0 - FAT_STORE_FROM));
+	}
 
 	/** Fat on this body, in body-mass units. */
 	public double fat() {
@@ -1374,10 +1416,19 @@ public abstract class NPC extends Entity {
 				double back = Math.min(fat * FAT_DENSITY, digest);
 				fat -= back / FAT_DENSITY;
 				hunger = Math.max(0, hunger - back / gut);
-			} else if (hunger < FAT_STORE_BELOW && glycogen >= cap - 1e-9 && fat < fatCap()) {
-				double store = Math.min(digest, Math.min((fatCap() - fat) * FAT_DENSITY, (1 - hunger) * gut));
-				fat += store / FAT_DENSITY;
-				hunger = Math.min(1.0, hunger + store / gut);
+			} else if (hunger < FAT_STORE_BELOW && fat < fatCap()) {
+				// Not "is glycogen full" but "how full": the share ramps from none
+				// at FAT_STORE_FROM to all of it at cap, so any sustained surplus
+				// banks something and a better one banks more. What is stored still
+				// comes out of the gut, at fat's own density -- the accounting is
+				// the old one, only the gate is a slope instead of a step.
+				double share = fatStoreShare(glycogen, cap);
+				if (share > 0) {
+					double store = Math.min(digest * share,
+							Math.min((fatCap() - fat) * FAT_DENSITY, (1 - hunger) * gut));
+					fat += store / FAT_DENSITY;
+					hunger = Math.min(1.0, hunger + store / gut);
+				}
 			}
 			// A collapsed captor cannot hold: restraint is exertion, and below the
 			// exhaustion floor there is none to spend — the grip opens and the captive

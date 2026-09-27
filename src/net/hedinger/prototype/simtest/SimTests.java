@@ -1374,6 +1374,84 @@ public class SimTests {
 	}
 
 	/**
+	 * Fat goes on at a rate that rises with how full the glycogen store is, so a
+	 * better surplus is worth more fat than a worse one.
+	 *
+	 * <p>This is a shape, not a number. Storing used to require glycogen at cap
+	 * exactly — a step with no partial credit, so a body holding 82% of its store
+	 * banked the same nothing as one holding 25%, and measured against pace the
+	 * result was a cliff: a grazer at 0.10 fattened to its cap in three days, one
+	 * at 0.15 never stored a gram in a lifetime. Nothing about that is climbable.
+	 * Selection could not walk a lineage toward storing, because every step short
+	 * of the top paid exactly zero, and the store to be filled is worth
+	 * {@code GLYCOGEN_PER_MASS} times an adult mass — so the trait that would
+	 * eventually pay was invisible the whole way up.
+	 *
+	 * <p>Held on one axis: the same stationary grazer with a full gut, its
+	 * glycogen pinned at a fixed share of cap, and the fat it lays down over a
+	 * fixed window read off at each level. The result is a line from
+	 * {@link NPC#FAT_STORE_FROM} to full, and at full it is exactly the old rate —
+	 * this widens the gate rather than replacing it, so a body that could store
+	 * before stores the same now.
+	 */
+	static class FatGoesOnByDegrees extends Scenario {
+		/** Fat laid down over a fixed window with glycogen pinned at {@code fullness}. */
+		private double rate(double fullness) {
+			seed(31);
+			World w = room(10, 8);
+			for (int x = 1; x < 9; x++) {
+				for (int y = 1; y < 7; y++) {
+					w.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			w.setTile(1, 3, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome g = new Genome();
+			g.size = 20;
+			g.speed = 0.0005; // stationary: the glycogen level is the only variable
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			TestNPC n = TestNPC.grazer(4.5, 3.5, 0, g).withMetabolic().grown()
+					.withHunger(0.0).withHydration(1.0).withReproCooldown(100_000_000);
+			w.spawnEntity(n);
+			double target = fullness * n.glycogenCapacity();
+			double f0 = n.fat();
+			for (int t = 0; t < 400; t++) {
+				// Pin both stores, so neither drifts under the measurement.
+				n.withGlycogen(target);
+				n.withHunger(0.0);
+				tick(w, 1);
+			}
+			return n.fat() - f0;
+		}
+
+		@Override
+		public void run() {
+			// The share is the shape, readable without running a body at all.
+			assertNear("nothing is stored on an empty store", 0.0,
+					NPC.fatStoreShare(0, 10), 1e-12);
+			assertNear("nothing at the knee itself", 0.0,
+					NPC.fatStoreShare(NPC.FAT_STORE_FROM * 10, 10), 1e-12);
+			assertNear("half way from the knee to full is half the rate", 0.5,
+					NPC.fatStoreShare((NPC.FAT_STORE_FROM + 1) / 2 * 10, 10), 1e-9);
+			assertNear("and a full store gives all of it", 1.0,
+					NPC.fatStoreShare(10, 10), 1e-12);
+
+			// And on a body: a line, strictly increasing above the knee.
+			double below = rate(NPC.FAT_STORE_FROM / 2);
+			double low = rate(0.8);
+			double mid = rate(0.9);
+			double full = rate(1.0);
+			assertNear("below the knee a body banks nothing", 0.0, below, 1e-9);
+			assertGreater("above it, something", low, 0);
+			assertGreater("and more, the fuller the store", mid, low);
+			assertGreater("most of all at cap", full, mid);
+			// The whole point: the payoff is proportional, not all-or-nothing --
+			// so equal steps in fullness are equal steps in fat.
+			assertNear("the rise is a straight line", mid - low, full - mid,
+					0.2 * (full - mid));
+		}
+	}
+
+	/**
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
 	 * lays what glycogen cannot take down as mass, at the one price; a body
 	 * whose gut runs empty draws that mass back into the gut at the same
@@ -17144,6 +17222,7 @@ public class SimTests {
 				new HowLongAFedBodyCanSprint(),
 				new OldAgeIsMassOverPace(),
 				new FatIsTheBodysStore(),
+				new FatGoesOnByDegrees(),
 				new ALineageDecidesHowBigItsYoungAreBorn(),
 				new WhatIsNotAbsorbedFeedsTheGround(),
 				new OtherHuntersJoinTheKill(),
