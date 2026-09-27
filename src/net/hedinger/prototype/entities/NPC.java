@@ -1308,11 +1308,12 @@ public abstract class NPC extends Entity {
 			// actually burns; the resting rhythm anchor (appetite returns in
 			// twice the time thirst does) survives as the GUT_PER_MASS identity.
 			double pace = Math.pow(leanMass(), -0.25) * eff;
-			thirst = Math.min(1.0, thirst + pace / THIRST_PERIOD);
+			thirst = Math.min(1.0, thirst + pace / thirstPeriod());
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
-			// keeps whatever partial refill had accrued.
-			if (thirst > 0 && nearWater()) {
+			// keeps whatever partial refill had accrued. Some bodies carry their
+			// water with them; see drinksWithoutWater().
+			if (thirst > 0 && (nearWater() || drinksWithoutWater())) {
 				thirst = Math.max(0, thirst - 1.0 / DRINK_TICKS);
 			}
 			double base = metabolismRate();
@@ -1501,6 +1502,31 @@ public abstract class NPC extends Entity {
 
 	public double getHunger() {
 		return hunger;
+	}
+
+	/**
+	 * How long this body takes to dry out. {@link #THIRST_PERIOD} is an
+	 * animal's pace; a clade whose living is different overrides it.
+	 *
+	 * <p>A hook rather than a field on the clade, because the thirst clock runs
+	 * here in the entities layer and what a clade is FOR lives out in the
+	 * ecosystem's niche cards. The body asks; the niche answers.
+	 */
+	protected double thirstPeriod() {
+		return THIRST_PERIOD;
+	}
+
+	/**
+	 * Whether this body is drinking something other than water where it stands.
+	 *
+	 * <p>False for anything that has to find a shore. A parasite riding a living
+	 * host is the exception: what it drinks is mostly water, so a ride is a
+	 * water supply and thirst is simply not one of its problems while it has
+	 * one. The moment it has no host that stops being true, which is the whole
+	 * point of giving it a short clock.
+	 */
+	protected boolean drinksWithoutWater() {
+		return false;
 	}
 
 	public double getThirst() {

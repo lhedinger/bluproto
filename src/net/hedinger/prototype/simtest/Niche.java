@@ -26,20 +26,21 @@ import net.hedinger.prototype.entities.Genome;
 public enum Niche {
 
 	/** Grazes the living substrate; no size constraint, ordinary locomotion. */
-	HERBIVORE(Diet.GRAZE, 1.0, 1.0, 0, Double.POSITIVE_INFINITY, 1.0),
+	HERBIVORE(Diet.GRAZE, 1.0, 1.0, 0, Double.POSITIVE_INFINITY, 1.0, 1.0),
 	/** Kills what it eats; no size floor — how small a hunter can live is the
 	 *  lineage's to find out — and can take quarry up to
 	 *  {@link TestNPC#PRED_PREY_RATIO_CAP} times its own size, greed deciding how
 	 *  much of that room a body uses. */
 	PREDATOR(Diet.HUNT, 1.0, 1.0, 0, Double.POSITIVE_INFINITY,
-			TestNPC.PRED_PREY_RATIO_CAP),
+			TestNPC.PRED_PREY_RATIO_CAP, 1.0),
 	/** Eats the dead; ranges far and cheap — the vulture's living is distance
 	 *  covered, not speed, so a big stride bought at a discounted travel bill. */
 	SCAVENGER(Diet.SCAVENGE, TestNPC.SCAVENGER_STRIDE, TestNPC.SCAVENGER_TRAVEL, 0,
-			Double.POSITIVE_INFINITY, 1.0),
+			Double.POSITIVE_INFINITY, 1.0, 1.0),
 	/** Drinks a living body; capped small so it stays under its hosts and grips
-	 *  them too tightly to buck. */
-	PARASITE(Diet.DRAIN, 1.0, 1.0, 0, TestNPC.PARASITE_MAX_SIZE_PX, 1.0);
+	 *  them too tightly to buck, and dries out in a day off one. */
+	PARASITE(Diet.DRAIN, 1.0, 1.0, 0, TestNPC.PARASITE_MAX_SIZE_PX, 1.0,
+			TestNPC.PARASITE_THIRST_FACTOR);
 
 	/** What a clade turns into food, which decides how it forages and what it does
 	 *  on arrival — the one axis the diet branches were really testing. */
@@ -60,15 +61,25 @@ public enum Niche {
 	private final double sizeFloorPx;
 	private final double sizeCapPx;
 	private final double preySizeRatio;
+	private final double thirstFactor;
 
 	Niche(Diet diet, double strideFactor, double travelFactor,
-			double sizeFloorPx, double sizeCapPx, double preySizeRatio) {
+			double sizeFloorPx, double sizeCapPx, double preySizeRatio,
+			double thirstFactor) {
 		this.diet = diet;
 		this.strideFactor = strideFactor;
 		this.travelFactor = travelFactor;
 		this.sizeFloorPx = sizeFloorPx;
 		this.sizeCapPx = sizeCapPx;
 		this.preySizeRatio = preySizeRatio;
+		this.thirstFactor = thirstFactor;
+	}
+
+	/** How fast a body of this clade dries out, as a share of the reference
+	 *  thirst clock. One for an animal; less for something small enough that
+	 *  its water is gone in a day. */
+	public double thirstFactor() {
+		return thirstFactor;
 	}
 
 	/** The niche for a clade. A {@code null} clade (a roleless fixture) grazes,
