@@ -13657,6 +13657,64 @@ public class SimTests {
 	}
 
 	/**
+	 * A radial query finds every body in range, including two at exactly the
+	 * same distance from it.
+	 *
+	 * <p>The queries return a {@code TreeMap} keyed by distance, and callers
+	 * depend on that: nearest is {@code firstEntry}, iteration runs near to far.
+	 * The key silently deduplicates too, so two bodies at the same distance
+	 * produced one Double and the second overwrote the first — a body that was
+	 * in range, dropped, with nothing to say so.
+	 *
+	 * <p>Exact ties are not the floating-point curiosity they sound like. Bodies
+	 * sit on a grid at tile midpoints, so anything placed symmetrically about the
+	 * query point ties to the last bit. This was found through hearing, where it
+	 * is starkest: two listeners either side of a kill, three tiles away with
+	 * twelve tiles of earshot, and one of them heard nothing at all — not
+	 * quieter, nothing, while its mirror image across the corpse heard it
+	 * clearly. The same key collapsed sight and the nearest-NPC scan, so a
+	 * predator picking prey could not see one of two flankers at equal range.
+	 *
+	 * <p>Both survive now, the tie broken by the order the gather reached them,
+	 * and the loser sorts immediately behind the winner so near-to-far still
+	 * holds.
+	 */
+	static class TwoBodiesAtOneRangeAreBothFound extends Scenario {
+		@Override
+		public void run() {
+			seed(51);
+			World w = room(14, 8);
+			// Mirrored about y = 3.5 at one x: hypot is bit-identical for both.
+			TestNPC near = TestNPC.grazer(8.5, 2.5, 0, new Genome());
+			TestNPC far = TestNPC.grazer(8.5, 4.5, 0, new Genome());
+			w.spawnEntity(near);
+			w.spawnEntity(far);
+			tick(w, 1); // the tile index the gather walks is built on the tick
+
+			double qx = 5.0, qy = 3.5;
+			double dn = Math.hypot(near.getX() - qx, near.getY() - qy);
+			double df = Math.hypot(far.getX() - qx, far.getY() - qy);
+			assertTrue("the two are the same distance away, to the last bit",
+					Double.doubleToLongBits(dn) == Double.doubleToLongBits(df));
+
+			var found = w.entitiesWithin(qx, qy, 0, 12.0, -1);
+			assertEquals("and the query returns both of them", 2, found.size());
+			assertTrue("the nearer key is the true distance",
+					found.firstKey() == dn);
+			assertTrue("and the tie sorts immediately behind it, not past the "
+					+ "next real body", found.lastKey() == Math.nextUp(dn));
+
+			// The case it was found through: a sound at the point of symmetry.
+			w.spawnEntity(new net.hedinger.prototype.entities.Sound(
+					qx, qy, 0, 12.0, net.hedinger.prototype.entities.Sound.KILL,
+					new Genome()));
+			tick(w, net.hedinger.prototype.entities.Sound.TRAVEL_TICKS + 2);
+			assertTrue("both listeners heard the scream", near.hearsSomething()
+					&& far.hearsSomething());
+		}
+	}
+
+	/**
 	 * A scream says WHO screamed: the sound carries the voice of the body that
 	 * made it — its clade, and its markers — and a listener hears that voice
 	 * against its own, on the same two axes sight reads a neighbour on. Clade
@@ -17061,6 +17119,7 @@ public class SimTests {
 				new GrowingUpIsPaidFor(),
 				new AQueryLeavesTheStreamAlone(),
 				new AScreamSaysWhatHappened(),
+				new TwoBodiesAtOneRangeAreBothFound(),
 				new AScreamSaysWhoScreamed(),
 				new ACreatureCallsInItsOwnVoice(),
 				new AParasiteDrinksItsHostAndDriesOutWithoutOne(),

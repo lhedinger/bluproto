@@ -769,6 +769,37 @@ public class World {
 	}
 
 	/**
+	 * Files a found entity under its distance, keeping ties instead of losing
+	 * them.
+	 *
+	 * <p>Every radial query here returns a {@code TreeMap} keyed by distance,
+	 * which callers rely on: the nearest thing is {@code firstEntry}, and
+	 * iteration is near-to-far. What the key silently also does is deduplicate.
+	 * Two bodies at <i>exactly</i> the same distance produce the same Double, and
+	 * the second {@code put} evicts the first — so the query drops an entity that
+	 * was in range, and nothing reports it.
+	 *
+	 * <p>Exact ties are not the rare curiosity floating point makes them sound.
+	 * The world is built on a grid and bodies sit at tile midpoints, so anything
+	 * symmetric about the query point ties to the last bit: two creatures either
+	 * side of a scream, a pair flanking a predator at equal range. It showed up
+	 * as a listener that heard nothing while its mirror image across the sound
+	 * heard it clearly, both of them three tiles from a kill with twelve tiles of
+	 * earshot.
+	 *
+	 * <p>Ties break by probing to the next representable double, so both entities
+	 * survive and the loser sorts immediately behind the winner. Which one wins is
+	 * the order the tile-box gather reached them, which is fixed — so this stays
+	 * deterministic, as replay requires.
+	 */
+	private static <T> void putByDistance(TreeMap<Double, T> result, double d, T e) {
+		while (result.containsKey(d)) {
+			d = Math.nextUp(d);
+		}
+		result.put(d, e);
+	}
+
+	/**
 	 * Everything within a Euclidean radius, <b>ignoring line of sight</b> and
 	 * facing — the query a sound needs.
 	 *
@@ -802,7 +833,7 @@ public class World {
 					}
 					double d = distance(x, y, z, e.getX(), e.getY(), e.getZ());
 					if (d <= range) {
-						result.put(d, e);
+						putByDistance(result, d, e);
 					}
 				}
 			}
@@ -818,7 +849,7 @@ public class World {
 		if (e != null && e.getLvl() == (int) z && !e.isDead() && ID != e.getID()) {
 			if (filterType(e.getEntityTypeName(), types, include)) {
 				if (hasLOS(x, y, z, dir, e.getX(), e.getY(), e.getZ(), range, fov)) {
-					result.put(distance(x, y, z, e.getX(), e.getY(), e.getZ()), e);
+					putByDistance(result, distance(x, y, z, e.getX(), e.getY(), e.getZ()), e);
 				}
 			}
 		}
@@ -893,7 +924,7 @@ public class World {
 	private static TreeMap<Double, NPC> buildResult(TreeMap<Double, NPC> result, double[] dist, NPC[] found,
 			int count) {
 		for (int i = 0; i < count; i++) {
-			result.put(dist[i], found[i]);
+			putByDistance(result, dist[i], found[i]);
 		}
 		return result;
 	}
