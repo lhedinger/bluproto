@@ -1664,11 +1664,21 @@ public class Grid {
 	// changes only how often the march runs, never what it says: the demo
 	// world asks ~5 000 sightlines a tick over ~1 800 tile pairs, four in five
 	// of them asked the tick before, so the march runs for one ray in five.
-	private long[] sightKeys;
-	private byte[] sightSeen;
-	private int[] sightStamp;
+	//
+	// Each slot is one long -- the pair in the low 48 bits, the verdict in
+	// bit 48, fifteen bits of epoch above -- so a probe touches one cache
+	// line, not three; at 2 300 bodies the probe, not the march, was the
+	// cost of sight, and it was the cost of three arrays' worth of misses.
+	// The fifteen-bit stamp is exact because the table is cleared before the
+	// epoch has advanced far enough for two stamps to collide.
+	private long[] sight;
 	private int sightMask;
+	private int sightClearedAt;
 	private static final int SIGHT_PROBES = 4;
+	private static final long SIGHT_KEY = (1L << 48) - 1;
+	private static final long SIGHT_SEEN = 1L << 48;
+	private static final int SIGHT_STAMP_BITS = 15;
+	private static final int SIGHT_STAMP_MASK = (1 << SIGHT_STAMP_BITS) - 1;
 
 	boolean sightBetween(int ca, int ra, int cb, int rb) {
 		if (ca == cb && ra == rb) {
@@ -1682,40 +1692,47 @@ public class Grid {
 			int tc = ca; ca = cb; cb = tc;
 			int tr = ra; ra = rb; rb = tr;
 		}
-		long key = (a << 32) | b;
-		if (sightKeys == null) {
+		long key = (a << 24) | b; // never 0: the same tile returned above
+		int epoch = world.sightEpoch();
+		if (sight == null) {
 			int cells = tiles.length * tiles[0].length * 4;
 			int bits = 12;
 			while (bits < 18 && (1 << bits) < cells) {
 				bits++;
 			}
-			sightKeys = new long[1 << bits];
-			java.util.Arrays.fill(sightKeys, -1L);
-			sightSeen = new byte[1 << bits];
-			sightStamp = new int[1 << bits];
+			sight = new long[1 << bits];
 			sightMask = (1 << bits) - 1;
+			sightClearedAt = epoch;
+		} else if (epoch - sightClearedAt >= SIGHT_STAMP_MASK) {
+			java.util.Arrays.fill(sight, 0L); // before a stamp could come round again
+			sightClearedAt = epoch;
 		}
-		int epoch = world.sightEpoch();
+		long stamp = (long) (epoch & SIGHT_STAMP_MASK) << (SIGHT_STAMP_BITS + 34);
 		int home = (int) ((key * 0x9E3779B97F4A7C15L) >>> 40) & sightMask;
 		int free = -1;
 		for (int p = 0; p < SIGHT_PROBES; p++) {
 			int i = (home + p) & sightMask;
-			if (sightKeys[i] == key) {
-				if (sightStamp[i] == epoch) {
-					return sightSeen[i] == 1;
+			long slot = sight[i];
+			if (slot == 0L) {
+				if (free < 0) {
+					free = i;
+				}
+				break; // nothing was ever put past an empty slot on this path
+			}
+			boolean current = (slot >>> (SIGHT_STAMP_BITS + 34)) == (stamp >>> (SIGHT_STAMP_BITS + 34));
+			if ((slot & SIGHT_KEY) == key) {
+				if (current) {
+					return (slot & SIGHT_SEEN) != 0;
 				}
 				free = i; // the pair, but from before the map changed
 				break;
 			}
-			if (free < 0 && (sightKeys[i] == -1L || sightStamp[i] != epoch)) {
+			if (free < 0 && !current) {
 				free = i;
 			}
 		}
 		boolean seen = traceCentres(ca, ra, cb, rb);
-		int i = free < 0 ? home : free;
-		sightKeys[i] = key;
-		sightSeen[i] = (byte) (seen ? 1 : 0);
-		sightStamp[i] = epoch;
+		sight[free < 0 ? home : free] = key | (seen ? SIGHT_SEEN : 0L) | stamp;
 		return seen;
 	}
 
