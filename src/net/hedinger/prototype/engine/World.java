@@ -151,6 +151,14 @@ public class World {
 				}
 			}
 			for (int z = 0; z < c.creatures.size(); z++) {
+				// Each list in cell order (stable, so ids still break ties within
+				// a cell): a near scan's gather then comes out already in census
+				// order and needs no sort -- see Buckets.near.
+				Buckets.orderByCell(c.creatures.get(z), w.cols, w.rows);
+				Buckets.orderByCell(c.predators.get(z), w.cols, w.rows);
+				Buckets.orderByCell(c.prey.get(z), w.cols, w.rows);
+				Buckets.orderByCell(c.corpses.get(z), w.cols, w.rows);
+				Buckets.orderByCell(c.clouds.get(z), w.cols, w.rows);
 				c.creatureBuckets.add(new Buckets<>(c.creatures.get(z), w.cols, w.rows));
 				c.predatorBuckets.add(new Buckets<>(c.predators.get(z), w.cols, w.rows));
 				c.preyBuckets.add(new Buckets<>(c.prey.get(z), w.cols, w.rows));
@@ -321,6 +329,39 @@ public class World {
 			}
 		}
 
+		/** Puts a list in cell order, row-major, keeping the order it had
+		 *  within a cell. The census lists are held this way so that a
+		 *  gather over a box of cells -- rows ascending, cells ascending
+		 *  within a row -- is ascending in list index without a sort. */
+		static <T extends Entity> void orderByCell(java.util.List<T> list, int cols, int rows) {
+			int cw = Math.max(1, (cols + CELL - 1) / CELL);
+			int ch = Math.max(1, (rows + CELL - 1) / CELL);
+			int n = list.size();
+			if (n < 2) {
+				return;
+			}
+			int[] cellOf = new int[n];
+			int[] start = new int[cw * ch + 1];
+			for (int i = 0; i < n; i++) {
+				T b = list.get(i);
+				int x = (int) Math.floor(b.getX() / CELL), y = (int) Math.floor(b.getY() / CELL);
+				x = x < 0 ? 0 : (x >= cw ? cw - 1 : x);
+				y = y < 0 ? 0 : (y >= ch ? ch - 1 : y);
+				cellOf[i] = y * cw + x;
+				start[cellOf[i] + 1]++;
+			}
+			for (int c = 0; c < cw * ch; c++) {
+				start[c + 1] += start[c];
+			}
+			java.util.ArrayList<T> sorted = new java.util.ArrayList<>(java.util.Collections.nCopies(n, (T) null));
+			for (int i = 0; i < n; i++) {
+				sorted.set(start[cellOf[i]]++, list.get(i));
+			}
+			for (int i = 0; i < n; i++) {
+				list.set(i, sorted.get(i));
+			}
+		}
+
 		private int cx(double x) {
 			int c = (int) Math.floor(x / CELL);
 			return c < 0 ? 0 : (c >= cw ? cw - 1 : c);
@@ -376,7 +417,8 @@ public class World {
 					}
 				}
 			}
-			java.util.Arrays.sort(got);
+			// No sort: the list is in cell order (orderByCell) and the box was
+			// walked rows ascending, cells ascending, so got[] is ascending.
 			java.util.ArrayList<T> out = new java.util.ArrayList<>(count);
 			for (int i : got) {
 				out.add(all.get(i));
