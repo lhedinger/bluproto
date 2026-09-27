@@ -829,6 +829,24 @@ public class TestNPC extends NPC {
 	@Unit("px radius")
 	public static final int PARASITE_MAX_SIZE_PX = 5;
 
+	/**
+	 * A parasite's thirst clock, as a share of {@link NPC#THIRST_PERIOD}. Four
+	 * and a half days is an animal's pace; a body five pixels across holds
+	 * almost no water and dries out in about one, so a bit over a fifth of the
+	 * reference.
+	 *
+	 * <p>It costs a parasite nothing while it is riding, because what it drinks
+	 * is mostly water -- see {@link #drinksWithoutWater()}. The short clock is
+	 * what a parasite BETWEEN hosts lives under, and it is meant to be the
+	 * thing that makes finding the next one urgent rather than optional.
+	 *
+	 * <p>Here rather than on the niche card because an enum's constants are
+	 * built before its static fields, so the card cannot name a figure declared
+	 * beside it -- the same reason {@link #PARASITE_MAX_SIZE_PX} lives here.
+	 */
+	@Unit("of THIRST_PERIOD")
+	public static final double PARASITE_THIRST_FACTOR = 1.0 / 4.5;
+
 	@Override
 	protected void run_extended() {
 		super.run_extended(); // the four books first (needs, regen, health)
@@ -858,6 +876,33 @@ public class TestNPC extends NPC {
 	 * parasite can actually digest, and the ride becomes the tax its host pays
 	 * — in glycogen if it can afford to mend, in health if it cannot.
 	 */
+	/**
+	 * A parasite dries out in about a day; everything else keeps an animal's
+	 * four and a half. See {@link Niche#PARASITE_THIRST_FACTOR}.
+	 */
+	@Override
+	protected double thirstPeriod() {
+		return THIRST_PERIOD * niche().thirstFactor();
+	}
+
+	/**
+	 * A parasite on a living host is drinking, and what it drinks is mostly
+	 * water — so while it is riding, thirst is not one of its problems. Off a
+	 * host it is on the same footing as anything else and has to find a shore,
+	 * which on a one-day clock is a real deadline rather than a background
+	 * need. That is the whole shape of the niche: attached is comfortable,
+	 * between hosts is urgent.
+	 *
+	 * <p>Deliberately "is riding", not "is drinking this tick". A sated
+	 * parasite that is between bites is still sitting on the supply; making
+	 * hydration wait on the bite cadence would dry it out on a full stomach.
+	 */
+	@Override
+	protected boolean drinksWithoutWater() {
+		return niche().drains() && getAttachTarget() instanceof NPC h
+				&& !h.isDead() && !h.isRemoved() && !isGrabbed();
+	}
+
 	/** Ticks this body waits between drinks: its lineage's {@link Genome#drainRate}
 	 *  turned into a cadence, since health is whole points and a bite cannot be a
 	 *  fraction of one. A body without a genome drinks at the reference pace. */

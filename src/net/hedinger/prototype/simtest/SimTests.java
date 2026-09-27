@@ -13764,6 +13764,91 @@ public class SimTests {
 	 * for a whisper to a quarter for the loudest; a held actuator calls once per
 	 * period rather than every tick; and a collapsed body cannot call at all.
 	 */
+	/**
+	 * A parasite's water comes off its host, and running out of host is what
+	 * makes it thirsty.
+	 *
+	 * <p>Two facts, and they are the same design read from both ends. A body
+	 * five pixels across holds almost no water, so its thirst clock is about a
+	 * day where an animal's is four and a half — off a host that is a deadline
+	 * rather than a background need. On one it is not a problem at all, because
+	 * what a parasite drinks is mostly water: a ride IS a water supply.
+	 *
+	 * <p>Before this, neither was true. Every body dried out at the animal's
+	 * pace, and {@code parasiteFeed} touched hunger and nothing else — so blood
+	 * fed a parasite without watering it, and a rider's hydration was entirely
+	 * at the mercy of whether its host happened to walk past a shore.
+	 */
+	static class AParasiteDrinksItsHostAndDriesOutWithoutOne extends Scenario {
+		/** A parasite whose mind either holds on or does not. Holding matters:
+		 *  a grip is A_ATTACH held above the line every tick, so a body simply
+		 *  told to attach lets go again on its next think. */
+		private TestNPC para(double x, double y, boolean clings) {
+			Genome g = new Genome();
+			g.size = 4;
+			// Least picky about hosts: minHostRatio falls with the predatory
+			// drive, and the default of zero is the choosiest a lineage gets.
+			// Whether this body would deign to ride the host is not what is
+			// being measured here.
+			g.predatory = 1.0;
+			Mind m = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_ATTACH] = clings ? 1 : 0;
+					a[AgentIO.A_THROTTLE] = 0;
+				}
+			};
+			return TestNPC.minded(x, y, 0, g, m)
+					.withClade(Genome.Clade.PARASITE).grown();
+		}
+
+		@Override
+		public void run() {
+			seed(151);
+			World w = room(20, 20); // dry: not a tile of water in it
+			assertNear("a parasite's clock is about a day",
+					NPC.DAY, NPC.THIRST_PERIOD * TestNPC.PARASITE_THIRST_FACTOR, 1.0);
+
+			// Riding: the host is the supply, so thirst goes nowhere.
+			Genome hg = new Genome();
+			hg.size = 20; // comfortably over any host standard
+			TestNPC host = TestNPC.breeder(10.5, 10.5, 0, hg)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(host);
+			TestNPC rider = para(10.5, 10.5, true);
+			w.spawnEntity(rider);
+			w.think();
+			tick(w, 5); // long enough for the grip to take hold
+			assertTrue("the rider is on its host", rider.getAttachTarget() == host);
+			tick(w, 3 * NPC.DAY);
+			assertTrue("three days aboard and it is not thirsty ("
+					+ String.format("%.3f", rider.getThirst()) + ")",
+					rider.getThirst() < 0.05);
+
+			// The same body, the same dry room, with nothing to ride.
+			TestNPC alone = para(4.5, 4.5, false);
+			w.spawnEntity(alone);
+			w.think();
+			tick(w, NPC.DAY);
+			assertGreater("a day without a host and it is parched ("
+					+ String.format("%.2f", alone.getThirst()) + ")",
+					alone.getThirst(), 0.8);
+
+			// And an ordinary animal, side by side with it, is nowhere near:
+			// the short clock is the parasite's, not the room's.
+			Genome ag = new Genome();
+			ag.size = 8;
+			TestNPC animal = TestNPC.breeder(6.5, 6.5, 0, ag)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(animal);
+			w.think();
+			tick(w, NPC.DAY);
+			assertLess("an animal in the same dry day is merely dry ("
+					+ String.format("%.2f", animal.getThirst()) + ")",
+					animal.getThirst(), 0.5);
+		}
+	}
+
 	static class ACreatureCallsInItsOwnVoice extends Scenario {
 		/** An MLP genome written before the call existed — fewer sensors, two
 		 *  actuators short — still loads, as the same net with the newer senses
@@ -15167,7 +15252,7 @@ public class SimTests {
 			// real host still rides. Without this the fix could be "nothing ever
 			// attaches" and the scenario above would still pass.
 			Genome hg = new Genome();
-			hg.size = 16; // comfortably larger than the parasite
+			hg.size = 20; // comfortably over any host standard // comfortably larger than the parasite
 			TestNPC host = TestNPC.breeder(2.5, 2.5, 0, hg);
 			w.spawnEntity(host);
 			Genome pg2 = new Genome();
@@ -16978,6 +17063,7 @@ public class SimTests {
 				new AScreamSaysWhatHappened(),
 				new AScreamSaysWhoScreamed(),
 				new ACreatureCallsInItsOwnVoice(),
+				new AParasiteDrinksItsHostAndDriesOutWithoutOne(),
 				new ASoundRidesTheWire(),
 				new MindHearsInBodyCoordinates(),
 				new TuningRidesTheCommandLog(),
