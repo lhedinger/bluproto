@@ -10713,6 +10713,71 @@ public class SimTests {
 		}
 	}
 
+	/** Attention is the nearest ATTENTION bodies: a body's kin centroid is
+	 * pulled by the kin it attends to, not by every kin in range. Twelve kin
+	 * stand close on one side and twenty a way off on the other; the
+	 * centroid lies with the close twelve, where an unbounded pass would
+	 * have put it with the far twenty. */
+	static class ABodyAttendsToItsNearest extends Scenario {
+		@Override
+		public void run() {
+			seed(65);
+			World w = room(60, 30);
+			Genome g = new Genome();
+			g.losRange = 12;
+			Mind still = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			};
+			TestNPC eye = TestNPC.minded(30.5, 15.5, 0, g, still).withHeading(0); // facing east
+			w.spawnEntity(eye);
+			for (int i = 0; i < TestNPC.ATTENTION; i++) { // close, to the west
+				w.spawnEntity(TestNPC.minded(27.5 - (i % 3), 12.5 + (i / 3) * 2, 0, g, still));
+			}
+			for (int i = 0; i < 20; i++) { // far, to the east, and more of them
+				w.spawnEntity(TestNPC.minded(38.5 + (i % 4), 11.5 + (i / 4) * 2, 0, g, still));
+			}
+			w.think();
+			tick(w, TestNPC.SENSE_CALM + 1);
+			double bearing = eye.sensorSnapshot()[AgentIO.S_KIN_BEARING];
+			assertGreater("the kin centroid lies behind, with the near twelve",
+					Math.abs(bearing), 0.5);
+		}
+	}
+
+	/** A crowd never hides a hunter: with more kin in range than the
+	 * attention holds, all of them nearer than the predator, the predator is
+	 * still on the threat channel. */
+	static class AHerdDoesNotHideAHunter extends Scenario {
+		@Override
+		public void run() {
+			seed(66);
+			World w = room(60, 30);
+			Genome g = new Genome();
+			g.losRange = 12;
+			g.size = 8;
+			Mind still = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			};
+			TestNPC eye = TestNPC.minded(20.5, 15.5, 0, g, still).withHeading(0);
+			w.spawnEntity(eye);
+			for (int i = 0; i < TestNPC.ATTENTION + 4; i++) { // a herd within four tiles
+				w.spawnEntity(TestNPC.minded(18.5 + (i % 4), 12.5 + (i / 4) * 2, 0, g, still));
+			}
+			Genome pg = new Genome();
+			pg.losRange = 12;
+			pg.size = 24;
+			pg.speed = 0;
+			TestNPC hunter = TestNPC.mindedPredator(30.5, 15.5, 0, pg).grown(); // ten tiles off
+			w.spawnEntity(hunter);
+			w.think();
+			tick(w, TestNPC.SENSE_CALM + 1);
+			assertGreater("the hunter beyond the herd is on the threat channel",
+					eye.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
+			assertNear("and it is that hunter, ten tiles off", 1.0 / 11.0,
+					eye.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0.02);
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -17091,6 +17156,8 @@ public class SimTests {
 				new SightIsTheTilePairs(),
 				new ASwungDoorChangesTheSightline(),
 				new AFarPredatorIsWatchedOnTheCalmClock(),
+				new ABodyAttendsToItsNearest(),
+				new AHerdDoesNotHideAHunter(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

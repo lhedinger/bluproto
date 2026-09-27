@@ -2100,6 +2100,13 @@ public class TestNPC extends NPC {
 	@net.hedinger.prototype.engine.Unit("ticks")
 	public static final int SENSE_IDLE = 16;
 	private long lastFullSense = -1;
+	/** How many of the bodies in range a sense pass looks at: the nearest.
+	 *  Every predator in range is looked at besides, so a crowd never hides
+	 *  a hunter. */
+	@net.hedinger.prototype.engine.Unit("bodies")
+	public static final int ATTENTION = 12;
+	private NPC[] attnBody;
+	private double[] attnDist;
 	private boolean sensedThisTick;
 	private int senseTier;
 	/** Full passes taken, a test seam for the cadence. */
@@ -2573,17 +2580,53 @@ public class TestNPC extends NPC {
 		}
 		// Census walk: live same-level bodies, then line of sight (cover and
 		// walls hide neighbours; hasLOS range-gates before it raycasts).
-		for (NPC n : sensedThisTick
+		// Attention: of everything in range, the ATTENTION nearest get a look
+		// (the ray, the sizing-up, the kinship); the rest are a crowd. Chosen
+		// by distance, ties by census order, so the choice replays. What it
+		// costs is the far edge of a dense herd: the kin centroid is the
+		// nearest kin's, and a body's prey channel shows the nearest quarry
+		// among the nearest bodies. What it buys is a sense pass whose cost
+		// no longer grows with the crowd. Predators are looked at regardless,
+		// below.
+		java.util.List<NPC> crowd = sensedThisTick
 				? getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)
-				: java.util.List.<NPC>of()) {
-			if (n == this || n.isDead() || n.isRemoved() || !isInLOS(n)) {
+				: java.util.List.<NPC>of();
+		int kept = 0;
+		if (attnBody == null) {
+			attnBody = new NPC[ATTENTION];
+			attnDist = new double[ATTENTION];
+		}
+		for (NPC n : crowd) {
+			if (n == this || n.isDead() || n.isRemoved()) {
+				continue;
+			}
+			double ddx = n.getX() - X, ddy = n.getY() - Y;
+			double d2 = ddx * ddx + ddy * ddy;
+			if (d2 > LOS_RANGE * LOS_RANGE) {
+				continue;
+			}
+			if (kept == ATTENTION && d2 >= attnDist[ATTENTION - 1]) {
+				continue; // farther than the farthest kept
+			}
+			int pos = kept < ATTENTION ? kept : ATTENTION - 1;
+			while (pos > 0 && attnDist[pos - 1] > d2) {
+				attnDist[pos] = attnDist[pos - 1];
+				attnBody[pos] = attnBody[pos - 1];
+				pos--;
+			}
+			attnDist[pos] = d2;
+			attnBody[pos] = n;
+			if (kept < ATTENTION) {
+				kept++;
+			}
+		}
+		for (int ai = 0; ai < kept; ai++) {
+			NPC n = attnBody[ai];
+			if (!isInLOS(n)) {
 				continue;
 			}
 			double dx = n.getX() - X, dy = n.getY() - Y;
-			double dist = Math.hypot(dx, dy);
-			if (dist > LOS_RANGE) {
-				continue;
-			}
+			double dist = Math.sqrt(attnDist[ai]);
 			// The prey channel shows exactly what the hunt would take, by the same
 			// predicate: size, rivals, parasites and machines all answered once in
 			// edibleQuarry. LOS and range are already settled by the loop guard
@@ -2605,6 +2648,25 @@ public class TestNPC extends NPC {
 				kinX += sim * dx; // similarity-weighted pull toward kin
 				kinY += sim * dy;
 				kinWeight += sim;
+			}
+		}
+		// A crowd never hides a hunter: whatever the attention held, every
+		// predator in range gets its look for the threat channel. Predators
+		// are a tenth of the bodies, so this is a few rays, and the memo
+		// answers most of them.
+		if (sensedThisTick) {
+			for (NPC p : getWorld().census().predatorsNear(getLvl(), X, Y, LOS_RANGE)) {
+				if (p == this || p.isDead() || p.isRemoved() || p.getSize() <= preyCeiling()) {
+					continue;
+				}
+				double dx = p.getX() - X, dy = p.getY() - Y;
+				double dist = Math.hypot(dx, dy);
+				if (dist > LOS_RANGE || dist >= threatD || !isInLOS(p)) {
+					continue;
+				}
+				threatD = dist;
+				threatDx = dx;
+				threatDy = dy;
 			}
 		}
 		if (sensedThisTick) {
