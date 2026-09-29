@@ -119,6 +119,7 @@ public class World {
 
 		static Census build(World w) {
 			Census c = new Census(w.getLevels(), w.cols, w.rows);
+			w.rasterFlip ^= 1; // this census stamps into the other set of fields
 			for (Entity e : w.entities.values()) {
 				if (e == null || e.isRemoved()) {
 					continue;
@@ -164,7 +165,7 @@ public class World {
 				c.preyBuckets.add(new Buckets<>(c.prey.get(z), w.cols, w.rows));
 				c.corpseBuckets.add(new Buckets<>(c.corpses.get(z), w.cols, w.rows));
 				c.cloudBuckets.add(new Buckets<>(c.clouds.get(z), w.cols, w.rows));
-				c.phero.add(rasterise(c.clouds.get(z), w.cols, w.rows));
+				c.phero.add(rasterise(c.clouds.get(z), w.cols, w.rows, w.rasterBuffer(z)));
 			}
 			return c;
 		}
@@ -208,8 +209,8 @@ public class World {
 		// centre, not its own point, so within a tile the field is flat. Many
 		// clouds may cover one tile; they add, as they always did.
 
-		static double[] rasterise(java.util.List<PheromoneCloud> clouds, int cols, int rows) {
-			double[] f = new double[cols * rows];
+		static double[] rasterise(java.util.List<PheromoneCloud> clouds, int cols, int rows, double[] f) {
+			java.util.Arrays.fill(f, 0.0);
 			for (PheromoneCloud c : clouds) {
 				if (c.isRemoved()) {
 					continue;
@@ -428,6 +429,28 @@ public class World {
 	}
 
 	private Census census;
+
+	// Two sets of pheromone fields, one per level each, that the census
+	// stamps into turn and turn about: the field is cols x rows doubles per
+	// level, and allocating it afresh for every census was a megabyte and a
+	// half of garbage a tick at four levels. A census always stamps into the
+	// set the previous census did not use, so a reader still holding that
+	// census reads a field nobody is writing; only a reader two censuses
+	// behind -- the viewer's overlay at worst -- could see one mid-stamp,
+	// and the sim itself reads the current census only.
+	private double[][][] rasterPool;
+	private int rasterFlip;
+
+	double[] rasterBuffer(int z) {
+		if (rasterPool == null) {
+			rasterPool = new double[2][getLevels()][];
+		}
+		double[] f = rasterPool[rasterFlip][z];
+		if (f == null || f.length != cols * rows) {
+			f = rasterPool[rasterFlip][z] = new double[cols * rows];
+		}
+		return f;
+	}
 
 	/** This tick's census; built lazily for callers that poke a freshly
 	 *  constructed world before its first tick. */
