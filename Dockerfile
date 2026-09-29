@@ -38,8 +38,12 @@ COPY res/ ./res/
 ARG GIT_SHA=dev
 ENV PORT=7070 SEED=42 BUILD_VERSION=$GIT_SHA
 # Heap ceiling for the 2 GB VPS. Per-chunk layer baking (no whole-level image
-# buffers) cut the bake's peak from >1 GB to under 384 MB, so 512 MB leaves
-# comfortable headroom; the ceiling only really matters during the startup bake.
-ENV JAVA_OPTS="-Xmx512m"
+# buffers) cut the bake's peak from >1 GB to under 384 MB; 768 MB leaves the
+# bake its headroom and a world of a few thousand bodies its live set. If the
+# heap still runs out, the JVM exits rather than sitting dead with the world
+# stopped -- compose restarts it (restart: unless-stopped), a fresh world from
+# the same seed -- and leaves a heap dump and a GC log on the data volume, so
+# the next such crash says what filled the heap instead of only that it filled.
+ENV JAVA_OPTS="-Xmx768m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/oom.hprof -Xlog:gc:file=/data/gc.log:time,uptime:filecount=3,filesize=5m"
 EXPOSE 7070
 CMD ["./bin/server"]
