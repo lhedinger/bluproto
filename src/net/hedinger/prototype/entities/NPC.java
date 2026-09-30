@@ -3010,14 +3010,42 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * The surplus gate every path to reproduction shares: metabolic, alive, off
-	 * cooldown, energy banked past the threshold, both needs low, and health
-	 * sound. Breeding is a surplus signal across all four books, not an energy
-	 * checkout (VITALS.md §6).
+	 * cooldown, both endowments banked, not parched, and health sound. Breeding
+	 * is a surplus signal across the books, not an energy checkout (VITALS.md §6).
+	 *
+	 * <p>Two of these clauses are the endowments themselves, priced to the unit:
+	 * the fat is half a child's body ({@link #fatToBreed}, and {@link
+	 * #payBirthMass} takes exactly that off), and the glycogen is what the child
+	 * is opened holding ({@link #birthPayment}). Neither can be relaxed without
+	 * minting matter or energy at the birth.
+	 *
+	 * <p>A gut-fullness clause used to sit beside them -- {@code hunger <
+	 * NEED_LOW} -- and it is gone. It endowed nothing: {@link #payBirth} is
+	 * explicit that undigested food is not wealth a parent can hand over, so the
+	 * gut never funded a child. What it was for is §6's welfare rule, that a
+	 * starving body does not court, and it measured that by asking whether the
+	 * gut was half full this tick.
+	 *
+	 * <p>That reading only holds for an animal that eats continuously. A grazer
+	 * nibbles all day and parks its gut near half; a hunter gorges and then fasts
+	 * while it drains, so the same number means "comfortable" for one and "nearly
+	 * empty" for the other. Measured on the demo world: mean hunger 0.36 across
+	 * the herd against 0.48-0.55 across the hunters, with the line at 0.5 -- 69%
+	 * of hunters failed this clause against 36% of grazers, and dropping it alone
+	 * moved the herd's breeding-ready share by a tenth of a point while more than
+	 * doubling the hunters'. It was pricing the shape of an animal's meals, not
+	 * its condition.
+	 *
+	 * <p>The welfare rule survives it, because {@link #starving} is "no fat and no
+	 * glycogen past the exhaustion floor" and {@code fat >= fatToBreed()} already
+	 * forbids that -- a body holding half a child in fat is by definition not
+	 * catabolising itself. The stores are the same signal integrated over time
+	 * instead of sampled this tick, and they were always the honest version of it.
 	 */
 	protected boolean surplusForBreeding() {
 		return metabolic && !isDead() && reproCooldown == 0
 				&& glycogen >= reproThreshold && fat >= fatToBreed()
-				&& hunger < NEED_LOW && thirst < NEED_LOW && health >= 60;
+				&& thirst < NEED_LOW && health >= 60;
 	}
 
 	/**
