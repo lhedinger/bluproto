@@ -10856,6 +10856,48 @@ public class SimTests {
 		}
 	}
 
+	/** A spent sound holds nothing. Every body keeps the last sound it heard,
+	 * so a sound that kept its audience -- the map of everything in earshot
+	 * when it broadcast -- kept every body in it alive on the heap after the
+	 * body died, and each of those kept its own last sound and ITS audience:
+	 * a chain back through time that filled the live server's heap. After the
+	 * broadcast tick a sound's audience and caller are gone, and a hearer's
+	 * last sound leads nowhere. */
+	static class ASpentSoundHoldsNothing extends Scenario {
+		@Override
+		public void run() {
+			seed(67);
+			World w = room(20, 20);
+			Genome g = new Genome();
+			Mind still = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			};
+			TestNPC caller = TestNPC.minded(10.5, 10.5, 0, g, still);
+			TestNPC hearer = TestNPC.minded(12.5, 10.5, 0, g, still);
+			w.spawnEntity(caller);
+			w.spawnEntity(hearer);
+			w.think();
+			Sound s = Sound.call(caller, 6, 1, g);
+			w.spawnEntity(s);
+			tick(w, 25); // a sound broadcasts at age 20 and is gone the tick after
+			assertTrue("the sound was heard", hearer.hearsSomething());
+			try {
+				java.lang.reflect.Field heard = net.hedinger.prototype.engine.Entity.class.getDeclaredField("lastHeardSound");
+				heard.setAccessible(true);
+				Sound kept = (Sound) heard.get(hearer);
+				assertTrue("the hearer keeps the sound it heard", kept == s);
+				java.lang.reflect.Field audience = Sound.class.getDeclaredField("entities");
+				audience.setAccessible(true);
+				assertTrue("the spent sound holds no audience", audience.get(kept) == null);
+				java.lang.reflect.Field by = Sound.class.getDeclaredField("caller");
+				by.setAccessible(true);
+				assertTrue("nor its caller", by.get(kept) == null);
+			} catch (ReflectiveOperationException e) {
+				throw new AssertionError("a sound no longer keeps its audience the way this reads it", e);
+			}
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -17249,6 +17291,7 @@ public class SimTests {
 				new AFarPredatorIsWatchedOnTheCalmClock(),
 				new ABodyAttendsToItsNearest(),
 				new AHerdDoesNotHideAHunter(),
+				new ASpentSoundHoldsNothing(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
