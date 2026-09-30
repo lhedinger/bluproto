@@ -144,6 +144,7 @@ final class WorldHost {
 			// And the level whole, small: the picture a viewer gets first,
 			// accumulated band by band into one low image, never a level image.
 			baked.put(z + "/low", LayerBaker.lowJpeg(low));
+			baked.put(z + "/lowalpha", LayerBaker.lowAlpha(low));
 		}
 		// The bake is free of LIVE state by construction — ground pixels read
 		// only tile type and the static fertility potential (grassland's
@@ -1759,6 +1760,11 @@ final class WorldHost {
 	/** The whole of level z as one small JPEG ({@link LayerBaker#lowJpeg}), or null. */
 	byte[] lowMap(int z) {
 		return chunks.get(z + "/low");
+	}
+
+	/** Level z's low map alpha ({@link LayerBaker#lowAlpha}), or null. */
+	byte[] lowAlpha(int z) {
+		return chunks.get(z + "/lowalpha");
 	}
 
 	int viewers() {
