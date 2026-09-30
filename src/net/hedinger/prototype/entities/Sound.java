@@ -27,7 +27,9 @@ public class Sound extends Entity {
 
 	private double radius = DEFAULT_RADIUS;
 
-	private TreeMap<Double, Entity> entities = new TreeMap<Double, Entity>();
+	/** Everyone in earshot, for the one tick the sound is broadcast; null
+	 *  before and after. A spent sound holds nothing -- see think(). */
+	private TreeMap<Double, Entity> entities = null;
 
 	private int code = 0;
 
@@ -110,6 +112,16 @@ public class Sound extends Entity {
 					}
 				}
 			}
+			// A spent sound holds nothing. Every body keeps the last sound it
+			// heard (Entity.lastHeardSound), so a sound that kept its audience
+			// kept every body in earshot alive on the heap after it died, and
+			// each of those kept ITS last sound, and that one its audience --
+			// a chain back through time that never broke once every creature
+			// could call, and that filled a 512 MB heap in six hours at two
+			// thousand bodies. The audience and the caller are the broadcast's
+			// business only; what a hearer keeps, it copies out (TestNPC.hear).
+			entities = null;
+			caller = null;
 		}
 	}
 
