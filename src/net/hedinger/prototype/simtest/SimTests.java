@@ -11564,16 +11564,18 @@ public class SimTests {
 	 * banks would fail no audit that still runs.
 	 */
 	/**
-	 * There is open air above the ground, it is mostly empty, and nothing in it
+	 * There is a level above the ground, it is mostly open, and nothing in it
 	 * floats.
 	 *
-	 * <p>The floating check is the one that matters. A summit is raised from the
-	 * surface's elevation field, but the surface is carved AFTER that field is
-	 * first read — by the ravine, by the installation, by two reachability
-	 * seals. Any of those can take away the rock a spire was going to stand on,
-	 * and a spire left hanging over open ground would not read as a bug: it
-	 * would read as a deliberate floating island, which is precisely why no
-	 * screenshot would ever catch it.
+	 * <p>The floating check is the one that matters. The sky's tables are read
+	 * off the FINAL surface, rock for rock, which is what keeps them grounded
+	 * today; they used to be raised from the surface's elevation field, which
+	 * the ravine, the installation and two reachability seals all carve after
+	 * it is first read, and any of those could take away the rock a summit was
+	 * going to stand on. Rock left hanging over open ground would not read as a
+	 * bug: it would read as a deliberate floating island, which is precisely
+	 * why no screenshot would ever catch it, and why this stays pinned however
+	 * the tables come to be built.
 	 */
 	static class TheSkyIsMostlyEmptyAndNothingFloats extends Scenario {
 		@Override
@@ -11583,12 +11585,12 @@ public class SimTests {
 				int cols = w.getColums(), rows = w.getRows();
 				int sky = w.getLevels() - 1, surf = w.getSurfaceZ();
 				assertTrue("seed " + s + ": the sky sits above the ground", sky > surf);
-				int voids = 0, standing = 0, floating = 0, climb = 0;
+				int drops = 0, standing = 0, floating = 0, climb = 0;
 				for (int x = 0; x < cols; x++) {
 					for (int y = 0; y < rows; y++) {
 						Tile t = w.getTile(x, y, sky);
-						if (t.getType() == Tile.TileType.TYPE_VOID) {
-							voids++;
+						if (t.isDrop()) {
+							drops++; // open to the floor below: nothing standing here
 							continue;
 						}
 						standing++;
@@ -11597,15 +11599,13 @@ public class SimTests {
 						}
 						// Over open ground, and so held up by nothing the
 						// terrain put there. Only a climb is allowed to do
-						// that, and only in the three places a climb is: the
-						// hole back down, the ramp beside it, and the tile the
-						// climb steps out onto, which stands over its own
-						// climbing ramp the way a stairwell overhangs its own
-						// stair. Anything else over open ground is a rock
-						// hanging in the air.
+						// that, and only in the two places a climb stands: the
+						// ramp back down, and the tile the climb steps out
+						// onto, which stands over its own climbing ramp the
+						// way a stairwell overhangs its own stair. Anything
+						// else over open ground is a rock hanging in the air.
 						Tile.TileType below = w.getTile(x, y, surf).getType();
-						boolean partOfAClimb = t.getType() == Tile.TileType.TYPE_HOLE
-								|| t.getType() == Tile.TileType.TYPE_RAMPDOWN
+						boolean partOfAClimb = t.getType() == Tile.TileType.TYPE_RAMPDOWN
 								|| below == Tile.TileType.TYPE_RAMPUP;
 						if (partOfAClimb) {
 							climb++;
@@ -11620,14 +11620,115 @@ public class SimTests {
 				// way onto one. Zero here would mean the mesas quietly went
 				// back to being scenery.
 				assertTrue("seed " + s + ": the sky can be climbed to (" + climb
-						+ " climb tiles)", climb >= 3);
+						+ " climb tiles)", climb >= 2);
 				// Mostly empty, but not empty: a sky with no summits at all is a
 				// level with nothing to look at, and one that is mostly rock is
 				// a lid over the world. Measured 7%..12% rock across seeds.
-				assertTrue("seed " + s + ": the sky is mostly open air (" + voids + " void, "
-						+ standing + " rock)", voids > standing * 4L);
+				assertTrue("seed " + s + ": the sky is mostly open (" + drops + " drop, "
+						+ standing + " rock)", drops > standing * 4L);
 				assertTrue("seed " + s + ": but something stands in it", standing > 200);
 			}
+		}
+	}
+
+	/**
+	 * The sky is one big hole, and a mesa's table ends in a cliff.
+	 *
+	 * <p>The level above the ground used to be open air, which is drawn by
+	 * drawing nothing — and so a table met it with no edge at all, and each one
+	 * was fenced by its rim: a ring of the rock-wall tile one thick, which the
+	 * wall art draws as a capped masonry wall. What the edge of a mesa should
+	 * read as is ground breaking off over a drop, and that is exactly the
+	 * treatment a pit's mouth already gets: the land ranks above it in the
+	 * autotiler and overhangs it in scalloped laps. So the sky is holes, the
+	 * floor below showing through all of it under the pit veil, and the tables
+	 * are the ground's own rock: over every tile of rock on the surface is
+	 * floor, so there is no rim left to draw and every table's edge is a lip
+	 * standing right over the foot of its cliff.
+	 *
+	 * <p>Four things are pinned, across seeds. No open air is left: the sky is
+	 * holes, or what stands in it. No hole stands over rock: the top of a rock
+	 * wall is floor, so a drop only ever falls onto open ground. Nothing
+	 * standing borders a table's side but its own climbs and the world's edge,
+	 * so no mesa is walled; the drop comes right up to the grass. And the drop
+	 * is one a body can see coming: at the edge of a table the hazard channel
+	 * reads it, as it reads any pit, which open air never did.
+	 */
+	static class AMesaEndsInACliff extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int sky = w.getLevels() - 1;
+				int air = 0, walled = 0, edges = 0, overRock = 0;
+				for (int x = 1; x < w.getColums() - 1; x++) {
+					for (int y = 1; y < w.getRows() - 1; y++) {
+						Tile.TileType t = w.getTile(x, y, sky).getType();
+						if (t == Tile.TileType.TYPE_VOID) {
+							air++;
+						}
+						if (t == Tile.TileType.TYPE_HOLE && w.getTile(x, y, w.getSurfaceZ()).getType()
+								== Tile.TileType.TYPE_WALL) {
+							overRock++;
+						}
+						if (t != Tile.TileType.TYPE_ROCKY) {
+							continue;
+						}
+						for (int dx = -1; dx <= 1; dx++) {
+							for (int dy = -1; dy <= 1; dy++) {
+								int nx = x + dx, ny = y + dy;
+								if (nx < 2 || ny < 2 || nx >= w.getColums() - 2 || ny >= w.getRows() - 2) {
+									continue; // the world's own edge, which is rock all the way up
+								}
+								if (dx != 0 && dy != 0) {
+									continue; // a SIDE is walled or it is not; a rock stack
+									// that only meets a table corner to corner is a stack
+								}
+								Tile.TileType n = w.getTile(nx, ny, sky).getType();
+								if (n == Tile.TileType.TYPE_HOLE) {
+									edges++;
+								} else if (n != Tile.TileType.TYPE_ROCKY
+										&& n != Tile.TileType.TYPE_RAMPDOWN) {
+									walled++;
+								}
+							}
+						}
+					}
+				}
+				assertEquals("seed " + s + ": no open air is left in the sky", 0, air);
+				// Rock a storey tall has a top: over it is floor, never a hole. A
+				// hole over rock is a fall onto nothing, and a body that takes it
+				// is gone from the world.
+				assertEquals("seed " + s + ": no hole stands over rock", 0, overRock);
+				assertEquals("seed " + s + ": no table is walled in", 0, walled);
+				assertTrue("seed " + s + ": and the tables do end in drops", edges > 0);
+			}
+
+			// The edge is sensed: a still body on a table, facing the drop.
+			World w = net.hedinger.prototype.sim.Worlds.demoTerrain(42);
+			int sky = w.getLevels() - 1;
+			int[] edge = null;
+			for (int x = 3; x < w.getColums() - 3 && edge == null; x++) {
+				for (int y = 3; y < w.getRows() - 3 && edge == null; y++) {
+					if (w.getTile(x, y, sky).getType() == Tile.TileType.TYPE_ROCKY
+							&& w.getTile(x - 1, y, sky).getType() == Tile.TileType.TYPE_ROCKY
+							&& w.getTile(x + 1, y, sky).getType() == Tile.TileType.TYPE_HOLE) {
+						edge = new int[] { x, y };
+					}
+				}
+			}
+			assertTrue("seed 42 has a table with a drop to its east", edge != null);
+			Genome g = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000);
+			TestNPC facing = TestNPC.minded(edge[0] + 0.5, edge[1] + 0.5, sky, g).withHeading(0);
+			TestNPC away = TestNPC.minded(edge[0] + 0.5, edge[1] + 0.5, sky, g).withHeading(Math.PI);
+			w.spawnEntity(facing);
+			w.spawnEntity(away);
+			w.think();
+			tick(w, 2);
+			assertEquals("the drop off a table's edge reads as a hazard", 1,
+					(long) Math.round(facing.sensorSnapshot()[AgentIO.S_HAZARD_AHEAD]));
+			assertEquals("and the table behind reads as none", 0,
+					(long) Math.round(away.sensorSnapshot()[AgentIO.S_HAZARD_AHEAD]));
 		}
 	}
 
@@ -17194,6 +17295,7 @@ public class SimTests {
 				new EveryCavernHasAStairOutOfIt(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new TheSkyIsMostlyEmptyAndNothingFloats(),
+				new AMesaEndsInACliff(),
 				new TheWorldRemembersItsBirths(),
 				new SeededWorldBerthsTheDroneRank(),
 				new EveryDroneInTheRankHasItsOwnPad(),

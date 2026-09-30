@@ -555,6 +555,35 @@ The precedents, so nobody pays twice:
   what let it ship — the bake test asked for `alpha < 255`, which 237 satisfies.
   A test for "see-through" must ask for *actually* see-through; "not fully
   opaque" is a different and much weaker claim, and a 93% black sheet meets it.
+  *Coda*: the sky is no longer open air. It is finished as holes — the next
+  entry — and `VOID` survives as what the builder thinks in, never as what a
+  viewer is served. The rule stands for any level that does keep open air.
+- **The mesa fenced in masonry** — a mesa's table ended in a ring of the
+  rock-wall tile, one thick, and the wall art draws a one-thick ring as a
+  capped masonry wall: every plateau in the sky looked walled in, where it
+  should have looked like ground breaking off over a drop. Removing the ring
+  left the table meeting open air with no edge at all, because open air is
+  drawn by drawing nothing and so draws no lip. The edge a cliff needs was
+  already in the system, belonging to the pit: the land ranks above a hole in
+  the autotiler and overhangs it in scalloped laps (§4). So the sky is **one
+  big hole**, and the floor below shows through it under the pit veil. That
+  dims the whole view down from up there to 30%, and it is kept on purpose:
+  from a mesa the world below *should* read as far away, and the parallax
+  slide still says it is a real place. The first cut made the rim a ring of
+  holes too, and it looked right and was a trap: under the rim was the hill's
+  own rock, and a hole over rock is a fall onto nothing — 114 of 121 bodies
+  that climbed a mesa died of it. The real error was older than the art. The
+  rim existed because the sky was a *second opinion* about the land's height,
+  a summit threshold just off the ground's own, and every place the two
+  opinions disagreed needed a tile to paper over it. **Rock a storey tall has
+  a top**: over every tile of surface rock the sky is floor, nowhere else is
+  it anything but a hole, and the table's edge stands exactly over the
+  cliff's foot. Two things fell out. A drop is also a fact a body senses: a
+  hole reads on the hazard channel and open air never did, so the cliff is one
+  a creature can see coming. And when a boundary looks wrong, look first for
+  whether the thing on either side of it is the same fact stated twice —
+  the masonry was a symptom of two elevations, and the cliff took no new art
+  at all.
 - **The placeholder that stayed** — each level's low map, one small picture of
   the whole floor, was made a JPEG to land fast, and JPEG has no alpha: a pit
   was painted as its veil over the page background, a loss accepted because

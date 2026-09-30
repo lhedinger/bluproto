@@ -455,7 +455,8 @@ public final class Worlds {
 	 * ground, and every reader that derived "the surface" from {@code levels-1}
 	 * would quietly have renamed the world's floors by one.
 	 *
-	 * <p>It is mostly {@code TYPE_VOID}. What stands in it is what the surface's
+	 * <p>It is mostly a drop: one big hole onto the surface below (see
+	 * {@link #openTheSky}). What stands in it is what the surface's
 	 * own elevation says should stand there — the highland outcrops and the mesa
 	 * buttes, whose tops carry on up past the ground plane. A viewer on this
 	 * level sees a scatter of summits over an otherwise open drop onto the
@@ -939,81 +940,104 @@ public final class Worlds {
 	}
 
 	/**
-	 * The skyline: what stands up into the open air above the ground.
+	 * The skyline: the level above the ground, which is the ground's own relief.
 	 *
-	 * <p>The sky is {@code TYPE_VOID} everywhere except where the land is still
-	 * climbing at this height. The surface calls anything over 0.87 elevation a
-	 * highland outcrop; a summit is the core of that which is still rising at
-	 * 0.90, and the gap between the two thresholds is what gives a hill a wide
-	 * base and a narrow top rather than a column with vertical sides. The rim
-	 * carries up too — the world is bounded by cliffs, and a cliff does not
-	 * stop at the ground plane.
+	 * <p>A rock wall on the surface is rock a full storey tall, so its top is
+	 * floor on the level above -- the same stacking every other pair of floors
+	 * has, where the surface's ground stands on the caves' rock. So wherever the
+	 * surface is rock, the sky is a table of rocky ground, and wherever it is
+	 * not, the sky is one big hole onto it ({@link #openTheSky}). The world's
+	 * border carries up as rock, because the world is bounded by cliffs and a
+	 * cliff does not stop at the ground plane.
 	 *
-	 * <p>Nothing floats. A spire is the TOP of something, so it is raised only
-	 * where the tile directly below it is solid; where a later pass cut the
-	 * outcrop away, the air above it is air. That invariant is the one thing
-	 * worth asserting about this level, because a floating rock is exactly what
-	 * a second elevation opinion would produce and it would look deliberate.
+	 * <p>It used to be a second opinion about the land's height -- summits
+	 * where the elevation noise ran past a threshold just above the outcrops',
+	 * eroded by one into a table and a ring of rock-wall rim. The two opinions
+	 * almost agreed, and every place they did not was wrong: the rim drew as a
+	 * masonry wall where a cliff edge belonged, and turned into a hole it put a
+	 * hole over rock, which a body falls into and lands on nothing. Reading the
+	 * ground directly has neither: a table's edge stands exactly over the
+	 * rock's edge, so the drop off it always lands on open ground below.
+	 *
+	 * <p>Nothing floats, by construction: a table is only ever laid over rock.
 	 */
 	private static void raiseSkyline(World w, int cols, int rows) {
-		Region[] regions = regionSites(cols, rows);
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
-				// The same biased elevation the ground read, so a stony upland
-				// carries a skyline and a wetland does not -- one opinion about
-				// how high the land is, not two.
-				double n = clamp01(Utils.noise2(x, y, 0.055) + biomeAt(regions, x, y).elevBias);
-				boolean summit = border || n > SUMMIT_N;
-				setBare(w, x, y, SKY_Z, summit && w.getTile(x, y, SURFACE_Z).isSolid()
-						? Tile.TileType.TYPE_WALL
-						: Tile.TileType.TYPE_VOID);
+				boolean rock = w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WALL;
+				if (border && rock) {
+					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_WALL);
+				} else if (rock) {
+					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
+					w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
+				} else {
+					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_VOID);
+				}
 			}
 		}
-		flattenSummits(w, cols, rows);
 		rampTheSkyline(w, cols, rows);
+		joinTheTables(w, cols, rows);
+		openTheSky(w, cols, rows);
 	}
 
 	/**
-	 * Cuts the top off every summit wide enough to have one: a mesa's TABLE is
-	 * its interior, and its rim is the ring of rock left standing round it.
+	 * Rock left standing that touches a climbed table on a side is part of it.
 	 *
-	 * <p>Erosion rather than a third elevation threshold, and the difference is
-	 * the whole reason the sky is a place. A threshold asks "is this cell high
-	 * enough", so whether a summit gets a top depends on how high its own noise
-	 * peak happens to run — and measured across seeds that was one mesa in the
-	 * whole world with a top on it, an empty level with a single green patch on
-	 * it. Erosion asks "is this cell WIDE enough", which is the actual property
-	 * a mesa has and a spire does not: every summit broad enough to hold an
-	 * interior gets one, at whatever height it stands, and a narrow stack stays
-	 * a narrow stack.
-	 *
-	 * <p>Eroding by exactly one leaves a rim exactly one thick at the thinnest
-	 * point, which is what the climbs need to breach and what reads from below
-	 * as an edge rather than a slope.
+	 * <p>The climbs are cut one table at a time, so a table too small to get a
+	 * climb of its own can be put back to rock and then find a later table's
+	 * climb laid right beside it -- a spur of walkable ground with a rock stack
+	 * against its flank, which is a floor over rock that anything could step
+	 * onto, drawn as a wall. Every table still standing after
+	 * {@link #rampTheSkyline} has a way up, so whatever touches one is reachable
+	 * too: it is floor. What is left is rock that touches no table at all.
 	 */
-	private static void flattenSummits(World w, int cols, int rows) {
-		boolean[][] table = new boolean[cols][rows];
-		for (int x = 3; x < cols - 3; x++) {
-			for (int y = 3; y < rows - 3; y++) {
-				if (w.getTile(x, y, SKY_Z).getType() != Tile.TileType.TYPE_WALL) {
-					continue;
-				}
-				boolean inside = true;
-				for (int dx = -1; dx <= 1 && inside; dx++) {
-					for (int dy = -1; dy <= 1 && inside; dy++) {
-						inside = w.getTile(x + dx, y + dy, SKY_Z).getType()
-								!= Tile.TileType.TYPE_VOID;
+	private static void joinTheTables(World w, int cols, int rows) {
+		boolean grew = true;
+		while (grew) {
+			grew = false;
+			for (int x = 2; x < cols - 2; x++) {
+				for (int y = 2; y < rows - 2; y++) {
+					if (w.getTile(x, y, SKY_Z).getType() != Tile.TileType.TYPE_WALL) {
+						continue;
+					}
+					for (int d = 0; d < 4; d++) {
+						if (w.getTile(x + Tile.dirDx(d), y + Tile.dirDy(d), SKY_Z).getType()
+								== Tile.TileType.TYPE_ROCKY) {
+							setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
+							w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
+							grew = true;
+							break;
+						}
 					}
 				}
-				table[x][y] = inside;
 			}
 		}
+	}
+
+	/**
+	 * The sky is one big hole: every tile of it that is not a table, a climb or
+	 * rock is finished as a pit onto the surface.
+	 *
+	 * <p>Up to here the level is built as open air ({@code TYPE_VOID}), which
+	 * the passes above read as "nothing stands here". Open air is drawn by
+	 * drawing nothing, so a table met it with no edge at all. The edge of a
+	 * mesa is ground breaking off over a drop, and that is the treatment a
+	 * pit's mouth already gets -- the land ranks above it and overhangs it in
+	 * scalloped laps -- so a hole is what the drop is made of. The floor below
+	 * reads through all of it under the pit veil, dark with the height.
+	 *
+	 * <p>A hole and open air fall the same way ({@link Tile#isDrop}); what
+	 * changes for a body is that a hole is a hazard it can SEE, on the channel
+	 * that reports pits and water ahead. And because a table covers all the
+	 * rock under it, no hole here stands over rock: a body that walks off a
+	 * table's edge falls onto the ground at the foot of the cliff.
+	 */
+	private static void openTheSky(World w, int cols, int rows) {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
-				if (table[x][y]) {
-					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
-					w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
+				if (w.getTile(x, y, SKY_Z).getType() == Tile.TileType.TYPE_VOID) {
+					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_HOLE);
 				}
 			}
 		}
@@ -1023,15 +1047,6 @@ public final class Worlds {
 	 *  below, so the climb buys grazing that is real but never better than
 	 *  staying down. */
 	private static final double PLATEAU_FERTILITY = 0.45;
-
-	/** Where the land stops climbing and starts standing up into the open air.
-	 *
-	 *  <p>Just under the 0.87 the ground calls an outcrop, so an outcrop and the
-	 *  skyline over it are very nearly the same shape: a rocky hill has height,
-	 *  and the sky is the relief map of the ground rather than a second, smaller
-	 *  opinion about where the high country is. It was 0.90, which left the sky
-	 *  a scatter of stacks too narrow for any of them to have a top. */
-	private static final double SUMMIT_N = 0.875;
 
 	/** The smallest table worth a climb. A handful of tiles up a ramp is a
 	 *  landing, not a place, and every one of them costs a ramp cut through the
@@ -1067,8 +1082,9 @@ public final class Worlds {
 					cut = climbPlateau(w, cols, rows, seen, table, want);
 				}
 				if (cut == 0) {
-					// Too small, or walled in on every side by its own rim:
-					// back to the mass it was cut out of.
+					// Too small, or nowhere round it to cut a climb: left as the
+					// rock it stands on. Rock over rock, never a hole over rock,
+					// and never a floor nothing can walk onto.
 					for (int[] p : table) {
 						setBare(w, p[0], p[1], SKY_Z, Tile.TileType.TYPE_WALL);
 					}
@@ -1158,18 +1174,17 @@ public final class Worlds {
 	 * ground along {@code -u}, or -1 where no climb can be cut arriving from
 	 * that direction.
 	 *
-	 * <p>What is measured is the run of SOLID SURFACE, not the run of sky wall,
-	 * and the difference matters. The surface calls anything over 0.87
-	 * elevation an outcrop while the sky only stands up over 0.90, so every
-	 * mesa sits on a skirt of solid rock that carries no skyline: measuring the
-	 * wall alone left the ramp's landing out on bare stone every time, and no
-	 * climb was ever cut. The run of solid ground is the hill, wall or no wall.
+	 * <p>What is measured is the run of SOLID SURFACE under open sky. Since the
+	 * sky became the ground's own relief -- a table over every tile of rock --
+	 * that run is normally zero: a table's edge stands right over the rock's
+	 * edge, and the climb's ramp is laid on the open ground at its foot. It was
+	 * the band of rock between a summit and the plain when the sky was a second
+	 * elevation opinion narrower than the ground's, and a hill of up to
+	 * {@link #MAX_HILL_RUN} is still climbed if one turns up.
 	 *
 	 * <p>Past the hill there must be three tiles of open air over walkable
 	 * ground — the landing the drop lands on, the tile between, and the
-	 * climbing ramp itself. The hill has a depth limit because the climb cuts a
-	 * spur of walkable stone along it: a short one reads as a notch in the
-	 * mesa's edge, a long one as a causeway out across the plain.
+	 * climbing ramp itself.
 	 */
 	private static int hillRun(World w, int cols, int rows, int px, int py, int u) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
@@ -1188,7 +1203,7 @@ public final class Worlds {
 			}
 			run++;
 		}
-		if (run == 0 || run >= MAX_HILL_RUN) {
+		if (run >= MAX_HILL_RUN) {
 			return -1;
 		}
 		for (int k = 1; k <= 3; k++) {
