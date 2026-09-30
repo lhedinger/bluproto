@@ -267,9 +267,13 @@ function chunkImage(cx: number, cy: number, z: number, fetch: boolean): HTMLCanv
 function getChunk(cx: number, cy: number, z: number, fetch: boolean): HTMLCanvasElement | null {
   return chunkImage(cx, cy, z, fetch);
 }
-/** The level's low map -- the whole floor in one small JPEG -- fetched and
+/** The level's low map -- the whole floor in one small picture -- fetched and
  *  cached exactly like a chunk, under the same build tag. The renderer paints
- *  it into whatever chunks have not landed (render.setLowMapSource). */
+ *  it into whatever chunks have not landed, and looks down through its holes
+ *  (render.setLowMapSource). It arrives in two parts, the colour as a JPEG and
+ *  the alpha as a greyscale PNG, because JPEG has no alpha and the colour as
+ *  a PNG is too big to land first (LayerBaker.lowAlpha); they are put back
+ *  together here, once. Without its alpha a sky level is a black sheet. */
 const lowMapCache = new Map<string, HTMLCanvasElement | null>();
 let lowMapGateUntil = 0; // chunk fetches wait for the low map until this
 function lowMapImage(z: number): HTMLCanvasElement | null {
@@ -279,16 +283,30 @@ function lowMapImage(z: number): HTMLCanvasElement | null {
   if (hit !== undefined) return hit;
   lowMapCache.set(key, null);
   if (z === currentLevel) lowMapGateUntil = performance.now() + 2000;
-  const img = new Image();
-  img.onload = () => {
+  const img = new Image(), alpha = new Image();
+  let loaded = 0;
+  const join = () => {
+    if (++loaded < 2) return;
     const copy = document.createElement('canvas');
     copy.width = img.naturalWidth;
     copy.height = img.naturalHeight;
-    copy.getContext('2d')!.drawImage(img, 0, 0);
+    const c = copy.getContext('2d', { willReadFrequently: true })!;
+    c.drawImage(img, 0, 0);
+    const colour = c.getImageData(0, 0, copy.width, copy.height);
+    c.clearRect(0, 0, copy.width, copy.height);
+    c.drawImage(alpha, 0, 0);
+    const mask = c.getImageData(0, 0, copy.width, copy.height).data;
+    for (let i = 3; i < mask.length; i += 4) colour.data[i] = mask[i - 3]; // grey is alpha
+    c.putImageData(colour, 0, 0);
     lowMapCache.set(key, copy);
   };
-  img.onerror = () => { setTimeout(() => { if (lowMapCache.get(key) === null) lowMapCache.delete(key); }, 8000); };
+  const retry = () => { setTimeout(() => { if (lowMapCache.get(key) === null) lowMapCache.delete(key); }, 8000); };
+  img.onload = join;
+  alpha.onload = join;
+  img.onerror = retry;
+  alpha.onerror = retry;
   img.src = `/api/world/layers/${z}/low.jpg?v=${v}`;
+  alpha.src = `/api/world/layers/${z}/lowalpha.png?v=${v}`;
   return null;
 }
 setLowMapSource(lowMapImage);

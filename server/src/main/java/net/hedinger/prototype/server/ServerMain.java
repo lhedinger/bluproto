@@ -548,6 +548,20 @@ public final class ServerMain {
 					.header("Cache-Control", "public, max-age=86400")
 					.result(jpg);
 		});
+		// Its alpha, as a greyscale PNG (LayerBaker.lowAlpha): the client puts
+		// the two back together, so the low map is a window wherever the
+		// level is. Registered before the chunk route, which would otherwise
+		// take the name for a chunk and refuse it.
+		app.get("/api/world/layers/{z}/lowalpha.png", ctx -> {
+			byte[] png = host.lowAlpha(Integer.parseInt(ctx.pathParam("z")));
+			if (png == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.contentType(ContentType.IMAGE_PNG)
+					.header("Cache-Control", "public, max-age=86400")
+					.result(png);
+		});
 		app.get("/api/world/layers/{z}/{chunk}.png", ctx -> {
 			int z = Integer.parseInt(ctx.pathParam("z").replace(".png", ""));
 			String[] p = ctx.pathParam("chunk").replace(".png", "").split("_");

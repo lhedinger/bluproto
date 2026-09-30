@@ -555,6 +555,20 @@ The precedents, so nobody pays twice:
   what let it ship — the bake test asked for `alpha < 255`, which 237 satisfies.
   A test for "see-through" must ask for *actually* see-through; "not fully
   opaque" is a different and much weaker claim, and a 93% black sheet meets it.
+- **The placeholder that stayed** — each level's low map, one small picture of
+  the whole floor, was made a JPEG to land fast, and JPEG has no alpha: a pit
+  was painted as its veil over the page background, a loss accepted because
+  it lasted "the second before its chunk lands". The same week, chunks came to
+  be fetched at near zoom only — and the zoom a world opens at is not near. So
+  at fit zoom the low map *was* the ground for as long as anyone looked, and
+  the view down went nowhere: the sky was a black sheet with the plateaus on
+  it, every pit on the surface a veil over nothing. Neither change was wrong
+  alone, and each commit said so in its message. The rule: **a stand-in is
+  judged by the longest anyone will look at it, not the shortest**, and when a
+  change makes something last longer, what it stood in for must be asked
+  again. The low map now ships its alpha as a small greyscale PNG beside the
+  JPEG, and the view down is drawn from the floors' own low maps wherever no
+  chunk is there to give a sharper one.
 - **The floor that made every body one size** — zooming out, the parasites
   did not get smaller; they seemed to grow against their hosts. Nothing drew
   a parasite differently. Every body went through one line, `r = max(3.5,

@@ -203,31 +203,35 @@ final class LayerBaker {
 	static final float LOW_QUALITY = 0.6f;
 
 	/**
-	 * The whole level as ONE small JPEG, {@link #LOW_PX} pixels per tile: the
-	 * 288x176 world comes out at 576x352 and under forty kilobytes, against
-	 * the several megabytes its two hundred chunks weigh. The client paints it first, so the
-	 * map is on screen after one request, and the chunks replace it as they
-	 * arrive. A phone on a mobile link used to sit on a black world for as long
-	 * as the chunk queue took behind the entity stream -- ten seconds and more
-	 * on a thousand-body world -- with nothing to look at but the dots.
+	 * The whole level small, {@link #LOW_PX} pixels per tile: the 288x176 world
+	 * comes out at 576x352, against the several megabytes its two hundred
+	 * chunks weigh. The client paints it first, so the map is on screen after
+	 * one request, and the chunks replace it as they arrive. A phone on a
+	 * mobile link used to sit on a black world for as long as the chunk queue
+	 * took behind the entity stream -- ten seconds and more on a thousand-body
+	 * world -- with nothing to look at but the dots.
 	 *
 	 * <p>Bilinear from the render-resolution bands, which is exactly what the
 	 * client's {@code refreshGroundLow} does to the chunks it has, so the
-	 * placeholder and the real mirror are the same picture. JPEG has no alpha,
-	 * so a pit is painted as its veil over the page background rather than as
-	 * a window: for the second or so before its chunk lands, the floor below
-	 * is not seen through it. That is the trade for a map that arrives at all.
+	 * placeholder and the real mirror are the same picture.
+	 *
+	 * <p>It keeps its alpha, and ships it in two parts: the colour as a JPEG
+	 * ({@link #lowJpeg}) and the alpha as a small greyscale PNG
+	 * ({@link #lowAlpha}), which the client puts back together. Alpha was
+	 * dropped once, on the understanding that a pit would be painted over the
+	 * page background only for the second before its chunk landed. That
+	 * stopped being true when chunks came to be fetched at near zoom only: at
+	 * the zoom a world opens at, the low map is the ground for as long as the
+	 * viewer stays there, and the sky -- nearly all open air -- was a black sheet
+	 * with the plateaus on it. Colour is noise and wants JPEG; alpha is a
+	 * handful of flat values (opaque, the pit veil, the lip between) and
+	 * compresses to a few kilobytes as a PNG, where the whole picture as a
+	 * PNG with alpha is five to eight times the JPEG.
 	 */
-	/** A blank low map for a level, on the page's own background: the bands
-	 *  are drawn into it one at a time ({@link #lowBand}), because a whole
-	 *  level's image no longer fits the deploy heap and never needs to. */
 	static BufferedImage lowCanvas(int cols, int rows) {
-		BufferedImage low = new BufferedImage(cols * LOW_PX, rows * LOW_PX, BufferedImage.TYPE_INT_RGB);
-		Graphics2D g = low.createGraphics();
-		g.setColor(new java.awt.Color(0x14161a));
-		g.fillRect(0, 0, low.getWidth(), low.getHeight());
-		g.dispose();
-		return low;
+		// Cleared to nothing: ARGB starts transparent, and whatever the bands
+		// leave unpainted is a window, exactly as in a chunk.
+		return new BufferedImage(cols * LOW_PX, rows * LOW_PX, BufferedImage.TYPE_INT_ARGB);
 	}
 
 	/** Draws one baked band (its top at tile row {@code tileY0}) into its strip
@@ -241,8 +245,14 @@ final class LayerBaker {
 		g.dispose();
 	}
 
-	/** Encodes a finished low map. */
+	/** Encodes a finished low map's colour, alpha dropped (see {@link #lowAlpha}). */
 	static byte[] lowJpeg(BufferedImage low) {
+		BufferedImage rgb = new BufferedImage(low.getWidth(), low.getHeight(), BufferedImage.TYPE_INT_RGB);
+		for (int y = 0; y < low.getHeight(); y++) {
+			for (int x = 0; x < low.getWidth(); x++) {
+				rgb.setRGB(x, y, low.getRGB(x, y) & 0xFFFFFF);
+			}
+		}
 		try {
 			javax.imageio.ImageWriter w = ImageIO.getImageWritersByFormatName("jpeg").next();
 			javax.imageio.ImageWriteParam prm = w.getDefaultWriteParam();
@@ -250,11 +260,28 @@ final class LayerBaker {
 			prm.setCompressionQuality(LOW_QUALITY);
 			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 15);
 			w.setOutput(new javax.imageio.stream.MemoryCacheImageOutputStream(out));
-			w.write(null, new javax.imageio.IIOImage(low, null, null), prm);
+			w.write(null, new javax.imageio.IIOImage(rgb, null, null), prm);
 			w.dispose();
 			return out.toByteArray();
 		} catch (IOException e) {
 			throw new IllegalStateException("low map encode failed", e);
+		}
+	}
+
+	/** Encodes a finished low map's alpha as a greyscale PNG, grey = alpha. */
+	static byte[] lowAlpha(BufferedImage low) {
+		BufferedImage mask = new BufferedImage(low.getWidth(), low.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+		for (int y = 0; y < low.getHeight(); y++) {
+			for (int x = 0; x < low.getWidth(); x++) {
+				mask.getRaster().setSample(x, y, 0, low.getRGB(x, y) >>> 24);
+			}
+		}
+		try {
+			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 12);
+			ImageIO.write(mask, "png", out);
+			return out.toByteArray();
+		} catch (IOException e) {
+			throw new IllegalStateException("low map alpha encode failed", e);
 		}
 	}
 

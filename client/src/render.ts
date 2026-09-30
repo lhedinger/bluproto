@@ -417,6 +417,37 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   return out;
 }
 
+/** The floors below as WHOLE levels, from their low maps: the same parallax
+ *  as belowChunks, one image a floor, deepest first: [z, canvas, x, y, w, h].
+ *
+ *  belowChunks can only look under a chunk that has landed, and chunks are
+ *  fetched at near zoom alone -- so at the zoom a world opens at, the view
+ *  down went nowhere, and the sky, nearly all open air, was a black sheet with the
+ *  plateaus on it. The low maps are fetched at every zoom and carry their
+ *  alpha, so this is the view down wherever no chunk is there to give a
+ *  sharper one; belowChunks draws over it where one is. Nothing is drawn for
+ *  a level whose own low map is opaque: there is no hole to see it through. */
+function belowLows(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+    level: number): Array<[number, HTMLCanvasElement, number, number, number, number]> {
+  const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
+  const top = getLowMap(level);
+  if (level - 1 < 0 || !top || !hasHoles(top)) return out;
+  const mx = cvW / 2, my = cvH / 2;
+  const rect = (factor: number): [number, number, number, number] => {
+    const a = cam.worldToScreen(0, 0), b = cam.worldToScreen(meta.cols, meta.rows);
+    const x0 = Math.round(mx + (a.x - mx) * factor), y0 = Math.round(my + (a.y - my) * factor);
+    return [x0, y0, Math.round(mx + (b.x - mx) * factor) - x0, Math.round(my + (b.y - my) * factor) - y0];
+  };
+  const below = getLowMap(level - 1);
+  if (!below) return out;
+  if (level - 2 >= 0 && hasHoles(below)) {
+    const below2 = getLowMap(level - 2);
+    if (below2) out.push([level - 2, below2, ...rect(parallaxFactor() * parallaxFactor())]);
+  }
+  out.push([level - 1, below, ...rect(parallaxFactor())]);
+  return out;
+}
+
 /** Camera zoom (px per tile) below which EVERY creature draws as a flat
  *  colour block instead of a sprite stamp. One decision per frame, from the
  *  zoom alone: keying the tier on each body's own on-screen size mixed
@@ -497,6 +528,9 @@ export function render(
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       g.imageSmoothingEnabled = false;
+      for (const [, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
+        g.drawImage(img, bx, by, bw, bh);
+      }
       for (const [, , img, bx, by, bw, bh] of
           belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
         g.drawImage(img, bx, by, bw, bh);
@@ -515,28 +549,33 @@ export function render(
     const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
     g.imageSmoothingEnabled = false;
     // The floor below goes down FIRST, under its own parallax, so the holes in
-    // the chunks drawn next look onto it (see belowChunks).
+    // the chunks drawn next look onto it (see belowLows, belowChunks).
+    for (const [, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
+      g.drawImage(img, bx, by, bw, bh);
+    }
     for (const [, , img, bx, by, bw, bh] of
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       g.drawImage(img, bx, by, bw, bh);
     }
     drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the chunks next
-    // The low map under everything, so a chunk not yet landed shows the map
-    // at the JPEG's resolution rather than the background.
+    // A chunk not yet landed shows its patch of the low map, at the JPEG's
+    // resolution, rather than the background. Its patch ONLY: the low map
+    // carries the pit veil too, and laid under the whole view it veiled every
+    // hole twice -- once in the map, once in the chunk drawn over it.
     const low = getLowMap(level);
-    if (low) {
-      const o = cam.worldToScreen(0, 0);
-      g.drawImage(low, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
-    }
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
         const img = getChunk(cx, cy, level, true); // lazily fetches + caches this chunk
-        if (!img) continue;
         const wx = cx * chunkTiles, wy = cy * chunkTiles;
         const cw = Math.min(chunkTiles, meta.cols - wx);
         const ch = Math.min(chunkTiles, meta.rows - wy);
         const o = cam.worldToScreen(wx, wy);
-        g.drawImage(img, o.x, o.y, cw * cam.scale, ch * cam.scale);
+        if (img) {
+          g.drawImage(img, o.x, o.y, cw * cam.scale, ch * cam.scale);
+        } else if (low) {
+          const sx = low.width / meta.cols, sy = low.height / meta.rows; // low px per tile
+          g.drawImage(low, wx * sx, wy * sy, cw * sx, ch * sy, o.x, o.y, cw * cam.scale, ch * cam.scale);
+        }
       }
     }
   }
@@ -1241,8 +1280,12 @@ export function renderGL(
     const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs,
       wantedChunks(cam, cv.width, cv.height, meta, chunkTiles));
     // The floor below goes down FIRST, under its own parallax, so the ground
-    // layer's holes look onto it (see belowChunks). Its chunks never change
-    // once decoded, so each is a permanent texture at rev 0.
+    // layer's holes look onto it (see belowLows, belowChunks). Neither its
+    // low maps nor its chunks change once decoded, so each is a permanent
+    // texture at rev 0.
+    for (const [z, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
+      glr.layer('belowlo:' + z, img, 0, null, bx, by, bw, bh);
+    }
     for (const [key, z, img, bx, by, bw, bh] of
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);

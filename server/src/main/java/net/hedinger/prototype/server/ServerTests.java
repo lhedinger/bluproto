@@ -623,7 +623,7 @@ public final class ServerTests {
 
 	/**
 	 * The low map is the level, small: one JPEG per level at LayerBaker.LOW_PX
-	 * per tile, the same picture the chunks make -- checked by comparing the
+	 * per tile and its alpha as a small PNG, the same picture the chunks make -- checked by comparing the
 	 * mean colour of a chunk against the mean of the low map's matching patch.
 	 * It is what a viewer paints before the chunks land, so a low map that
 	 * showed some other picture would be a lie that the chunks then correct,
@@ -650,6 +650,37 @@ public final class ServerTests {
 					&& cols > 0 && rows > 0);
 			check("and small enough to land first on a phone (" + png.length + " bytes)",
 					png.length < 48_000);
+			// Its alpha, which the client joins back onto the colour: the same
+			// size, a few kilobytes, and a window wherever the level is one.
+			byte[] apng = host.lowAlpha(z);
+			check("level " + z + " has a low map alpha", apng != null);
+			java.awt.image.BufferedImage alpha = javax.imageio.ImageIO.read(
+					new java.io.ByteArrayInputStream(apng));
+			check("level " + z + "'s alpha is the low map's size",
+					alpha.getWidth() == low.getWidth() && alpha.getHeight() == low.getHeight());
+			check("and a few kilobytes (" + apng.length + " bytes)", apng.length < 8_000);
+			java.awt.image.BufferedImage joined = new java.awt.image.BufferedImage(
+					low.getWidth(), low.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+			int seeThrough = 0;
+			for (int y = 0; y < low.getHeight(); y++) {
+				for (int x = 0; x < low.getWidth(); x++) {
+					int al = alpha.getRaster().getSample(x, y, 0);
+					seeThrough += al < 255 ? 1 : 0;
+					joined.setRGB(x, y, (al << 24) | (low.getRGB(x, y) & 0xFFFFFF));
+				}
+			}
+			if (z == levels - 1) {
+				// The sky is nearly all open: its low map has to be a window, or the
+				// view down from it is a black sheet at every zoom it is seen at.
+				check("the sky's low map is mostly see-through (" + seeThrough + " of "
+						+ low.getWidth() * low.getHeight() + ")",
+						seeThrough * 2 > low.getWidth() * low.getHeight());
+			}
+			if (z == 0) {
+				check("the bottom level's low map is solid (" + seeThrough + " see-through)",
+						seeThrough == 0);
+			}
+			low = joined;
 			// Mean colour of chunk (2,1) against its patch of the low map.
 			int cx = 2, cy = 1;
 			byte[] cpng = host.chunk(z, cx, cy);
@@ -667,8 +698,8 @@ public final class ServerTests {
 	}
 
 	/** Mean colour over a rect, each pixel composited over the page background
-	 *  the way the low map is encoded -- a transparent pixel IS the background
-	 *  there, so an open sky level compares as the dark it is drawn as. */
+	 *  -- the same rule for a chunk and for the low map with its alpha joined
+	 *  back on, so a see-through patch compares as what both leave showing. */
 	private static double[] mean(java.awt.image.BufferedImage img, int x0, int y0, int w, int h) {
 		final int bgR = 0x14, bgG = 0x16, bgB = 0x1a;
 		double r = 0, g = 0, b = 0, n = 0;
