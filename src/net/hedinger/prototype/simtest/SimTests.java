@@ -506,6 +506,83 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter's cub scavenges until it can hunt: it eats a carcass that has
+	 * turned, which an adult hunter cannot, and its forage channel smells for
+	 * one the way a scavenger's does.
+	 *
+	 * <p>A cub too small to kill had no food it could reach. The bite scales with
+	 * the hunter's size against its quarry's, so a cub against a full-grown grazer
+	 * does a fraction of an adult's damage, and a hunter eats only what it kills
+	 * fresh. Measured on the demo world, a cub ate a fiftieth of what it needed to
+	 * grow, one in ninety-four born ever grew up, and no hunter lineage reached a
+	 * second generation. Scavenging is the one food a body that cannot kill can
+	 * get to, and it is what young carnivores do.
+	 *
+	 * <p>It ends at adulthood, so the back half of every corpse stays the
+	 * scavengers' to every adult in the world.
+	 */
+	static class AHunterCubScavengesUntilItCanHunt extends Scenario {
+		private static Genome body(double size) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.0005;
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(61);
+			World w = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			TestNPC prey = TestNPC.grazer(10.5, 5.5, 0, body(12)).grown();
+			w.spawnEntity(prey);
+			tick(w, 1);
+			prey.kill();
+			tick(w, 1);
+			for (int t = 0; t < NPC.FRESH_TICKS * 4 && prey.freshMeat() > 0; t++) {
+				tick(w, 1);
+			}
+			assertEquals("the body has turned", 0, (long) Math.round(prey.freshLeft() * 1000));
+			assertGreater("and there is meat left on it", prey.meatLeft(), 0);
+
+			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
+			TestNPC cub = TestNPC.minded(10.5, 5.5, 0, body(12), feeder)
+					.withClade(Genome.Clade.PREDATOR).withHunger(1.0);
+			TestNPC adult = TestNPC.minded(10.5, 5.5, 0, body(12), feeder)
+					.withClade(Genome.Clade.PREDATOR).grown().withHunger(1.0);
+			w.spawnEntity(cub);
+			w.spawnEntity(adult);
+			tick(w, 1);
+			assertTrue("the cub is a cub, and the adult is not", cub.isJuvenile() && !adult.isJuvenile());
+			double c0 = cub.totalSwallowed(), a0 = adult.totalSwallowed();
+			tick(w, 20);
+			assertGreater("a cub eats a body that has turned", cub.totalSwallowed() - c0, 0);
+			assertTrue("an adult hunter still cannot",
+					adult.totalSwallowed() - a0 < 1e-9);
+
+			// And it can find one: five tiles off, inside scent, a cub's forage
+			// channel points at the carcass; a grown hunter's, with no quarry in
+			// the world and a turned body not food to it, reads nothing.
+			Mind still = (sensors, act) -> { };
+			TestNPC sniffing = TestNPC.minded(5.5, 5.5, 0, body(12), still)
+					.withClade(Genome.Clade.PREDATOR).withHunger(1.0);
+			TestNPC grownBeside = TestNPC.minded(5.5, 6.5, 0, body(12), still)
+					.withClade(Genome.Clade.PREDATOR).grown().withHunger(1.0);
+			w.spawnEntity(sniffing);
+			w.spawnEntity(grownBeside);
+			tick(w, 2);
+			assertGreater("a cub smells the carcass on its forage channel",
+					sniffing.sensorSnapshot()[AgentIO.S_FORAGE_PROX], 0);
+			assertNear("an adult's forage channel has nothing to point at", 0.0,
+					grownBeside.sensorSnapshot()[AgentIO.S_FORAGE_PROX], 1e-12);
+		}
+	}
+
+	/**
 	 * A creature is alive, then freshly dead, then decaying, then gone -- and
 	 * the middle two are decided by two different books.
 	 *
@@ -596,7 +673,8 @@ public class SimTests {
 			tick(m, 1);
 			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
 			TestNPC hunter = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
-					.withClade(Genome.Clade.PREDATOR).withHunger(1.0);
+					.withClade(Genome.Clade.PREDATOR).grown() // grown: what is asserted is an ADULT hunter's diet, and a cub scavenges (TestNPC.scavengesAsCub)
+					.withHunger(1.0);
 			TestNPC scav = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
 					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
 			TestNPC para = TestNPC.minded(10.5, 6.5, 0, body(4), feeder)
@@ -1780,7 +1858,8 @@ public class SimTests {
 			boolean hunts = clade == Genome.Clade.PREDATOR;
 			for (int i = 0; i < count; i++) {
 				TestNPC m = TestNPC.minded(body.getX(), body.getY(), 0, g, feeder)
-						.withClade(clade).withHunger(1.0).withReproCooldown(100_000_000);
+						.withClade(clade).grown() // grown: what is asserted is an ADULT hunter's diet, and a cub scavenges (TestNPC.scavengesAsCub)
+						.withHunger(1.0).withReproCooldown(100_000_000);
 				w.spawnEntity(m);
 				// Until full, or until there is nothing left this mouth may eat -- a
 				// mouth waiting at a body it cannot eat is not part of the meal.
@@ -8149,7 +8228,7 @@ public class SimTests {
 			// hitch-hiker seed would prove nothing here — it seeks what is BIGGER
 			// than it, so it closes on threats and never hunts anything.
 			hg.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, hg);
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, hg).grown(); // an adult: a cub would scavenge
 			w.spawnEntity(hunter);
 			assertEquals("the body really is a hunter",
 					Genome.Clade.PREDATOR.ordinal(), hunter.getGenome().clade.ordinal());
@@ -8202,7 +8281,7 @@ public class SimTests {
 			lg.speed = 0.06;
 			lg.markers = new double[] { 0.8, 0.2, 0.2 };
 			lg.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
-			TestNPC lone = TestNPC.mindedPredator(6.5, 6.5, 0, lg);
+			TestNPC lone = TestNPC.mindedPredator(6.5, 6.5, 0, lg).grown();
 			empty.spawnEntity(lone);
 			double[] loneSense = new double[AgentIO.NUM_SENSORS];
 			int sawSomething = 0;
@@ -17397,6 +17476,7 @@ public class SimTests {
 				new ScavengerEatsCarrionButDoesNotRotIt(),
 				new ABiteDoesNotTurnTheRest(),
 				new AFreshCarcassSitsBeforeItRots(),
+				new AHunterCubScavengesUntilItCanHunt(),
 				new DecayedMeatRotsOnTheClock(),
 				new TheWorldKeepsOneClock(),
 				new RestingIsCheapestAndWalkingBeatsRunning(),
