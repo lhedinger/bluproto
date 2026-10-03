@@ -14847,6 +14847,63 @@ public class SimTests {
 	}
 
 	/**
+	 * A body can feel what it is standing on. {@link AgentIO#S_ON_TILE} reads 1
+	 * when the tile underfoot has the property the mind names on
+	 * {@link AgentIO#A_TILE} -- the same choice the forage scan already reads --
+	 * and 0 when it does not. So "am I in cover" is one write and one read, and
+	 * so is "am I in the mud" or "am I on food worth eating".
+	 *
+	 * <p>Pinned on tiles chosen so the properties come apart: a thicket hides a
+	 * body and does not slow it, mud slows a body and does not hide it, a reed
+	 * bed does both. Naming a property the ground underfoot has reads 1, naming
+	 * one it lacks reads 0, on the same tile. Food reads 1 on a grown sward and
+	 * 0 on ground that grows nothing. And it is every clade's sense: a hunter
+	 * standing in a thicket feels the cover a grazer feels, though its forage
+	 * channel answers a different question entirely.
+	 */
+	static class AGroundUnderfootAnswersTheTileAsked extends Scenario {
+		/** on_tile for a still body standing on {@code ground}, its mind naming
+		 *  {@code asked} on the tile actuator. */
+		private double feel(Tile.TileType ground, double fertility, double asked, Genome.Clade clade) {
+			seed(110);
+			World w = room(8, 8);
+			w.setTile(3, 3, 0, ground);
+			w.getTile(3, 3, 0).setFertility(fertility);
+			final double[] heard = new double[AgentIO.NUM_SENSORS];
+			Mind mind = (sn, a) -> {
+				System.arraycopy(sn, 0, heard, 0, sn.length);
+				java.util.Arrays.fill(a, 0);
+				a[AgentIO.A_TILE] = asked;
+			};
+			Genome g = Genome.phenotype(8, 0.0, 8, 4, Math.PI, 100000); // speed 0: it stays put
+			w.spawnEntity(TestNPC.minded(3.5, 3.5, 0, g, mind).withClade(clade).withoutMetabolism());
+			w.think();
+			// The choice is written on one sense pass and read back on the next:
+			// two whole periods of the sense clock leave no doubt both have run.
+			tick(w, 2 * TestNPC.SENSE_EVERY + 1);
+			return heard[AgentIO.S_ON_TILE];
+		}
+
+		@Override
+		public void run() {
+			Genome.Clade herb = Genome.Clade.HERBIVORE;
+			double cover = 0.25, slow = 0.5, food = 0.0;
+			assertNear("in a thicket, asking for cover: yes", 1, feel(Tile.TileType.TYPE_COVER, 0, cover, herb), 0);
+			assertNear("in a thicket, asking for slow ground: no", 0, feel(Tile.TileType.TYPE_COVER, 0, slow, herb), 0);
+			assertNear("in mud, asking for slow ground: yes", 1, feel(Tile.TileType.TYPE_MUD, 0, slow, herb), 0);
+			assertNear("in mud, asking for cover: no", 0, feel(Tile.TileType.TYPE_MUD, 0, cover, herb), 0);
+			assertNear("in reeds, cover: yes", 1, feel(Tile.TileType.TYPE_REEDS, 0, cover, herb), 0);
+			assertNear("and in reeds, slow ground: yes too", 1, feel(Tile.TileType.TYPE_REEDS, 0, slow, herb), 0);
+			assertNear("on open grass, asking for cover: no", 0, feel(Tile.TileType.TYPE_FLOOR, 1, cover, herb), 0);
+			assertNear("on a grown sward, asking for food: yes", 1, feel(Tile.TileType.TYPE_FLOOR, 1, food, herb), 0);
+			assertNear("on ground that grows nothing, asking for food: no", 0,
+					feel(Tile.TileType.TYPE_FLOOR, 0, food, herb), 0);
+			assertNear("a hunter in a thicket feels the cover too", 1,
+					feel(Tile.TileType.TYPE_COVER, 0, cover, Genome.Clade.PREDATOR), 0);
+		}
+	}
+
+	/**
 	 * A host feels its riders, and can learn to buck them when it does.
 	 *
 	 * <p>A herbivore had no way to know a parasite was on it. The threat channel
@@ -17609,6 +17666,7 @@ public class SimTests {
 				new ParasiteLatchesAndDrainsItsHost(),
 				new APredatoryParasiteSettlesForASmallerHost(),
 				new AHostFeelsItsRiders(),
+				new AGroundUnderfootAnswersTheTileAsked(),
 				new AParasiteDrinksOnlyWhatItHasRoomFor(),
 				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
