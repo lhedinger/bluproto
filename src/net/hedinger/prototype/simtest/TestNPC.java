@@ -2783,6 +2783,17 @@ public class TestNPC extends NPC {
 		// machine exclusions, and the line of sight that makes cover a real refuge.
 		// Which of those candidates it goes for is scanPrey's: the best by value
 		// over effort, held until something is worth turning for.
+		// A cub smells for carrion first, the way a scavenger does, and falls back
+		// to quarry only when no carcass is in scent -- see scavengesAsCub.
+		if (scavengesAsCub()) {
+			scanCarrion();
+			if (forageCol >= 0) {
+				double cdx = forageCol + 0.5 - X, cdy = forageRow + 0.5 - Y;
+				s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(cdx, cdy));
+				s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
+				return;
+			}
+		}
 		if (niche().hunts()) {
 			NPC quarry = huntPick; // resolved once in senseInto; both channels share it
 			if (quarry == null) {
@@ -3947,7 +3958,8 @@ public class TestNPC extends NPC {
 		// ledger, so what a hunter already ate is not paid again, and a carcass
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
-		Mouthful bite = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(), actsAsHunter());
+		Mouthful bite = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(),
+				actsAsHunter() && !scavengesAsCub()); // a cub eats the turned meat too
 		ingest(bite.energy(), FLESH_ASSIMILATION); // meat -> gut; satiation powers the body
 		setAction("eating", true);
 		return bite.mass();
@@ -3985,6 +3997,35 @@ public class TestNPC extends NPC {
 	}
 
 	/**
+	 * A hunter's cub scavenges until it can hunt: it eats any carcass with meat
+	 * on it, turned or not, and smells for one the way a scavenger does.
+	 *
+	 * <p>Without this a hunter's childhood was a trap almost nothing escaped.
+	 * Growth is paid from surplus, and a cub's only food was fresh meat off a
+	 * kill -- but a kill takes a body that can make one, and the bite scales with
+	 * the hunter's size against its quarry's, so a 4 px cub against a grazer of
+	 * eight does a third of an adult's damage and needs some twenty-six bites to
+	 * bring one down. It could not hunt, so it could not eat, so it could not
+	 * grow. Measured on the demo world: a cub needs about three gut-fulls to reach
+	 * its adult body, ate 0.45 over a 4.3-day life, and one hunter in ninety-four
+	 * born in the world ever grew up -- so no hunter lineage reached a second
+	 * generation, and nothing about hunting could be selected on.
+	 *
+	 * <p>Scavenging is what young carnivores do, and it is the one food a body
+	 * too small to kill can actually reach. Permission alone would not have been
+	 * enough: a hunter's forage channel points at living quarry, so a cub allowed
+	 * carrion would still only have eaten what it walked into. It points at the
+	 * nearest carcass instead while one is in scent, and at quarry when none is.
+	 *
+	 * <p>Ends at adulthood. A grown hunter is back to fresh meat only, so the
+	 * scavengers keep the back half of every corpse to the adults of their own
+	 * niche, and a cub is a competitor for it only while it is a cub.
+	 */
+	private boolean scavengesAsCub() {
+		return actsAsHunter() && isJuvenile();
+	}
+
+	/**
 	 * Whether {@code n} is a carcass THIS mouth can eat -- a hard rule of the
 	 * body's clade, not of its mind or any adaptable attribute. A hunter eats
 	 * only a corpse with fresh meat still on it ({@link NPC#freshMeat}); once
@@ -3995,6 +4036,9 @@ public class TestNPC extends NPC {
 	private boolean edibleCarrion(NPC n) {
 		if (n == this || !n.isDead() || n.isRemoved() || n.meatLeft() <= 0) {
 			return false;
+		}
+		if (scavengesAsCub()) {
+			return true; // any meat at all, turned or not
 		}
 		if (actsAsHunter()) {
 			return n.freshMeat() > 0;
