@@ -397,6 +397,38 @@ public class Genome {
 		g.searchCast = 0.15 + Utils.random() * 2.0;
 	}
 
+	/**
+	 * Draws a founder's {@link #birthSize} -- how big a share of its adult body
+	 * a lineage builds its young at.
+	 *
+	 * <p>Here for the same reason {@link #spreadSearch} is: the gene was
+	 * heritable, bounded (0.12..0.6) and mutating, and no founder drew it. Every
+	 * body in the world started at 0.35 and the only variance it had was the
+	 * incidental kin-mutation off a shared recipe -- measured on the founding
+	 * population, a standard deviation of 0.009 against a legal range of 0.48,
+	 * which is two per cent of the room the gene has. Beside it, milk -- the one
+	 * life-history gene added after that lesson was learned -- founded with
+	 * twelve times the spread, because milk is drawn and this was not. A gene
+	 * responds to selection in proportion to the variance there is to select on,
+	 * so what this had was drift.
+	 *
+	 * <p>A method, and called from the founder loops as well as {@link #random()},
+	 * because the species pools bypass random() entirely -- the same trap the
+	 * first version of spreadSearch fell into, reaching a third of the world.
+	 *
+	 * <p>Centred on the old 0.35 rather than moved: founders are seeding, and
+	 * which way this pays is the question, not the answer. Both ends are real
+	 * strategies and the world can teach either -- a big newborn is dear, comes
+	 * out of a parent's fat and starts close to its adult body; a small one is
+	 * quick to afford and then has a long childhood to survive. The corners are
+	 * left for drift to reach rather than seeded onto, and the whole declared
+	 * range is affordable: at the top of it a reference hunter needs 0.50 of fat
+	 * to breed against a cap of 0.80, so no founder is drawn sterile.
+	 */
+	public static void spreadBirth(Genome g) {
+		g.birthSize = 0.15 + Utils.random() * 0.40;
+	}
+
 	/** True if this genome reproduces sexually; false if it buds. */
 	public boolean isSexual() {
 		return sexuality >= 0.5;
@@ -457,6 +489,10 @@ public class Genome {
 		// is born either unable to digest or unable to stand. Drawn after maxAge
 		// for the same reason maxAge is drawn after everything before it.
 		g.milk = 0.2 + Utils.random() * 0.6;
+		// How big this lineage builds its young. Drawn last, after milk, for the
+		// reason milk is drawn after maxAge: appending a draw leaves every draw
+		// before it on the stream it already had.
+		spreadBirth(g);
 		return g;
 	}
 

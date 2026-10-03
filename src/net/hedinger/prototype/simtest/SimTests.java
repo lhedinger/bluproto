@@ -3120,9 +3120,24 @@ public class SimTests {
 			int listeners = 0, worstSpent = 0, everLive = 0;
 			for (int t = 0; t < 1200; t++) {
 				if (t % 100 == 0) {
-					w.spawnEntity(new net.hedinger.prototype.entities.Sound(
-							w.getColums() / 2.0, w.getRows() / 2.0, 0,
-							12, net.hedinger.prototype.entities.Sound.FIGHT));
+					// ON a body, not at the middle of the map. Planting it at a fixed
+					// point replaced "hope a bite lands somewhere" with "hope the stream
+					// left somebody within twelve tiles of the centre", which is the same
+					// kind of guard wearing a different hat -- and one draw added in
+					// Genome.random() was enough to empty that circle. A sound made where
+					// a creature is standing has a hearer whatever the stream did.
+					NPC on = null;
+					for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+						if (e instanceof NPC n && !e.isRemoved() && !n.isDead()) {
+							on = n;
+							break;
+						}
+					}
+					if (on != null) {
+						w.spawnEntity(new net.hedinger.prototype.entities.Sound(
+								on.getX(), on.getY(), on.getLvl(),
+								12, net.hedinger.prototype.entities.Sound.FIGHT));
+					}
 				}
 				w.think();
 				int spent = 0, live = 0, hearers = 0;
@@ -9262,6 +9277,16 @@ public class SimTests {
 					Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 					founder.size = adult;
 					founder.speed = paces[c];
+					// And how big it builds its young, pinned for the same reason the
+					// size and the pace are. A founder draws this like every other
+					// life-history gene, and it sets BOTH halves of what is measured
+					// here: the price of a child, and whether a body this size can
+					// afford one at all -- at the top of the draw an 8 px founder's
+					// newborn costs its whole fat cap, and spawnOffspring returns
+					// nothing. The claim is about the pricing RULE, so the rule's own
+					// input is held still and the reference lineage's value is what it
+					// is held at.
+					founder.birthSize = NPC.BIRTH_SIZE_FRACTION;
 					// And the pace of life, for the same reason the speed is pinned:
 					// the endowment buys a childhood's worth of BURN, and metabolism
 					// scales every rate in it.
@@ -9297,8 +9322,14 @@ public class SimTests {
 					double fatBefore = parent.fat();
 					parent.settleBirth(child, null);
 					w.spawnEntity(child);
+					// Against the child's OWN born mass, not NPC.birthMass(size): that
+					// overload prices a REFERENCE lineage's newborn, for the cases where
+					// no parent has made the decision yet, and this founder has -- it
+					// draws its own birthSize like every other life-history gene. What
+					// the claim is about is conservation, that the body the child HAS is
+					// the fat the parent LOST, so both sides have to be this birth's.
 					assertNear("the child's body came out of the founder's fat, at birth mass",
-							NPC.birthMass(child.getGenome().size), fatBefore - parent.fat(), 1e-9);
+							child.bornMass(), fatBefore - parent.fat(), 1e-9);
 					int provisioned = (int) Math.round(
 							TestNPC.PROVISION * TestNPC.growthTicks(child.getGenome().size));
 					tick(w, provisioned);

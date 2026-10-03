@@ -4270,6 +4270,7 @@ public final class Worlds {
 			// to settle. Without this the herd, the bulk of the ecosystem, could
 			// only ever drift away from a single hardcoded search.
 			net.hedinger.prototype.entities.Genome.spreadSearch(g);
+			net.hedinger.prototype.entities.Genome.spreadBirth(g); // and how big it builds its young
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
@@ -4283,6 +4284,7 @@ public final class Worlds {
 			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
 			net.hedinger.prototype.entities.Genome g = hunterFounder(pred[i % pred.length].copy());
 			net.hedinger.prototype.entities.Genome.spreadSearch(g); // as the herd, above
+			net.hedinger.prototype.entities.Genome.spreadBirth(g);
 			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
