@@ -2460,6 +2460,10 @@ public class TestNPC extends NPC {
 		// What kind of ground to look for is the mind's standing choice, read before
 		// the scan so the channel answers the question actually being asked.
 		tileWanted = AgentIO.tileWanted(actuators[AgentIO.A_TILE]);
+		// And the same question about the ground underfoot: does it have that
+		// property? The forage channel looks for it in sight; this says whether
+		// the body is already there -- in cover, in the mud, on food.
+		s[AgentIO.S_ON_TILE] = onWantedTile() ? 1 : 0;
 		// The hunt is decided once, here, and both channels that speak for it read
 		// the same answer. A hunter has two names for its food -- SEEK_PREY and,
 		// because its forage IS a body, SEEK_FORAGE -- and if those resolve

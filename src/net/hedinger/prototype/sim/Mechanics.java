@@ -573,6 +573,11 @@ public final class Mechanics {
 								+ "need for food, sibling of thirst and distinct from energy."),
 						sense(AgentIO.S_THIRST, "How dry it is, 0 slaked to 1 parched."),
 						sense(AgentIO.S_CARRIED, "+1 held captive, −1 riding willingly, 0 free."),
+						sense(AgentIO.S_ON_TILE, "Whether the ground underfoot has the property "
+								+ "the tile actuator names: 1 or 0. The question the forage "
+								+ "channel asks of the ground in sight, asked of the ground "
+								+ "underfoot -- am I in cover, am I in the mud, is there food "
+								+ "here worth eating. Every clade has it."),
 						sense(AgentIO.S_RIDDEN, "What rides it: the weight of its voluntary riders "
 								+ "— a parasite, a hitchhiker — as a share of its own size, 0 for "
 								+ "nothing, clamped at 1. A captive it holds is not a rider. The one "

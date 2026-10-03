@@ -222,7 +222,14 @@ public final class AgentIO {
 	 *  a sound that was not a call — a scream says what it is on
 	 *  {@link #S_SOUND_KIND} instead — and when nothing is ringing. */
 	public static final int S_SOUND_CALL = 44;
-	public static final int NUM_SENSORS = 45;
+	/** Whether the tile underfoot has the property the mind names on
+	 *  {@link #A_TILE}: 1 if it does, 0 if not. The same question the forage
+	 *  channel answers about the ground in sight, asked about the ground
+	 *  underfoot -- so "am I in cover", "am I in the mud" and "is there food
+	 *  here worth eating" are each one write and one read. Every clade's
+	 *  sense, though only a grazer's forage channel reads {@link #A_TILE}. */
+	public static final int S_ON_TILE = 45;
+	public static final int NUM_SENSORS = 46;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -233,7 +240,7 @@ public final class AgentIO {
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
-			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call" };
+			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
