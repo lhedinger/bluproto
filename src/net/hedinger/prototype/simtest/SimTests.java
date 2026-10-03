@@ -9147,6 +9147,14 @@ public class SimTests {
 			}
 			Genome hg = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			hg.size = 16;
+			// And its sight, pinned as its size is. A founder draws losRange now,
+			// and what is under test is the CHASE -- that a running hunter pays from
+			// its store -- not whether this particular founder can see the herd.
+			// On seed 3 it drew 4.9 tiles against grazers five to eight tiles off,
+			// never saw them, never ran, and banked glycogen instead: a short-sighted
+			// hunter failing to hunt, which is the world working, and a fixture that
+			// only passes when the dice give it eyes.
+			hg.losRange = 10;
 			TestNPC hunter = TestNPC.mindedPredator(8.5, 15.5, 0, hg).grown().withHunger(0.6)
 					.withReproCooldown(100_000_000);
 			w.spawnEntity(hunter);
