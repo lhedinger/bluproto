@@ -429,6 +429,35 @@ public class Genome {
 		g.birthSize = 0.15 + Utils.random() * 0.40;
 	}
 
+	/**
+	 * Draws a founder's {@link #losRange} -- how far it can see.
+	 *
+	 * <p>The same gap {@link #spreadBirth} closed, on the gene that turned out to
+	 * matter most to a hunter. No founder drew it: the founding population held
+	 * 9.94 tiles with a standard deviation of 0.11, all of it incidental
+	 * kin-mutation, so a lineage that would gain by seeing further had nothing to
+	 * climb from. And it would gain a great deal. The herd lives in herds, so the
+	 * map is mostly empty: measured at tick 12000, a hunter's ten-tile circle is
+	 * 0.61% of the map, uniform density would put 3.7 grazers in it, and the
+	 * real count was 0.27 -- 58 of 63 hunters could see no prey at all, with the
+	 * nearest one 30 tiles away. Search SHAPE was given variance and selection
+	 * found nothing in it, which is what you would expect when the animal you
+	 * are combing for is three sight-ranges off: what decides whether a hunter
+	 * finds a herd is how far it sees, and that was the gene held still.
+	 *
+	 * <p>Sight is not free -- it is perception tissue, a surcharge on the resting
+	 * burn around the reference genome ({@code NPC.PERCEPTION_BURN}) -- so the
+	 * spread is a real trade and not a free upgrade: seeing sixteen tiles costs a
+	 * reference hunter about six per cent more burn than seeing ten, and seeing
+	 * four saves about as much. Centred on the old ten rather than moved, for the
+	 * reason every spread here is: founders are seeding, and which end pays is
+	 * the world's to settle. Floored at four, above the three the minded bodies
+	 * clamp to, so the draw never lands where the clamp would flatten it.
+	 */
+	public static void spreadSight(Genome g) {
+		g.losRange = 4 + Utils.random() * 12;
+	}
+
 	/** True if this genome reproduces sexually; false if it buds. */
 	public boolean isSexual() {
 		return sexuality >= 0.5;
@@ -493,6 +522,8 @@ public class Genome {
 		// reason milk is drawn after maxAge: appending a draw leaves every draw
 		// before it on the stream it already had.
 		spreadBirth(g);
+		// And how far it sees, appended after the birth size for the same reason.
+		spreadSight(g);
 		return g;
 	}
 
