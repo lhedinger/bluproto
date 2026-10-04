@@ -825,6 +825,7 @@ public final class ServerTests {
 		host.runner().world().spawnEntity(new net.hedinger.prototype.entities.Sound(
 				5.5, 4.5, 0, 5, net.hedinger.prototype.entities.Sound.PLAIN, singer));
 		boolean voiceOk = true;
+		host.runner().pause(); // this thread ticks the world now; the runner's must not tick it too
 		for (int t = 0; t < 600; t++) {
 			host.runner().world().think();
 			for (net.hedinger.prototype.engine.Entity e : host.worldEntitiesForTest()) {
