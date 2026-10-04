@@ -179,7 +179,12 @@ public final class GeneSchema {
 		// The drain's pace. Multiplicative over a fortyfold range, where an
 		// additive step sized for the fast end would carry the slow end straight
 		// through zero and out the other side.
-		add("drain", "host hp/tick", Drift.MULT, 0.005, 0.2, false,
+		// The range sits around the host's mending pace (a point every 160
+		// ticks, 0.00625): a lineage can drink at a sixth of that and be carried
+		// for life, or at six times it and bleed a host out in a few days.
+		// Nothing in it is free: at the fast end the host dies and the rider
+		// dries out, at the slow end a rider lives on a thin trickle.
+		add("drain", "host hp/tick", Drift.MULT, 0.001, 0.04, false,
 				g -> g.drainRate, (g, v) -> g.drainRate = v);
 		// How a lineage looks for what it cannot see. Appended, so every draw
 		// before them is unshifted.

@@ -327,7 +327,7 @@ public class Genome {
 	 * <p>Somewhere between those is a pace that keeps a host alive indefinitely
 	 * while filling its rider, and finding it is selection's problem.
 	 */
-	public double drainRate = 0.0333; // one point per 30 ticks: TestNPC.PARA_BITE_PERIOD
+	public double drainRate = 0.004; // one point per 250 ticks: TestNPC.PARA_BITE_PERIOD, slower than a host mends
 	/** How hard this lineage mutates its own offspring, per gene at birth — meta-
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */

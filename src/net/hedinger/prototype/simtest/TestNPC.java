@@ -933,7 +933,7 @@ public class TestNPC extends NPC {
 		}
 		// What one point of this host is worth once it is across the gut wall,
 		// which is the currency the room is measured in.
-		double perPoint = LEAN_DENSITY * h.leanMass() * FLESH_ASSIMILATION / FULL_BODY_HEALTH;
+		double perPoint = LEAN_DENSITY * h.leanMass() * PARASITE_ASSIMILATION / FULL_BODY_HEALTH;
 		int room = perPoint <= 0 ? PARA_BITE : (int) Math.floor(gutRoom() / perPoint);
 		int consumed = Math.max(0, Math.min(Math.min(PARA_BITE, room), h.getHealth()));
 		if (consumed <= 0) {
@@ -946,7 +946,7 @@ public class TestNPC extends NPC {
 		h.damage(consumed, "parasites");
 		// At the one price of mass: the host mends what was drunk at the same
 		// price, so the pair can never mint energy between them.
-		ingest(LEAN_DENSITY * h.leanMass() * share, FLESH_ASSIMILATION);
+		ingest(LEAN_DENSITY * h.leanMass() * share, PARASITE_ASSIMILATION);
 		setAction("eating", true);
 	}
 
@@ -1127,7 +1127,19 @@ public class TestNPC extends NPC {
 	 *  lineage: the pace itself is {@link Genome#drainRate}, and this is the
 	 *  value that gene is born carrying. */
 	@Unit("ticks")
-	public static final int PARA_BITE_PERIOD = NPC.days(0.015); // ~22 min between drinks
+	public static final int PARA_BITE_PERIOD = NPC.days(0.125); // one point every three hours: slower than the host mends (one every two)
+	/** How much of a mouthful of living host a rider keeps. Flesh off a
+	 *  carcass assimilates at {@link NPC#FLESH_ASSIMILATION}; a blood meal is
+	 *  thinner -- drawn off a living body a point at a time, most of it is
+	 *  water the rider passes straight back onto the ground as fertility. A
+	 *  rider used to bank the full carcass value of every point it drank, and
+	 *  with a body a fifth the size of its host's that was a lifetime of food
+	 *  in every bite: a parasite that could neither be hunted nor scavenged,
+	 *  fed for weeks by one bite, bred on a small body's short clock and
+	 *  filled the guild to its ceiling in every long run. The pace is the
+	 *  gene's; the thinness is the world's. */
+	@Unit("of a mouthful")
+	public static final double PARASITE_ASSIMILATION = 0.4;
 	/** Health a parasite's bite takes off the host — a slow drain, not an
 	 *  attack: minutes to matter, so the host has every chance to buck it off
 	 *  or simply outlive it. The meal is the same meat arithmetic as a
