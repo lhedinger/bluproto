@@ -2572,10 +2572,14 @@ public class TestNPC extends NPC {
 	}
 
 	private void senseFieldAndBody(double[] s) {
+		// Read the pass flag once: it is a field, and a world ticked from two
+		// threads at once (a test harness did) could flip it mid-pass and leave
+		// the gather and the list it fills disagreeing.
+		final boolean pass = sensedThisTick;
 		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
 		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
 		double kinX = 0, kinY = 0, kinWeight = 0;
-		if (!sensedThisTick) {
+		if (!pass) {
 			// Between passes: what was last seen, read off the current pose.
 			if (!Double.isNaN(heldPreyX)) {
 				preyDx = heldPreyX - X;
@@ -2603,7 +2607,7 @@ public class TestNPC extends NPC {
 		// among the nearest bodies. What it buys is a sense pass whose cost
 		// no longer grows with the crowd. Predators are looked at regardless,
 		// below.
-		java.util.List<NPC> crowd = sensedThisTick
+		java.util.List<NPC> crowd = pass
 				? getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)
 				: java.util.List.<NPC>of();
 		int kept = 0;
@@ -2640,8 +2644,8 @@ public class TestNPC extends NPC {
 		// mating and the nearest-neighbour channels (NPC.perceive). It used to
 		// be gathered a second time, every tick, with a ray per neighbour, by
 		// the legacy scan; now there is one gather and one set of rays a pass.
-		java.util.TreeMap<Double, NPC> seen = sensedThisTick ? new java.util.TreeMap<Double, NPC>() : null;
-		if (sensedThisTick) {
+		java.util.TreeMap<Double, NPC> seen = pass ? new java.util.TreeMap<Double, NPC>() : null;
+		if (pass) {
 			heldNear = null; // the pass names the nearest seen body below
 		}
 		for (int ai = 0; ai < kept; ai++) {
@@ -2682,7 +2686,7 @@ public class TestNPC extends NPC {
 		// predator in range gets its look for the threat channel. Predators
 		// are a tenth of the bodies, so this is a few rays, and the memo
 		// answers most of them.
-		if (sensedThisTick) {
+		if (pass) {
 			for (NPC p : getWorld().census().predatorsNear(getLvl(), X, Y, LOS_RANGE)) {
 				if (p == this || p.isDead() || p.isRemoved() || p.getSize() <= preyCeiling()) {
 					continue;
@@ -2719,7 +2723,7 @@ public class TestNPC extends NPC {
 			}
 			targets = seen;
 		}
-		if (sensedThisTick) {
+		if (pass) {
 			// Keep what this pass saw, as points in the world.
 			heldPreyX = preyD < Double.MAX_VALUE ? X + preyDx : Double.NaN;
 			heldPreyY = preyD < Double.MAX_VALUE ? Y + preyDy : Double.NaN;
