@@ -2069,36 +2069,26 @@ public class TestNPC extends NPC {
 	//
 	// A full sense pass -- the neighbour walk with a line-of-sight ray per
 	// body, the hunt scan, the mate scan -- is the dear part of a tick, and
-	// most bodies most of the time have nothing new to see. So a body pays for
-	// it on a SITUATIONAL cadence: every tick while anything about it is
-	// urgent (a predator within its range, prey within a hunter's, a courtship
-	// in progress), every SENSE_CALM ticks while it has company and no danger,
-	// every SENSE_IDLE ticks while nothing at all stands within its range --
-	// and that last one loses nothing, since an empty range senses as empty.
-	// Between passes the body keeps what it last saw as POINTS in the world,
-	// and reads bearing and distance to them off its current pose, so turning
-	// does not drag a held bearing round with it; only the other body's own
-	// movement is stale, by at most the cadence. The situation itself is
-	// checked every tick from the census's cell counts, which cost no ray, so
-	// a threat arriving in range is sensed the tick it arrives.
+	// most bodies most of the time have nothing new to see. So every body
+	// pays for it every SENSE_EVERY ticks, spread across the ticks by id so a
+	// herd that formed together does not sense in lockstep. Between passes
+	// the body keeps what it last saw as POINTS in the world, and reads
+	// bearing and distance to them off its current pose, so turning does not
+	// drag a held bearing round with it; only the other body's own movement
+	// is stale, by at most the cadence: 120 ms, under half a tile at a run.
 	//
-	// The clock is a function of the tick and the id, never of wall time, so a
-	// replay is bit-identical; and the tier is a function of the situation,
-	// never of a heritable trait, so the scheduler is not a selective force.
-	/** How close a predator must be to put a body on the urgent clock. A
-	 *  hunter at the edge of a twelve-tile range is a hundred ticks away at
-	 *  a walk; one this close is a few seconds away, and every tick counts.
-	 *  Beyond it the body is on the calm clock, and the threat point it
-	 *  holds between passes is at most the cadence stale -- under half a
-	 *  tile against six or more of gap. */
-	@net.hedinger.prototype.engine.Unit("tiles")
-	public static final int SENSE_URGENT_R = 6;
-	/** Ticks between full passes for a body with company and no danger. */
+	// One clock for every body, on purpose. The first version graded the
+	// cadence by the body's situation -- every tick with a predator close --
+	// and at density most bodies had a predator close, so the clock rested on
+	// nobody; and a clock that reads the creature's circumstances is a
+	// creature-level mechanic wearing an engine's clothes. The refresh rate
+	// of perception is the simulation's resolution, set here once, not a
+	// thing a body earns. The clock is a function of the tick and the id,
+	// never of wall time or of a heritable trait, so a replay is
+	// bit-identical and the scheduler is not a selective force.
+	/** Ticks between full sense passes, for every body. */
 	@net.hedinger.prototype.engine.Unit("ticks")
-	public static final int SENSE_CALM = 4;
-	/** Ticks between full passes for a body with nothing within its range. */
-	@net.hedinger.prototype.engine.Unit("ticks")
-	public static final int SENSE_IDLE = 16;
+	public static final int SENSE_EVERY = 4;
 	private long lastFullSense = -1;
 	/** How many of the bodies in range a sense pass looks at: the nearest.
 	 *  Every predator in range is looked at besides, so a crowd never hides
@@ -2108,7 +2098,6 @@ public class TestNPC extends NPC {
 	private NPC[] attnBody;
 	private double[] attnDist;
 	private boolean sensedThisTick;
-	private int senseTier;
 	/** Full passes taken, a test seam for the cadence. */
 	int fullSenses;
 	/** What the last pass saw, as points; NaN for nothing. */
@@ -2117,54 +2106,15 @@ public class TestNPC extends NPC {
 	private double heldKinX = Double.NaN, heldKinY = Double.NaN;
 	private NPC heldMate;
 
-	/** The situation this tick: 0 urgent, 1 company, 2 alone. */
-	int senseTier() {
-		return senseTier;
-	}
-
-	private int situation() {
-		var c = getWorld().census();
-		int z = getLvl();
-		if (matingWith != null || preyTarget != null) {
-			return 0;
-		}
-		if (niche().hunts() && c.preyNearCount(z, X, Y, LOS_RANGE) > 0) {
-			return 0;
-		}
-		if (!"predator".equals(ecoRole()) && predatorWithin(c, z, Math.min(LOS_RANGE, SENSE_URGENT_R))) {
-			return 0;
-		}
-		return c.creaturesNearCount(z, X, Y, LOS_RANGE) > 1 ? 1 : 2; // one is this body
-	}
-
-	/** Whether a predator stands within {@code r} tiles, measured, not
-	 *  counted by cell: the cells are eight tiles wide, so a count by cell
-	 *  would call a hunter two cells off "close". Predators are a tenth of
-	 *  the bodies, so the walk is short. */
-	private boolean predatorWithin(net.hedinger.prototype.engine.World.Census c, int z, double r) {
-		for (NPC p : c.predatorsNear(z, X, Y, r)) {
-			if (p == this) {
-				continue;
-			}
-			double dx = p.getX() - X, dy = p.getY() - Y;
-			if (dx * dx + dy * dy <= r * r) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/** Decides, once per tick, whether this tick takes a full sense pass. */
 	private boolean senseDue() {
-		senseTier = situation();
 		long now = getWorld().getTick();
-		if (senseTier == 0 || lastFullSense < 0) {
-			return true;
+		if (lastFullSense < 0) {
+			return true; // a body's first tick looks
 		}
-		int every = senseTier == 1 ? SENSE_CALM : SENSE_IDLE;
 		// Never longer than the cadence since the last pass, and spread across
 		// ticks by id so a herd that formed together does not sense in lockstep.
-		return now - lastFullSense >= every || Math.floorMod(now + getID(), every) == 0;
+		return now - lastFullSense >= SENSE_EVERY || Math.floorMod(now + getID(), SENSE_EVERY) == 0;
 	}
 
 	/**
