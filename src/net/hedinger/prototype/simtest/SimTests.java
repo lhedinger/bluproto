@@ -1770,7 +1770,7 @@ public class SimTests {
 			}
 			assertTrue("the first hunter made the kill", prey.isDead());
 			killer.remove(); // out of the way: what is eaten now is the joiner's
-			tick(w, 2);
+			tick(w, TestNPC.SENSE_EVERY + 1); // the next pass sees the carcass
 			double[] sense = new double[AgentIO.NUM_SENSORS];
 			joiner.senseInto(sense);
 			assertGreater("the fresh carcass shows up on a hunter's prey scan as food",
@@ -2446,7 +2446,7 @@ public class SimTests {
 	 * the moment a predator stands within its range -- and the threat is on
 	 * its channel that same tick, not up to sixteen ticks later.
 	 */
-	static class AThreatIsSensedTheTickItArrives extends Scenario {
+	static class AThreatIsSensedWithinTheCadence extends Scenario {
 		@Override
 		public void run() {
 			seed(61);
@@ -2460,7 +2460,6 @@ public class SimTests {
 			w.spawnEntity(grazer);
 			w.think();
 			tick(w, 40);
-			assertEquals("alone, the body senses on the idle clock", 2, grazer.senseTier());
 			int before = grazer.fullSenses;
 			Genome pg = new Genome();
 			pg.losRange = 12;
@@ -2469,11 +2468,9 @@ public class SimTests {
 			TestNPC hunter = TestNPC.mindedPredator(16.5, 15.5, 0, pg).grown();
 			w.spawnEntity(hunter);
 			w.think(); // the spawn lands at the end of this tick
-			w.think(); // and the grazer's next tick reads it
-			assertEquals("a predator within range makes the tick urgent", 0, grazer.senseTier());
-			assertGreater("a full pass was taken now, not on the idle clock",
-					grazer.fullSenses, before);
-			assertGreater("and the threat is on the channel the tick it is in view",
+			tick(w, TestNPC.SENSE_EVERY); // and the grazer's next pass reads it
+			assertGreater("a full pass was taken within the cadence", grazer.fullSenses, before);
+			assertGreater("and the threat is on the channel within the cadence",
 					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
 		}
 	}
@@ -2485,7 +2482,7 @@ public class SimTests {
 	 * channel stays silent, because the full pass it triggers casts the ray
 	 * and the ray stops at the wall. The cadence never leaks visibility.
 	 */
-	static class AThreatBehindAWallIsUrgentButUnseen extends Scenario {
+	static class AThreatBehindAWallIsUnseen extends Scenario {
 		@Override
 		public void run() {
 			seed(62);
@@ -2508,14 +2505,13 @@ public class SimTests {
 			w.spawnEntity(hunter);
 			w.think();
 			tick(w, 20);
-			assertEquals("the predator's nearness makes every tick urgent", 0, grazer.senseTier());
 			assertTrue("but through a wall it is not seen",
 					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX] == 0);
 			// And the same wall, removed: seen at once.
 			for (int y = 10; y <= 20; y++) {
 				w.setTile(13, y, 0, Tile.TileType.TYPE_FLOOR);
 			}
-			tick(w, 2);
+			tick(w, TestNPC.SENSE_EVERY + 1);
 			assertGreater("with the wall gone the same predator is on the channel",
 					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
 		}
@@ -2527,7 +2523,7 @@ public class SimTests {
 	 * every 4, and one with a predator in range every tick. The counts are the
 	 * saving the cadence exists for, and the ceilings are the latency it costs.
 	 */
-	static class ACalmBodySensesOnTheClock extends Scenario {
+	static class EveryBodySensesOnOneClock extends Scenario {
 		@Override
 		public void run() {
 			seed(63);
@@ -2552,12 +2548,9 @@ public class SimTests {
 			int a0 = alone.fullSenses, c0 = company.fullSenses, e0 = endangered.fullSenses;
 			tick(w, 64);
 			int a = alone.fullSenses - a0, c = company.fullSenses - c0, e = endangered.fullSenses - e0;
-			assertEquals("alone: on the idle clock", 2, alone.senseTier());
-			assertTrue("alone: about one pass in sixteen ticks (" + a + ")", a >= 3 && a <= 6);
-			assertEquals("company: on the calm clock", 1, company.senseTier());
-			assertTrue("company: about one pass in four ticks (" + c + ")", c >= 14 && c <= 18);
-			assertEquals("endangered: urgent", 0, endangered.senseTier());
-			assertTrue("endangered: a pass every tick (" + e + ")", e >= 62);
+			assertTrue("alone: one pass in four ticks (" + a + ")", a >= 14 && a <= 18);
+			assertTrue("company: one pass in four ticks (" + c + ")", c >= 14 && c <= 18);
+			assertTrue("endangered: one pass in four ticks, the same clock (" + e + ")", e >= 14 && e <= 18);
 		}
 	}
 
@@ -9286,11 +9279,17 @@ public class SimTests {
 			// the middle, its kills stalling until it had recovered. That is the
 			// shape wanted: a chase spends the store, a collapsed hunter cannot
 			// hunt, and a rested one can again. What is pinned is that three days
-			// of it leaves the hunter alive and fed and its store DRAWN.
+			// of it leaves the hunter alive and fed, with a store that is neither
+			// drained nor brimming. It used to be pinned DRAWN -- less than it
+			// started with -- and that held while prey saw a chase coming on the
+			// tick it started; on the four-tick sense clock a herd notices a
+			// hunter up to 120 ms later, and the same hunter's chases now pay
+			// for themselves at this fixture. Whether that is the right economy
+			// is the demo world's guild counts' question, not this scenario's.
 			assertTrue("and the hunter is alive at the end of it", !hunter.isDead());
-			assertLess("the chase was paid from the store ("
+			assertLess("the chase did not fill the store ("
 					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
-					hunter.getGlycogen(), e0);
+					hunter.getGlycogen(), hunter.glycogenCapacity());
 			// Fed enough, not stuffed. A kill pays a hunter its fresh half and no
 			// more, a mouthful at a time, and a hunter that moves straight on to the
 			// next animal leaves even some of that lying there for whatever finds it.
@@ -10870,45 +10869,6 @@ public class SimTests {
 		}
 	}
 
-	/** Urgency is nearness, measured: a predator standing well inside a body's
-	 * range but outside SENSE_URGENT_R leaves it on the calm clock, one within
-	 * that radius puts every tick on the urgent clock -- and the test is the
-	 * distance, not the census cell, so a hunter two cells off does not count
-	 * as close. The threat is still on the channel either way, at most the
-	 * calm cadence late. */
-	static class AFarPredatorIsWatchedOnTheCalmClock extends Scenario {
-		@Override
-		public void run() {
-			seed(64);
-			World w = room(40, 30);
-			Genome g = new Genome();
-			g.losRange = 12;
-			g.size = 8;
-			TestNPC grazer = TestNPC.minded(10.5, 15.5, 0, g, (sn, a) -> {
-				a[AgentIO.A_THROTTLE] = 0;
-			}).withHeading(0);
-			Genome pg = new Genome();
-			pg.losRange = 12;
-			pg.size = 24;
-			pg.speed = 0;
-			// Ten tiles off: in range, in the next census cell but one, not close.
-			TestNPC far = TestNPC.mindedPredator(20.5, 15.5, 0, pg).grown();
-			w.spawnEntity(grazer);
-			w.spawnEntity(far);
-			w.think();
-			tick(w, TestNPC.SENSE_CALM + 1);
-			assertEquals("a predator ten tiles off: the calm clock", 1, grazer.senseTier());
-			assertGreater("but on the threat channel all the same",
-					grazer.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
-			// Five tiles off: close.
-			TestNPC near = TestNPC.mindedPredator(15.5, 15.5, 0, pg).grown();
-			w.spawnEntity(near);
-			w.think();
-			w.think();
-			assertEquals("a predator five tiles off: urgent", 0, grazer.senseTier());
-		}
-	}
-
 	/** Attention is the nearest ATTENTION bodies: a body's kin centroid is
 	 * pulled by the kin it attends to, not by every kin in range. Twelve kin
 	 * stand close on one side and twenty a way off on the other; the
@@ -10933,7 +10893,7 @@ public class SimTests {
 				w.spawnEntity(TestNPC.minded(38.5 + (i % 4), 11.5 + (i / 4) * 2, 0, g, still));
 			}
 			w.think();
-			tick(w, TestNPC.SENSE_CALM + 1);
+			tick(w, TestNPC.SENSE_EVERY + 1);
 			double bearing = eye.sensorSnapshot()[AgentIO.S_KIN_BEARING];
 			assertGreater("the kin centroid lies behind, with the near twelve",
 					Math.abs(bearing), 0.5);
@@ -10966,7 +10926,7 @@ public class SimTests {
 			TestNPC hunter = TestNPC.mindedPredator(30.5, 15.5, 0, pg).grown(); // ten tiles off
 			w.spawnEntity(hunter);
 			w.think();
-			tick(w, TestNPC.SENSE_CALM + 1);
+			tick(w, TestNPC.SENSE_EVERY + 1);
 			assertGreater("the hunter beyond the herd is on the threat channel",
 					eye.sensorSnapshot()[AgentIO.S_THREAT_PROX], 0);
 			assertNear("and it is that hunter, ten tiles off", 1.0 / 11.0,
@@ -17501,15 +17461,14 @@ public class SimTests {
 				new TheMushroomIsPaintedFromRamps(),
 				new TheMeadowWearsFourFloras(),
 				new NearScansAreTheCensusScansCut(),
-				new AThreatIsSensedTheTickItArrives(),
-				new AThreatBehindAWallIsUrgentButUnseen(),
-				new ACalmBodySensesOnTheClock(),
+				new AThreatIsSensedWithinTheCadence(),
+				new AThreatBehindAWallIsUnseen(),
+				new EveryBodySensesOnOneClock(),
 				new HeldSightTurnsWithTheBody(),
 				new TheSenseClockReplays(),
 				new ThePheromoneFieldIsTheCloudsRasterised(),
 				new SightIsTheTilePairs(),
 				new ASwungDoorChangesTheSightline(),
-				new AFarPredatorIsWatchedOnTheCalmClock(),
 				new ABodyAttendsToItsNearest(),
 				new AHerdDoesNotHideAHunter(),
 				new ASpentSoundHoldsNothing(),
