@@ -519,11 +519,11 @@ public class TestNPC extends NPC {
 	private int forageCol = -1, forageRow = -1;
 	private long forageScanAt = Long.MIN_VALUE;
 
-	/** How often a body re-scans for a forage patch. Grass regrows over ~a minute
-	 *  (Tile.REGROW_DELAY), so a target a second old is still a good target, and
-	 *  rescanning every tick would buy nothing for 33x the cost. */
+	/** How often a body re-scans for a forage patch: the slow clock. Grass
+	 *  regrows over ~a minute (Tile.REGROW_DELAY), so a target half a second old
+	 *  is still a good target, and rescanning every tick would buy nothing. */
 	@Unit("ticks")
-	public static final int FORAGE_SCAN_PERIOD = 33;
+	public static final int FORAGE_SCAN_PERIOD = net.hedinger.prototype.engine.Scan.SLOW;
 
 	private TestNPC(double x, double y, double z, Behavior behavior) {
 		super(x, y, z);
@@ -532,7 +532,7 @@ public class TestNPC extends NPC {
 		size = 6;
 		health = 100;
 		deathspan = 1000;
-		SEARCH_FREQ = 50;
+		SEARCH_FREQ = net.hedinger.prototype.engine.Scan.SLOW;
 		LOS_RANGE = 10;
 		LOS_FOV = Math.PI * 0.5;
 	}
@@ -591,7 +591,7 @@ public class TestNPC extends NPC {
 		t.turn = 10; // gentle, wide turns
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = 24;
-		t.SEARCH_FREQ = 2;
+		t.SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 		return t;
 	}
 
@@ -658,7 +658,7 @@ public class TestNPC extends NPC {
 		configureGenomeBody(t, g); // size-scaled reserve, burn, and repro thresholds
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 12);
-		t.SEARCH_FREQ = 3;
+		t.SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 		t.turn = 8;
 		return t;
 	}
@@ -692,7 +692,7 @@ public class TestNPC extends NPC {
 		// (the same move GenomePredatorHuntsPrey makes for its predator).
 		t.LOS_FOV = Math.PI * 2;
 		t.LOS_RANGE = Math.max(g.losRange, 3);
-		t.SEARCH_FREQ = 5;
+		t.SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 		return t;
 	}
 
@@ -726,7 +726,7 @@ public class TestNPC extends NPC {
 	private static void mindedPerception(TestNPC t, Genome g) {
 		t.LOS_FOV = Math.PI * 2; // omnidirectional, like the other genome bodies
 		t.LOS_RANGE = Math.max(g.losRange, 3);
-		t.SEARCH_FREQ = 2;
+		t.SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 	}
 
 	/** A minded body whose mind is the genome's own evolvable {@link Brain} (an
@@ -2105,7 +2105,7 @@ public class TestNPC extends NPC {
 	// bit-identical and the scheduler is not a selective force.
 	/** Ticks between full sense passes, for every body. */
 	@net.hedinger.prototype.engine.Unit("ticks")
-	public static final int SENSE_EVERY = 4;
+	public static final int SENSE_EVERY = net.hedinger.prototype.engine.Scan.FAST;
 	private long lastFullSense = -1;
 	/** How many of the bodies in range a sense pass looks at: the nearest.
 	 *  Every predator in range is looked at besides, so a crowd never hides
@@ -2117,6 +2117,8 @@ public class TestNPC extends NPC {
 	private boolean sensedThisTick;
 	/** Full passes taken, a test seam for the cadence. */
 	int fullSenses;
+	/** Carrion scans taken, a test seam for their clock. */
+	int carrionScans;
 	/** What the last pass saw, as points; NaN for nothing. */
 	private double heldPreyX = Double.NaN, heldPreyY = Double.NaN;
 	private double heldThreatX = Double.NaN, heldThreatY = Double.NaN;
@@ -2179,7 +2181,7 @@ public class TestNPC extends NPC {
 		}
 		// Never longer than the cadence since the last pass, and spread across
 		// ticks by id so a herd that formed together does not sense in lockstep.
-		return now - lastFullSense >= SENSE_EVERY || Math.floorMod(now + getID(), SENSE_EVERY) == 0;
+		return now - lastFullSense >= SENSE_EVERY || net.hedinger.prototype.engine.Scan.due(now, getID(), SENSE_EVERY);
 	}
 
 	/**
@@ -2817,10 +2819,19 @@ public class TestNPC extends NPC {
 		// A scavenger's food is a body, not a patch of ground, so its forage channel
 		// points at the best carcass in sight instead of the best vegetation. Same
 		// channel, same units, same intent: what changes is only what counts as food,
-		// which is exactly what a clade is. Rescanned every tick because a carcass can
-		// be eaten out from under it by another scavenger, unlike a tile of grass.
+		// which is exactly what a clade is. On the fast clock, because a carcass can
+		// be eaten out from under it by another scavenger, unlike a tile of grass --
+		// and at once when that happens to the one it was walking to.
 		if (niche().scavenges()) {
-			scanCarrion();
+			NPC was = carrionTarget;
+			boolean lost = was != null && heldCarrion() == null;
+			if (sensedThisTick || mind == null || lost || carrionScans == 0) {
+				scanCarrion();
+			} else {
+				NPC t = carrionTarget;
+				forageCol = t == null ? -1 : (int) t.getX();
+				forageRow = t == null ? -1 : (int) t.getY();
+			}
 			if (forageCol < 0) {
 				s[AgentIO.S_FORAGE_PROX] = 0;
 				s[AgentIO.S_FORAGE_BEARING] = 0;
@@ -2886,7 +2897,7 @@ public class TestNPC extends NPC {
 		// no longer matching -- are heard on sense ticks only: a mind that
 		// flickers between wants no longer sweeps the map every tick.
 		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
-				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
+				|| net.hedinger.prototype.engine.Scan.due(now, getID(), FORAGE_SCAN_PERIOD) // staggered by id
 				|| ((sensedThisTick || mind == null) && (tileWanted != tileScanned // the mind asked for different ground
 						|| (forageCol >= 0 && tileScoreAt(forageCol, forageRow, now) <= 0))); // no longer matches
 		tileScanned = tileWanted;
@@ -2952,6 +2963,7 @@ public class TestNPC extends NPC {
 	 * identically on every replay.
 	 */
 	private void scanCarrion() {
+		carrionScans++;
 		forageCol = -1;
 		forageRow = -1;
 		if (getWorld() == null) {

@@ -280,7 +280,7 @@ public final class StewardDrone extends NPC {
 		this.col = new java.awt.Color(0xd8b028);
 		this.health = 100;
 		this.LOS_RANGE = 14;
-		this.SEARCH_FREQ = 20;
+		this.SEARCH_FREQ = net.hedinger.prototype.engine.Scan.SLOW; // a machine on its rounds
 	}
 
 	@Override

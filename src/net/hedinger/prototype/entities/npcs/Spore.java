@@ -29,7 +29,7 @@ public class Spore extends NPC
 		col = new Color(100, 0, 0, 200);
 		drawLine = false;
 		age = SPORE_MAXAGE / 2;
-		SEARCH_FREQ = 0;
+		SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 	}
 
 	public Spore(double x, double y, double z, double a)
@@ -39,7 +39,7 @@ public class Spore extends NPC
 		col = new Color(100, 0, 0, 200);
 		podmode = true;
 		drawLine = false;
-		SEARCH_FREQ = 0;
+		SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST;
 	}
 
 	protected void think()
