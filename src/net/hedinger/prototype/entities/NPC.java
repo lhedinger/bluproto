@@ -20,7 +20,15 @@ public abstract class NPC extends Entity {
 
 	// targeting variables
 	protected double tX, tY, tZ;
+	/** Ticks between this body's neighbourhood scans: always one of the two
+	 *  clocks, {@link net.hedinger.prototype.engine.Scan#FAST} or
+	 *  {@link net.hedinger.prototype.engine.Scan#SLOW}. */
 	protected int SEARCH_FREQ;
+
+	/** This body's scan period, for tests and the inspector. */
+	public int scanPeriod() {
+		return SEARCH_FREQ;
+	}
 	protected double LOS_RANGE; // max distance entity can see (tiles)
 	protected double LOS_FOV; // max field of view (radians)
 	protected int status;
@@ -1217,11 +1225,6 @@ public abstract class NPC extends Entity {
 	// crowd.
 	protected int MAX_NEIGHBORS = Integer.getInteger("blu.k", 7);
 
-	// Staggered-update period multiplier (1 = each NPC re-scans every
-	// SEARCH_FREQ ticks). Tunable via -Dblu.stagger=N for benchmarking the
-	// freshness/speed trade-off.
-	@Unit("x search period")
-	public static int STAGGER = Integer.getInteger("blu.stagger", 1);
 
 	public NPC(double x, double y, double z) {
 		super(x, y, z);
@@ -1248,7 +1251,7 @@ public abstract class NPC extends Entity {
 		path = null;
 		path_next = -1;
 		path_goal = -1;
-		SEARCH_FREQ = 50;
+		SEARCH_FREQ = net.hedinger.prototype.engine.Scan.SLOW;
 		LOS_RANGE = 5;
 		LOS_FOV = Math.PI; // entity can see 180 degrees left and right
 
@@ -2694,11 +2697,9 @@ public abstract class NPC extends Entity {
 		// Staggered update: instead of each NPC re-scanning its neighbourhood at
 		// a random ~1/SEARCH_FREQ chance (which clumps -- many can fire on the
 		// same tick), give every NPC a fixed phase from its ID so exactly
-		// 1/period of the population does the expensive full scan each tick. Same
-		// average refresh rate, evenly spread across ticks. STAGGER lengthens the
-		// period to trade perception freshness for speed.
-		int period = Math.max(1, SEARCH_FREQ * STAGGER);
-		if (((getID() + age) % period) == 0) {
+		// 1/period of the population does the expensive full scan each tick. The
+		// period is one of the two clocks (Scan).
+		if (net.hedinger.prototype.engine.Scan.due(age, getID(), SEARCH_FREQ)) {
 			// Bounded nearest-K gather: cost is O(K), not O(local density).
 			return getWorld().searchNearestNPC(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID(), MAX_NEIGHBORS);
 		}

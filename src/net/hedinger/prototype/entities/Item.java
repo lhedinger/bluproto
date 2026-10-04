@@ -50,7 +50,7 @@ public class Item extends NPC {
 		// which way a creature bumps into it (an item has no meaningful heading).
 		LOS_FOV = Math.PI * 2;
 		LOS_RANGE = 2;
-		SEARCH_FREQ = 5;
+		SEARCH_FREQ = net.hedinger.prototype.engine.Scan.FAST; // bumped by bodies, which move
 		switch (kind) {
 		case FOOD:
 			size = 4;
