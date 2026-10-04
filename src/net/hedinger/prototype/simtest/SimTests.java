@@ -829,7 +829,7 @@ public class SimTests {
 			inDays("a carcass stays fresh for about a day", 1.0, NPC.FRESH_TICKS);
 			inDays("mating is held for about two hours", 0.0825, NPC.BREED_HOLD_TICKS);
 			inDays("a hunter bites every twenty minutes or so", 0.0165, TestNPC.PRED_BITE_PERIOD);
-			inDays("a parasite drinks a little faster", 0.015, TestNPC.PARA_BITE_PERIOD);
+			inDays("a parasite sips every three hours, slower than its host mends", 0.125, TestNPC.PARA_BITE_PERIOD);
 			inDays("a stripped sward rests a day before it recovers", 1.0,
 					net.hedinger.prototype.engine.Tile.REGROW_DELAY);
 
@@ -11038,6 +11038,52 @@ public class SimTests {
 		}
 	}
 
+	/** A host carries one rider and shows nothing for it. A default rider
+	 * drinks a point every 250 ticks and its host mends one every 160, so over
+	 * two days of riding the host stays within a few points of full -- and
+	 * the rider still makes a living off the trickle: it ends the two days
+	 * with its glycogen no lower and fat put on, so the lineage is viable at
+	 * the seed and selection has the drain gene to climb either way. */
+	static class AHostMendsWhatOneRiderDrinks extends Scenario {
+		@Override
+		public void run() {
+			seed(72);
+			World w = room(20, 20);
+			Genome hg = new Genome();
+			hg.size = 24;
+			TestNPC host = TestNPC.minded(10.5, 10.5, 0, hg, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			}).grown().fattened().withReproCooldown(100_000_000);
+			Genome pg = new Genome();
+			pg.size = 4;
+			pg.speed = 0;
+			TestNPC rider = TestNPC.minded(10.9, 10.5, 0, pg, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+				a[AgentIO.A_ATTACH] = 1;
+			}).withClade(Genome.Clade.PARASITE).grown().withHunger(0.9).withReproCooldown(100_000_000);
+			w.spawnEntity(host);
+			w.spawnEntity(rider);
+			w.think();
+			assertTrue("the rider latched on", rider.attachTo(host));
+			double g0 = rider.getGlycogen(), f0 = rider.fat();
+			int low = 100;
+			for (int t = 0; t < 2 * NPC.DAY; t++) {
+				if (t % 100 == 0) {
+					host.withHunger(0.0).withHydration(1.0); // a fed, watered host: the one that mends
+				}
+				w.think();
+				low = Math.min(low, host.getHealth());
+			}
+			assertTrue("the rider stayed aboard", rider.getAttachTarget() == host);
+			assertGreater("and drank", rider.totalSwallowed(), 0.0);
+			assertTrue("the host never fell below 95 of 100 under one rider (low " + low + ")", low >= 95);
+			assertTrue("and ends the two days near full (" + host.getHealth() + ")", host.getHealth() >= 97);
+			assertTrue("the rider's glycogen held (" + String.format("%.2f -> %.2f", g0, rider.getGlycogen()) + ")",
+					rider.getGlycogen() >= g0 - 1e-9);
+			assertGreater("and it put on fat off the trickle", rider.fat(), f0);
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -15208,7 +15254,7 @@ public class SimTests {
 			assertNear("what it banked is the flesh that left the host, less what "
 					+ "egesta gave the ground ("
 					+ String.format("%.3f banked against %.3f taken", drinker.totalSwallowed(), took) + ")",
-					took * NPC.FLESH_ASSIMILATION, drinker.totalSwallowed(), 0.02 * took + 1e-9);
+					took * TestNPC.PARASITE_ASSIMILATION, drinker.totalSwallowed(), 0.02 * took + 1e-9);
 
 			// --- the pace, on a host that can actually mend: pasture it can roam
 			// and a shore to drink at, so the only question left is whether the
@@ -15230,9 +15276,13 @@ public class SimTests {
 			tick(m, 6000);
 			assertTrue("the parasite is still aboard", passenger.getAttachTarget() == ridden);
 			assertGreater("and still drinking", passenger.totalSwallowed(), 0.0);
-			assertTrue("its gut is full, which is what paces it ("
+			// The pace is the drain gene's, a point every 250 ticks at the
+			// default, and the trickle keeps a rider fed without ever filling it:
+			// it used to be the gut that paced the bites, when a bite came every
+			// 30 ticks and banked the full carcass value of the point.
+			assertTrue("the trickle keeps it fed, well clear of starving ("
 					+ String.format("%.2f hunger", passenger.getHunger()) + ")",
-					passenger.getHunger() < 0.25);
+					passenger.getHunger() < 0.6);
 			assertTrue("and the host is alive under it", !ridden.isDead());
 			assertGreater("with its health held, not sliding to nothing ("
 					+ ridden.getHealth() + " hp)", ridden.getHealth(), 89);
@@ -17671,6 +17721,7 @@ public class SimTests {
 				new AHerdDoesNotHideAHunter(),
 				new ASpentSoundHoldsNothing(),
 				new PerceptionIsOneGatherOnTheClock(),
+				new AHostMendsWhatOneRiderDrinks(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
