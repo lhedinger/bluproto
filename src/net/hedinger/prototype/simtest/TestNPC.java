@@ -33,6 +33,14 @@ import net.hedinger.prototype.entities.NPC;
  */
 public class TestNPC extends NPC {
 
+	/** The length of (dx, dy): a square root of the sum of squares, which is
+	 *  what every bearing and proximity here wants, and a tenth the cost of
+	 *  Math.hypot, whose overflow-safe arithmetic no world coordinate needs. */
+	private static double len(double dx, double dy) {
+		return Math.sqrt(dx * dx + dy * dy);
+	}
+
+
 	private enum Behavior {
 		INERT, ROAM, CHASE, LISTEN, MOVE, GENOME, GRAZE, BREEDER, NEST, MATER, MINDED, HAUL, PREDATOR
 	}
@@ -1727,7 +1735,7 @@ public class TestNPC extends NPC {
 		}
 		int pinSlot = (int) (getWorld().getTick() % PIN_WINDOW);
 		if (pinCount >= PIN_WINDOW && huntGiveUp <= 0 && trying
-				&& Math.hypot(X - pinX[pinSlot], Y - pinY[pinSlot]) < PIN_MIN_MOVE
+				&& len(X - pinX[pinSlot], Y - pinY[pinSlot]) < PIN_MIN_MOVE
 				&& (!terrainOnly || terrainBlockedAhead())) {
 			huntGiveUp = HUNT_GIVEUP_TICKS; // pinned: take over movement for a spell
 			D = escapeHeading(); // aim at genuinely open ground the moment it is spotted
@@ -1739,7 +1747,7 @@ public class TestNPC extends NPC {
 		}
 		if (huntGiveUp > 0) {
 			huntGiveUp--;
-			if (Math.hypot(X - escLastX, Y - escLastY) < 1e-4) {
+			if (len(X - escLastX, Y - escLastY) < 1e-4) {
 				D += 2.39996; // golden angle (~137.5 deg): sweep for a heading that moves
 			}
 			escLastX = X;
@@ -1829,6 +1837,14 @@ public class TestNPC extends NPC {
 		if (mount instanceof NPC h && !h.isDead() && !h.isRemoved()) {
 			return h;
 		}
+		// Looked for on the sense clock, like everything else the body sees;
+		// between passes the held host stands while it is still a host.
+		if (!sensedThisTick && mind != null) {
+			if (heldHost != null && (heldHost.isDead() || heldHost.isRemoved() || !bigEnoughHost(heldHost))) {
+				heldHost = null;
+			}
+			return heldHost;
+		}
 		NPC best = null;
 		double bestD = HOST_SENSE_R;
 		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, HOST_SENSE_R)) {
@@ -1843,6 +1859,7 @@ public class TestNPC extends NPC {
 				best = n;
 			}
 		}
+		heldHost = best;
 		return best;
 	}
 
@@ -2105,6 +2122,54 @@ public class TestNPC extends NPC {
 	private double heldThreatX = Double.NaN, heldThreatY = Double.NaN;
 	private double heldKinX = Double.NaN, heldKinY = Double.NaN;
 	private NPC heldMate;
+	private NPC heldHost;
+	/** The nearest body the last pass saw, read every tick for the
+	 *  nearest-neighbour channels; the walk that found it ran once a pass. */
+	private NPC heldNear;
+	/** How many items a sense pass perceives. */
+	@net.hedinger.prototype.engine.Unit("items")
+	public static final int ITEMS_PERCEIVED = 4;
+
+	/** A minded body perceives through its sense pass (senseFieldAndBody
+	 *  fills {@code targets}); the legacy scan is for bodies without one. */
+	@Override
+	protected java.util.TreeMap<Double, NPC> perceive(java.util.TreeMap<Double, NPC> previous) {
+		if (mind == null) {
+			return super.perceive(previous);
+		}
+		return previous;
+	}
+
+	/** The separation spring reads the ground, not the perception: whoever
+	 *  stands on the tiles around this body, every tick, so a body that
+	 *  arrived between sense passes is pushed off like any other. The touch
+	 *  reach is under a tile (half of two radii, each under a tile), so the
+	 *  three-by-three tile box around the body holds everything it can touch:
+	 *  two bodies closer than a tile are on the same or adjacent tiles. */
+	@Override
+	public void collisionCheck() {
+		if (mind == null) {
+			super.collisionCheck();
+			return;
+		}
+		var w = getWorld();
+		int z = getLvl();
+		int cx = (int) X, cy = (int) Y;
+		for (int ty = cy - 1; ty <= cy + 1; ty++) {
+			for (int tx = cx - 1; tx <= cx + 1; tx++) {
+				net.hedinger.prototype.engine.Tile t = w.getTile(tx, ty, z);
+				if (t == null) {
+					continue;
+				}
+				int occ = t.getEntityCount();
+				for (int oi = 0; oi < occ; oi++) {
+					if (w.entityById(t.getEntityId(oi)) instanceof NPC npc && !npc.isDead() && !npc.isRemoved()) {
+						springAgainst(npc);
+					}
+				}
+			}
+		}
+	}
 
 	/** Decides, once per tick, whether this tick takes a full sense pass. */
 	private boolean senseDue() {
@@ -2304,7 +2369,7 @@ public class TestNPC extends NPC {
 		NPC near = nearestPerceived();
 		if (near != null) {
 			double dx = near.getX() - X, dy = near.getY() - Y;
-			double dist = Math.hypot(dx, dy);
+			double dist = len(dx, dy);
 			s[AgentIO.S_NEAR_PROX] = 1.0 / (1.0 + dist);
 			s[AgentIO.S_NEAR_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 			net.hedinger.prototype.entities.Genome og = near.getGenome();
@@ -2326,7 +2391,7 @@ public class TestNPC extends NPC {
 		// falls silent on its own once the sound stops ringing.
 		if (hearsSomething()) {
 			double hdx = heardX - X, hdy = heardY - Y;
-			s[AgentIO.S_SOUND_PROX] = 1.0 / (1.0 + Math.hypot(hdx, hdy));
+			s[AgentIO.S_SOUND_PROX] = 1.0 / (1.0 + len(hdx, hdy));
 			double rel = Math.atan2(hdy, hdx) - D;
 			s[AgentIO.S_SOUND_BEARING] = wrap(rel) / Math.PI;
 			// The same direction again as body-frame coordinates: distance
@@ -2367,7 +2432,7 @@ public class TestNPC extends NPC {
 		Item item = nearestItem();
 		if (item != null) {
 			double dx = item.getX() - X, dy = item.getY() - Y;
-			double dist = Math.hypot(dx, dy);
+			double dist = len(dx, dy);
 			s[AgentIO.S_ITEM_PROX] = 1.0 / (1.0 + dist);
 			s[AgentIO.S_ITEM_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 			s[AgentIO.S_ITEM_KIND] = item.kindSignal();
@@ -2384,7 +2449,7 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.entities.Switch fx = nearestFixture();
 		if (fx != null) {
 			double dx = fx.getX() + 0.5 - X, dy = fx.getY() + 0.5 - Y;
-			double dist = Math.hypot(dx, dy);
+			double dist = len(dx, dy);
 			s[AgentIO.S_FIXTURE_PROX] = 1.0 / (1.0 + dist);
 			s[AgentIO.S_FIXTURE_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 		} else {
@@ -2515,12 +2580,12 @@ public class TestNPC extends NPC {
 			if (!Double.isNaN(heldPreyX)) {
 				preyDx = heldPreyX - X;
 				preyDy = heldPreyY - Y;
-				preyD = Math.hypot(preyDx, preyDy);
+				preyD = len(preyDx, preyDy);
 			}
 			if (!Double.isNaN(heldThreatX)) {
 				threatDx = heldThreatX - X;
 				threatDy = heldThreatY - Y;
-				threatD = Math.hypot(threatDx, threatDy);
+				threatD = len(threatDx, threatDy);
 			}
 			if (!Double.isNaN(heldKinX)) {
 				kinX = heldKinX - X;
@@ -2570,6 +2635,15 @@ public class TestNPC extends NPC {
 				kept++;
 			}
 		}
+		// What this pass sees becomes what the body perceives until the next:
+		// the one list the act path reads for touching, grabbing, boarding,
+		// mating and the nearest-neighbour channels (NPC.perceive). It used to
+		// be gathered a second time, every tick, with a ray per neighbour, by
+		// the legacy scan; now there is one gather and one set of rays a pass.
+		java.util.TreeMap<Double, NPC> seen = sensedThisTick ? new java.util.TreeMap<Double, NPC>() : null;
+		if (sensedThisTick) {
+			heldNear = null; // the pass names the nearest seen body below
+		}
 		for (int ai = 0; ai < kept; ai++) {
 			NPC n = attnBody[ai];
 			if (!isInLOS(n)) {
@@ -2577,6 +2651,10 @@ public class TestNPC extends NPC {
 			}
 			double dx = n.getX() - X, dy = n.getY() - Y;
 			double dist = Math.sqrt(attnDist[ai]);
+			seen.put(dist, n);
+			if (heldNear == null) {
+				heldNear = n; // attention is nearest-first, so the first seen is the nearest
+			}
 			// The prey channel shows exactly what the hunt would take, by the same
 			// predicate: size, rivals, parasites and machines all answered once in
 			// edibleQuarry. LOS and range are already settled by the loop guard
@@ -2610,14 +2688,36 @@ public class TestNPC extends NPC {
 					continue;
 				}
 				double dx = p.getX() - X, dy = p.getY() - Y;
-				double dist = Math.hypot(dx, dy);
-				if (dist > LOS_RANGE || dist >= threatD || !isInLOS(p)) {
+				double dist = len(dx, dy);
+				if (dist > LOS_RANGE || !isInLOS(p)) {
 					continue;
 				}
-				threatD = dist;
-				threatDx = dx;
-				threatDy = dy;
+				seen.put(dist, p); // a seen hunter is perceived whatever the attention held
+				if (dist < threatD) {
+					threatD = dist;
+					threatDx = dx;
+					threatDy = dy;
+				}
 			}
+			// And the nearest few things to pick up, so a body can still find a
+			// crate or a morsel: items are not creatures and the attention never
+			// held them, but the legacy scan did, and nearestItem reads this.
+			int itemsKept = 0;
+			for (NPC it : getWorld().census().itemsNear(getLvl(), X, Y, LOS_RANGE)) {
+				if (it.isRemoved()) {
+					continue;
+				}
+				double dx = it.getX() - X, dy = it.getY() - Y;
+				double dist = len(dx, dy);
+				if (dist > LOS_RANGE || !isInLOS(it)) {
+					continue;
+				}
+				seen.put(dist, it);
+				if (++itemsKept >= ITEMS_PERCEIVED) {
+					break;
+				}
+			}
+			targets = seen;
 		}
 		if (sensedThisTick) {
 			// Keep what this pass saw, as points in the world.
@@ -2662,7 +2762,7 @@ public class TestNPC extends NPC {
 		// weights are a positive scalar, so dividing them out moves the point but not
 		// the direction -- S_KIN_BEARING is unchanged by this.
 		if (kinWeight > 0 && (kinX != 0 || kinY != 0)) {
-			s[AgentIO.S_KIN_PROX] = 1.0 / (1.0 + Math.hypot(kinX / kinWeight, kinY / kinWeight));
+			s[AgentIO.S_KIN_PROX] = 1.0 / (1.0 + len(kinX / kinWeight, kinY / kinWeight));
 		} else {
 			s[AgentIO.S_KIN_PROX] = 0;
 		}
@@ -2719,7 +2819,7 @@ public class TestNPC extends NPC {
 				return;
 			}
 			double cdx = forageCol + 0.5 - X, cdy = forageRow + 0.5 - Y;
-			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(cdx, cdy));
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + len(cdx, cdy));
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
 			return;
 		}
@@ -2739,7 +2839,7 @@ public class TestNPC extends NPC {
 			scanCarrion();
 			if (forageCol >= 0) {
 				double cdx = forageCol + 0.5 - X, cdy = forageRow + 0.5 - Y;
-				s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(cdx, cdy));
+				s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + len(cdx, cdy));
 				s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(cdy, cdx) - D) / Math.PI;
 				return;
 			}
@@ -2752,7 +2852,7 @@ public class TestNPC extends NPC {
 				return;
 			}
 			double qdx = quarry.getX() - X, qdy = quarry.getY() - Y;
-			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(qdx, qdy));
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + len(qdx, qdy));
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(qdy, qdx) - D) / Math.PI;
 			return;
 		}
@@ -2769,14 +2869,18 @@ public class TestNPC extends NPC {
 				return;
 			}
 			double hdx = host.getX() - X, hdy = host.getY() - Y;
-			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(hdx, hdy));
+			s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + len(hdx, hdy));
 			s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(hdy, hdx) - D) / Math.PI;
 			return;
 		}
+		// The sweep is dear (every tile within range), so its reasons to run
+		// again -- the mind asking for different ground, the remembered tile
+		// no longer matching -- are heard on sense ticks only: a mind that
+		// flickers between wants no longer sweeps the map every tick.
 		boolean due = forageScanAt == Long.MIN_VALUE // never scanned: answer this tick
-				|| tileWanted != tileScanned // the mind asked for different ground
 				|| (now + getID()) % FORAGE_SCAN_PERIOD == 0 // staggered by id across the cohort
-				|| (forageCol >= 0 && tileScoreAt(forageCol, forageRow, now) <= 0); // no longer matches
+				|| ((sensedThisTick || mind == null) && (tileWanted != tileScanned // the mind asked for different ground
+						|| (forageCol >= 0 && tileScoreAt(forageCol, forageRow, now) <= 0))); // no longer matches
 		tileScanned = tileWanted;
 		if (due) {
 			scanForage(now);
@@ -2787,7 +2891,7 @@ public class TestNPC extends NPC {
 			return;
 		}
 		double dx = forageCol + 0.5 - X, dy = forageRow + 0.5 - Y;
-		s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_FORAGE_PROX] = 1.0 / (1.0 + len(dx, dy));
 		s[AgentIO.S_FORAGE_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 	}
 
@@ -2945,7 +3049,7 @@ public class TestNPC extends NPC {
 	private boolean walkableLineTo(int tx, int ty) {
 		double gx = tx + 0.5, gy = ty + 0.5;
 		double dx = gx - X, dy = gy - Y;
-		double dist = Math.hypot(dx, dy);
+		double dist = len(dx, dy);
 		if (dist <= 0.5) {
 			return true; // already there, or as good as
 		}
@@ -2972,7 +3076,7 @@ public class TestNPC extends NPC {
 		int cx = (int) X, cy = (int) Y, lvl = getLvl();
 		for (int ty = cy - r; ty <= cy + r; ty++) {
 			for (int tx = cx - r; tx <= cx + r; tx++) {
-				double dist = Math.hypot(tx + 0.5 - X, ty + 0.5 - Y);
+				double dist = len(tx + 0.5 - X, ty + 0.5 - Y);
 				if (dist > LOS_RANGE) {
 					continue; // the square's corners fall outside the sight circle
 				}
@@ -3171,21 +3275,13 @@ public class TestNPC extends NPC {
 	 * prey and threat channels: this level, in line of sight, inside LOS_RANGE.
 	 */
 	private NPC nearestMate() {
-		NPC best = null;
-		double bestD = LOS_RANGE;
-		// Census walk: live same-level bodies (see World.Census).
-		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
-			if (n == this || n.isDead() || n.isRemoved() || !canMateWith(n)
-					|| !isInLOS(n)) {
+		for (NPC n : targets.values()) { // what the pass saw, nearest first
+			if (n == this || n.isDead() || n.isRemoved() || n instanceof Item || !canMateWith(n)) {
 				continue;
 			}
-			double d = distance(n.getX(), n.getY(), n.getZ());
-			if (d < bestD) {
-				bestD = d;
-				best = n;
-			}
+			return n;
 		}
-		return best;
+		return null;
 	}
 
 	/**
@@ -3236,6 +3332,12 @@ public class TestNPC extends NPC {
 		}
 		// The mate scan rides the sense clock: rescanned on a full pass, and
 		// held between them unless the held partner is gone or unwilling.
+		// The partner is the nearest willing body the last pass saw, re-chosen
+		// on the pass and the moment the held one is gone or turns unwilling.
+		// That re-choice is now a walk over the dozen bodies the pass kept, no
+		// census gather and no ray; it used to be a fresh walk over everyone
+		// in range with a ray each, every tick for a body that wanted a mate
+		// and had none willing.
 		if (sensedThisTick || heldMate == null || heldMate.isDead() || heldMate.isRemoved()
 				|| !canMateWith(heldMate)) {
 			heldMate = nearestMate();
@@ -3263,7 +3365,7 @@ public class TestNPC extends NPC {
 			return;
 		}
 		double dx = wpX - X, dy = wpY - Y;
-		s[AgentIO.S_WAYPOINT_PROX] = 1.0 / (1.0 + Math.hypot(dx, dy));
+		s[AgentIO.S_WAYPOINT_PROX] = 1.0 / (1.0 + len(dx, dy));
 		s[AgentIO.S_WAYPOINT_BEARING] = wrap(Math.atan2(dy, dx) - D) / Math.PI;
 	}
 
@@ -3805,6 +3907,14 @@ public class TestNPC extends NPC {
 	/** Nearest living perceived neighbour (excluding self and inanimate items), or
 	 * null. Items have their own dedicated sense/interaction path. */
 	private NPC nearestPerceived() {
+		if (mind != null) {
+			// Named by the pass; between passes it stands while it lives. The
+			// per-tick walk over the perceived list was a tenth of the tick.
+			if (heldNear != null && (heldNear.isDead() || heldNear.isRemoved())) {
+				heldNear = null;
+			}
+			return heldNear;
+		}
 		NPC near = null;
 		double best = Double.MAX_VALUE;
 		for (NPC n : targets.values()) {
@@ -4493,7 +4603,7 @@ public class TestNPC extends NPC {
 	 */
 	private void settleOnPatch() {
 		double dx = Math.floor(X) + 0.5 - X, dy = Math.floor(Y) + 0.5 - Y;
-		if (Math.hypot(dx, dy) > 0.12) {
+		if (len(dx, dy) > 0.12) {
 			move(speed * 0.3, Math.atan2(dy, dx));
 		}
 	}

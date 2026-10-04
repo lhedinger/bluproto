@@ -92,6 +92,7 @@ public class World {
 		private final java.util.List<java.util.List<NPC>> predators = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<NPC>> prey = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<NPC>> corpses = new java.util.ArrayList<>();
+		private final java.util.List<java.util.List<NPC>> items = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<PheromoneCloud>> clouds = new java.util.ArrayList<>();
 		private final java.util.List<java.util.List<net.hedinger.prototype.entities.Switch>> switches =
 				new java.util.ArrayList<>();
@@ -99,6 +100,7 @@ public class World {
 		private final java.util.List<Buckets<NPC>> predatorBuckets = new java.util.ArrayList<>();
 		private final java.util.List<Buckets<NPC>> preyBuckets = new java.util.ArrayList<>();
 		private final java.util.List<Buckets<NPC>> corpseBuckets = new java.util.ArrayList<>();
+		private final java.util.List<Buckets<NPC>> itemBuckets = new java.util.ArrayList<>();
 		private final java.util.List<Buckets<PheromoneCloud>> cloudBuckets = new java.util.ArrayList<>();
 		/** The pheromone field, one concentration per tile per level. */
 		private final java.util.List<double[]> phero = new java.util.ArrayList<>();
@@ -112,6 +114,7 @@ public class World {
 				predators.add(new java.util.ArrayList<>());
 				prey.add(new java.util.ArrayList<>());
 				corpses.add(new java.util.ArrayList<>());
+				items.add(new java.util.ArrayList<>());
 				clouds.add(new java.util.ArrayList<>());
 				switches.add(new java.util.ArrayList<>());
 			}
@@ -136,7 +139,11 @@ public class World {
 					c.clouds.get(z).add(pc);
 					continue;
 				}
-				if (!(e instanceof NPC n) || e instanceof net.hedinger.prototype.entities.Item) {
+				if (e instanceof net.hedinger.prototype.entities.Item it) {
+					c.items.get(z).add(it); // things to pick up: their own list, never a creature
+					continue;
+				}
+				if (!(e instanceof NPC n)) {
 					continue;
 				}
 				if (n.isDead()) {
@@ -159,11 +166,13 @@ public class World {
 				Buckets.orderByCell(c.predators.get(z), w.cols, w.rows);
 				Buckets.orderByCell(c.prey.get(z), w.cols, w.rows);
 				Buckets.orderByCell(c.corpses.get(z), w.cols, w.rows);
+				Buckets.orderByCell(c.items.get(z), w.cols, w.rows);
 				Buckets.orderByCell(c.clouds.get(z), w.cols, w.rows);
 				c.creatureBuckets.add(new Buckets<>(c.creatures.get(z), w.cols, w.rows));
 				c.predatorBuckets.add(new Buckets<>(c.predators.get(z), w.cols, w.rows));
 				c.preyBuckets.add(new Buckets<>(c.prey.get(z), w.cols, w.rows));
 				c.corpseBuckets.add(new Buckets<>(c.corpses.get(z), w.cols, w.rows));
+				c.itemBuckets.add(new Buckets<>(c.items.get(z), w.cols, w.rows));
 				c.cloudBuckets.add(new Buckets<>(c.clouds.get(z), w.cols, w.rows));
 				c.phero.add(rasterise(c.clouds.get(z), w.cols, w.rows, w.rasterBuffer(z)));
 			}
@@ -268,6 +277,11 @@ public class World {
 
 		public java.util.List<NPC> corpsesNear(int z, double x, double y, double r) {
 			return corpseBuckets.get(z).near(x, y, r);
+		}
+
+		/** Items (food, crates, tools) on the level within r, in census order. */
+		public java.util.List<NPC> itemsNear(int z, double x, double y, double r) {
+			return itemBuckets.get(z).near(x, y, r);
 		}
 
 		/** How many creatures / predators / prey the cells within r hold -- a
@@ -677,6 +691,12 @@ public class World {
 	}
 
 	/** Read-only view over all entities currently in the world. */
+	/** The entity with this id, or null if none: the way from a tile's
+	 *  occupant list back to the body standing there. */
+	public Entity entityById(int id) {
+		return entities.get(id);
+	}
+
 	public Iterable<Entity> getEntities() {
 		return entities.values();
 	}
@@ -1584,7 +1604,7 @@ public class World {
 	}
 
 	public double distance(double dx, double dy, double dz) {
-		return Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2) + Math.pow(dz, 2));
+		return Math.sqrt(dx * dx + dy * dy + dz * dz); // squares by multiplication: pow() is a library call per axis
 	}
 
 	public double distance(double x1, double y1, double z1, double x2, double y2, double z2) {

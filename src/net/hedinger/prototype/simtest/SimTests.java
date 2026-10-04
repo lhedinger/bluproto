@@ -10976,6 +10976,56 @@ public class SimTests {
 		}
 	}
 
+	/** A minded body perceives once a pass, through its own sense walk: the
+	 * list its act path reads -- for grabbing, boarding, mating, the nearest
+	 * neighbour and the nearest item -- is what the pass saw, bounded by the
+	 * attention plus every hunter plus a few items, held between passes and
+	 * replaced on the next. The legacy per-tick scan no longer runs for it. */
+	static class PerceptionIsOneGatherOnTheClock extends Scenario {
+		@Override
+		public void run() {
+			seed(71);
+			World w = room(40, 30);
+			Genome g = new Genome();
+			g.losRange = 10;
+			Mind still = (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			};
+			TestNPC eye = TestNPC.minded(20.5, 15.5, 0, g, still);
+			w.spawnEntity(eye);
+			for (int i = 0; i < 24; i++) { // a crowd twice the attention, within range
+				w.spawnEntity(TestNPC.minded(14.5 + (i % 6) * 2, 11.5 + (i / 6) * 2.5, 0, g, still));
+			}
+			Item crate = Item.crate(23.5, 15.5, 0);
+			w.spawnEntity(crate);
+			w.think();
+			tick(w, TestNPC.SENSE_EVERY);
+			java.util.Collection<NPC> seen = eye.targetsView();
+			assertTrue("the pass perceives at most the attention, the hunters and a few items ("
+					+ seen.size() + ")", seen.size() <= TestNPC.ATTENTION + TestNPC.ITEMS_PERCEIVED);
+			assertGreater("and it perceives a crowd (" + seen.size() + ")", seen.size(), TestNPC.ATTENTION / 2);
+			assertTrue("the crate in range is among them", seen.contains(crate));
+			NPC first = seen.iterator().next();
+			double d0 = Math.hypot(first.getX() - eye.getX(), first.getY() - eye.getY());
+			for (NPC n : seen) {
+				assertTrue("nearest first", Math.hypot(n.getX() - eye.getX(), n.getY() - eye.getY()) >= d0 - 1e-9);
+			}
+			// Held between passes: the same list object stands until the next pass.
+			java.util.Collection<NPC> before = eye.targetsView();
+			int held = 0;
+			for (int i = 0; i < TestNPC.SENSE_EVERY * 2; i++) {
+				w.think();
+				if (eye.targetsView() == before) {
+					held++;
+				} else {
+					before = eye.targetsView();
+				}
+			}
+			assertTrue("the list was held between passes and replaced on them (" + held + " held of "
+					+ TestNPC.SENSE_EVERY * 2 + ")", held >= TestNPC.SENSE_EVERY * 2 - 3 && held <= TestNPC.SENSE_EVERY * 2 - 1);
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -17472,6 +17522,7 @@ public class SimTests {
 				new ABodyAttendsToItsNearest(),
 				new AHerdDoesNotHideAHunter(),
 				new ASpentSoundHoldsNothing(),
+				new PerceptionIsOneGatherOnTheClock(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

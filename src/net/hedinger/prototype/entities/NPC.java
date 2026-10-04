@@ -1277,7 +1277,7 @@ public abstract class NPC extends Entity {
 		}
 
 		Perf.stopwatch.start();
-		targets = scanTargets(targets);
+		targets = perceive(targets);
 		Perf.stopwatch.stop();
 
 		if (status < 0 || status > 3) {
@@ -1840,36 +1840,36 @@ public abstract class NPC extends Entity {
 	 */
 	@Override
 	public void collisionCheck() {
-		float spring = 0.25f;
 		for (NPC npc : targets.values()) {
-			// Never shove against something bound to us: a captive/rider we carry, or
-			// the host we ride. They move together, so the separation spring would
-			// just fight the carry (and stall a hauler pushing against its own load).
-			if (npc.getAttachTarget() == this || getAttachTarget() == npc) {
-				continue;
-			}
-			// Nor against something at a different altitude. Flight in this world
-			// is not a height — Z is the level a body is on, so a flyer stands in
-			// exactly the same cell space as a walker and this spring saw two
-			// bodies at one point. The steward's drone barged grazers along the
-			// ground it was flying over, and its own quarry away from its emitter.
-			//
-			// Every other close interaction already asks. A grounded creature
-			// cannot seize a flyer out of the air (see grab); biting and mating
-			// take flight into account too. The spring was the one that never did.
-			if (npc.isFlying() != isFlying()) {
-				continue;
-			}
-			double dx = npc.getX() - getX();
-			double dy = npc.getY() - getY();
-			if (canTouch(npc)) {
-				// The old code went angle = atan2(-dy,-dx) and then
-				// cos(angle)*hypot / sin(angle)*hypot -- a transcendental
-				// round-trip that exactly reconstructs (-dx, -dy). Push
-				// directly away from the neighbour instead.
-				dX += -dx * spring;
-				dY += -dy * spring;
-			}
+			springAgainst(npc);
+		}
+	}
+
+	/**
+	 * The separation spring against one neighbour: a touching body is pushed
+	 * off, a quarter of the overlap a tick. Never against something bound to
+	 * us -- a captive or rider we carry, or the host we ride: they move
+	 * together, so the spring would just fight the carry (and stall a hauler
+	 * pushing against its own load). Nor against something at a different
+	 * altitude: flight here is not a height, Z is the level, so a flyer stands
+	 * in the same cell space as a walker and this spring once saw two bodies
+	 * at one point -- the steward's drone barged grazers along the ground it
+	 * was flying over. Every other close interaction already asks (grab, bite,
+	 * mate); the spring was the one that never did.
+	 */
+	protected void springAgainst(NPC npc) {
+		float spring = 0.25f;
+		if (npc == this || npc.getAttachTarget() == this || getAttachTarget() == npc) {
+			return;
+		}
+		if (npc.isFlying() != isFlying()) {
+			return;
+		}
+		double dx = npc.getX() - getX();
+		double dy = npc.getY() - getY();
+		if (canTouch(npc)) {
+			dX += -dx * spring;
+			dY += -dy * spring;
 		}
 	}
 
@@ -2677,6 +2677,17 @@ public abstract class NPC extends Entity {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * What this body perceives this tick, nearest first: the list the act path
+	 * reads for touching, grabbing, boarding, mating and the nearest-neighbour
+	 * channels. The legacy scan below is the default; a body with a sense pass
+	 * of its own feeds the same list from that pass instead (TestNPC), so it
+	 * perceives its neighbours once a pass and not twice a tick.
+	 */
+	protected TreeMap<Double, NPC> perceive(TreeMap<Double, NPC> previous) {
+		return scanTargets(previous);
 	}
 
 	private TreeMap<Double, NPC> scanTargets(TreeMap<Double, NPC> ts) {
