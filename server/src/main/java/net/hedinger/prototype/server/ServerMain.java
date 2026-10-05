@@ -510,6 +510,18 @@ public final class ServerMain {
 					"data", java.util.Base64.getEncoder().encodeToString(v)));
 		});
 
+		// Static per-tile climate fields -- light, temperature, humidity -- for
+		// the viewer's overlays. Fetched once per level: they are read off the
+		// terrain and the terrain does not change.
+		app.get("/api/world/climate/{field}/{z}", ctx -> {
+			var resp = host.climate(ctx.pathParam("field"), Integer.parseInt(ctx.pathParam("z")));
+			if (resp == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.json(resp);
+		});
+
 		// Static per-tile cover mask (1 = thicket) for the shrub canopy overlay.
 		// Fetched once per level; the client draws foliage over entities in cover.
 		app.get("/api/world/cover/{z}", ctx -> {

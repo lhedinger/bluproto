@@ -1185,6 +1185,55 @@ final class WorldHost {
 	 * once per level and draws the overlay over entities standing in it —
 	 * anything the sim hides, the viewer part-hides too.
 	 */
+	/**
+	 * One climate field of one level -- "light", "temperature" or "humidity" --
+	 * quantised to a byte a tile over its own range, with the range alongside
+	 * so the viewer can label a legend in the field's units. Static: the
+	 * fields are a function of the terrain and the terrain does not change, so
+	 * the client fetches this once per level. The world builds the fields on
+	 * the first ask, a few hundred milliseconds on the request thread, and
+	 * hands back the same arrays after.
+	 */
+	java.util.Map<String, Object> climate(String field, int z) {
+		var w = runner.world();
+		if (z < 0 || z >= w.getLevels()) {
+			return null;
+		}
+		var c = w.climate();
+		double[] f;
+		double lo, hi;
+		switch (field) {
+		case "light" -> { f = c.light(z); lo = 0; hi = 1; }
+		case "humidity" -> { f = c.humidity(z); lo = 0; hi = 1; }
+		case "temperature" -> {
+			f = c.temperature(z);
+			lo = Double.MAX_VALUE;
+			hi = -Double.MAX_VALUE;
+			for (double v : f) {
+				lo = Math.min(lo, v);
+				hi = Math.max(hi, v);
+			}
+			if (hi - lo < 1e-9) {
+				lo -= 1; // a flat field still needs a range to be drawn against
+				hi += 1;
+			}
+		}
+		default -> { return null; }
+		}
+		byte[] q = new byte[f.length];
+		for (int i = 0; i < f.length; i++) {
+			double u = (f[i] - lo) / (hi - lo);
+			q[i] = (byte) Math.round(Math.max(0, Math.min(1, u)) * 255);
+		}
+		var out = new java.util.LinkedHashMap<String, Object>();
+		out.put("cols", w.getColums());
+		out.put("rows", w.getRows());
+		out.put("min", lo);
+		out.put("max", hi);
+		out.put("data", java.util.Base64.getEncoder().encodeToString(q));
+		return out;
+	}
+
 	byte[] cover(int z) {
 		var w = runner.world();
 		if (z < 0 || z >= w.getLevels()) {
