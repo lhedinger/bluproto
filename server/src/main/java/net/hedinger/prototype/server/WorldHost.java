@@ -1230,6 +1230,12 @@ final class WorldHost {
 		out.put("rows", w.getRows());
 		out.put("min", lo);
 		out.put("max", hi);
+		if (field.equals("temperature")) {
+			// What "cool" and "warm" are relative to: the ground's own
+			// temperature, not the midpoint of whatever a vent stretched the
+			// range to. A cave at the region's mean is neither.
+			out.put("mid", net.hedinger.prototype.engine.Climate.TEMP_SURFACE);
+		}
 		out.put("data", java.util.Base64.getEncoder().encodeToString(q));
 		return out;
 	}
