@@ -11084,6 +11084,69 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The body scan is painted from the world's ramps and accents. Every hex
+	 * literal in {@code client/src/bodyScan.ts} is a ramp colour, a sanctioned
+	 * accent, or one of the panel's own tokens -- nothing invented, which is
+	 * the §2 violation that is easiest to commit in an overlay nobody compares
+	 * to the ground. And the four plans differ where the eye lands: the gut.
+	 * A grazer's is the biggest, a parasite's the smallest, and no two are the
+	 * same size, so a cross-section says what a body eats without a label.
+	 *
+	 * <p>Java cannot run the painter, so this reads the file: the palette by
+	 * its literals, the plans by their gut extents. If a ramp moves under it,
+	 * this fails and names the client as the thing that needs editing.
+	 */
+	static class TheBodyScanIsPaintedFromRamps extends Scenario {
+		@Override
+		public void run() {
+			String src;
+			try {
+				src = java.nio.file.Files.readString(java.nio.file.Path.of("client/src/bodyScan.ts"));
+			} catch (java.io.IOException e) {
+				throw new AssertionError("the body scan painter is not where the guide says", e);
+			}
+			java.util.Set<Integer> allowed = new java.util.HashSet<>();
+			for (int cls : new int[] { GroundTextures.CLS_GRASS, GroundTextures.CLS_SAND,
+					GroundTextures.CLS_SHALLOWS, GroundTextures.CLS_CRYSTAL, GroundTextures.CLS_CRYSTAL_BED }) {
+				for (int i = 0; i < 3; i++) {
+					allowed.add(GroundTextures.rampColor(cls, i));
+				}
+			}
+			allowed.add(0xE0455F); // bloom red, the flesh the world's flora-food wears
+			allowed.add(0x7c2434); // its dark, the plate's pressed red
+			allowed.add(0xF0E8C6); // bloom cream
+			allowed.add(0xD0ECFF); // the crystal glint / a lit lamp
+			allowed.add(0xffffff); // the mind: one white cell
+			// the panel's own tokens: its fill, grid, band, border, muted text, gold
+			for (int c : new int[] { 0x0b0f17, 0x10192a, 0x12303a, 0x1f2a3a, 0x8b93a3, 0xd6b16a }) {
+				allowed.add(c);
+			}
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("'#([0-9a-fA-F]{6})'").matcher(src);
+			int seen = 0;
+			while (m.find()) {
+				int c = Integer.parseInt(m.group(1), 16);
+				assertTrue("#" + m.group(1) + " is a ramp, an accent or a panel token", allowed.contains(c));
+				seen++;
+			}
+			assertGreater("the painter names its colours as literals this reads", seen, 12);
+			// The gut is the organ that differs: parse each plan's gut extent.
+			java.util.Map<String, Double> gutArea = new java.util.TreeMap<>();
+			java.util.regex.Matcher pm = java.util.regex.Pattern
+					.compile("(herbivore|predator|scavenger|parasite): \\{[^}]*?gut: \\[([0-9.]+), ([0-9.]+), ([0-9.]+), ([0-9.]+)\\]")
+					.matcher(src);
+			while (pm.find()) {
+				gutArea.put(pm.group(1), Double.parseDouble(pm.group(4)) * Double.parseDouble(pm.group(5)));
+			}
+			assertEquals("all four plans are drawn", 4, gutArea.size());
+			assertTrue("the grazer's gut is the biggest",
+					gutArea.get("herbivore") > gutArea.get("predator") && gutArea.get("herbivore") > gutArea.get("scavenger"));
+			assertTrue("the parasite's is the smallest",
+					gutArea.get("parasite") < gutArea.get("predator") && gutArea.get("parasite") < gutArea.get("scavenger"));
+			assertTrue("and the hunter's is smaller than the scavenger's", gutArea.get("predator") < gutArea.get("scavenger"));
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -17901,6 +17964,7 @@ public class SimTests {
 				new ASpentSoundHoldsNothing(),
 				new PerceptionIsOneGatherOnTheClock(),
 				new AHostMendsWhatOneRiderDrinks(),
+				new TheBodyScanIsPaintedFromRamps(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),
