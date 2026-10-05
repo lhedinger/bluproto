@@ -25,6 +25,7 @@ import {
   drawLoader, drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
 } from './render';
 import { el, renderMechPage, syncNavPad } from './mechdoc';
+import { PLANS, SATED, bodyScanCanvas, type BodyState } from './bodyScan';
 
 const root = document.getElementById('root')!;
 // The page has two halves. Mechanics come first — a viewer who wants to know why
@@ -650,6 +651,29 @@ for (const [act, name, meaning] of EXPR) {
 // viewer sees rather than a second rendering that merely resembles it. These
 // used to be baked GIFs, which is a picture of what the art ought to be.
 interface RefBody { group: string; label: string; pheno: number; worn: boolean; rgb: number; }
+
+// The body scan the inspector's body tab and the entity card draw: each plan
+// sated, then one grazer through a day. Drawn by the live painter, so what is
+// shown here is what a viewer is shown there.
+const scans = section('Body scan',
+  'A creature\'s cross-section as the inspector shows it: the gut, the fat band, the '
+  + 'glycogen tank and the water, each a gauge of the body\'s books, on the plan its '
+  + 'trophic role wears. A grazer is mostly gut; a hunter has a small gut and the '
+  + 'biggest tank; a scavenger has the feelers it finds carrion by; a parasite has a '
+  + 'proboscis, hooks under the belly and no water of its own. Every mark is a cell, '
+  + 'and the glow is one bright edge and one dim halo, never a blur.');
+for (const [role, plan] of Object.entries(PLANS)) {
+  figure(bodyScanCanvas(plan, SATED, 96, 48, 3, true), `${role}, sated`, scans);
+}
+const day: [string, BodyState][] = [
+  ['half', { hunger: 0.5, thirst: 0.45, fat: 0.6, glycogen: 0.5, health: 1 }],
+  ['starving', { hunger: 0.95, thirst: 0.6, fat: 0.02, glycogen: 0.12, health: 0.85 }],
+  ['hurt', { hunger: 0.25, thirst: 0.2, fat: 0.8, glycogen: 0.6, health: 0.3 }],
+];
+for (const [name, st] of day) {
+  figure(bodyScanCanvas(PLANS.herbivore, st, 96, 48, 3, true), `a grazer, ${name}`, scans);
+}
+figure(bodyScanCanvas(PLANS.predator, SATED, 48, 24, 3, false), 'the card thumbnail: 48×24 cells, no callouts', scans);
 
 const plans = section('Body plans',
   'Every outline the organism renderer can express, drawn from one genome with the '
