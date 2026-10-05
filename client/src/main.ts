@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { VEG_KIND_MASK, drawSenseHeat, render, renderGL, setLowMapSource, type WorldMeta } from './render';
+import { VEG_KIND_MASK, drawClimateLayer, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 
@@ -438,6 +438,36 @@ async function fetchCover(): Promise<void> {
   }
 }
 
+// The chosen climate field for the current level, fetched once per level and
+// per choice: the fields are static, so there is nothing to poll. The legend
+// prints the field's own range, which only the server knows (temperature is
+// in degrees and its span is the map's), so a wash of colour is never the
+// only thing the viewer has to read it by.
+let climGrid: Uint8Array | null = null;
+let climRange: ClimateRange | null = null;
+async function fetchClimate(): Promise<void> {
+  const epoch = levelEpoch;
+  const field = climChoice;
+  climGrid = null;
+  climRange = null;
+  climLegend();
+  if (!field) return;
+  try {
+    const r = await fetch(`/api/world/climate/${field}/${currentLevel}?v=${hello ? hello.build : '0'}`);
+    if (epoch !== levelEpoch || field !== climChoice || !r.ok) return; // stale: the level or the choice moved on
+    const j = await r.json();
+    if (epoch !== levelEpoch || field !== climChoice) return;
+    const bin = atob(j.data);
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    climGrid = a;
+    climRange = { min: j.min, max: j.max, mid: j.mid };
+    climLegend();
+  } catch {
+    /* transient; the layer stays off until the next fetch */
+  }
+}
+
 function resize(): void {
   // 1x CSS pixels, deliberately ignoring devicePixelRatio: a retina display
   // would otherwise quadruple every blit and fill for detail pixel art does
@@ -567,6 +597,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       vegGrid = null;
       startVegPolling();
       fetchCover();
+      fetchClimate();
       // Tell the server which level to stream. The client says this on every
       // connection now, not only when someone taps: after a reconnect the two
       // ends have no other way to agree, and silence meant the server carried on
@@ -1488,6 +1519,7 @@ function goToLevel(z: number): void {
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
+  fetchClimate(); // and so is the climate field
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.
   net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
@@ -1596,10 +1628,37 @@ try {
 } catch { /* storage may be unavailable; the toggles still work per-session */ }
 ovlSmellBox.checked = ovlSmell;
 ovlSoundBox.checked = ovlSound;
+// The climate field, one at a time: three full-tile washes over each other
+// would be unreadable, so it is a choice with an off, not three toggles.
+// The choice sticks like the toggles do.
+const climBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="clim"]'));
+const climLegendEl = document.getElementById('climLegend')!;
+let climChoice: ClimateField | null = null;
+try {
+  const saved = localStorage.getItem('climField');
+  if (saved === 'light' || saved === 'temperature' || saved === 'humidity') climChoice = saved;
+} catch { /* per-session only, then */ }
+for (const b of climBoxes) b.checked = (b.value || null) === climChoice;
+function climLegend(): void {
+  if (!climChoice || !climRange) { climLegendEl.textContent = ''; return; }
+  const { min, max } = climRange;
+  climLegendEl.textContent = climChoice === 'temperature'
+    ? `${min.toFixed(1)} – ${max.toFixed(1)} °C`
+    : `${min.toFixed(2)} – ${max.toFixed(2)}`;
+}
+function climApply(): void {
+  const on = climBoxes.find(b => b.checked);
+  const v = on ? on.value : '';
+  climChoice = v === 'light' || v === 'temperature' || v === 'humidity' ? v : null;
+  ovlBtn.style.fontWeight = ovlSmell || ovlSound || climChoice ? '600' : '';
+  try { localStorage.setItem('climField', climChoice ?? ''); } catch { /* per-session only */ }
+  fetchClimate();
+}
+for (const b of climBoxes) b.onchange = climApply;
 function ovlApply(): void {
   ovlSmell = ovlSmellBox.checked;
   ovlSound = ovlSoundBox.checked;
-  ovlBtn.style.fontWeight = ovlSmell || ovlSound ? '600' : '';
+  ovlBtn.style.fontWeight = ovlSmell || ovlSound || climChoice ? '600' : '';
   try {
     localStorage.setItem('ovlSmell', ovlSmell ? '1' : '0');
     localStorage.setItem('ovlSound', ovlSound ? '1' : '0');
@@ -2043,6 +2102,9 @@ function frame(now: number): void {
   } else {
     render(g, cam, state, meta, chunkTiles, chunkPx, getChunk,
       vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
+  }
+  if (climChoice && climGrid && climRange && meta) {
+    drawClimateLayer(g, cam, climChoice, climGrid, climRange, meta.cols, meta.rows);
   }
   if (ovlSmell || ovlSound) {
     drawSenseHeat(g, cam, state, renderTime, currentLevel, ovlSmell, ovlSound, now);

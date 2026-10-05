@@ -2749,3 +2749,68 @@ export function drawSenseHeat(g: CanvasRenderingContext2D, cam: Camera,
   }
   g.restore();
 }
+
+
+// --- climate overlays ---------------------------------------------------------
+// One of three static per-tile fields -- light, temperature, humidity -- drawn
+// as a tinted raster under the sense heatmaps. The server hands each over once
+// per level as a byte a tile on the field's own range; the colouring happens
+// here, once per grid, into an offscreen canvas the size of the map in tiles,
+// and the frame scales that up with smoothing off so every tile stays a
+// square. The three ramps say different things on purpose: light darkens what
+// the sky cannot reach (a lit tile is left alone), temperature is a diverging
+// cool-to-warm wash, humidity a single blue that deepens with moisture.
+export type ClimateField = 'light' | 'temperature' | 'humidity';
+let climCanvas: HTMLCanvasElement | null = null;
+let climFor: Uint8Array | null = null;
+let climField: ClimateField | null = null;
+let climRangeFor: ClimateRange | null = null;
+
+export type ClimateRange = { min: number; max: number; mid?: number };
+
+function climatePixels(field: ClimateField, grid: Uint8Array, range: ClimateRange,
+    px: Uint8ClampedArray): void {
+  // Temperature diverges around the ground's own temperature (the server's
+  // `mid`), not the midpoint of the range: a cave at the region's mean is
+  // neither cool nor warm, however hot the vent that stretched the range.
+  const mid = range.mid ?? (range.min + range.max) / 2;
+  const half = Math.max(range.max - mid, mid - range.min, 1e-9);
+  for (let i = 0; i < grid.length; i++) {
+    const u = grid[i] / 255;
+    const o = i * 4;
+    if (field === 'light') {
+      px[o] = 10; px[o + 1] = 10; px[o + 2] = 30;
+      px[o + 3] = Math.round((1 - u) * 190); // the veil thickens as the light goes
+    } else if (field === 'temperature') {
+      const v = range.min + u * (range.max - range.min);
+      const t = Math.max(-1, Math.min(1, (v - mid) / half)); // -1 cool .. +1 warm
+      if (t < 0) { px[o] = 59; px[o + 1] = 111; px[o + 2] = 214; }
+      else { px[o] = 232; px[o + 1] = 68; px[o + 2] = 42; }
+      px[o + 3] = Math.round(Math.abs(t) * 150 + 20);
+    } else {
+      px[o] = 47; px[o + 1] = 143; px[o + 2] = 214;
+      px[o + 3] = Math.round(u * 170);
+    }
+  }
+}
+
+export function drawClimateLayer(g: CanvasRenderingContext2D, cam: Camera,
+    field: ClimateField, grid: Uint8Array, range: ClimateRange, cols: number, rows: number): void {
+  if (climCanvas === null || climFor !== grid || climField !== field || climRangeFor !== range) {
+    climCanvas = document.createElement('canvas');
+    climCanvas.width = cols;
+    climCanvas.height = rows;
+    const cg = climCanvas.getContext('2d')!;
+    const img = cg.createImageData(cols, rows);
+    climatePixels(field, grid, range, img.data);
+    cg.putImageData(img, 0, 0);
+    climFor = grid;
+    climField = field;
+    climRangeFor = range;
+  }
+  const o = cam.worldToScreen(0, 0);
+  g.save();
+  g.imageSmoothingEnabled = false;
+  g.drawImage(climCanvas, o.x, o.y, cols * cam.scale, rows * cam.scale);
+  g.restore();
+}
