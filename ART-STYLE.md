@@ -249,6 +249,26 @@ One sun, straight overhead-north. The grammar:
   deliberate outline. Procedural texture is for *fields* (ground, patterns);
   discrete objects get drawn.
 
+### Overlays and dialogues: the scan idiom
+What the viewer draws *over* the world about a body -- the inspector's body
+tab, the entity card's thumbnail -- is not world art and does not pretend to
+be: it is an instrument reading, and it wears the **scan idiom**. A cell grid
+(96×48 at four device pixels a cell for a panel, 48×24 at three for a card),
+the panel's own dark fill with a faint eight-cell grid and one dithered scan
+band, the body as a blob outline in the crystal glint with a single dithered
+halo ring outside it, organs as gauges that fill from the bottom with a bright
+edge and a solid dim fill, and callouts as cell-run leaders from the skin
+outward to monospace labels in the margin. The colours are the world's ramps
+and accents, each organ a {bright, dim} pair; the glow is one bright cell and
+one dim cell, never a blur; and the drawing is a pure function of the body
+plan and the five books, so the same creature in the same state is the same
+picture. `client/src/bodyScan.ts` is the painter, `/sprites` shows every
+plan and a grazer through a day, and `TheBodyScanIsPaintedFromRamps` holds
+the file to its palette. What was rejected on the way: dithered organ fills
+(speckle at four pixels), a checkered fat band (busier than the organ it
+framed), organs touching the wall (growths), and a blurred vector pixelated
+afterwards (mud).
+
 ## 6. The two renderers
 
 The **Java renderer is the visual source of truth**. It bakes the ground
