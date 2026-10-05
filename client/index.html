@@ -263,7 +263,9 @@
                bottom: max(8px, env(safe-area-inset-bottom)); z-index: var(--z-minimap);
                border: 1px solid #3a3f4a; border-radius: 6px; background: #10121688;
                width: 150px; height: auto; cursor: crosshair; }
-  </style>
+      #ovl h3.sub { position: static; font-size: 12px; opacity: .8; margin: 8px 0 2px; padding: 0; }
+    #ovl .legend { float: right; font-weight: 400; opacity: .9; font-variant-numeric: tabular-nums; }
+</style>
 </head>
 <body>
   <div id="app"><canvas id="cv"></canvas><canvas id="fx"></canvas></div>
@@ -309,6 +311,14 @@
       <span class="sw" style="background:#e628be"></span>smell — pheromone clouds</label>
     <label><input type="checkbox" id="ovlSound" />
       <span class="sw" style="background:#f2b84b"></span>sound — events in earshot</label>
+    <h3 class="sub">climate <span class="legend" id="climLegend"></span></h3>
+    <label><input type="radio" name="clim" id="climOff" value="" />none</label>
+    <label><input type="radio" name="clim" id="climLight" value="light" />
+      <span class="sw" style="background:#1a1a2e"></span>light — dark where the sky cannot reach</label>
+    <label><input type="radio" name="clim" id="climTemp" value="temperature" />
+      <span class="sw" style="background:linear-gradient(90deg,#3b6fd6,#e8442a)"></span>temperature — cool to warm</label>
+    <label><input type="radio" name="clim" id="climHumid" value="humidity" />
+      <span class="sw" style="background:#2f8fd6"></span>humidity — dry to wet</label>
   </div>
   <div id="tuning" class="panel half">
     <h3>simulation constants<span class="szbtn" title="full screen">⛶</span><span
