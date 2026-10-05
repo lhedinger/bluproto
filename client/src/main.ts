@@ -13,6 +13,7 @@ import { GLRenderer } from './gl';
 import { VEG_KIND_MASK, drawClimateLayer, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
+import { bodyScanCanvas, planFor, stateOf } from './bodyScan';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
 const fx = document.getElementById('fx') as HTMLCanvasElement;
@@ -863,7 +864,12 @@ function renderInspectSimple(d: Record<string, any>): void {
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
-  inspectEl.innerHTML = header(swatch, kind, d.id) + `<table>${rows.join('')}</table>`;
+  inspectEl.innerHTML = header(swatch, kind, d.id)
+      + (d.role ? '<div class="scan card"></div>' : '') + `<table>${rows.join('')}</table>`;
+  // A creature's card opens on its body: the scan at 3 px a cell, no callouts,
+  // the same books the bars below it count.
+  const thumb = inspectEl.querySelector('.scan');
+  if (thumb) thumb.appendChild(bodyScanCanvas(planFor(d.role), stateOf(d), 48, 24, 3, false));
   showInspect('card');
 }
 
@@ -883,7 +889,7 @@ function renderInspectSimple(d: Record<string, any>): void {
 // each other because the mind IS a gene — Genome.brain, copied and mutated with
 // the rest — and lineage had been wedged between the two, which put a family
 // tree in the middle of one creature's biology.
-type InspectTab = 'attributes' | 'genome' | 'mind' | 'lineage';
+type InspectTab = 'attributes' | 'body' | 'genome' | 'mind' | 'lineage';
 let inspectTab: InspectTab = 'attributes';
 let inspectDetail: Record<string, any> | null = null;
 let lineageData: Record<string, any> | null = null;
@@ -896,9 +902,13 @@ function inspectTabsFor(d: Record<string, any>): InspectTab[] {
   // It asked `hasBrain`, which meant the LGP program, so a network-minded
   // creature was offered no mind tab and read as scripted.
   const minded = d.genome?.mind && d.genome.mind !== 'none';
+  // The body scan is for a creature: a thing with a trophic role and the
+  // four books. An item or a fixture has neither, and a tab of an empty
+  // outline would be a tab that wastes the click.
+  const body = d.role ? ['body' as InspectTab] : [];
   return minded
-    ? ['attributes', 'genome', 'mind', 'lineage']
-    : ['attributes', 'genome', 'lineage'];
+    ? ['attributes', ...body, 'genome', 'mind', 'lineage']
+    : ['attributes', ...body, 'genome', 'lineage'];
 }
 
 function renderInspectDebug(d: Record<string, any>): void {
@@ -914,6 +924,7 @@ function renderInspectDebug(d: Record<string, any>): void {
     `<button data-tab="${t}" class="${t === inspectTab ? 'on' : ''}">${t}</button>`).join('');
   let body = '';
   if (inspectTab === 'attributes') body = attributesTab(d);
+  else if (inspectTab === 'body') body = '<div class="scan"></div>';
   else if (inspectTab === 'genome') body = genomeTab(d);
   else if (inspectTab === 'lineage') body = lineageTab(d);
   else body = mindTab();
@@ -923,6 +934,12 @@ function renderInspectDebug(d: Record<string, any>): void {
   // the size the viewer last chose survives the poll that rebuilds it, and
   // survives walking from one creature to the next.
   showInspect(inspectEl.classList.contains('half') ? 'half' : 'full');
+  // The body tab is a canvas, not markup: the scan drawn at 4 px a cell with
+  // its callouts, from the same books the attributes tab lists as bars.
+  const scanHost = inspectEl.querySelector('.scan');
+  if (scanHost) {
+    scanHost.appendChild(bodyScanCanvas(planFor(d.role), stateOf(d), 96, 48, 4, true));
+  }
   // The tab bar is chrome, so it stays put with the header rather than
   // scrolling away with the content — on a full genome dump or a mind listing
   // it used to leave the panel with no visible way out of the tab you were in.
@@ -1895,7 +1912,7 @@ function toast(msg: string): void {
 
 // Test/debug handle: lets an automated browser (or a curious dev console)
 // read live state and camera without any UI coupling.
-(window as unknown as Record<string, unknown>).__blu = { cam, state };
+(window as unknown as Record<string, unknown>).__blu = { cam, state, select }; // select: a harness's way to open an inspector
 
 // ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
 const hudEl = document.getElementById('hud') as HTMLElement;
