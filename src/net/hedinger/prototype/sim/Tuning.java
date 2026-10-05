@@ -39,6 +39,7 @@ public final class Tuning {
 	private static final Class<?>[] SURVEYED = {
 			net.hedinger.prototype.engine.Tile.class,
 			net.hedinger.prototype.engine.World.class,
+			net.hedinger.prototype.engine.Climate.class,
 			net.hedinger.prototype.entities.Genome.class,
 			net.hedinger.prototype.entities.NPC.class,
 			net.hedinger.prototype.simtest.TestNPC.class,

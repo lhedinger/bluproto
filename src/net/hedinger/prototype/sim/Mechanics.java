@@ -63,7 +63,64 @@ public final class Mechanics {
 		out.add(food());
 		out.add(hearing());
 		out.add(pheromones());
+		out.add(climate());
 		return out;
+	}
+
+	private static Map<String, Object> climate() {
+		Map<String, Object> s = section("climate", "Light, temperature and humidity",
+				"Three slow fields lie over every tile, read off the finished ground and nothing "
+				+ "else: no noise layer beside the terrain, no band across the map, because two "
+				+ "descriptions of one landscape disagree somewhere and every disagreement needs "
+				+ "a tile to paper over. Light falls from the sky onto whatever is open to it, "
+				+ "drops through holes and ramp mouths onto the floor below, and fades along a "
+				+ "passage, losing more to cover; rock takes none. The ground holds one "
+				+ "Mediterranean temperature -- the world is not wide enough for a latitude -- "
+				+ "cooler a storey up, the region's mean below ground, and vents and the "
+				+ "facility's plant warm or chill the air around them. Water wets the air near "
+				+ "it over a floor's own dry baseline, and then the sun and the heat take their "
+				+ "share, so shade is moister than open ground at the same distance from a pond. "
+				+ "With no day and no season these are still until a tile is written, and nothing "
+				+ "in a body reads them yet: what they will do to a creature is a multiplier on "
+				+ "its need clocks, and lands once a creature can sense them.");
+		rows(s,
+				row("Full sun", num(net.hedinger.prototype.engine.Climate.LIGHT_SKY), "light",
+						"Open ground under the sky."),
+				row("Light, per tile of air", num(net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF), "x",
+						"What survives one step along a passage underground."),
+				row("Light, entering cover", num(net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER), "x",
+						"On top of the step: thicket, reeds and tall grass dim it without stopping it."),
+				row("A lit grating", num(net.hedinger.prototype.engine.Climate.LIGHT_GRATE), "light",
+						"The facility's own small source."),
+				row("The ground", num(net.hedinger.prototype.engine.Climate.TEMP_SURFACE), "deg C",
+						"A Mediterranean mean; with no sun it is the ground's temperature everywhere."),
+				row("Per storey above", num(net.hedinger.prototype.engine.Climate.TEMP_LAPSE), "deg C", ""),
+				row("Below ground", num(net.hedinger.prototype.engine.Climate.TEMP_UNDERGROUND), "deg C",
+						"The rock holds the region's mean."),
+				row("Per storey deeper", num(net.hedinger.prototype.engine.Climate.TEMP_DEPTH), "deg C", ""),
+				row("A geothermal vent", "+" + num(net.hedinger.prototype.engine.Climate.VENT_HEAT), "deg C",
+						"At its mouth."),
+				row("The heat exchanger", "+" + num(net.hedinger.prototype.engine.Climate.EXCHANGER_HEAT), "deg C",
+						"At the grille."),
+				row("The coolant run", "-" + num(net.hedinger.prototype.engine.Climate.COOLANT_CHILL), "deg C",
+						"At the pipe."),
+				row("Warmth, per tile of air", num(net.hedinger.prototype.engine.Climate.TEMP_FALLOFF), "x",
+						"The strongest source reaching a tile counts: two vents side by side are a vent."),
+				row("Dry ground", num(net.hedinger.prototype.engine.Climate.HUMID_SURFACE), "humidity",
+						"The surface far from water."),
+				row("A cave", num(net.hedinger.prototype.engine.Climate.HUMID_CAVE), "humidity",
+						"Sealed rock holds its moisture; " + num(net.hedinger.prototype.engine.Climate.HUMID_DEPTH)
+						+ " more per storey deeper."),
+				row("Open water", num(net.hedinger.prototype.engine.Climate.HUMID_WATER), "humidity",
+						"Shallows " + num(net.hedinger.prototype.engine.Climate.HUMID_SHALLOWS) + ", reeds "
+						+ num(net.hedinger.prototype.engine.Climate.HUMID_REEDS) + ", mud "
+						+ num(net.hedinger.prototype.engine.Climate.HUMID_MUD) + "."),
+				row("Moisture, per tile of air", num(net.hedinger.prototype.engine.Climate.HUMID_FALLOFF), "x", ""),
+				row("What full sun takes", pct(net.hedinger.prototype.engine.Climate.HUMID_SUN_DRY), "of humidity",
+						"Shade keeps it."),
+				row("What each degree of heat takes", pct(net.hedinger.prototype.engine.Climate.HUMID_HEAT_DRY),
+						"of humidity per deg C", "Above the ground's own; each degree below gives as much back."));
+		return s;
 	}
 
 	/**

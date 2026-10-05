@@ -1245,12 +1245,34 @@ public class World {
 		}
 		openings = null; // a written tile may have been, or become, a way through
 		sightEpoch++;
+		terrainEpoch++;
 		return levels[l].setTile(c, r, l, t);
 	}
 
 	public void setTile(int c, int r, int l) {
 		sightEpoch++;
+		terrainEpoch++;
 		levels[l].setTile(c, r, l);
+	}
+
+	/** Which terrain the climate was read off. Advances on every tile written,
+	 *  so the fields are rebuilt on their next read and never on a tick. */
+	private int terrainEpoch = 0;
+	private Climate climate;
+	private int climateEpoch = -1;
+
+	/**
+	 * The light, temperature and humidity over every tile -- a function of the
+	 * terrain, built the first time anyone asks and again only after a tile has
+	 * been written since. Nothing that ticks reads it yet, so a world that is
+	 * never looked at never pays for it.
+	 */
+	public Climate climate() {
+		if (climate == null || climateEpoch != terrainEpoch) {
+			climate = new Climate(this);
+			climateEpoch = terrainEpoch;
+		}
+		return climate;
 	}
 
 	/**
