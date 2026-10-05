@@ -11429,6 +11429,185 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Light is where the sky can reach. Open ground under it reads full sun; a
+	 * floor below takes light through a hole in the floor above and at the foot
+	 * of a ramp down from a lit floor, and from there it fades along the passage
+	 * a fixed share a step, losing more to cover, and stops at rock. A chamber
+	 * nothing opens into is dark. Pinned on a two-storey room with a corridor
+	 * carved under one hole, so every number is the geometry's.
+	 */
+	static class LightFallsThroughHolesAndFadesInTheDark extends Scenario {
+		@Override
+		public void run() {
+			seed(1);
+			World w = room(20, 12, 2); // z=1 the surface, z=0 the cave beneath
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WALL); // solid rock below
+				}
+			}
+			for (int x = 3; x <= 12; x++) {
+				w.setTile(x, 5, 0, Tile.TileType.TYPE_FLOOR); // one corridor
+			}
+			w.setTile(8, 5, 0, Tile.TileType.TYPE_REEDS); // cover across it
+			w.setTile(3, 5, 1, Tile.TileType.TYPE_HOLE); // a hole over its west end
+			w.setTile(15, 8, 0, Tile.TileType.TYPE_FLOOR); // a sealed chamber
+			w.setTile(15, 2, 1, Tile.TileType.TYPE_RAMPDOWN); // and a ramp down, elsewhere
+			Tile ramp = w.getTile(15, 2, 1);
+			int fx = 15 + Tile.dirDx(ramp.rampExit()), fy = 2 + Tile.dirDy(ramp.rampExit());
+			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FLOOR); // its foot, carved out of the rock
+
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			double f = net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF;
+			assertNear("open ground is in full sun", 1.0, c.lightAt(10.5, 8.5, 1), 1e-12);
+			assertNear("and so is the hole itself", 1.0, c.lightAt(3.5, 5.5, 1), 1e-12);
+			assertNear("rock takes none", 0.0, c.lightAt(1.5, 1.5, 0), 1e-12);
+			assertNear("the floor under the hole is lit through it", 1.0, c.lightAt(3.5, 5.5, 0), 1e-12);
+			assertNear("one step in, a step's worth is lost", f, c.lightAt(4.5, 5.5, 0), 1e-12);
+			assertNear("three steps in, three", f * f * f, c.lightAt(6.5, 5.5, 0), 1e-12);
+			double beforeCover = c.lightAt(7.5, 5.5, 0);
+			assertNear("cover takes its step and its own toll on top",
+					beforeCover * f * net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER,
+					c.lightAt(8.5, 5.5, 0), 1e-12);
+			assertNear("and past it the fade is a plain step again",
+					c.lightAt(8.5, 5.5, 0) * f, c.lightAt(9.5, 5.5, 0), 1e-12);
+			assertNear("a chamber nothing opens into is dark", 0.0, c.lightAt(15.5, 8.5, 0), 1e-12);
+			assertNear("the foot of a ramp down from the surface is lit as the ramp is",
+					c.lightAt(15.5, 2.5, 1), c.lightAt(fx + 0.5, fy + 0.5, 0), 1e-12);
+			assertGreater("which is to say, lit", c.lightAt(fx + 0.5, fy + 0.5, 0), 0.99);
+		}
+	}
+
+	/**
+	 * The ground holds one temperature -- no band across the map, the world is
+	 * not wide enough for a latitude -- cooler a storey up, the region's mean
+	 * below it and a touch warmer deeper. A vent warms the air at its mouth and
+	 * fades with distance; the plant's coolant chills; and two sources side by
+	 * side are the stronger of them, not their sum.
+	 */
+	static class TheGroundIsMediterraneanAndTheRockBelowIsCool extends Scenario {
+		@Override
+		public void run() {
+			seed(2);
+			World w = room(10, 10, 4);
+			w.setSurfaceZ(2); // sky above, cave and deep below
+			// The baselines first, on the bare room: a vent's warmth reaches
+			// further than any corner of a room this size is clear of, so what
+			// a floor reads with nothing on it is read before anything goes on.
+			net.hedinger.prototype.engine.Climate bare = w.climate();
+			double ground = net.hedinger.prototype.engine.Climate.TEMP_SURFACE;
+			double lo = Double.MAX_VALUE, hi = -Double.MAX_VALUE;
+			for (int y = 1; y < 9; y++) {
+				for (int x = 1; x < 9; x++) {
+					double t = bare.temperatureAt(x + 0.5, y + 0.5, 2);
+					lo = Math.min(lo, t);
+					hi = Math.max(hi, t);
+				}
+			}
+			assertNear("the ground is one temperature, north to south", lo, hi, 1e-9);
+			assertNear("and it is the Mediterranean mean", ground, lo, 1e-9);
+			assertNear("a storey up is cooler by the lapse",
+					ground + net.hedinger.prototype.engine.Climate.TEMP_LAPSE, bare.temperatureAt(4.5, 4.5, 3), 1e-9);
+			double cave = net.hedinger.prototype.engine.Climate.TEMP_UNDERGROUND;
+			double deep = cave + net.hedinger.prototype.engine.Climate.TEMP_DEPTH;
+			assertNear("the cave holds the region's mean", cave, bare.temperatureAt(8.5, 8.5, 1), 1e-9);
+			assertNear("and deeper is a touch warmer", deep, bare.temperatureAt(8.5, 8.5, 0), 1e-9);
+
+			// Then the anomalies, each read against the baseline its floor had.
+			w.setTile(4, 4, 1, Tile.TileType.TYPE_VENT);
+			w.setTile(5, 4, 1, Tile.TileType.TYPE_VENT); // a second, beside it
+			w.setTile(2, 2, 0, Tile.TileType.TYPE_COOLANT);
+			w.setTile(7, 7, 2, Tile.TileType.TYPE_EXCHANGER);
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			double vent = net.hedinger.prototype.engine.Climate.VENT_HEAT, tf = net.hedinger.prototype.engine.Climate.TEMP_FALLOFF;
+			assertNear("a vent is hot at its mouth", cave + vent, c.temperatureAt(4.5, 4.5, 1), 1e-9);
+			assertNear("two side by side are a vent, not a furnace", cave + vent, c.temperatureAt(5.5, 4.5, 1), 1e-9);
+			assertNear("and two tiles off, two steps of the fade",
+					cave + vent * tf * tf, c.temperatureAt(7.5, 4.5, 1), 1e-9);
+			assertNear("the coolant run chills the deep floor at the pipe",
+					deep - net.hedinger.prototype.engine.Climate.COOLANT_CHILL, c.temperatureAt(2.5, 2.5, 0), 1e-9);
+			assertNear("and the exchanger warms the ground at the grille",
+					ground + net.hedinger.prototype.engine.Climate.EXCHANGER_HEAT, c.temperatureAt(7.5, 7.5, 2), 1e-9);
+		}
+	}
+
+	/**
+	 * Water wets the air around it, fading with distance over a floor's own dry
+	 * baseline -- the surface's Mediterranean air, or a cave's held moisture --
+	 * and then the sun and the heat take their share. So a cave is moister than
+	 * the ground, shade is moister than sun at the same distance from a pond,
+	 * and the air at a vent's mouth is drier than the dark beside it.
+	 */
+	static class WaterWetsTheAirAndSunAndHeatDryIt extends Scenario {
+		@Override
+		public void run() {
+			seed(3);
+			World w = room(16, 14, 2); // z=1 the surface, z=0 a cave, both open
+			w.setTile(6, 6, 0, Tile.TileType.TYPE_WATER); // a pool in the cave
+			w.setTile(11, 6, 1, Tile.TileType.TYPE_HOLE); // sun onto the cave five tiles east of it
+			w.setTile(2, 12, 0, Tile.TileType.TYPE_VENT); // a vent in a far corner
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			double sun = net.hedinger.prototype.engine.Climate.HUMID_SUN_DRY;
+			assertNear("open ground far from water: the dry air, less what the sun takes",
+					net.hedinger.prototype.engine.Climate.HUMID_SURFACE * (1 - sun), c.humidityAt(13.5, 1.5, 1), 1e-9);
+			assertNear("the pool is as wet as the pool",
+					net.hedinger.prototype.engine.Climate.HUMID_WATER, c.humidityAt(6.5, 6.5, 0), 1e-9);
+			assertGreater("the air beside it is wetter than the cave's own",
+					c.humidityAt(7.5, 6.5, 0), c.humidityAt(13.5, 12.5, 0));
+			assertLess("and not as wet as the water", c.humidityAt(7.5, 6.5, 0), 1.0);
+			double inSun = c.humidityAt(11.5, 6.5, 0), inShade = c.humidityAt(6.5, 1.5, 0);
+			assertGreater("the lit tile is in the sun", c.lightAt(11.5, 6.5, 0), 0.99);
+			assertLess("the one in shade is barely", c.lightAt(6.5, 1.5, 0), 0.2);
+			assertGreater("at the same distance from the pool, shade is moister than sun", inShade, inSun);
+			assertGreater("a dark cave is moister than the ground",
+					c.humidityAt(13.5, 12.5, 0), c.humidityAt(13.5, 12.5, 1));
+			assertLess("and the air at a vent's mouth is drier than the dark beside it",
+					c.humidityAt(2.5, 12.5, 0), c.humidityAt(13.5, 12.5, 0));
+		}
+	}
+
+	/**
+	 * The climate is a function of the ground: the same terrain reads the same
+	 * fields, a world that is never asked never computes them, and a tile
+	 * written is read back on the next look -- and nothing that ticks reads
+	 * them, so a world with and without ever having been asked runs the same.
+	 */
+	static class ClimateIsReadOffTheGround extends Scenario {
+		@Override
+		public void run() {
+			seed(4);
+			World a = room(14, 10, 2), b = room(14, 10, 2);
+			for (World w : new World[] { a, b }) {
+				for (int x = 1; x < 13; x++) {
+					for (int y = 1; y < 9; y++) {
+						w.setTile(x, y, 0, Tile.TileType.TYPE_WALL);
+					}
+				}
+				for (int x = 3; x <= 10; x++) {
+					w.setTile(x, 4, 0, Tile.TileType.TYPE_FLOOR);
+				}
+				w.setTile(3, 4, 1, Tile.TileType.TYPE_HOLE);
+			}
+			net.hedinger.prototype.engine.Climate ca = a.climate(), cb = b.climate();
+			for (int z = 0; z < 2; z++) {
+				assertTrue("the same ground reads the same light on level " + z,
+						java.util.Arrays.equals(ca.light(z), cb.light(z)));
+				assertTrue("and the same humidity", java.util.Arrays.equals(ca.humidity(z), cb.humidity(z)));
+				assertTrue("and the same temperature", java.util.Arrays.equals(ca.temperature(z), cb.temperature(z)));
+			}
+			assertTrue("an unchanged world hands back the fields it built", a.climate() == ca);
+			double before = ca.lightAt(9.5, 4.5, 0);
+			assertGreater("the far end of the corridor is lit", before, 0);
+			a.setTile(6, 4, 0, Tile.TileType.TYPE_WALL); // rock dropped across the corridor
+			net.hedinger.prototype.engine.Climate after = a.climate();
+			assertTrue("a written tile is read back on the next look", after != ca);
+			assertNear("and the corridor beyond the fall is dark", 0.0, after.lightAt(9.5, 4.5, 0), 1e-12);
+			assertNear("while before it the light is what it was",
+					ca.lightAt(4.5, 4.5, 0), after.lightAt(4.5, 4.5, 0), 1e-12);
+		}
+	}
+
 	/** The same seed and script produce the exact same end state. */
 	static class SameSeedSameOutcome extends Scenario {
 		private double[] runOnce() {
@@ -17899,6 +18078,10 @@ public class SimTests {
 				new NestEmergesFromPheromone(),
 				new SnapshotStreamDeterministic(),
 				new CommandLogReplayReproduces(),
+				new LightFallsThroughHolesAndFadesInTheDark(),
+				new TheGroundIsMediterraneanAndTheRockBelowIsCool(),
+				new WaterWetsTheAirAndSunAndHeatDryIt(),
+				new ClimateIsReadOffTheGround(),
 				new SameSeedSameOutcome(),
 		};
 	}
