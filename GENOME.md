@@ -330,7 +330,9 @@ life:
   pays more per point of health drunk and outlasts the drain; any host is easier
   to find. The host scan and the latch apply the same line, so what a parasite
   goes looking for and what it will climb onto agree; a hitchhiker, after a lift
-  rather than a meal, still climbs on anything bigger.
+  rather than a meal, still climbs on anything bigger. A hunter is never a host,
+  whatever its size: parasites drink the herd and the carrion-eaters, and the
+  hunters are left to hunt.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on

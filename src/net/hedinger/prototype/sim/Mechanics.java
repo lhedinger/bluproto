@@ -1266,8 +1266,9 @@ public final class Mechanics {
 								+ "an animal, and the only one that works far above its own "
 								+ "weight. It can neither graze nor scavenge."),
 						item("host sense", "Warm bodies bigger than itself within "
-								+ num(TestNPC.HOST_SENSE_R) + " tiles, scent-like; its forage "
-								+ "channel points at the nearest, and riding one reads "
+								+ num(TestNPC.HOST_SENSE_R) + " tiles, scent-like, hunters "
+								+ "excepted: a predator is never a host. Its forage channel "
+								+ "points at the nearest, and riding one reads "
 								+ "\"you are on it\"."),
 						item("on arrival", "Latches. The grip holds while the forage intent "
 								+ "does, so a mind that switches to water climbs off — and a "
