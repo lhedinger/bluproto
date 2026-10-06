@@ -398,6 +398,22 @@ public class Genome {
 	}
 
 	/**
+	 * Draws a founder's {@link #sexuality} -- whether the lineage buds or courts.
+	 *
+	 * <p>An even split, for the reason {@link #spreadSearch} gives: the species
+	 * pools never drew it, and the default sits at 0.5, which {@link #isSexual}
+	 * reads as sexual. So every founder in the herd and the pack courted, and a
+	 * budding hunter existed only where the steward reseeded one. Measured on
+	 * seed 42 over sixty thousand ticks: forty founder hunters, all of them
+	 * courters; the budders among the reseeds, a minority throughout, produced
+	 * half the clade's births. Which strategy a niche favours is selection's to
+	 * settle, and it can only settle it between founders that differ.
+	 */
+	public static void spreadStrategy(Genome g) {
+		g.sexuality = Utils.random();
+	}
+
+	/**
 	 * Draws a founder's {@link #birthSize} -- how big a share of its adult body
 	 * a lineage builds its young at.
 	 *
@@ -495,7 +511,7 @@ public class Genome {
 		g.gregariousness = Utils.random();
 		g.boldness = Utils.random() * 0.3;
 		g.mateThreshold = 0.7 + Utils.random() * 0.3;
-		g.sexuality = Utils.random(); // an even split of strategies to start from
+		spreadStrategy(g);
 		// Founders differ in appetite from the start, so selection has something to
 		// act on before mutation has had time to make any.
 		g.greed = 0.5 + Utils.random() * 1.5;

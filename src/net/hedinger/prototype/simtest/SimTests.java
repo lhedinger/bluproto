@@ -15283,6 +15283,47 @@ public class SimTests {
 	}
 
 	/**
+	 * The founding pack buds and courts alike. Reproductive strategy is a gene
+	 * with a boundary at 0.5, and the species pools the herd and the pack are
+	 * copied from never drew it: every body took the default, which sits exactly
+	 * on the sexual side. So every founder hunter had to find a fertile,
+	 * same-clade partner alike enough to breed with, in a world holding a few
+	 * dozen hunters, and whether a lineage of budders could do better was never
+	 * on the table. Measured on seed 42 over sixty thousand ticks: forty
+	 * founder hunters, forty sexual; the steward's reseeds brought the budders
+	 * in, and a minority of them produced half the births.
+	 *
+	 * <p>Pinned on the demo world's founders: both strategies are present in the
+	 * pack and in the herd, and in more than token numbers.
+	 */
+	static class TheFoundingPackBudsAndCourtsAlike extends Scenario {
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			int[] pack = new int[2], herd = new int[2];
+			for (Entity e : w.getEntities()) {
+				if (!(e instanceof TestNPC t) || t.getGenome() == null || t.generation() != 0) {
+					continue;
+				}
+				int[] tally = switch (t.ecoRole()) {
+				case "predator" -> pack;
+				case "herbivore" -> herd;
+				default -> null;
+				};
+				if (tally != null) {
+					tally[t.getGenome().isSexual() ? 1 : 0]++;
+				}
+			}
+			assertTrue("the founding pack has budders in it: " + pack[0] + " of " + (pack[0] + pack[1]),
+					pack[0] >= 3);
+			assertTrue("and courters: " + pack[1] + " of " + (pack[0] + pack[1]), pack[1] >= 3);
+			assertTrue("the founding herd has budders in it: " + herd[0] + " of " + (herd[0] + herd[1]),
+					herd[0] >= 10);
+			assertTrue("and courters: " + herd[1] + " of " + (herd[0] + herd[1]), herd[1] >= 10);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18142,6 +18183,7 @@ public class SimTests {
 				new ParasiteLatchesAndDrainsItsHost(),
 				new APredatoryParasiteSettlesForASmallerHost(),
 				new AParasiteDoesNotRideAHunter(),
+				new TheFoundingPackBudsAndCourtsAlike(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
