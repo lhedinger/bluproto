@@ -4272,6 +4272,7 @@ public final class Worlds {
 			net.hedinger.prototype.entities.Genome.spreadSearch(g);
 			net.hedinger.prototype.entities.Genome.spreadBirth(g); // and how big it builds its young
 			net.hedinger.prototype.entities.Genome.spreadSight(g); // and how far it sees
+			net.hedinger.prototype.entities.Genome.spreadStrategy(g); // and whether it buds or courts
 			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
 			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
@@ -4287,6 +4288,7 @@ public final class Worlds {
 			net.hedinger.prototype.entities.Genome.spreadSearch(g); // as the herd, above
 			net.hedinger.prototype.entities.Genome.spreadBirth(g);
 			net.hedinger.prototype.entities.Genome.spreadSight(g);
+			net.hedinger.prototype.entities.Genome.spreadStrategy(g);
 			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
 		}
 		// A small parallel cohort of minded creatures (fully-random brains) that
