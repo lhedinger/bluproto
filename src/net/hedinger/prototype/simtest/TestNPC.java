@@ -1833,15 +1833,23 @@ public class TestNPC extends NPC {
 		return 1.0 + PARA_PICKINESS * Math.max(0, 1 - predatory);
 	}
 
-	/** Whether this parasite would ride {@code n} for its size: bigger than
-	 *  itself by at least its {@link #minHostRatio()}. */
+	/** Whether this parasite would ride {@code n}: bigger than itself by at
+	 *  least its {@link #minHostRatio()}, and not a hunter. A predator is not
+	 *  a host whatever its size says -- a parasite drinks the herd and the
+	 *  carrion-eaters, and the hunters are left to hunt. Measured before the
+	 *  rule: with the host line tied to the predatory drive, predator deaths
+	 *  to parasites tripled (48 to 148 per 100k ticks on seed 42) and the
+	 *  hunters, the clade with the thinnest margin, carried it. */
 	private boolean bigEnoughHost(NPC n) {
+		if (nicheOf(n) != null && nicheOf(n).hunts()) {
+			return false;
+		}
 		return n.getSize() > getSize() * minHostRatio();
 	}
 
 	/** The nearest body a parasite could ride: bigger than itself by its
-	 *  predatory drive's line ({@link #minHostRatio()}), alive, and not itself
-	 *  a parasite (they do not stack), within {@link #HOST_SENSE_R}.
+	 *  predatory drive's line ({@link #minHostRatio()}), not a hunter, alive,
+	 *  and not itself a parasite (they do not stack), within {@link #HOST_SENSE_R}.
 	 *  The host it is already riding counts — and is trivially nearest — so the
 	 *  forage channel keeps reading "here" for as long as the meal lasts. */
 	private NPC nearestHost() {

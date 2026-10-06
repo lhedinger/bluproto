@@ -15283,6 +15283,97 @@ public class SimTests {
 	}
 
 	/**
+	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
+	 * as a host, it is not one: no parasite's host scan points at a predator,
+	 * and no parasite can latch onto one, however it got there.
+	 *
+	 * <p>Pinned on a 5 px parasite: set between a hunter and a grazer of equal
+	 * size, with the hunter nearer, its forage channel points at the grazer and
+	 * it rides the grazer; dropped in contact with a hunter and told to latch,
+	 * it stays on its own feet; and the rule is a parasite's alone -- a
+	 * hitchhiker of the same size and position takes the hunter, since it is
+	 * after a lift and not a meal.
+	 */
+	static class AParasiteDoesNotRideAHunter extends Scenario {
+		private static TestNPC parked(double x, double y, double size, Genome.Clade clade) {
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0;
+			// The scripted hunter wears the predator clade as a live hunter does;
+			// its builder leaves the genome's default on, and the neighbour rules
+			// read the clade.
+			TestNPC t = clade == Genome.Clade.PREDATOR
+					? TestNPC.predator(x, y, 0, g).withClade(clade).withHunger(0.0) // sated: it hunts nothing
+					: TestNPC.breeder(x, y, 0, g);
+			return t.grown().withReproCooldown(100_000_000);
+		}
+
+		private static final Mind RIDE = (sn, a) -> {
+			a[AgentIO.A_SEEK] = 0.1; // forage: for a parasite, a host
+			a[AgentIO.A_THROTTLE] = 0.6;
+			a[AgentIO.A_ATTACH] = 1;
+		};
+
+		private static Genome rider() {
+			Genome g = new Genome();
+			g.size = 5;
+			g.speed = 0.06;
+			g.predatory = 1.0; // the least picky line: any bigger body will do
+			return g;
+		}
+
+		@Override
+		public void run() {
+			seed(85);
+			World w = room(30, 10);
+			TestNPC hunter = parked(8.5, 5.5, 12, Genome.Clade.PREDATOR);
+			TestNPC grazer = parked(14.5, 5.5, 12, Genome.Clade.HERBIVORE);
+			w.spawnEntity(hunter);
+			w.spawnEntity(grazer);
+			TestNPC para = TestNPC.minded(4.5, 5.5, 0, rider(), RIDE)
+					.withClade(Genome.Clade.PARASITE).grown().withHunger(1.0);
+			w.spawnEntity(para);
+			w.think();
+			tick(w, TestNPC.SENSE_EVERY + 1);
+			double bearing = para.sensorSnapshot()[AgentIO.S_FORAGE_BEARING];
+			double prox = para.sensorSnapshot()[AgentIO.S_FORAGE_PROX];
+			assertGreater("the parasite's host channel points at something", prox, 0);
+			assertNear("and it is the grazer, ten tiles on, not the hunter four tiles on",
+					1.0 / (1.0 + 10.0), prox, 0.02);
+			tick(w, 1200);
+			assertTrue("the parasite walked past the hunter and rides the grazer",
+					para.getAttachTarget() == grazer);
+			assertTrue("the hunter carries nothing", hunter.getCarriedLoad() == 0);
+
+			// Dropped touching a hunter, latching: nothing to latch onto.
+			seed(85);
+			World w2 = room(20, 10);
+			TestNPC hunter2 = parked(8.5, 5.5, 12, Genome.Clade.PREDATOR);
+			w2.spawnEntity(hunter2);
+			TestNPC para2 = TestNPC.minded(8.5 + 0.6, 5.5, 0, rider(), RIDE)
+					.withClade(Genome.Clade.PARASITE).grown().withHunger(1.0);
+			w2.spawnEntity(para2);
+			w2.think();
+			tick(w2, 200);
+			assertTrue("a parasite in contact with a hunter does not latch onto it",
+					para2.getAttachTarget() == null);
+
+			// The same body as a hitchhiker takes the lift.
+			seed(85);
+			World w3 = room(20, 10);
+			TestNPC hunter3 = parked(8.5, 5.5, 12, Genome.Clade.PREDATOR);
+			w3.spawnEntity(hunter3);
+			TestNPC hitch = TestNPC.minded(8.5 + 0.6, 5.5, 0, rider(), RIDE)
+					.withClade(Genome.Clade.HERBIVORE).grown().withHunger(1.0);
+			w3.spawnEntity(hitch);
+			w3.think();
+			tick(w3, 200);
+			assertTrue("a hitchhiker beside the same hunter climbs aboard: it wants a lift, not a meal",
+					hitch.getAttachTarget() == hunter3);
+		}
+	}
+
+	/**
 	 * A host feels its riders, and can learn to buck them when it does.
 	 *
 	 * <p>A herbivore had no way to know a parasite was on it. The threat channel
@@ -18050,6 +18141,7 @@ public class SimTests {
 				new HealthGatesEnergyRegeneration(),
 				new ParasiteLatchesAndDrainsItsHost(),
 				new APredatoryParasiteSettlesForASmallerHost(),
+				new AParasiteDoesNotRideAHunter(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
