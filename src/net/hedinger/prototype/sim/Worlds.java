@@ -27,86 +27,15 @@ public final class Worlds {
 	}
 
 
-	/** Herbivore "species": small, grazing prey — distinct marker barcodes drive
-	 *  distinct procedural bodies/colours; all metabolic breeders (they evolve). */
-	private static net.hedinger.prototype.entities.Genome[] herbivoreSpecies() {
-		// Warm/cool hues, deliberately NOT green — herbivores should read clearly
-		// against the green meadow, not camouflage into it.
-		double[][] markers = {
-				{ 0.90, 0.72, 0.40 }, // sand
-				{ 0.55, 0.72, 0.92 }, // sky blue
-				{ 0.74, 0.46, 0.86 }, // violet
-				{ 0.95, 0.60, 0.35 }, // amber
-		};
-		double[] sizes = { 7, 8, 6, 9 };
-		// Neutral metabolism efficiency (META_REF): the size-scaled energy model
-		// does the work — reserve, resting burn and fasting endurance all follow
-		// body size, so these small grazers hold a few minutes of reserve and the
-		// bigger ones a little more. The herd stays food-limited: it booms where the
-		// grass is rich and thins where grazing has stripped it.
-		return species(markers, sizes, 0.018, 0.03, 0.02);
-	}
-
-	/** Predator "species": bigger, faster hunters — reddish barcodes so they read
-	 *  as menacing against the green prey. Metabolic; they hunt, breed, starve. */
-	private static net.hedinger.prototype.entities.Genome[] predSpecies() {
-		double[][] markers = {
-				{ 0.90, 0.20, 0.22 }, // red hunter
-				{ 0.78, 0.28, 0.48 }, // crimson hunter
-		};
-		// Apex-sized, at the top of the band every genome is clamped to
-		// (Genome.SIZE_MAX): paired with the "up to my own size" hunting rule this
-		// makes a founder hunter able to take ANY creature in the world, including a
-		// minded one that has drifted to the largest body a genome can express.
-		double[] sizes = { 20, 18 };
-		// Neutral metabolism efficiency (META_REF): the size-scaled model gives
-		// these big hunters a large reserve and a long fasting endurance (bigger
-		// body, bigger store), so a predator drains gently between kills. Running
-		// prey down is what costs it: movement is charged as mass * v^2, so a
-		// full-speed pursuit burns far harder than its patrol and a long fruitless
-		// chase still thins it.
-		net.hedinger.prototype.entities.Genome[] out = species(markers, sizes, 0.045, 0.055, 0.02);
-		for (net.hedinger.prototype.entities.Genome g : out) {
-			// Say so in the genome. These have always hunted -- thinkPredator does the
-			// work -- but the genome described a herbivore with no appetite for it,
-			// which meant nothing downstream could tell a hunter from a grazer. The
-			// body plan reads `diet`, and `predatory` is a disposition that ought to
-			// match the animal carrying it; leaving it at zero on the world's actual
-			// predators made the gene decorative. Behaviour is unaffected: a hunter
-			// runs thinkPredator, not the react() weights this feeds.
-			g.clade = net.hedinger.prototype.entities.Genome.Clade.PREDATOR;
-			g.predatory = 0.9;
-		}
-		return out;
-	}
-
-	/** Minded "species": a small cohort whose behaviour comes from a fully-random
-	 *  evolvable {@link net.hedinger.prototype.entities.Brain}, not a hardcoded rule.
-	 *  Random bodies (so a role can emerge — a big one may learn to hunt, a small one
-	 *  to graze) with a distinct greenish barcode, and a random brain each. They
-	 *  compete inside the same world as the scripted species; most will flounder at
-	 *  first (a random mind rarely feeds itself), which is the point of watching. */
-	private static net.hedinger.prototype.entities.Genome[] mindedSpecies(int count) {
-		net.hedinger.prototype.entities.Genome[] out =
-				new net.hedinger.prototype.entities.Genome[count];
-		for (int i = 0; i < count; i++) {
-			out[i] = mindedGenome(i);
-		}
-		return out;
-	}
-
 	/** One founder minded genome: random dispositions, markers and body inside the
 	 *  sane size band, and the hand-written {@link #starterBrain()} — a minimal
 	 *  forager that mutation and survivor-seeding then refine. A fully-random brain
 	 *  was tried first (Phase 3/4): it never stumbled onto feeding, so selection had
 	 *  no gradient to climb. Seeding a viable-but-crude brain gives evolution a
 	 *  foothold to improve from, while every other gene stays random. */
-	static net.hedinger.prototype.entities.Genome mindedGenome() {
-		return mindedGenome(0);
-	}
-
 	/**
-	 * As {@link #mindedGenome()}, but picks the founder's starting brain by index
+	 * One founder body and mind: random dispositions, markers and a body inside
+	 * the sane size band, with the starting brain picked by index
 	 * so the cohort does not all begin with the same idea. Every third founder is a
 	 * {@link #hitchhikerBrain() hitch-hiker} rather than a plain forager, so both
 	 * strategies are in the world from the first tick and can be watched competing
@@ -357,27 +286,153 @@ public final class Worlds {
 	 */
 	public static net.hedinger.prototype.entities.Genome founderGenome(
 			net.hedinger.prototype.entities.Genome.Clade clade) {
+		net.hedinger.prototype.entities.Genome g;
 		if (clade == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
-			return pricedFounder(hunterFounder(mindedGenome(0)));
+			g = pricedFounder(hunterFounder(mindedGenome(0)));
+		} else {
+			// 0..2: the three founder programs
+			g = pricedFounder(mindedGenome((int) (Utils.random() * 3)));
 		}
-		// 0..2: the three founder programs
-		return pricedFounder(mindedGenome((int) (Utils.random() * 3)));
+		g.clade = clade;
+		return g;
 	}
 
-	private static net.hedinger.prototype.entities.Genome[] species(double[][] markers, double[] sizes,
-			double speedLo, double speedHi, double metabolism) {
-		net.hedinger.prototype.entities.Genome[] out =
-				new net.hedinger.prototype.entities.Genome[markers.length];
-		for (int i = 0; i < markers.length; i++) {
-			net.hedinger.prototype.entities.Genome g = new net.hedinger.prototype.entities.Genome();
-			g.markers = markers[i];
-			g.size = sizes[i];
-			g.speed = speedLo + (speedHi - speedLo) * (markers.length == 1 ? 0 : i / (double) (markers.length - 1));
-			g.turnRate = 5;
-			g.metabolism = metabolism;
-			out[i] = g;
+	/**
+	 * How far from its food a founding group of body-eaters lands: within a
+	 * founder's sight of a living grazer, so a hunter, a scavenger or a parasite
+	 * begins where its living is and not wherever the map happened to be
+	 * walkable. The herd anchors on pasture for the same reason, and has since
+	 * seeding landed in clusters; the three clades that eat the herd anchored on
+	 * any open ground, and so did every reseed of them. Measured at tick one on
+	 * four seeds: founder hunters 38..98 tiles from the nearest grazer, with
+	 * 4..16 tiles of sight, and 28% of them never ate. A reseed is a founder
+	 * every time, so nothing a lineage learned about finding the herd ever
+	 * reached the next one -- the placement had to be the world's to fix.
+	 */
+	@net.hedinger.prototype.engine.Unit("tiles")
+	public static final double FOOD_REACH = 8.0;
+
+	/**
+	 * Founds {@code count} bodies of {@code clade} on level {@code z}, in whole
+	 * kin groups of {@link WorldSteward#RESEED_GROUP} -- rounded up, so a count
+	 * that is not a multiple of the group still lands complete groups. Returns
+	 * how many landed.
+	 */
+	public static int found(World w, net.hedinger.prototype.entities.Genome.Clade clade, int z,
+			int count) {
+		int groups = (count + WorldSteward.RESEED_GROUP - 1) / WorldSteward.RESEED_GROUP;
+		for (int i = 0; i < groups; i++) {
+			foundGroup(w, clade, z);
 		}
-		return out;
+		return groups * WorldSteward.RESEED_GROUP;
+	}
+
+	/**
+	 * One kin group of {@code clade}, the one way anything is ever put into the
+	 * world: a {@link #founderGenome founder recipe} drawn once, and
+	 * {@link WorldSteward#RESEED_GROUP} bodies that are each a small mutation of
+	 * it, landed together within {@link #SEED_CLUSTER_RADIUS} of an anchor
+	 * {@link #anchorFor placed by its food}. Kin because a group of unrelated
+	 * founders is five strangers who cannot breed with each other; a founder's
+	 * markers are drawn at random, and a mate has to be alike. Together because
+	 * a body of any clade lives on what is near it, and a sexual lineage on who
+	 * is.
+	 *
+	 * <p>The world at tick zero and a steward reseed come through here alike.
+	 * They used to be three recipes -- species pools with a hand-picked body
+	 * and every disposition at its default, a random minded genome, and the
+	 * same genome priced for its young -- the first two at founding and the
+	 * third ever after, each patched where the cohort under the microscope
+	 * needed it. One recipe means a founding is what the warden would have put
+	 * there, and the warden puts back what was founded.
+	 *
+	 * <p>Each body arrives grown and fed, an adult with the fat to breed from,
+	 * and is signed into the birth registry as a founder: no parents,
+	 * generation zero, the tick it landed. A founder used to write nothing,
+	 * which made a reseed indistinguishable from a record that had aged out --
+	 * and "did this line breed, or did the warden keep putting it back" is the
+	 * one question the lineage diagram exists to answer.
+	 */
+	public static void foundGroup(World w, net.hedinger.prototype.entities.Genome.Clade clade, int z) {
+		// Never onto a drop, on any level. Underground a pit is bottomless and a
+		// body seeded into one is wasted; on the surface a hole only moves it a
+		// level down -- but away from the food it was placed by, which is the
+		// whole of the placement. Measured on seed 11: whole scavenger groups
+		// anchored on a grazer that fell through at tick one.
+		boolean avoidDrops = true;
+		double[] anchor = anchorFor(w, clade, z);
+		net.hedinger.prototype.entities.Genome founder = founderGenome(clade);
+		for (int i = 0; i < WorldSteward.RESEED_GROUP; i++) {
+			double[] p = spotNear(w, anchor[0], anchor[1], z, avoidDrops);
+			if (p == null) {
+				p = anchor; // nothing walkable within reach of the anchor: pile on it
+			}
+			net.hedinger.prototype.entities.Genome g =
+					net.hedinger.prototype.entities.Genome.child(founder, KIN_RATE);
+			TestNPC body = switch (clade) {
+			case HERBIVORE -> TestNPC.mindedForager(p[0], p[1], z, g);
+			case PREDATOR -> TestNPC.mindedPredator(p[0], p[1], z, g);
+			case SCAVENGER -> TestNPC.mindedScavenger(p[0], p[1], z, g);
+			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
+			};
+			w.spawnEntity(body.grown().fattened());
+			if (body.getID() >= 0 && body.getGenome() != null) {
+				w.recordBirth(body.getID(), -1, -1, 0,
+						net.hedinger.prototype.entities.Species.of(body.getGenome()).key());
+			}
+		}
+	}
+
+	/**
+	 * Where a founding group of {@code clade} lands on level {@code z}: a grazer
+	 * on the richest pasture of a handful of probes (underground, on any cave
+	 * floor), and anything that eats bodies within {@link #FOOD_REACH} of a
+	 * living grazer on that level -- or where a grazer would land, when there
+	 * is none to be near. The warden only restores a body-eater into a world
+	 * that can feed it, so that last case is a founding order's, not a reseed's.
+	 */
+	static double[] anchorFor(World w, net.hedinger.prototype.entities.Genome.Clade clade, int z) {
+		if (clade != net.hedinger.prototype.entities.Genome.Clade.HERBIVORE) {
+			double[] p = nearFood(w, z);
+			if (p != null) {
+				return p;
+			}
+		}
+		return z == SURFACE_Z ? pastureSpot(w) : caveSpot(w, z);
+	}
+
+	/** A walkable spot within {@link #FOOD_REACH} of a living grazer on level
+	 *  {@code z} -- the grazer's own spot when a fair number of tries finds
+	 *  none -- or null when the level has no grazer on it. */
+	private static double[] nearFood(World w, int z) {
+		java.util.List<TestNPC> herd = new java.util.ArrayList<>();
+		// The herd in the world and the herd landed this tick alike: at tick
+		// zero the grazers a hunter is placed by have not stepped in yet.
+		for (Iterable<net.hedinger.prototype.engine.Entity> some : java.util.List.of(w.getEntities(), w.getArrivals())) {
+			for (net.hedinger.prototype.engine.Entity e : some) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.getGenome() != null
+						&& t.getGenome().clade == net.hedinger.prototype.entities.Genome.Clade.HERBIVORE
+						&& (int) t.getZ() == z) {
+					herd.add(t);
+				}
+			}
+		}
+		if (herd.isEmpty()) {
+			return null;
+		}
+		TestNPC grazer = herd.get((int) (Utils.random() * herd.size()));
+		for (int tries = 0; tries < 40; tries++) {
+			double x = grazer.getX() + (Utils.random() * 2 - 1) * FOOD_REACH;
+			double y = grazer.getY() + (Utils.random() * 2 - 1) * FOOD_REACH;
+			if (x < 2 || y < 2 || x >= w.getColums() - 2 || y >= w.getRows() - 2) {
+				continue;
+			}
+			Tile t = w.getTile(x, y, z);
+			if (t.isWalkable() && !t.isDrop()) {
+				return new double[] { x, y };
+			}
+		}
+		return new double[] { grazer.getX(), grazer.getY() };
 	}
 
 	/**
@@ -4077,20 +4132,10 @@ public final class Worlds {
 	 *  fungus — never into rock, and never onto a pit or shaft (a drop on the
 	 *  lowest level is bottomless, and a founder should not spawn into the void). */
 	/**
-	 * A founder's place in its cluster: the first member under {@code key} picks
-	 * open ground and becomes the anchor, every later member lands within
-	 * {@link #SEED_CLUSTER_RADIUS} of it -- or, if nothing walkable is that close,
-	 * wherever it can. Keyed by species template for herds and packs, by a single
-	 * key for a cohort that should arrive together.
-	 */
-	private static double[] clusterSpot(World w, java.util.Map<Integer, double[]> anchors,
-		int key, int z, boolean avoidDrops) {
-		return clusterSpot(w, anchors, key, z, avoidDrops, false);
-	}
-
-	/**
-	 * As above, with the anchor on PASTURE when asked: a grazing herd's first
-	 * member picks rich ground, and the herd arrives around it.
+	 * Grazing worth arriving on: the richest of a scatter of probes across the
+	 * surface, so a herd's anchor is the best pasture of a handful and not
+	 * merely a tile with grass on it. Falls back to any open ground on a map
+	 * with none.
 	 *
 	 * <p>Since seeding landed in clusters this has been the difference between
 	 * a world that holds and one that does not. With one blend of terrain
@@ -4098,28 +4143,10 @@ public final class Worlds {
 	 * drawn from all walkable ground lands in the steppe or the badlands as
 	 * readily as anywhere, and a herd does not migrate. Measured on seed 42: the
 	 * herd anchored in the steppe, its mean energy fell for twelve thousand
-	 * ticks, and then forty-six of it were eaten inside two thousand — while
+	 * ticks, and then forty-six of it were eaten inside two thousand -- while
 	 * the thirty that had wandered into the wetland grew to forty-five. Founders
 	 * are placed by the world, and the world knows where the grass is.
 	 */
-	private static double[] clusterSpot(World w, java.util.Map<Integer, double[]> anchors,
-		int key, int z, boolean avoidDrops, boolean onPasture) {
-		double[] anchor = anchors.get(key);
-		if (anchor != null) {
-			double[] near = spotNear(w, anchor[0], anchor[1], z, avoidDrops);
-			if (near != null) {
-				return near;
-			}
-		}
-		double[] p = avoidDrops ? caveSpot(w) : onPasture ? pastureSpot(w) : openSpot(w);
-		anchors.putIfAbsent(key, p);
-		return p;
-	}
-
-	/** Grazing worth arriving on: the richest of a scatter of probes across
-	 *  the surface, so a herd's anchor is the best pasture of a handful and not
-	 *  merely a tile with grass on it. Falls back to any open ground on a map
-	 *  with none. */
 	private static double[] pastureSpot(World w) {
 		double[] best = null;
 		double bestFert = 0;
@@ -4139,11 +4166,13 @@ public final class Worlds {
 	 *  the meadow's fertility band. */
 	private static final double PASTURE_FERTILITY = 0.5;
 
-	private static double[] caveSpot(World w) {
+	/** A random cave floor on level {@code z} that is not a drop: a pit on the
+	 *  lowest level is bottomless, and a founder seeded into one is wasted. */
+	private static double[] caveSpot(World w, int z) {
 		for (int tries = 0; tries < 60; tries++) {
 			double x = 2 + Utils.random() * (w.getColums() - 4);
 			double y = 2 + Utils.random() * (w.getRows() - 4);
-			Tile t = w.getTile(x, y, CAVE_Z);
+			Tile t = w.getTile(x, y, z);
 			if (t.isWalkable() && !t.isDrop()) {
 				return new double[] { x, y };
 			}
@@ -4226,164 +4255,6 @@ public final class Worlds {
 	public static World demo(long seed, int cols, int rows) {
 		World w = demoTerrain(seed, cols, rows);
 		double scale = cols * (double) rows / DENSITY_AREA;
-		net.hedinger.prototype.entities.Genome[] herb = herbivoreSpecies();
-		net.hedinger.prototype.entities.Genome[] pred = predSpecies();
-
-		// Founder herbivores: metabolic grazers that breed and evolve, scattered
-		// onto open meadow (never into water or rock).
-		//
-		// No nesters. A quarter of the founders used to home on their pheromone
-		// peak to breed and leave a Nest fixture there, and measured over 40k ticks
-		// that lineage drove the plain breeders extinct by tick 20k -- a decisive
-		// outcome for a mechanic whose fixture does nothing at all (no shelter, no
-		// safety, no bonus; the minded cohort can neither build one nor perceive
-		// one). A strategy that wins that hard while meaning that little is shaping
-		// the ecosystem for no reason anyone chose, so it is out of the seeded world
-		// until it earns its place. The behaviour and the fixture both still exist
-		// and stay covered by the scenario suite.
-		// The herd is minded. It keeps the species pool's BODY — the four warm
-		// barcodes, the sizes, the grazer's slow speed and neutral metabolism, all
-		// of which are what makes a herd read as a herd — and takes its behaviour
-		// from a brain instead of thinkBreeder. Nothing in the seeded world is
-		// scripted any more; the scripted behaviours stay in TestNPC for the
-		// scenario suite, which is the one place a fixed, known-good animal is
-		// worth more than an evolving one.
-		//
-		// The genome is copied per body because the pool is a shared array and
-		// mindedForager, unlike the other three minded builders, keeps the instance
-		// it is handed: writing a brain into the pool entry would hand the same
-		// mind to every founder drawn from it.
-		//
-		// No withHerding(): vigilance is read only by thinkBreeder, so on a minded
-		// body it is a flag nothing consults. Whether to flee a hunter or close up
-		// with kin is now the brain's to work out, which is the point.
-		// Founders arrive as herds, packs and broods: the first of a species picks the
-		// ground, the rest of that species land beside it (see SEED_CLUSTER_RADIUS).
-		java.util.Map<Integer, double[]> herds = new java.util.HashMap<>();
-		for (int i = 0; i < sc(32, scale); i++) { // with the two broods below, the herd founds AT its floor
-			double[] p = clusterSpot(w, herds, i % herb.length, SURFACE_Z, false, true);
-			net.hedinger.prototype.entities.Genome g = herb[i % herb.length].copy();
-			// A species pool is a BODY plan -- one barcode, one size, one speed --
-			// so every founder drawn from it is a clone in everything else. That is
-			// right for what makes a herd read as a herd and wrong for how each
-			// animal looks for food, which is the one thing here selection is meant
-			// to settle. Without this the herd, the bulk of the ecosystem, could
-			// only ever drift away from a single hardcoded search.
-			net.hedinger.prototype.entities.Genome.spreadSearch(g);
-			net.hedinger.prototype.entities.Genome.spreadBirth(g); // and how big it builds its young
-			net.hedinger.prototype.entities.Genome.spreadSight(g); // and how far it sees
-			net.hedinger.prototype.entities.Genome.spreadStrategy(g); // and whether it buds or courts
-			g.brain = (i % 3 == 2) ? hitchhikerBrain() : starterBrain();
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-		}
-		// Founder hunters (few: predation should track the prey, not cap it), on
-		// the predator species' big fast bodies. Always the forager seed and never
-		// the hitch-hiker: the hitch-hiker closes on what is BIGGER than it, which
-		// for a hunter is the wrong end of every encounter, while the forager seed
-		// is a working hunt once the forage channel means prey.
-		java.util.Map<Integer, double[]> packs = new java.util.HashMap<>();
-		for (int i = 0; i < sc(4, scale); i++) {
-			double[] p = clusterSpot(w, packs, i % pred.length, SURFACE_Z, false);
-			net.hedinger.prototype.entities.Genome g = hunterFounder(pred[i % pred.length].copy());
-			net.hedinger.prototype.entities.Genome.spreadSearch(g); // as the herd, above
-			net.hedinger.prototype.entities.Genome.spreadBirth(g);
-			net.hedinger.prototype.entities.Genome.spreadSight(g);
-			net.hedinger.prototype.entities.Genome.spreadStrategy(g);
-			w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-		}
-		// A small parallel cohort of minded creatures (fully-random brains) that
-		// competes inside the same world as the scripted species — the A/B seam
-		// where evolvable behaviour proves itself (or doesn't) against the hardcoded
-		// baseline. The steward keeps this cohort topped up as it dies off.
-		int nMinded = Math.max(5, sc(5, scale));
-		net.hedinger.prototype.entities.Genome[] minded = mindedSpecies(nMinded);
-		java.util.Map<Integer, double[]> brood = new java.util.HashMap<>();
-		for (int i = 0; i < nMinded; i++) {
-			double[] p = clusterSpot(w, brood, 0, SURFACE_Z, false, true);
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], SURFACE_Z, minded[i]).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-		}
-		// The underground gets its own minded seed group — separate founder
-		// lineages, so cave life starts as its own experiment. Fungus beds feed
-		// them, and the cave's fixtures (the buried base's plates and buttons)
-		// are theirs to discover.
-		int nCaveMinded = Math.max(3, sc(3, scale));
-		net.hedinger.prototype.entities.Genome[] caveMinded = mindedSpecies(nCaveMinded);
-		java.util.Map<Integer, double[]> caveBrood = new java.util.HashMap<>();
-		for (int i = 0; i < nCaveMinded; i++) {
-			double[] p = clusterSpot(w, caveBrood, 0, CAVE_Z, true);
-			w.spawnEntity(TestNPC.mindedForager(p[0], p[1], CAVE_Z, caveMinded[i]).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-		}
-
-		// Founder scavengers: minded, like the cohort above and running the same
-		// brains, but eating carrion instead of grass. A third trophic level rather
-		// than a third species -- nothing dies for them, they live on what the other
-		// two leave behind, and by eating it they are the world's decomposition.
-		// Their supply is mortality itself, which is finite and self-consuming, so
-		// the cohort is small by nature: a handful is a niche and a crowd is a famine.
-		// Seeded as TWO lineages of several individuals each, not one founder per
-		// species. Three founders of three species is not a population: with diet a
-		// reproductive barrier, a sexual scavenger among them has no compatible
-		// partner anywhere in the world and its line ends with it, whatever it eats.
-		// Kin it can actually breed with is the difference between a cohort and three
-		// animals that happen to share a diet.
-		int nScavLines = 2;
-		int nScavPerLine = Math.max(5, sc(5, scale)); // two lines: the clade founds AT its floor
-		net.hedinger.prototype.entities.Genome[] scavengers = mindedSpecies(nScavLines);
-		java.util.Map<Integer, double[]> scavengersAt = new java.util.HashMap<>();
-		for (int line = 0; line < nScavLines; line++) {
-			for (int i = 0; i < nScavPerLine; i++) {
-				double[] p = clusterSpot(w, scavengersAt, line, SURFACE_Z, false); // a line lands together
-				// Siblings, not clones: enough drift for selection to have something to
-				// work on, well inside the genome's own similarity threshold.
-				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(scavengers[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedScavenger(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-			}
-		}
-
-		// Founder parasites: the fourth trophic level, and the strangest living —
-		// they eat the herd without hunting it, a bite at a time from on top of
-		// it. Small by nature (a parasite must be smaller than its host to latch,
-		// and small is what clings too tight to buck off), ignored by predators,
-		// unable to graze: their supply is the standing crop of big warm bodies,
-		// which is abundant but fights back one buck at a time. Seeded as two
-		// lineages of siblings for the same reason the scavengers are — diet is a
-		// mate barrier, and a lone founder of a sexual line dies single.
-		int nParaLines = 2;
-		int nParaPerLine = Math.max(5, sc(5, scale)); // likewise
-		net.hedinger.prototype.entities.Genome[] parasites = mindedSpecies(nParaLines);
-		java.util.Map<Integer, double[]> parasitesAt = new java.util.HashMap<>();
-		for (int line = 0; line < nParaLines; line++) {
-			for (int i = 0; i < nParaPerLine; i++) {
-				double[] p = clusterSpot(w, parasitesAt, line, SURFACE_Z, false); // a line lands together
-				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(parasites[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedParasite(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-			}
-		}
-
-		// Founder minded hunters, so the predator clade has an evolving line of its
-		// own rather than only the scripted loop. It was the one clade left without
-		// one: herbivores, scavengers and parasites all had minded cohorts and
-		// predators had thinkPredator and nothing else, which meant the role could
-		// not be learned, only executed. Seeded as two lineages of siblings for the
-		// reason the other two are — a clade is a hard mate barrier, so a lone
-		// founder of a sexual line dies single.
-		int nHuntLines = 2;
-		int nHuntPerLine = Math.max(3, sc(3, scale)); // with the pack above, AT the floor
-		net.hedinger.prototype.entities.Genome[] hunters = mindedSpecies(nHuntLines);
-		for (net.hedinger.prototype.entities.Genome h : hunters) {
-			hunterFounder(h); // a hunting line founds with a hunter's mind and pace
-		}
-		java.util.Map<Integer, double[]> huntersAt = new java.util.HashMap<>();
-		for (int line = 0; line < nHuntLines; line++) {
-			for (int i = 0; i < nHuntPerLine; i++) {
-				double[] p = clusterSpot(w, huntersAt, line, SURFACE_Z, false); // a line lands together
-				net.hedinger.prototype.entities.Genome g =
-						net.hedinger.prototype.entities.Genome.child(hunters[line], KIN_RATE);
-				w.spawnEntity(TestNPC.mindedPredator(p[0], p[1], SURFACE_Z, g).grown().fattened()); // a founder arrives grown and fed: an adult, with the fat to breed from
-			}
-		}
 
 		// A sprinkle of the inanimate world: food, crates, hazards.
 		for (int i = 0; i < sc(10, scale); i++) {
@@ -4464,6 +4335,27 @@ public final class Worlds {
 				// about the ecology rather than a reason to hide it behind a cap.
 				new int[] { Math.max(6, sc(CLADE_FLOOR, scale)), Math.max(100, sc(100, scale)) });
 		w.spawnEntity(steward);
+
+		// The founding population: every clade at its floor, through the one
+		// recipe the warden restores it with (see foundGroup) -- so the world at
+		// tick zero is what the warden would have put there, kin group by kin
+		// group, each placed by its food. The herd first, since the three clades
+		// that eat it anchor on where it is; a small cohort of it underground,
+		// where the fungus beds feed it and the cave's fixtures are its to
+		// discover, so cave life starts as its own experiment. Nothing in the
+		// seeded world is scripted: the scripted behaviours stay in TestNPC for
+		// the scenario suite, which is the one place a fixed, known-good animal
+		// is worth more than an evolving one.
+		int caveHerd = found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, CAVE_Z,
+				Math.max(3, sc(3, scale)));
+		found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, SURFACE_Z,
+				steward.floor(net.hedinger.prototype.entities.Genome.Clade.HERBIVORE) - caveHerd);
+		for (var clade : new net.hedinger.prototype.entities.Genome.Clade[] {
+				net.hedinger.prototype.entities.Genome.Clade.PREDATOR,
+				net.hedinger.prototype.entities.Genome.Clade.SCAVENGER,
+				net.hedinger.prototype.entities.Genome.Clade.PARASITE }) {
+			found(w, clade, SURFACE_Z, steward.floor(clade));
+		}
 
 		// The warden's one machine, berthed in the buried base. It takes its
 		// orders from the steward and does the killing the steward used to do

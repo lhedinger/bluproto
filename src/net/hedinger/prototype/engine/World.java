@@ -701,6 +701,16 @@ public class World {
 		return entities.values();
 	}
 
+	/**
+	 * What has been spawned this tick and not yet stepped into the world: a
+	 * body is queued by {@link #spawnEntity} and joins {@link #getEntities}
+	 * on the next tick. A founding that places each group by its food has to
+	 * see the herd it landed a moment ago, before anything has ticked.
+	 */
+	public Iterable<Entity> getArrivals() {
+		return spawnQueue;
+	}
+
 	/** Registers a door. Doors are ordinary non-living entities (like crates):
 	 *  they ride the entity stream -- think, snapshot, wire -- so a web viewer
 	 *  sees them slide instead of meeting an invisible barrier. Perception

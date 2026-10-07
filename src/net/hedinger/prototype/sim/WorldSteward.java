@@ -287,17 +287,12 @@ public final class WorldSteward extends Entity implements CullOrders {
 	}
 
 	/**
-	 * One kin group of {@code clade}: a founder recipe drawn once, and
-	 * {@link #RESEED_GROUP} bodies that are each a small mutation of it, landed
-	 * together within {@link Worlds#SEED_CLUSTER_RADIUS} of one open spot. Kin
-	 * because a group of unrelated founders is five strangers who cannot breed
-	 * with each other; a founder's markers are drawn at random, and a mate has to
-	 * be alike. Together because a body of any clade lives on what is near it,
-	 * and a sexual lineage on who is.
-	 *
-	 * <p>Herbivore groups alternate between the surface and the underground
-	 * (when the world has one), so the cave cohort persists instead of draining
-	 * one-way to the surface. The others live where the herds are.
+	 * One kin group of {@code clade}, through {@link Worlds#foundGroup} -- the
+	 * same recipe and the same placement the world was founded with, so a
+	 * restored niche is what was seeded and not a different animal. Herbivore
+	 * groups alternate between the surface and the underground (when the world
+	 * has one), so the cave cohort persists instead of draining one-way to the
+	 * surface. The others live where the herds are.
 	 */
 	private void seedGroup(Genome.Clade clade) {
 		int z = surfaceZ;
@@ -305,47 +300,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 			z = seedBelow ? caveZ : surfaceZ;
 			seedBelow = !seedBelow;
 		}
-		boolean avoidDrops = z != surfaceZ;
-		double[] anchor = openSpot(z, avoidDrops);
-		Genome founder = Worlds.founderGenome(clade);
-		for (int i = 0; i < RESEED_GROUP; i++) {
-			double[] p = Worlds.spotNear(getWorld(), anchor[0], anchor[1], z, avoidDrops);
-			if (p == null) {
-				p = anchor; // nothing walkable within reach of the anchor: pile on it
-			}
-			Genome g = Genome.child(founder, Worlds.KIN_RATE);
-			TestNPC body = switch (clade) {
-			case HERBIVORE -> TestNPC.mindedForager(p[0], p[1], z, g);
-			case PREDATOR -> TestNPC.mindedPredator(p[0], p[1], z, g);
-			case SCAVENGER -> TestNPC.mindedScavenger(p[0], p[1], z, g);
-			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
-			};
-			getWorld().spawnEntity(body.grown().fattened()); // arrives grown and fed, an adult with the fat to breed from; its corpse lasts as long as its body took to build
-			// Signed into the birth registry as a FOUNDER: no parents, generation
-			// zero, the tick it landed. A founder used to write nothing, which made
-			// a reseed indistinguishable from a record that had aged out -- and
-			// "did this line breed, or did the warden keep putting it back" is the
-			// one question the lineage diagram exists to answer.
-			if (body.getID() >= 0 && body.getGenome() != null) {
-				getWorld().recordBirth(body.getID(), -1, -1, 0,
-						net.hedinger.prototype.entities.Species.of(body.getGenome()).key());
-			}
-		}
-	}
-
-	/** A random walkable spot on level {@code z} -- the anchor a kin group lands
-	 *  around. Underground, never a drop: a pit on the lowest level is
-	 *  bottomless, and a founder seeded into one is wasted. */
-	private double[] openSpot(int z, boolean avoidDrops) {
-		for (int tries = 0; tries < 40; tries++) {
-			double px = 3 + Utils.random() * (cols - 6);
-			double py = 3 + Utils.random() * (rows - 6);
-			var t = getWorld().getTile(px, py, z);
-			if (t.isWalkable() && !(avoidDrops && t.isDrop())) {
-				return new double[] { px, py };
-			}
-		}
-		return new double[] { cols / 2.0, rows / 2.0 };
+		Worlds.foundGroup(getWorld(), clade, z);
 	}
 
 	/** The cohort keys — the clades, whose declaration order is the fixed
