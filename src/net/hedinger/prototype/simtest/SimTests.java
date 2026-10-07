@@ -12167,6 +12167,10 @@ public class SimTests {
 	 * actually born rather than staging a birth — the record must appear from
 	 * ordinary life, or the inspector's family tree is a feature only tests
 	 * ever see.
+	 *
+	 * <p>Founders have records too -- no parents, generation zero, the tick
+	 * they landed -- so the search is for the first record WITH a parent, not
+	 * the first record.
 	 */
 	static class TheWorldRemembersItsBirths extends Scenario {
 		@Override
@@ -12177,7 +12181,7 @@ public class SimTests {
 				w.think();
 				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 					net.hedinger.prototype.engine.World.Birth b = w.birthOf(e.getID());
-					if (b != null) {
+					if (b != null && b.parentA() >= 0) {
 						birth = b;
 						break;
 					}
@@ -15324,6 +15328,112 @@ public class SimTests {
 	}
 
 	/**
+	 * A founder lands within reach of its food, and the world is founded the
+	 * way the warden restores it.
+	 *
+	 * <p>Founding and reseeding used to be three recipes: species pools with a
+	 * hand-picked body and every disposition at its default, a random minded
+	 * genome, and that genome priced for its young -- the first two at tick
+	 * zero and the third ever after. The herd anchored on pasture; the three
+	 * clades that eat it anchored on any open ground, and so did every reseed
+	 * of them. Measured at tick one on four seeds: founder hunters 38..98 tiles
+	 * from the nearest grazer with 4..16 tiles of sight, 30..40 of 40 priced
+	 * below their own cub, and 28% of them never ate.
+	 *
+	 * <p>Pinned on the demo world at tick one: every clade stands at the
+	 * warden's floor, no more and no less; every body-eater has a living grazer
+	 * within {@code FOOD_REACH} plus the cluster box; and every founder is
+	 * funded for the child its body costs, within a kin step. Then the hunting
+	 * line is cut to nothing and the warden's reseed lands within the same
+	 * reach -- one recipe, both ways in.
+	 */
+	static class AFounderLandsWithinReachOfItsFood extends Scenario {
+		private static double price(Genome g) {
+			double cap = NPC.GLYCOGEN_PER_MASS * g.size / NPC.REF_SIZE;
+			return Math.min(0.9, TestNPC.endowmentCost(g.size, g.speed) / cap); // the gene's own ceiling
+		}
+
+		private static java.util.List<TestNPC> living(World w, Genome.Clade clade) {
+			java.util.List<TestNPC> out = new java.util.ArrayList<>();
+			for (Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.getGenome() != null
+						&& t.ecoClade() == clade) {
+					out.add(t);
+				}
+			}
+			return out;
+		}
+
+		private static double nearestGrazer(TestNPC t, java.util.List<TestNPC> herd) {
+			double best = Double.MAX_VALUE;
+			for (TestNPC h : herd) {
+				if ((int) h.getZ() == (int) t.getZ()) {
+					best = Math.min(best, t.distance(h.getX(), h.getY(), h.getZ()));
+				}
+			}
+			return best;
+		}
+
+		@Override
+		public void run() {
+			World w = net.hedinger.prototype.sim.Worlds.demo(42);
+			net.hedinger.prototype.sim.WorldSteward steward = null;
+			for (Entity e : w.getEntities()) {
+				if (e instanceof net.hedinger.prototype.sim.WorldSteward s) {
+					steward = s;
+				}
+			}
+			assertTrue("the demo world has a warden", steward != null);
+			// Founding and reseeding share one anchor rule: a body-eater's anchor
+			// sits within FOOD_REACH on each axis of a grazer, and each body within
+			// SEED_CLUSTER_RADIUS on each axis of the anchor.
+			double reach = Math.sqrt(2) * (net.hedinger.prototype.sim.Worlds.FOOD_REACH
+					+ net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS) + 0.5;
+			java.util.List<TestNPC> herd = living(w, Genome.Clade.HERBIVORE);
+			for (Genome.Clade clade : Genome.Clade.values()) {
+				java.util.List<TestNPC> bodies = living(w, clade);
+				assertEquals(clade + " founds at the warden's floor", steward.floor(clade), bodies.size());
+				int funded = 0, near = 0;
+				for (TestNPC t : bodies) {
+					Genome g = t.getGenome();
+					if (g.reproCostFraction >= price(g) - 0.1) {
+						funded++;
+					}
+					if (clade == Genome.Clade.HERBIVORE || nearestGrazer(t, herd) <= reach) {
+						near++;
+					}
+				}
+				assertEquals(clade + " founders are funded for the child their body costs",
+						bodies.size(), funded);
+				// Not every last one: an anchor box with no walkable ground in it
+				// falls back to the grazer's own spot, and a grazer may have walked.
+				assertGreater(clade + " founders land within reach of a grazer: " + near + " of "
+						+ bodies.size(), near / (double) bodies.size(), 0.9);
+			}
+
+			// The reseed comes through the same door.
+			for (TestNPC t : living(w, Genome.Clade.PREDATOR)) {
+				t.remove();
+			}
+			java.util.List<TestNPC> newcomers = java.util.List.of();
+			for (int i = 0; i < 2000 && newcomers.isEmpty(); i++) {
+				tick(w, 1);
+				newcomers = living(w, Genome.Clade.PREDATOR);
+			}
+			assertGreater("the warden restored the hunting line", newcomers.size(), 0);
+			herd = living(w, Genome.Clade.HERBIVORE);
+			int near = 0;
+			for (TestNPC t : newcomers) {
+				if (nearestGrazer(t, herd) <= reach) {
+					near++;
+				}
+			}
+			assertGreater("and the reseed lands within reach of a grazer too: " + near + " of "
+					+ newcomers.size(), near / (double) newcomers.size(), 0.9);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18184,6 +18294,7 @@ public class SimTests {
 				new APredatoryParasiteSettlesForASmallerHost(),
 				new AParasiteDoesNotRideAHunter(),
 				new TheFoundingPackBudsAndCourtsAlike(),
+				new AFounderLandsWithinReachOfItsFood(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
