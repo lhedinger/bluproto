@@ -15434,6 +15434,78 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter holds its kill between scans. A fresh carcass is quarry (see
+	 * {@link OtherHuntersJoinTheKill}), chosen on the scan clock like living
+	 * prey -- and on the three ticks between scans the rule that drops a quarry
+	 * that has died dropped it again. The hunter's forage channel read its own
+	 * kill one tick in four; the seek intent had nothing to walk to on the
+	 * other three, and a hungry hunter wandered off a body it had just brought
+	 * down. Measured on seed 42: hungry grown hunters with fresh meat in sight
+	 * had an empty forage channel on 45..67% of ticks, ate 34% of the meat on
+	 * their own kills, and bit once in 190 ticks.
+	 *
+	 * <p>Pinned on a hunter with the hunter seed and a fresh carcass in plain
+	 * sight: the forage channel reads the carcass on EVERY tick, and once in
+	 * reach it eats on nearly every tick until the fresh meat is gone.
+	 */
+	static class AHunterHoldsItsKillBetweenScans extends Scenario {
+		@Override
+		public void run() {
+			seed(53);
+			World w = room(24, 12);
+			for (int x = 1; x < 23; x++) {
+				for (int y = 1; y < 11; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome pg = new Genome();
+			pg.size = 12;
+			pg.speed = 0;
+			TestNPC prey = TestNPC.grazer(8.5, 6.5, 0, pg).grown();
+			w.spawnEntity(prey);
+			tick(w, 1);
+			prey.kill();
+			Genome hg = new Genome();
+			hg.size = 16;
+			hg.speed = 0.06;
+			hg.markers = new double[] { 0.5, 0.5, 0.5 };
+			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(15.5, 6.5, 0, hg).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			tick(w, TestNPC.SENSE_EVERY + 1); // admitted, and one full scan behind it
+			int lit = 0, span = 4 * TestNPC.SENSE_EVERY;
+			for (int t = 0; t < span; t++) {
+				tick(w, 1);
+				if (hunter.sensorSnapshot()[AgentIO.S_FORAGE_PROX] > 0) {
+					lit++;
+				}
+			}
+			assertEquals("the kill is quarry on every tick, not only on the scan tick", span, lit);
+			double fresh0 = prey.freshMeat();
+			int inReach = 0, fed = 0;
+			double last = hunter.totalSwallowed();
+			for (int t = 0; t < 1500 && prey.freshMeat() > 0 && hunter.getHunger() > 0.06; t++) {
+				tick(w, 1);
+				double reach = (hunter.getSize() + prey.getSize()) / 2.0 + TestNPC.CARRION_REACH;
+				if (hunter.distance(prey.getX(), prey.getY(), prey.getZ()) <= reach) {
+					inReach++;
+					if (hunter.totalSwallowed() > last) {
+						fed++;
+					}
+				}
+				last = hunter.totalSwallowed();
+			}
+			assertGreater("it reached its kill", inReach, 0);
+			assertGreater("and ate on nearly every tick it stood at it: " + fed + " of " + inReach,
+					fed / (double) inReach, 0.8);
+			assertTrue("until the fresh meat was gone or it was full",
+					prey.freshMeat() <= 1e-9 || hunter.getHunger() <= 0.06);
+			assertLess("taking a real meal off it", prey.freshMeat(), fresh0 * 0.5);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18295,6 +18367,7 @@ public class SimTests {
 				new AParasiteDoesNotRideAHunter(),
 				new TheFoundingPackBudsAndCourtsAlike(),
 				new AFounderLandsWithinReachOfItsFood(),
+				new AHunterHoldsItsKillBetweenScans(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
