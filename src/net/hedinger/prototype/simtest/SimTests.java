@@ -9287,7 +9287,14 @@ public class SimTests {
 			// and has no reason to make a third.
 			assertGreater("a founder hunter runs its prey down: a kill at all", kills, 0);
 			assertLess("and the first one soon (tick " + firstKill + ")", firstKill, 1000);
-			assertGreater("and it is not a fluke: a second kill in the window (" + kills + " in 6000 ticks)", kills, 1);
+			// A second kill used to be the proof it was no fluke, and it came because a
+			// full hunter walked off its kill and hunted again. A hunter now stays with
+			// a kill while there is meat on it, eating as its gut makes room
+			// (AHunterAtItsMealIsNotHuntingForSport), so a kill is followed by a day
+			// at the body, and the proof the hunt is real is that it ate it.
+			assertGreater("and ate it: swallowed " + String.format("%.1f", hunter.totalSwallowed())
+					+ " against a store of " + String.format("%.1f", hunter.glycogenCapacity()),
+					hunter.totalSwallowed(), 0.5 * hunter.glycogenCapacity());
 			// The chase is paid from the STORE, and the kills pay it back through the
 			// gut. This used to assert the hunter's glycogen ended well above the
 			// exhaustion floor, which was a claim about the mint and not about
@@ -15700,6 +15707,66 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter at its meal is not hunting for sport. The sport in a hunt
+	 * ({@link AHunterHuntsForFoodOrForSport}) is a reason to take one up, never
+	 * a reason to leave a meal. A hunter fills its gut off a carcass in a dozen
+	 * ticks and then stays at the body, eating again as digestion makes room:
+	 * that is how a kill's fresh half gets eaten by the mouth that made it. The
+	 * day sport went in, a full hunter's appetite for its carcass was 0, the
+	 * held body was let go for it, and the sport in the first live animal in
+	 * sight took the hunter off to kill again: measured on seed 42, the meat
+	 * grown hunters ate off their kills fell from 55% to 36%, and hunger rose
+	 * back to where it had been.
+	 *
+	 * <p>So a held carcass is kept while there is meat on it, full stomach or
+	 * not, and while one is held every body is scored by the stomach alone.
+	 * Pinned on a hunter with the hunter seed, as sporty as a gene can be and
+	 * as fickle (determination 1): it eats at a fresh carcass until it is full,
+	 * a living animal appears four tiles off, and the hunter stays with its
+	 * kill, eating again as its gut empties, with the animal untouched.
+	 */
+	static class AHunterAtItsMealIsNotHuntingForSport extends Scenario {
+		@Override
+		public void run() {
+			seed(119);
+			World w = room(16, 9);
+			for (int x = 1; x < 15; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome mg = new Genome();
+			mg.size = 8;
+			mg.speed = 0;
+			TestNPC meal = TestNPC.grazer(6.5, 4.5, 0, mg).grown();
+			w.spawnEntity(meal);
+			tick(w, 1);
+			meal.kill();
+			Genome hg = new Genome();
+			hg.size = 8;
+			hg.speed = 0.06;
+			hg.predatory = 1.0; // hunts for the kill itself, whatever its stomach says
+			hg.determination = 1.0; // and holds nothing: the weakest grip a gene allows
+			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(3.5, 4.5, 0, hg).grown().withHunger(0.3)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			for (int t = 0; t < 600 && hunter.getHunger() > 0.06; t++) {
+				tick(w, 1);
+			}
+			assertLess("the hunter walked to the carcass and ate its fill", hunter.getHunger(), 0.07);
+			assertGreater("with meat still on the body", meal.freshMeat(), 0.1);
+			double full = hunter.totalSwallowed();
+			TestNPC prey = TestNPC.inert(10.5, 4.5, 0).withSize(6); // four tiles beyond the meal, in plain sight
+			w.spawnEntity(prey);
+			tick(w, 800); // the gut makes room, and the kill is still well inside its fresh day
+			assertEquals("the living animal was left alone", 100, prey.getHealth());
+			assertGreater("the hunter stayed with its kill and ate again as its gut emptied",
+					hunter.totalSwallowed() - full, 0.0);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18565,6 +18632,7 @@ public class SimTests {
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AHunterHuntsForFoodOrForSport(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
+				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
