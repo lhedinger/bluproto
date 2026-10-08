@@ -9005,6 +9005,13 @@ public class SimTests {
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain(preyConst));
 			hg.greed = greed;
+			// A hunter that hunts for the kill: what is under test is the STANDARD a
+			// mind names, not the stomach. With the hunt's appetite in the score
+			// (AHunterHuntsForFoodOrForSport), a body is worth what the gut has room
+			// for, and this hunter grows up alone on a full one; at predatory 1 it
+			// wants every quarry whatever its stomach says, and the standard alone
+			// decides between the two.
+			hg.predatory = 1.0;
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; this hunter is offered a choice, not a meal
 			w.spawnEntity(hunter);
 			// Grow up alone: the ceiling on what counts as food rises with the body,
@@ -9255,10 +9262,11 @@ public class SimTests {
 				w.spawnEntity(gr);
 				herd.add(gr);
 			}
-			double e0 = hunter.getGlycogen();
+			double e0 = hunter.getGlycogen(), low = e0;
 			int kills = 0, firstKill = -1;
 			for (int t = 1; t <= 6000; t++) {
 				tick(w, 1);
+				low = Math.min(low, hunter.getGlycogen());
 				int k = 0;
 				for (TestNPC g : herd) {
 					if (g.isDead()) {
@@ -9298,10 +9306,18 @@ public class SimTests {
 			// hunter up to 120 ms later, and the same hunter's chases now pay
 			// for themselves at this fixture. Whether that is the right economy
 			// is the demo world's guild counts' question, not this scenario's.
+			//
+			// "Neither drained nor brimming" was read off the END of the run, and
+			// that held only while a fed hunter kept hunting. The hunt has an
+			// appetite now (AHunterHuntsForFoodOrForSport): full on its second
+			// kill, this hunter sees no quarry, rests, and the mint fills its store
+			// from a full gut -- brimming is what two kills and a rest honestly
+			// leave. What the chase spends is read where it is spent: the store's
+			// low point over the run sits below where it started.
 			assertTrue("and the hunter is alive at the end of it", !hunter.isDead());
-			assertLess("the chase did not fill the store ("
-					+ String.format("%.1f -> %.1f of %.1f", e0, hunter.getGlycogen(), hunter.glycogenCapacity()) + ")",
-					hunter.getGlycogen(), hunter.glycogenCapacity());
+			assertLess("the chase drew on the store ("
+					+ String.format("%.1f at the start, %.1f at its lowest, of %.1f", e0, low, hunter.glycogenCapacity()) + ")",
+					low, e0);
 			// Fed enough, not stuffed. A kill pays a hunter its fresh half and no
 			// more, a mouthful at a time, and a hunter that moves straight on to the
 			// next animal leaves even some of that lying there for whatever finds it.
@@ -15566,6 +15582,63 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter hunts for food, or for sport, and its genes say which. The hunt
+	 * had no appetite: the scripted hunter stops killing at PRED_FULL_HUNGER,
+	 * but the minded one -- every hunter in the seeded world -- killed whatever
+	 * was in sight whenever its mind sought forage, which is always. Measured
+	 * on seed 42: two thirds of all kills were made at a gut under a fifth
+	 * empty, and the killer then ate 0.67 energy off a body carrying ten; a
+	 * hunter killing at three fifths empty ate seven. A kill it cannot eat is
+	 * a kill for nothing, and the comment on PRED_FULL_HUNGER had said so all
+	 * along.
+	 *
+	 * <p>Now a quarry's value to a hunter is what its stomach has room for --
+	 * the meat on the body against the gut above the full line -- plus, for a
+	 * living body, what the lineage's {@code predatory} drive adds for the
+	 * kill itself. At predatory 0 a full hunter sees no quarry; at 1 it hunts
+	 * as it always did; greed, the exponent on value in every food scan, bites
+	 * on a hunter's choice for the first time. Which mix pays is selection's.
+	 *
+	 * <p>Pinned on three minded hunters with the hunter seed and prey in reach:
+	 * full and unpredatory, it leaves the animal alone; full and predatory, it
+	 * kills; hungry and unpredatory, it kills.
+	 */
+	static class AHunterHuntsForFoodOrForSport extends Scenario {
+		private int preyHealthAfter(double hunger, double predatory) {
+			seed(109);
+			World w = room(12, 9);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome g = new Genome();
+			g.size = 20;
+			g.speed = 0;
+			g.predatory = predatory;
+			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withReproCooldown(100_000_000);
+			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(6); // already in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.think();
+			for (int i = 0; i < 4 * TestNPC.SENSE_EVERY + 2 * TestNPC.PRED_BITE_PERIOD; i++) {
+				hunter.withHunger(hunger); // hold the appetite there
+				tick(w, 1);
+			}
+			return prey.getHealth();
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a full hunter with no taste for the kill leaves prey in reach alone",
+					100, preyHealthAfter(0.0, 0.0));
+			assertLess("a full hunter that hunts for sport kills it", preyHealthAfter(0.0, 1.0), 100);
+			assertLess("and a hungry hunter kills for food whatever its taste", preyHealthAfter(0.7, 0.0), 100);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18429,6 +18502,7 @@ public class SimTests {
 				new AFounderLandsWithinReachOfItsFood(),
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),
+				new AHunterHuntsForFoodOrForSport(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),

@@ -1116,9 +1116,10 @@ public final class Mechanics {
 				+ "built-in machinery values the world. They matter because not every decision "
 				+ "is the mind's — food is scored, targets are held, mates are judged by shared "
 				+ "code in the body, and these genes are that code's dials. The two appetite "
-				+ "genes are live for every clade; the four social drives below them steer only "
-				+ "the older scripted reaction model, so in today's all-minded live world they "
-				+ "are carried but not consulted — heritage the brain took over.\n\n"
+				+ "genes are live for every clade, and predatory is live for the hunter and the "
+				+ "parasite; the other three social drives steer only the older scripted "
+				+ "reaction model, so in today's all-minded live world they are carried but "
+				+ "not consulted — heritage the brain took over.\n\n"
 				+ "Both appetites default to values that were measured, not chosen: greed's "
 				+ "range gives selection something to act on from the first generation, and "
 				+ "determination's default is the number the scavenger's carrion path was "
@@ -1127,8 +1128,10 @@ public final class Mechanics {
 				row("greed", "0 – " + num(Genome.GREED_MAX), "value exponent",
 						"How much a BIG prize outranks a near one when food is scored value "
 						+ "over distance — 0 takes whatever is handy, above 1 holds out. For a "
-						+ "hunter it also sets the reach: quarry up to 0.5 + greed times its own "
-						+ "size, capped at " + num(TestNPC.PRED_PREY_RATIO_CAP) + "×."),
+						+ "hunter the value is its appetite for the body (below), so greed also "
+						+ "says how much a full stomach dulls the hunt; and it sets the reach: "
+						+ "quarry up to 0.5 + greed times its own size, capped at "
+						+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×."),
 				row("determination", "1 – " + num(Genome.DETERMINATION_MAX), "× incumbent",
 						"How much better a rival target must score before the held one is "
 						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "
@@ -1141,9 +1144,17 @@ public final class Mechanics {
 				row("mateThreshold", "0 – 1", "similarity",
 						"How alike a partner must be before courtship: the gene that makes "
 						+ "species real, because drifted markers stop clearing it."),
-				row("predatory / xenophobia", "≥ 0", "",
-						"Attack-the-smaller and flee-the-bigger weights of the scripted "
-						+ "reaction model; inert for a minded body, whose brain decides."),
+				row("predatory", "0 – 1", "sport in the hunt",
+						"A quarry is worth what the gut has room for: the meat on it against "
+						+ "the stomach above the full line (" + pct(TestNPC.PRED_FULL_HUNGER)
+						+ " empty), so a full hunter wants nothing from it — plus, for a living "
+						+ "body, this much of the rest for the kill itself. At 0 a hunter kills "
+						+ "only what it can eat; at 1 whatever is in sight, as every hunter did "
+						+ "before the gene was read. Also the gain on a mind's prey channel, and "
+						+ "a parasite's standard for a host."),
+				row("xenophobia", "≥ 0", "",
+						"Flee-the-bigger weight of the scripted reaction model; inert for a "
+						+ "minded body, whose brain decides."),
 				row("gregariousness / boldness", "≥ 0", "",
 						"The flocking pull and the flee damper of the same model — same "
 						+ "status: inherited, mutating, and awaiting a reader again."));
