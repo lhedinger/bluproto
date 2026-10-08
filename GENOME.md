@@ -342,6 +342,13 @@ life:
   it. `greed`, the exponent on that value, thereby bites on a hunter's choice
   for the first time: on the default standard it had been an exponent on a
   constant 1.
+- **A hunter keeps its reserve before it runs.** `reserve` is the share of
+  its glycogen below which a hunter takes up no chase and lets one under way
+  go; from twice that share a chase is wanted in full, and in proportion
+  between. It multiplies the hunt's appetite above, for living bodies only —
+  a carcass is a walk, not a sprint. A chase is paid from the store, and a
+  hunter used to sprint at any glycogen above the exhaustion floor: one lost
+  chase in ten ended collapsed. Founders draw 0.05–0.5; zero is no line.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on

@@ -201,6 +201,9 @@ public final class GeneSchema {
 		// a reason the world can teach.
 		add("milk", "of the endowment", Drift.ADD, 0, 1, false,
 				g -> g.milk, (g, v) -> g.milk = v);
+		// The store a hunter keeps before it will run (Genome.reserve). Appended.
+		add("reserve", "of glycogen", Drift.ADD, 0, Genome.RESERVE_MAX, false,
+				g -> g.reserve, (g, v) -> g.reserve = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},

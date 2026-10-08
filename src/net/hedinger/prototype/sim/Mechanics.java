@@ -1152,6 +1152,13 @@ public final class Mechanics {
 						+ "only what it can eat; at 1 whatever is in sight, as every hunter did "
 						+ "before the gene was read. Also the gain on a mind's prey channel, and "
 						+ "a parasite's standard for a host."),
+				row("reserve", "0 – " + num(Genome.RESERVE_MAX), "of glycogen",
+						"The store a hunter keeps before it will run: a living body is worth "
+						+ "nothing below this share of its glycogen, everything from twice it, "
+						+ "and a chase under way is let go at the line. A carcass is a walk, not "
+						+ "a sprint, and is not held to it. Founders draw " + num(Genome.RESERVE_LO)
+						+ " – " + num(Genome.RESERVE_HI) + "; zero is no line, which is every "
+						+ "hunter before the gene was read."),
 				row("xenophobia", "≥ 0", "",
 						"Flee-the-bigger weight of the scripted reaction model; inert for a "
 						+ "minded body, whose brain decides."),

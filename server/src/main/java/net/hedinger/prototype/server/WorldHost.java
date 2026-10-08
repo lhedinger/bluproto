@@ -831,6 +831,7 @@ final class WorldHost {
 					gm.put("greed", round(g.greed));
 					gm.put("determination", round(g.determination));
 					gm.put("patience", g.patience);
+					gm.put("reserve", round(g.reserve));
 					// Breeding. Seven genes were missing from this map — sexuality,
 					// greed, determination, the two r/K fractions, the mutation rate and
 					// instinct — not by decision but because each was added to the

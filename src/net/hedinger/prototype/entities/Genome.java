@@ -342,6 +342,18 @@ public class Genome {
 	 */
 	public double instinct = 0.0;
 	/**
+	 * The share of its glycogen a hunter keeps before it will run, 0..1: below
+	 * it no chase is taken up and one under way is let go, and from twice it a
+	 * chase is wanted in full (see {@code TestNPC.appetite}). A chase is paid
+	 * from the store, and a hunter used to take one up at any glycogen above
+	 * the exhaustion floor -- measured on seed 42, one lost chase in ten ended
+	 * with the hunter collapsed. How much to keep back is a question about a
+	 * lineage: a lean line that sprints on fumes against a prudent one that
+	 * rests first, and the herd decides between them. Zero is no line at all.
+	 * A carcass is a walk, not a sprint, and is not held to it.
+	 */
+	public double reserve = 0.0;
+	/**
 	 * How long a search leg is held, in ticks, before the body casts about for a
 	 * new heading. With {@link #searchCast} this is the whole of how a lineage
 	 * looks for what it cannot see.
@@ -540,8 +552,19 @@ public class Genome {
 		spreadBirth(g);
 		// And how far it sees, appended after the birth size for the same reason.
 		spreadSight(g);
+		// And the store it keeps before it will run: from just above the
+		// exhaustion floor to half the store, appended after sight for the same
+		// reason again.
+		g.reserve = RESERVE_LO + Utils.random() * (RESERVE_HI - RESERVE_LO);
 		return g;
 	}
+
+	/** Where founders' {@link #reserve} lines are drawn from: just above the
+	 *  exhaustion floor to half the store. The gene's own ceiling is
+	 *  {@link #RESERVE_MAX}; a line at the top of the store is a hunter that
+	 *  never runs, which is selection's to try and not a founder's to start at. */
+	@net.hedinger.prototype.engine.Unit("of glycogen")
+	public static final double RESERVE_LO = 0.05, RESERVE_HI = 0.5, RESERVE_MAX = 0.9;
 
 	public Genome copy() {
 		Genome g = new Genome();

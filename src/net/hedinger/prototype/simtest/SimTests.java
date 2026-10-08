@@ -9780,12 +9780,24 @@ public class SimTests {
 			// emitted sixteen clean groups of five as four and six. Nearest is
 			// deterministic and order-free, and it is what "which group is this
 			// one's" actually means.
+			//
+			// And kin that LANDED TOGETHER: a kin group is five bodies off one
+			// recipe within R of one anchor, so a newcomer belongs to the group it
+			// is both alike and beside. Markers alone were not enough: two recipes
+			// can draw within a kin step of each other, and nearest-in-marker-space
+			// then filed a body with the wrong group's siblings -- measured on seed
+			// 11 after a draw was appended to the founder recipe, a group of seven
+			// and a group of three where the reseed had landed sixteen of five.
+			// Members land within R on each axis of a shared anchor, so within
+			// 2R*sqrt(2) of each other in the plane.
+			double r2 = 2 * net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
 			for (TestNPC n : newcomers) {
 				java.util.List<TestNPC> mine = null;
 				double best = Double.MAX_VALUE;
 				for (java.util.List<TestNPC> g : groups) {
 					double d = separation(g.get(0), n);
-					if (sameSpecies(g.get(0), n) && d < best) {
+					if (sameSpecies(g.get(0), n) && d < best
+							&& n.distance(g.get(0).getX(), g.get(0).getY(), g.get(0).getZ()) <= r2) {
 						best = d;
 						mine = g;
 					}
@@ -9797,9 +9809,6 @@ public class SimTests {
 				mine.add(n);
 			}
 			assertEquals("as whole kin groups", newcomers.size() / group, groups.size());
-			// Members land within R on each axis of a shared anchor, so within
-			// 2R*sqrt(2) of each other in the plane.
-			double r2 = 2 * net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
 			for (java.util.List<TestNPC> g : groups) {
 				assertEquals("each of " + group, group, g.size());
 				double spread = 0;
@@ -15639,6 +15648,58 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter keeps its reserve before it runs. A chase is paid from the
+	 * store, and a hunter took one up at any glycogen above the exhaustion
+	 * floor: measured on seed 42, 415 of 3986 lost chases ended with the
+	 * hunter collapsed, and grown hunters were exhausted on 14% of their
+	 * ticks. How much of its store a lineage keeps before it will sprint --
+	 * and the line at which it lets a chase go -- is {@code Genome.reserve},
+	 * weighed into the hunt's appetite with the stomach and the sport: a
+	 * living body is worth nothing below the line and everything from twice
+	 * it. A carcass is a walk, not a sprint, and is wanted on the stomach's
+	 * terms alone.
+	 *
+	 * <p>Pinned on minded hunters with the hunter seed, hungry, with prey in
+	 * reach: at a third of its store a hunter keeping a tenth kills, one
+	 * keeping a half does not, and the same prudent hunter kills on a full
+	 * store.
+	 */
+	static class AHunterKeepsItsReserveBeforeItRuns extends Scenario {
+		private int preyHealthAfter(double store, double reserve) {
+			seed(113);
+			World w = room(12, 9);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome g = new Genome();
+			g.size = 20;
+			g.speed = 0;
+			g.reserve = reserve;
+			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withReproCooldown(100_000_000);
+			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(6); // already in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.think();
+			for (int i = 0; i < 4 * TestNPC.SENSE_EVERY + 2 * TestNPC.PRED_BITE_PERIOD; i++) {
+				hunter.withHunger(0.8).withGlycogen(store * hunter.glycogenCapacity()); // hold the books there
+				tick(w, 1);
+			}
+			return prey.getHealth();
+		}
+
+		@Override
+		public void run() {
+			assertLess("at a third of its store, a hunter keeping a tenth runs the prey down",
+					preyHealthAfter(0.33, 0.1), 100);
+			assertEquals("one keeping a half leaves it alone", 100, preyHealthAfter(0.33, 0.5));
+			assertLess("and kills on a full store", preyHealthAfter(1.0, 0.5), 100);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18503,6 +18564,7 @@ public class SimTests {
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AHunterHuntsForFoodOrForSport(),
+				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
