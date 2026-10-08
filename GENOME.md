@@ -333,6 +333,15 @@ life:
   rather than a meal, still climbs on anything bigger. A hunter is never a host,
   whatever its size: parasites drink the herd and the carrion-eaters, and the
   hunters are left to hunt.
+- **A hunter hunts for food, or for sport, and `predatory` says how much of
+  each.** A quarry's value in the prey scan is the hunter's appetite for it:
+  the meat it may take off the body against its gut above the full line
+  (`PRED_FULL_HUNGER`), so a full hunter wants nothing from it — plus, for a
+  living body, `predatory` of the rest for the kill itself. At 0 a hunter kills
+  only what it can eat; at 1 whatever is in sight. A carcass has no sport in
+  it. `greed`, the exponent on that value, thereby bites on a hunter's choice
+  for the first time: on the default standard it had been an exponent on a
+  constant 1.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on

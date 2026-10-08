@@ -1996,21 +1996,58 @@ public class TestNPC extends NPC {
 	 */
 	private double preyScore(NPC n) {
 		double dist = distance(n.getX(), n.getY(), n.getZ());
+		double want = appetite(n);
 		switch (preyWanted()) {
 		case AgentIO.PREY_BIGGEST:
-			return prize(n.leanMass(), dist);
+			return prize(want * n.leanMass(), dist);
 		case AgentIO.PREY_WEAKEST: {
 			double left = Math.max(1, Math.ceil(Math.max(1, n.getHealth())
 					/ (double) biteDamage(n)));
-			return prize(1.0 / left, dist);
+			return prize(want / left, dist);
 		}
 		case AgentIO.PREY_EASIEST: {
 			double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
-			return prize(n.leanMass() / bites, dist);
+			return prize(want * n.leanMass() / bites, dist);
 		}
 		default:
-			return prize(1.0, dist);
+			return prize(want, dist);
 		}
+	}
+
+	/**
+	 * What this hunter wants from {@code n}, 0..1: the appetite every quarry
+	 * standard is weighed by.
+	 *
+	 * <p>Food first: the meat this mouth may take off the body -- a living
+	 * body's fresh share, a carcass's fresh meat -- against the gut above the
+	 * {@link #PRED_FULL_HUNGER full line}, so a body it could eat all of is
+	 * worth 1 and one it has no room for is worth 0. Then, for a living body,
+	 * what the lineage's {@code Genome.predatory} drive adds for the kill
+	 * itself: at 1 a hunter wants every quarry whatever its stomach says, at 0
+	 * only what it can eat. A carcass has no sport in it.
+	 *
+	 * <p>The hunt had no appetite. The scripted hunter stops killing at the full
+	 * line, but the minded one -- every hunter in the seeded world -- killed
+	 * whatever was in sight whenever its mind sought forage, which is always.
+	 * Measured on seed 42: two thirds of all kills were made at a gut under a
+	 * fifth empty, and the killer then ate 0.67 energy off a body carrying ten,
+	 * where one killing at three fifths empty ate seven. The rest fed scavengers
+	 * or rotted, and the herd paid for it either way. Putting the stomach into
+	 * the score, rather than a gate in front of the scan, leaves the decision
+	 * where every other food decision is: value over effort, with greed the
+	 * exponent -- which for a hunter on the default standard was an exponent on
+	 * a constant 1 until now -- and the sport in it a gene selection can price.
+	 */
+	private double appetite(NPC n) {
+		double meat = n.isDead() ? n.freshMeat() : NPC.FRESH_SHARE * n.leanMass();
+		double meatEnergy = meat * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
+		double room = Math.max(0, hunger - PRED_FULL_HUNGER) * NPC.GUT_PER_MASS * adultMass();
+		double food = meatEnergy <= 0 ? 0 : Math.min(1.0, room / meatEnergy);
+		if (n.isDead()) {
+			return food;
+		}
+		double sport = genome == null ? 0 : Math.max(0, Math.min(1.0, genome.predatory));
+		return food + sport * (1 - food);
 	}
 
 	/** The kind of quarry this hunter is currently after -- the mind's standing
@@ -2075,10 +2112,13 @@ public class TestNPC extends NPC {
 		if (t == null) {
 			return null;
 		}
-		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || (!t.isDead() && !isInLOS(t))) {
+		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || (!t.isDead() && !isInLOS(t))
+				|| appetite(t) <= 0) {
 			// Gone, a floor away, inedible (a carcass eaten out of what this mouth
-			// may take), or living prey lost to cover. A carcass is held by smell,
-			// not sight (see scanPrey), so cover does not lose it.
+			// may take), living prey lost to cover, or nothing wanted from it any
+			// more -- a stomach that has filled at the body, with no sport in a
+			// carcass to keep it there. A carcass is held by smell, not sight (see
+			// scanPrey), so cover does not lose it.
 			preyTarget = null;
 			return null;
 		}
