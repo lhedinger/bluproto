@@ -395,7 +395,9 @@ public final class Mechanics {
 						+ "with meat, however old. A parasite: the living only. A fresh carcass is on "
 						+ "a hunter's prey scan, so other hunters join a kill."),
 				row("Scent range for corpses", num(TestNPC.CARRION_SCENT_R), "tiles",
-						"Smelled, not seen — it reaches through walls that sight does not."),
+						"Smelled, not seen — it reaches through cover that sight does not, and "
+						+ "only where a walk can. Scavengers, cubs and grown hunters alike: a hunter "
+						+ "finds living prey by sight and a carcass by smell."),
 				row("A parasite's bite", num(TestNPC.PARA_BITE) + " health per "
 						+ num(TestNPC.PARA_BITE_PERIOD) + " ticks", "while riding, hungry",
 						"Worth " + pct(TestNPC.PARA_BITE / (double) TestNPC.FULL_BODY_HEALTH)

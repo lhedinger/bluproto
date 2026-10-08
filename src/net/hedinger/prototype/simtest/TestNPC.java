@@ -2075,8 +2075,11 @@ public class TestNPC extends NPC {
 		if (t == null) {
 			return null;
 		}
-		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || !isInLOS(t)) {
-			preyTarget = null; // dead, gone, a floor away, inedible, or lost to cover
+		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || (!t.isDead() && !isInLOS(t))) {
+			// Gone, a floor away, inedible (a carcass eaten out of what this mouth
+			// may take), or living prey lost to cover. A carcass is held by smell,
+			// not sight (see scanPrey), so cover does not lose it.
+			preyTarget = null;
 			return null;
 		}
 		if (age - Math.max(chaseSince, lastBiteAt) > patience()) {
@@ -2236,12 +2239,22 @@ public class TestNPC extends NPC {
 		}
 		// And the fresh dead: a carcass with fresh meat on it is food to a hunter
 		// on the same terms as living prey, which is how other hunters join a kill.
-		for (NPC n : getWorld().census().corpsesNear(getLvl(), X, Y, LOS_RANGE)) {
-			if (!edibleQuarry(n, cannibal) || distance(n.getX(), n.getY(), n.getZ()) > LOS_RANGE) {
+		// Smelled, not seen -- at CARRION_SCENT_R through cover, the way a
+		// scavenger and a hunter's own cub smell carrion, and like them only
+		// where a walk can actually reach. A grown hunter used to find a carcass
+		// by sight alone, and the herd grazes at the reed edge, so that is where
+		// its kills lay: measured on seed 42, of the ticks a hungry hunter stood
+		// with fresh meat in range and nothing to walk to, 72% were a carcass it
+		// could not see, behind reeds in 60% of those, and 60% of the bodies its
+		// own clade's kills -- it had stepped away from one and could not find
+		// its way back. Living prey is still found by sight: cover hides what is
+		// alive, and a body that has stopped moving is a smell.
+		for (NPC n : getWorld().census().corpsesNear(getLvl(), X, Y, CARRION_SCENT_R)) {
+			if (!edibleQuarry(n, cannibal) || distance(n.getX(), n.getY(), n.getZ()) > CARRION_SCENT_R) {
 				continue;
 			}
 			double score = preyScore(n);
-			if (score > bar && isInLOS(n)) {
+			if (score > bar && walkableLineTo((int) n.getX(), (int) n.getY())) {
 				bar = score;
 				best = n;
 			}

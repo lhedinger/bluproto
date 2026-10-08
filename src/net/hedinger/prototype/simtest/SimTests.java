@@ -15506,6 +15506,66 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter smells the kill behind the reeds. A grown hunter found carcasses
+	 * by sight alone, while a scavenger and a hunter's own cub smell carrion
+	 * through cover at {@code CARRION_SCENT_R}. The herd grazes at the reed
+	 * edge, so that is where kills are made -- and a hunter that stepped away
+	 * from one (another chase, a drink, a bigger hunter) could not find its way
+	 * back to it. Measured on seed 42 after the kill was held between scans:
+	 * of the ticks a hungry hunter still stood with fresh meat in range and an
+	 * empty forage channel, 72% were a carcass it could not see, the first
+	 * sight-blocking tile on the line being reeds in 60% of those, and 60% of
+	 * the bodies its own clade's kills.
+	 *
+	 * <p>Pinned on a hunter with the hunter seed and a fresh carcass behind a
+	 * bed of reeds: the forage channel reads it, and the hunter walks through
+	 * the reeds and eats. Living prey is still found by sight -- the reeds hide
+	 * a living animal exactly as before ({@link CoverHidesPreyFromAHunter}).
+	 */
+	static class AHunterSmellsTheKillBehindTheReeds extends Scenario {
+		@Override
+		public void run() {
+			seed(57);
+			World w = room(20, 10);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 9; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			for (int y = 1; y < 9; y++) {
+				w.setTile(9, y, 0, Tile.TileType.TYPE_REEDS); // a reed bed across the room: walkable, sight-blocking
+			}
+			Genome pg = new Genome();
+			pg.size = 12;
+			pg.speed = 0;
+			TestNPC prey = TestNPC.grazer(5.5, 5.5, 0, pg).grown();
+			w.spawnEntity(prey);
+			tick(w, 1);
+			prey.kill();
+			Genome hg = new Genome();
+			hg.size = 16;
+			hg.speed = 0.06;
+			hg.markers = new double[] { 0.5, 0.5, 0.5 };
+			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(13.5, 5.5, 0, hg).grown().withHunger(1.0)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			tick(w, TestNPC.SENSE_EVERY + 1);
+			double[] sense = new double[AgentIO.NUM_SENSORS];
+			hunter.senseInto(sense);
+			assertTrue("the reeds hide the carcass from sight",
+					!w.hasLOS(hunter.getX(), hunter.getY(), 0, 0, prey.getX(), prey.getY(), 0, 99, Math.PI * 2));
+			assertGreater("and the hunter smells it anyway: its forage channel reads the carcass",
+					sense[AgentIO.S_FORAGE_PROX], 0.0);
+			double before = prey.freshMeat();
+			for (int t = 0; t < 1500 && prey.freshMeat() >= before - 0.05; t++) {
+				tick(w, 1);
+			}
+			assertLess("it walked through the reeds and ate off it", prey.freshMeat(), before);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18368,6 +18428,7 @@ public class SimTests {
 				new TheFoundingPackBudsAndCourtsAlike(),
 				new AFounderLandsWithinReachOfItsFood(),
 				new AHunterHoldsItsKillBetweenScans(),
+				new AHunterSmellsTheKillBehindTheReeds(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
