@@ -1667,8 +1667,23 @@ public class TestNPC extends NPC {
 		}
 		double got = scavenge();
 		totalIntake += got;
+		if (got > 0) {
+			lastMouthfulAt = age; // the hunt is paying: patience counts from here too
+		}
 		return got;
 	}
+
+	/**
+	 * When this hunter last took a mouthful off a carcass. Patience runs from
+	 * the last time the hunt PAID -- a bite landed on living prey, or a
+	 * mouthful taken off the kill -- and eating did not count: a hunter at
+	 * its kill, full and eating again as its gut made room, was "going
+	 * nowhere" by the bite clock alone, spurned the body after one patience
+	 * and walked off to hunt again with meat still on it (traced in
+	 * AHunterAtItsMealIsNotHuntingForSport: spurned at tick 600 of a 600
+	 * patience, with 0.28 of the body still fresh).
+	 */
+	private long lastMouthfulAt = Long.MIN_VALUE / 2;
 
 	/**
 	 * One bite into a LIVING animal: a wound, and a scream. It feeds nothing.
@@ -2046,9 +2061,13 @@ public class TestNPC extends NPC {
 		if (n.isDead()) {
 			return food;
 		}
-		double sport = genome == null ? 0 : Math.max(0, Math.min(1.0, genome.predatory));
+		double sport = !sporting || genome == null ? 0 : Math.max(0, Math.min(1.0, genome.predatory));
 		return stamina() * (food + sport * (1 - food));
 	}
+
+	/** Whether the sport in a hunt counts right now: not while a carcass is held
+	 *  (see {@link #scanPrey}). Set by the scan for the scoring it does. */
+	private boolean sporting = true;
 
 	/**
 	 * How much of a chase this hunter's store will fund, 0..1: nothing below
@@ -2131,17 +2150,21 @@ public class TestNPC extends NPC {
 		if (t == null) {
 			return null;
 		}
-		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal) || (!t.isDead() && !isInLOS(t))
-				|| appetite(t) <= 0) {
+		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal)
+				|| (!t.isDead() && (!isInLOS(t) || appetite(t) <= 0))) {
 			// Gone, a floor away, inedible (a carcass eaten out of what this mouth
-			// may take), living prey lost to cover, or nothing wanted from it any
-			// more -- a stomach that has filled at the body, with no sport in a
-			// carcass to keep it there. A carcass is held by smell, not sight (see
-			// scanPrey), so cover does not lose it.
+			// may take), or living prey lost to cover or no longer wanted -- a
+			// store run down to its reserve, a stomach filled on the way. A held
+			// CARCASS is kept while there is meat on it, full stomach or not: a
+			// hunter fills off a kill in a dozen ticks and then stays, eating again
+			// as digestion makes room, which is how a kill's fresh half gets eaten
+			// by the mouth that made it. Letting a full hunter go left the body to
+			// scavengers and rot (AHunterAtItsMealIsNotHuntingForSport). Held by
+			// smell, not sight (see scanPrey), so cover does not lose it either.
 			preyTarget = null;
 			return null;
 		}
-		if (age - Math.max(chaseSince, lastBiteAt) > patience()) {
+		if (age - Math.max(chaseSince, Math.max(lastBiteAt, lastMouthfulAt)) > patience()) {
 			spurned = t;
 			spurnedUntil = age + patience();
 			preyTarget = null; // going nowhere: let it go, and look elsewhere
@@ -2278,6 +2301,11 @@ public class TestNPC extends NPC {
 	private NPC scanPrey(boolean cannibal) {
 		NPC held = heldPrey(cannibal);
 		NPC best = null;
+		// A hunter at its meal is not hunting for sport: with a carcass held, every
+		// body is scored by the stomach alone (see appetite), so the sport in a
+		// live animal two tiles off cannot outscore the meal underfoot. Sport is
+		// a reason to take up a hunt, never a reason to leave a meal.
+		sporting = held == null || !held.isDead();
 		double bar = held == null ? 0 : preyScore(held) * determination();
 		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
