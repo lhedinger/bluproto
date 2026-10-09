@@ -2665,6 +2665,34 @@ public class TestNPC extends NPC {
 	 *  nearest-neighbour channel cannot give. One pass over perceivable neighbours
 	 *  feeds the prey, threat and kin gradients at once, at full sight range. */
 	/**
+	 * Whether {@code n} is a danger to this body: bigger than the line where a
+	 * neighbour stops being food ({@link #preyCeiling}), and not a hunter of
+	 * this hunter's own clade unless it is starving.
+	 *
+	 * <p>The threat channel read "the nearest larger creature", and to a
+	 * hunter's cub every grown hunter in its pack was one -- the parents at
+	 * the kill it was born beside. But a hunter does not bite a hunter: the
+	 * quarry rule ({@link #edibleQuarry}) keeps its own clade off the menu
+	 * unless it is starving ({@link #STARVE_HUNGER}), so the sense announced
+	 * a danger the body never acts on, and the cub ran from its food. Measured
+	 * on seed 42: a cub fled on 29% of its ticks with the nearest bigger hunter
+	 * 5.5 tiles off, lay collapsed on 22%, ate on 0.4%, and 7 of 104 grew up.
+	 * A sense should not lie about danger: a body of the same clade is a threat
+	 * only in the one state in which it would bite. A bigger grazer stays a
+	 * threat to everything, as it always was -- that is what "bigger than me"
+	 * means to a grazer's senses, and the question here is the hunter's.
+	 */
+	private boolean threatens(NPC n) {
+		if (n.getSize() <= preyCeiling()) {
+			return false;
+		}
+		if (niche().hunts() && n instanceof TestNPC t && Niche.of(t.ecoClade()).hunts()) {
+			return t.getHunger() >= STARVE_HUNGER;
+		}
+		return true;
+	}
+
+	/**
 	 * The size at which a neighbour stops being food and starts being danger.
 	 * For a hunter that is {@link #preyReach} times its own size --
 	 * exactly where {@link #nearestPrey} stops taking quarry -- and for everything
@@ -2803,7 +2831,7 @@ public class TestNPC extends NPC {
 				preyDx = dx;
 				preyDy = dy;
 			}
-			if (n.getSize() > preyCeiling() && dist < threatD) {
+			if (threatens(n) && dist < threatD) {
 				threatD = dist;
 				threatDx = dx;
 				threatDy = dy;
@@ -2822,7 +2850,7 @@ public class TestNPC extends NPC {
 		// answers most of them.
 		if (pass) {
 			for (NPC p : getWorld().census().predatorsNear(getLvl(), X, Y, LOS_RANGE)) {
-				if (p == this || p.isDead() || p.isRemoved() || p.getSize() <= preyCeiling()) {
+				if (p == this || p.isDead() || p.isRemoved() || !threatens(p)) {
 					continue;
 				}
 				double dx = p.getX() - X, dy = p.getY() - Y;

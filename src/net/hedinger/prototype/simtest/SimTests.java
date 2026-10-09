@@ -15767,6 +15767,57 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter is no threat to its own kind. The threat channel read "the
+	 * nearest larger creature", and to a hunter's cub every grown hunter in
+	 * its pack is one -- the parents at the kill it was born beside. But a
+	 * hunter does not bite a hunter: the quarry rule keeps its own clade off
+	 * the menu unless it is starving (edibleQuarry, STARVE_HUNGER), so the
+	 * sense was announcing a danger the body never acts on. Measured on seed
+	 * 42: a hunter's cub fled on 29% of its ticks, with the nearest bigger
+	 * hunter 5.5 tiles off on average, was collapsed on 22%, and ate on 0.4%
+	 * -- with meat within its scent on 57% of ticks and a grown hunter
+	 * standing on that meat on half of those. Of 104 born, 7 grew up.
+	 *
+	 * <p>A body of the hunter's own clade is a threat only while it is
+	 * starving -- the one state in which it would bite. Pinned on a cub
+	 * beside a fed grown hunter (no threat), beside a starving one (a
+	 * threat), and a grazer beside the same fed hunter (a threat, as ever).
+	 */
+	static class AHunterIsNoThreatToItsOwnKind extends Scenario {
+		private double threatRead(boolean cubIsHunter, double adultHunger) {
+			seed(127);
+			World w = room(14, 9);
+			Genome ag = new Genome();
+			ag.size = 16;
+			ag.speed = 0;
+			ag.markers = new double[] { 0.5, 0.5, 0.5 };
+			Mind still = (sensors, act) -> { };
+			TestNPC adult = TestNPC.minded(8.5, 4.5, 0, ag, still).withClade(Genome.Clade.PREDATOR)
+					.grown().withHunger(adultHunger);
+			Genome cg = ag.copy();
+			cg.size = 16; // the cub is born small of a big lineage: a juvenile of this body
+			TestNPC cub = TestNPC.minded(6.5, 4.5, 0, cg, still)
+					.withClade(cubIsHunter ? Genome.Clade.PREDATOR : Genome.Clade.HERBIVORE).withHeading(0);
+			w.spawnEntity(adult);
+			w.spawnEntity(cub);
+			tick(w, 1);
+			tick(w, 2 * TestNPC.SENSE_EVERY);
+			assertTrue("the small one is a juvenile", cub.isJuvenile());
+			assertTrue("beside a grown hunter bigger than its ceiling", adult.getSize() > cub.getSize() * 2);
+			return cub.sensorSnapshot()[AgentIO.S_THREAT_PROX];
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a hunter's cub beside a fed grown hunter of its clade reads no threat", 0,
+					(long) Math.round(threatRead(true, 0.2) * 1000));
+			assertGreater("beside a starving one it reads a threat", threatRead(true, 0.95), 0.0);
+			assertGreater("and a grazer beside the fed hunter reads a threat, as ever",
+					threatRead(false, 0.2), 0.0);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18633,6 +18684,7 @@ public class SimTests {
 				new AHunterHuntsForFoodOrForSport(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
+				new AHunterIsNoThreatToItsOwnKind(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
