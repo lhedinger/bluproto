@@ -2227,6 +2227,7 @@ public class TestNPC extends NPC {
 	/** What the last pass saw, as points; NaN for nothing. */
 	private double heldPreyX = Double.NaN, heldPreyY = Double.NaN;
 	private double heldThreatX = Double.NaN, heldThreatY = Double.NaN;
+	private double heldBiggerX = Double.NaN, heldBiggerY = Double.NaN;
 	private double heldKinX = Double.NaN, heldKinY = Double.NaN;
 	private NPC heldMate;
 	private NPC heldHost;
@@ -2665,40 +2666,28 @@ public class TestNPC extends NPC {
 	 *  nearest-neighbour channel cannot give. One pass over perceivable neighbours
 	 *  feeds the prey, threat and kin gradients at once, at full sight range. */
 	/**
-	 * Whether {@code n} is a danger to this body: bigger than the line where a
-	 * neighbour stops being food ({@link #preyCeiling}), and not a hunter of
-	 * this hunter's own clade unless it is starving.
+	 * Whether {@code n} would bite this body: the threat channel's one rule,
+	 * for every clade alike. A hunting body that would take this one as quarry
+	 * -- its own quarry rule ({@link #edibleQuarry}) asked from its side, so
+	 * the size ceiling, the clade taboo (a hunter's own clade only while
+	 * starving) and the parasite exclusion all answer here as they answer
+	 * there. Nothing else bites, so nothing else is a threat.
 	 *
-	 * <p>The threat channel read "the nearest larger creature", and to a
-	 * hunter's cub every grown hunter in its pack was one -- the parents at
-	 * the kill it was born beside. But a hunter does not bite a hunter: the
-	 * quarry rule ({@link #edibleQuarry}) keeps its own clade off the menu
-	 * unless it is starving ({@link #STARVE_HUNGER}), so the sense announced
-	 * a danger the body never acts on, and the cub ran from its food. Measured
-	 * on seed 42: a cub fled on 29% of its ticks with the nearest bigger hunter
-	 * 5.5 tiles off, lay collapsed on 22%, ate on 0.4%, and 7 of 104 grew up.
-	 * A sense should not lie about danger: to a hunter, a threat is a body that
-	 * would hunt it -- a hunter above its ceiling, of its own clade only in the
-	 * one state in which it would bite -- and nothing else. A bigger grazer
-	 * stays a threat to a grazer, as it always was: that is what "bigger than
-	 * me" means to a grazer's senses, since a bigger thing may be a hunter, and
-	 * the hitch-hiker reads the same channel with the opposite sign for a lift.
+	 * <p>The channel used to read "the nearest larger creature", which is what
+	 * a grazer's senses can mean by danger -- a bigger thing may be a hunter --
+	 * and was a lie to everyone else: a hunter's cub fled its own pack at the
+	 * kill and the herd it was born beside (29% of its ticks, collapsed on 22%,
+	 * 7 of 104 grown up), a grown grazer fled bigger grazers on two thirds of
+	 * the ticks it fled at all. The size reading is a fact worth having, so it
+	 * is its own channel now ({@link AgentIO#S_BIGGER_PROX}); whether size
+	 * means danger is a mind's to decide, and danger itself is the body telling
+	 * the truth about teeth.
 	 */
-	private boolean threatens(NPC n) {
-		if (n.getSize() <= preyCeiling()) {
+	private boolean wouldBite(NPC n) {
+		if (!(n instanceof TestNPC t) || t == this || !t.actsAsHunter()) {
 			return false;
 		}
-		if (!niche().hunts()) {
-			return true; // a grazer's danger is anything bigger: it may be a hunter
-		}
-		// A hunter's danger is what would hunt it, and nothing else does. Beyond
-		// its own pack, a cub was still fleeing on a fifth of its ticks -- from
-		// grazers (43% of them), scavengers (14%) and parasites (12%), none of
-		// which bites a hunter -- and lay collapsed on 24% (AHunterFearsOnlyWhatHuntsIt).
-		if (n instanceof TestNPC t && Niche.of(t.ecoClade()).hunts()) {
-			return t.getHunger() >= STARVE_HUNGER; // its own clade: only while starving
-		}
-		return n instanceof TestNPC t2 ? t2.actsAsHunter() : false;
+		return t.edibleQuarry(this, t.hunger >= STARVE_HUNGER);
 	}
 
 	/**
@@ -2747,8 +2736,8 @@ public class TestNPC extends NPC {
 		// threads at once (a test harness did) could flip it mid-pass and leave
 		// the gather and the list it fills disagreeing.
 		final boolean pass = sensedThisTick;
-		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE;
-		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0;
+		double preyD = Double.MAX_VALUE, threatD = Double.MAX_VALUE, biggerD = Double.MAX_VALUE;
+		double preyDx = 0, preyDy = 0, threatDx = 0, threatDy = 0, biggerDx = 0, biggerDy = 0;
 		double kinX = 0, kinY = 0, kinWeight = 0;
 		if (!pass) {
 			// Between passes: what was last seen, read off the current pose.
@@ -2761,6 +2750,11 @@ public class TestNPC extends NPC {
 				threatDx = heldThreatX - X;
 				threatDy = heldThreatY - Y;
 				threatD = len(threatDx, threatDy);
+			}
+			if (!Double.isNaN(heldBiggerX)) {
+				biggerDx = heldBiggerX - X;
+				biggerDy = heldBiggerY - Y;
+				biggerD = len(biggerDx, biggerDy);
 			}
 			if (!Double.isNaN(heldKinX)) {
 				kinX = heldKinX - X;
@@ -2840,10 +2834,15 @@ public class TestNPC extends NPC {
 				preyDx = dx;
 				preyDy = dy;
 			}
-			if (threatens(n) && dist < threatD) {
+			if (wouldBite(n) && dist < threatD) {
 				threatD = dist;
 				threatDx = dx;
 				threatDy = dy;
+			}
+			if (n.getSize() > preyCeiling() && dist < biggerD) {
+				biggerD = dist;
+				biggerDx = dx;
+				biggerDy = dy;
 			}
 			net.hedinger.prototype.entities.Genome og = n.getGenome();
 			if (genome != null && og != null) {
@@ -2859,7 +2858,7 @@ public class TestNPC extends NPC {
 		// answers most of them.
 		if (pass) {
 			for (NPC p : getWorld().census().predatorsNear(getLvl(), X, Y, LOS_RANGE)) {
-				if (p == this || p.isDead() || p.isRemoved() || !threatens(p)) {
+				if (p == this || p.isDead() || p.isRemoved() || !wouldBite(p)) {
 					continue;
 				}
 				double dx = p.getX() - X, dy = p.getY() - Y;
@@ -2900,6 +2899,8 @@ public class TestNPC extends NPC {
 			heldPreyY = preyD < Double.MAX_VALUE ? Y + preyDy : Double.NaN;
 			heldThreatX = threatD < Double.MAX_VALUE ? X + threatDx : Double.NaN;
 			heldThreatY = threatD < Double.MAX_VALUE ? Y + threatDy : Double.NaN;
+			heldBiggerX = biggerD < Double.MAX_VALUE ? X + biggerDx : Double.NaN;
+			heldBiggerY = biggerD < Double.MAX_VALUE ? Y + biggerDy : Double.NaN;
 			heldKinX = kinWeight > 0 ? X + kinX / kinWeight : Double.NaN;
 			heldKinY = kinWeight > 0 ? Y + kinY / kinWeight : Double.NaN;
 		}
@@ -2936,6 +2937,13 @@ public class TestNPC extends NPC {
 		} else {
 			s[AgentIO.S_THREAT_PROX] = 0;
 			s[AgentIO.S_THREAT_BEARING] = 0;
+		}
+		if (biggerD < Double.MAX_VALUE) {
+			s[AgentIO.S_BIGGER_PROX] = 1.0 / (1.0 + biggerD);
+			s[AgentIO.S_BIGGER_BEARING] = wrap(Math.atan2(biggerDy, biggerDx) - D) / Math.PI;
+		} else {
+			s[AgentIO.S_BIGGER_PROX] = 0;
+			s[AgentIO.S_BIGGER_BEARING] = 0;
 		}
 		s[AgentIO.S_KIN_BEARING] = (kinX != 0 || kinY != 0)
 				? wrap(Math.atan2(kinY, kinX) - D) / Math.PI
@@ -3336,6 +3344,7 @@ public class TestNPC extends NPC {
 			{ AgentIO.S_THREAT_PROX, AgentIO.S_THREAT_BEARING },
 			{ AgentIO.S_ITEM_PROX, AgentIO.S_ITEM_BEARING },
 			{ AgentIO.S_FIXTURE_PROX, AgentIO.S_FIXTURE_BEARING },
+			{ AgentIO.S_BIGGER_PROX, AgentIO.S_BIGGER_BEARING },
 	};
 
 	/** Smallest and largest number of things any mind can keep track of. */
@@ -3621,6 +3630,10 @@ public class TestNPC extends NPC {
 		case AgentIO.SEEK_WATER:
 			prox = AgentIO.S_WATER_PROX;
 			bearing = AgentIO.S_WATER_BEARING;
+			break;
+		case AgentIO.SEEK_BIGGER:
+			prox = AgentIO.S_BIGGER_PROX;
+			bearing = AgentIO.S_BIGGER_BEARING;
 			break;
 		default:
 			return Double.NaN;

@@ -680,12 +680,19 @@ public final class Mechanics {
 								+ "its quarry down. A living one: a carcass is forage, not prey, "
 								+ "since it does not run and is not worth a sprint."),
 						sense(AgentIO.S_PREY_BEARING, "Which way that quarry lies."),
-						sense(AgentIO.S_THREAT_PROX, "The nearest LARGER creature, likewise at "
-								+ "full range. The flee channel. Clade-shaped, like forage: to a "
-								+ "hunter only what would hunt it counts — a hunter above its ceiling, "
-								+ "of its own clade only while starving — so a cub neither flees its "
-								+ "pack at the kill nor the herd it was born beside."),
+						sense(AgentIO.S_THREAT_PROX, "The nearest body that would BITE this one, "
+								+ "at full range: a hunter that would take it as quarry, by that "
+								+ "hunter's own quarry rule — the size ceiling, its own clade only "
+								+ "while starving. One rule for every clade. The flee channel; it "
+								+ "used to mean the nearest larger creature, which is now "
+								+ "bigger_prox."),
 						sense(AgentIO.S_THREAT_BEARING, "Which way the threat lies."),
+						sense(AgentIO.S_BIGGER_PROX, "The nearest LARGER creature — above the line "
+								+ "where a neighbour stops being food. A fact about size, not danger: "
+								+ "the grazer's old \"a bigger thing may be a hunter\" heuristic and "
+								+ "the hitch-hiker's lift are read from here, and whether size means "
+								+ "danger is the mind's to decide."),
+						sense(AgentIO.S_BIGGER_BEARING, "Which way that larger creature lies."),
 						sense(AgentIO.S_KIN_PROX, "How close the weighted centre of nearby kin "
 								+ "is — the difference between \"my kind are off that way\" and "
 								+ "\"I am in the middle of them\"."),
@@ -901,12 +908,12 @@ public final class Mechanics {
 	/** Names for the seek targets, indexed by {@link AgentIO#seekTarget}'s return. */
 	private static final String[] SEEK_NAMES = {
 		"nothing", "a forage patch", "kin", "prey", "a threat", "an object",
-		"the waypoint", "a fixture", "water",
+		"the waypoint", "a fixture", "water", "something bigger",
 	};
 	/** What the body does on arriving, in the same order. */
 	private static final String[] ARRIVAL = {
 		"—", "grazes", "—", "bites", "— (never attacks)", "takes it",
-		"—", "presses it", "— (drinking is adjacency)",
+		"—", "presses it", "— (drinking is adjacency)", "— (the latch is A_ATTACH)",
 	};
 	/** Names for the tile properties, indexed by {@link AgentIO#tileWanted}. */
 	private static final String[] TILE_NAMES = {

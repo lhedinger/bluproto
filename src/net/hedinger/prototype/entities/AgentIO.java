@@ -229,7 +229,16 @@ public final class AgentIO {
 	 *  here worth eating" are each one write and one read. Every clade's
 	 *  sense, though only a grazer's forage channel reads {@link #A_TILE}. */
 	public static final int S_ON_TILE = 45;
-	public static final int NUM_SENSORS = 46;
+	/** The nearest LARGER body -- above the line where a neighbour stops being
+	 *  food -- and which way it lies. What {@link #S_THREAT_PROX} used to mean:
+	 *  the threat channel now reports what would BITE this body, for every
+	 *  clade alike, and "bigger" is its own fact. A grazer's old flee heuristic
+	 *  ("a bigger thing may be a hunter") and the hitch-hiker's lift are read
+	 *  from here, so a mind can still act on size; whether size means danger is
+	 *  the mind's to decide. */
+	public static final int S_BIGGER_PROX = 46;
+	public static final int S_BIGGER_BEARING = 47;
+	public static final int NUM_SENSORS = 48;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -240,7 +249,8 @@ public final class AgentIO {
 			"intent", "fixture_prox", "fixture_bearing",
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
-			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile" };
+			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile",
+			"bigger_prox", "bigger_bearing" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -459,6 +469,12 @@ public final class AgentIO {
 	/** Steer to the nearest drinkable shore (the body computes the bearing
 	 *  from the tile map; drinking is adjacency, no act needed). */
 	public static final int SEEK_WATER = 8;
+	/** Steer toward (or, signed negative, away from) the nearest LARGER body,
+	 *  {@link #S_BIGGER_PROX}. The hitch-hiker's lift. Encoded past water
+	 *  (magnitude >= 12): water had the open top of the scale, and a genome
+	 *  writing twelve or more for it now names this instead -- the starter
+	 *  composes ten for water, so no seeded genome moves. */
+	public static final int SEEK_BIGGER = 9;
 
 	// ---- intent status (the values of S_INTENT) ----------------------------
 	// ---- tile properties (the values of A_TILE) ----------------------------
@@ -568,7 +584,10 @@ public final class AgentIO {
 		if (m < 9.0) {
 			return SEEK_FIXTURE;
 		}
-		return SEEK_WATER;
+		if (m < 12.0) {
+			return SEEK_WATER;
+		}
+		return SEEK_BIGGER;
 	}
 
 	private AgentIO() {

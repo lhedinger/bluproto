@@ -70,7 +70,7 @@ intent:
 
 | `A_SEEK` | Target | | `A_SEEK` | Target |
 |---|---|---|---|---|
-| `±0.1` | forage patch | | `±1` | threat |
+| `±0.1` | forage patch | | `±1` | threat (what would bite) · `±12` bigger |
 | `±0.25` | kin | | `±2` | item |
 | `±0.5` | prey | | `±4` | waypoint |
 
@@ -182,8 +182,8 @@ that mutation sharpens:
 
 | Brain | Length | Strategy |
 |---|---|---|
-| `Worlds.starterBrain()` | 13 | Forager — `A_SEEK = forage` finds grass, walks to it and grazes it; the same slot flips to `-threat` when something bigger closes, and the throttle goes with it (amble to eat, flat out to run) |
-| `Worlds.hitchhikerBrain()` | 9 | Hitch-hiker — `A_SEEK = +threat`, the forager's flee read with the opposite sign: close on anything bigger and cling to it |
+| `Worlds.starterBrain()` | 13 | Forager — `A_SEEK = forage` finds grass, walks to it and grazes it; the same slot flips to `-threat` when something that would bite it closes, and the throttle goes with it (amble to eat, flat out to run) |
+| `Worlds.hitchhikerBrain()` | 12 | Hitch-hiker — `A_SEEK = +bigger`: close on anything bigger (`S_BIGGER_PROX`, the size fact the threat channel used to carry) and cling to it |
 
 **Intents did not make these much shorter** — 13 against the motor-level version's
 14. Steering collapsed into one slot, but choosing a pace deliberately did *not*
