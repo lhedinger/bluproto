@@ -6842,8 +6842,9 @@ public class SimTests {
 				}
 			};
 			Genome tg = new Genome();
-			tg.size = 14; // a big, stationary threat to the prey's west
-			TestNPC threat = TestNPC.minded(9.5, 4.5, 0, tg, idle);
+			tg.size = 14; // a big, stationary threat to the prey's west -- a hunter that
+			// could take it: the threat channel reads what would bite, not what is big
+			TestNPC threat = TestNPC.minded(9.5, 4.5, 0, tg, idle).withClade(Genome.Clade.PREDATOR).grown();
 			w.spawnEntity(prey);
 			w.spawnEntity(threat);
 			w.think();
@@ -7211,7 +7212,7 @@ public class SimTests {
 			double[] s = body.sensorSnapshot();
 			int seen = 0;
 			for (int prox : new int[] { AgentIO.S_FORAGE_PROX, AgentIO.S_PREY_PROX,
-					AgentIO.S_THREAT_PROX, AgentIO.S_ITEM_PROX }) {
+					AgentIO.S_BIGGER_PROX, AgentIO.S_ITEM_PROX }) { // the size-19 inert body is bigger, not a biter
 				if (s[prox] > 0) {
 					seen++;
 				}
@@ -12931,8 +12932,14 @@ public class SimTests {
 			// beside the threat scenes.
 			w.spawnEntity(TestNPC.inert(7.5, 5.5, 0).withSize(5));
 			w.spawnEntity(TestNPC.inert(7.5, 25.5, 0).withSize(5));
-			w.spawnEntity(TestNPC.inert(27.5, 5.5, 0).withSize(16));
-			w.spawnEntity(TestNPC.inert(27.5, 25.5, 0).withSize(16));
+			// The larger neighbours are hunters that could take a size-10 body: the
+			// threat channel reads what would bite, and a big inert body is not it.
+			Genome hunterG = new Genome();
+			hunterG.size = 16;
+			hunterG.speed = 0;
+			Mind still = (sn, a) -> { };
+			w.spawnEntity(TestNPC.minded(27.5, 5.5, 0, hunterG, still).withClade(Genome.Clade.PREDATOR).grown());
+			w.spawnEntity(TestNPC.minded(27.5, 25.5, 0, hunterG.copy(), still).withClade(Genome.Clade.PREDATOR).grown());
 			w.spawnEntity(TestNPC.inert(17.5, 15.5, 0).withSize(5));
 			// A couple of ticks: the first admits the spawns to the census, the next
 			// is the one the bodies actually sense on.
@@ -15818,52 +15825,64 @@ public class SimTests {
 	}
 
 	/**
-	 * A hunter fears only what hunts it. Beyond its own pack
-	 * ({@link AHunterIsNoThreatToItsOwnKind}), a hunter's cub was still
-	 * fleeing on a fifth of its ticks: the nearest body above its ceiling was
-	 * a grazer on 43% of them, a scavenger on 14%, a parasite on 12% -- and
-	 * none of those bites a hunter. "Bigger than me" is what a grazer's senses
-	 * mean by danger, because a bigger thing may be a hunter; to a hunter the
-	 * same reading was a cost with nothing behind it, a sprint from the herd
-	 * it was born beside, and 24% of its ticks were spent collapsed.
+	 * A threat is what would bite you, and bigger is bigger. The threat channel
+	 * read "the nearest larger creature" -- a grazer's heuristic, since a
+	 * bigger thing may be a hunter -- and lied to everyone else: a hunter's cub
+	 * fled its pack at the kill and the herd it was born beside (29% of its
+	 * ticks; 7 of 104 grew up), and a grown grazer fled bigger grazers on two
+	 * thirds of the ticks it fled at all. The same rule is now asked of every
+	 * clade from the other body's side: a threat is a hunter that would take
+	 * this body as quarry by its own quarry rule -- the size ceiling, its own
+	 * clade only while starving -- and nothing else bites. Size is a fact worth
+	 * keeping, so it is its own channel ({@code S_BIGGER_PROX}); the hitch-hiker
+	 * finds its lift there, and whether size means danger is a mind's to decide.
 	 *
-	 * <p>So the threat channel is clade-shaped, as the forage channel is: to a
-	 * hunter, a threat is a body that would hunt it -- a hunter above its
-	 * ceiling, of its own clade only while starving -- and nothing else. To a
-	 * grazer it stays "bigger than me", exactly as before: a bigger grazer is
-	 * still read as a threat, and the hitch-hiker still reads the same channel
-	 * with the opposite sign to find a lift. Pinned on a hunter's cub beside a
-	 * big grazer (no threat) and a grazer beside a bigger grazer (a threat).
+	 * <p>Pinned on four pairs: a hunter beside a big grazer (bigger, no threat);
+	 * a grazer beside a bigger grazer (bigger, no threat); a grazer beside a
+	 * hunter that could take it (a threat); and a grazer beside a hunter too
+	 * small to take it (neither).
 	 */
-	static class AHunterFearsOnlyWhatHuntsIt extends Scenario {
-		private double threatRead(Genome.Clade small) {
+	static class AThreatIsWhatWouldBiteYou extends Scenario {
+		/** {threat, bigger} as read by a body of {@code small} clade and size
+		 *  beside a body of {@code big} clade and size, two tiles east. */
+		private double[] read(Genome.Clade small, double smallSize, Genome.Clade big, double bigSize) {
 			seed(131);
 			World w = room(14, 9);
 			Genome bg = new Genome();
-			bg.size = 17;
+			bg.size = bigSize;
 			bg.speed = 0;
 			bg.markers = new double[] { 0.2, 0.8, 0.5 };
 			Mind still = (sensors, act) -> { };
-			TestNPC big = TestNPC.minded(8.5, 4.5, 0, bg, still).grown(); // a big grazer
+			TestNPC other = TestNPC.minded(8.5, 4.5, 0, bg, still).withClade(big).grown();
 			Genome sg = new Genome();
-			sg.size = 8;
+			sg.size = smallSize;
 			sg.speed = 0;
 			sg.markers = new double[] { 0.5, 0.5, 0.5 };
 			TestNPC body = TestNPC.minded(6.5, 4.5, 0, sg, still).withClade(small).grown().withHeading(0);
-			w.spawnEntity(big);
+			w.spawnEntity(other);
 			w.spawnEntity(body);
 			tick(w, 1);
 			tick(w, 2 * TestNPC.SENSE_EVERY);
-			assertTrue("the grazer is bigger than the small one's ceiling", big.getSize() > body.getSize() * 2);
-			return body.sensorSnapshot()[AgentIO.S_THREAT_PROX];
+			double[] s = body.sensorSnapshot();
+			return new double[] { s[AgentIO.S_THREAT_PROX], s[AgentIO.S_BIGGER_PROX] };
 		}
 
 		@Override
 		public void run() {
-			assertEquals("a hunter beside a big grazer reads no threat: nothing there hunts it", 0,
-					(long) Math.round(threatRead(Genome.Clade.PREDATOR) * 1000));
-			assertGreater("a grazer beside a bigger grazer reads one, as it always did",
-					threatRead(Genome.Clade.HERBIVORE), 0.0);
+			double[] r = read(Genome.Clade.PREDATOR, 8, Genome.Clade.HERBIVORE, 17);
+			assertEquals("a hunter beside a big grazer reads no threat: nothing there bites", 0,
+					(long) Math.round(r[0] * 1000));
+			assertGreater("but reads it as bigger", r[1], 0.0);
+			r = read(Genome.Clade.HERBIVORE, 8, Genome.Clade.HERBIVORE, 17);
+			assertEquals("a grazer beside a bigger grazer reads no threat either", 0,
+					(long) Math.round(r[0] * 1000));
+			assertGreater("and reads it as bigger", r[1], 0.0);
+			r = read(Genome.Clade.HERBIVORE, 8, Genome.Clade.PREDATOR, 16);
+			assertGreater("a grazer beside a hunter that could take it reads a threat", r[0], 0.0);
+			r = read(Genome.Clade.HERBIVORE, 16, Genome.Clade.PREDATOR, 5);
+			assertEquals("and beside a hunter too small to take it, none", 0,
+					(long) Math.round(r[0] * 1000));
+			assertEquals("nor is a smaller hunter bigger", 0, (long) Math.round(r[1] * 1000));
 		}
 	}
 
@@ -18794,7 +18813,7 @@ public class SimTests {
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
-				new AHunterFearsOnlyWhatHuntsIt(),
+				new AThreatIsWhatWouldBiteYou(),
 				new ACarcassIsForageNotPrey(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),

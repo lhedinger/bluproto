@@ -245,6 +245,7 @@ public final class Worlds {
 	 * riding its mothers until it grows out of them.
 	 */
 	public static net.hedinger.prototype.entities.Brain hitchhikerBrain() {
+		final int ADD = net.hedinger.prototype.entities.Brain.ADD;
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
@@ -252,12 +253,19 @@ public final class Worlds {
 		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
 		int[][] code = {
-				{ SET, 1, 9, 0 }, // r1 = 1.0 (const[9]) -- seek the THREAT channel, i.e.
+				// Seek the BIGGER channel: 4+4+4 = 12 from the const pool names it
+				// (SEEK_BIGGER sits past water on the scale). It used to read the
+				// threat channel, which meant "bigger" then; a threat is now what
+				// would bite, and a lift is simply something bigger.
+				{ SET, 1, 11, 0 }, // r1 = 4 (const[11])
+				{ ADD, 1, 1, 1 }, // r1 = 8
+				{ SET, 2, 11, 0 }, // r2 = 4
+				{ ADD, 1, 1, 2 }, // r1 = 12 -- seek what is bigger, i.e.
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_SEEK, 1, 0 }, // ...ride what's bigger
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 1, 0 }, // chase it down
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_EAT, 1, 0 }, // graze, aboard or not:
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_MATE, 1, 0 }, // a seek-threat doesn't feed you
-				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 }, // r2 = how close
+				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_BIGGER_PROX, 0 }, // r2 = how close
 				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) boarding threshold
 				{ GT, 4, 2, 3 }, // r4 = something bigger is within reach?
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_ATTACH, 4, 0 }, // cling; 0 lets go
