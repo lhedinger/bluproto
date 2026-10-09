@@ -15818,6 +15818,56 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter fears only what hunts it. Beyond its own pack
+	 * ({@link AHunterIsNoThreatToItsOwnKind}), a hunter's cub was still
+	 * fleeing on a fifth of its ticks: the nearest body above its ceiling was
+	 * a grazer on 43% of them, a scavenger on 14%, a parasite on 12% -- and
+	 * none of those bites a hunter. "Bigger than me" is what a grazer's senses
+	 * mean by danger, because a bigger thing may be a hunter; to a hunter the
+	 * same reading was a cost with nothing behind it, a sprint from the herd
+	 * it was born beside, and 24% of its ticks were spent collapsed.
+	 *
+	 * <p>So the threat channel is clade-shaped, as the forage channel is: to a
+	 * hunter, a threat is a body that would hunt it -- a hunter above its
+	 * ceiling, of its own clade only while starving -- and nothing else. To a
+	 * grazer it stays "bigger than me", exactly as before: a bigger grazer is
+	 * still read as a threat, and the hitch-hiker still reads the same channel
+	 * with the opposite sign to find a lift. Pinned on a hunter's cub beside a
+	 * big grazer (no threat) and a grazer beside a bigger grazer (a threat).
+	 */
+	static class AHunterFearsOnlyWhatHuntsIt extends Scenario {
+		private double threatRead(Genome.Clade small) {
+			seed(131);
+			World w = room(14, 9);
+			Genome bg = new Genome();
+			bg.size = 17;
+			bg.speed = 0;
+			bg.markers = new double[] { 0.2, 0.8, 0.5 };
+			Mind still = (sensors, act) -> { };
+			TestNPC big = TestNPC.minded(8.5, 4.5, 0, bg, still).grown(); // a big grazer
+			Genome sg = new Genome();
+			sg.size = 8;
+			sg.speed = 0;
+			sg.markers = new double[] { 0.5, 0.5, 0.5 };
+			TestNPC body = TestNPC.minded(6.5, 4.5, 0, sg, still).withClade(small).grown().withHeading(0);
+			w.spawnEntity(big);
+			w.spawnEntity(body);
+			tick(w, 1);
+			tick(w, 2 * TestNPC.SENSE_EVERY);
+			assertTrue("the grazer is bigger than the small one's ceiling", big.getSize() > body.getSize() * 2);
+			return body.sensorSnapshot()[AgentIO.S_THREAT_PROX];
+		}
+
+		@Override
+		public void run() {
+			assertEquals("a hunter beside a big grazer reads no threat: nothing there hunts it", 0,
+					(long) Math.round(threatRead(Genome.Clade.PREDATOR) * 1000));
+			assertGreater("a grazer beside a bigger grazer reads one, as it always did",
+					threatRead(Genome.Clade.HERBIVORE), 0.0);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18685,6 +18735,7 @@ public class SimTests {
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
+				new AHunterFearsOnlyWhatHuntsIt(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),

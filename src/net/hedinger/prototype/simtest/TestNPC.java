@@ -2677,19 +2677,28 @@ public class TestNPC extends NPC {
 	 * a danger the body never acts on, and the cub ran from its food. Measured
 	 * on seed 42: a cub fled on 29% of its ticks with the nearest bigger hunter
 	 * 5.5 tiles off, lay collapsed on 22%, ate on 0.4%, and 7 of 104 grew up.
-	 * A sense should not lie about danger: a body of the same clade is a threat
-	 * only in the one state in which it would bite. A bigger grazer stays a
-	 * threat to everything, as it always was -- that is what "bigger than me"
-	 * means to a grazer's senses, and the question here is the hunter's.
+	 * A sense should not lie about danger: to a hunter, a threat is a body that
+	 * would hunt it -- a hunter above its ceiling, of its own clade only in the
+	 * one state in which it would bite -- and nothing else. A bigger grazer
+	 * stays a threat to a grazer, as it always was: that is what "bigger than
+	 * me" means to a grazer's senses, since a bigger thing may be a hunter, and
+	 * the hitch-hiker reads the same channel with the opposite sign for a lift.
 	 */
 	private boolean threatens(NPC n) {
 		if (n.getSize() <= preyCeiling()) {
 			return false;
 		}
-		if (niche().hunts() && n instanceof TestNPC t && Niche.of(t.ecoClade()).hunts()) {
-			return t.getHunger() >= STARVE_HUNGER;
+		if (!niche().hunts()) {
+			return true; // a grazer's danger is anything bigger: it may be a hunter
 		}
-		return true;
+		// A hunter's danger is what would hunt it, and nothing else does. Beyond
+		// its own pack, a cub was still fleeing on a fifth of its ticks -- from
+		// grazers (43% of them), scavengers (14%) and parasites (12%), none of
+		// which bites a hunter -- and lay collapsed on 24% (AHunterFearsOnlyWhatHuntsIt).
+		if (n instanceof TestNPC t && Niche.of(t.ecoClade()).hunts()) {
+			return t.getHunger() >= STARVE_HUNGER; // its own clade: only while starving
+		}
+		return n instanceof TestNPC t2 ? t2.actsAsHunter() : false;
 	}
 
 	/**

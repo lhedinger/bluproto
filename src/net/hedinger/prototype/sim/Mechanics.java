@@ -680,9 +680,10 @@ public final class Mechanics {
 								+ "its quarry down."),
 						sense(AgentIO.S_PREY_BEARING, "Which way that quarry lies."),
 						sense(AgentIO.S_THREAT_PROX, "The nearest LARGER creature, likewise at "
-								+ "full range. The flee channel. To a hunter, a hunter of its own "
-								+ "clade counts only while starving — the one state in which it "
-								+ "would bite — so a cub does not flee its pack at the kill."),
+								+ "full range. The flee channel. Clade-shaped, like forage: to a "
+								+ "hunter only what would hunt it counts — a hunter above its ceiling, "
+								+ "of its own clade only while starving — so a cub neither flees its "
+								+ "pack at the kill nor the herd it was born beside."),
 						sense(AgentIO.S_THREAT_BEARING, "Which way the threat lies."),
 						sense(AgentIO.S_KIN_PROX, "How close the weighted centre of nearby kin "
 								+ "is — the difference between \"my kind are off that way\" and "
