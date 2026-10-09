@@ -2835,8 +2835,8 @@ public class TestNPC extends NPC {
 			// edibleQuarry. LOS and range are already settled by the loop guard
 			// above, and cannibalism is off here because the forage channel asks
 			// the same way — a hunter's two views of its own food agree.
-			if (edibleQuarry(n, false) && dist < preyD) {
-				preyD = dist;
+			if (!n.isDead() && edibleQuarry(n, false) && dist < preyD) {
+				preyD = dist; // the prey channel is the LIVING quarry: a carcass does not run
 				preyDx = dx;
 				preyDy = dy;
 			}
@@ -2908,7 +2908,14 @@ public class TestNPC extends NPC {
 		// at. For everything else the channel keeps its plain meaning -- the
 		// nearest smaller body, which is all a grazer's senses can make of one.
 		if (niche().hunts()) {
-			if (huntPick != null) {
+			// A carcass is forage, not prey. The forage channel points at the pick
+			// dead or alive; the prey channel reads a living quarry only, because
+			// the hunter seed answers it with a flat-out chase and a carcass does
+			// not run. With a kill on both channels a cub, whose only quarry is
+			// carrion, sprinted to every body it smelled: measured on seed 42, full
+			// throttle on 46% of its ticks, 38% of them at a carcass, travel
+			// costing more than living, collapsed on 18% (ACarcassIsForageNotPrey).
+			if (huntPick != null && !huntPick.isDead()) {
 				preyD = distance(huntPick.getX(), huntPick.getY(), huntPick.getZ());
 				preyDx = huntPick.getX() - X;
 				preyDy = huntPick.getY() - Y;

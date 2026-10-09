@@ -677,7 +677,8 @@ public final class Mechanics {
 						sense(AgentIO.S_PREY_PROX, "The nearest SMALLER creature, at full sight "
 								+ "range rather than the short facing-gated neighbour set — a "
 								+ "hunter has to be able to lock on from far enough off to run "
-								+ "its quarry down."),
+								+ "its quarry down. A living one: a carcass is forage, not prey, "
+								+ "since it does not run and is not worth a sprint."),
 						sense(AgentIO.S_PREY_BEARING, "Which way that quarry lies."),
 						sense(AgentIO.S_THREAT_PROX, "The nearest LARGER creature, likewise at "
 								+ "full range. The flee channel. Clade-shaped, like forage: to a "

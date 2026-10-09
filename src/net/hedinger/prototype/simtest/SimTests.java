@@ -15868,6 +15868,65 @@ public class SimTests {
 	}
 
 	/**
+	 * A carcass is forage, not prey. A hunter has two names for its food: the
+	 * forage channel, which points at the quarry it has committed to, dead or
+	 * alive, and the prey channel, which the hunter seed reads as "something
+	 * to run down" and answers with a flat-out chase. A carcass does not run,
+	 * and it sat on the prey channel too -- so a cub, whose only quarry is
+	 * carrion, sprinted to every body it smelled and a grown hunter sprinted
+	 * to a kill it could have walked to. Measured on seed 42: a hunter's cub
+	 * ran at full throttle on 46% of its ticks, 38% of them with a carcass as
+	 * the thing in sight, paid more for travel than for living (0.83 against
+	 * 0.60 energy a day), and lay collapsed on 18%.
+	 *
+	 * <p>The prey channel now reads a LIVING quarry only; the forage channel
+	 * reads the pick as before, dead or alive. Pinned on a hunter with a fresh
+	 * carcass in sight (forage lit, prey dark) and the same hunter with a
+	 * living animal in sight (both lit).
+	 */
+	static class ACarcassIsForageNotPrey extends Scenario {
+		private double[] read(boolean alive) {
+			seed(137);
+			World w = room(14, 9);
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome pg = new Genome();
+			pg.size = 8;
+			pg.speed = 0;
+			TestNPC body = TestNPC.grazer(9.5, 4.5, 0, pg).grown();
+			w.spawnEntity(body);
+			tick(w, 1);
+			if (!alive) {
+				body.kill();
+			}
+			Genome hg = new Genome();
+			hg.size = 16;
+			hg.speed = 0;
+			Mind still = (sensors, act) -> { };
+			TestNPC hunter = TestNPC.minded(5.5, 4.5, 0, hg, still).withClade(Genome.Clade.PREDATOR)
+					.grown().withHunger(0.8).withHeading(0);
+			w.spawnEntity(hunter);
+			tick(w, 1);
+			tick(w, 2 * TestNPC.SENSE_EVERY);
+			double[] s = hunter.sensorSnapshot();
+			return new double[] { s[AgentIO.S_FORAGE_PROX], s[AgentIO.S_PREY_PROX] };
+		}
+
+		@Override
+		public void run() {
+			double[] dead = read(false), live = read(true);
+			assertGreater("a fresh carcass is on the forage channel", dead[0], 0.0);
+			assertEquals("and not on the prey channel: a carcass does not run", 0,
+					(long) Math.round(dead[1] * 1000));
+			assertGreater("a living animal is on the forage channel", live[0], 0.0);
+			assertGreater("and on the prey channel too", live[1], 0.0);
+		}
+	}
+
+	/**
 	 * A parasite does not ride a hunter. Whatever a hunter's size says about it
 	 * as a host, it is not one: no parasite's host scan points at a predator,
 	 * and no parasite can latch onto one, however it got there.
@@ -18736,6 +18795,7 @@ public class SimTests {
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
 				new AHunterFearsOnlyWhatHuntsIt(),
+				new ACarcassIsForageNotPrey(),
 				new AHostFeelsItsRiders(),
 				new AGroundUnderfootAnswersTheTileAsked(),
 				new EveryScanRunsOnOneOfTwoClocks(),
