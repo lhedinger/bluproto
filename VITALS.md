@@ -313,8 +313,8 @@ store and an empty gut is hungry rather than dying.
 
 **And eating is lossy, which is where the pyramid comes from.** A meal is
 swallowed whole but only assimilated in part: `FLESH_ASSIMILATION` 0.85 of
-flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.40 of plant matter
-does, so the same gutful is worth twice as much to a carnivore as to a
+flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.20 of plant matter
+does, so the same gutful is worth four times as much to a carnivore as to a
 herbivore — the honest reason a grazer eats all day and a hunter eats once,
 with no clade rule saying so. What does not cross is egesta: it drops where
 the animal fed and fertilises that tile at `EGESTA_FERTILITY`, the same worth

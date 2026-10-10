@@ -396,11 +396,11 @@ into its meat and cannot price the two apart yet — but they are separate
 knobs, and in life fat carries about six times what wet muscle does.
 
 - **Nothing absorbs a whole meal.** `FLESH_ASSIMILATION` 0.85 of swallowed
-  flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.40 of swallowed plant
+  flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.20 of swallowed plant
   matter does: flesh is close to the animal eating it, grass is mostly
   structure nothing here has an enzyme for. **That difference, and no rule
   about clades, is why a grazer eats all day and a hunter eats once** — the
-  same gutful is worth twice as much to the one as to the other.
+  same gutful is worth four times as much to the one as to the other.
 - **What is not absorbed is not lost.** Egesta drop where the animal fed and
   fertilise that tile at `EGESTA_FERTILITY` per unit of energy, which is the
   same worth per unit of matter a rotting body returns. So nutrients cycle
