@@ -4314,7 +4314,17 @@ public final class Worlds {
 				// population one for one and the ceiling remains the control. That
 				// is a fact about the ecology, and the honest place to record it is
 				// beside the constant that is standing in for it.
-				new int[] { Math.max(2, sc(CLADE_FLOOR, scale)), sc(100, scale) },
+				//
+				// 100 -> 250 (400 -> 1000 at the default map). The paragraph above
+				// is out of date in the way it hoped to be: with hunters placed by
+				// their food, holding and smelling their kills, hunting with an
+				// appetite and a reserve, and cubs no longer fleeing their pack or
+				// the herd, the clade breeds past the warden -- 264..595 births per
+				// 100k ticks against 0..80 reseeds on four seeds, standing at 100 to
+				// 207 with the herd at 650 to 1800. The old ceiling was the control;
+				// this one is a guardrail, and where the clade settles under grass,
+				// prey and starvation is now the world's to show.
+				new int[] { Math.max(2, sc(CLADE_FLOOR, scale)), sc(250, scale) },
 				// Scavengers. A floor so the niche is never simply empty, and a
 				// ceiling well above it -- the binding control is meant to be the
 				// carrion supply, which is finite and self-limiting in a way grass is
