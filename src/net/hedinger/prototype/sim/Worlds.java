@@ -983,17 +983,6 @@ public final class Worlds {
 			}
 		}
 
-		// Tune the surface grass's logistic recovery so a grazed-bare patch rests
-		// (Tile.REGROW_DELAY, ~1 min) and then climbs back slowly over another
-		// ~1.5 min, while a lightly-cropped patch springs back fast. Heavy grazing
-		// thus leaves lasting bare patches, but the big map still sustains the herd
-		// (unlike a small room). Non-grass tiles are unaffected.
-		for (int x = 0; x < cols; x++) {
-			for (int y = 0; y < rows; y++) {
-				w.getTile(x, y, SURFACE_Z).setRegrowRate(0.0025);
-			}
-		}
-
 		// Last, so it reads the FINAL surface: every pass that could carve a
 		// hilltop away (the ravine, the installation's shell, both seals) has
 		// already run, and a summit is only raised where rock actually survived
