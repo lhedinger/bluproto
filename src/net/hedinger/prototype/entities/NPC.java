@@ -188,7 +188,7 @@ public abstract class NPC extends Entity {
 	 * mostly structure an animal has no enzyme for, and the greater part of it
 	 * passes through. That difference, and not a rule about clades, is why a
 	 * grazer eats all day and a hunter eats once: the same gutful is worth
-	 * twice as much to the one as to the other.
+	 * four times as much to the one as to the other.
 	 *
 	 * What does not cross is egesta, and it is not lost. It drops where the
 	 * animal fed and fertilises that ground, so nutrients cycle continuously
@@ -196,7 +196,7 @@ public abstract class NPC extends Entity {
 	 */
 	/** Share of PLANT energy that crosses the gut wall; the rest is egesta. */
 	@Unit("of plant energy swallowed")
-	public static double PLANT_ASSIMILATION = 0.40;
+	public static double PLANT_ASSIMILATION = 0.20;
 	/** Share of FLESH energy that crosses the gut wall; the rest is egesta. */
 	@Unit("of flesh energy swallowed")
 	public static double FLESH_ASSIMILATION = 0.85;
