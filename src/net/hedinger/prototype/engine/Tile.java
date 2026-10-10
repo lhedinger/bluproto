@@ -49,7 +49,7 @@ public class Tile {
 	 *  grass. The rate is the PLANT's and not the level's: a bed laid in a
 	 *  surface biodome grows exactly as one in a cave. */
 	@Unit("vegetation/tick")
-	public static double FUNGUS_REGROW = 0.002;
+	public static double FUNGUS_REGROW = 0.0015;
 	/** A tile grazed below {@link #DEPLETION_LEVEL} of its cap pauses this many
 	 *  ticks -- a day of world time, a minute of watching -- before it starts to
 	 *  recover; a tile with grass to spare resumes at once. */
