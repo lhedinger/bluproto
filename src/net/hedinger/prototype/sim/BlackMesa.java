@@ -118,7 +118,6 @@ public final class BlackMesa {
 					} else if (life > 0.82) {
 						set(w, x, y, z, Tile.TileType.TYPE_FUNGUS);
 						w.getTile(x, y, z).setFertility(0.5);
-						w.getTile(x, y, z).setRegrowRate(0.002);
 					} else if (life < 0.12) {
 						set(w, x, y, z, Tile.TileType.TYPE_RUBBLE);
 					} else {
@@ -147,7 +146,6 @@ public final class BlackMesa {
 			for (int y = 23; y <= 37; y++) {
 				if (w.getTile(x, y, DEEP).getType() == Tile.TileType.TYPE_FUNGUS) {
 					w.getTile(x, y, DEEP).setFertility(0.5);
-					w.getTile(x, y, DEEP).setRegrowRate(0.002);
 				}
 			}
 		}
@@ -165,7 +163,6 @@ public final class BlackMesa {
 			for (int y = 54; y <= 66; y++) {
 				if (w.getTile(x, y, LABS).getType() == Tile.TileType.TYPE_FUNGUS) {
 					w.getTile(x, y, LABS).setFertility(0.5);
-					w.getTile(x, y, LABS).setRegrowRate(0.002);
 				}
 			}
 		}
@@ -566,7 +563,6 @@ public final class BlackMesa {
 		for (int x = 115; x <= 119; x++) {
 			for (int y = 41; y <= 45; y++) {
 				w.getTile(x, y, LABS).setFertility(0.5);
-				w.getTile(x, y, LABS).setRegrowRate(0.002);
 			}
 		}
 		shell(w, LABS, 122, 44 - 4, 128, 46,

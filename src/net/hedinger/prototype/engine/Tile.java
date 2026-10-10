@@ -39,9 +39,17 @@ public class Tile {
 	// something grazes or draws it.
 	@Unit("vegetation")
 	public static final double VEG_MAX = 1.0;
-	/** Default logistic growth rate (per tick): larger => faster recovery. */
+	/** Logistic growth rate of the sward -- meadow, tall grass and the thin
+	 *  sward on rocky ground, one plant wherever it stands. Larger => faster
+	 *  recovery: a lightly cropped patch springs back in a minute or two of
+	 *  watching, a stripped one rests and then climbs back over several. */
 	@Unit("vegetation/tick")
-	public static final double VEG_REGROW = 0.002;
+	public static double GRASS_REGROW = 0.0025;
+	/** Logistic growth rate of a fungus bed, the caves' plant, slower than
+	 *  grass. The rate is the PLANT's and not the level's: a bed laid in a
+	 *  surface biodome grows exactly as one in a cave. */
+	@Unit("vegetation/tick")
+	public static double FUNGUS_REGROW = 0.002;
 	/** A tile grazed below {@link #DEPLETION_LEVEL} of its cap pauses this many
 	 *  ticks -- a day of world time, a minute of watching -- before it starts to
 	 *  recover; a tile with grass to spare resumes at once. */
@@ -56,7 +64,6 @@ public class Tile {
 	private static final double VEG_SEED = 0.03;
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
-	private double regrowRate = VEG_REGROW; // per-tile logistic rate (world-gen may slow grass)
 
 	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
 	// A fertility field (see World.generateFertility) makes grass grow patchy,
@@ -215,10 +222,12 @@ public class Tile {
 		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
 	}
 
-	/** Logistic regrow rate for this tile (world-gen can slow grass so grazed
-	 *  patches take longer to recover). Larger => faster recovery. */
-	public void setRegrowRate(double r) {
-		regrowRate = r < 0 ? 0 : r;
+	/** Logistic regrow rate of whatever grows here, read off the tile's TYPE:
+	 *  {@link #FUNGUS_REGROW} on a fungus bed, {@link #GRASS_REGROW} on every
+	 *  sward. It is not a per-tile field, so the same plant can never be given
+	 *  two speeds by whichever worldgen pass laid it. */
+	public double regrowRate() {
+		return type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW;
 	}
 
 	/** The most vegetation this tile can hold, given its fertility. */
@@ -266,7 +275,7 @@ public class Tile {
 			v0 = seed;
 		}
 		double t = elapsed - delay;
-		double v = cap / (1 + ((cap - v0) / v0) * Math.exp(-regrowRate * t));
+		double v = cap / (1 + ((cap - v0) / v0) * Math.exp(-regrowRate() * t));
 		return v > cap ? cap : v;
 	}
 

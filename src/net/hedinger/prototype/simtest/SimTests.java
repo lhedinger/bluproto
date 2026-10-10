@@ -5416,6 +5416,47 @@ public class SimTests {
 	}
 
 	/**
+	 * Regrowth is the plant's, not the floor's. A fungus bed recovers at the
+	 * fungus rate on any level and a sward at the grass rate on any level, so
+	 * the same tile type grows the same wherever worldgen put it. It used to be
+	 * stamped per LEVEL at build -- the whole surface at one rate, everything
+	 * underground left at the default -- so a fungus bed laid in a surface
+	 * biodome outgrew the same bed in a cave, and the plateau's rocky sward
+	 * lagged the skirt it is made of. Two plants, two rates, read off the type.
+	 */
+	static class RegrowthIsThePlantsNotTheFloors extends Scenario {
+		@Override
+		public void run() {
+			seed(5);
+			World w = room(7, 7, 2);
+			w.setTile(2, 2, 0, Tile.TileType.TYPE_FUNGUS);
+			w.setTile(2, 2, 1, Tile.TileType.TYPE_FUNGUS);
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_ROCKY);
+			w.setTile(4, 4, 1, Tile.TileType.TYPE_TALLGRASS);
+			Tile caveFungus = w.getTile(2, 2, 0), skyFungus = w.getTile(2, 2, 1);
+			Tile rocky = w.getTile(4, 4, 0), tall = w.getTile(4, 4, 1), meadow = w.getTile(3, 3, 1);
+			tick(w, 1); // the clock off zero
+			for (Tile t : new Tile[] { caveFungus, skyFungus, rocky, tall, meadow }) {
+				t.setFertility(1.0);
+				// Cropped to 0.4 of cap: above the depletion line, so every tile
+				// starts regrowing at once from the same standing crop.
+				t.graze(w.getTick(), 0.6);
+			}
+			tick(w, 400);
+			long now = w.getTick();
+			assertNear("a fungus bed grows the same on either level",
+					caveFungus.getVegetation(now), skyFungus.getVegetation(now), 1e-9);
+			assertNear("and the sward is one plant: rocky ground grows as the meadow does",
+					meadow.getVegetation(now), rocky.getVegetation(now), 1e-9);
+			assertNear("tall grass too", meadow.getVegetation(now), tall.getVegetation(now), 1e-9);
+			assertTrue("but the fungus is not the grass: a different plant, a different rate ("
+					+ String.format("%.3f fungus against %.3f grass", caveFungus.getVegetation(now),
+							meadow.getVegetation(now)) + ")",
+					Math.abs(caveFungus.getVegetation(now) - meadow.getVegetation(now)) > 0.01);
+		}
+	}
+
+	/**
 	 * Vegetation regrows over time toward its cap once grazing stops. Pins the
 	 * lazy closed-form regrowth against the world clock (no entity needed).
 	 */
@@ -14981,8 +15022,11 @@ public class SimTests {
 						&& (Double) byKey.get("NPC.PLANT_DENSITY").get("value") == NPC.PLANT_DENSITY);
 				assertTrue("the size anchor is frozen",
 						(Boolean) byKey.get("NPC.REF_SIZE").get("frozen"));
-				assertTrue("the regrow rate is frozen — tiles copied it at build",
-						(Boolean) byKey.get("Tile.VEG_REGROW").get("frozen"));
+				assertTrue("the regrow rates are the plants' and live: nothing copied them at build",
+						byKey.containsKey("Tile.GRASS_REGROW")
+						&& !(Boolean) byKey.get("Tile.GRASS_REGROW").get("frozen")
+						&& byKey.containsKey("Tile.FUNGUS_REGROW")
+						&& !(Boolean) byKey.get("Tile.FUNGUS_REGROW").get("frozen"));
 				assertTrue("names are not quantities: the direction codes are "
 						+ "not listed at all", !byKey.containsKey("Tile.DIR_N"));
 				assertTrue("nor are the status codes",
@@ -18761,6 +18805,7 @@ public class SimTests {
 				new HitchhikerBrainClimbsAboard(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
+				new RegrowthIsThePlantsNotTheFloors(),
 				new VegetationRegrows(),
 				new FertilityCapsVegetation(),
 				new FertileHabitatPatches(),
