@@ -332,6 +332,23 @@ public class Genome {
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */
 	public double mutationRate = 0.1;
+	/** The founder draw of {@link #mutationRate}, and the floor the gene can
+	 *  never cross. In a steady world selection on the rate only pushes down --
+	 *  most mutations hurt, so the parent that jitters its young least leaves
+	 *  the most intact descendants -- and the gene ratchets to whatever floor
+	 *  it is given. Measured on the live world: both clades fell from about
+	 *  0.10 to a floor of 0.01 inside forty generations, which made that one
+	 *  constant the whole world's evolvability. So the floor is the bottom of
+	 *  the founder draw: a lineage can settle, but never copy itself more
+	 *  faithfully than the world was seeded with. Nothing here yet pays for
+	 *  fidelity or stirs the environment, which is what holds real rates up. */
+	@Unit("per gene")
+	public static final double MUT_LO = 0.05;
+	@Unit("per gene")
+	public static final double MUT_HI = 0.15;
+	/** Ceiling of the gene: past this a lineage dissolves. */
+	@Unit("per gene")
+	public static final double MUT_MAX = 0.5;
 	/**
 	 * A born-in drive to forage, 0..1: how hard a newborn seeks food before its
 	 * mind has decided anything. Seeded into the body's actuators at birth (the
@@ -533,7 +550,7 @@ public class Genome {
 		// and the foraging instinct all vary from the first generation.
 		g.reproFraction = 0.6 + Utils.random() * 0.3;
 		g.reproCostFraction = 0.35 + Utils.random() * 0.3;
-		g.mutationRate = 0.05 + Utils.random() * 0.1;
+		g.mutationRate = MUT_LO + Utils.random() * (MUT_HI - MUT_LO);
 		g.instinct = 0.5 + Utils.random() * 0.5;
 		spreadSearch(g);
 		// Lifespan: 12 to 25 days at the reference body and pace, which spans one

@@ -1111,9 +1111,11 @@ public final class Mechanics {
 						+ "axis, low is breed-early, high is bank-first."),
 				row("Spends per child", pct(def.reproCostFraction) + " of glycogen", "",
 						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
-				row("Mutation rate", "± " + num(def.mutationRate) + " per gene", "",
-						"Evolvability, itself heritable — meta-evolution, bounded so a lineage "
-						+ "cannot fossilise or dissolve."),
+				row("Mutation rate", "± " + num(def.mutationRate) + " per gene",
+						num(Genome.MUT_LO) + " – " + num(Genome.MUT_MAX),
+						"Evolvability, itself heritable — meta-evolution. In a steady world selection "
+						+ "only ever pushes it down, so the floor is where founders begin: a lineage can "
+						+ "settle but never copy itself more faithfully than the world was seeded with."),
 				row("Forage instinct", "0 – 1", "",
 						"A born-in drive to seek food, seeded into a newborn's steering; the "
 						+ "mind overrides it once it decides, so a random-brained founder still "
