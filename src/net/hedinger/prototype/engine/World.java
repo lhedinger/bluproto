@@ -1419,8 +1419,8 @@ public class World {
 		java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
 		for (int x = 0; x < c; x++) {
 			for (int y = 0; y < r; y++) {
-				Tile.TileType t = getTile(x, y, l).getType();
-				boolean wet = t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS;
+				Tile tile = getTile(x, y, l);
+				boolean wet = tile.isWater() || tile.getType() == Tile.TileType.TYPE_SHALLOWS;
 				near[x][y] = wet ? (x << 16 | y) : -1;
 				steps[x][y] = wet ? 0 : -1;
 				if (wet) {

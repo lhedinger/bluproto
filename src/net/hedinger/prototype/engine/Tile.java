@@ -245,7 +245,8 @@ public class Tile {
 		// have given it, so adding it moved no food. A cover tile that starved
 		// the herd would be a balance change wearing a texture's clothes.
 		return type == TileType.TYPE_FLOOR || type == TileType.TYPE_ROCKY
-				|| type == TileType.TYPE_FUNGUS || type == TileType.TYPE_TALLGRASS;
+				|| type == TileType.TYPE_FUNGUS || type == TileType.TYPE_TALLGRASS
+				|| type == TileType.TYPE_SPHAGNUM || type == TileType.TYPE_SEDGE;
 	}
 
 	/** Current vegetation density [0, cap], regrown lazily to {@code now} along a
@@ -691,7 +692,7 @@ public class Tile {
 	}
 
 	public boolean isWalkable() {
-		return type.isOpen() && !isDrop() && type != TileType.TYPE_WATER;
+		return type.isOpen() && !isDrop() && !isWater();
 	}
 
 	public boolean isFlyable() {
@@ -704,7 +705,7 @@ public class Tile {
 
 	/** Water is open (flyers pass) but not walkable — land entities can't enter. */
 	public boolean isWater() {
-		return type == TileType.TYPE_WATER;
+		return type == TileType.TYPE_WATER || type == TileType.TYPE_POOL;
 	}
 
 	/**
@@ -732,8 +733,16 @@ public class Tile {
 		switch (type) {
 		case TYPE_QUICKSAND:
 			return 0.2;
+		case TYPE_MIRE:
+			return 0.2; // nominal; the true drag is size-scaled, see speedFactorFor
 		case TYPE_MUD:
 			return 0.4;
+		case TYPE_SPHAGNUM:
+			return 0.6; // a moss mat gives underfoot
+		case TYPE_SEDGE:
+			return 0.5; // tussocks: stepped between, not over, as slow as a reed bed
+		case TYPE_PEAT:
+			return 0.7; // soft, but it carries
 		case TYPE_REEDS:
 			return 0.5;
 		case TYPE_SHALLOWS:
@@ -767,8 +776,19 @@ public class Tile {
 		if (type == TileType.TYPE_CRYSTAL_BED) {
 			return 1.0 - 0.65 * Math.min(1.0, size / CRYSTAL_CLEARANCE);
 		}
+		if (type == TileType.TYPE_MIRE) {
+			// A mire takes a body by its weight: a parasite skates across what
+			// a grown grazer sinks into to the belly. Quicksand near-stops
+			// everything alike; this is the wet country's version, and the one
+			// place a small body outruns a big one on the ground.
+			return 1.0 - 0.85 * Math.min(1.0, size / MIRE_CLEARANCE);
+		}
 		return speedFactor();
 	}
+
+	/** The body size (px) at which a mire takes its full hold. */
+	@Unit("px")
+	public static final float MIRE_CLEARANCE = 10;
 
 	/** The biggest body (radius) that fits through a crawl duct; anything
 	 *  larger is stopped at the grille. */
@@ -807,7 +827,7 @@ public class Tile {
 		}
 		return isSolid() || type == TileType.TYPE_COVER || type == TileType.TYPE_REEDS
 				|| type == TileType.TYPE_DUCT || type == TileType.TYPE_TALLGRASS
-				|| type == TileType.TYPE_SCRUB;
+				|| type == TileType.TYPE_SCRUB || type == TileType.TYPE_SEDGE;
 	}
 
 	public void updateTilecode(World world) {
@@ -948,7 +968,13 @@ public class Tile {
 		TYPE_SCRUB(52, true, "desert scrub"), // thorn clumps on sand: the dry country's only cover
 		TYPE_TURBINE(53, false, "turbine"), // a generator set: solid machinery, the plant's hot shape
 		TYPE_CONSOLE(54, false, "control panel"), // a bank of instruments: solid furniture, below any eye line
-		TYPE_LIFT(55, true, "lift shaft"); // an elevator's shaft with no car in it: drops like a hole, for now
+		TYPE_LIFT(55, true, "lift shaft"), // an elevator's shaft with no car in it: drops like a hole, for now
+		// ---- the bog: wet ground that is neither lake nor shore ----
+		TYPE_PEAT(56, true, "peat"), // waterlogged half-rotted plant: soft going, grows nothing
+		TYPE_SPHAGNUM(57, true, "sphagnum mat"), // a moss mat on peat: slow, and a thin grazing
+		TYPE_POOL(58, true, "tannin pool"), // still water steeped in peat: open to flyers, closed to walkers, drinkable
+		TYPE_MIRE(59, true, "mire"), // ground that is half water: near-stops a big body, lets a small one through
+		TYPE_SEDGE(60, true, "cotton grass"); // tussocks on peat: open cover, grazeable, and it hides a body
 
 		private int value;
 		private boolean open;
