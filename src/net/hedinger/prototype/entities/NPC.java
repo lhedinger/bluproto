@@ -1677,9 +1677,9 @@ public abstract class NPC extends Entity {
 				if (!getWorld().isValid(X + dx, Y + dy, Z)) {
 					continue;
 				}
-				var t = getWorld().getTile(X + dx, Y + dy, Z).getType();
-				if (t == net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER
-						|| t == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHALLOWS) {
+				var tile = getWorld().getTile(X + dx, Y + dy, Z);
+				// Any standing water drinks: the lake, its shallows, a bog pool.
+				if (tile.isWater() || tile.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHALLOWS) {
 					return true;
 				}
 			}

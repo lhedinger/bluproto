@@ -1340,7 +1340,7 @@ public class Grid {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				Tile.TileType tt = tiles[x][y].getType();
-				if (tt == Tile.TileType.TYPE_WATER || tt == Tile.TileType.TYPE_SHALLOWS) {
+				if (tiles[x][y].isWater() || tt == Tile.TileType.TYPE_SHALLOWS) {
 					d[x][y] = Integer.MAX_VALUE;
 				} else {
 					q.add(x * rows + y);
@@ -1391,6 +1391,7 @@ public class Grid {
 		for (int dy = -1; dy <= 1; dy++) {
 			for (int dx = -1; dx <= 1; dx++) {
 				if (isType(x + dx, y + dy, Tile.TileType.TYPE_WATER)
+						|| isType(x + dx, y + dy, Tile.TileType.TYPE_POOL)
 						|| isType(x + dx, y + dy, Tile.TileType.TYPE_SHALLOWS)) {
 					return true;
 				}

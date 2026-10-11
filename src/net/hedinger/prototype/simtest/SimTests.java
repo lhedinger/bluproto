@@ -11221,6 +11221,152 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The bog's ground, by what it does to a walker. Four movers cross four
+	 * strips -- clear floor, peat, a sphagnum mat, cotton grass -- and finish
+	 * in that order: peat is soft but carries, the mat gives underfoot, the
+	 * tussocks are stepped between. None of it is impassable, and none of it
+	 * is fast.
+	 */
+	static class BogGroundSlowsByItsNature extends Scenario {
+		@Override
+		public void run() {
+			seed(73);
+			World w = room(18, 7);
+			Tile.TileType[] strips = { Tile.TileType.TYPE_FLOOR, Tile.TileType.TYPE_PEAT,
+					Tile.TileType.TYPE_SPHAGNUM, Tile.TileType.TYPE_SEDGE };
+			TestNPC[] movers = new TestNPC[strips.length];
+			for (int i = 0; i < strips.length; i++) {
+				for (int x = 5; x <= 10; x++) {
+					w.setTile(x, 1 + i, 0, strips[i]);
+				}
+				movers[i] = TestNPC.mover(2.5, 1.5 + i, 0, 0);
+				w.spawnEntity(movers[i]);
+			}
+			w.think();
+			tick(w, 220);
+			for (int i = 1; i < strips.length; i++) {
+				assertGreater("every mover got into its strip (" + strips[i] + ")", movers[i].getX(), 5.0);
+				assertGreater(strips[i - 1] + " carries a walker further than " + strips[i],
+						movers[i - 1].getX() - movers[i].getX(), 0.2);
+			}
+		}
+	}
+
+	/**
+	 * A mire takes a body by its weight. The same strip of mire near-stops a
+	 * grown grazer and lets a parasite-sized body through at most of its pace
+	 * -- the one ground in the world where small outruns big -- and the tile
+	 * says so directly, by size, before any body walks it.
+	 */
+	static class AMireSwallowsTheBigAndFloatsTheSmall extends Scenario {
+		@Override
+		public void run() {
+			seed(74);
+			Tile mire = new Tile(3, 3, 0, Tile.TileType.TYPE_MIRE);
+			assertGreater("a 4 px body keeps most of its pace", mire.speedFactorFor(4), 0.6);
+			assertLess("a 24 px body is near-stopped", mire.speedFactorFor(24), 0.2);
+			assertLess("and the hold grows with the body",
+					mire.speedFactorFor(12), mire.speedFactorFor(6));
+			World w = room(18, 5);
+			for (int x = 5; x <= 9; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_MIRE);
+				w.setTile(x, 3, 0, Tile.TileType.TYPE_MIRE);
+			}
+			TestNPC small = TestNPC.mover(2.5, 1.5, 0, 0).withSize(4);
+			TestNPC big = TestNPC.mover(2.5, 3.5, 0, 0).withSize(24);
+			w.spawnEntity(small);
+			w.spawnEntity(big);
+			w.think();
+			tick(w, 160);
+			assertGreater("both reached the mire", Math.min(small.getX(), big.getX()), 5.0);
+			assertGreater("the small body is well ahead of the big one across it",
+					small.getX() - big.getX(), 1.0);
+		}
+	}
+
+	/**
+	 * A tannin pool is still water: closed to a walker, open to a flyer, and
+	 * drinkable from its edge -- a parched grazer with a pool in reach drinks
+	 * itself back over the thirst line, exactly as it would at a lake.
+	 */
+	static class APoolIsWaterToDrinkAndNotToCross extends Scenario {
+		@Override
+		public void run() {
+			seed(75);
+			World w = room(12, 5);
+			for (int y = 1; y <= 3; y++) {
+				w.setTile(6, y, 0, Tile.TileType.TYPE_POOL);
+			}
+			TestNPC land = TestNPC.mover(2.5, 2.5, 0, 0);
+			TestNPC flyer = TestNPC.mover(2.5, 1.5, 0, 0).withFlying();
+			w.spawnEntity(land);
+			w.spawnEntity(flyer);
+			w.think();
+			tick(w, 200);
+			assertLess("a walker stops at the pool's edge", land.getX(), 6.0);
+			assertGreater("having walked up to it", land.getX(), 5.0);
+			assertGreater("a flyer crosses it", flyer.getX(), 6.5);
+
+			World d = room(20, 12);
+			for (int x = 1; x < 19; x++) {
+				for (int y = 1; y < 11; y++) {
+					d.getTile(x, y, 0).setFertility(1.0);
+				}
+			}
+			for (int y = 1; y < 11; y++) {
+				d.setTile(18, y, 0, Tile.TileType.TYPE_POOL); // a bog pool along the east
+			}
+			tick(d, 1);
+			TestNPC g = TestNPC.breeder(3.5, 6.5, 0,
+					Genome.phenotype(6, 0.05, 5, 6, Math.PI / 2, 1_000_000))
+					.withHydration(0.2).withReproCooldown(100_000_000);
+			d.spawnEntity(g);
+			tick(d, 1500);
+			assertTrue("the parched grazer is still alive", !g.isDead() && !g.isRemoved());
+			assertGreater("it walked to the pool and drank itself back over the thirst line",
+					g.getHydration(), 0.5);
+		}
+	}
+
+	/**
+	 * What the bog grows and what it hides. Cotton grass is open cover -- it
+	 * blocks sight the way tall grass does, and a body can graze it; the
+	 * sphagnum mat grows a thin sward; peat grows nothing, and a mire and a
+	 * pool are not ground at all. And a mire is on the hazard channel: a body
+	 * facing one reads it the way it reads water or a pit.
+	 */
+	static class TheBogGrowsHidesAndWarns extends Scenario {
+		@Override
+		public void run() {
+			seed(76);
+			World w = room(12, 12);
+			Tile sedge = new Tile(1, 1, 0, Tile.TileType.TYPE_SEDGE);
+			Tile mat = new Tile(1, 2, 0, Tile.TileType.TYPE_SPHAGNUM);
+			Tile peat = new Tile(1, 3, 0, Tile.TileType.TYPE_PEAT);
+			Tile mire = new Tile(1, 4, 0, Tile.TileType.TYPE_MIRE);
+			Tile pool = new Tile(1, 5, 0, Tile.TileType.TYPE_POOL);
+			assertTrue("cotton grass hides a body", sedge.blocksSight());
+			assertTrue("and can be grazed", sedge.growsVegetation() && sedge.isWalkable());
+			assertTrue("a sphagnum mat grows a sward", mat.growsVegetation());
+			assertTrue("and does not hide", !mat.blocksSight());
+			assertTrue("peat grows nothing", !peat.growsVegetation());
+			assertTrue("a mire grows nothing and hides nothing", !mire.growsVegetation() && !mire.blocksSight());
+			assertTrue("a pool is water", pool.isWater() && !pool.isWalkable() && pool.isFlyable());
+
+			w.setTile(7, 6, 0, Tile.TileType.TYPE_MIRE);
+			Genome g = new Genome();
+			g.losRange = 6;
+			TestNPC body = TestNPC.minded(6.5, 6.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_THROTTLE] = 0;
+			}).withHeading(0); // facing east, the mire one tile ahead
+			w.spawnEntity(body);
+			w.think();
+			tick(w, TestNPC.SENSE_EVERY + 1);
+			assertNear("a mire ahead is on the hazard channel", 1.0, body.sensorSnapshot()[AgentIO.S_HAZARD_AHEAD], 1e-9);
+		}
+	}
+
 	/** Sight is decided tile to tile: whether B can be seen from A is the ray
 	 * between the two tile CENTRES, so every body in A gets the same answer
 	 * about every body in B wherever each stands inside its tile, A sees B
@@ -18763,6 +18909,10 @@ public class SimTests {
 				new PerceptionIsOneGatherOnTheClock(),
 				new AHostMendsWhatOneRiderDrinks(),
 				new TheBodyScanIsPaintedFromRamps(),
+				new BogGroundSlowsByItsNature(),
+				new AMireSwallowsTheBigAndFloatsTheSmall(),
+				new APoolIsWaterToDrinkAndNotToCross(),
+				new TheBogGrowsHidesAndWarns(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

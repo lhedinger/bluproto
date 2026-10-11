@@ -2978,9 +2978,12 @@ public class TestNPC extends NPC {
 		// ground is the third and the interesting one, because a body CAN enter
 		// it and merely pays for the crossing. The channel says "ahead of you
 		// costs something", and what that something is is the terrain's business.
+		// A mire is the fourth: a body can enter it and may not get out again
+		// before something finds it, which is a cost the channel should say.
 		boolean hazard = !isFlying() && ahead != null
 				&& (ahead.isWater() || ahead.isCorrosive()
-						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
+						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
+						|| ahead.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE);
 		s[AgentIO.S_HAZARD_AHEAD] = hazard ? 1.0 : 0.0;
 	}
 
@@ -3115,8 +3118,8 @@ public class TestNPC extends NPC {
 		case AgentIO.TILE_SOLID:
 			return t.isSolid() ? 1 : 0;
 		case AgentIO.TILE_HAZARD:
-			return t.isWater()
-					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE ? 1 : 0;
+			return t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
+					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE ? 1 : 0;
 		default:
 			if (!t.isWalkable()) {
 				return 0;
