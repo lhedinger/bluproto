@@ -1202,14 +1202,21 @@ public final class GroundTextures {
 	}
 
 	/**
-	 * A tannin pool: still black water. A hash-stippled surface in the two
-	 * dark shades (no Bayer -- the pattern is organic, not a gradient) and a
-	 * rare 2x2 sky glint. No depth shading: a bog pool is opaque at an inch.
+	 * A tannin pool: the lake's own surface, in tea-black. The same broad
+	 * shadow/base patches off the same noise, sharpened the same way so the
+	 * cores stay solid and only their borders dither, and the same sparse
+	 * 2-px glint in the highlight -- so it reads as water first and as dark
+	 * water second. No depth term: a bog pool is opaque at an inch.
 	 */
 	public static int tanninPool(double wx, double wy, int px, int py) {
-		double n = Utils.noise2(wx + 2, wy + 7, 0.55);
-		int c = n > 0.6 ? RAMP[CLS_POOL][1] : RAMP[CLS_POOL][0];
-		return hash01(px >> 1, py >> 1, 31) < 0.03 ? RAMP[CLS_POOL][2] : c;
+		if (hash01(px >> 1, py, 14) > 0.992) {
+			return RAMP[CLS_POOL][2]; // sparse glint, 2 px wide
+		}
+		double sh = Utils.noise2(wx + 31, wy + 17, 0.6);
+		double p = (sh - 0.24) / 0.44;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
+		return ditherRamp(CLS_POOL, p, px, py);
 	}
 
 	/**
