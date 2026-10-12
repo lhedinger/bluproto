@@ -561,7 +561,7 @@ for (const [act, name, meaning] of EXPR) {
   // so the demo veils exactly those — the live view veils every foliage tile,
   // which is equivalent because re-stamped pixels are invisible over the
   // identical ground.
-  for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2]] as const) {
+  for (const [name, kind] of [['canopy', 1], ['reeds', 3], ['duct', 2], ['sedge', 6]] as const) {
     if (!atlas) break; // the whole point is a body under the veil
     const ground = await loadCanvas(`/help/${name}_ground.png`);
     if (!ground) continue;

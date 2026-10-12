@@ -1258,12 +1258,14 @@ final class WorldHost {
 					// and they are all different — 1 thicket (clustered blocks
 					// at half coverage), 2 duct (slot-exact), 3 reeds
 					// (stalk-exact), 4 tall grass (the lit tips only), 5 scrub
-					// (the wood only) — so the kind has to travel, not just the
-					// fact that the tile hides something.
+					// (the wood only), 6 cotton grass (tufts and seed heads) — so
+					// the kind has to travel, not just the fact that the tile
+					// hides something.
 					v = (byte) (type == net.hedinger.prototype.engine.Tile.TileType.TYPE_DUCT ? 2
 							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_REEDS ? 3
 							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_TALLGRASS ? 4
-							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_SCRUB ? 5 : 1);
+							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_SCRUB ? 5
+							: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_SEDGE ? 6 : 1);
 				}
 				c[y * cols + x] = v;
 			}

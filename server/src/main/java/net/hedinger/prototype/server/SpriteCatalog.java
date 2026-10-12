@@ -101,6 +101,7 @@ final class SpriteCatalog {
 		concealGround("canopy", Tile.TileType.TYPE_COVER);
 		concealGround("reeds", Tile.TileType.TYPE_REEDS);
 		concealGround("duct", Tile.TileType.TYPE_DUCT);
+		concealGround("sedge", Tile.TileType.TYPE_SEDGE);
 		bedGround();
 	}
 

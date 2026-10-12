@@ -1560,6 +1560,11 @@ const REED_GAP = 0x14301f;   // GroundTextures.RAMP[CLS_REEDS][0]
 const BLADE_TIP = 0x5f9850;  // RAMP[CLS_GRASS][2]
 const SCRUB_WOOD = 0x3f7a38; // RAMP[CLS_CACTUS][1]
 const SCRUB_THORN = 0x2a4d24; // RAMP[CLS_CACTUS][0]
+// Cotton grass (cover 6): the tufts and their seed heads — reed stem, reed
+// tip and the bloom cream — and nothing of the peat between them.
+const SEDGE_STEM = 0x2c5a36;  // RAMP[CLS_REEDS][1]
+const SEDGE_TIP = 0x4f8752;   // RAMP[CLS_REEDS][2]
+const SEDGE_HEAD = 0xf0e8c6;  // GroundTextures.BLOOM_CREAM
 
 /** The design system's cover translucency: every concealment veil — canopy,
  *  reed stalks, duct lids — draws at 25% translucency, so a veiled body
@@ -1588,6 +1593,7 @@ export function veilTile(ctx: CanvasRenderingContext2D, kind: number,
   const keep = kind === 3 ? (c: number) => c !== REED_GAP
     : kind === 4 ? (c: number) => c === BLADE_TIP
     : kind === 5 ? (c: number) => c === SCRUB_WOOD || c === SCRUB_THORN
+    : kind === 6 ? (c: number) => c === SEDGE_STEM || c === SEDGE_TIP || c === SEDGE_HEAD
     : null;
   if (keep) {
     const vg = VEIL_SCRATCH.getContext('2d', { willReadFrequently: true })!;
