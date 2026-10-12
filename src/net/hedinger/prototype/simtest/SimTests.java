@@ -2819,8 +2819,9 @@ public class SimTests {
 					}
 					count[f]++;
 					if (f == Tile.FLORA_MOSS) {
-						assertTrue("moss grows on rocky ground and nowhere else",
-								t.getType() == Tile.TileType.TYPE_ROCKY);
+						assertTrue("moss grows on rocky ground and in the bog's mat, nowhere else",
+								t.getType() == Tile.TileType.TYPE_ROCKY
+										|| t.getType() == Tile.TileType.TYPE_SPHAGNUM);
 					}
 				}
 			}
@@ -11222,6 +11223,51 @@ public class SimTests {
 	}
 
 	/**
+	 * The demo world grows a bog, and only where a bog belongs.
+	 *
+	 * <p>Five tiles nobody places are five tiles nobody sees -- the cactus
+	 * spent a release as art no world contained. So every seed checked must
+	 * lay all five, and only the wetland may lay them. The two plants are
+	 * the only bog tiles that grow anything, and the mat is drawn as moss.
+	 */
+	static class TheWetlandGrowsABog extends Scenario {
+		@Override
+		public void run() {
+			java.util.EnumSet<Tile.TileType> bog = java.util.EnumSet.of(Tile.TileType.TYPE_PEAT,
+					Tile.TileType.TYPE_SPHAGNUM, Tile.TileType.TYPE_SEDGE, Tile.TileType.TYPE_MIRE,
+					Tile.TileType.TYPE_POOL);
+			for (long seed : new long[] { 1, 2, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int z = w.getSurfaceZ();
+				java.util.EnumMap<Tile.TileType, Integer> n = new java.util.EnumMap<>(Tile.TileType.class);
+				int wild = 0;
+				for (int x = 1; x < w.getColums() - 1; x++) {
+					for (int y = 1; y < w.getRows() - 1; y++) {
+						Tile t = w.getTile(x, y, z);
+						if (!bog.contains(t.getType())) {
+							continue;
+						}
+						n.merge(t.getType(), 1, Integer::sum);
+						if (!"wetland".equals(net.hedinger.prototype.sim.Worlds.biomeNameAt(w, x, y))) {
+							wild++;
+						}
+						boolean grows = t.getType() == Tile.TileType.TYPE_SPHAGNUM
+								|| t.getType() == Tile.TileType.TYPE_SEDGE;
+						assertTrue("only the bog's two plants grow anything", grows == t.getFertility() > 0);
+						if (t.getType() == Tile.TileType.TYPE_SPHAGNUM) {
+							assertEquals("the mat is moss", Tile.FLORA_MOSS, t.getFlora());
+						}
+					}
+				}
+				for (Tile.TileType t : bog) {
+					assertGreater("seed " + seed + " lays " + t, n.getOrDefault(t, 0), 0);
+				}
+				assertEquals("seed " + seed + ": no bog outside the wetland", 0, wild);
+			}
+		}
+	}
+
+	/**
 	 * The bog is painted from the wet ground the world already had.
 	 *
 	 * <p>Five tiles and not one new hue: peat is mud darkened, the pool is
@@ -19053,6 +19099,7 @@ public class SimTests {
 				new APoolIsWaterToDrinkAndNotToCross(),
 				new TheBogGrowsHidesAndWarns(),
 				new TheBogIsPaintedFromTheWetGroundItHas(),
+				new TheWetlandGrowsABog(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

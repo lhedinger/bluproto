@@ -603,6 +603,10 @@ public final class Worlds {
 		 *  {@code waterElev}. Reed and marsh rings hang off the same numbers.
 		 *  A moisture above 1 means no water at all. */
 		final double waterMoist, waterElev;
+		/** The bog: peat flats on ground moister than {@code bogMoist} and not
+		 *  much higher than the water table, where the bog field says so. A
+		 *  moisture above 1 means no bog at all. */
+		final double bogMoist;
 		/** Sand pans: ground higher than {@code sandElev} and drier than
 		 *  {@code sandMoist}. An elevation above 1 means no sand. */
 		final double sandElev, sandMoist;
@@ -611,7 +615,7 @@ public final class Worlds {
 
 		Biome(String name, double elevBias, double moistBias, double fertBase, double fertGain,
 				double coverCut, double coverMoist, double waterMoist, double waterElev,
-				double sandElev, double sandMoist, double dustMoist) {
+				double bogMoist, double sandElev, double sandMoist, double dustMoist) {
 			this.name = name;
 			this.elevBias = elevBias;
 			this.moistBias = moistBias;
@@ -621,6 +625,7 @@ public final class Worlds {
 			this.coverMoist = coverMoist;
 			this.waterMoist = waterMoist;
 			this.waterElev = waterElev;
+			this.bogMoist = bogMoist;
 			this.sandElev = sandElev;
 			this.sandMoist = sandMoist;
 			this.dustMoist = dustMoist;
@@ -634,23 +639,23 @@ public final class Worlds {
 	 *  the temperate parts of the map still read as the world these thresholds
 	 *  were tuned for. Everything else is defined by its distance from it. */
 	private static final Biome MEADOW = new Biome("meadow",
-			0, 0, 0.15, 1.25, 0.62, 0.55, 0.70, 0.45, 0.58, 0.30, 0.40);
+			0, 0, 0.15, 1.25, 0.62, 0.55, 0.70, 0.45, NEVER, 0.58, 0.30, 0.40);
 	/** Dry open grass: thin, few features, the odd copse and pond. */
 	private static final Biome STEPPE = new Biome("steppe",
-			0.01, -0.08, 0.10, 0.90, 0.86, 0.60, 0.84, 0.40, 0.62, 0.28, 0.42);
+			0.01, -0.08, 0.10, 0.90, 0.86, 0.60, 0.84, 0.40, NEVER, 0.62, 0.28, 0.42);
 	/** Sand pans, bare dust, quicksand and mesas. No water, no thicket. */
 	private static final Biome BADLANDS = new Biome("badlands",
-			0.05, -0.20, 0.03, 0.60, NEVER, NEVER, NEVER, 0, 0.50, 0.48, 0.62);
+			0.05, -0.20, 0.03, 0.60, NEVER, NEVER, NEVER, 0, NEVER, 0.50, 0.48, 0.62);
 	/** Rock, scree and rocky pasture; most of the skyline stands over it. */
 	private static final Biome UPLAND = new Biome("upland",
-			0.14, -0.04, 0.08, 0.80, 0.82, 0.60, 0.86, 0.35, NEVER, 0, 0.30);
+			0.14, -0.04, 0.08, 0.80, 0.82, 0.60, 0.86, 0.35, NEVER, NEVER, 0, 0.30);
 	/** Thicket first and clearing second: the one region that hides things. */
 	private static final Biome WOODLAND = new Biome("woodland",
-			-0.02, 0.08, 0.22, 1.10, 0.33, 0.30, 0.76, 0.45, NEVER, 0, 0.25);
-	/** Lakes, reed beds and marsh, on the richest ground there is. No sand,
-	 *  and it sits too low to carry outcrops. */
+			-0.02, 0.08, 0.22, 1.10, 0.33, 0.30, 0.76, 0.45, NEVER, NEVER, 0, 0.25);
+	/** Lakes, reed beds and marsh, on the richest ground there is, and the
+	 *  one region with a bog. No sand, and it sits too low to carry outcrops. */
 	private static final Biome WETLAND = new Biome("wetland",
-			-0.08, 0.16, 0.28, 1.30, 0.62, 0.62, 0.60, 0.52, NEVER, 0, 0.20);
+			-0.08, 0.16, 0.28, 1.30, 0.62, 0.62, 0.60, 0.52, 0.40, NEVER, 0, 0.20);
 
 	/** One region: a Voronoi site and the biome it carries. */
 	static final class Region {
@@ -717,6 +722,12 @@ public final class Worlds {
 	 * warp is what turns straight Voronoi edges into coastlines; without it the
 	 * borders are the polygon edges of a diagram, which no landscape has.
 	 */
+	/** The name of the biome a tile of this world's surface was laid by --
+	 *  for anything checking what grew where without re-deriving the map. */
+	public static String biomeNameAt(World w, int x, int y) {
+		return biomeAt(regionSites(w.getColums(), w.getRows()), x, y).name;
+	}
+
 	static Biome biomeAt(Region[] regions, int x, int y) {
 		double wx = x + BIOME_WARP * (Utils.noise2(x + 3100, y + 2200, 0.022) - 0.5) * 2;
 		double wy = y + BIOME_WARP * (Utils.noise2(x + 4300, y + 900, 0.022) - 0.5) * 2;
@@ -797,6 +808,40 @@ public final class Worlds {
 				} else if (moist > b.waterMoist - 0.03 && elev < b.waterElev + 0.01) {
 					t = Tile.TileType.TYPE_REEDS;
 					fert = 0; // reed beds fringing the water: slow, sight-blocking
+				} else if (moist > b.bogMoist && elev < b.waterElev + 0.14
+						&& Utils.noise2(x + 1700, y + 880, 0.045) > 0.50) {
+					// The bog: peat flats where the wetland's ground is wet but
+					// not under water. Cut from a SLOW field so it comes as a
+					// few flats rather than a band round every lake, and tested
+					// BEFORE the mud band so a flat takes the marsh it lies in
+					// -- a bog is what a marsh becomes when the peat builds up,
+					// and placed after the mud it was only a thin shell outside
+					// the shore that no body would ever have to cross.
+					// Inside, one hollow field lays the whole mosaic: pools in
+					// the lowest hollows with a ring of mire round each (so a
+					// pool is never stepped straight into), the moss mat on the
+					// hummocks, cotton grass where the detail noise tufts it,
+					// and bare peat between. Only the two plants grow anything,
+					// and little: the bog is poor ground that is hard to cross,
+					// which is its whole offer -- a small body's refuge, not a
+					// pasture.
+					double hollow = Utils.noise2(x + 2600, y + 1500, 0.13);
+					if (hollow < 0.30) {
+						t = Tile.TileType.TYPE_POOL;
+						fert = 0;
+					} else if (hollow < 0.37) {
+						t = Tile.TileType.TYPE_MIRE;
+						fert = 0;
+					} else if (hollow > 0.62) {
+						t = Tile.TileType.TYPE_SPHAGNUM;
+						fert = 0.35;
+					} else if (detail > 0.60) {
+						t = Tile.TileType.TYPE_SEDGE;
+						fert = 0.30;
+					} else {
+						t = Tile.TileType.TYPE_PEAT;
+						fert = 0;
+					}
 				} else if (moist > b.waterMoist - 0.10 && elev < b.waterElev + 0.07) {
 					t = Tile.TileType.TYPE_MUD;
 					fert = 0.30; // marshy shore, slows movement
@@ -3452,7 +3497,8 @@ public final class Worlds {
 	 * of four looks. Within its band each plant comes in STANDS, cut from a slow
 	 * patch noise, because a fern bed is a place and a fern every fourth tile is
 	 * confetti. Rocky ground grows moss on about half its grit and keeps its
-	 * thin tufts on the rest. Tall grass stays grass: it is what it says it is.
+	 * thin tufts on the rest, and the sphagnum mat is moss outright. Tall grass
+	 * stays grass: it is what it says it is.
 	 *
 	 * <p>None of this moves food. The plant is a look on the same crop, at the
 	 * fertility the band already gave the tile.
@@ -3461,6 +3507,9 @@ public final class Worlds {
 		double patch = Utils.noise2(x + 3100, y + 450, 0.09);
 		if (t == Tile.TileType.TYPE_ROCKY) {
 			return patch > 0.50 ? Tile.FLORA_MOSS : Tile.FLORA_GRASS;
+		}
+		if (t == Tile.TileType.TYPE_SPHAGNUM) {
+			return Tile.FLORA_MOSS; // the mat IS moss; its crop is drawn as moss
 		}
 		if (t != Tile.TileType.TYPE_FLOOR) {
 			return Tile.FLORA_GRASS;
