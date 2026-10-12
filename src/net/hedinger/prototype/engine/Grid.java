@@ -824,6 +824,16 @@ public class Grid {
 								col = GroundTextures.rail(railMask, ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_QUICKSAND) {
 								col = GroundTextures.quicksand(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_PEAT) {
+								col = GroundTextures.peat(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_SPHAGNUM) {
+								col = GroundTextures.sphagnum(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_POOL) {
+								col = GroundTextures.tanninPool(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_MIRE) {
+								col = GroundTextures.mire(wx, wy, gx, gy);
+							} else if (cl == GroundTextures.CLS_SEDGE) {
+								col = GroundTextures.sedge(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_VENT) {
 								col = GroundTextures.vent(ai, aj, gx, gy);
 							} else if (cl == GroundTextures.CLS_PAVED) {
@@ -1099,6 +1109,14 @@ public class Grid {
 		case GroundTextures.CLS_SHALLOWS: return 2;
 		case GroundTextures.CLS_MUD: return 3;
 		case GroundTextures.CLS_QUICKSAND: return 4;
+		// The bog laps the way it drains: a pool is water, mire is nearly,
+		// peat laps over both (and over the mud it grades out of), the moss
+		// mat laps over the peat it grows on, and cotton grass is cover.
+		case GroundTextures.CLS_POOL: return 1;
+		case GroundTextures.CLS_MIRE: return 2;
+		case GroundTextures.CLS_PEAT: return 5;
+		case GroundTextures.CLS_SPHAGNUM: return 6;
+		case GroundTextures.CLS_SEDGE: return 14;
 		case GroundTextures.CLS_SAND: return 5;
 		case GroundTextures.CLS_BONES: return 5;
 		case GroundTextures.CLS_SOIL: return 6;

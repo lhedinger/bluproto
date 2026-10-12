@@ -11222,6 +11222,145 @@ public class SimTests {
 	}
 
 	/**
+	 * The bog is painted from the wet ground the world already had.
+	 *
+	 * <p>Five tiles and not one new hue: peat is mud darkened, the pool is
+	 * water steeped in that mud, the moss is the thicket's green pulled toward
+	 * sand, and mire and cotton grass own no colour at all. The derivations
+	 * are pinned so the ramps cannot drift into picked colours, and each
+	 * painter is pinned to the shades it may emit — the pool highlight that
+	 * glints in peat, the red fleck in the mat, the reed stems and cream heads
+	 * of the tufts — because the client's veil for cotton grass is a KEEP rule
+	 * on exactly those three colours, and a painter that stopped emitting them
+	 * would leave a body in cotton grass uncovered with nothing to notice.
+	 *
+	 * <p>The density bounds say what each tile is for. The mat must read as a
+	 * carpet with peat showing through, not a second thicket; the mire must be
+	 * genuinely half water; cotton grass must be as open as the reed bed it
+	 * borrows its stalks from.
+	 */
+	static class TheBogIsPaintedFromTheWetGroundItHas extends Scenario {
+		@Override
+		public void run() {
+			final int A = GroundTextures.ART;
+
+			// ---- the ramps are derived, not picked ---------------------------
+			for (int i = 0; i < 3; i++) {
+				int mud = GroundTextures.rampColor(GroundTextures.CLS_MUD, i);
+				assertEquals("peat shade " + i + " is mud x0.62",
+						scale(mud, 0.62), GroundTextures.rampColor(GroundTextures.CLS_PEAT, i));
+				int water = GroundTextures.rampColor(GroundTextures.CLS_WATER, i);
+				assertEquals("pool shade " + i + " is water mixed 45% to mud, x0.72",
+						scale(mix(water, mud, 0.45), 0.72),
+						GroundTextures.rampColor(GroundTextures.CLS_POOL, i));
+				int cover = GroundTextures.rampColor(GroundTextures.CLS_COVER, i);
+				int sand = GroundTextures.rampColor(GroundTextures.CLS_SAND, i);
+				double toward = new double[] { 0.35, 0.42, 0.5 }[i];
+				assertEquals("sphagnum shade " + i + " is thicket green toward sand, x0.78",
+						scale(mix(cover, sand, toward), 0.78),
+						GroundTextures.rampColor(GroundTextures.CLS_SPHAGNUM, i));
+				assertEquals("mire's ground IS peat", GroundTextures.rampColor(GroundTextures.CLS_PEAT, i),
+						GroundTextures.rampColor(GroundTextures.CLS_MIRE, i));
+				assertEquals("cotton grass's ground IS peat", GroundTextures.rampColor(GroundTextures.CLS_PEAT, i),
+						GroundTextures.rampColor(GroundTextures.CLS_SEDGE, i));
+			}
+			assertEquals("the red fleck is bloom red at x0.55", scale(0xE0455F, 0.55),
+					GroundTextures.SPHAGNUM_RED);
+
+			// ---- each painter emits only what it is allowed to ---------------
+			java.util.Set<Integer> peat = ramp(GroundTextures.CLS_PEAT);
+			java.util.Set<Integer> pool = ramp(GroundTextures.CLS_POOL);
+			java.util.Set<Integer> moss = ramp(GroundTextures.CLS_SPHAGNUM);
+			int glint = GroundTextures.rampColor(GroundTextures.CLS_POOL, 2);
+			int stem = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 1);
+			int tip = GroundTextures.rampColor(GroundTextures.CLS_REEDS, 2);
+			int head = 0xF0E8C6; // GroundTextures.BLOOM_CREAM
+			double matMin = 1, matMax = 0, fleck = 0, mireWet = 0, tuft = 0, heads = 0;
+			int tiles = 0;
+			for (int wx = 0; wx < 160; wx += 4) {
+				for (int wy = 0; wy < 160; wy += 4) {
+					int mat = 0, wet = 0, stalks = 0;
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							double x = wx + (ai + 0.5) / A, y = wy + (aj + 0.5) / A;
+							int px = wx * A + ai, py = wy * A + aj;
+							int c = GroundTextures.peat(x, y, px, py);
+							assertTrue("peat is peat, with the pool glinting in its hollows: "
+									+ Integer.toHexString(c), peat.contains(c) || c == glint);
+							c = GroundTextures.tanninPool(x, y, px, py);
+							assertTrue("a pool is three shades of tannin: " + Integer.toHexString(c),
+									pool.contains(c));
+							c = GroundTextures.mire(x, y, px, py);
+							assertTrue("mire is peat or pool, nothing else: " + Integer.toHexString(c),
+									peat.contains(c) || pool.contains(c));
+							if (pool.contains(c)) {
+								wet++;
+							}
+							c = GroundTextures.sphagnum(x, y, px, py);
+							assertTrue("the mat is moss, the peat under it, or the fleck: "
+									+ Integer.toHexString(c),
+									moss.contains(c) || peat.contains(c) || c == GroundTextures.SPHAGNUM_RED);
+							if (moss.contains(c)) {
+								mat++;
+							}
+							if (c == GroundTextures.SPHAGNUM_RED) {
+								fleck++;
+							}
+							c = GroundTextures.sedge(x, y, px, py);
+							assertTrue("cotton grass is peat, reed stems and cream heads: "
+									+ Integer.toHexString(c),
+									peat.contains(c) || c == stem || c == tip || c == head);
+							if (c == stem || c == tip) {
+								stalks++;
+							}
+							if (c == head) {
+								heads++;
+							}
+						}
+					}
+					matMin = Math.min(matMin, mat / (double) (A * A));
+					matMax = Math.max(matMax, mat / (double) (A * A));
+					mireWet += wet / (double) (A * A);
+					tuft += stalks / (double) (A * A);
+					tiles++;
+				}
+			}
+			double px = tiles * A * A;
+			assertGreater("somewhere the mat closes into a carpet", matMax, 0.70);
+			assertLess("and somewhere the peat shows through it", matMin, 0.30);
+			assertGreater("the red fleck is there", fleck / px, 0.01);
+			assertLess("but it is a fleck, not a colour", fleck / px, 0.04);
+			assertGreater("mire is at least a third water", mireWet / tiles, 0.33);
+			assertLess("and at most two thirds", mireWet / tiles, 0.67);
+			assertGreater("cotton grass has enough stalk to veil a body", tuft / tiles, 0.10);
+			assertLess("and enough peat between the tufts to see one", tuft / tiles, 0.40);
+			assertGreater("the seed heads are common enough to be part of the veil", heads / px, 0.01);
+		}
+
+		private static java.util.Set<Integer> ramp(int cls) {
+			java.util.Set<Integer> s = new java.util.HashSet<>();
+			for (int i = 0; i < 3; i++) {
+				s.add(GroundTextures.rampColor(cls, i));
+			}
+			return s;
+		}
+
+		/** Per-channel scale, truncating -- GroundTextures' darken. */
+		private static int scale(int c, double f) {
+			int r = (int) (((c >> 16) & 255) * f), g = (int) (((c >> 8) & 255) * f), b = (int) ((c & 255) * f);
+			return (r << 16) | (g << 8) | b;
+		}
+
+		/** Per-channel mix toward {@code b}, rounded -- the sheet's mix(). */
+		private static int mix(int a, int b, double t) {
+			int r = (int) Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
+			int g = (int) Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
+			int bl = (int) Math.round((a & 255) * (1 - t) + (b & 255) * t);
+			return (r << 16) | (g << 8) | bl;
+		}
+	}
+
+	/**
 	 * The bog's ground, by what it does to a walker. Four movers cross four
 	 * strips -- clear floor, peat, a sphagnum mat, cotton grass -- and finish
 	 * in that order: peat is soft but carries, the mat gives underfoot, the
@@ -18913,6 +19052,7 @@ public class SimTests {
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
 				new TheBogGrowsHidesAndWarns(),
+				new TheBogIsPaintedFromTheWetGroundItHas(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

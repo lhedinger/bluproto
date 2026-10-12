@@ -64,7 +64,8 @@ public final class GroundTextures {
 			CLS_HAZARD = 43, CLS_CONVEYOR = 44, CLS_WINDOW = 45,
 			CLS_DESK = 46, CLS_BUNK = 47, CLS_WRECK = 48,
 			CLS_TALLGRASS = 49, CLS_SCRUB = 50,
-			CLS_TURBINE = 51, CLS_CONSOLE = 52, CLS_LIFT = 53;
+			CLS_TURBINE = 51, CLS_CONSOLE = 52, CLS_LIFT = 53,
+			CLS_PEAT = 54, CLS_SPHAGNUM = 55, CLS_POOL = 56, CLS_MIRE = 57, CLS_SEDGE = 58;
 	private static final int[][] RAMP = {
 			{ 0x1a3a60, 0x24568c, 0x3172b0 }, // water
 			{ 0x2a4d24, 0x3f7a38, 0x5f9850 }, // grass
@@ -137,6 +138,22 @@ public final class GroundTextures {
 			{ 0x30343d, 0x4d535f, 0x6e7583 }, // turbine: the steel bulkhead's ramp, verbatim -- plant, not furniture
 			{ 0x14171d, 0x252a34, 0x3c434f }, // control panel: the rack's steel, verbatim -- the same cabinet family
 			{ 0x0a0b10, 0x16181f, 0x232630 }, // lift shaft: the shaft void's ramp, verbatim -- a drop is a drop
+			// The bog derives every colour it has from the wet ground the world
+			// already had. Peat is mud at x0.62: the same earth, waterlogged and
+			// half-rotted, so it sits a step darker than the mud it grades out
+			// of. The tannin pool is water steeped in that peat -- each shade
+			// is the water ramp mixed 45% toward mud, then x0.72 -- tea-black
+			// and still, never the lake's blue. Sphagnum is the thicket's green
+			// pulled toward sand (35/42/50% up the ramp, the ochre-olive of a
+			// living moss cushion) and then x0.78 so the mat sits down into the
+			// peat instead of standing up off it. Mire and cotton grass are peat
+			// verbatim: one is peat with pool in it, the other peat with tufts
+			// on it, and neither owns a colour of its own.
+			{ 0x221910, 0x352716, 0x493722 }, // peat: mud x0.62
+			{ 0x2b371c, 0x45512d, 0x666c46 }, // sphagnum mat: cover toward sand, x0.78
+			{ 0x1c242e, 0x2a3642, 0x3a4a57 }, // tannin pool: water steeped in mud, x0.72
+			{ 0x221910, 0x352716, 0x493722 }, // mire: peat, verbatim -- half of it is pool
+			{ 0x221910, 0x352716, 0x493722 }, // cotton grass: peat, verbatim -- the tufts are reeds
 	};
 	/** The design system's cover translucency: every concealment veil — the
 	 *  thicket canopy, reed stalks, the duct's ribbed lid — draws its
@@ -265,6 +282,16 @@ public final class GroundTextures {
 			return CLS_CONSOLE;
 		case TYPE_LIFT:
 			return CLS_LIFT;
+		case TYPE_PEAT:
+			return CLS_PEAT;
+		case TYPE_SPHAGNUM:
+			return CLS_SPHAGNUM;
+		case TYPE_POOL:
+			return CLS_POOL;
+		case TYPE_MIRE:
+			return CLS_MIRE;
+		case TYPE_SEDGE:
+			return CLS_SEDGE;
 		case TYPE_RAIL:
 			return CLS_RAIL;
 		case TYPE_SERVER:
@@ -1154,6 +1181,125 @@ public final class GroundTextures {
 		p = p < 0 ? 0 : (p > 1 ? 1 : p);
 		p = p < 0.33 ? 0 : (p > 0.66 ? 1 : (p - 0.33) / 0.33); // sharpen
 		return ditherRamp(CLS_QUICKSAND, p, px, py);
+	}
+
+	// ---- the bog ------------------------------------------------------------
+
+	/** The one accent the bog owns: red sphagnum, a fleck in the green mat.
+	 *  Bloom red at x0.55 -- the flora accent promoted by darkening it, the
+	 *  way the mushroom cap's shadow and the mesa's rock were. */
+	public static final int SPHAGNUM_RED = darken(BLOOM_RED, 0.55);
+
+	/**
+	 * Peat: quiet ground in its own darkened-mud ramp, with a wet sheen --
+	 * rare 2-px glints of the pool's highlight, only where a coarse noise says
+	 * the ground is lowest, because that is where the water table shows.
+	 */
+	public static int peat(double wx, double wy, int px, int py) {
+		int c = quietGround(CLS_PEAT, wx, wy, px, py);
+		boolean low = Utils.noise2(wx + 5, wy + 9, 0.5) < 0.3;
+		return low && hash01(px >> 1, py, 51) < 0.04 ? RAMP[CLS_POOL][2] : c;
+	}
+
+	/**
+	 * A tannin pool: still black water. A hash-stippled surface in the two
+	 * dark shades (no Bayer -- the pattern is organic, not a gradient) and a
+	 * rare 2x2 sky glint. No depth shading: a bog pool is opaque at an inch.
+	 */
+	public static int tanninPool(double wx, double wy, int px, int py) {
+		double n = Utils.noise2(wx + 2, wy + 7, 0.55);
+		int c = n > 0.6 ? RAMP[CLS_POOL][1] : RAMP[CLS_POOL][0];
+		return hash01(px >> 1, py >> 1, 31) < 0.03 ? RAMP[CLS_POOL][2] : c;
+	}
+
+	/**
+	 * Mire: ground that is half water. Peat and pool interleaved by a
+	 * sharpened noise and Bayer-dithered at the seam, so neither reads as a
+	 * patch laid on the other -- the same material, sometimes under water.
+	 */
+	public static int mire(double wx, double wy, int px, int py) {
+		double n = Utils.noise2(wx + 40, wy + 3, 0.7);
+		double p = (n - 0.38) / 0.24;
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		return bayer(px, py) < p ? tanninPool(wx, wy, px, py) : quietGround(CLS_PEAT, wx, wy, px, py);
+	}
+
+	/** Cushion lattice pitch of the sphagnum mat (art-px): a cushion every
+	 *  three pixels, a quarter of a small body across, so the mat reads as a
+	 *  texture a creature stands ON rather than a field of things it stands
+	 *  among. The first draft used a six-pixel lattice and the hummocks came
+	 *  out body-sized; the sheet caught it with a herbivore beside them. */
+	private static final int SPH_C = 3;
+
+	/**
+	 * Sphagnum mat: a connected carpet of moss over peat. A coarse coverage
+	 * noise says where the mat lies (dithered at its edge, so patches join
+	 * through a stipple rather than butt); inside, each lattice cell grows
+	 * one small cushion, lit on the single pixel north of its centre, sunk
+	 * on its south half, and 2.5% of the mat's pixels are the red fleck.
+	 */
+	public static int sphagnum(double wx, double wy, int px, int py) {
+		int c = quietGround(CLS_PEAT, wx, wy, px, py);
+		double cov = Utils.noise2(wx + 21, wy + 33, 0.55);
+		double p = (cov - 0.34) / 0.2; // 0 bare peat .. 1 solid mat
+		p = p < 0 ? 0 : (p > 1 ? 1 : p);
+		if (bayer(px, py) >= p) {
+			return c;
+		}
+		c = RAMP[CLS_SPHAGNUM][1];
+		int cx0 = Math.floorDiv(px, SPH_C), cy0 = Math.floorDiv(py, SPH_C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int kx = cx0 + ox, ky = cy0 + oy;
+				if (hash01(kx, ky, 21) > 0.7) {
+					continue; // a cell with no cushion: flat mat
+				}
+				int jx = kx * SPH_C + 1 + (int) (hash01(kx, ky, 22) * 2);
+				int jy = ky * SPH_C + 1 + (int) (hash01(kx, ky, 23) * 2);
+				int dx = px - jx, dy = py - jy;
+				double r = 1.0 + hash01(kx, ky, 24) * 0.6;
+				if (dx * dx + dy * dy <= r * r) {
+					c = dy < 0 && dx == 0 ? RAMP[CLS_SPHAGNUM][2]
+							: dy > 0 ? RAMP[CLS_SPHAGNUM][0] : RAMP[CLS_SPHAGNUM][1];
+				}
+			}
+		}
+		return hash01(px, py, 26) < 0.025 ? SPHAGNUM_RED : c;
+	}
+
+	/** Tuft lattice pitch of cotton grass (art-px). */
+	private static final int SEDGE_C = 5;
+
+	/**
+	 * Cotton grass: open cover on peat. Reed-ramp tufts on a lattice, each a
+	 * stem with a lit top and, on a third of them, a cream seed head one
+	 * pixel above -- the bloom cream every other flora accent wears. The
+	 * veil keeps the stem shades and the head, so a body in cotton grass is
+	 * seen between the tufts the way it is between reed stalks.
+	 */
+	public static int sedge(double wx, double wy, int px, int py) {
+		int c = quietGround(CLS_PEAT, wx, wy, px, py);
+		int cx0 = Math.floorDiv(px, SEDGE_C), cy0 = Math.floorDiv(py, SEDGE_C);
+		for (int oy = -1; oy <= 1; oy++) {
+			for (int ox = -1; ox <= 1; ox++) {
+				int kx = cx0 + ox, ky = cy0 + oy;
+				if (hash01(kx, ky, 61) > 0.55) {
+					continue; // bare peat between tufts
+				}
+				int jx = kx * SEDGE_C + 1 + (int) (hash01(kx, ky, 62) * 3);
+				int jy = ky * SEDGE_C + 1 + (int) (hash01(kx, ky, 63) * 3);
+				int dx = px - jx, dy = py - jy;
+				if (Math.abs(dx) <= 1 && dy >= -3 && dy <= 1 && (dx == 0 || dy >= -1)) {
+					c = dy <= -2 ? RAMP[CLS_REEDS][2] : RAMP[CLS_REEDS][1];
+				}
+				boolean headed = hash01(kx, ky, 64) < 0.35;
+				if (headed && dy == -4 && (dx == 0
+						|| (Math.abs(dx) == 1 && hash01(kx, ky, 65) < 0.5))) {
+					c = BLOOM_CREAM;
+				}
+			}
+		}
+		return c;
 	}
 
 	/** Prism lattice pitch for the dense formation (art-px). */
