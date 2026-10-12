@@ -1105,36 +1105,38 @@ public class Grid {
 	private static int edgeRank(int cls) {
 		switch (cls) {
 		case GroundTextures.CLS_HOLE: return 0;
-		case GroundTextures.CLS_WATER: return 1;
-		case GroundTextures.CLS_SHALLOWS: return 2;
-		case GroundTextures.CLS_MUD: return 3;
-		case GroundTextures.CLS_QUICKSAND: return 4;
-		// The bog laps the way it drains: a pool is water, mire is nearly,
-		// peat laps over both (and over the mud it grades out of), the moss
-		// mat laps over the peat it grows on, and cotton grass is cover.
-		case GroundTextures.CLS_POOL: return 1;
-		case GroundTextures.CLS_MIRE: return 2;
-		case GroundTextures.CLS_PEAT: return 5;
-		case GroundTextures.CLS_SPHAGNUM: return 6;
-		case GroundTextures.CLS_SEDGE: return 14;
-		case GroundTextures.CLS_SAND: return 5;
-		case GroundTextures.CLS_BONES: return 5;
-		case GroundTextures.CLS_SOIL: return 6;
+		case GroundTextures.CLS_WATER: return 10;
+		case GroundTextures.CLS_SHALLOWS: return 20;
+		case GroundTextures.CLS_MUD: return 30;
+		case GroundTextures.CLS_QUICKSAND: return 40;
+		// The bog laps the way it drains. A pool laps just over open water, so
+		// the two meet in a ragged fringe and not a grid line; mire sits
+		// between the shallows and the mud; peat laps over all of those; the
+		// moss mat laps over the peat it grows on; cotton grass is cover. The
+		// ranks run in tens so that a terrain can be slotted between two.
+		case GroundTextures.CLS_POOL: return 15;
+		case GroundTextures.CLS_MIRE: return 25;
+		case GroundTextures.CLS_PEAT: return 50;
+		case GroundTextures.CLS_SPHAGNUM: return 60;
+		case GroundTextures.CLS_SEDGE: return 140;
+		case GroundTextures.CLS_SAND: return 50;
+		case GroundTextures.CLS_BONES: return 50;
+		case GroundTextures.CLS_SOIL: return 60;
 		// Rocky ground laps over meadow and bare rock laps over rocky, so the
 		// slope from pasture to outcrop always reads in that order.
-		case GroundTextures.CLS_ROCKY: return 7;
-		case GroundTextures.CLS_STONE: return 8;
-		case GroundTextures.CLS_CRYSTAL_SPARSE: return 9;
-		case GroundTextures.CLS_CRYSTAL_BED: return 10;
-		case GroundTextures.CLS_RUBBLE: return 11;
-		case GroundTextures.CLS_VENT: return 12;
-		case GroundTextures.CLS_FUNGUS: return 13;
-		case GroundTextures.CLS_REEDS: return 14;
+		case GroundTextures.CLS_ROCKY: return 70;
+		case GroundTextures.CLS_STONE: return 80;
+		case GroundTextures.CLS_CRYSTAL_SPARSE: return 90;
+		case GroundTextures.CLS_CRYSTAL_BED: return 100;
+		case GroundTextures.CLS_RUBBLE: return 110;
+		case GroundTextures.CLS_VENT: return 120;
+		case GroundTextures.CLS_FUNGUS: return 130;
+		case GroundTextures.CLS_REEDS: return 140;
 		// Scrub laps over the sand it stands in; tall grass over the meadow it
 		// grows out of and under the thicket it thickens into.
-		case GroundTextures.CLS_SCRUB: return 6;
-		case GroundTextures.CLS_TALLGRASS: return 14;
-		case GroundTextures.CLS_COVER: return 15;
+		case GroundTextures.CLS_SCRUB: return 60;
+		case GroundTextures.CLS_TALLGRASS: return 140;
+		case GroundTextures.CLS_COVER: return 150;
 		default: return -1; // structures, shafts, paving: no lapping
 		}
 	}
@@ -1358,7 +1360,11 @@ public class Grid {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				Tile.TileType tt = tiles[x][y].getType();
-				if (tiles[x][y].isWater() || tt == Tile.TileType.TYPE_SHALLOWS) {
+				// A tannin pool is water to a body but not to the lake: it is
+				// a separate, stiller water, so a lake shallows toward one
+				// exactly as it does toward a shore.
+				if ((tiles[x][y].isWater() && tt != Tile.TileType.TYPE_POOL)
+						|| tt == Tile.TileType.TYPE_SHALLOWS) {
 					d[x][y] = Integer.MAX_VALUE;
 				} else {
 					q.add(x * rows + y);
