@@ -11409,6 +11409,31 @@ public class SimTests {
 			assertGreater("cotton grass has enough stalk to veil a body", tuft / tiles, 0.10);
 			assertLess("and enough peat between the tufts to see one", tuft / tiles, 0.40);
 			assertGreater("the seed heads are common enough to be part of the veil", heads / px, 0.01);
+
+			// ---- a pool meets a lake with no step at either end of the blend --
+			// Past each end the renderer switches to the plain painter, so the
+			// blend must already BE that painter there or the switch shows.
+			int lake = 0, stain = 0;
+			for (int py = 0; py < 96; py++) {
+				for (int qx = 0; qx < 96; qx++) {
+					double x = qx / (double) A, y = py / (double) A;
+					for (double d : new double[] { 1.0, 2.5, 6.0 }) {
+						assertEquals("deep in the pool the blend is the pool",
+								GroundTextures.tanninPool(x, y, qx, py),
+								GroundTextures.poolBlend(x, y, qx, py, GroundTextures.POOL_BLEND_POOL, d));
+						assertEquals("out in the lake the blend is the lake",
+								GroundTextures.waterSurface(x, y, qx, py, d),
+								GroundTextures.poolBlend(x, y, qx, py, GroundTextures.POOL_BLEND_LAKE, d));
+					}
+					int c = GroundTextures.poolBlend(x, y, qx, py, 0, 4);
+					if (pool.contains(c)) {
+						stain++;
+					} else {
+						lake++;
+					}
+				}
+			}
+			assertGreater("on the seam the stain and the lake both show", Math.min(lake, stain), 96 * 96 / 10);
 		}
 
 		private static java.util.Set<Integer> ramp(int cls) {

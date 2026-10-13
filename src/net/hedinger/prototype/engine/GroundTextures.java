@@ -1219,6 +1219,44 @@ public final class GroundTextures {
 		return ditherRamp(CLS_POOL, p, px, py);
 	}
 
+	/** How far into the pool (negative tiles) and into the lake (positive)
+	 *  the pool blend reaches. Past either end the plain painter takes over
+	 *  and the blend is already identical to it, so there is no step. */
+	public static final double POOL_BLEND_POOL = -2, POOL_BLEND_LAKE = 3;
+
+	/**
+	 * Where a tannin pool meets a lake: the pool's dark water bleeds out in
+	 * tongues and the lake deepens toward it, so nothing in between reads as
+	 * a shore. {@code side} is the signed distance across the seam in tiles
+	 * (0 on it, positive into the lake); {@code lakeDepth} is the lake's own
+	 * shore distance there.
+	 *
+	 * <p>A Bayer cross-fade between the two surfaces, its centre bent by a
+	 * slow noise so the stain comes out in tongues rather than a band, and
+	 * sharpened so each tongue has a solid core and only a dithered rim. On
+	 * the lake side the depth is pushed toward the abyss as it nears the
+	 * pool, which is the half that matters: tea-black tongues end in dark
+	 * water, not against bright blue.
+	 */
+	public static int poolBlend(double wx, double wy, int px, int py, double side, double lakeDepth) {
+		double n = Utils.noise2(wx + 70, wy + 20, 0.55);
+		double t = (side + 1) / 3 + (n - 0.5) * 1.1;
+		t = t < 0.3 ? 0 : (t > 0.7 ? 1 : (t - 0.3) / 0.4);
+		if (bayer(px, py) >= t) {
+			return tanninPool(wx, wy, px, py);
+		}
+		double near = 1 - side / POOL_BLEND_LAKE;
+		near = near < 0 ? 0 : (near > 1 ? 1 : near);
+		// ...but not where the lake is also at a real shore: there the
+		// shallows belong to the land, and darkening them would hide the
+		// beach beside the pool along with the one that is not there.
+		double open = (lakeDepth - 1.2) / 1.6;
+		near *= open < 0 ? 0 : (open > 1 ? 1 : open);
+		// Deepen toward the pool; at the band's lake edge (near = 0) this is
+		// the lake's own depth exactly, so the hand-off has no step.
+		return waterSurface(wx, wy, px, py, lakeDepth + near * (Math.max(0, 4.4 - lakeDepth) + 2.5));
+	}
+
 	/**
 	 * Mire: ground that is half water. Peat and pool interleaved by a
 	 * sharpened noise and Bayer-dithered at the seam, so neither reads as a
