@@ -516,6 +516,8 @@ public class Grid {
 		int ts = ResourceManager.tileSize;
 		int A = GroundTextures.ART;
 		int[][] wdist = null; // tile distance-to-shore, built on first water pixel
+		int[][][] pools = null; // pool/lake distance fields, built on first water or pool pixel
+		boolean poolsBuilt = false;
 		int[] span = tileSpan(g2, ox, oy);
 		for (int x = span[0]; x < span[1]; x++) {
 			for (int y = span[2]; y < span[3]; y++) {
@@ -747,7 +749,14 @@ public class Grid {
 							if (wdist == null) {
 								wdist = waterDist();
 							}
-							col = GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
+							if (!poolsBuilt) {
+								pools = poolFields();
+								poolsBuilt = true;
+							}
+							double side = pools == null ? 9 : poolSide(pools, wx, wy);
+							col = side < GroundTextures.POOL_BLEND_LAKE
+									? GroundTextures.poolBlend(wx, wy, gx, gy, side, depthAt(wdist, wx, wy))
+									: GroundTextures.waterSurface(wx, wy, gx, gy, depthAt(wdist, wx, wy));
 							if (wallN) {
 								col = groundShadow(col, aj); // graded shadow from the wall north
 							}
@@ -829,7 +838,19 @@ public class Grid {
 							} else if (cl == GroundTextures.CLS_SPHAGNUM) {
 								col = GroundTextures.sphagnum(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_POOL) {
-								col = GroundTextures.tanninPool(wx, wy, gx, gy);
+								if (!poolsBuilt) {
+									pools = poolFields();
+									poolsBuilt = true;
+								}
+								double side = poolSide(pools, wx, wy);
+								if (side > GroundTextures.POOL_BLEND_POOL) {
+									if (wdist == null) {
+										wdist = waterDist();
+									}
+									col = GroundTextures.poolBlend(wx, wy, gx, gy, side, depthAt(wdist, wx, wy));
+								} else {
+									col = GroundTextures.tanninPool(wx, wy, gx, gy);
+								}
 							} else if (cl == GroundTextures.CLS_MIRE) {
 								col = GroundTextures.mire(wx, wy, gx, gy);
 							} else if (cl == GroundTextures.CLS_SEDGE) {
@@ -1360,11 +1381,11 @@ public class Grid {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				Tile.TileType tt = tiles[x][y].getType();
-				// A tannin pool is water to a body but not to the lake: it is
-				// a separate, stiller water, so a lake shallows toward one
-				// exactly as it does toward a shore.
-				if ((tiles[x][y].isWater() && tt != Tile.TileType.TYPE_POOL)
-						|| tt == Tile.TileType.TYPE_SHALLOWS) {
+				// A tannin pool counts as water here: a lake does not shallow
+				// toward one (a turquoise ring there reads as a beach that is
+				// not there). Where the two waters meet is the pool blend's
+				// business -- see poolBlend.
+				if (tiles[x][y].isWater() || tt == Tile.TileType.TYPE_SHALLOWS) {
 					d[x][y] = Integer.MAX_VALUE;
 				} else {
 					q.add(x * rows + y);
@@ -1384,6 +1405,64 @@ public class Grid {
 			}
 		}
 		return d;
+	}
+
+	/** Per-tile 4-way distance to the nearest tile of {@code seeds}, over the
+	 *  whole level (unreached tiles stay huge and clamp to deep). */
+	private int[][] distTo(java.util.function.Predicate<Tile.TileType> seeds) {
+		int cols = world.cols, rows = world.rows;
+		int[][] d = new int[cols][rows];
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				if (seeds.test(tiles[x][y].getType())) {
+					q.add(x * rows + y);
+				} else {
+					d[x][y] = Integer.MAX_VALUE;
+				}
+			}
+		}
+		while (!q.isEmpty()) {
+			int i = q.poll();
+			int x = i / rows, y = i % rows, nd = d[x][y] + 1;
+			for (int k = 0; k < 4; k++) {
+				int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0);
+				int ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+				if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && d[nx][ny] > nd) {
+					d[nx][ny] = nd;
+					q.add(nx * rows + ny);
+				}
+			}
+		}
+		return d;
+	}
+
+	/** The two fields the pool blend reads: distance to the nearest pool and
+	 *  to the nearest lake tile. Null when the level has no pool, so a world
+	 *  without a bog never builds them. */
+	private int[][][] poolFields() {
+		boolean any = false;
+		for (int x = 0; x < world.cols && !any; x++) {
+			for (int y = 0; y < world.rows && !any; y++) {
+				any = tiles[x][y].getType() == Tile.TileType.TYPE_POOL;
+			}
+		}
+		if (!any) {
+			return null;
+		}
+		return new int[][][] {
+				distTo(t -> t == Tile.TileType.TYPE_POOL),
+				distTo(t -> t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS) };
+	}
+
+	/**
+	 * Signed position across a pool/lake seam, in tiles: about 0 on the
+	 * seam, positive into the lake, negative into the pool. Both tile
+	 * classes paint from this one continuous number, so the seam the grid
+	 * would draw is not there to see.
+	 */
+	private static double poolSide(int[][][] f, double wx, double wy) {
+		return depthAt(f[0], wx, wy) - depthAt(f[1], wx, wy);
 	}
 
 	/**
