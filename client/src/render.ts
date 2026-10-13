@@ -2603,7 +2603,7 @@ export function drawActionGlyph(g: CanvasRenderingContext2D, cx: number, cy: num
 // same centre-scaling the below ground does, so it sits on its floor as the
 // view slides. Dimmed to sit under the pit veil's darkness.
 
-type BelowBody = { x: number; y: number; px: number; col: string; dead: boolean };
+type BelowBody = { x: number; y: number; px: number; col: string; rgb: number; dead: boolean };
 
 function belowBodies(cam: Camera, state: WorldState, renderTime: number,
     level: number, w: number, h: number): BelowBody[] {
@@ -2624,6 +2624,7 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
       x: sx, y: sy,
       px: Math.max(3, e.size * cam.scale * f * 1.6),
       col: '#' + e.rgb.toString(16).padStart(6, '0'),
+      rgb: e.rgb,
       dead: (e.flags & F_DEAD) !== 0,
     });
   }
@@ -2644,30 +2645,21 @@ export function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
 
 /** GL variant: the batcher draws in submission order, so these quads land
  *  between the below layer and the ground layer exactly like the 2D path.
- *  One tiny tinted square per colour, cached for the tab's life. */
-const belowDotCvs = new Map<string, HTMLCanvasElement>();
-function belowDot(col: string, dead: boolean): HTMLCanvasElement {
-  const key = dead ? 'dead' : col;
-  let c = belowDotCvs.get(key);
-  if (!c) {
-    c = document.createElement('canvas');
-    c.width = c.height = 8;
-    const ctx = c.getContext('2d')!;
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = dead ? '#5a5f66' : col;
-    ctx.fillRect(0, 0, 8, 8);
-    belowDotCvs.set(key, c);
-  }
-  return c;
-}
-
+ *  Solid quads with the colour on the vertex, so every dot shares the one
+ *  white texture and the whole cohort is a single draw call. They used to
+ *  be one 8x8 texture per body colour: through a pit mouth that is a
+ *  handful, but a sky level's floor below is the surface, and the surface
+ *  is the population -- eleven hundred bodies of alternating colour broke
+ *  the batch on nearly every one, a thousand draw calls and as many
+ *  textures a frame, none of them ever evicted. */
+const BELOW_DEAD_RGB = 0x5a5f66;
 export function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
     state: WorldState, renderTime: number, level: number,
     w: number, h: number): void {
   for (const b of belowBodies(cam, state, renderTime, level, w, h)) {
-    const cvd = belowDot(b.col, b.dead);
-    glr.sprite('bdot:' + (b.dead ? 'dead' : b.col), cvd, 1, 0, 0, 8, 8,
-        b.x - b.px / 2, b.y - b.px / 2, b.px, b.px);
+    const rgb = b.dead ? BELOW_DEAD_RGB : b.rgb;
+    glr.quad(b.x - b.px / 2, b.y - b.px / 2, b.px, b.px,
+        ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 0.7);
   }
 }
 
