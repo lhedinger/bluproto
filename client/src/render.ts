@@ -278,6 +278,13 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
         return true;
       }
       const [dx, dy, dw, dh] = r;
+      // The slot holds the low map's placeholder, and a chunk is not opaque:
+      // its pit veils (and on a sky level, nearly all of it) are translucent
+      // black. Drawn straight over the placeholder's own veil, the two
+      // stacked to a window three times darker than either -- a landed
+      // chunk read as a black hole in the map while its unlanded neighbours
+      // kept the single veil. The placeholder goes before the chunk lands on it.
+      ctx.clearRect(dx, dy, dw, dh);
       ctx.drawImage(chunk, 0, 0, dw / ART * tilePx, dh / ART * tilePx, dx, dy, dw, dh);
       filled.push(r);
       return false;
