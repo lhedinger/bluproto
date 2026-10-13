@@ -258,13 +258,23 @@ export class GLRenderer {
    * this they would also never share the MEMORY, and a three-storey world
    * would hold three worlds' worth of layers on a phone GPU. Sprite atlases
    * are untouched: they are level-agnostic and have their own LRU pools.
+   *
+   * <p>The view down -- the floors below as seen through this level's holes
+   * -- is tagged with the floor it SHOWS, not the floor it is seen from, so
+   * it is not matched by level: every below texture goes. They are cheap to
+   * put back (their canvases stay cached on the CPU side) and, left alone,
+   * they were the one family nothing ever evicted: a tour of a sky level at
+   * near zoom pinned the surface's and the cave's chunks on the GPU for the
+   * life of the tab.
    */
   evictLevel(level: number): void {
     const families = new Set(['ground', 'groundlo', 'veg', 'veglo', 'canopy', 'canopylo']);
+    const below = new Set(['below', 'belowlo']);
     const tag = String(level);
     for (const key of [...this.textures.keys()]) {
       const part = key.split(':');
-      if (part.length >= 2 && families.has(part[0]) && part[1] === tag) {
+      if (part.length >= 2 && (below.has(part[0])
+          || (families.has(part[0]) && part[1] === tag))) {
         this.evict(key);
       }
     }
