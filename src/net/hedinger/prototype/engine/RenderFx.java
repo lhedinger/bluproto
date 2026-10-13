@@ -36,6 +36,14 @@ public final class RenderFx {
 	 * Only pits with a level under them show anything at all — see
 	 * {@code Grid.pitFloor}. */
 	public static double holeDepth = 0.7;
+	/** The same veil for the sky's openings, seen from the level above the
+	 * ground. A pit in rock hides the storey below in its own shadow, but the
+	 * sky is open air under daylight: the surface seen from above should still
+	 * read as the surface, only a storey off. At 0.7 the whole world arrived
+	 * at 30% from up there and read as night; 0.35 keeps the drop legible (the
+	 * tables stay fully lit, the lip and cliff carry the height) and the ground
+	 * at 65%. */
+	public static double skyDepth = 0.35;
 
 	private RenderFx() {
 	}

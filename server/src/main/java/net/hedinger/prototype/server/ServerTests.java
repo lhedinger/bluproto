@@ -1113,11 +1113,25 @@ public final class ServerTests {
 				} else {
 					deep = z;
 					check("a pit over a floor opens onto it", openPixels(img, p, y0) > 0);
+					// The veil's weight is the level's: a pit in the ground hides
+					// the storey below at holeDepth, the sky's openings show the
+					// surface at the lighter skyDepth. Both are the exact alpha
+					// the bake wrote, so a drift in either constant or in which
+					// level reads which is caught here and not by eye.
+					double depth = z > terrain.getSurfaceZ()
+							? net.hedinger.prototype.engine.RenderFx.skyDepth
+							: net.hedinger.prototype.engine.RenderFx.holeDepth;
+					int want = (int) (depth * 255 + 0.5);
+					int got = artPixel(img, p[0], p[1] - y0, 6, 6) >>> 24;
+					check("level " + z + " veils its pit at " + depth + " (alpha " + want
+							+ ", got " + got + ")", got == want);
 				}
 			}
 		}
 		check("the demo world has a pit over another level", deep > 0);
 		check("the demo world has a pit over nothing", bottom == 0);
+		check("the sky is lighter than a pit", net.hedinger.prototype.engine.RenderFx.skyDepth
+				< net.hedinger.prototype.engine.RenderFx.holeDepth);
 	}
 
 	/**

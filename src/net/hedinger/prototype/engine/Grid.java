@@ -971,6 +971,14 @@ public class Grid {
 		return (r << 16) | (g << 8) | b;
 	}
 
+	/** The veil's opacity on this level: {@link RenderFx#holeDepth} for a pit
+	 *  in the ground, {@link RenderFx#skyDepth} for the sky's openings above
+	 *  it — the surface seen from above is open air away, not a storey of
+	 *  rock away. */
+	private double veilDepth() {
+		return level > world.getSurfaceZ() ? RenderFx.skyDepth : RenderFx.holeDepth;
+	}
+
 	/** Replaces an art-pixel — the tile sprite's paint included — with the
 	 *  pit's veil: solid black at {@link RenderFx#holeDepth} opacity, and real
 	 *  alpha beneath it. One flat shade over the whole interior, not a
@@ -980,10 +988,10 @@ public class Grid {
 	 *  actually does to the floor a storey down — showing all of it, darkly —
 	 *  and the client's parallax slide carries the depth. SRC composite so
 	 *  the veil's alpha lands in the bake exactly, whatever was under it. */
-	private static void veilPixel(Graphics2D g2, int x, int y, int w, int h) {
+	private void veilPixel(Graphics2D g2, int x, int y, int w, int h) {
 		java.awt.Composite prev = g2.getComposite();
 		g2.setComposite(java.awt.AlphaComposite.Src);
-		g2.setColor(new Color(0f, 0f, 0f, (float) RenderFx.holeDepth));
+		g2.setColor(new Color(0f, 0f, 0f, (float) veilDepth()));
 		g2.fillRect(x, y, w, h);
 		g2.setComposite(prev);
 	}

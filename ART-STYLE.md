@@ -141,7 +141,11 @@ One sun, straight overhead-north. The grammar:
   `RenderFx.holeDepth` opacity** with real alpha beneath (`Grid.pitFloor`,
   `Grid.veilPixel`) — §4's own sanctioned shadow, doing what a pit does to
   the floor a storey down: showing all of it, darkly. At the default 0.7 the
-  floor below reads through at 30% brightness, whole. This replaced a hashed
+  floor below reads through at 30% brightness, whole. The sky's openings are
+  the one exception: seen from the level above the ground, the surface is open
+  air away rather than rock away, so they veil at `RenderFx.skyDepth` (0.35,
+  ground at 65%) — the drop still reads, because the tables stay fully lit and
+  the lip and cliff carry the height. This replaced a hashed
   scatter of fully-open pixels among void ones, which showed the floor bright
   but only in specks — and specks read as noise ON the pit, not a view
   through it. A window is better dim than perforated: continuity is what
