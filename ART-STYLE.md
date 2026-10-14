@@ -162,7 +162,8 @@ One sun, straight overhead-north. The grammar:
   water highlight as a sky reflection on black, mire rarer still — so the
   waters tell apart by motion as well as pattern. A glint is a 2-px dash on
   the art-pixel lattice in the ramp's highlight, a 4-px spark through the
-  middle of its blink, and nothing is ever a new colour. Position, period and
+  middle of its blink, fading in and out as whole blocks (the haze's idiom:
+  pixelated structure, soft tint), and nothing is ever a new colour. Position, period and
   phase are hashed from world position; the phase runs on the simulation
   tick, never the wall clock. Drawn from 12 px a tile up only, where an
   art-pixel is at least a device pixel.

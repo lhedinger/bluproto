@@ -2827,10 +2827,10 @@ const GLINT_C = 4;
  *  blink period range in ticks, and the lit share of each period. */
 export const GLINT_KINDS: ReadonlyArray<{ col: number; per: number; pmin: number; pmax: number; lit: number } | null> = [
   null,
-  { col: GLINT_WATER, per: 0.9, pmin: 50, pmax: 120, lit: 0.22 },    // 1 open water
-  { col: GLINT_SHALLOWS, per: 2.2, pmin: 30, pmax: 70, lit: 0.30 },  // 2 shallows
-  { col: GLINT_WATER, per: 0.5, pmin: 80, pmax: 160, lit: 0.18 },    // 3 tannin pool
-  { col: GLINT_WATER, per: 0.25, pmin: 90, pmax: 180, lit: 0.15 },   // 4 mire
+  { col: GLINT_WATER, per: 0.9, pmin: 100, pmax: 240, lit: 0.22 },   // 1 open water
+  { col: GLINT_SHALLOWS, per: 2.2, pmin: 60, pmax: 140, lit: 0.30 }, // 2 shallows
+  { col: GLINT_WATER, per: 0.5, pmin: 160, pmax: 320, lit: 0.18 },   // 3 tannin pool
+  { col: GLINT_WATER, per: 0.25, pmin: 180, pmax: 360, lit: 0.15 },  // 4 mire
 ];
 export interface Glint { x: number; y: number; kind: number; period: number; phase: number }
 
@@ -2872,7 +2872,10 @@ export function glintLit(gl: Glint, tick: number): number {
 /** Stamp the lit glints of `glints` into `g`, with art-pixel (0,0) at device
  *  (ox, oy) and `px` device pixels per art-pixel; only glints inside the
  *  art-pixel box [x0,x1)×[y0,y1) are considered. A glint is a 2-px dash in
- *  its water's highlight, and a 4-px spark through the middle of its blink. */
+ *  its water's highlight, and a 4-px spark through the middle of its blink.
+ *  It fades in and out over its lit window — translucency on whole art-pixel
+ *  blocks, the pheromone haze's idiom: the structure stays pixelated and
+ *  only the tint is soft. */
 export function drawGlints(g: CanvasRenderingContext2D, glints: Glint[], tick: number,
     ox: number, oy: number, px: number, x0: number, y0: number, x1: number, y1: number): void {
   const d = Math.ceil(px);
@@ -2886,6 +2889,7 @@ export function drawGlints(g: CanvasRenderingContext2D, glints: Glint[], tick: n
       g.fillStyle = '#' + col.toString(16).padStart(6, '0');
       last = col;
     }
+    g.globalAlpha = s < 0.5 ? s * 2 : (1 - s) * 2; // in over the first half, out over the second
     const sx = Math.round(ox + gl.x * px), sy = Math.round(oy + gl.y * px);
     g.fillRect(sx, sy, d, d);
     g.fillRect(Math.round(ox + (gl.x + 1) * px), sy, d, d);
@@ -2894,6 +2898,7 @@ export function drawGlints(g: CanvasRenderingContext2D, glints: Glint[], tick: n
       g.fillRect(Math.round(ox + (gl.x + 1) * px), Math.round(oy + (gl.y + 1) * px), d, d);
     }
   }
+  g.globalAlpha = 1;
 }
 
 let glintSrc: Uint8Array | null = null;
