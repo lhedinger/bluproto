@@ -588,7 +588,13 @@ public final class Worlds {
 	 *  never far from a way up, and nothing on the step is far from a way
 	 *  down. A mesa keeps its own, sparser figure ({@link #TILES_PER_SKY_RAMP}):
 	 *  it is a destination, a cliff is a crossing. */
-	private static final int CLIFF_TILES_PER_RAMP = 10;
+	private static final int CLIFF_TILES_PER_RAMP = 6;
+
+	/** The closest two climbs up a cliff may stand -- half a mesa's figure,
+	 *  because a cliff's climbs are spread along a line and a mesa's round a
+	 *  shape, and at the mesa's gap a long cliff could not take the climbs its
+	 *  length asks for. */
+	private static final int CLIFF_RAMP_GAP = 4;
 
 	/** How many drones the facility berths, and therefore how many charge pads
 	 *  are cut into its deck. They share one standing order rather than dividing
@@ -1382,7 +1388,8 @@ public final class Worlds {
 								+ (long) (p[1] - q[1]) * (p[1] - q[1]);
 						near = cut.get(0) == q ? d : Math.min(near, d);
 					}
-					if (!cut.isEmpty() && near < (long) MIN_SKY_RAMP_GAP * MIN_SKY_RAMP_GAP) {
+					int gap = cliff ? CLIFF_RAMP_GAP : MIN_SKY_RAMP_GAP;
+					if (!cut.isEmpty() && near < (long) gap * gap) {
 						continue;
 					}
 					// Farthest from the climbs already cut; among equals, the
