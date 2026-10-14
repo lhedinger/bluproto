@@ -2824,13 +2824,17 @@ export const GLINT_SHALLOWS = 0x63becd; // RAMP[CLS_SHALLOWS][2]
 /** Lattice pitch in art-px: nine cells a tile, at most one glint each. */
 const GLINT_C = 4;
 /** Per water kind (index = the mask byte): colour, expected glints per tile,
- *  blink period range in ticks, and the lit share of each period. */
+ *  blink period range in ticks, and the lit share of each period. Tuned by
+ *  eye for how a whole surface reads, not one glint: what registers as pace
+ *  is the rate of events across the water, so a calm surface wants few
+ *  glints each lit long (half its period, swelling and dimming over seconds)
+ *  rather than many each winking briefly. */
 export const GLINT_KINDS: ReadonlyArray<{ col: number; per: number; pmin: number; pmax: number; lit: number } | null> = [
   null,
-  { col: GLINT_WATER, per: 0.9, pmin: 100, pmax: 240, lit: 0.22 },   // 1 open water
-  { col: GLINT_SHALLOWS, per: 2.2, pmin: 60, pmax: 140, lit: 0.30 }, // 2 shallows
-  { col: GLINT_WATER, per: 0.5, pmin: 160, pmax: 320, lit: 0.18 },   // 3 tannin pool
-  { col: GLINT_WATER, per: 0.25, pmin: 180, pmax: 360, lit: 0.15 },  // 4 mire
+  { col: GLINT_WATER, per: 0.5, pmin: 150, pmax: 360, lit: 0.5 },    // 1 open water
+  { col: GLINT_SHALLOWS, per: 1.2, pmin: 90, pmax: 210, lit: 0.5 },  // 2 shallows
+  { col: GLINT_WATER, per: 0.3, pmin: 240, pmax: 480, lit: 0.5 },    // 3 tannin pool
+  { col: GLINT_WATER, per: 0.15, pmin: 270, pmax: 540, lit: 0.5 },   // 4 mire
 ];
 export interface Glint { x: number; y: number; kind: number; period: number; phase: number }
 
