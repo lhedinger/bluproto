@@ -1372,16 +1372,34 @@ function mindBody(d: Record<string, any>): string {
     '<div class="grp">sensors — what it perceives</div>' + sIn +
     '<div class="grp">actuators — what it drives</div>' + aOut +
     head + `<div class="prog">${prog}</div>` + regBlock +
-    '<div class="save" role="button">⤓ save genome</div>';
+    '<div class="save" role="button">⤓ save genome</div>' +
+    '<div class="save edit" role="button">✎ edit a copy</div>';
 }
 
-/** The save button is rewritten by every mind poll, so its handler is too. */
+/** The save and edit buttons are rewritten by every mind poll, so their
+ *  handlers are too. */
 function wireSave(): void {
-  const save = inspectEl.querySelector('.save');
-  if (save && selectedId !== null) {
+  const save = inspectEl.querySelector('.save:not(.edit)');
+  const edit = inspectEl.querySelector('.save.edit');
+  if (selectedId !== null) {
     const id = selectedId;
-    save.addEventListener('click', () => downloadGenome(id));
+    save?.addEventListener('click', () => downloadGenome(id));
+    edit?.addEventListener('click', () => openEditor(id));
   }
+}
+
+// Open the genome editor (/edit) on a copy of this creature's genome. The
+// editor never touches the living creature: what it produces is a new founder,
+// placed through the same injection path as a loaded file.
+async function openEditor(id: number): Promise<void> {
+  try {
+    const r = await fetch(`/api/world/genome/${id}`);
+    if (!r.ok) { toast('no genome'); return; }
+    const d = await r.json();
+    if (!d.hasBrain || !d.genome) { toast('no brain to edit'); return; }
+    const t = net.commandToken ? '&t=' + encodeURIComponent(net.commandToken) : '';
+    window.open('/edit#g=' + encodeURIComponent(d.genome) + t, 'bluproto-editor');
+  } catch { toast('editor unavailable'); }
 }
 
 // Export this creature's whole genome (brain included) to a savefile you can

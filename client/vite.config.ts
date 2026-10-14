@@ -22,6 +22,7 @@ export default defineConfig({
         help: 'help.html', // the client half of /help
         genome: 'genome.html', // /help/genome — the heritable reference
         body: 'body.html', // /help/body — the body's books and hard limits
+        edit: 'edit.html', // /edit — the genome editor
       },
     },
   },

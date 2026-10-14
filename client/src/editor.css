@@ -1,0 +1,27 @@
+/* The genome editor's own rules, on top of docs.css. One form, two tables. */
+.ed-section { margin: 1.4rem 0; }
+.ed-section h2 { margin: 0 0 .4rem; }
+.ed-load { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; }
+.ed-load textarea { width: 100%; min-height: 3.2rem; font-family: ui-monospace, Menlo, monospace; font-size: .78rem; box-sizing: border-box; }
+.ed-load .drop { border: 1px dashed currentColor; opacity: .7; padding: .4rem .7rem; border-radius: 6px; }
+.ed-msg { margin: .4rem 0; font-size: .86rem; }
+.ed-msg.err { color: #c0392b; }
+.ed-msg.ok { opacity: .75; }
+table.genes td, table.genes th { vertical-align: middle; }
+table.genes input[type=number] { width: 7.5rem; font-family: ui-monospace, Menlo, monospace; }
+table.genes input[type=range] { width: 11rem; vertical-align: middle; }
+table.genes .unit { opacity: .7; font-size: .82rem; }
+table.genes .bounds { opacity: .6; font-size: .78rem; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+table.genes tr.clamped td:first-child::after { content: " ⟂ clamped"; color: #c07a00; font-size: .75rem; }
+table.prog { font-family: ui-monospace, Menlo, monospace; font-size: .82rem; }
+table.prog td { padding: .15rem .35rem; white-space: nowrap; }
+table.prog td.n { opacity: .5; text-align: right; }
+table.prog select { font-family: inherit; font-size: inherit; }
+table.prog td.dis { opacity: .75; }
+table.prog td.ctl button { margin: 0 .05rem; padding: 0 .35rem; }
+table.prog tr.pc td { background: rgba(120, 180, 255, .18); }
+.ed-row { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; margin: .5rem 0; }
+.ed-out textarea { width: 100%; min-height: 4rem; font-family: ui-monospace, Menlo, monospace; font-size: .74rem; box-sizing: border-box; }
+.ed-badge { display: inline-block; padding: .05rem .45rem; border-radius: 999px; border: 1px solid currentColor; font-size: .76rem; opacity: .8; }
+button.ed-btn { padding: .3rem .7rem; }
+label.ed-raw { font-size: .85rem; opacity: .85; }
