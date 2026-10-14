@@ -1405,7 +1405,14 @@ public final class Worlds {
 			if (bestSite == null) {
 				break;
 			}
-			raiseStair(w, seen, bestSite[0], bestSite[1], bestSite[2], bestSite[3], z);
+			// A cliff's climbs come in widths: one lane, or two to four, so a
+			// herd pressed against the foot goes up as a herd rather than in
+			// single file. Which width is hashed off the site, so it is a
+			// property of the world and not of the order the sites were found.
+			int lanes = cliff ? 1 + (int) (net.hedinger.prototype.engine.GroundTextures.hash01(
+					bestSite[0], bestSite[1], 83) * 4) : 1;
+			raiseStair(w, cols, rows, seen, bestSite[0], bestSite[1], bestSite[2], bestSite[3], z,
+					lanes);
 			cut.add(bestSite);
 		}
 		return cut.size();
@@ -1487,26 +1494,53 @@ public final class Worlds {
 	 * the foot is open air, which {@link #openTheSky} finishes as the hole
 	 * the drop falls through.
 	 */
-	private static void raiseStair(World w, boolean[][] seen, int px, int py, int u, int run,
-			int z) {
+	private static void raiseStair(World w, int cols, int rows, boolean[][] seen, int px, int py,
+			int u, int run, int z, int lanes) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
-		int sx = px - (run + 1) * ax, sy = py - (run + 1) * ay; // the slope
-		setBare(w, sx, sy, z, Tile.TileType.TYPE_RAMPDOWN);
-		w.getTile(sx, sy, z).setRampUphill(u);
-		setBare(w, sx, sy, z - 1, Tile.TileType.TYPE_RAMPUP);
-		w.getTile(sx, sy, z - 1).setRampUphill(u);
-		// The spur: the hill's own top, laid as floor from the slope's head to
-		// the table. Zero tiles long in the common case, where the climb
-		// exits straight onto the table's edge.
-		for (int k = 1; k <= run; k++) {
-			int nx = px - k * ax, ny = py - k * ay;
-			setBare(w, nx, ny, z, Tile.TileType.TYPE_ROCKY);
-			w.getTile(nx, ny, z).setFertility(PLATEAU_FERTILITY);
-			// Claimed, so the sweep that is still running does not come back
-			// and flood the spur as a table of its own — which, being three
-			// tiles long, would fail the size test and be demolished, taking
-			// the only way onto the mesa with it.
-			seen[nx][ny] = true;
+		int cx = Tile.dirDx((u + 1) & 3), cy = Tile.dirDy((u + 1) & 3); // across the slope
+		// Lanes are laid outward from the site, either side in turn, and a
+		// lane is laid only where the hillside is the same as the site's: the
+		// same table tile at the top, the same run of rock, open ground past
+		// it. A lane the hillside refuses ends the widening on that side.
+		int[] order = { 0, 1, -1, 2, -2, 3, -3 };
+		boolean plusOk = true, minusOk = true;
+		int laid = 0;
+		for (int i = 0; i < order.length && laid < lanes; i++) {
+			int r = order[i];
+			if ((r > 0 && !plusOk) || (r < 0 && !minusOk)) {
+				continue;
+			}
+			int lx = px + r * cx, ly = py + r * cy;
+			boolean ok = r == 0 || (lx >= 2 && ly >= 2 && lx < cols - 2 && ly < rows - 2
+					&& w.getTile(lx, ly, z).getType() == Tile.TileType.TYPE_ROCKY
+					&& hillRun(w, cols, rows, lx, ly, u, z) == run);
+			if (!ok) {
+				if (r > 0) {
+					plusOk = false;
+				} else {
+					minusOk = false;
+				}
+				continue;
+			}
+			laid++;
+			int sx = lx - (run + 1) * ax, sy = ly - (run + 1) * ay; // the slope
+			setBare(w, sx, sy, z, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(sx, sy, z).setRampUphill(u);
+			setBare(w, sx, sy, z - 1, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(sx, sy, z - 1).setRampUphill(u);
+			// The spur: the hill's own top, laid as floor from the slope's head
+			// to the table. Zero tiles long in the common case, where the climb
+			// exits straight onto the table's edge.
+			for (int k = 1; k <= run; k++) {
+				int nx = lx - k * ax, ny = ly - k * ay;
+				setBare(w, nx, ny, z, Tile.TileType.TYPE_ROCKY);
+				w.getTile(nx, ny, z).setFertility(PLATEAU_FERTILITY);
+				// Claimed, so the sweep that is still running does not come
+				// back and flood the spur as a table of its own — which, being
+				// three tiles long, would fail the size test and be demolished,
+				// taking the only way onto the mesa with it.
+				seen[nx][ny] = true;
+			}
 		}
 	}
 
