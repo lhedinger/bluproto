@@ -1279,9 +1279,8 @@ public final class Worlds {
 	 * elevation opinion narrower than the ground's, and a hill of up to
 	 * {@link #MAX_HILL_RUN} is still climbed if one turns up.
 	 *
-	 * <p>Past the hill there must be three tiles of open air over walkable
-	 * ground — the landing the drop lands on, the tile between, and the
-	 * climbing ramp itself.
+	 * <p>Past the hill there must be two tiles of open air over walkable
+	 * ground — the slope itself, and the foot it is stepped onto from.
 	 */
 	private static int hillRun(World w, int cols, int rows, int px, int py, int u) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
@@ -1303,7 +1302,7 @@ public final class Worlds {
 		if (run >= MAX_HILL_RUN) {
 			return -1;
 		}
-		for (int k = 1; k <= 3; k++) {
+		for (int k = 1; k <= 2; k++) {
 			int qx = px - (run + k) * ax, qy = py - (run + k) * ay;
 			if (qx < 2 || qy < 2 || qx >= cols - 2 || qy >= rows - 2) {
 				return -1;
@@ -1329,28 +1328,28 @@ public final class Worlds {
 	 * turned the other way up, with the surface as the lower floor and the sky
 	 * as the upper one.
 	 *
-	 * <p>Reading inward along {@code u} from the open plain: a hole in the sky
-	 * to drop back through, the descending ramp beside it, the climbing ramp on
-	 * the ground, and then the spur it steps out onto — the hillside between
-	 * the ramp's exit and the table, raised into walkable stone. The mesa's
-	 * edge overhangs its own stair, which is what the underdark's stairwells do
-	 * a level down and what makes the descent a walk rather than a jump.
+	 * <p>Reading inward along {@code u} from the open plain: the foot, open
+	 * ground under open sky; then the slope, one tile that is a climbing ramp
+	 * on the ground and a descending ramp in the sky, because a slope is one
+	 * piece of ground seen from two floors; then the spur it steps out onto —
+	 * the hillside between the slope and the table, raised into walkable
+	 * stone — or, where the table's edge stands right over the rock's edge,
+	 * the table itself. Nothing overhangs anything: the slope stands over
+	 * open ground and the spur over the rock it is the top of. The sky above
+	 * the foot is open air, which {@link #openTheSky} finishes as the hole
+	 * the drop falls through.
 	 */
 	private static void raiseStair(World w, boolean[][] seen, int px, int py, int u, int run) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
-		int bx = px - (run + 3) * ax, by = py - (run + 3) * ay;
-		setBare(w, bx, by, SKY_Z, Tile.TileType.TYPE_HOLE);
-		setBare(w, bx + ax, by + ay, SKY_Z, Tile.TileType.TYPE_RAMPDOWN);
-		w.getTile(bx + ax, by + ay, SKY_Z).setRampUphill(u);
-		setBare(w, bx + 2 * ax, by + 2 * ay, SURFACE_Z, Tile.TileType.TYPE_RAMPUP);
-		w.getTile(bx + 2 * ax, by + 2 * ay, SURFACE_Z).setRampUphill(u);
-		// One past the hill: the tile the descending ramp is stepped onto from
-		// the spur, and the tile the climb exits beside. It stands over the
-		// climbing ramp rather than over solid ground -- the stair's own
-		// overhang, exactly as the underdark's stairwells overhang theirs a
-		// level down. Without it the descending ramp is stranded a tile off the
-		// spur and the mesa has a way up but no way down.
-		for (int k = 1; k <= run + 1; k++) {
+		int sx = px - (run + 1) * ax, sy = py - (run + 1) * ay; // the slope
+		setBare(w, sx, sy, SKY_Z, Tile.TileType.TYPE_RAMPDOWN);
+		w.getTile(sx, sy, SKY_Z).setRampUphill(u);
+		setBare(w, sx, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPUP);
+		w.getTile(sx, sy, SURFACE_Z).setRampUphill(u);
+		// The spur: the hill's own top, laid as floor from the slope's head to
+		// the table. Zero tiles long in the common case, where the climb
+		// exits straight onto the table's edge.
+		for (int k = 1; k <= run; k++) {
 			int nx = px - k * ax, ny = py - k * ay;
 			setBare(w, nx, ny, SKY_Z, Tile.TileType.TYPE_ROCKY);
 			w.getTile(nx, ny, SKY_Z).setFertility(PLATEAU_FERTILITY);
@@ -1519,9 +1518,10 @@ public final class Worlds {
 
 	/**
 	 * A tile that must be left exactly as it is: one end of a link between
-	 * floors, something wired, or the ROCK a ramp climbs into.
+	 * floors, something wired, the ROCK a ramp climbs into, or the FLOOR a
+	 * ramp steps out onto.
 	 *
-	 * <p>That last one is not decoration. An up ramp whose high side is open
+	 * <p>The rock is not decoration. An up ramp whose high side is open
 	 * floor is a staircase into a ceiling -- it climbs to a surface tile
 	 * resting on nothing, and the art has no mass to disappear into, which is
 	 * why {@code DemoLevelsLinkSurfaceAndCave} asserts it. The ramp tile
@@ -1530,19 +1530,40 @@ public final class Worlds {
 	 * left the ramp climbing into air. It took packing the sectors against the
 	 * core to find it -- the campus puts several times as much wall next to
 	 * the link stations as a line of distant stops ever did.
+	 *
+	 * <p>The floor is the other end of the same lesson. A link is three tiles
+	 * on each floor -- foot, slope, head -- and only the slope was its own
+	 * tile type; the landings were plain floor that happened to be where a
+	 * ramp let out, and a building stamped over one turned a link into a
+	 * ramp that walked into concrete and a hole that dropped bodies onto it.
+	 * The landings are found from the ramps that use them: the foot sits
+	 * downhill of a descending ramp on the floor above, the head uphill of a
+	 * climbing ramp on the floor below.
 	 */
 	private static boolean mustStay(World w, int z, int x, int y) {
 		Tile t = w.getTile(x, y, z);
 		if (isRampOrDrop(t.getType())) {
 			return true;
 		}
-		if (!t.isSolid()) {
-			return false;
-		}
 		for (int d = 0; d < 4; d++) {
-			Tile n = w.getTile(x - Tile.dirDx(d), y - Tile.dirDy(d), z);
-			if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
-				return true;
+			int dx = Tile.dirDx(d), dy = Tile.dirDy(d);
+			if (t.isSolid()) {
+				Tile n = w.getTile(x - dx, y - dy, z);
+				if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+					return true; // the rock at a climb's head
+				}
+			}
+			if (z + 1 < w.getLevels() && w.isValid(x + dx, y + dy, z + 1)) {
+				Tile n = w.getTile(x + dx, y + dy, z + 1);
+				if (n.getType() == Tile.TileType.TYPE_RAMPDOWN && n.getRampUphill() == d) {
+					return true; // the foot a descent steps down onto
+				}
+			}
+			if (z - 1 >= 0 && w.isValid(x - dx, y - dy, z - 1)) {
+				Tile n = w.getTile(x - dx, y - dy, z - 1);
+				if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+					return true; // the landing a climb steps out onto
+				}
 			}
 		}
 		return false;
@@ -2753,7 +2774,7 @@ public final class Worlds {
 	private static int stairsBetween(World w, int x0, int y0, int W, int H, int upper, int lower) {
 		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
 		for (int hy = y0 + 1; hy < y0 + H - 1 && cut.size() < STAIRS_PER_STATION; hy++) {
-			for (int hx = x0 + 1; hx < x0 + W - 4 && cut.size() < STAIRS_PER_STATION; hx++) {
+			for (int hx = x0 + 1; hx < x0 + W - 3 && cut.size() < STAIRS_PER_STATION; hx++) {
 				if (!stationStairFits(w, hx, hy, upper, lower)) {
 					continue;
 				}
@@ -2767,7 +2788,7 @@ public final class Worlds {
 				}
 				// Two lanes wherever the row below fits as well.
 				sinkStairwell(w, hx, hy, stationStairFits(w, hx, hy + 1, upper, lower) ? 2 : 1,
-						upper, lower);
+						upper, lower, Tile.DIR_E);
 				cut.add(new int[] { hx, hy });
 			}
 		}
@@ -2785,10 +2806,10 @@ public final class Worlds {
 	private static final int MIN_STATION_STAIR_GAP = 4;
 
 	/** Whether {@link #sinkStairwell} can cut one lane from the halls at
-	 *  (hx, hy) down into the works: four tiles of blank deck plate on each
-	 *  floor for the landing, the climb and its housing to occupy. */
+	 *  (hx, hy) down into the works: three tiles of blank deck plate on each
+	 *  floor for the foot, the slope and its head to occupy. */
 	private static boolean stationStairFits(World w, int hx, int hy, int upper, int lower) {
-		for (int k = 0; k <= 3; k++) {
+		for (int k = 0; k <= 2; k++) {
 			// Blank deck plate on BOTH floors: the halls are a drawing too now,
 			// and a stair cut through a drawn tile is a drawn tile that is not
 			// there any more.
@@ -2888,12 +2909,11 @@ public final class Worlds {
 	 * The stairwell from the cave level down to the plant floor, {@code lanes}
 	 * of it side by side running south from (hx, hy).
 	 *
-	 * <p>The link copies the surface-to-cave pattern exactly, one level down: a
-	 * hole to fall through, a descending ramp beside it so the fall is not the
-	 * only way, a landing below, and a climbing ramp back up. Written out
-	 * rather than reusing {@code linkStation} because that carves cave and
-	 * surface by name, and this joins the two floors underneath them — the
-	 * geometry is the same, the levels are not.
+	 * <p>The link copies the surface-to-cave pattern exactly, one level down:
+	 * a foot, a slope, a head (see {@link #linkStation} for the shape).
+	 * Written out rather than reusing {@code linkStation} because that carves
+	 * cave and surface by name, and this joins the two floors underneath them
+	 * — the geometry is the same, the levels are not.
 	 *
 	 * <p>Two lanes where the room above allows it, so a body coming down does
 	 * not have to wait for one going up; one where it does not.
@@ -2902,29 +2922,28 @@ public final class Worlds {
 	 * is not walkable, so nothing routes through one and the flood never
 	 * enters it.
 	 */
-	private static void sinkStairwell(World w, int hx, int hy, int lanes) {
-		sinkStairwell(w, hx, hy, lanes, CAVE_Z, DEEP_Z);
+	private static void sinkStairwell(World w, int hx, int hy, int lanes, int u) {
+		sinkStairwell(w, hx, hy, lanes, CAVE_Z, DEEP_Z, u);
 	}
 
-	/** As above, between any two adjacent floors. */
-	private static void sinkStairwell(World w, int hx, int hy, int lanes, int upper, int lower) {
-		// u = 1 is east in Tile's direction order, so the slope climbs east and
-		// a body steps off its west foot to come down.
-		final int u = 1;
-		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
+	/** As above, between any two adjacent floors, climbing toward {@code u};
+	 *  the lanes lie side by side across the slope, the first at (hx, hy). */
+	private static void sinkStairwell(World w, int hx, int hy, int lanes, int upper, int lower,
+			int u) {
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);                     // up the slope
+		int cx = Tile.dirDx((u + 1) & 3), cy = Tile.dirDy((u + 1) & 3); // across it
 		for (int r = 0; r < lanes; r++) {
-			int bx = hx, by = hy + r;
-			int dx1 = bx + ax, dy1 = by + ay;            // the descending ramp
-			int ux = bx + 2 * ax, uy = by + 2 * ay;      // the climbing ramp
-			int lx = bx + 3 * ax, ly = by + 3 * ay;      // the upper landing
+			int bx = hx + r * cx, by = hy + r * cy;      // the foot
+			int sx = bx + ax, sy = by + ay;              // the slope, on both floors
+			int lx = bx + 2 * ax, ly = by + 2 * ay;      // the head
 
 			setBare(w, bx, by, upper, Tile.TileType.TYPE_HOLE);
-			setBare(w, dx1, dy1, upper, Tile.TileType.TYPE_RAMPDOWN);
-			w.getTile(dx1, dy1, upper).setRampUphill(u);
 			setBare(w, bx, by, lower, Tile.TileType.TYPE_PLATE); // landing below
 
-			setBare(w, ux, uy, lower, Tile.TileType.TYPE_RAMPUP);
-			w.getTile(ux, uy, lower).setRampUphill(u);
+			setBare(w, sx, sy, upper, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(sx, sy, upper).setRampUphill(u);
+			setBare(w, sx, sy, lower, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(sx, sy, lower).setRampUphill(u);
 			// Under the upper landing stands the mass the climb rises into.
 			// This has flipped twice, so the reasoning in full: the first
 			// version walled it as "rock under", the second removed it as "a
@@ -3345,7 +3364,7 @@ public final class Worlds {
 			int bestX = -1, bestY = -1;
 			long best = cut.isEmpty() ? Long.MAX_VALUE : Long.MIN_VALUE;
 			for (int[] p : cavern) {
-				if (!stairwellFits(w, cols, rows, p[0], p[1])) {
+				if (!stairwellFits(w, cols, rows, p[0], p[1], Tile.DIR_E)) {
 					continue;
 				}
 				if (cut.isEmpty()) {
@@ -3378,8 +3397,8 @@ public final class Worlds {
 			// body coming down does not have to wait for one going up. This is
 			// the common case in a roomy cavern and the reason the old
 			// one-lane-everywhere stairs felt like bottlenecks.
-			int lanes = stairwellFits(w, cols, rows, bestX, bestY + 1) ? 2 : 1;
-			sinkStairwell(w, bestX, bestY, lanes);
+			int lanes = stairwellFits(w, cols, rows, bestX, bestY + 1, Tile.DIR_E) ? 2 : 1;
+			sinkStairwell(w, bestX, bestY, lanes, Tile.DIR_E);
 			cut.add(new int[] { bestX, bestY });
 		}
 	}
@@ -3444,28 +3463,32 @@ public final class Worlds {
 	}
 
 	/**
-	 * Whether a stairwell cut at {@code (bx, by)} lands in clean ground on both
-	 * levels: plain cave floor above with a one-tile skirt, so the head does
-	 * not open through a wall or into a lake, and carved cavern floor below for
-	 * the landing and the climb.
+	 * Whether a stairwell with its foot at {@code (bx, by)}, climbing toward
+	 * {@code u}, lands in clean ground on both levels: plain cave floor above
+	 * with a one-tile skirt, so the head does not open through a wall or into
+	 * a lake, and carved cavern floor below for the landing and the climb.
+	 * Measured in the slope's own frame -- {@code t} up it, {@code r} across
+	 * -- so the same footprint is asked for whichever way the stair faces.
 	 */
-	private static boolean stairwellFits(World w, int cols, int rows, int bx, int by) {
-		// The world's own size, not COLS/ROWS: demoTerrain builds 72x44 and
-		// 96x120 too, and the constants would wave the scan off the east edge
-		// of the small one and refuse the bottom third of the tall one.
-		if (bx < 4 || by < 4 || bx >= cols - 8 || by >= rows - 4) {
-			return false;
-		}
-		for (int dx = -1; dx <= 4; dx++) {
-			for (int dy = -1; dy <= 1; dy++) {
-				if (w.getTile(bx + dx, by + dy, CAVE_Z).getType()
-						!= Tile.TileType.TYPE_STONE) {
+	private static boolean stairwellFits(World w, int cols, int rows, int bx, int by, int u) {
+		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
+		int cx = Tile.dirDx((u + 1) & 3), cy = Tile.dirDy((u + 1) & 3);
+		for (int t = -1; t <= 3; t++) {
+			for (int r = -1; r <= 1; r++) {
+				int x = bx + t * ax + r * cx, y = by + t * ay + r * cy;
+				// The world's own size, not COLS/ROWS: demoTerrain builds
+				// 72x44 and 96x120 too. A margin of four keeps the cut off
+				// the border rock on every side.
+				if (x < 4 || y < 4 || x >= cols - 4 || y >= rows - 4) {
+					return false;
+				}
+				if (w.getTile(x, y, CAVE_Z).getType() != Tile.TileType.TYPE_STONE) {
 					return false;
 				}
 			}
 		}
-		for (int dx = 0; dx <= 2; dx++) {
-			Tile.TileType d = w.getTile(bx + dx, by, DEEP_Z).getType();
+		for (int t = 0; t <= 2; t++) {
+			Tile.TileType d = w.getTile(bx + t * ax, by + t * ay, DEEP_Z).getType();
 			if (d != Tile.TileType.TYPE_STONE && d != Tile.TileType.TYPE_CRYSTAL_SPARSE
 					&& d != Tile.TileType.TYPE_FUNGUS) {
 				return false;
@@ -4092,14 +4115,19 @@ public final class Worlds {
 	 * axes through the direction this site faces. So the same station is built
 	 * whichever way it points, and there is one description of it rather than
 	 * four. The run is two tiles wide ({@code r} of 0 and 1) so bodies pass each
-	 * other on it instead of queueing on a one-tile thread. Per row:
+	 * other on it instead of queueing on a one-tile thread. Per row, three
+	 * tiles up the slope:
 	 * <ul>
-	 *   <li><b>Down</b> — on the surface at {@code t=1}, a RAMPDOWN whose foot
-	 *       faces back down-slope onto the cave floor carved at {@code t=0},
-	 *       with a HOLE on that same tile that falls to the same landing.</li>
-	 *   <li><b>Up</b> — in the cave at {@code t=2}, a RAMPUP whose top faces up
-	 *       the slope onto the surface floor carved at {@code t=3}. The WALL
-	 *       below that landing is only the rock the surface tile rests on.</li>
+	 *   <li><b>The foot</b>, {@code t=0}: the cave landing, with a HOLE in the
+	 *       surface over it that falls onto the same tile.</li>
+	 *   <li><b>The slope</b>, {@code t=1}: a RAMPUP in the cave and a RAMPDOWN
+	 *       on the surface, on the SAME tile. A slope is one piece of ground
+	 *       seen from two floors — its foot on the lower one, its top on the
+	 *       upper — so the two ramps stand over each other; the earlier layout
+	 *       put them a tile apart, which was two slopes, and which way the
+	 *       pair leaned depended on the station's facing.</li>
+	 *   <li><b>The head</b>, {@code t=2}: the surface landing the climb steps
+	 *       out onto, on the WALL that is the rock the climb rises into.</li>
 	 * </ul>
 	 */
 	private static void linkStation(World w, int sx, int sy, int u) {
@@ -4119,25 +4147,26 @@ public final class Worlds {
 
 		for (int r = 0; r <= 1; r++) {
 			int bx = sx + r * cx, by = sy + r * cy;
-			int x0 = bx, y0 = by;                       // t = 0: the cave landing
-			int x1 = bx + ax, y1 = by + ay;             // t = 1: the descending ramp
-			int x2 = bx + 2 * ax, y2 = by + 2 * ay;     // t = 2: the climbing ramp
-			int x3 = bx + 3 * ax, y3 = by + 3 * ay;     // t = 3: the surface landing
+			int x0 = bx, y0 = by;                       // t = 0: the foot
+			int x1 = bx + ax, y1 = by + ay;             // t = 1: the slope
+			int x2 = bx + 2 * ax, y2 = by + 2 * ay;     // t = 2: the head
 
-			// Down: a pit, and beside it a ramp whose foot faces back down-slope;
-			// the cave floor at t=0 is what both routes land on.
+			// The foot: the cave landing, and over it the pit that drops onto it.
 			w.setTile(x0, y0, SURFACE_Z, Tile.TileType.TYPE_HOLE);
-			w.setTile(x1, y1, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
-			w.getTile(x1, y1, SURFACE_Z).setRampUphill(u);
-			w.setTile(x0, y0, CAVE_Z, Tile.TileType.TYPE_STONE); // landing
+			w.setTile(x0, y0, CAVE_Z, Tile.TileType.TYPE_STONE);
 			w.getTile(x0, y0, CAVE_Z).setFertility(0);
 
-			// Up: a ramp in the cave climbing onto the stone landing carved above.
-			w.setTile(x2, y2, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
-			w.getTile(x2, y2, CAVE_Z).setRampUphill(u);
-			w.setTile(x3, y3, CAVE_Z, Tile.TileType.TYPE_WALL); // rock under the landing
-			w.setTile(x3, y3, SURFACE_Z, Tile.TileType.TYPE_STONE); // landing above
-			w.getTile(x3, y3, SURFACE_Z).setFertility(0);
+			// The slope: the climb from the cave and the descent from the
+			// surface are the one tile.
+			w.setTile(x1, y1, CAVE_Z, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(x1, y1, CAVE_Z).setRampUphill(u);
+			w.setTile(x1, y1, SURFACE_Z, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(x1, y1, SURFACE_Z).setRampUphill(u);
+
+			// The head: the surface landing on the rock the climb rises into.
+			w.setTile(x2, y2, CAVE_Z, Tile.TileType.TYPE_WALL);
+			w.setTile(x2, y2, SURFACE_Z, Tile.TileType.TYPE_STONE);
+			w.getTile(x2, y2, SURFACE_Z).setFertility(0);
 		}
 	}
 
