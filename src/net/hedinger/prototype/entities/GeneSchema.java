@@ -164,7 +164,7 @@ public final class GeneSchema {
 				g -> g.reproFraction, (g, v) -> g.reproFraction = v);
 		add("reproC", "of glycogen", Drift.ADD, 0.1, 0.9, false,
 				g -> g.reproCostFraction, (g, v) -> g.reproCostFraction = v);
-		add("mut", "per gene", Drift.ADD, Genome.MUT_LO, Genome.MUT_MAX, false,
+		add("mut", "per gene", Drift.ADD, Genome.MUT_FLOOR, Genome.MUT_MAX, false,
 				g -> g.mutationRate, (g, v) -> g.mutationRate = v);
 		add("inst", "forage drive", Drift.ADD, 0, 1, false,
 				g -> g.instinct, (g, v) -> g.instinct = v);

@@ -5337,30 +5337,34 @@ public class SimTests {
 	}
 
 	/**
-	 * No lineage copies itself more faithfully than a founder starts out.
-	 * Selection on the mutation rate only ever pushes one way in a steady world:
-	 * most mutations hurt, so the parent that jitters its young least leaves the
+	 * No lineage fossilises, and no founder program is scrambled. Selection on
+	 * the mutation rate only ever pushes one way in a steady world: most
+	 * mutations hurt, so the parent that jitters its young least leaves the
 	 * most intact descendants, and the gene ratchets to whatever floor the
 	 * schema sets. Measured on the live world: both clades went from about 0.10
-	 * to the old floor of 0.01 inside forty generations, which turned the whole
-	 * world's evolvability into that one constant. The floor is now the bottom
-	 * of the founder draw, so a lineage can settle but never fossilise below
-	 * what the world was seeded with.
+	 * to a floor of 0.01 inside forty generations, which turned the whole
+	 * world's evolvability into that one constant. Raised to the founder draw's
+	 * 0.05, the same rate hit the brain's instructions and within ten
+	 * generations 44% of grazers had lost the one seek write they live by. The
+	 * floor sits between, below the founder draw, so a lineage can settle
+	 * without fossilising and a program still survives its births.
 	 */
 	static class ALineageCannotFossilise extends Scenario {
 		@Override
 		public void run() {
 			seed(9);
 			Genome line = new Genome();
-			line.mutationRate = Genome.MUT_LO; // on the floor already: half its children push down
+			line.mutationRate = Genome.MUT_FLOOR; // on the floor already: half its children push down
 			double lowest = 1;
 			for (int i = 0; i < 400; i++) {
 				Genome c = Genome.child(line, line.mutationRate);
 				lowest = Math.min(lowest, c.mutationRate);
 			}
-			assertNear("no child copies itself more faithfully than a founder begins ("
-					+ String.format("lowest %.4f against the founder floor %.2f", lowest, Genome.MUT_LO) + ")",
-					Genome.MUT_LO, lowest, 1e-12);
+			assertTrue("the floor is below where founders begin, so a lineage can settle",
+					Genome.MUT_FLOOR < Genome.MUT_LO);
+			assertNear("and no child gets below it ("
+					+ String.format("lowest %.4f against the floor %.2f", lowest, Genome.MUT_FLOOR) + ")",
+					Genome.MUT_FLOOR, lowest, 1e-12);
 		}
 	}
 
