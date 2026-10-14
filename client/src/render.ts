@@ -405,20 +405,24 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     for (let cx = cx0; cx <= cx1; cx++) {
       // A peek, never a request: the top chunk is fetched by the ground pass
       // for the viewport at near zoom, and only a decoded chunk knows its
-      // holes. The chunk beneath is requested only for a holed top.
-      const top = getChunk(cx, cy, level, false);
-      if (!top || !hasHoles(top)) continue;
-      const below = getChunk(cx, cy, level - 1, true);
-      if (!below) continue;
+      // holes. The chunk beneath is requested only for a holed top, and the
+      // one beneath THAT only for a holed chunk beneath — so the view down
+      // goes as deep as the openings do and no deeper. Three storeys of sky
+      // over the ground made this a walk rather than a pair: from the top
+      // storey the ground is three floors down, and each floor's own
+      // parallax compounds on the way.
       const key = cx + cy * cxN;
-      if (level - 2 >= 0 && hasHoles(below)) {
-        const below2 = getChunk(cx, cy, level - 2, true);
-        if (below2) {
-          out.push([key, level - 2, below2,
-              ...rect(cx, cy, parallaxFactor() * parallaxFactor())]);
-        }
+      const stack: Array<[number, number, HTMLCanvasElement, number, number, number, number]> = [];
+      let above = getChunk(cx, cy, level, false);
+      let factor = 1;
+      for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
+        const below = getChunk(cx, cy, z, true);
+        if (!below) break;
+        factor *= parallaxFactor();
+        stack.push([key, z, below, ...rect(cx, cy, factor)]);
+        above = below;
       }
-      out.push([key, level - 1, below, ...rect(cx, cy, parallaxFactor())]);
+      for (let i = stack.length - 1; i >= 0; i--) out.push(stack[i]); // deepest first
     }
   }
   return out;
@@ -437,21 +441,28 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
 function belowLows(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     level: number): Array<[number, HTMLCanvasElement, number, number, number, number]> {
   const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
-  const top = getLowMap(level);
-  if (level - 1 < 0 || !top || !hasHoles(top)) return out;
   const mx = cvW / 2, my = cvH / 2;
   const rect = (factor: number): [number, number, number, number] => {
     const a = cam.worldToScreen(0, 0), b = cam.worldToScreen(meta.cols, meta.rows);
     const x0 = Math.round(mx + (a.x - mx) * factor), y0 = Math.round(my + (a.y - my) * factor);
     return [x0, y0, Math.round(mx + (b.x - mx) * factor) - x0, Math.round(my + (b.y - my) * factor) - y0];
   };
-  const below = getLowMap(level - 1);
-  if (!below) return out;
-  if (level - 2 >= 0 && hasHoles(below)) {
-    const below2 = getLowMap(level - 2);
-    if (below2) out.push([level - 2, below2, ...rect(parallaxFactor() * parallaxFactor())]);
+  // Down floor by floor while each floor's map has holes to look through,
+  // every floor a storey further from the eye (see belowChunks).
+  const stack: Array<[number, HTMLCanvasElement, number]> = [];
+  let above = getLowMap(level);
+  let factor = 1;
+  for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
+    const low = getLowMap(z);
+    if (!low) break;
+    factor *= parallaxFactor();
+    stack.push([z, low, factor]);
+    above = low;
   }
-  out.push([level - 1, below, ...rect(parallaxFactor())]);
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const [z, low, f] = stack[i];
+    out.push([z, low, ...rect(f)]); // deepest first
+  }
   return out;
 }
 
