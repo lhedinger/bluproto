@@ -12511,9 +12511,13 @@ public class SimTests {
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
 				int cols = w.getColums(), rows = w.getRows();
-				int sky = w.getLevels() - 1, surf = w.getSurfaceZ();
-				assertTrue("seed " + s + ": the sky sits above the ground", sky > surf);
-				int drops = 0, standing = 0, floating = 0, climb = 0;
+				int surf = w.getSurfaceZ();
+				assertTrue("seed " + s + ": the sky sits above the ground", w.getLevels() - 1 > surf);
+				// Every storey of sky, each read against the storey under it: a
+				// higher storey stands on the one below exactly as the first
+				// stands on the ground.
+				for (int sky = surf + 1; sky < w.getLevels(); sky++) {
+				int drops = 0, standing = 0, floating = 0, climb = 0, tables = 0;
 				for (int x = 0; x < cols; x++) {
 					for (int y = 0; y < rows; y++) {
 						Tile t = w.getTile(x, y, sky);
@@ -12522,7 +12526,10 @@ public class SimTests {
 							continue;
 						}
 						standing++;
-						if (w.getTile(x, y, surf).isSolid()) {
+						if (t.getType() == Tile.TileType.TYPE_ROCKY) {
+							tables++;
+						}
+						if (w.getTile(x, y, sky - 1).isSolid()) {
 							continue;
 						}
 						// Over open ground, and so held up by nothing the
@@ -12532,7 +12539,7 @@ public class SimTests {
 						// onto, which stands over its own climbing ramp the
 						// way a stairwell overhangs its own stair. Anything
 						// else over open ground is a rock hanging in the air.
-						Tile.TileType below = w.getTile(x, y, surf).getType();
+						Tile.TileType below = w.getTile(x, y, sky - 1).getType();
 						boolean partOfAClimb = t.getType() == Tile.TileType.TYPE_RAMPDOWN
 								|| below == Tile.TileType.TYPE_RAMPUP;
 						if (partOfAClimb) {
@@ -12542,19 +12549,27 @@ public class SimTests {
 						}
 					}
 				}
-				assertEquals("seed " + s + ": nothing floats in the sky", 0, floating);
+				String at = "seed " + s + " storey z" + sky + ": ";
+				assertEquals(at + "nothing floats in the sky", 0, floating);
 				// And the sky is REACHABLE: summits with tables on them are the
 				// whole reason the level is walkable, and a climb is the only
 				// way onto one. Zero here would mean the mesas quietly went
-				// back to being scenery.
-				assertTrue("seed " + s + ": the sky can be climbed to (" + climb
-						+ " climb tiles)", climb >= 2);
+				// back to being scenery. The first storey always has tables;
+				// a higher one may have none on a seed whose outcrops never
+				// run that high, and then it has nothing to climb to either.
+				// A climb is one tile, the slope, since the descent stands on
+				// the climb; one is enough to prove the storey is reachable.
+				if (sky == surf + 1 || tables > 0) {
+					assertTrue(at + "the sky can be climbed to (" + climb
+							+ " climb tiles, " + tables + " table tiles)", climb >= 1);
+				}
 				// Mostly empty, but not empty: a sky with no summits at all is a
 				// level with nothing to look at, and one that is mostly rock is
 				// a lid over the world. Measured 7%..12% rock across seeds.
-				assertTrue("seed " + s + ": the sky is mostly open (" + drops + " drop, "
+				assertTrue(at + "the sky is mostly open (" + drops + " drop, "
 						+ standing + " rock)", drops > standing * 4L);
-				assertTrue("seed " + s + ": but something stands in it", standing > 200);
+				assertTrue(at + "but something stands in it", standing > 200);
+				}
 			}
 		}
 	}
@@ -12587,7 +12602,7 @@ public class SimTests {
 		public void run() {
 			for (long s : new long[] { 1, 9, 42, 415, 777 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
-				int sky = w.getLevels() - 1;
+				for (int sky = w.getSurfaceZ() + 1; sky < w.getLevels(); sky++) {
 				int air = 0, walled = 0, edges = 0, overRock = 0;
 				for (int x = 1; x < w.getColums() - 1; x++) {
 					for (int y = 1; y < w.getRows() - 1; y++) {
@@ -12595,7 +12610,7 @@ public class SimTests {
 						if (t == Tile.TileType.TYPE_VOID) {
 							air++;
 						}
-						if (t == Tile.TileType.TYPE_HOLE && w.getTile(x, y, w.getSurfaceZ()).getType()
+						if (t == Tile.TileType.TYPE_HOLE && w.getTile(x, y, sky - 1).getType()
 								== Tile.TileType.TYPE_WALL) {
 							overRock++;
 						}
@@ -12615,26 +12630,34 @@ public class SimTests {
 								Tile.TileType n = w.getTile(nx, ny, sky).getType();
 								if (n == Tile.TileType.TYPE_HOLE) {
 									edges++;
+								} else if (n == Tile.TileType.TYPE_WALL && sky + 1 < w.getLevels()
+										&& !w.getTile(nx, ny, sky + 1).isDrop()) {
+									continue; // the base of a higher table: a cliff going up, not a wall
 								} else if (n != Tile.TileType.TYPE_ROCKY
-										&& n != Tile.TileType.TYPE_RAMPDOWN) {
-									walled++;
+										&& n != Tile.TileType.TYPE_RAMPDOWN
+										&& n != Tile.TileType.TYPE_RAMPUP) {
+									walled++; // (a RAMPUP beside a table is the climb to the storey above)
 								}
 							}
 						}
 					}
 				}
-				assertEquals("seed " + s + ": no open air is left in the sky", 0, air);
+				String at = "seed " + s + " storey z" + sky + ": ";
+				assertEquals(at + "no open air is left in the sky", 0, air);
 				// Rock a storey tall has a top: over it is floor, never a hole. A
 				// hole over rock is a fall onto nothing, and a body that takes it
 				// is gone from the world.
-				assertEquals("seed " + s + ": no hole stands over rock", 0, overRock);
-				assertEquals("seed " + s + ": no table is walled in", 0, walled);
-				assertTrue("seed " + s + ": and the tables do end in drops", edges > 0);
+				assertEquals(at + "no hole stands over rock", 0, overRock);
+				assertEquals(at + "no table is walled in", 0, walled);
+				if (sky == w.getSurfaceZ() + 1) {
+					assertTrue(at + "and the tables do end in drops", edges > 0);
+				}
+				}
 			}
 
 			// The edge is sensed: a still body on a table, facing the drop.
 			World w = net.hedinger.prototype.sim.Worlds.demoTerrain(42);
-			int sky = w.getLevels() - 1;
+			int sky = w.getSurfaceZ() + 1;
 			int[] edge = null;
 			for (int x = 3; x < w.getColums() - 3 && edge == null; x++) {
 				for (int y = 3; y < w.getRows() - 3 && edge == null; y++) {

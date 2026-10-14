@@ -533,6 +533,25 @@ public final class Worlds {
 	 */
 	static final int SKY_Z = 3;
 
+	/**
+	 * Storeys of sky, each a floor of the engine: {@link #SKY_Z} is the first,
+	 * {@link #TOP_Z} the last. A rock outcrop on the ground is a storey tall
+	 * and carries a table on the first; where the elevation runs higher still
+	 * the outcrop carries on up, rock through the storeys below its summit and
+	 * a table on the storey it tops out on. So the sky is the ground's relief
+	 * three times over: mesas, and on the tallest of them a higher mesa, and
+	 * rarely a third.
+	 */
+	static final int SKY_STOREYS = 3;
+	static final int TOP_Z = SKY_Z + SKY_STOREYS - 1;
+	static final int LEVELS = TOP_Z + 1;
+
+	/** Elevation above which a surface outcrop stands two storeys tall, and
+	 *  three. The outcrop itself begins at 0.87 (the surface pass); the noise
+	 *  means about 0.67, so each step up is rarer than the one below it, and a
+	 *  three-storey summit is the exception a skyline wants. */
+	private static final double RELIEF_TWO = 0.95, RELIEF_THREE = 0.98;
+
 	/** How many drones the facility berths, and therefore how many charge pads
 	 *  are cut into its deck. They share one standing order rather than dividing
 	 *  the work: the steward recounts every tick and drops the order the moment
@@ -765,7 +784,7 @@ public final class Worlds {
 		Utils.seed(seed);
 		Perf.stopwatch = new StopWatch();
 
-		World w = new World(cols, rows, 4);
+		World w = new World(cols, rows, LEVELS);
 		// Said, not inferred. The ground is no longer the top of the array —
 		// SKY_Z sits above it — so every reader that wants "the surface" has to
 		// be told which floor that is instead of taking the highest index.
@@ -773,12 +792,14 @@ public final class Worlds {
 
 		// ---- the surface: regions inside a rocky boundary ----
 		Region[] regions = regionSites(cols, rows);
+		double[][] elevation = new double[cols][rows]; // kept for the skyline's relief
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
 				double detail = Utils.noise2(x + 950, y + 640, 0.16);
 				Biome b = biomeAt(regions, x, y);
 				double elev = clamp01(Utils.noise2(x, y, 0.055) + b.elevBias);
+				elevation[x][y] = elev;
 				double moist = clamp01(Utils.noise2(x + 500, y + 300, 0.075) + b.moistBias);
 				Tile.TileType t;
 				double fert;
@@ -1032,20 +1053,28 @@ public final class Worlds {
 		// hilltop away (the ravine, the installation's shell, both seals) has
 		// already run, and a summit is only raised where rock actually survived
 		// under it.
-		raiseSkyline(w, cols, rows);
+		raiseSkyline(w, cols, rows, elevation);
 		return w;
 	}
 
 	/**
-	 * The skyline: the level above the ground, which is the ground's own relief.
+	 * The skyline: the storeys above the ground, which are the ground's own
+	 * relief.
 	 *
 	 * <p>A rock wall on the surface is rock a full storey tall, so its top is
 	 * floor on the level above -- the same stacking every other pair of floors
 	 * has, where the surface's ground stands on the caves' rock. So wherever the
-	 * surface is rock, the sky is a table of rocky ground, and wherever it is
-	 * not, the sky is one big hole onto it ({@link #openTheSky}). The world's
-	 * border carries up as rock, because the world is bounded by cliffs and a
-	 * cliff does not stop at the ground plane.
+	 * surface is rock, the first storey is a table of rocky ground, and wherever
+	 * it is not, the storey is one big hole onto it ({@link #openTheSky}). The
+	 * world's border carries up as rock, because the world is bounded by cliffs
+	 * and a cliff does not stop at the ground plane.
+	 *
+	 * <p>The storeys above repeat the rule on the storey below them. An outcrop
+	 * whose elevation runs past {@link #RELIEF_TWO} is rock two storeys tall: its
+	 * first storey is wall, and the table is on the second; past
+	 * {@link #RELIEF_THREE} the same again. Every storey is built in turn, bottom
+	 * up -- laid, climbed, joined, opened -- so the climbs onto a storey are cut
+	 * from the finished floor of the one below it.
 	 *
 	 * <p>It used to be a second opinion about the land's height -- summits
 	 * where the elevation noise ran past a threshold just above the outcrops',
@@ -1057,25 +1086,73 @@ public final class Worlds {
 	 * rock's edge, so the drop off it always lands on open ground below.
 	 *
 	 * <p>Nothing floats, by construction: a table is only ever laid over rock.
+	 * And no hole stands over rock: a table that could not be climbed is not
+	 * left as a lid with open air above it, it is put back as rock all the way
+	 * to the top of the world ({@code column}), a stack a body walks round
+	 * rather than a pit it falls into.
 	 */
-	private static void raiseSkyline(World w, int cols, int rows) {
+	private static void raiseSkyline(World w, int cols, int rows, double[][] elevation) {
+		int[][] height = rockHeight(w, cols, rows, elevation);
+		boolean[][] column = new boolean[cols][rows];
+		for (int k = 1; k <= SKY_STOREYS; k++) {
+			int z = SKY_Z + k - 1;
+			layStorey(w, cols, rows, z, k, height, column);
+			rampTheSkyline(w, cols, rows, z, column);
+			joinTheTables(w, cols, rows, z, k, height, column);
+			openTheSky(w, cols, rows, z);
+		}
+	}
+
+	/**
+	 * How many storeys of rock stand over each tile of the ground: none where
+	 * the surface is not rock, one for an outcrop, two and three where the
+	 * elevation that raised the outcrop runs higher, and the full height at the
+	 * world's border. Read off the elevation, not the tiles, so a storey can
+	 * tell a base it should build on from rock the lower storey left standing
+	 * for its own reasons.
+	 */
+	private static int[][] rockHeight(World w, int cols, int rows, double[][] elevation) {
+		int[][] h = new int[cols][rows];
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
-				boolean rock = w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WALL;
-				if (border && rock) {
-					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_WALL);
-				} else if (rock) {
-					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
-					w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
-				} else {
-					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_VOID);
+				if (border) {
+					h[x][y] = SKY_STOREYS;
+				} else if (w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WALL) {
+					double e = elevation[x][y];
+					h[x][y] = 1 + (e > RELIEF_TWO ? 1 : 0) + (e > RELIEF_THREE ? 1 : 0);
 				}
 			}
 		}
-		rampTheSkyline(w, cols, rows);
-		joinTheTables(w, cols, rows);
-		openTheSky(w, cols, rows);
+		return h;
+	}
+
+	/**
+	 * Lays one storey over the finished storey below it: rock where the
+	 * outcrop under this tile is taller still, a table where it tops out here,
+	 * open air over everything that is not rock below. Read off the tiles
+	 * below rather than the height alone, so a summit is only raised where
+	 * rock actually survived under it -- every pass that could carve a
+	 * hilltop away has already run.
+	 */
+	private static void layStorey(World w, int cols, int rows, int z, int k,
+			int[][] height, boolean[][] column) {
+		for (int x = 0; x < cols; x++) {
+			for (int y = 0; y < rows; y++) {
+				boolean border = x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2;
+				boolean rockBelow = w.getTile(x, y, z - 1).getType() == Tile.TileType.TYPE_WALL;
+				if (border || column[x][y]) {
+					setBare(w, x, y, z, Tile.TileType.TYPE_WALL);
+				} else if (!rockBelow) {
+					setBare(w, x, y, z, Tile.TileType.TYPE_VOID);
+				} else if (height[x][y] > k) {
+					setBare(w, x, y, z, Tile.TileType.TYPE_WALL); // the base of a higher table
+				} else {
+					setBare(w, x, y, z, Tile.TileType.TYPE_ROCKY);
+					w.getTile(x, y, z).setFertility(PLATEAU_FERTILITY);
+				}
+			}
+		}
 	}
 
 	/**
@@ -1089,20 +1166,23 @@ public final class Worlds {
 	 * {@link #rampTheSkyline} has a way up, so whatever touches one is reachable
 	 * too: it is floor. What is left is rock that touches no table at all.
 	 */
-	private static void joinTheTables(World w, int cols, int rows) {
+	private static void joinTheTables(World w, int cols, int rows, int z, int k,
+			int[][] height, boolean[][] column) {
 		boolean grew = true;
 		while (grew) {
 			grew = false;
 			for (int x = 2; x < cols - 2; x++) {
 				for (int y = 2; y < rows - 2; y++) {
-					if (w.getTile(x, y, SKY_Z).getType() != Tile.TileType.TYPE_WALL) {
-						continue;
+					if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_WALL
+							|| height[x][y] > k) {
+						continue; // not rock, or rock that is the base of a higher table
 					}
 					for (int d = 0; d < 4; d++) {
-						if (w.getTile(x + Tile.dirDx(d), y + Tile.dirDy(d), SKY_Z).getType()
+						if (w.getTile(x + Tile.dirDx(d), y + Tile.dirDy(d), z).getType()
 								== Tile.TileType.TYPE_ROCKY) {
-							setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_ROCKY);
-							w.getTile(x, y, SKY_Z).setFertility(PLATEAU_FERTILITY);
+							setBare(w, x, y, z, Tile.TileType.TYPE_ROCKY);
+							w.getTile(x, y, z).setFertility(PLATEAU_FERTILITY);
+							column[x][y] = false; // floor again: nothing stacks over it
 							grew = true;
 							break;
 						}
@@ -1130,11 +1210,11 @@ public final class Worlds {
 	 * rock under it, no hole here stands over rock: a body that walks off a
 	 * table's edge falls onto the ground at the foot of the cliff.
 	 */
-	private static void openTheSky(World w, int cols, int rows) {
+	private static void openTheSky(World w, int cols, int rows, int z) {
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
-				if (w.getTile(x, y, SKY_Z).getType() == Tile.TileType.TYPE_VOID) {
-					setBare(w, x, y, SKY_Z, Tile.TileType.TYPE_HOLE);
+				if (w.getTile(x, y, z).getType() == Tile.TileType.TYPE_VOID) {
+					setBare(w, x, y, z, Tile.TileType.TYPE_HOLE);
 				}
 			}
 		}
@@ -1163,27 +1243,28 @@ public final class Worlds {
 	 * region is exactly what {@code WorldAudit.connectivity} exists to catch,
 	 * and it would be right to.
 	 */
-	private static void rampTheSkyline(World w, int cols, int rows) {
+	private static void rampTheSkyline(World w, int cols, int rows, int z, boolean[][] column) {
 		boolean[][] seen = new boolean[cols][rows];
 		for (int sx = 0; sx < cols; sx++) {
 			for (int sy = 0; sy < rows; sy++) {
-				if (seen[sx][sy] || w.getTile(sx, sy, SKY_Z).getType() != Tile.TileType.TYPE_ROCKY) {
+				if (seen[sx][sy] || w.getTile(sx, sy, z).getType() != Tile.TileType.TYPE_ROCKY) {
 					continue;
 				}
 				java.util.ArrayList<int[]> table = new java.util.ArrayList<int[]>();
-				floodPlateau(w, seen, cols, rows, sx, sy, table);
+				floodPlateau(w, seen, cols, rows, sx, sy, table, z);
 				int want = table.size() < MIN_PLATEAU ? 0
 						: Math.max(1, table.size() / TILES_PER_SKY_RAMP);
 				int cut = 0;
 				if (want > 0) {
-					cut = climbPlateau(w, cols, rows, seen, table, want);
+					cut = climbPlateau(w, cols, rows, seen, table, want, z);
 				}
 				if (cut == 0) {
 					// Too small, or nowhere round it to cut a climb: left as the
 					// rock it stands on. Rock over rock, never a hole over rock,
 					// and never a floor nothing can walk onto.
 					for (int[] p : table) {
-						setBare(w, p[0], p[1], SKY_Z, Tile.TileType.TYPE_WALL);
+						setBare(w, p[0], p[1], z, Tile.TileType.TYPE_WALL);
+						column[p[0]][p[1]] = true; // and rock on every storey above
 					}
 				}
 			}
@@ -1197,7 +1278,7 @@ public final class Worlds {
 
 	/** Collects one plateau's tiles, four-connected. */
 	private static void floodPlateau(World w, boolean[][] seen, int cols, int rows,
-			int sx, int sy, java.util.List<int[]> out) {
+			int sx, int sy, java.util.List<int[]> out, int z) {
 		java.util.Deque<int[]> q = new java.util.ArrayDeque<int[]>();
 		q.add(new int[] { sx, sy });
 		seen[sx][sy] = true;
@@ -1209,7 +1290,7 @@ public final class Worlds {
 				if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || seen[nx][ny]) {
 					continue;
 				}
-				if (w.getTile(nx, ny, SKY_Z).getType() != Tile.TileType.TYPE_ROCKY) {
+				if (w.getTile(nx, ny, z).getType() != Tile.TileType.TYPE_ROCKY) {
 					continue;
 				}
 				seen[nx][ny] = true;
@@ -1224,14 +1305,14 @@ public final class Worlds {
 	 * underdark's stairs use, so two ways up a mesa are on two sides of it.
 	 */
 	private static int climbPlateau(World w, int cols, int rows, boolean[][] seen,
-			java.util.List<int[]> table, int want) {
+			java.util.List<int[]> table, int want, int z) {
 		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
 		while (cut.size() < want) {
 			int[] bestSite = null;
 			long best = Long.MIN_VALUE;
 			for (int[] p : table) {
 				for (int u = 0; u < 4; u++) {
-					int run = hillRun(w, cols, rows, p[0], p[1], u);
+					int run = hillRun(w, cols, rows, p[0], p[1], u, z);
 					if (run < 0) {
 						continue;
 					}
@@ -1257,7 +1338,7 @@ public final class Worlds {
 			if (bestSite == null) {
 				break;
 			}
-			raiseStair(w, seen, bestSite[0], bestSite[1], bestSite[2], bestSite[3]);
+			raiseStair(w, seen, bestSite[0], bestSite[1], bestSite[2], bestSite[3], z);
 			cut.add(bestSite);
 		}
 		return cut.size();
@@ -1282,7 +1363,7 @@ public final class Worlds {
 	 * <p>Past the hill there must be two tiles of open air over walkable
 	 * ground — the slope itself, and the foot it is stepped onto from.
 	 */
-	private static int hillRun(World w, int cols, int rows, int px, int py, int u) {
+	private static int hillRun(World w, int cols, int rows, int px, int py, int u, int z) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
 		int run = 0;
 		while (run < MAX_HILL_RUN) {
@@ -1290,10 +1371,10 @@ public final class Worlds {
 			if (ex < 4 || ey < 4 || ex >= cols - 4 || ey >= rows - 4) {
 				return -1;
 			}
-			if (!w.getTile(ex, ey, SURFACE_Z).isSolid()) {
+			if (!w.getTile(ex, ey, z - 1).isSolid()) {
 				break; // (ex, ey) is the first open ground: the hill ended one back
 			}
-			Tile.TileType sky = w.getTile(ex, ey, SKY_Z).getType();
+			Tile.TileType sky = w.getTile(ex, ey, z).getType();
 			if (sky != Tile.TileType.TYPE_WALL && sky != Tile.TileType.TYPE_VOID) {
 				return -1; // a climb already cut through here
 			}
@@ -1307,11 +1388,11 @@ public final class Worlds {
 			if (qx < 2 || qy < 2 || qx >= cols - 2 || qy >= rows - 2) {
 				return -1;
 			}
-			if (w.getTile(qx, qy, SKY_Z).getType() != Tile.TileType.TYPE_VOID) {
+			if (w.getTile(qx, qy, z).getType() != Tile.TileType.TYPE_VOID) {
 				return -1;
 			}
-			Tile.TileType g = w.getTile(qx, qy, SURFACE_Z).getType();
-			if (!w.getTile(qx, qy, SURFACE_Z).isWalkable() || g == Tile.TileType.TYPE_RAMPUP
+			Tile.TileType g = w.getTile(qx, qy, z - 1).getType();
+			if (!w.getTile(qx, qy, z - 1).isWalkable() || g == Tile.TileType.TYPE_RAMPUP
 					|| g == Tile.TileType.TYPE_RAMPDOWN || g == Tile.TileType.TYPE_HOLE) {
 				return -1;
 			}
@@ -1339,20 +1420,21 @@ public final class Worlds {
 	 * the foot is open air, which {@link #openTheSky} finishes as the hole
 	 * the drop falls through.
 	 */
-	private static void raiseStair(World w, boolean[][] seen, int px, int py, int u, int run) {
+	private static void raiseStair(World w, boolean[][] seen, int px, int py, int u, int run,
+			int z) {
 		int ax = Tile.dirDx(u), ay = Tile.dirDy(u);
 		int sx = px - (run + 1) * ax, sy = py - (run + 1) * ay; // the slope
-		setBare(w, sx, sy, SKY_Z, Tile.TileType.TYPE_RAMPDOWN);
-		w.getTile(sx, sy, SKY_Z).setRampUphill(u);
-		setBare(w, sx, sy, SURFACE_Z, Tile.TileType.TYPE_RAMPUP);
-		w.getTile(sx, sy, SURFACE_Z).setRampUphill(u);
+		setBare(w, sx, sy, z, Tile.TileType.TYPE_RAMPDOWN);
+		w.getTile(sx, sy, z).setRampUphill(u);
+		setBare(w, sx, sy, z - 1, Tile.TileType.TYPE_RAMPUP);
+		w.getTile(sx, sy, z - 1).setRampUphill(u);
 		// The spur: the hill's own top, laid as floor from the slope's head to
 		// the table. Zero tiles long in the common case, where the climb
 		// exits straight onto the table's edge.
 		for (int k = 1; k <= run; k++) {
 			int nx = px - k * ax, ny = py - k * ay;
-			setBare(w, nx, ny, SKY_Z, Tile.TileType.TYPE_ROCKY);
-			w.getTile(nx, ny, SKY_Z).setFertility(PLATEAU_FERTILITY);
+			setBare(w, nx, ny, z, Tile.TileType.TYPE_ROCKY);
+			w.getTile(nx, ny, z).setFertility(PLATEAU_FERTILITY);
 			// Claimed, so the sweep that is still running does not come back
 			// and flood the spur as a table of its own — which, being three
 			// tiles long, would fail the size test and be demolished, taking
