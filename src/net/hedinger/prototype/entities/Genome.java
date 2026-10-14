@@ -332,20 +332,28 @@ public class Genome {
 	 *  evolution, bounded so a lineage can neither fossilise at zero nor dissolve
 	 *  at a huge rate. */
 	public double mutationRate = 0.1;
-	/** The founder draw of {@link #mutationRate}, and the floor the gene can
-	 *  never cross. In a steady world selection on the rate only pushes down --
-	 *  most mutations hurt, so the parent that jitters its young least leaves
-	 *  the most intact descendants -- and the gene ratchets to whatever floor
-	 *  it is given. Measured on the live world: both clades fell from about
-	 *  0.10 to a floor of 0.01 inside forty generations, which made that one
-	 *  constant the whole world's evolvability. So the floor is the bottom of
-	 *  the founder draw: a lineage can settle, but never copy itself more
-	 *  faithfully than the world was seeded with. Nothing here yet pays for
-	 *  fidelity or stirs the environment, which is what holds real rates up. */
+	/** The founder draw of {@link #mutationRate}. */
 	@Unit("per gene")
 	public static final double MUT_LO = 0.05;
 	@Unit("per gene")
 	public static final double MUT_HI = 0.15;
+	/** The floor the gene can never cross. In a steady world selection on the
+	 *  rate only pushes down -- most mutations hurt, so the parent that jitters
+	 *  its young least leaves the most intact descendants -- and the gene
+	 *  ratchets to whatever floor it is given. Measured on the live world: both
+	 *  clades fell from about 0.10 to a floor of 0.01 inside forty generations,
+	 *  which made that one constant the whole world's evolvability. Raised to
+	 *  the bottom of the founder draw, 0.05, the rate applied to the brain's
+	 *  instructions as well, and the forager program could not take it: about
+	 *  two edits a birth against one seek instruction, and within ten
+	 *  generations 44% of grazers had lost the write they live by, against 2%
+	 *  at 0.01. Matched runs with identical founders put the loss on the floor
+	 *  alone. So the floor sits between the two: low enough that selection can
+	 *  still clean a program, high enough that a lineage never fossilises.
+	 *  Nothing here yet pays for fidelity or stirs the environment, which is
+	 *  what holds real rates up. */
+	@Unit("per gene")
+	public static final double MUT_FLOOR = 0.03;
 	/** Ceiling of the gene: past this a lineage dissolves. */
 	@Unit("per gene")
 	public static final double MUT_MAX = 0.5;
