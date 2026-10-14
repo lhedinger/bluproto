@@ -434,6 +434,37 @@ public final class ServerMain {
 			ctx.json(Map.of("ok", true, "tick", tick, "x", x, "y", y, "z", z));
 		});
 
+		// The genome editor (see GenomeEditor): the form's schema, a genome taken
+		// apart for it, and the form put back together. All three are pure and
+		// open to read -- nothing here touches the world; placing the result is
+		// the token-gated injection above, and the page is /edit.
+		app.get("/api/genome/schema", ctx -> ctx.json(net.hedinger.prototype.sim.GenomeEditor.schema()));
+		app.post("/api/genome/describe", ctx -> {
+			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
+			try {
+				ctx.json(net.hedinger.prototype.sim.GenomeEditor.describe(body.path("genome").asText("")));
+			} catch (IllegalArgumentException e) {
+				ctx.status(400).json(Map.of("ok", false, "error", String.valueOf(e.getMessage())));
+			}
+		});
+		app.post("/api/genome/assemble", ctx -> {
+			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
+			try {
+				@SuppressWarnings("unchecked")
+				Map<String, Object> genes = body.has("genes") && !body.get("genes").isNull()
+						? Protocol.JSON.convertValue(body.get("genes"), Map.class) : null;
+				@SuppressWarnings("unchecked")
+				java.util.List<java.util.List<Number>> code = body.has("code") && !body.get("code").isNull()
+						? Protocol.JSON.convertValue(body.get("code"), java.util.List.class) : null;
+				Integer clade = body.has("clade") && !body.get("clade").isNull() ? body.get("clade").asInt() : null;
+				String base = body.has("base") && !body.get("base").isNull() ? body.get("base").asText() : null;
+				ctx.json(net.hedinger.prototype.sim.GenomeEditor.assemble(base, genes, clade, code,
+						body.path("raw").asBoolean(false)));
+			} catch (IllegalArgumentException e) {
+				ctx.status(400).json(Map.of("ok", false, "error", String.valueOf(e.getMessage())));
+			}
+		});
+
 		// The constants registry (see Tuning): every surveyed simulation
 		// constant with its live value, boot default, and whether it is
 		// frozen. Open to read — the debug panel is a viewer feature.

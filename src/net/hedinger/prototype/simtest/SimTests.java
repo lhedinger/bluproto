@@ -5368,6 +5368,70 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The genome editor edits numbers, never text, and puts back exactly what it
+	 * took apart. A genome described for the form and assembled from it encodes
+	 * to the same line; a value outside the schema's bounds is clamped the way a
+	 * birth clamps it, unless the caller asks for raw; and a program longer than
+	 * a mind can hold, an unknown gene or an unknown clade are refused by name.
+	 * The schema the form is built from covers every opcode and every channel,
+	 * so a gene or a sense added elsewhere reaches the editor without a change
+	 * here.
+	 */
+	static class TheEditorPutsBackWhatItTookApart extends Scenario {
+		@Override
+		@SuppressWarnings("unchecked")
+		public void run() {
+			seed(21);
+			String line = net.hedinger.prototype.entities.GenomeCodec.encode(net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR));
+			var d = net.hedinger.prototype.sim.GenomeEditor.describe(line);
+			var genes = (java.util.Map<String, Object>) d.get("genes");
+			var code = (java.util.List<java.util.List<Integer>>) d.get("code");
+			assertTrue("the form sees every schema gene", genes.size() == net.hedinger.prototype.entities.GeneSchema.genes().size());
+			assertTrue("and the whole program", code.size() > 10 && code.get(0).size() == 4);
+			var back = net.hedinger.prototype.sim.GenomeEditor.assemble(line, genes, (Integer) d.get("clade"), code, true);
+			assertTrue("assembled raw, it is the same creature to the byte", line.equals(back.get("genome")));
+
+			// Clamped, as at a birth: a size past the ceiling lands on it, and the
+			// editor says which gene it moved.
+			var big = new java.util.LinkedHashMap<String, Object>(genes);
+			big.put("size", 1e6);
+			var clamped = net.hedinger.prototype.sim.GenomeEditor.assemble(line, big, null, null, false);
+			var cg = (java.util.Map<String, Object>) clamped.get("genes");
+			assertNear("size clamps to the schema's ceiling", Genome.SIZE_MAX, (Double) cg.get("size"), 1e-9);
+			assertTrue("and the clamp is reported", ((java.util.List<String>) clamped.get("clamped")).contains("size"));
+			var rawOut = net.hedinger.prototype.sim.GenomeEditor.assemble(line, big, null, null, true);
+			assertNear("raw keeps the experiment's value", 1e6,
+					(Double) ((java.util.Map<String, Object>) rawOut.get("genes")).get("size"), 1e-9);
+
+			// Refusals name the thing.
+			assertTrue("a program past the mind's length is refused",
+					refuses(() -> net.hedinger.prototype.sim.GenomeEditor.assemble(line, null, null,
+							java.util.Collections.nCopies(Brain.MAX_LEN + 1, java.util.List.of(0, 0, 0, 0)), false),
+							"instructions"));
+			assertTrue("an unknown gene is refused",
+					refuses(() -> net.hedinger.prototype.sim.GenomeEditor.assemble(line, java.util.Map.of("wings", 1.0), null, null, false),
+							"wings"));
+			assertTrue("an unknown clade is refused rather than quietly made a grazer",
+					refuses(() -> net.hedinger.prototype.sim.GenomeEditor.assemble(line, null, 9, null, false), "clade"));
+
+			// The schema is the instruction set and the channels, whole.
+			var schema = net.hedinger.prototype.sim.GenomeEditor.schema();
+			assertTrue("every opcode is described", ((java.util.List<?>) schema.get("ops")).size() == Brain.NUM_OPS);
+			assertTrue("every sensor is named", ((java.util.List<?>) schema.get("sensors")).size() == AgentIO.NUM_SENSORS);
+			assertTrue("every actuator is named", ((java.util.List<?>) schema.get("actuators")).size() == AgentIO.ACT_NAMES.length);
+		}
+
+		private static boolean refuses(Runnable r, String naming) {
+			try {
+				r.run();
+				return false;
+			} catch (IllegalArgumentException e) {
+				return e.getMessage() != null && e.getMessage().contains(naming);
+			}
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -19435,6 +19499,7 @@ public class SimTests {
 				new ViolenceIsAudibleThroughWalls(),
 				new HitchhikerBrainClimbsAboard(),
 				new ALineageCannotFossilise(),
+				new TheEditorPutsBackWhatItTookApart(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new RegrowthIsThePlantsNotTheFloors(),
