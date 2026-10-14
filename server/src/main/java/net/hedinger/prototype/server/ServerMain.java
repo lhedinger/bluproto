@@ -535,6 +535,19 @@ public final class ServerMain {
 					"data", java.util.Base64.getEncoder().encodeToString(c)));
 		});
 
+		// Static per-tile water mask (1 water, 2 shallows, 3 pool, 4 mire) for
+		// the glint overlay. Fetched once per level, like the cover mask.
+		app.get("/api/world/water/{z}", ctx -> {
+			byte[] c = host.water(Integer.parseInt(ctx.pathParam("z")));
+			if (c == null) {
+				ctx.status(404);
+				return;
+			}
+			var w = host.runner().world();
+			ctx.json(Map.of("cols", w.getColums(), "rows", w.getRows(),
+					"data", java.util.Base64.getEncoder().encodeToString(c)));
+		});
+
 		// Tap-to-inspect a tile (debug): type, fertility, live vegetation/food.
 		app.get("/api/world/tile/{z}/{x}/{y}", ctx -> {
 			var d = host.tileDetail(Integer.parseInt(ctx.pathParam("x")),

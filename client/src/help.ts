@@ -23,6 +23,7 @@ import {
   DOT_LOD_SCALE, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
   drawLoader, drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
+  ART, drawGlints, glintsFor,
 } from './render';
 import { el, renderMechPage, syncNavPad } from './mechdoc';
 import { PLANS, SATED, bodyScanCanvas, type BodyState } from './bodyScan';
@@ -417,6 +418,12 @@ for (const kind of VEG_KINDS) {
 
 // ---- web-only bakes: living body, corpse ---------------------------------
 
+const waters = section('Water glints',
+  'Light moving on a surface, which a bake cannot carry: the live view twinkles each '
+  + 'water its own way — the shallows densest and quickest, open water sparser, a bog '
+  + 'pool rare and slow, mire rarer — from the same glintsFor/drawGlints code, over the '
+  + 'server\'s ground bake. Phase runs on the simulation tick.');
+
 const bakes = section('Atlas bakes',
   'What the viewer itself makes of a creature\'s server-baked sprite atlas: the living '
   + 'stamp and the drained corpse bake (colour stripped, body kept). '
@@ -554,6 +561,23 @@ for (const [act, name, meaning] of EXPR) {
   figure(mipStamp(corpseMipFor(pheno, atlas)), '<b>corpse mip</b>', bakes);
   } // end of the entries that need a live atlas
 
+
+  // Water glints: the live layer over the server's bake of each water, five
+  // tiles across, the tick run from the clock here because the page has no
+  // world to follow.
+  for (const [name, kind] of [['water', 1], ['shallows', 2], ['pool', 3], ['mire', 4]] as const) {
+    const ground = await loadCanvas(`/help/${name}_ground.png`);
+    if (!ground) continue;
+    const grid = new Uint8Array(7 * 7);
+    for (let ty = 1; ty <= 5; ty++) for (let tx = 1; tx <= 5; tx++) grid[ty * 7 + tx] = kind;
+    const glints = glintsFor(grid, 7, 7);
+    const DC = 280, px = DC / (5 * ART);
+    pair(waters, `glints on ${name}`, DC, DC, (g, t) => {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(ground, 0, 0, DC, DC);
+      drawGlints(g, glints, Math.floor(t * 33), -ART * px, -ART * px, px, ART, ART, 6 * ART, 6 * ART);
+    });
+  }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
   // Java scene was baked from. The Java pass veils the 3x3 tiles around the

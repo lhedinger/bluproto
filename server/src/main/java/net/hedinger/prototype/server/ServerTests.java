@@ -56,6 +56,7 @@ public final class ServerTests {
 		everyRungOfTheCactusLadderOccurs();
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		bandAndWholeBakeAgree();
+		theWaterMaskNamesEachWater();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
 		aCarcassSaysWhatItIsWorth();
@@ -1132,6 +1133,44 @@ public final class ServerTests {
 		check("the demo world has a pit over nothing", bottom == 0);
 		check("the sky is lighter than a pit", net.hedinger.prototype.engine.RenderFx.skyDepth
 				< net.hedinger.prototype.engine.RenderFx.holeDepth);
+	}
+
+	/**
+	 * The water mask the glint overlay reads names each water by the number the
+	 * client expects, and nothing that is not water.
+	 *
+	 * <p>The client sparkles by kind -- open water, shallows, pool, mire each
+	 * with its own density, colour and tempo -- so a wrong byte is not a
+	 * missing sparkle but the wrong one: a bog pool twinkling like a sunlit
+	 * ford. The demo world has all four on its surface, so the whole mapping
+	 * is exercised, and every other tile must come back 0 or the ground would
+	 * glitter.
+	 */
+	static void theWaterMaskNamesEachWater() {
+		WorldHost host = new WorldHost(42);
+		host.runner().pause();
+		net.hedinger.prototype.engine.World w = host.runner().world();
+		int z = w.getSurfaceZ();
+		byte[] m = host.water(z);
+		check("the mask is one byte a tile", m.length == w.getColums() * w.getRows());
+		int[] seen = new int[5];
+		boolean right = true;
+		for (int y = 0; y < w.getRows(); y++) {
+			for (int x = 0; x < w.getColums(); x++) {
+				var t = w.getTile(x, y, z).getType();
+				int want = t == net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER ? 1
+						: t == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHALLOWS ? 2
+						: t == net.hedinger.prototype.engine.Tile.TileType.TYPE_POOL ? 3
+						: t == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE ? 4 : 0;
+				int got = m[y * w.getColums() + x];
+				right &= got == want;
+				seen[got]++;
+			}
+		}
+		check("every tile carries its water kind, and dry ground carries none", right);
+		check("the demo surface has all four waters to sparkle: " + java.util.Arrays.toString(seen),
+				seen[1] > 0 && seen[2] > 0 && seen[3] > 0 && seen[4] > 0);
+		check("a level that does not exist has no mask", host.water(99) == null);
 	}
 
 	/**

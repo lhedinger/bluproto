@@ -102,6 +102,12 @@ final class SpriteCatalog {
 		concealGround("reeds", Tile.TileType.TYPE_REEDS);
 		concealGround("duct", Tile.TileType.TYPE_DUCT);
 		concealGround("sedge", Tile.TileType.TYPE_SEDGE);
+		// The four waters, for the glint demo: the client sparkles each in its
+		// own way over the server's own bake of it.
+		concealGround("water", Tile.TileType.TYPE_WATER);
+		concealGround("shallows", Tile.TileType.TYPE_SHALLOWS);
+		concealGround("pool", Tile.TileType.TYPE_POOL);
+		concealGround("mire", Tile.TileType.TYPE_MIRE);
 		bedGround();
 	}
 

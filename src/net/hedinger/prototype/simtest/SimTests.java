@@ -11251,6 +11251,44 @@ public class SimTests {
 	}
 
 	/**
+	 * The live water glints are the water ramps' own highlights.
+	 *
+	 * <p>The client twinkles each water in a colour it names in render.ts, and
+	 * Java cannot read that file. This pins the two literals it was written
+	 * with to the ramps they claim to be, so a ramp moving under them fails
+	 * here and names the client as the thing to edit -- the same link the
+	 * mushroom and the veils have.
+	 */
+	static class TheWaterGlintsAreTheRampsHighlights extends Scenario {
+		@Override
+		public void run() {
+			// Copied from render.ts: GLINT_WATER, GLINT_SHALLOWS.
+			int water = 0x3172b0, shallows = 0x63becd;
+			assertEquals("open water, a pool and mire glint in the water ramp's highlight",
+					GroundTextures.rampColor(GroundTextures.CLS_WATER, 2), water);
+			assertEquals("the shallows glint in their own highlight",
+					GroundTextures.rampColor(GroundTextures.CLS_SHALLOWS, 2), shallows);
+			// And the bake's fixed glints use the same two, so still and moving
+			// light on one water are one colour.
+			final int A = GroundTextures.ART;
+			boolean bakedWater = false, bakedShallows = false;
+			for (int wx = 0; wx < 60 && !(bakedWater && bakedShallows); wx++) {
+				for (int wy = 0; wy < 60; wy++) {
+					for (int aj = 0; aj < A; aj++) {
+						for (int ai = 0; ai < A; ai++) {
+							double x = wx + (ai + 0.5) / A, y = wy + (aj + 0.5) / A;
+							bakedWater |= GroundTextures.waterTop(x, y, wx * A + ai, wy * A + aj, 0.3) == water;
+							bakedShallows |= GroundTextures.waterSurface(x, y, wx * A + ai, wy * A + aj, 1.0) == shallows;
+						}
+					}
+				}
+			}
+			assertTrue("the bake glints open water in the same highlight", bakedWater);
+			assertTrue("and the shallows in theirs", bakedShallows);
+		}
+	}
+
+	/**
 	 * The demo world grows a bog, and only where a bog belongs.
 	 *
 	 * <p>Five tiles nobody places are five tiles nobody sees -- the cactus
@@ -19272,6 +19310,7 @@ public class SimTests {
 				new TheBogGrowsHidesAndWarns(),
 				new TheBogIsPaintedFromTheWetGroundItHas(),
 				new TheWetlandGrowsABog(),
+				new TheWaterGlintsAreTheRampsHighlights(),
 				new TheWardenSignsItsFounders(),
 				new TheSurfaceFloraIsPaintedFromRamps(),
 				new ASoundIsHeardAndThenGone(),

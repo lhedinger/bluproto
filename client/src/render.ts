@@ -45,7 +45,7 @@ const VEG_LOW_MIN_MS = 1500;
 // Art-pixels per tile. The Java engine owns this number as
 // GroundTextures.ART; the two languages cannot share a constant, so this copy
 // must move with it or every baked layer lands off-lattice.
-const ART = 12;
+export const ART = 12;
 
 function vegVariant(tx: number, ty: number): number {
   return Math.floor(hash01(tx, ty, 11) * VEG_VARIANTS);
@@ -495,6 +495,7 @@ const PARALLAX_OFF = flagOff('parallax'); // below-floor slide (floors still sho
 const BELOW_OFF = flagOff('below');       // bodies on the floor below the pits
 const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
 const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
+const GLINTS_OFF = flagOff('glints');   // live glints on water
 
 /** The map-view dot: a corpse is a spent grey block; a live body its colour. */
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
@@ -2797,6 +2798,122 @@ function climatePixels(field: ClimateField, grid: Uint8Array, range: ClimateRang
       px[o + 3] = Math.round(u * 170);
     }
   }
+}
+
+// ---- water glints -----------------------------------------------------------
+//
+// The one thing a bake cannot carry: light moving on a surface. The ground
+// bake scatters a few fixed 2-px glints in each water's highlight; this layer
+// adds the ones that come and go. Each water kind sparkles its own way — the
+// wading shallows densest and quickest, open water sparser, a bog pool rare
+// and slow with a sky reflection on black water, mire rarer still — so the
+// kinds tell apart by motion as well as by pattern.
+//
+// Everything about a glint is hashed from its world position: where it sits
+// on the art-pixel lattice, its period, its phase. Nothing consumes RNG or the
+// wall clock; the phase runs on the simulation tick (ART-STYLE §1), so two
+// viewers see the same water twinkle the same way, and a paused world holds
+// still. The glint set for a level is built once from the water mask and read
+// every frame, so the per-frame cost is a cull over a few thousand entries,
+// not a hash per tile.
+//
+// Colours are the water ramps' own highlights, pinned by a scenario
+// (TheWaterGlintsAreTheRampsHighlights) because Java cannot read this file.
+export const GLINT_WATER = 0x3172b0;    // GroundTextures.RAMP[CLS_WATER][2]
+export const GLINT_SHALLOWS = 0x63becd; // RAMP[CLS_SHALLOWS][2]
+/** Lattice pitch in art-px: nine cells a tile, at most one glint each. */
+const GLINT_C = 4;
+/** Per water kind (index = the mask byte): colour, expected glints per tile,
+ *  blink period range in ticks, and the lit share of each period. */
+export const GLINT_KINDS: ReadonlyArray<{ col: number; per: number; pmin: number; pmax: number; lit: number } | null> = [
+  null,
+  { col: GLINT_WATER, per: 0.9, pmin: 50, pmax: 120, lit: 0.22 },    // 1 open water
+  { col: GLINT_SHALLOWS, per: 2.2, pmin: 30, pmax: 70, lit: 0.30 },  // 2 shallows
+  { col: GLINT_WATER, per: 0.5, pmin: 80, pmax: 160, lit: 0.18 },    // 3 tannin pool
+  { col: GLINT_WATER, per: 0.25, pmin: 90, pmax: 180, lit: 0.15 },   // 4 mire
+];
+export interface Glint { x: number; y: number; kind: number; period: number; phase: number }
+
+/** Every glint a level will ever show, from its water mask: world-absolute
+ *  art-pixel positions, each with its own period and phase. */
+export function glintsFor(water: Uint8Array, cols: number, rows: number): Glint[] {
+  const out: Glint[] = [];
+  const cells = ART / GLINT_C; // per tile side
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const kind = water[ty * cols + tx];
+      const k = GLINT_KINDS[kind];
+      if (!k) continue;
+      for (let j = 0; j < cells; j++) {
+        for (let i = 0; i < cells; i++) {
+          const cx = tx * cells + i, cy = ty * cells + j;
+          if (hash01(cx, cy, 81) >= k.per / (cells * cells)) continue;
+          const period = k.pmin + Math.floor(hash01(cx, cy, 82) * (k.pmax - k.pmin));
+          out.push({
+            x: cx * GLINT_C + 1 + Math.floor(hash01(cx, cy, 84) * 2),
+            y: cy * GLINT_C + 1 + Math.floor(hash01(cx, cy, 85) * 2),
+            kind, period, phase: Math.floor(hash01(cx, cy, 83) * period),
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Where a glint is in its blink at `tick`: -1 while dark, else 0..1 across
+ *  the lit window. */
+export function glintLit(gl: Glint, tick: number): number {
+  const k = GLINT_KINDS[gl.kind]!;
+  const u = (((tick + gl.phase) % gl.period) + gl.period) % gl.period / gl.period;
+  return u > k.lit ? -1 : u / k.lit;
+}
+
+/** Stamp the lit glints of `glints` into `g`, with art-pixel (0,0) at device
+ *  (ox, oy) and `px` device pixels per art-pixel; only glints inside the
+ *  art-pixel box [x0,x1)×[y0,y1) are considered. A glint is a 2-px dash in
+ *  its water's highlight, and a 4-px spark through the middle of its blink. */
+export function drawGlints(g: CanvasRenderingContext2D, glints: Glint[], tick: number,
+    ox: number, oy: number, px: number, x0: number, y0: number, x1: number, y1: number): void {
+  const d = Math.ceil(px);
+  let last = -1;
+  for (const gl of glints) {
+    if (gl.x < x0 - 1 || gl.x >= x1 || gl.y < y0 - 1 || gl.y >= y1 + 1) continue;
+    const s = glintLit(gl, tick);
+    if (s < 0) continue;
+    const col = GLINT_KINDS[gl.kind]!.col;
+    if (col !== last) {
+      g.fillStyle = '#' + col.toString(16).padStart(6, '0');
+      last = col;
+    }
+    const sx = Math.round(ox + gl.x * px), sy = Math.round(oy + gl.y * px);
+    g.fillRect(sx, sy, d, d);
+    g.fillRect(Math.round(ox + (gl.x + 1) * px), sy, d, d);
+    if (s > 0.3 && s < 0.7) {
+      g.fillRect(sx, Math.round(oy + (gl.y - 1) * px), d, d);
+      g.fillRect(Math.round(ox + (gl.x + 1) * px), Math.round(oy + (gl.y + 1) * px), d, d);
+    }
+  }
+}
+
+let glintSrc: Uint8Array | null = null;
+let glintSet: Glint[] = [];
+
+/** The live glint layer over the viewport's water. Drawn only from 12 px a
+ *  tile up: below that an art-pixel is less than a device pixel and a glint
+ *  is a flicker of noise, which the far view does not need. */
+export function drawWaterGlints(g: CanvasRenderingContext2D, cam: Camera,
+    water: Uint8Array, cols: number, rows: number, tick: number): void {
+  if (GLINTS_OFF || cam.scale < ART) return;
+  if (water !== glintSrc) {
+    glintSet = glintsFor(water, cols, rows);
+    glintSrc = water;
+  }
+  const o = cam.worldToScreen(0, 0);
+  const px = cam.scale / ART;
+  const x0 = Math.floor(-o.x / px), y0 = Math.floor(-o.y / px);
+  const x1 = Math.ceil((g.canvas.width - o.x) / px), y1 = Math.ceil((g.canvas.height - o.y) / px);
+  drawGlints(g, glintSet, tick, o.x, o.y, px, x0, y0, x1, y1);
 }
 
 export function drawClimateLayer(g: CanvasRenderingContext2D, cam: Camera,
