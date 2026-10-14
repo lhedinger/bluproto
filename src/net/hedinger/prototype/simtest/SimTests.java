@@ -12923,6 +12923,37 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The underdark's stairs face every way. They all climbed east once: the
+	 * link stations between surface and cave took their facing in turn, and
+	 * the stairwells a floor down were the one place the engine's
+	 * four-direction ramps went unused. Facing is taken in turn per cavern,
+	 * so the count here is the whole floor's, and the test asks only that
+	 * every cardinal is represented, not for an even split -- a cavern with
+	 * one stair faces one way, and which way is its own business.
+	 */
+	static class TheUnderdarksStairsFaceEveryWay extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 7, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int[] facing = new int[4];
+				for (int x = 0; x < w.getColums(); x++) {
+					for (int y = 0; y < w.getRows(); y++) {
+						Tile t = w.getTile(x, y, 0);
+						if (t.getType() == Tile.TileType.TYPE_RAMPUP) {
+							facing[t.getRampUphill()]++;
+						}
+					}
+				}
+				for (int d = 0; d < 4; d++) {
+					assertGreater("seed " + s + ": some stair climbs toward cardinal " + d
+							+ " " + java.util.Arrays.toString(facing), facing[d], 0);
+				}
+			}
+		}
+	}
+
 	static class DemoWorldFullyConnected extends Scenario {
 		@Override
 		public void run() {
@@ -19130,6 +19161,7 @@ public class SimTests {
 				new DemoWorldFullyConnected(),
 				new EveryCavernHasAStairOutOfIt(),
 				new AStairIsOneSlopeSeenFromBothFloors(),
+				new TheUnderdarksStairsFaceEveryWay(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new TheSkyIsMostlyEmptyAndNothingFloats(),
 				new AMesaEndsInACliff(),

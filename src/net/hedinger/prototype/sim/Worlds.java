@@ -3359,12 +3359,21 @@ public final class Worlds {
 		cy /= cavern.size();
 		int want = Math.min(MAX_STAIRS_PER_CAVERN,
 				Math.max(1, cavern.size() / TILES_PER_STAIRWELL));
+		// Stairs take their facing in turn, as the link stations above do:
+		// every cavern with four or more faces each way by construction, and
+		// a cavern with one has it facing whichever way its centroid hashes
+		// to, so the underdark as a whole does not lean one way. They all
+		// climbed east before -- the one place the four-direction freedom the
+		// engine has was not used in the world.
+		int dirOffset = (int) (net.hedinger.prototype.engine.GroundTextures.hash01(
+				(int) cx, (int) cy, 67) * 4) & 3;
 		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
 		while (cut.size() < want) {
+			int u = (cut.size() + dirOffset) & 3;
 			int bestX = -1, bestY = -1;
 			long best = cut.isEmpty() ? Long.MAX_VALUE : Long.MIN_VALUE;
 			for (int[] p : cavern) {
-				if (!stairwellFits(w, cols, rows, p[0], p[1], Tile.DIR_E)) {
+				if (!stairwellFits(w, cols, rows, p[0], p[1], u)) {
 					continue;
 				}
 				if (cut.isEmpty()) {
@@ -3393,12 +3402,13 @@ public final class Worlds {
 			if (bestX < 0) {
 				break; // the cavern has no room left that fits
 			}
-			// Two lanes wherever the tile south of the head also fits, so a
-			// body coming down does not have to wait for one going up. This is
-			// the common case in a roomy cavern and the reason the old
-			// one-lane-everywhere stairs felt like bottlenecks.
-			int lanes = stairwellFits(w, cols, rows, bestX, bestY + 1, Tile.DIR_E) ? 2 : 1;
-			sinkStairwell(w, bestX, bestY, lanes, Tile.DIR_E);
+			// Two lanes wherever the tile beside the foot, across the slope,
+			// also fits, so a body coming down does not have to wait for one
+			// going up. This is the common case in a roomy cavern and the
+			// reason the old one-lane-everywhere stairs felt like bottlenecks.
+			int lanes = stairwellFits(w, cols, rows, bestX + Tile.dirDx((u + 1) & 3),
+					bestY + Tile.dirDy((u + 1) & 3), u) ? 2 : 1;
+			sinkStairwell(w, bestX, bestY, lanes, u);
 			cut.add(new int[] { bestX, bestY });
 		}
 	}
