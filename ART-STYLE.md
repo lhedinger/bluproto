@@ -154,6 +154,18 @@ One sun, straight overhead-north. The grammar:
   tile completely. A pit with nothing under it — the lowest level's — is
   opaque void shade all the way, and reads bottomless because it is. Grate
   gaps and drop-shafts are small pits and take the identical treatment.
+- **Water glints are live, and the only moving light.** The bake scatters a
+  few fixed 2-px glints in each water's highlight; the web client adds the
+  ones that come and go (`render.ts` `glintsFor`/`drawGlints`, from the
+  server's per-tile water mask). Each kind sparkles its own way — shallows
+  densest and quickest, open water sparser, a bog pool rare and slow with the
+  water highlight as a sky reflection on black, mire rarer still — so the
+  waters tell apart by motion as well as pattern. A glint is a 2-px dash on
+  the art-pixel lattice in the ramp's highlight, a 4-px spark through the
+  middle of its blink, and nothing is ever a new colour. Position, period and
+  phase are hashed from world position; the phase runs on the simulation
+  tick, never the wall clock. Drawn from 12 px a tile up only, where an
+  art-pixel is at least a device pixel.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `PARALLAX` (0.94), which is the
   projection of a plane one storey further from the eye: pan by *d* and the top

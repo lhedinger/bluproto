@@ -1187,6 +1187,33 @@ final class WorldHost {
 	 * anything the sim hides, the viewer part-hides too.
 	 */
 	/**
+	 * Per-tile water mask for the glint overlay: one byte per tile of level z
+	 * -- 1 open water, 2 the wading shallows, 3 a tannin pool, 4 mire, else 0.
+	 * The values match the client's water kinds in render.ts. Static for the
+	 * life of the world: the client fetches it once per level and sparkles
+	 * each kind of water in its own way, so the live view carries the one
+	 * thing a bake cannot -- light moving on a surface.
+	 */
+	byte[] water(int z) {
+		net.hedinger.prototype.engine.World w = runner.world();
+		if (z < 0 || z >= w.getLevels()) {
+			return null;
+		}
+		int cols = w.getColums(), rows = w.getRows();
+		byte[] c = new byte[cols * rows];
+		for (int y = 0; y < rows; y++) {
+			for (int x = 0; x < cols; x++) {
+				var type = w.getTile(x, y, z).getType();
+				c[y * cols + x] = (byte) (type == net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER ? 1
+						: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHALLOWS ? 2
+						: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_POOL ? 3
+						: type == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE ? 4 : 0);
+			}
+		}
+		return c;
+	}
+
+	/**
 	 * One climate field of one level -- "light", "temperature" or "humidity" --
 	 * quantised to a byte a tile over its own range, with the range alongside
 	 * so the viewer can label a legend in the field's units. Static: the

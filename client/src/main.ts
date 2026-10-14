@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { VEG_KIND_MASK, drawClimateLayer, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
+import { VEG_KIND_MASK, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import { bodyScanCanvas, planFor, stateOf } from './bodyScan';
@@ -343,6 +343,7 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['sprites', 'creature sprites (off = dots)'],
   ['overlay', 'badges, rings & links'],
   ['minimap', 'minimap'],
+  ['glints', 'live glints on water'],
   ['parallax', 'below-floor parallax slide'],
   ['below', 'creatures on the floor below'],
   ['gl', 'webgl renderer (off = canvas2d)'],
@@ -436,6 +437,26 @@ async function fetchCover(): Promise<void> {
     coverGrid = a;
   } catch {
     /* transient; leave the canopy off until the next fetch */
+  }
+}
+
+// Static water mask (one byte per tile: 1 water, 2 shallows, 3 pool, 4 mire)
+// fetched once per level, so the renderer can twinkle each water its own way.
+let waterGrid: Uint8Array | null = null;
+async function fetchWater(): Promise<void> {
+  const epoch = levelEpoch;
+  waterGrid = null;
+  try {
+    const r = await fetch(`/api/world/water/${currentLevel}?v=${hello ? hello.build : '0'}`);
+    if (epoch !== levelEpoch || !r.ok) return; // stale: the level moved on
+    const j = await r.json();
+    if (epoch !== levelEpoch) return;
+    const bin = atob(j.data);
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    waterGrid = a;
+  } catch {
+    /* transient; the water lies still until the next fetch */
   }
 }
 
@@ -598,6 +619,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       vegGrid = null;
       startVegPolling();
       fetchCover();
+      fetchWater();
       fetchClimate();
       // Tell the server which level to stream. The client says this on every
       // connection now, not only when someone taps: after a reconnect the two
@@ -1536,6 +1558,7 @@ function goToLevel(z: number): void {
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
+  fetchWater(); // so is the water mask
   fetchClimate(); // and so is the climate field
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.
@@ -2119,6 +2142,9 @@ function frame(now: number): void {
   } else {
     render(g, cam, state, meta, chunkTiles, chunkPx, getChunk,
       vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
+  }
+  if (waterGrid && meta) {
+    drawWaterGlints(g, cam, waterGrid, meta.cols, meta.rows, state.tick);
   }
   if (climChoice && climGrid && climRange && meta) {
     drawClimateLayer(g, cam, climChoice, climGrid, climRange, meta.cols, meta.rows);
