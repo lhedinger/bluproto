@@ -308,16 +308,26 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // nothing and the ground pass declines to paint them (Grid.pitFloor), so what
 // shows through a hole is a real second layer rather than a picture of one.
 //
-// That layer is drawn scaled about the SCREEN CENTRE by PARALLAX, which is the
-// projection of a plane one storey further from the eye: pan by d and the top
-// layer moves d while the floor below moves 0.90d, so the view down a hole
-// slides as you travel. That slide is the whole point — it is what separates
-// "there is a place down there" from "someone painted rock on the lid". The
-// factor is a storey read at arm's length, not surveyed geometry: 0.90 made
-// the slide easy to catch but read as too much — pit floors visibly swimming
-// away from their mouths at the screen's edges — so this sits at the 0.94 a
-// far camera over a one-storey drop actually projects: subtler on purpose,
-// realism over showmanship.
+// That layer is drawn scaled about the SCREEN CENTRE by a parallax factor,
+// which is the projection of a plane one storey further from the eye: pan by
+// d and the top layer moves d while the floor below moves a little less, so
+// the view down a hole slides as you travel. That slide is the whole point —
+// it is what separates "there is a place down there" from "someone painted
+// rock on the lid".
+//
+// The factor follows the camera. Zooming is the eye moving: zoomed in it is
+// close over the ground and a storey is a real fraction of its height, zoomed
+// out it is far and a storey is nothing. A fixed factor had the opposite feel
+// — at fit zoom, where the whole world is on screen, every floor below slid
+// by the same 6% of the screen, a world-sized layer swimming under a lid, and
+// the parallax-off switch existed largely because of that. The projection of
+// a plane one storey down from a camera at height H is H / (H + 1); with
+// zoom as the inverse of height that is 1 / (1 + scale / PARALLAX_ZOOM), and
+// PARALLAX_ZOOM is the one figure read by eye: the zoom at which a storey
+// slides by half, set so that at 32 px/tile — a creature filling a fingertip
+// — the slide is the 0.94 that read right at that zoom before. At the fit
+// zoom of an ordinary window (~3 px/tile) it is 0.994, and at the far end of
+// the wheel (256) it is 0.66, a real drop under the feet.
 //
 // The dimming of what shows through is the bake's business, not this pass's:
 // the pit interior arrives as a flat black veil at RenderFx.holeDepth opacity
@@ -332,13 +342,14 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // past 12 px/tile was a feature nobody saw — at fit zoom the openings are
 // small, but a hole that is dark blue nothing until the third wheel-click
 // reads as a bug, not a hole.
-export const PARALLAX = 0.94;
-/** The factor actually applied: parallax=0 in the URL (or the ⚙ dialog) pins
- *  it to 1.0 — the floors below still show through every pit, they just stop
- *  sliding. A viewer preference as much as a perf experiment: the slide is a
- *  depth cue some eyes read as the world coming apart. */
-const parallaxFactor = (): number =>
-  PARALLAX_OFF ? 1.0 : PARALLAX;
+export const PARALLAX_ZOOM = 500;
+/** The factor one storey down at this zoom (device px per tile): parallax=0
+ *  in the URL (or the ⚙ dialog) pins it to 1.0 — the floors below still show
+ *  through every pit, they just stop sliding. A viewer preference as much as
+ *  a perf experiment: the slide is a depth cue some eyes read as the world
+ *  coming apart. */
+export const parallaxFactor = (scale: number): number =>
+  PARALLAX_OFF ? 1.0 : 1 / (1 + scale / PARALLAX_ZOOM);
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
 // canvas itself: one getImageData per chunk for the life of the tab, and it
@@ -366,7 +377,7 @@ function hasHoles(chunk: HTMLCanvasElement): boolean {
  *  screen rects their parallax puts them in, deepest first: [key, z, canvas,
  *  x, y, w, h]. Where the level below is itself holed over the same chunk —
  *  the gorge cutting through two storeys — the level under THAT is drawn
- *  first at PARALLAX², a plane two storeys from the eye, so the stack reads
+ *  first at the factor squared, a plane two storeys from the eye, so the stack reads
  *  as one deepening cut rather than a hole with a hole painted on its
  *  floor. */
 function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
@@ -418,7 +429,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
       for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
         const below = getChunk(cx, cy, z, true);
         if (!below) break;
-        factor *= parallaxFactor();
+        factor *= parallaxFactor(cam.scale);
         stack.push([key, z, below, ...rect(cx, cy, factor)]);
         above = below;
       }
@@ -455,7 +466,7 @@ function belowLows(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
     const low = getLowMap(z);
     if (!low) break;
-    factor *= parallaxFactor();
+    factor *= parallaxFactor(cam.scale);
     stack.push([z, low, factor]);
     above = low;
   }
@@ -2621,7 +2632,7 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
     level: number, w: number, h: number): BelowBody[] {
   const out: BelowBody[] = [];
   if (BELOW_OFF || level - 1 < 0) return out;
-  const f = parallaxFactor(); // the same factor the ground below slid by
+  const f = parallaxFactor(cam.scale); // the same factor the ground below slid by
   const cx = w / 2, cy = h / 2;
   for (const t of state.tracks.values()) {
     const e = t.curr;
