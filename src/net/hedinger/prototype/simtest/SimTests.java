@@ -11306,7 +11306,10 @@ public class SimTests {
 			java.util.EnumSet<Tile.TileType> bog = java.util.EnumSet.of(Tile.TileType.TYPE_PEAT,
 					Tile.TileType.TYPE_SPHAGNUM, Tile.TileType.TYPE_SEDGE, Tile.TileType.TYPE_MIRE,
 					Tile.TileType.TYPE_POOL);
-			for (long seed : new long[] { 1, 2, 42 }) {
+			// Seeds whose wetland is on the plain. Seed 1's lies under the
+			// escarpment now, and a wetland under three storeys of rock grows
+			// no bog, which is right and not what this scenario is about.
+			for (long seed : new long[] { 2, 7, 42 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
 				int z = w.getSurfaceZ();
 				java.util.EnumMap<Tile.TileType, Integer> n = new java.util.EnumMap<>(Tile.TileType.class);
@@ -12565,9 +12568,12 @@ public class SimTests {
 				}
 				// Mostly empty, but not empty: a sky with no summits at all is a
 				// level with nothing to look at, and one that is mostly rock is
-				// a lid over the world. Measured 7%..12% rock across seeds.
+				// a lid over the world. The first storey carries the
+				// escarpment's lowest step -- a quarter of the width -- on top
+				// of the mesas, so it is a third standing; the storeys above
+				// thin out step by step.
 				assertTrue(at + "the sky is mostly open (" + drops + " drop, "
-						+ standing + " rock)", drops > standing * 4L);
+						+ standing + " rock)", drops > standing);
 				assertTrue(at + "but something stands in it", standing > 200);
 				}
 			}
@@ -13014,6 +13020,55 @@ public class SimTests {
 				for (int d = 0; d < 4; d++) {
 					assertGreater("seed " + s + ": some stair climbs toward cardinal " + d
 							+ " " + java.util.Arrays.toString(facing), facing[d], 0);
+				}
+			}
+		}
+	}
+
+	/**
+	 * The escarpment: the east of the world rises in three steps, each step a
+	 * table on its own storey, and each cliff is climbed all along its length.
+	 *
+	 * <p>Most of each step is table (the ravine and the facility's shaft may
+	 * take a few tiles out of it), and the climbs onto a step are counted
+	 * where they are cut: a RAMPUP on the storey below whose high side lets
+	 * out onto the step. One per CLIFF_TILES_PER_RAMP tiles of cliff is the
+	 * rule; the floor here is one per sixteen rows, which leaves the farthest-
+	 * apart placement room to refuse a site the hillside cannot take.
+	 */
+	static class TheEscarpmentIsClimbedAllAlongItsLength extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 7, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
+				int cols = w.getColums(), rows = w.getRows(), surf = w.getSurfaceZ();
+				for (int k = 1; k <= 3; k++) {
+					int z = surf + k;
+					int step = 0, table = 0, climbs = 0;
+					for (int x = 2; x < cols - 2; x++) {
+						for (int y = 2; y < rows - 2; y++) {
+							int lift = net.hedinger.prototype.sim.Worlds.escarpment(x, y, cols, rows);
+							if (lift == k) {
+								step++;
+								if (w.getTile(x, y, z).getType() == Tile.TileType.TYPE_ROCKY) {
+									table++;
+								}
+							}
+							Tile below = w.getTile(x, y, z - 1);
+							if (below.getType() == Tile.TileType.TYPE_RAMPUP) {
+								int u = below.getRampUphill();
+								int ex = x + Tile.dirDx(u), ey = y + Tile.dirDy(u);
+								if (net.hedinger.prototype.sim.Worlds.escarpment(ex, ey, cols, rows) == k) {
+									climbs++;
+								}
+							}
+						}
+					}
+					String at = "seed " + s + " step " + k + ": ";
+					assertGreater(at + "the step is mostly table (" + table + " of " + step + ")",
+							table, step * 0.6);
+					assertGreater(at + "the cliff is climbed all along (" + climbs + " climbs)",
+							climbs, rows / 16 - 1);
 				}
 			}
 		}
@@ -19227,6 +19282,7 @@ public class SimTests {
 				new EveryCavernHasAStairOutOfIt(),
 				new AStairIsOneSlopeSeenFromBothFloors(),
 				new TheUnderdarksStairsFaceEveryWay(),
+				new TheEscarpmentIsClimbedAllAlongItsLength(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new TheSkyIsMostlyEmptyAndNothingFloats(),
 				new AMesaEndsInACliff(),
