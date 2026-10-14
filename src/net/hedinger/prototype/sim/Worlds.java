@@ -552,6 +552,44 @@ public final class Worlds {
 	 *  three-storey summit is the exception a skyline wants. */
 	private static final double RELIEF_TWO = 0.95, RELIEF_THREE = 0.98;
 
+	/**
+	 * The escarpment: the east side of the world rises in three steps, one
+	 * storey each, so a body crossing the map climbs the whole height of the
+	 * sky and comes down it again. Each step is the fraction of the width it
+	 * occupies from the east edge, outermost first; its cliff line wanders by
+	 * {@link #ESCARPMENT_WAVE} tiles either way along its length, read off
+	 * coordinate noise so it draws no RNG.
+	 *
+	 * <p>The step is land, not scenery: the ground under it is rock, which is
+	 * what lifts the tables onto the storeys the way an outcrop lifts a mesa,
+	 * and the rivers read the lift as height and flow away from it rather
+	 * than pooling against a cliff.
+	 */
+	private static final double[] ESCARPMENT_STEPS = { 0.25, 0.167, 0.083 };
+	private static final double ESCARPMENT_WAVE = 6;
+
+	/** How many storeys the escarpment lifts the ground at (x, y): none on the
+	 *  plain, one per step crossed toward the east edge. */
+	public static int escarpment(int x, int y, int cols, int rows) {
+		double wave = Math.min(ESCARPMENT_WAVE, cols * 0.02); // a small world keeps its steps apart
+		int lift = 0;
+		for (int k = 0; k < ESCARPMENT_STEPS.length; k++) {
+			double edge = cols * (1 - ESCARPMENT_STEPS[k])
+					+ wave * (Utils.noise2(y + 7000, k * 300 + 40, 0.022) - 0.5) * 2;
+			if (x >= edge) {
+				lift = k + 1;
+			}
+		}
+		return lift;
+	}
+
+	/** A cliff is climbed by its length, not its area: one climb per this many
+	 *  tiles of edge, so a herd pressed against the foot of the escarpment is
+	 *  never far from a way up, and nothing on the step is far from a way
+	 *  down. A mesa keeps its own, sparser figure ({@link #TILES_PER_SKY_RAMP}):
+	 *  it is a destination, a cliff is a crossing. */
+	private static final int CLIFF_TILES_PER_RAMP = 10;
+
 	/** How many drones the facility berths, and therefore how many charge pads
 	 *  are cut into its deck. They share one standing order rather than dividing
 	 *  the work: the steward recounts every tick and drops the order the moment
@@ -803,9 +841,9 @@ public final class Worlds {
 				double moist = clamp01(Utils.noise2(x + 500, y + 300, 0.075) + b.moistBias);
 				Tile.TileType t;
 				double fert;
-				if (border || elev > 0.87) {
+				if (border || elev > 0.87 || escarpment(x, y, cols, rows) > 0) {
 					t = Tile.TileType.TYPE_WALL;
-					fert = 0; // rocky rim + highland outcrops (the elevation noise
+					fert = 0; // rocky rim + highland outcrops + the escarpment's steps (the elevation noise
 					// means ~0.67, so this high threshold keeps highlands an accent
 					// everywhere but the upland, whose bias is what earns it more)
 				} else if (elev > 0.845) {
@@ -1120,7 +1158,10 @@ public final class Worlds {
 					h[x][y] = SKY_STOREYS;
 				} else if (w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WALL) {
 					double e = elevation[x][y];
-					h[x][y] = 1 + (e > RELIEF_TWO ? 1 : 0) + (e > RELIEF_THREE ? 1 : 0);
+					int relief = 1 + (e > RELIEF_TWO ? 1 : 0) + (e > RELIEF_THREE ? 1 : 0);
+					// An outcrop on a step stands its own height above the step.
+					int lift = escarpment(x, y, cols, rows);
+					h[x][y] = Math.min(SKY_STOREYS, lift > 0 ? lift + relief - 1 : relief);
 				}
 			}
 		}
@@ -1254,9 +1295,16 @@ public final class Worlds {
 				floodPlateau(w, seen, cols, rows, sx, sy, table, z);
 				int want = table.size() < MIN_PLATEAU ? 0
 						: Math.max(1, table.size() / TILES_PER_SKY_RAMP);
+				boolean cliff = false;
+				for (int[] p : table) {
+					if (escarpment(p[0], p[1], cols, rows) >= z - SKY_Z + 1) {
+						cliff = true; // this table is (at least partly) a step of the escarpment
+						break;
+					}
+				}
 				int cut = 0;
 				if (want > 0) {
-					cut = climbPlateau(w, cols, rows, seen, table, want, z);
+					cut = climbPlateau(w, cols, rows, seen, table, want, z, cliff);
 				}
 				if (cut == 0) {
 					// Too small, or nowhere round it to cut a climb: left as the
@@ -1305,7 +1353,19 @@ public final class Worlds {
 	 * underdark's stairs use, so two ways up a mesa are on two sides of it.
 	 */
 	private static int climbPlateau(World w, int cols, int rows, boolean[][] seen,
-			java.util.List<int[]> table, int want, int z) {
+			java.util.List<int[]> table, int want, int z, boolean cliff) {
+		if (cliff) {
+			int edge = 0; // the tiles a climb could be cut from: the cliff's length
+			for (int[] p : table) {
+				for (int u = 0; u < 4; u++) {
+					if (hillRun(w, cols, rows, p[0], p[1], u, z) >= 0) {
+						edge++;
+						break;
+					}
+				}
+			}
+			want = Math.max(want, edge / CLIFF_TILES_PER_RAMP);
+		}
 		java.util.ArrayList<int[]> cut = new java.util.ArrayList<int[]>();
 		while (cut.size() < want) {
 			int[] bestSite = null;
@@ -3907,7 +3967,7 @@ public final class Worlds {
 				int px = 4 + Utils.random(cols - 8), py = 4 + Utils.random(rows - 8);
 				double e = Utils.noise2(px, py, 0.055);
 				double m = Utils.noise2(px + 500, py + 300, 0.075);
-				if (e > best && e < 0.80 && m > 0.35) {
+				if (e > best && e < 0.80 && m > 0.35 && escarpment(px, py, cols, rows) == 0) {
 					best = e;
 					sx = px;
 					sy = py;
@@ -3958,7 +4018,8 @@ public final class Worlds {
 					continue; // no immediate backtrack
 				}
 				double e = Utils.noise2(x + dx, y + dy, 0.055)
-						+ 0.06 * GroundTextures.hash01(x + dx, y + dy, 71);
+						+ 0.06 * GroundTextures.hash01(x + dx, y + dy, 71)
+						+ 0.5 * escarpment(x + dx, y + dy, cols, rows); // a step is a storey uphill
 				if (e < bestE) {
 					bestE = e;
 					bx = dx;
