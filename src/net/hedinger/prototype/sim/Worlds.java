@@ -590,6 +590,24 @@ public final class Worlds {
 	 *  it is a destination, a cliff is a crossing. */
 	private static final int CLIFF_TILES_PER_RAMP = 6;
 
+	/** The sward a step of the escarpment keeps: a wind-scoured shelf of
+	 *  rock with grass in the hollows, not a pasture lifted a storey. A
+	 *  table's own figure is {@link #PLATEAU_FERTILITY}; a step gets this
+	 *  where its ground holds any soil and nothing at all where it does not
+	 *  ({@link #STEP_BARE}), so the top reads as rock with tufts. */
+	private static final double STEP_FERTILITY = 0.12;
+	/** The share of a step that is bare rock, read off coordinate noise. */
+	private static final double STEP_BARE = 0.55;
+
+	/** What a tile of table grows: a mesa's thin pasture, or a step's thinner
+	 *  and patchier one. */
+	private static double tableFertility(int x, int y, int cols, int rows) {
+		if (escarpment(x, y, cols, rows) == 0) {
+			return PLATEAU_FERTILITY;
+		}
+		return Utils.noise2(x + 8800, y + 1200, 0.2) > STEP_BARE ? 0 : STEP_FERTILITY;
+	}
+
 	/** The closest two climbs up a cliff may stand -- half a mesa's figure,
 	 *  because a cliff's climbs are spread along a line and a mesa's round a
 	 *  shape, and at the mesa's gap a long cliff could not take the climbs its
@@ -1196,7 +1214,7 @@ public final class Worlds {
 					setBare(w, x, y, z, Tile.TileType.TYPE_WALL); // the base of a higher table
 				} else {
 					setBare(w, x, y, z, Tile.TileType.TYPE_ROCKY);
-					w.getTile(x, y, z).setFertility(PLATEAU_FERTILITY);
+					w.getTile(x, y, z).setFertility(tableFertility(x, y, cols, rows));
 				}
 			}
 		}
@@ -1228,7 +1246,7 @@ public final class Worlds {
 						if (w.getTile(x + Tile.dirDx(d), y + Tile.dirDy(d), z).getType()
 								== Tile.TileType.TYPE_ROCKY) {
 							setBare(w, x, y, z, Tile.TileType.TYPE_ROCKY);
-							w.getTile(x, y, z).setFertility(PLATEAU_FERTILITY);
+							w.getTile(x, y, z).setFertility(tableFertility(x, y, cols, rows));
 							column[x][y] = false; // floor again: nothing stacks over it
 							grew = true;
 							break;
@@ -1534,7 +1552,7 @@ public final class Worlds {
 			for (int k = 1; k <= run; k++) {
 				int nx = lx - k * ax, ny = ly - k * ay;
 				setBare(w, nx, ny, z, Tile.TileType.TYPE_ROCKY);
-				w.getTile(nx, ny, z).setFertility(PLATEAU_FERTILITY);
+				w.getTile(nx, ny, z).setFertility(tableFertility(nx, ny, cols, rows));
 				// Claimed, so the sweep that is still running does not come
 				// back and flood the spur as a table of its own — which, being
 				// three tiles long, would fail the size test and be demolished,
