@@ -1577,21 +1577,22 @@ public final class BlackMesa {
 	}
 
 	/**
-	 * A two-way stair from {@code zTop} to the floor below, four tiles in a
+	 * A two-way stair from {@code zTop} to the floor below, three tiles in a
 	 * row along direction {@code dir} starting at (x, y) — the same pattern
-	 * the demo world's stairwells use: a hole to fall through, a descending
-	 * ramp beside it so the fall is not the only way, a landing below, and a
-	 * climbing ramp back up. Stamp it after the rooms it lives in, so the
-	 * landings overwrite floor rather than rock.
+	 * the demo world's stairwells use: the foot, a hole to fall through onto
+	 * the landing under it; the slope, one tile that is a descending ramp
+	 * above and a climbing ramp below; and the head, the landing the climb
+	 * steps out onto. Stamp it after the rooms it lives in, so the landings
+	 * overwrite floor rather than rock.
 	 */
 	private static void stair(World w, int zTop, int x, int y, int dir) {
 		int ax = Tile.dirDx(dir), ay = Tile.dirDy(dir);
 		set(w, x, y, zTop, Tile.TileType.TYPE_HOLE);
+		set(w, x, y, zTop - 1, Tile.TileType.TYPE_PLATE);
 		set(w, x + ax, y + ay, zTop, Tile.TileType.TYPE_RAMPDOWN);
 		w.getTile(x + ax, y + ay, zTop).setRampUphill(dir);
-		set(w, x + 3 * ax, y + 3 * ay, zTop, Tile.TileType.TYPE_PLATE);
-		set(w, x, y, zTop - 1, Tile.TileType.TYPE_PLATE);
-		set(w, x + 2 * ax, y + 2 * ay, zTop - 1, Tile.TileType.TYPE_RAMPUP);
-		w.getTile(x + 2 * ax, y + 2 * ay, zTop - 1).setRampUphill(dir);
+		set(w, x + ax, y + ay, zTop - 1, Tile.TileType.TYPE_RAMPUP);
+		w.getTile(x + ax, y + ay, zTop - 1).setRampUphill(dir);
+		set(w, x + 2 * ax, y + 2 * ay, zTop, Tile.TileType.TYPE_PLATE);
 	}
 }

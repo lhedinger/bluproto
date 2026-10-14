@@ -12867,6 +12867,62 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Every link between floors is one slope seen from both of them: the
+	 * descending ramp on the upper floor stands directly over the climbing
+	 * ramp on the lower, facing the same way, and each lets out onto walkable
+	 * ground -- the foot below the descent, the landing above the climb.
+	 *
+	 * <p>The generator used to lay the two ramps a tile apart along the slope,
+	 * which was two slopes, and the hand-built fixtures in this suite never
+	 * did: {@code ARampIsWalkedUpAndDown} and its kin put both on the one tile.
+	 * This pins the world to the fixtures' geometry, on every link the demo
+	 * cuts (station, stairwell, climb) and on the authored campus too, and it
+	 * pins the landings, because a building stamped over one once turned a
+	 * link into a hole that dropped bodies onto concrete.
+	 */
+	static class AStairIsOneSlopeSeenFromBothFloors extends Scenario {
+		@Override
+		public void run() {
+			for (long s : new long[] { 7, 42, 415 }) {
+				audit("demo " + s, net.hedinger.prototype.sim.Worlds.demoTerrain(s));
+			}
+			audit("campus", net.hedinger.prototype.sim.BlackMesa.build(7));
+		}
+
+		private void audit(String name, World w) {
+			int downs = 0, ups = 0;
+			for (int z = 0; z < w.getLevels(); z++) {
+				for (int x = 0; x < w.getColums(); x++) {
+					for (int y = 0; y < w.getRows(); y++) {
+						Tile t = w.getTile(x, y, z);
+						int u = t.getRampUphill();
+						String at = name + " (" + x + "," + y + ",z" + z + ")";
+						if (t.getType() == Tile.TileType.TYPE_RAMPDOWN) {
+							downs++;
+							assertTrue(at + ": a descent has a floor under it", z > 0);
+							Tile under = w.getTile(x, y, z - 1);
+							assertTrue(at + ": the climb stands under the descent, not "
+									+ under.getType(), under.getType() == Tile.TileType.TYPE_RAMPUP);
+							assertEquals(at + ": and faces the same way", u, under.getRampUphill());
+							Tile foot = w.getTile(x - Tile.dirDx(u), y - Tile.dirDy(u), z - 1);
+							assertTrue(at + ": the descent steps down onto floor, not "
+									+ foot.getType(), foot.isWalkable());
+						} else if (t.getType() == Tile.TileType.TYPE_RAMPUP) {
+							ups++;
+							assertTrue(at + ": a climb has a floor over it", z + 1 < w.getLevels());
+							Tile head = w.getTile(x + Tile.dirDx(u), y + Tile.dirDy(u), z + 1);
+							assertTrue(at + ": the climb steps out onto floor, not "
+									+ head.getType(), head.isWalkable());
+						}
+					}
+				}
+			}
+			assertGreater(name + ": there are links to check", downs, 0);
+			assertEquals(name + ": every climb has its descent", ups, downs);
+		}
+	}
+
 	static class DemoWorldFullyConnected extends Scenario {
 		@Override
 		public void run() {
@@ -17922,7 +17978,7 @@ public class SimTests {
 						continue;
 					}
 					Tile.TileType got0 = w.getTile(at[0] + i, at[1] + j, z).getType();
-					if (preserved(got0)) {
+					if (preserved(w, at[0] + i, at[1] + j, z)) {
 						continue; // a link the building was put up around
 					}
 					int got = got0.getValue();
@@ -17941,10 +17997,40 @@ public class SimTests {
 		/** A tile no plan draws, so finding one where a plan drew something
 		 *  means the building was put up around a link between floors that was
 		 *  there first (see Worlds.stampPlan's preserve). Those cells are not
-		 *  the drawing's business and this scenario passes over them. */
-		static boolean preserved(Tile.TileType t) {
-			return t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN
-					|| t == Tile.TileType.TYPE_HOLE || t == Tile.TileType.TYPE_SWITCH;
+		 *  the drawing's business and this scenario passes over them. A link
+		 *  is its ramps and holes and ALSO the ground around them: the rock a
+		 *  climb rises into beside it, the foot downhill of a descent on the
+		 *  floor above, the landing uphill of a climb on the floor below --
+		 *  the same rule Worlds.mustStay keeps a building off them with. */
+		static boolean preserved(World w, int x, int y, int z) {
+			Tile here = w.getTile(x, y, z);
+			Tile.TileType t = here.getType();
+			if (t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN
+					|| t == Tile.TileType.TYPE_HOLE || t == Tile.TileType.TYPE_SWITCH) {
+				return true;
+			}
+			for (int d = 0; d < 4; d++) {
+				int dx = Tile.dirDx(d), dy = Tile.dirDy(d);
+				if (here.isSolid() && w.isValid(x - dx, y - dy, z)) {
+					Tile n = w.getTile(x - dx, y - dy, z);
+					if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+						return true;
+					}
+				}
+				if (z + 1 < w.getLevels() && w.isValid(x + dx, y + dy, z + 1)) {
+					Tile n = w.getTile(x + dx, y + dy, z + 1);
+					if (n.getType() == Tile.TileType.TYPE_RAMPDOWN && n.getRampUphill() == d) {
+						return true;
+					}
+				}
+				if (z - 1 >= 0 && w.isValid(x - dx, y - dy, z - 1)) {
+					Tile n = w.getTile(x - dx, y - dy, z - 1);
+					if (n.getType() == Tile.TileType.TYPE_RAMPUP && n.getRampUphill() == d) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		/** The building's interior north-west corner on the deep level, or null
@@ -19043,6 +19129,7 @@ public class SimTests {
 		return new Scenario[] {
 				new DemoWorldFullyConnected(),
 				new EveryCavernHasAStairOutOfIt(),
+				new AStairIsOneSlopeSeenFromBothFloors(),
 				new TheRavineIsCutButTheWorldHolds(),
 				new TheSkyIsMostlyEmptyAndNothingFloats(),
 				new AMesaEndsInACliff(),
