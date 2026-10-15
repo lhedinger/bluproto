@@ -228,11 +228,7 @@ public final class ProcTiles {
 				int a = downhill == 1 ? ai : downhill == 3 ? A - 1 - ai
 						: downhill == 2 ? aj : A - 1 - aj;
 				int b = horiz ? aj : ai;
-				double t = a / (double) (A - 1) * 3; // 0..3 along the ladder
-				int lo = (int) t;
-				double frac = t - lo;
-				int idx = lo >= 3 ? 3
-						: (frac > GroundTextures.bayer(ai, aj) ? lo + 1 : lo);
+				int idx = rampLadder(code, up, downhill, ai, aj);
 				Color col = shades[idx];
 				if (up) {
 					// Triangular side walls on the open flanks: wedge width
@@ -247,10 +243,6 @@ public final class ProcTiles {
 								: GroundTextures.hash01(ai, aj, 53) < 0.16
 										? stoneDark : stone; // grainy body
 					}
-				} else if (((b == 0 && edge0) || (b == A - 1 && edge1)) && idx < 3) {
-					// Dark channel edges along the down ramp's open sides, so
-					// the descent reads as a cut into the ground.
-					col = shades[idx + 1];
 				}
 				g.setColor(col);
 				g.fillRect(X0 + ai * TS / A, Y0 + aj * TS / A, ap, ap);
@@ -281,6 +273,43 @@ public final class ProcTiles {
 		}
 		g.dispose();
 		return img;
+	}
+
+	/**
+	 * The shade-ladder index of a ramp's art-pixel (ai, aj): 0 at the high
+	 * edge, 3 at the low edge, the band boundaries Bayer-dithered. A down
+	 * ramp's open sides take a dark channel edge (one step further down the
+	 * ladder), so the descent reads as a cut into the ground. Shared by the
+	 * sprite and by {@link #rampVoidPixel}, so the bake's idea of where the
+	 * void band lies is the sprite's.
+	 */
+	static int rampLadder(String code, boolean up, int downhill, int ai, int aj) {
+		int A = GroundTextures.ART;
+		boolean horiz = downhill == 1 || downhill == 3;
+		boolean edge0 = !has(code, horiz ? '2' : '4');
+		boolean edge1 = !has(code, horiz ? '7' : '5');
+		int a = downhill == 1 ? ai : downhill == 3 ? A - 1 - ai
+				: downhill == 2 ? aj : A - 1 - aj;
+		int b = horiz ? aj : ai;
+		double t = a / (double) (A - 1) * 3; // 0..3 along the ladder
+		int lo = (int) t;
+		double frac = t - lo;
+		int idx = lo >= 3 ? 3 : (frac > GroundTextures.bayer(ai, aj) ? lo + 1 : lo);
+		if (!up && ((b == 0 && edge0) || (b == A - 1 && edge1)) && idx < 3) {
+			idx++;
+		}
+		return idx;
+	}
+
+	/**
+	 * Whether art-pixel (ai, aj) of a DOWN ramp is its void band: the low
+	 * edge the slope fades into, painted in the pit's dark. The ground bake
+	 * replaces exactly these pixels with the pit veil, so the floor below
+	 * shows through the foot of the ramp as it does through the pit the ramp
+	 * pours into -- a ramp down is a way into a hole, not a picture of one.
+	 */
+	public static boolean rampVoidPixel(String code, int downhill, int ai, int aj) {
+		return rampLadder(code, false, downhill, ai, aj) == 3;
 	}
 
 	/** Plots one chevron art-pixel given slope coordinates: {@code a} downhill

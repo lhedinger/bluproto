@@ -528,6 +528,25 @@ public class Grid {
 					// still needs seating — see seatRamp.
 					if (t.getType() == Tile.TileType.TYPE_RAMPUP) {
 						seatRamp(g2, ox + x * ts, oy + y * ts, x, y, t.getRampUphill());
+					} else if (t.getType() == Tile.TileType.TYPE_RAMPDOWN
+							&& pitFloor(x, y, GroundTextures.CLS_HOLE) == null) {
+						// A down ramp's foot is the pit it pours into. The sprite
+						// paints that band in the void's own opaque dark, which
+						// under the sky's light veil stayed a black bar beside a
+						// pit that showed its floor: a picture of the dark next
+						// to a window onto it. The band takes the pit veil
+						// instead, so the floor below reads through the foot of
+						// the ramp exactly as it does through the hole.
+						int downhill = Tile.opposite(t.getRampUphill());
+						String code = t.getTileCode();
+						for (int aj = 0; aj < A; aj++) {
+							for (int ai = 0; ai < A; ai++) {
+								if (ProcTiles.rampVoidPixel(code, downhill, ai, aj)) {
+									veilPixel(g2, ox + x * ts + ai * ts / A, oy + y * ts + aj * ts / A,
+											(ai + 1) * ts / A - ai * ts / A, (aj + 1) * ts / A - aj * ts / A);
+								}
+							}
+						}
 					}
 					continue;
 				}
