@@ -13099,6 +13099,13 @@ public class SimTests {
 	 * out onto the step. One per CLIFF_TILES_PER_RAMP tiles of cliff is the
 	 * rule; the floor here is one per sixteen rows, which leaves the farthest-
 	 * apart placement room to refuse a site the hillside cannot take.
+	 *
+	 * <p>The cliff lines wander on their own and cross: somewhere a higher
+	 * step reaches out past the one below it and the drops stack into one
+	 * sheer face two or three storeys tall. Those faces exist on every seed,
+	 * and no ramp descends one -- a ramp spans a storey and needs floor at
+	 * its foot, so a descent whose foot lies two storeys down would be a
+	 * ramp into air.
 	 */
 	static class TheEscarpmentIsClimbedAllAlongItsLength extends Scenario {
 		@Override
@@ -13106,6 +13113,34 @@ public class SimTests {
 			for (long s : new long[] { 7, 42 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(s);
 				int cols = w.getColums(), rows = w.getRows(), surf = w.getSurfaceZ();
+				int sheer = 0, overDrop = 0;
+				for (int x = 2; x < cols - 2; x++) {
+					for (int y = 2; y < rows - 2; y++) {
+						int lift = net.hedinger.prototype.sim.Worlds.escarpment(x, y, cols, rows);
+						for (int d = 0; d < 4 && lift >= 2; d++) {
+							if (net.hedinger.prototype.sim.Worlds.escarpment(x + Tile.dirDx(d),
+									y + Tile.dirDy(d), cols, rows) <= lift - 2) {
+								sheer++;
+								break;
+							}
+						}
+						for (int z = surf + 1; z < w.getLevels(); z++) {
+							Tile t = w.getTile(x, y, z);
+							if (t.getType() != Tile.TileType.TYPE_RAMPDOWN) {
+								continue;
+							}
+							int u = t.getRampUphill();
+							int fx = x - Tile.dirDx(u), fy = y - Tile.dirDy(u);
+							if (net.hedinger.prototype.sim.Worlds.escarpment(fx, fy, cols, rows)
+									< net.hedinger.prototype.sim.Worlds.escarpment(x, y, cols, rows) - 1) {
+								overDrop++;
+							}
+						}
+					}
+				}
+				assertGreater("seed " + s + ": the drops stack somewhere (" + sheer
+						+ " tiles at a two-storey face)", sheer, 20);
+				assertEquals("seed " + s + ": no ramp descends a stacked drop", 0, overDrop);
 				for (int k = 1; k <= 3; k++) {
 					int z = surf + k;
 					int step = 0, table = 0, climbs = 0;
