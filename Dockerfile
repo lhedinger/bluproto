@@ -36,7 +36,7 @@ COPY res/ ./res/
 # Stamp the built commit so /api/health reports exactly what's live (set by
 # the publish workflow; "dev" for a plain local build).
 ARG GIT_SHA=dev
-ENV PORT=7070 SEED=42 BUILD_VERSION=$GIT_SHA
+ENV PORT=7070 SEED=7 BUILD_VERSION=$GIT_SHA
 # Heap ceiling for the 2 GB VPS. Per-chunk layer baking (no whole-level image
 # buffers) cut the bake's peak from >1 GB to under 384 MB; 768 MB leaves the
 # bake its headroom and a world of a few thousand bodies its live set. If the
