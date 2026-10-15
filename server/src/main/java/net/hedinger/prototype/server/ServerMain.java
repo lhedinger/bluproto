@@ -37,7 +37,7 @@ import net.hedinger.prototype.sim.SpawnItemCommand;
 public final class ServerMain {
 
 	public static void main(String[] args) {
-		long seed = Long.parseLong(cfg(args, "SEED", "42"));
+		long seed = Long.parseLong(cfg(args, "SEED", "7"));
 		int port = Integer.parseInt(cfg(args, "PORT", "7070"));
 		// Public-deploy gate (MODERNIZATION.md Phase 5): when COMMAND_TOKEN is
 		// set, viewing stays open but every mutating verb — WS commands and the

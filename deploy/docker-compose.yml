@@ -15,7 +15,7 @@ services:
       context: ..
     restart: unless-stopped
     environment:
-      SEED: "${SEED:-42}"
+      SEED: "${SEED:-7}"
       PORT: "7070"
       COMMAND_TOKEN: "${COMMAND_TOKEN:?set in .env — gate for mutating commands}"
       RECORD_DIR: "/data" # durable session recording survives restarts

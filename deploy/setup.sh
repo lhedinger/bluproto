@@ -36,8 +36,8 @@ if [ ! -f .env ]; then
 	read -rp "Domain (e.g. bluproto.example.com): " DOMAIN
 	read -rp "Command token (secret; viewers who have it may spawn/pause) [random]: " COMMAND_TOKEN
 	COMMAND_TOKEN=${COMMAND_TOKEN:-$(head -c 18 /dev/urandom | base64 | tr -d '/+=')}
-	read -rp "World seed [42]: " SEED
-	SEED=${SEED:-42}
+	read -rp "World seed [7]: " SEED
+	SEED=${SEED:-7}
 	printf 'DOMAIN=%s\nCOMMAND_TOKEN=%s\nSEED=%s\n' "$DOMAIN" "$COMMAND_TOKEN" "$SEED" > .env
 	chmod 600 .env
 	echo "-- wrote .env (command token: $COMMAND_TOKEN)"
