@@ -1080,9 +1080,12 @@ public class Grid {
 		if (level - 1 < 0) {
 			return dark; // the lowest floor: its pits are bottomless
 		}
-		if (GroundTextures.groundClass(world.getTile(x, y, level - 1)) < 0) {
-			return dark; // a ramp down there: nothing flat to look down onto
-		}
+		// Whatever is down there -- ground, a ramp, a door, a machine -- is
+		// drawn on that level's own bake and shows through the window. The
+		// one bottomless pit is the lowest floor's. This used to paint the
+		// void opaque over anything without a ground class, meant for a ramp
+		// under a cave pit; on the sky's terraces, where every climb up a
+		// table has sky over it, that was a black block over every ramp.
 		return null;
 	}
 
