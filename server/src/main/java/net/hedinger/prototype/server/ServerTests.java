@@ -1154,6 +1154,38 @@ public final class ServerTests {
 			}
 		}
 		check("the demo world has a pit over a ramp", overRamp != null);
+		// And a DOWN ramp's foot opens like the pit it pours into: its void
+		// band was opaque, a black bar under the sky's light veil beside a
+		// pit showing its floor.
+		int[] down = null;
+		int dz = -1;
+		for (int z = 1; z < terrain.getLevels() && down == null; z++) {
+			for (int x = 1; x < terrain.getColums() - 1 && down == null; x++) {
+				for (int y = 1; y < terrain.getRows() - 1; y++) {
+					if (terrain.getTile(x, y, z).getType()
+							== net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN) {
+						down = new int[] { x, y };
+						dz = z;
+						break;
+					}
+				}
+			}
+		}
+		check("the demo world has a down ramp over a floor", down != null);
+		if (down != null) {
+			int y0 = (down[1] / band) * band;
+			java.awt.image.BufferedImage img = LayerBaker.bakeBandImage(terrain, lr, dz, y0, band);
+			int open = 0, a = LayerBaker.CHUNK_PX;
+			for (int aj = 0; aj < a; aj++) {
+				for (int ai = 0; ai < a; ai++) {
+					if ((artPixel(img, down[0], down[1] - y0, ai, aj) >>> 24) < 255) {
+						open++;
+					}
+				}
+			}
+			check("a down ramp's foot is see-through onto the floor below (" + down[0] + "," + down[1]
+					+ " z" + dz + ": " + open + " open art-px)", open > 0 && open < a * a / 2);
+		}
 		if (overRamp != null) {
 			int y0 = (overRamp[1] / band) * band;
 			java.awt.image.BufferedImage img = LayerBaker.bakeBandImage(terrain, lr, rz, y0, band);
@@ -1274,6 +1306,8 @@ public final class ServerTests {
 	private static boolean canSeeDown(net.hedinger.prototype.engine.Tile t) {
 		net.hedinger.prototype.engine.Tile.TileType ty = t.getType();
 		return ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
+				// A down ramp's foot is the pit it pours into, and takes its veil.
+				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_SHAFT
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_LIFT
 				|| ty == net.hedinger.prototype.engine.Tile.TileType.TYPE_CATWALK
