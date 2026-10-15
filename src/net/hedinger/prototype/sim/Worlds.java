@@ -556,9 +556,18 @@ public final class Worlds {
 	 * The escarpment: the east side of the world rises in three steps, one
 	 * storey each, so a body crossing the map climbs the whole height of the
 	 * sky and comes down it again. Each step is the fraction of the width it
-	 * occupies from the east edge, outermost first; its cliff line wanders by
-	 * {@link #ESCARPMENT_WAVE} tiles either way along its length, read off
-	 * coordinate noise so it draws no RNG.
+	 * occupies from the east edge on average, outermost first, and its cliff
+	 * line wanders along its length on two scales -- a long swell and a short
+	 * chop on top of it -- read off coordinate noise so it draws no RNG.
+	 *
+	 * <p>Each step wanders on its own. The lines are not parallel, so a step
+	 * is broad here and a ledge there, and where a higher step's line swings
+	 * out past the one below it the two drops stack into one sheer cliff two
+	 * or three storeys tall, straight from the plain. There is no way up such
+	 * a face and none is cut: a climb spans one storey and needs floor at its
+	 * foot, and the floor there is air. The first cut of this had the three
+	 * lines at fixed spacing with a few tiles of wobble, and every step was a
+	 * rectangle with a ragged edge.
 	 *
 	 * <p>The step is land, not scenery: the ground under it is rock, which is
 	 * what lifts the tables onto the storeys the way an outcrop lifts a mesa,
@@ -566,16 +575,26 @@ public final class Worlds {
 	 * than pooling against a cliff.
 	 */
 	private static final double[] ESCARPMENT_STEPS = { 0.25, 0.167, 0.083 };
-	private static final double ESCARPMENT_WAVE = 6;
+	/** How far a cliff line swings either side of its step's mean, as a share
+	 *  of the width: the swell, and the chop on top of it. The swell is more
+	 *  than the spacing between steps, which is what lets the lines cross. */
+	private static final double ESCARPMENT_SWELL = 0.12, ESCARPMENT_CHOP = 0.03;
+	/** Each step's swell has its own wavelength, so the lines are shapes of
+	 *  their own rather than three copies of one wave at different offsets. */
+	private static final double[] ESCARPMENT_WAVELENGTH = { 0.009, 0.014, 0.021 };
 
 	/** How many storeys the escarpment lifts the ground at (x, y): none on the
-	 *  plain, one per step crossed toward the east edge. */
+	 *  plain, and east of each step's cliff line the height of that step --
+	 *  the highest line crossed wins, so a higher step reaching out past a
+	 *  lower one lifts the ground its own height. */
 	public static int escarpment(int x, int y, int cols, int rows) {
-		double wave = Math.min(ESCARPMENT_WAVE, cols * 0.02); // a small world keeps its steps apart
 		int lift = 0;
 		for (int k = 0; k < ESCARPMENT_STEPS.length; k++) {
-			double edge = cols * (1 - ESCARPMENT_STEPS[k])
-					+ wave * (Utils.noise2(y + 7000, k * 300 + 40, 0.022) - 0.5) * 2;
+			double swell = (Utils.noise2(y + 7000 + k * 3100, 40 + k * 300,
+					ESCARPMENT_WAVELENGTH[k]) - 0.5) * 2 * cols * ESCARPMENT_SWELL;
+			double chop = (Utils.noise2(y + 9100 + k * 1700, 80 + k * 500, 0.05) - 0.5) * 2
+					* cols * ESCARPMENT_CHOP;
+			double edge = cols * (1 - ESCARPMENT_STEPS[k]) + swell + chop;
 			if (x >= edge) {
 				lift = k + 1;
 			}
