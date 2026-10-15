@@ -1131,6 +1131,35 @@ public final class ServerTests {
 		}
 		check("the demo world has a pit over another level", deep > 0);
 		check("the demo world has a pit over nothing", bottom == 0);
+		// A pit over a RAMP opens too. The sky's terraces are holes, and
+		// every climb from one table to the next has sky over its top: the
+		// bake used to paint those tiles opaque void, a black block over
+		// every ramp, because a ramp has no ground class and the pit floor
+		// read "no class" as "nothing down there".
+		int[] overRamp = null;
+		int rz = -1;
+		for (int z = 1; z < terrain.getLevels() && overRamp == null; z++) {
+			for (int x = 1; x < terrain.getColums() - 1 && overRamp == null; x++) {
+				for (int y = 1; y < terrain.getRows() - 1; y++) {
+					var t = terrain.getTile(x, y, z).getType();
+					var below = terrain.getTile(x, y, z - 1).getType();
+					if (t == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
+							&& (below == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP
+							|| below == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN)) {
+						overRamp = new int[] { x, y };
+						rz = z;
+						break;
+					}
+				}
+			}
+		}
+		check("the demo world has a pit over a ramp", overRamp != null);
+		if (overRamp != null) {
+			int y0 = (overRamp[1] / band) * band;
+			java.awt.image.BufferedImage img = LayerBaker.bakeBandImage(terrain, lr, rz, y0, band);
+			check("a pit over a ramp opens onto it (" + overRamp[0] + "," + overRamp[1] + " z" + rz + ")",
+					openPixels(img, overRamp, y0) > 0);
+		}
 		check("the sky is lighter than a pit", net.hedinger.prototype.engine.RenderFx.skyDepth
 				< net.hedinger.prototype.engine.RenderFx.holeDepth);
 	}
