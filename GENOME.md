@@ -209,6 +209,21 @@ costs the square of speed, so a seed that wanders slightly too fast starves its
 own lineage — which is exactly why the throttle is worth leaving for selection to
 price rather than deciding on the mind's behalf.
 
+Leaving it to selection turned out to need more than putting it in the mind. The
+0.25 was one pool constant copied into every founder of every minded clade, and
+a point mutation reaches it about one birth in three hundred — on seed 7 every
+adult hunter still ambled at 0.25 after 20k ticks, blind to its herd a quarter
+of the time. So the pace is now a founder draw like the search leg and cast
+(`Worlds.drawAmble`): one of the pool slots 0.1, 0.25 or 0.5, and the hunter
+seed is built at whatever pace its founder drew. The scenario-facing
+`starterBrain()` and `hunterBrain()` keep 0.25 as the reference. Whether the
+grazer's number is also the hunter's is for the populations to find. The draw
+stops at 0.5 because the seed is replanted by the steward for as long as the
+world runs: with 1.0 in it, a quarter of every founder cohort walked at the
+pace that drains a body with a full gut, and over 120k ticks on seeds 7 and 42
+the herd's births halved and the hunter clade on 42 ended the run at generation
+1, carried by reseeds.
+
 Every third minded founder is a hitch-hiker, so both strategies compete from tick
 one; survivor-seeding then propagates whichever is coping.
 

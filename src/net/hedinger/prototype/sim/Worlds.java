@@ -60,8 +60,67 @@ public final class Worlds {
 		// same idea: of every three, two are LGP foragers and one an LGP
 		// hitch-hiker.
 		int pick = index % 3;
-		g.brain = (pick == 2) ? hitchhikerBrain() : starterBrain();
+		// The forage pace is drawn, not fixed: see drawAmble. Drawn after speed
+		// so every draw before it keeps the stream it had.
+		g.brain = (pick == 2) ? hitchhikerBrain() : starterBrain(drawAmble());
 		return g;
+	}
+
+	/**
+	 * Pool slots a founder's forage pace is drawn from: 0.1, 0.25 and 0.5 of
+	 * its speed ({@link net.hedinger.prototype.entities.Brain#CONST}).
+	 *
+	 * <p>The pace was 0.25 for every founder of every minded clade. It was a
+	 * good number -- a seed ambling at 0.5 collapsed the grazer cohort at 50k
+	 * ticks and 0.25 held it flat for 100k (GENOME.md) -- but it was one
+	 * number, inherited by the hunter from the grazer's measurement, and the
+	 * one thing in the seed that selection could not price: a point mutation
+	 * has to land on that instruction, in its constant field, on one of the
+	 * four faster slots, about one birth in three hundred, and the lineage
+	 * that gets it runs faster at every hunger. Measured on seed 7, every
+	 * adult hunter still ambled at 0.25 after 20k ticks, blind to the herd a
+	 * quarter of the time and reaching 12 tiles in 2000 ticks of search.
+	 *
+	 * <p>So it is a spread like the search leg and cast, and the pool's own
+	 * granularity: these are the values mutation moves it between anyway.
+	 * Which one pays, for a grazer whose food stays put or a hunter whose
+	 * food runs, is for each population to find.
+	 *
+	 * <p>The spread stops at 0.5 because the seed has to stay viable, and the
+	 * steward replants it for as long as the world runs. With 1.0 in the draw
+	 * a quarter of every founder cohort walked at the pace that drained a
+	 * founder with a full gut, and measured over 120k ticks on seeds 7 and 42
+	 * the herd's births halved (8325 to 3611, 5960 to 2561), the herd ran at
+	 * a third of trunk, and on seed 42 the hunter clade ended the run at
+	 * generation 1, carried by reseeds. Without it the herd holds 919 and 578
+	 * on average against trunk's 1073 and 815, the cycle keeps turning, and
+	 * the hunters breed deeper (generation 6 on seed 42 against 4): grazers
+	 * born in the world lean to 0.5 and hunters to 0.25 by the end, which is
+	 * the spread being read, not a number being given.
+	 */
+	public static final int[] AMBLE_SLOTS = { 6, 7, 8 };
+
+	/** The pool slot of the 0.25 amble: the pace every founder once had, and
+	 *  the one a scenario gets when it asks for a seed without saying. */
+	public static final int REFERENCE_AMBLE = 7;
+
+	static int drawAmble() {
+		return AMBLE_SLOTS[(int) (Utils.random() * AMBLE_SLOTS.length)];
+	}
+
+	/**
+	 * The pool slot a seed program's forage pace is set from: the immediate of
+	 * the first SET of register 5, which is where the starter and the hunter
+	 * seed keep the throttle. -1 for a program with no such instruction, such
+	 * as the hitch-hiker's, which rides flat out.
+	 */
+	public static int ambleOf(net.hedinger.prototype.entities.Brain b) {
+		for (int[] ins : b.code()) {
+			if (ins[0] == net.hedinger.prototype.entities.Brain.SET && ins[1] == 5) {
+				return ins[2];
+			}
+		}
+		return -1;
 	}
 
 	/**
@@ -85,6 +144,12 @@ public final class Worlds {
 	 * which is the whole experiment.
 	 */
 	public static net.hedinger.prototype.entities.Brain starterBrain() {
+		return starterBrain(REFERENCE_AMBLE);
+	}
+
+	/** The starter with its forage pace set from pool slot {@code amble}:
+	 *  what a founder gets, with the slot drawn ({@link #drawAmble}). */
+	public static net.hedinger.prototype.entities.Brain starterBrain(int amble) {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
 		final int ADD = net.hedinger.prototype.entities.Brain.ADD;
@@ -94,7 +159,7 @@ public final class Worlds {
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
 		int[][] code = {
 				{ SET, 1, 6, 0 }, // r1 = 0.1 (const[6]) -- the forage intent
-				{ SET, 5, 7, 0 }, // r5 = 0.25 (const[7]) -- a cheap amble; movement costs v^2
+				{ SET, 5, amble, 0 }, // r5 = the forage pace, 0.25 for the reference seed; movement costs v^2
 				// The drink reflex: parched outranks foraging (a threat, below,
 				// still outranks both). SEEK_WATER lives at magnitude >= 9, so the
 				// intent value is composed as 4+4+2 from the const pool -- the warm
@@ -125,7 +190,8 @@ public final class Worlds {
 
 	/**
 	 * The hunter's seed: the {@link #starterBrain() starter}, prowling at the
-	 * grazer's 0.25 amble and chasing at 1.0 the moment prey is in sight. Three
+	 * forage pace it was founded with and chasing at 1.0 the moment prey is in
+	 * sight. Three
 	 * instructions on the one register the starter leaves free; everything else
 	 * is the same program -- forage intent, the drink reflex, the flee override,
 	 * the mate write.
@@ -194,23 +260,30 @@ public final class Worlds {
 	 *  childhood like every other clade's ({@link #pricedFounder}). The clade
 	 *  is the caller's to set. */
 	static net.hedinger.prototype.entities.Genome hunterFounder(net.hedinger.prototype.entities.Genome g) {
-		g.brain = hunterBrain();
+		int amble = ambleOf(g.brain); // the pace mindedGenome drew, now a hunter's
+		g.brain = hunterBrain(amble < 0 ? drawAmble() : amble);
 		g.speed = HUNTER_SPEED_LO + Utils.random() * (HUNTER_SPEED_HI - HUNTER_SPEED_LO);
 		return g;
 	}
 
 	public static net.hedinger.prototype.entities.Brain hunterBrain() {
+		return hunterBrain(REFERENCE_AMBLE);
+	}
+
+	/** The hunter seed prowling at pool slot {@code amble}: the starter at that
+	 *  pace, chasing flat out on sight. See {@link #drawAmble} for the spread. */
+	public static net.hedinger.prototype.entities.Brain hunterBrain(int amble) {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
-		int[][] seed = starterBrain().code();
+		int[][] seed = starterBrain(amble).code();
 		java.util.List<int[]> code = new java.util.ArrayList<>();
 		boolean paced = false;
 		for (int[] ins : seed) {
 			code.add(ins.clone());
 			// Right after the amble is set: raise it to a chase when prey is in
 			// sight. r0 is the one register the starter leaves untouched.
-			if (!paced && ins[0] == SET && ins[1] == 5 && ins[2] == 7) {
+			if (!paced && ins[0] == SET && ins[1] == 5 && ins[2] == amble) {
 				code.add(new int[] { SENSE, 0, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r0 = prey near?
 				code.add(new int[] { SKIPZ, 0, 0, 0 }); // nothing in sight -> keep the amble
 				code.add(new int[] { SET, 5, 9, 0 }); // r5 = 1.0 (const[9]) -- chase flat out
