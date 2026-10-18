@@ -8252,6 +8252,55 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A founder draws its forage pace. The starter brain set its throttle to
+	 * 0.25 for every founder of every minded clade: the right number for a
+	 * grazer, measured (a cohort ambling at 0.5 collapsed; 0.25 held), and the
+	 * one the hunter inherited without a measurement of its own. It was the one
+	 * value in the seed that selection could not price -- a point mutation has
+	 * to hit that instruction's constant field and land on a faster slot, about
+	 * one birth in three hundred -- and on seed 7 every adult hunter still
+	 * ambled at 0.25 after 20k ticks, blind to the herd a quarter of the time.
+	 *
+	 * <p>Founders are noisy seeding, so the pace is a spread like the search leg
+	 * and cast: each founder draws one of four pool slots, and the hunter seed
+	 * is built at the pace its founder drew, still chasing flat out on sight.
+	 * The scenario-facing {@code starterBrain()} and {@code hunterBrain()} keep
+	 * the 0.25 reference so every pinned measurement stays what it was.
+	 */
+	static class AFounderDrawsItsForagePace extends Scenario {
+		@Override
+		public void run() {
+			seed(17);
+			java.util.Set<Integer> grazerPaces = new java.util.TreeSet<>(), hunterPaces = new java.util.TreeSet<>();
+			for (int i = 0; i < 300; i++) {
+				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
+				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
+				if (amble >= 0) {
+					grazerPaces.add(amble);
+				}
+			}
+			for (int i = 0; i < 100; i++) {
+				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain;
+				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
+				hunterPaces.add(amble);
+				assertTrue("a founder hunter is the hunter seed at the pace it drew",
+						java.util.Arrays.deepEquals(net.hedinger.prototype.sim.Worlds.hunterBrain(amble).code(), b.code()));
+			}
+			java.util.Set<Integer> slots = new java.util.TreeSet<>();
+			for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
+				slots.add(slot);
+			}
+			assertTrue("founder grazers draw every pace in the spread: " + grazerPaces, grazerPaces.equals(slots));
+			assertTrue("and so do founder hunters: " + hunterPaces, hunterPaces.equals(slots));
+			assertEquals("the reference seed still ambles at 0.25", net.hedinger.prototype.sim.Worlds.REFERENCE_AMBLE,
+					net.hedinger.prototype.sim.Worlds.ambleOf(net.hedinger.prototype.sim.Worlds.starterBrain()));
+			assertEquals("the hitch-hiker sets no forage pace", -1,
+					net.hedinger.prototype.sim.Worlds.ambleOf(net.hedinger.prototype.sim.Worlds.hitchhikerBrain()));
+		}
+	}
+
 	/**
 	 * A reseed is a founder, not the champion's child. The steward used to top a
 	 * clade up with mutated children of its oldest living body, on the theory
@@ -8313,16 +8362,19 @@ public class SimTests {
 					children, SAMPLES / 20);
 			assertEquals("every reseed carries a program", SAMPLES, programs);
 
-			int[][] forager = net.hedinger.prototype.sim.Worlds.starterBrain().code();
-			int[][] hunter = net.hedinger.prototype.sim.Worlds.hunterBrain().code();
 			for (int i = 0; i < 50; i++) {
-				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain.code();
-				assertTrue("a founder hunter carries the hunter seed", java.util.Arrays.deepEquals(hunter, code));
+				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain;
+				int[][] hunter = net.hedinger.prototype.sim.Worlds.hunterBrain(
+						net.hedinger.prototype.sim.Worlds.ambleOf(b)).code();
+				assertTrue("a founder hunter carries the hunter seed, at the pace it drew",
+						java.util.Arrays.deepEquals(hunter, b.code()));
 			}
 			int hitchhikers = 0;
 			for (int i = 0; i < 300; i++) {
-				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain.code();
-				if (!java.util.Arrays.deepEquals(forager, code)) {
+				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
+				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
+				if (amble < 0 || !java.util.Arrays.deepEquals(
+						net.hedinger.prototype.sim.Worlds.starterBrain(amble).code(), b.code())) {
 					hitchhikers++;
 				}
 			}
@@ -19636,6 +19688,7 @@ public class SimTests {
 				new MindedBodyUnsticksFromWallJam(),
 				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
+				new AFounderDrawsItsForagePace(),
 				new AReseedIsAFounderNotAChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
