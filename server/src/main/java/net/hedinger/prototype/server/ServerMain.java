@@ -236,6 +236,7 @@ public final class ServerMain {
 		// same way the main page's mechanics do.
 		app.get("/help/genome", clientPage.apply("genome.html"));
 		app.get("/help/body", clientPage.apply("body.html"));
+		app.get("/help/design", clientPage.apply("design.html")); // Bulkhead: the UI kit and its playground
 		app.get("/edit", clientPage.apply("edit.html")); // the genome editor
 		app.get("/help/genome.json", ctx -> ctx.json(Mechanics.genomePage()));
 		app.get("/help/body.json", ctx -> ctx.json(Mechanics.bodyPage()));
