@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bulkhead · the viewer's design system</title>
+  <link rel="stylesheet" href="/src/bulkhead.css">
+  <style>
+:root { --page: #0f1115; --rule: #252a33; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--f-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+a { color: var(--lamp-l); }
+.wrap { max-width: 1160px; margin: 0 auto; }
+
+/* page header + nav */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: var(--page); padding-block: 14px 10px;
+  display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; border-bottom: 1px solid var(--rule); }
+.top h1 { margin: 0; font: 400 20px/1 var(--f-label); letter-spacing: .06em; }
+.top h1 small { font: 400 12px var(--f-ui); color: var(--dim); letter-spacing: 0; margin-left: 8px; }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.top nav a { color: var(--dim); text-decoration: none; }
+.top nav a:hover, .top nav a:focus-visible { color: var(--ink); }
+.intro { color: var(--dim); max-width: 72ch; margin: 18px 0 0; }
+section.band { padding-top: 40px; display: grid; gap: 18px; scroll-margin-top: 70px; }
+section.band > h2 { margin: 0; font: 400 16px var(--f-label); letter-spacing: .06em; display: flex; gap: 10px; align-items: baseline; }
+section.band > h2 span { font: 12px var(--f-ui); color: var(--dim); letter-spacing: 0; }
+section.band > p { margin: 0; color: var(--dim); max-width: 78ch; }
+h3.sub { margin: 8px 0 0; font: 400 12px var(--f-label); letter-spacing: .06em; color: var(--dim); }
+code, .mono { font-family: var(--f-ui); }
+.k { color: var(--lamp-l); }
+
+/* foundations */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.sw { display: grid; grid-template-rows: 48px auto; background: #ffffff05; border: 1px solid var(--rule); }
+.sw i { display: block; }
+.sw div { padding: 6px 8px; font-size: 12px; display: grid; }
+.sw b { font-weight: 500; }
+.sw span { color: var(--dim); }
+.typescale { display: grid; gap: 10px; }
+.ts { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+.ts > span { color: var(--dim); font-size: 12px; }
+.ts > div { min-width: 0; overflow-wrap: anywhere; }
+.grammar { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.gram { display: grid; gap: 10px; justify-items: start; font-size: 12px; color: var(--dim); }
+.gram .demo { width: 120px; height: 60px; }
+table.ref { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tablewrap { overflow-x: auto; }
+table.ref th, table.ref td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.ref th { font: 400 11px var(--f-label); letter-spacing: .06em; color: var(--dim); }
+table.ref td:first-child { white-space: nowrap; }
+
+/* ============================================================= PAGE FIXTURES */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+.spec { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.spec > .cap { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.spec > .cap b { font: 400 12px var(--f-label); letter-spacing: .06em; }
+.spec > .cap span { font-size: 11px; color: var(--dim); }
+.spec > .box { background: var(--s0); padding: 16px; display: grid; gap: 12px; min-width: 0;
+  box-shadow: inset 0 0 0 1px #ffffff0a; }
+.spec .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.world { background: url("/design/world.png") center / 912px auto repeat; image-rendering: pixelated; }
+
+/* layout band: the viewer mock */
+.devbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.device { margin: 0 auto; width: 100%; transition: max-width .2s; border: 2px solid var(--rule); position: relative; }
+.device[data-w="390"] { max-width: 390px; }
+.device[data-w="768"] { max-width: 768px; }
+.device[data-w="1200"] { max-width: 1200px; }
+.vw { container-type: inline-size; container-name: vw bh; position: relative; height: 620px; overflow: hidden; }
+.vw .bh-toolbar { position: absolute; inset: 0 0 auto; z-index: 3; }
+.vw .anchor { position: absolute; z-index: 4; display: flex; }
+.vw .anchor[hidden] { display: none; }
+.vw .anchor .bh-panel { width: 100%; }
+.vw .a-card { left: 12px; bottom: 12px; width: 300px; }
+.vw .a-menu { right: 12px; top: calc(var(--bar, 54px) + 8px); width: 260px; }
+.vw .a-half { right: 12px; top: calc(var(--bar, 54px) + 8px); width: 480px; height: calc(50% - 20px); }
+.vw .a-full { left: 12px; right: 12px; top: calc(var(--bar, 54px) + 8px); bottom: 12px; }
+.vw .minimap { position: absolute; right: 12px; bottom: 12px; width: 120px; height: 80px; background: #22402acc; z-index: 2; box-shadow: 0 0 0 2px var(--sh); }
+@container vw (min-width: 600px) and (max-width: 1023px) {
+  .vw .a-half { width: calc(50% - 18px); height: calc(100% - var(--bar, 54px) - 20px); }
+}
+@container vw (max-width: 599px) {
+  /* phone: the corner panels become sheets from the bottom edge, the card spans the width */
+  .vw .a-card { left: 0; right: 0; bottom: 0; width: auto; }
+  .vw .a-menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 70%; }
+  .vw .a-half { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 60%; }
+  .vw .a-full { left: 0; right: 0; bottom: 0; top: var(--bar, 54px); }
+  .vw .anchor .bh-panel { margin: 0; box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
+  .vw .bh-panel > header::before { content: ""; position: absolute; left: 50%; top: 4px; width: 32px; height: 4px; margin-left: -16px; background: var(--s2); }
+  .vw .bh-panel > header { padding-top: 12px; }
+  .vw .minimap { display: none; }
+}
+
+/* playground */
+.play { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 18px; align-items: start; }
+.play > * { min-width: 0; }
+@media (max-width: 800px) { .play { grid-template-columns: 1fr; } }
+.props { display: grid; gap: 14px; }
+.stagewrap { display: grid; gap: 10px; }
+.pstage { position: relative; min-height: 300px; display: grid; place-items: center; padding: 28px 16px; overflow: hidden; margin: 0 auto; width: 100%; transition: max-width .2s; }
+.pstage[data-w="390"] { max-width: 390px; }
+.pstage[data-w="768"] { max-width: 768px; }
+.pstage .bh { width: 100%; display: grid; place-items: center; }
+.pstage .bh > * { max-width: 100%; }
+.snippet { position: relative; background: #0a0c10; border: 1px solid var(--rule); }
+.snippet pre { margin: 0; padding: 14px; overflow-x: auto; font: 12px/1.55 var(--f-ui); color: #b9c3d3; white-space: pre; }
+.snippet .bh-btn { position: absolute; right: 8px; top: 8px; }
+.wnote { font-size: 12px; color: var(--dim); }
+
+  </style>
+</head>
+<body>
+
+
+<div class="wrap bh-root">
+  <div class="top">
+    <h1>BULKHEAD <small>evarium viewer · design system v0.1</small></h1>
+    <nav aria-label="Sections"><a href="/help">← help</a><a href="#foundations">Foundations</a><a href="#components">Components</a><a href="#layout">Layout &amp; breakpoints</a><a href="#playground">Playground</a></nav>
+  </div>
+  <p class="intro">The viewer's chrome built from the facility's own materials: bulkhead steel for surfaces, signal red for the action that commits, indicator lamps for state, hazard yellow for anything that destroys. Controls are furniture. Buttons are plates that sink when pressed, toggles are lamps, sliders ride a rail. Every edge is a 2&nbsp;px bevel on the art-pixel lattice with the corners left open, and nothing is rounded or blurred.</p>
+
+  <!-- ============================================================ FOUNDATIONS -->
+  <section class="band" id="foundations">
+    <h2>Foundations <span>colour, type, bevel, spacing</span></h2>
+    <h3 class="sub">Colour</h3>
+    <p>Every colour is an existing ramp or signal colour from ART-STYLE.md. The amber pair is derived from hazard yellow the sanctioned way, ×0.65 down and ×1.18 up, as the drone's hull is.</p>
+    <div class="swatches" id="swatches"></div>
+
+    <h3 class="sub">Type</h3>
+    <div class="typescale">
+      <div class="ts"><span>title · Silkscreen 16</span><div style="font:400 16px var(--f-label);letter-spacing:.06em">POPULATION</div></div>
+      <div class="ts"><span>panel head · Silkscreen 13</span><div style="font:400 13px var(--f-label);letter-spacing:.06em">Inspector · herbivore #4412</div></div>
+      <div class="ts"><span>control · Silkscreen 12</span><div style="font:400 12px var(--f-label);letter-spacing:.06em">SPAWN · PAUSE · FOLLOW</div></div>
+      <div class="ts"><span>body · Plex Mono 13</span><div>A grazer that drifted into the mire at 9.4 px floats; one at 14 px sinks to its knees.</div></div>
+      <div class="ts"><span>label · Plex Mono 11 caps</span><div class="bh"><span class="bh-label">sense radius · tiles</span></div></div>
+      <div class="ts"><span>readout · Silkscreen 12</span><div class="bh"><span class="bh-readout">0.80</span></div></div>
+    </div>
+    <p class="wnote">Rule: Silkscreen never below 11&nbsp;px and never for running text. Labels under 12&nbsp;px set in Plex Mono capitals instead; that was the legibility problem in the first draft.</p>
+
+    <h3 class="sub">Bevel grammar</h3>
+    <div class="grammar bh">
+      <div class="gram"><div class="demo raised" style="background:var(--s1);margin:2px"></div><span><b class="k">raised</b> · lit top and left, shadow bottom and right. Panels, buttons, toasts.</span></div>
+      <div class="gram"><div class="demo sunk" style="background:var(--lamp-h);margin:2px"></div><span><b class="k">sunk</b> · the reverse. Wells: fields, tracks, switches, readouts.</span></div>
+      <div class="gram"><div class="demo" style="background:var(--s0);margin:2px;box-shadow:0 -2px 0 0 var(--sh),-2px 0 0 0 var(--sh),2px 0 0 0 var(--s2),0 2px 0 0 var(--s2);position:relative;top:2px"></div><span><b class="k">pressed</b> · a raised plate drops 2&nbsp;px and its bevel flips. Active and toggled-on.</span></div>
+      <div class="gram"><div class="demo bh-hazard" style="height:60px"></div><span><b class="k">hazard</b> · stripes only on things that destroy. Reset, delete, cull.</span></div>
+    </div>
+
+    <h3 class="sub">Spacing and sizes</h3>
+    <div class="tablewrap"><table class="ref">
+      <thead><tr><th>Token</th><th>Value</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>--u</code></td><td>2 px</td><td>One art-pixel at UI scale. Every bevel, notch and drop is a multiple.</td></tr>
+        <tr><td><code>--sp1 … --sp6</code></td><td>4 · 8 · 12 · 16 · 24 · 32</td><td>Gaps inside and between components.</td></tr>
+        <tr><td><code>--h-sm / md / lg</code></td><td>28 · 34 · 42 px</td><td>Control heights on a pointer device.</td></tr>
+        <tr><td><code>--touch</code></td><td>44 px</td><td>Minimum hit target in compact width and on any coarse pointer.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ============================================================ COMPONENTS -->
+  <section class="band" id="components">
+    <h2>Components <span>every state, live</span></h2>
+    <p>Each specimen is the real markup. Press, drag and type. The class names are the system: <code>bh-btn</code>, <code>bh-switch</code>, <code>bh-slider</code> and so on, all scoped under <code>.bh</code>.</p>
+    <div class="gallery">
+
+      <div class="spec"><div class="cap"><b>Button</b><span>bh-btn</span></div><div class="box bh">
+        <div class="row"><button class="bh-btn bh-btn--primary">Spawn</button><button class="bh-btn">Pause</button><button class="bh-btn bh-btn--ghost">Cancel</button><button class="bh-btn bh-btn--caution">Cull</button></div>
+        <div class="row"><button class="bh-btn bh-btn--sm">Small</button><button class="bh-btn">Medium</button><button class="bh-btn bh-btn--lg">Large</button></div>
+        <div class="row"><button class="bh-btn" aria-pressed="true" data-toggle>Follow</button><button class="bh-btn" disabled>Locked</button><button class="bh-btn" aria-busy="true">Baking</button></div>
+        <div class="row"><button class="bh-btn bh-btn--icon" aria-label="Close">✕</button><button class="bh-btn bh-btn--icon" aria-label="Full screen">⛶</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Settings">⚙</button></div>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Switch · Check · Radio</b><span>bh-switch · bh-check</span></div><div class="box bh">
+        <div class="bh-inline"><label class="bh-switch"><input type="checkbox" id="g-sw1" checked><span class="knob"></span><span>Smell</span></label>
+          <label class="bh-switch"><input type="checkbox" id="g-sw2"><span class="knob"></span><span>Sound</span></label>
+          <label class="bh-switch"><input type="checkbox" id="g-sw3" disabled><span class="knob"></span><span>Disabled</span></label></div>
+        <fieldset class="bh-fieldset"><legend class="bh-label">Overlays</legend><div class="bh-inline">
+          <label class="bh-check"><input type="checkbox" id="g-c1" checked><span>Glints</span></label>
+          <label class="bh-check"><input type="checkbox" id="g-c2" data-indet><span>Some lineages</span></label>
+          <label class="bh-check"><input type="checkbox" id="g-c3" disabled><span>Disabled</span></label></div></fieldset>
+        <fieldset class="bh-fieldset"><legend class="bh-label">Climate field</legend><div class="bh-inline">
+          <label class="bh-check"><input type="radio" name="g-r" id="g-r0"><span>None</span></label>
+          <label class="bh-check"><input type="radio" name="g-r" id="g-r1" checked><span>Light</span></label>
+          <label class="bh-check"><input type="radio" name="g-r" id="g-r2"><span>Humidity</span></label></div></fieldset>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Slider · Stepper</b><span>bh-slider · bh-stepper</span></div><div class="box bh">
+        <div class="bh-slider"><label class="bh-label" for="g-s1"><span>Travel cost</span><span>× per tile</span></label>
+          <input type="range" id="g-s1" min="0" max="1.5" step="0.05" value="0.8"><output class="bh-readout" for="g-s1">0.80</output>
+          <div class="bh-ticks" aria-hidden="true"><span>0</span><span>0.5</span><span>1.0</span><span>1.5</span></div></div>
+        <div class="bh-slider"><label class="bh-label" for="g-s2"><span>Sense every</span><span>ticks</span></label>
+          <input type="range" id="g-s2" min="4" max="16" step="1" value="4"><output class="bh-readout" for="g-s2">4</output></div>
+        <div class="bh-slider"><label class="bh-label" for="g-s3"><span>Disabled</span></label>
+          <input type="range" id="g-s3" min="0" max="10" value="6" disabled><output class="bh-readout" for="g-s3">6</output></div>
+        <div class="bh-field"><span class="bh-label" id="g-stl">Founders per guild</span>
+          <div class="bh-stepper" role="group" aria-labelledby="g-stl"><button class="bh-btn bh-btn--icon bh-btn--sm" data-step="-1" aria-label="Fewer">−</button><input class="bh-input" id="g-st" value="40" inputmode="numeric" aria-labelledby="g-stl"><button class="bh-btn bh-btn--icon bh-btn--sm" data-step="1" aria-label="More">+</button></div></div>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Text field · Area · Select</b><span>bh-input</span></div><div class="box bh">
+        <div class="bh-field"><label class="bh-label" for="g-f1">Genome name</label><input class="bh-input" id="g-f1" placeholder="e.g. marsh-grazer-07" value="peat stalker"><span class="bh-hint">Shown on the card and in the lineage.</span></div>
+        <div class="bh-field"><label class="bh-label" for="g-f2">Seed</label><input class="bh-input" id="g-f2" value="4x2" aria-invalid="true" aria-describedby="g-f2e" inputmode="numeric"><span class="bh-error" id="g-f2e">A seed is a whole number, such as 42.</span></div>
+        <div class="bh-field bh-search"><label class="bh-label sr" for="g-f3" style="position:absolute;width:1px;height:1px;overflow:hidden">Search bodies</label><input class="bh-input" id="g-f3" type="search" placeholder="Search bodies by id or clade"></div>
+        <div class="bh-field"><label class="bh-label" for="g-sel">Spawn on tap</label><select class="bh-input" id="g-sel"><option>Herbivore</option><option>Predator</option><option>Scavenger</option><option>Parasite</option><option>Food</option></select></div>
+        <div class="bh-field"><label class="bh-label" for="g-ta">Notes</label><textarea class="bh-input" id="g-ta">Founders seeded on the wetland edge. Watch the mire.</textarea></div>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Tabs · Segmented</b><span>bh-tabs · bh-seg</span></div><div class="box bh" style="padding:0">
+        <div class="bh-tabs" role="tablist" aria-label="Inspector"><button role="tab" aria-selected="true">Attributes</button><button role="tab" aria-selected="false">Genome</button><button role="tab" aria-selected="false">Lineage</button><button role="tab" aria-selected="false">Mind</button><button role="tab" aria-selected="false">Body</button></div>
+        <div style="padding:16px;display:grid;gap:12px">
+          <div class="bh-field"><span class="bh-label" id="g-segl">Speed</span>
+            <div class="bh-seg" role="radiogroup" aria-labelledby="g-segl"><button role="radio" aria-checked="false">Pause</button><button role="radio" aria-checked="true">1×</button><button role="radio" aria-checked="false">4×</button><button role="radio" aria-checked="false">16×</button></div></div>
+        </div>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Meter · Badge · Readout</b><span>bh-meter · bh-badge · bh-kv</span></div><div class="box bh">
+        <div class="bh-meter"><span class="bh-label">Energy · 64 of 100</span><div class="track" role="meter" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100" aria-label="Energy"><div class="fill" style="width:64%"></div></div></div>
+        <div class="bh-meter bh-meter--warn"><span class="bh-label">Thirst · 78 of 100</span><div class="track" role="meter" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100" aria-label="Thirst"><div class="fill" style="width:78%"></div></div></div>
+        <div class="bh-meter bh-meter--crit"><span class="bh-label">Health · 12 of 100</span><div class="track" role="meter" aria-valuenow="12" aria-valuemin="0" aria-valuemax="100" aria-label="Health"><div class="fill" style="width:12%"></div></div></div>
+        <div class="bh-meter bh-meter--busy"><span class="bh-label">Baking chunks</span><div class="track" role="progressbar" aria-label="Baking chunks"><div class="fill"></div></div></div>
+        <div class="row"><span class="bh-badge bh-badge--live">Live</span><span class="bh-badge">Paused</span><span class="bh-badge bh-badge--warn">Lagging</span><span class="bh-badge bh-badge--crit">Starving</span></div>
+        <dl class="bh-kv"><dt>Clade</dt><dd>marsh grazer</dd><dt>Size</dt><dd>9.4 px</dd><dt>Generation</dt><dd>212</dd><dt>Tick</dt><dd>2,004,817</dd></dl>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Tooltip · Toast</b><span>bh-tip · bh-toast</span></div><div class="box bh world" style="padding-top:56px">
+        <div class="row"><span class="bh-tip-wrap"><button class="bh-btn bh-btn--icon" aria-describedby="g-tip">?</button><span class="bh-tip bh-tip--show bh-tip--start" role="tooltip" id="g-tip">Mire floats bodies under 10 px</span></span></div>
+        <div class="bh-toast" role="status">Genome injected · 1 body spawned</div>
+        <div class="bh-toast bh-toast--warn" role="status">Tick load 92% · slowing to 4×</div>
+        <div class="bh-toast bh-toast--crit" role="alert">Connection lost <button class="bh-btn bh-btn--sm">Retry</button></div>
+      </div></div>
+
+      <div class="spec"><div class="cap"><b>Panel · Dialog</b><span>bh-panel · bh-dialog</span></div><div class="box bh world" style="min-height:300px;position:relative">
+        <div class="bh-panel">
+          <header><h4>Tuning</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Full screen">⛶</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Close">✕</button></div></header>
+          <div class="bh-body"><p style="margin:0;color:var(--dim)">The header sticks and is opaque. The body scrolls under it.</p>
+            <button class="bh-btn bh-btn--caution" data-open="g-dlg">Reset world…</button></div>
+        </div>
+        <div class="bh-scrim" id="g-dlg" hidden><div class="bh-panel bh-dialog" role="dialog" aria-modal="true" aria-labelledby="g-dlgh">
+          <header><h4 id="g-dlgh">Reset world</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" data-close aria-label="Close dialog">✕</button></div></header>
+          <div class="bh-hazard"></div>
+          <div class="bh-body"><p style="margin:0">This wipes all 1,164 bodies and builds a new world.</p>
+            <div class="bh-field"><label class="bh-label" for="g-dseed">Seed</label><input class="bh-input" id="g-dseed" value="3" inputmode="numeric"></div></div>
+          <footer><button class="bh-btn bh-btn--ghost" data-close>Cancel</button><button class="bh-btn bh-btn--caution" data-close>Reset world</button></footer>
+        </div></div>
+      </div></div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ LAYOUT -->
+  <section class="band" id="layout">
+    <h2>Layout &amp; breakpoints <span>the viewer at three widths</span></h2>
+    <p>Breakpoints are widths of the viewer root, so everything in the viewer switches together, and the mock below switches when you change its width. Panels keep the viewer's four anchors from the panels skill: card, menu, half and full. On a phone the corner panels become sheets from the bottom edge, controls grow to 44&nbsp;px, and dialogues dock to the bottom.</p>
+    <div class="tablewrap"><table class="ref">
+      <thead><tr><th>Width</th><th>Range</th><th>Panels</th><th>Controls</th></tr></thead>
+      <tbody>
+        <tr><td>compact</td><td>&lt; 600 px</td><td>card, menu and half become bottom sheets (60% tall). Full fills under the toolbar. Minimap hidden.</td><td>44 px targets, 16 px field text, footers stack, label/value rows stack, dialogues dock to the bottom.</td></tr>
+        <tr><td>medium</td><td>600 – 1023 px</td><td>half takes the right half at full height. Toolbar may wrap to two rows.</td><td>Base sizes. Touch sizes if the pointer is coarse.</td></tr>
+        <tr><td>expanded</td><td>≥ 1024 px</td><td>half is 480 px × 50% at the top right. Card bottom left. Menu under the toolbar.</td><td>Base sizes.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="devbar bh">
+      <div class="bh-field"><span class="bh-label" id="dwl">Device width</span><div class="bh-seg" role="radiogroup" aria-labelledby="dwl" id="devW"><button role="radio" aria-checked="false" data-w="390">Phone 390</button><button role="radio" aria-checked="false" data-w="768">Tablet 768</button><button role="radio" aria-checked="true" data-w="1200">Desktop</button></div></div>
+      <div class="bh-field"><span class="bh-label" id="anl">Open panel</span><div class="bh-seg" role="radiogroup" aria-labelledby="anl" id="devA"><button role="radio" aria-checked="false" data-a="card">Card</button><button role="radio" aria-checked="false" data-a="menu">Menu</button><button role="radio" aria-checked="true" data-a="half">Half</button><button role="radio" aria-checked="false" data-a="full">Full</button></div></div>
+    </div>
+    <div class="device" id="device" data-w="1200"><div class="vw world" id="vw">
+      <div class="bh"><div class="bh-toolbar" id="vbar">
+        <button class="bh-btn bh-btn--sm">Level 0</button><button class="bh-btn bh-btn--sm">Drone</button><button class="bh-btn bh-btn--sm" aria-pressed="true">Population</button><button class="bh-btn bh-btn--sm">Overlays</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Settings">⚙</button>
+        <span class="bh-spacer"></span><span class="bh-stat">tick 2,004,817 · 1,164 bodies · seed 42</span>
+      </div></div>
+      <div class="minimap" aria-hidden="true"></div>
+      <div class="anchor a-card bh" data-anchor="card" hidden><div class="bh-panel"><header><h4>Herbivore #4412</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Close">✕</button></div></header>
+        <div class="bh-body"><dl class="bh-kv"><dt>Clade</dt><dd>marsh grazer</dd><dt>Size</dt><dd>9.4 px</dd><dt>Doing</dt><dd>grazing sphagnum</dd></dl>
+          <div class="bh-meter"><span class="bh-label">Energy</span><div class="track"><div class="fill" style="width:64%"></div></div></div></div></div></div>
+      <div class="anchor a-menu bh" data-anchor="menu" hidden><div class="bh-panel"><header><h4>Overlays</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Close">✕</button></div></header>
+        <div class="bh-body"><label class="bh-switch"><input type="checkbox" checked><span class="knob"></span><span>Smell</span></label><label class="bh-switch"><input type="checkbox"><span class="knob"></span><span>Sound</span></label><label class="bh-switch"><input type="checkbox" checked><span class="knob"></span><span>Water glints</span></label></div></div></div>
+      <div class="anchor a-half bh" data-anchor="half"><div class="bh-panel" style="height:100%"><header><h4>Tuning</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Full screen">⛶</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Close">✕</button></div></header>
+        <div class="bh-tabs" role="tablist"><button role="tab" aria-selected="true">Senses</button><button role="tab" aria-selected="false">Metabolism</button><button role="tab" aria-selected="false">Parasites</button><button role="tab" aria-selected="false">World</button></div>
+        <div class="bh-body"><div class="bh-slider"><label class="bh-label" for="v-s1"><span>Travel cost</span></label><input type="range" id="v-s1" min="0" max="1.5" step="0.05" value="0.8"><output class="bh-readout" for="v-s1">0.80</output></div>
+          <div class="bh-slider"><label class="bh-label" for="v-s2"><span>Sense every · ticks</span></label><input type="range" id="v-s2" min="4" max="16" value="4"><output class="bh-readout" for="v-s2">4</output></div>
+          <div class="bh-slider"><label class="bh-label" for="v-s3"><span>Bite period · days</span></label><input type="range" id="v-s3" min="0.05" max="0.5" step="0.005" value="0.125"><output class="bh-readout" for="v-s3">0.125</output></div>
+          <label class="bh-switch"><input type="checkbox" checked><span class="knob"></span><span>Hold tuning across resets</span></label></div>
+        <footer><button class="bh-btn bh-btn--ghost">Defaults</button><button class="bh-btn bh-btn--primary">Apply</button></footer></div></div>
+      <div class="anchor a-full bh" data-anchor="full" hidden><div class="bh-panel" style="height:100%"><header><h4>Genome · marsh grazer</h4><div class="bh-actions"><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Half screen">⊟</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Close">✕</button></div></header>
+        <div class="bh-body"><dl class="bh-kv"><dt>size</dt><dd>9.4 px</dd><dt>drainRate</dt><dd>0.004</dd><dt>sightRange</dt><dd>7.5 tiles</dd><dt>reproduction</dt><dd>sexual · 0.62</dd><dt>mutation</dt><dd>0.03</dd></dl></div></div></div>
+    </div></div>
+  </section>
+
+  <!-- ============================================================ PLAYGROUND -->
+  <section class="band" id="playground">
+    <h2>Playground <span>change props, watch it answer, copy the markup</span></h2>
+    <div class="play">
+      <div class="props bh" id="props">
+        <div class="bh-field"><label class="bh-label" for="p-comp">Component</label>
+          <select class="bh-input" id="p-comp"><option value="button">Button</option><option value="switch">Switch</option><option value="check">Checkbox / radio</option><option value="slider">Slider</option><option value="field">Text field</option><option value="select">Select</option><option value="tabs">Tabs</option><option value="seg">Segmented</option><option value="meter">Meter</option><option value="badge">Badge</option><option value="toast">Toast</option><option value="dialog">Dialog</option></select></div>
+        <div id="p-knobs" style="display:grid;gap:14px"></div>
+        <div class="bh-field"><span class="bh-label" id="p-wl">Frame width</span><div class="bh-seg" role="radiogroup" aria-labelledby="p-wl" id="p-w"><button role="radio" aria-checked="false" data-w="390">390</button><button role="radio" aria-checked="false" data-w="768">768</button><button role="radio" aria-checked="true" data-w="full">Fill</button></div></div>
+        <label class="bh-switch"><input type="checkbox" id="p-world" checked><span class="knob"></span><span>World behind</span></label>
+      </div>
+      <div class="stagewrap">
+        <div class="pstage world bh-root" id="pstage" data-w="full"><div class="bh" id="pout"></div></div>
+        <div class="snippet bh"><pre id="pcode"></pre><button class="bh-btn bh-btn--sm" id="pcopy">Copy</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+<script type="module" src="/src/design.ts"></script>
+</body>
+</html>
