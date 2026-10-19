@@ -2725,11 +2725,11 @@ public final class GroundTextures {
 		return (r << 16) | (g << 8) | b;
 	}
 
-	/** Deterministic integer-lattice hash to [0,1). */
+	/** Deterministic integer-lattice hash to [0,1): {@link Hash#unit(int, int, int)},
+	 *  kept under this name for the painters and the world generator that
+	 *  draw with it. */
 	public static double hash01(int x, int y, int s) {
-		int h = x * 374761393 + y * 668265263 + s * (int) 2246822519L;
-		h = (h ^ (h >>> 13)) * 1274126177;
-		return ((h ^ (h >>> 16)) & 0x7fffffff) / (double) 0x7fffffff;
+		return Hash.unit(x, y, s);
 	}
 
 	/** A specific ramp shade (0 shadow, 1 base, 2 highlight) for a class. */
