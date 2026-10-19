@@ -9008,8 +9008,9 @@ public class SimTests {
 		 * <p>The hunter grows up in a walled cell so it is where the geometry
 		 * expects it when the cell is opened; the water is a channel the full
 		 * height of the room, so there is no way round. The far animal is bigger
-		 * and nearer, so under BIGGEST it is the pick by every measure; the near
-		 * one is smaller and further, and the only thing that can be eaten.
+		 * and nearer by a clear margin, so under BIGGEST it is the pick by every
+		 * measure; the near one is smaller and further, and the only thing that
+		 * can be eaten.
 		 */
 		private int reachableHealthAfter(int patience) {
 			seed(37);
@@ -9028,6 +9029,7 @@ public class SimTests {
 			Genome hg = body(13, 0.04, fatSeeker());
 			hg.patience = patience;
 			hg.determination = 4.0; // dogged, so only the clock can turn it
+			hg.losFov = Math.PI * 2; // all-round sight: the pick is by size and distance, never by facing
 			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg).grown(); // growth is eaten, and there is nothing to eat in a cell
 			w.spawnEntity(hunter);
 			tick(w, 200);
@@ -9036,8 +9038,14 @@ public class SimTests {
 					w.setTile(x, y, 0, Tile.TileType.TYPE_FLOOR); // the cell opens
 				}
 			}
-			TestNPC far = TestNPC.grazer(15.5, 12.5, 0, body(16, 0.0005, null)); // 9 tiles, over water
-			TestNPC near = TestNPC.grazer(9.5, 20.5, 0, body(8, 0.0005, null)); // 8.5 tiles, on foot
+			// The far animal must be nearer by more than the hunter can drift
+			// inside its cell. A quarry is scored by value over distance, and at
+			// 9 tiles over water against 8.5 on foot the two scored within a
+			// tenth of each other: which won came down to where in its one tile
+			// the hunter stood when the cell opened, which its blind search had
+			// decided, and the standoff held only by the accident of that drift.
+			TestNPC far = TestNPC.grazer(14.5, 12.5, 0, body(16, 0.0005, null)); // 8 tiles, over water
+			TestNPC near = TestNPC.grazer(9.5, 21.5, 0, body(8, 0.0005, null)); // 9.5 tiles, on foot
 			w.spawnEntity(far);
 			w.spawnEntity(near);
 			for (int t = 0; t < 3000 && !near.isDead(); t++) {
