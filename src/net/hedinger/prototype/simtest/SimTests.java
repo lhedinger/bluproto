@@ -4872,6 +4872,52 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A hash replays and spreads. {@link net.hedinger.prototype.engine.Hash} is
+	 * what the engine uses where it needs a number that is a pure function of
+	 * its inputs and never touches the random stream: the ground textures, the
+	 * cliff lanes, and the swing a searching creature casts at the end of each
+	 * leg. The contract is three things, pinned here for both key widths: the
+	 * same inputs give the same number, every time; different inputs -- the
+	 * keys swapped, or a different salt -- give a different one; and over many
+	 * keys the numbers fill [0, 1) evenly, so a threshold compared against one
+	 * passes the fraction of the time the threshold says.
+	 */
+	static class AHashIsReplayableAndEven extends Scenario {
+		@Override
+		public void run() {
+			double u = net.hedinger.prototype.engine.Hash.unit(1234L, 56L, 7);
+			assertTrue("the same keys and salt hash to the same number",
+					u == net.hedinger.prototype.engine.Hash.unit(1234L, 56L, 7));
+			assertTrue("swapping the keys gives a different number",
+					u != net.hedinger.prototype.engine.Hash.unit(56L, 1234L, 7));
+			assertTrue("a different salt gives a different number",
+					u != net.hedinger.prototype.engine.Hash.unit(1234L, 56L, 8));
+			assertTrue("the lattice hash replays too",
+					net.hedinger.prototype.engine.Hash.unit(3, 4, 5) == net.hedinger.prototype.engine.Hash.unit(3, 4, 5));
+			assertTrue("and its salt tells uses apart",
+					net.hedinger.prototype.engine.Hash.unit(3, 4, 5) != net.hedinger.prototype.engine.Hash.unit(3, 4, 6));
+
+			final int BUCKETS = 10, KEYS = 20000;
+			int[] wide = new int[BUCKETS], lattice = new int[BUCKETS];
+			double signedSum = 0;
+			for (int k = 0; k < KEYS; k++) {
+				double w = net.hedinger.prototype.engine.Hash.unit((long) k, 99L, 3);
+				double l = net.hedinger.prototype.engine.Hash.unit(k % 200, k / 200, 3);
+				assertTrue("in [0, 1)", w >= 0 && w < 1 && l >= 0 && l < 1);
+				wide[(int) (w * BUCKETS)]++;
+				lattice[(int) (l * BUCKETS)]++;
+				signedSum += net.hedinger.prototype.engine.Hash.signed((long) k, 99L, 4);
+			}
+			for (int b = 0; b < BUCKETS; b++) {
+				assertNear("counter keys fill each tenth of [0, 1) evenly", KEYS / BUCKETS, wide[b], KEYS / BUCKETS * 0.1);
+				assertNear("lattice keys fill each tenth evenly", KEYS / BUCKETS, lattice[b], KEYS / BUCKETS * 0.1);
+			}
+			assertNear("the signed form is centred on zero", 0, signedSum / KEYS, 0.02);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -19697,6 +19743,7 @@ public class SimTests {
 				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
+				new AHashIsReplayableAndEven(),
 				new AReseedIsAFounderNotAChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),

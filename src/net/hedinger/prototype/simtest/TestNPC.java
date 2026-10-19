@@ -387,6 +387,9 @@ public class TestNPC extends NPC {
 	/** The heading this body is searching along, or NaN before it has picked one.
 	 *  Held for a whole leg, so a search is a walk with corners rather than a
 	 *  turn rate re-decided every tick. */
+	/** Salt of the search's cast hash: keeps the swing unrelated to any other
+	 *  hash of the same leg and body. */
+	private static final int SEARCH_CAST_SALT = 1;
 	private double searchHeading = Double.NaN;
 	/** The tick the current search leg runs out. */
 	private long searchLegEnd = Long.MIN_VALUE;
@@ -4374,7 +4377,8 @@ public class TestNPC extends NPC {
 	 * period, for most of its life. Nobody chose that; it was the shape of the
 	 * arithmetic. The comment there was right that a search must not freeze and
 	 * must not draw a random, and both still hold: the cast comes off a hash of
-	 * the leg index and the body's id, so a world replays identically.
+	 * the leg index and the body's id ({@link net.hedinger.prototype.engine.Hash}),
+	 * so a world replays identically.
 	 */
 	private double searchSteer(long now) {
 		int leg = genome == null ? 25
@@ -4385,9 +4389,9 @@ public class TestNPC extends NPC {
 			// Deterministic, not random: a hash of which leg this is and whose
 			// it is. Two bodies side by side cast differently, the same body
 			// casts differently each leg, and the whole thing replays exactly.
-			long i = Math.floorDiv(now, leg);
-			double h = Math.sin(i * 12.9898 + getID() * 78.233) * 43758.5453;
-			searchHeading = wrap(from + cast * (2 * (h - Math.floor(h)) - 1));
+			long legIndex = Math.floorDiv(now, leg);
+			double swing = net.hedinger.prototype.engine.Hash.signed(legIndex, getID(), SEARCH_CAST_SALT);
+			searchHeading = wrap(from + cast * swing);
 			searchLegEnd = now + leg;
 		}
 		return clamp(wrap(searchHeading - D) / MAX_TURN, -1, 1);
