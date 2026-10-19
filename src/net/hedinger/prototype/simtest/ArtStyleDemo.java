@@ -919,11 +919,12 @@ public class ArtStyleDemo {
 		return v < 0 ? 0 : (v > 255 ? 255 : v);
 	}
 
+	/** The engine's lattice hash ({@link Hash#unit(int, int, int)}). This
+	 *  painter carried a copy with a different salt multiplier, so folding it
+	 *  in redrew every creature; the shapes are the same grammar on a
+	 *  different sample. */
 	static double hash(int x, int y, int s) {
-		int h = x * 374761393 + y * 668265263 + s * 2147483647;
-		h = (h ^ (h >>> 13)) * 1274126177;
-		h ^= h >>> 16;
-		return (h & 0x7fffffff) / (double) 0x7fffffff;
+		return net.hedinger.prototype.engine.Hash.unit(x, y, s);
 	}
 
 	static double smooth(double t) {
