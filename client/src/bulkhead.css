@@ -66,23 +66,25 @@
 .bh-error { font-size: 12px; color: var(--red2); }
 
 /* --- button */
-.bh-btn { --bg: var(--s1); --lit: var(--s2); --dark: var(--sh); --fg: var(--ink);
+/* Hover rules sit behind (hover: hover): on a touch screen :hover sticks to the last thing tapped
+   until something else is, which left a lit plate behind every press. */
+.bh-btn { -webkit-tap-highlight-color: transparent; --bg: var(--s1); --lit: var(--s2); --dark: var(--sh); --fg: var(--ink);
   appearance: none; border: 0; margin: var(--u); cursor: pointer; position: relative; top: 0;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--h-md); padding: 0 14px;
   font: 400 12px var(--f-label); letter-spacing: .06em; color: var(--fg); background: var(--bg); white-space: nowrap;
   box-shadow: 0 -2px 0 0 var(--lit), -2px 0 0 0 var(--lit), 2px 0 0 0 var(--dark), 0 2px 0 0 var(--dark), 0 4px 0 0 #0009; }
-.bh-btn:hover { --bg: var(--lit); }
+@media (hover: hover) { .bh-btn:hover { --bg: var(--lit); } }
 .bh-btn:active, .bh-btn[aria-pressed="true"] { top: 2px; --bg: var(--s0);
   box-shadow: 0 -2px 0 0 var(--dark), -2px 0 0 0 var(--dark), 2px 0 0 0 var(--lit), 0 2px 0 0 var(--lit); }
 .bh-btn[aria-pressed="true"] { color: var(--lamp-l); }
 .bh-btn--primary { --bg: var(--red1); --lit: var(--red2); --dark: var(--red0); --fg: #fff; }
-.bh-btn--primary:hover { --bg: var(--red2); }
+@media (hover: hover) { .bh-btn--primary:hover { --bg: var(--red2); } }
 .bh-btn--primary:active { --bg: var(--red0); }
 .bh-btn--caution { --bg: var(--amb1); --lit: var(--amb2); --dark: var(--amb0); --fg: var(--haz-k); }
-.bh-btn--caution:hover { --bg: var(--amb2); }
+@media (hover: hover) { .bh-btn--caution:hover { --bg: var(--amb2); } }
 .bh-btn--caution:active { --bg: var(--amb0); }
 .bh-btn--ghost { --bg: transparent; box-shadow: none; color: var(--dim); }
-.bh-btn--ghost:hover { --bg: var(--s1); color: var(--ink); }
+@media (hover: hover) { .bh-btn--ghost:hover { --bg: var(--s1); color: var(--ink); } }
 .bh-btn--ghost:active { box-shadow: none; }
 .bh-btn--sm { min-height: var(--h-sm); padding: 0 10px; font-size: 11px; }
 .bh-btn--lg { min-height: var(--h-lg); padding: 0 20px; font-size: 13px; }
@@ -115,6 +117,8 @@
 .bh-check input[type=radio]:checked::after { background: var(--red1); }
 .bh-check input:indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--lamp-l); }
 .bh-check input:disabled, .bh-check input:disabled + span { opacity: .42; cursor: not-allowed; }
+/* parent + children: the parent shows mixed while some children are on, and a press sets them all */
+.bh-subgroup { display: grid; gap: 0; padding-left: 26px; }
 .bh-fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
 .bh-fieldset legend { padding: 0; margin-bottom: 4px; }
 .bh-inline { display: flex; flex-wrap: wrap; gap: 4px 18px; }
@@ -166,7 +170,7 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
 .bh-tabs::-webkit-scrollbar { display: none; }
 .bh-tabs [role=tab] { appearance: none; border: 0; background: transparent; color: var(--dim); cursor: pointer; flex: none;
   min-height: 34px; padding: 0 12px; font: 400 11px var(--f-label); letter-spacing: .06em; }
-.bh-tabs [role=tab]:hover { color: var(--ink); }
+@media (hover: hover) { .bh-tabs [role=tab]:hover { color: var(--ink); } }
 .bh-tabs [role=tab][aria-selected="true"] { color: var(--ink); background: var(--s1); box-shadow: inset 0 2px 0 0 var(--s2); }
 
 /* --- meter / progress */
