@@ -97,9 +97,10 @@ table.ref td:first-child { white-space: nowrap; }
 /* playground */
 .play { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 18px; align-items: start; }
 .play > * { min-width: 0; }
-@media (max-width: 800px) { .play { grid-template-columns: 1fr; } }
 .props { display: grid; gap: 14px; }
-.stagewrap { display: grid; gap: 10px; }
+/* minmax(0, 1fr) and min-width: 0, or the snippet's unwrapped lines widen the column, the stage and the page */
+.stagewrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.stagewrap > * { min-width: 0; }
 .pstage { position: relative; min-height: 300px; display: grid; place-items: center; padding: 28px 16px; overflow: hidden; margin: 0 auto; width: 100%; transition: max-width .2s; }
 .pstage[data-w="390"] { max-width: 390px; }
 .pstage[data-w="768"] { max-width: 768px; }
@@ -109,6 +110,20 @@ table.ref td:first-child { white-space: nowrap; }
 .snippet pre { margin: 0; padding: 14px; overflow-x: auto; font: 12px/1.55 var(--f-ui); color: #b9c3d3; white-space: pre; }
 .snippet .bh-btn { position: absolute; right: 8px; top: 8px; }
 .wnote { font-size: 12px; color: var(--dim); }
+/* phone playground: last in the sheet so it wins over the base rules above */
+@media (max-width: 800px) {
+  .play { grid-template-columns: minmax(0, 1fr); }
+  /* on a phone the preview comes first and stays pinned while the knobs scroll under it, so a change is
+     seen as it is made; the page header gives up its stickiness to leave the room */
+  .top { position: static; }
+  .stagewrap { display: contents; }
+  .pstage { order: -1; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; min-height: 200px; padding: 20px 12px;
+    box-shadow: 0 6px 0 0 var(--page); }
+  .snippet { order: 2; }
+  .snippet { display: flex; flex-direction: column-reverse; }
+  .snippet .bh-btn { position: static; align-self: flex-end; margin: 8px; }
+}
+
 
   </style>
 </head>
