@@ -22,7 +22,14 @@ const fmtOut = r => { const o = document.querySelector(`output[for="${r.id}"]`);
   const st = String(r.step || '1'); const d = st.includes('.') ? st.split('.')[1].length : 0; o.textContent = Number(r.value).toFixed(d); };
 document.addEventListener('input', e => { if (e.target.matches('input[type=range]')) fmtOut(e.target); });
 document.querySelectorAll('input[type=range]').forEach(fmtOut);
-document.querySelectorAll('[data-indet]').forEach(c => c.indeterminate = true);
+// A parent checkbox is never set to "partial" directly: partial is what it reads while some of its
+// children are on. Pressing it sets every child to on, or every child to off once all are on.
+const syncParent = g => { const kids = [...g.querySelectorAll('.bh-subgroup input[type=checkbox]:not(:disabled)')], par = g.querySelector('[data-parent]');
+  const on = kids.filter(k => k.checked).length; par.checked = on === kids.length; par.indeterminate = on > 0 && on < kids.length; };
+document.querySelectorAll('[data-tristate]').forEach(g => { syncParent(g);
+  g.addEventListener('change', e => { const par = g.querySelector('[data-parent]');
+    if (e.target === par) g.querySelectorAll('.bh-subgroup input[type=checkbox]:not(:disabled)').forEach(k => k.checked = par.checked);
+    syncParent(g); }); });
 document.addEventListener('click', e => {
   const t = e.target.closest('[role=tab]');
   if (t) t.parentElement.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', String(x === t)));
