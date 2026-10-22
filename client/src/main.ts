@@ -2242,8 +2242,10 @@ function frame(now: number): void {
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;
-    statsEl.textContent = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
-        (hello ? ` · seed ${hello.seed}` : '');
+    // The seed is its own span so a phone can drop it (index.html): beside the
+    // minimap there is room for the tick and the count, not for all three.
+    statsEl.innerHTML = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
+        (hello ? `<span class="stat-seed"> · seed ${Number(hello.seed)}</span>` : '');
     droneLabel();
   }
   // Our whole share of the frame: everything above, GL submission included.

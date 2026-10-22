@@ -59,7 +59,7 @@
                          0 2px 0 0 var(--sh), 0 6px 0 0 #0007; }
     .panel.open { display: flex; }
     .panel.card { left: max(8px, env(safe-area-inset-left));
-                  bottom: max(8px, env(safe-area-inset-bottom));
+                  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 34px); /* above the status readout */
                   width: min(240px, 46vw); }
     .panel.menu { top: var(--bar-h); right: max(8px, env(safe-area-inset-right)); }
     .panel.half { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
@@ -193,15 +193,13 @@
     #barToggle { display: none; }
     .bar-burger { display: block; width: 14px; height: 10px;
       background: linear-gradient(currentColor 0 2px, transparent 2px 4px, currentColor 4px 6px, transparent 6px 8px, currentColor 8px 10px); }
-    /* On a phone the toolbar is ONE row -- the floor stepper, the stats and the toggle --
+    /* On a phone the toolbar is ONE row -- the floor stepper and the toggle --
        and the tools fold into a sheet that drops from under it. Wrapping them took three
        rows of a 844 px screen before the world began. */
     @container bh (max-width: 599px) {
       #bar { flex-wrap: nowrap; }
       #bar.open { z-index: calc(var(--z-panel) + 1); }
-      #barToggle { display: inline-flex; flex: none; }
-      #stats { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-               text-align: right; font-size: 10px; }
+      #barToggle { display: inline-flex; flex: none; margin-left: auto; }
       #bar .bar-tools { display: none; }
       #bar.open .bar-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: stretch;
         position: absolute; left: 0; right: 0; top: 100%; padding: 14px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left));
@@ -210,16 +208,32 @@
     }
     @container bh (max-width: 599px) { #bar { gap: 6px; } #bar select.bh-input--sm { padding-right: 26px; background-position: right 8px center; } }
     #bar .bh-level[hidden], #bar [hidden] { display: none; }
-    #stats { margin-left: auto; font: 400 11px var(--f-label); letter-spacing: .04em; color: var(--dim);
-             font-variant-numeric: tabular-nums; }
+    /* The status readout lives in the bottom-left corner, off the toolbar: a small dark
+       plate, Bulkhead's readout type. It is still the triple-tap that toggles debug. The
+       entity card opens above it rather than over it; on a phone the card is a sheet
+       across the bottom and covers it while it is up. */
+    #stats { position: fixed; z-index: var(--z-minimap);
+             left: max(8px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom));
+             max-width: calc(100vw - 190px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+             padding: 5px 8px; background: #14171de6; box-shadow: 0 0 0 2px var(--sh);
+             font: 400 11px var(--f-label); letter-spacing: .04em; color: var(--dim);
+             font-variant-numeric: tabular-nums; -webkit-tap-highlight-color: transparent; }
+    @container bh (max-width: 599px) {
+      /* beside the minimap there is room for the tick and the count; the seed goes */
+      #stats { font-size: 10px; max-width: calc(100vw - 186px); }
+      #stats .stat-seed { display: none; }
+    }
     /* Bulkhead's toast: a dark plate with one lit lamp. */
-    #toast { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
+    #toast { position: fixed; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 40px); left: 50%; /* above the readout row */
              transform: translateX(-50%); background: var(--lamp-h); color: var(--ink);
              display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px);
              padding: 9px 12px; opacity: 0; transition: opacity .25s steps(3);
              box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh), 0 2px 0 0 var(--sh), 0 4px 0 0 #0009;
              pointer-events: none; z-index: var(--z-toast); } /* above every panel */
     #toast::before { content: ""; flex: none; width: 8px; height: 8px; background: var(--lamp-l); }
+    @container bh (max-width: 599px) {
+      #toast { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 108px); } /* clear of the minimap */
+    }
     /* #inspect is three surfaces sharing one element, and which one it is at
        any moment is the ANCHOR class it wears (see the panel system above):
        the plain entity card and the tile dump are `.card`, the debug creature
@@ -378,7 +392,6 @@
     <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
     <button class="bh-btn bh-btn--sm" id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
     </div>
-    <span id="stats">connecting…</span>
     <button class="bh-btn bh-btn--sm bh-btn--icon" id="barToggle" aria-expanded="false" aria-controls="barTools"
       aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
   </div>
@@ -414,6 +427,7 @@
     <div id="tuneBody"></div>
     <div class="foot" id="tuneFoot"></div>
   </div>
+  <div id="stats">connecting…</div>
   <div id="toast"></div>
   <div id="inspect" class="panel"></div>
   <canvas id="minimap" width="150" height="90"></canvas>
