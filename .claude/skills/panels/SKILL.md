@@ -28,6 +28,23 @@ differs between them:
 | `.half` | right-hand column, 480px × 50vh | ⛶ → full |
 | `.full` | everything under the toolbar | ⊟ → half |
 
+Under 600 px wide (Bulkhead's *compact* width) the corner anchors become sheets
+from the bottom edge: `.half` and `.menu` span the width from the bottom up,
+`.card` spans the width at the bottom, `.full` fills everything under the
+toolbar. Those rules live in `index.html` beside the anchors themselves.
+
+### Controls are Bulkhead, never hand-styled
+
+The viewer's chrome is the design system in `client/src/bulkhead.css`,
+documented and playable at `/help/design`. A new control takes its class
+from there (`bh-btn`, `bh-input`, `bh-box`, `bh-range`, `bh-check`, `bh-level`,
+`bh-panel` for a dialog) instead of an inline `style.cssText` or a one-off rule:
+the settings dialog was the last thing in the viewer styled by hand, with its own
+radius, blur and blue, and it read as belonging to a different app. Breakpoints
+answer to `body.bh-root`, so a control written once grows to touch size on a
+phone by itself. If a control the viewer needs is missing, add it to the system
+and to its page first, then use it.
+
 **A panel is half or full and nothing between.** The population chart shipped
 as a 360×120 card; it was legible only as a sparkline, and the lineage thinning
 out over hours that it existed to show could not be read at that size at all. A

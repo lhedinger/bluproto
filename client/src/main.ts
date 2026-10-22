@@ -62,7 +62,11 @@ const spawnSel = document.getElementById('spawn') as HTMLSelectElement;
 const toastEl = document.getElementById('toast')!;
 const inspectEl = document.getElementById('inspect') as HTMLElement;
 const mm = document.getElementById('minimap') as HTMLCanvasElement;
-const levelBtn = document.getElementById('level') as HTMLButtonElement;
+// The floor stepper: up over down, beside the floor's name (Bulkhead's bh-level).
+const levelCtl = document.getElementById('levelCtl') as HTMLElement;
+const levelLabel = document.getElementById('level') as HTMLElement;
+const levelUp = document.getElementById('levelUp') as HTMLButtonElement;
+const levelDown = document.getElementById('levelDown') as HTMLButtonElement;
 const droneBtn = document.getElementById('drone') as HTMLButtonElement;
 const injectBtn = document.getElementById('inject') as HTMLButtonElement;
 const injectFile = document.getElementById('injectFile') as HTMLInputElement;
@@ -627,8 +631,8 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       // with whatever the previous session had asked for.
       net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
       // Only offer the level switch when the world actually has more than one.
-      levelBtn.style.display = m.levels > 1 ? 'inline-block' : 'none';
-      levelBtn.textContent = levelName(currentLevel);
+      levelCtl.hidden = m.levels <= 1;
+      syncLevelCtl();
       // A world with no base carves no charge pads and spawns no drones, and a
       // reset can hand back one that does or does not — so the button asks on
       // every hello and shows itself only if there is a rank to cycle.
@@ -1572,7 +1576,7 @@ function goToLevel(z: number): void {
   if (!hello || z < 0 || z >= hello.levels || z === currentLevel) return;
   currentLevel = z;
   levelEpoch++; // any grid still in flight for the old level is now stale
-  levelBtn.textContent = levelName(currentLevel);
+  syncLevelCtl();
   vegGrid = null;
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
@@ -1583,7 +1587,22 @@ function goToLevel(z: number): void {
   net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
 }
 
-levelBtn.onclick = () => {
+/** The stepper's label and its two ends, read from the level every time: up is
+ *  dead on the top floor and down on the bottom one, so the pair itself says
+ *  where in the stack the viewer is. */
+function syncLevelCtl(): void {
+  levelLabel.textContent = levelName(currentLevel);
+  const top = hello ? hello.levels - 1 : 0;
+  levelUp.disabled = currentLevel >= top;
+  levelDown.disabled = currentLevel <= 0;
+}
+
+/**
+ * One floor up or down. It used to be a single button that stepped down and
+ * wrapped back to the top, which made the floor above you a full lap away; a
+ * pair says which way you are going and stops at the ends instead of wrapping.
+ */
+function stepLevel(dz: number): void {
   if (!hello || hello.levels <= 1) return;
   // Changing level by hand ends the follow. Otherwise the two fight: the button
   // moves the viewer, the followed creature's next poll drags it straight back,
@@ -1593,14 +1612,10 @@ levelBtn.onclick = () => {
     cam.followId = null;
     reflect();
   }
-  // Step down one floor at a time and wrap back to the top -- incrementing
-  // the index would do that for exactly two levels (index 0 IS the only floor
-  // below the top) but skips the middle floor of a three-level world, jumping
-  // straight from the surface to the bottom. The wrap goes to the highest
-  // level, not to the surface: where a world has sky, that sky is a floor the
-  // cycle has to be able to reach.
-  goToLevel(currentLevel === 0 ? hello.levels - 1 : currentLevel - 1);
-};
+  goToLevel(currentLevel + dz);
+}
+levelUp.onclick = () => stepLevel(1);
+levelDown.onclick = () => stepLevel(-1);
 // ---- the drone button ------------------------------------------------------
 // Four machines parked on charge pads in a base buried somewhere in the rock,
 // on a floor the viewer is probably not watching. Nothing on screen said they
@@ -1812,6 +1827,7 @@ async function openTuning(): Promise<void> {
     const num = document.createElement('input');
     if (c.type === 'boolean') {
       num.type = 'checkbox';
+      num.className = 'bh-box';
       num.checked = c.value !== 0;
       num.disabled = !canEdit;
       row.append(num);
@@ -1819,12 +1835,14 @@ async function openTuning(): Promise<void> {
       // The pair: a slider for the hand, a number for precision — same value.
       const slider = document.createElement('input');
       slider.type = 'range';
+      slider.className = 'bh-range';
       slider.min = '0';
       slider.max = String(tuneMax(c.def, c.value));
       slider.step = String(tuneMax(c.def, c.value) / 400);
       slider.value = String(c.value);
       slider.disabled = !canEdit;
       num.type = 'number';
+      num.className = 'bh-input bh-input--sm';
       num.step = 'any';
       num.value = String(c.value);
       num.disabled = !canEdit;
@@ -1851,6 +1869,7 @@ async function openTuning(): Promise<void> {
     note.className = 'note';
     note.textContent = '🔒 = structural, read-only';
     const save = document.createElement('button');
+    save.className = 'bh-btn bh-btn--primary bh-btn--sm';
     save.textContent = 'save & close';
     save.onclick = saveTuning;
     tuneFoot.append(note, save);
@@ -2008,59 +2027,77 @@ function viewFlagOn(k: string): boolean {
 }
 
 const perfBtn = document.createElement('button');
+perfBtn.className = 'bh-btn bh-btn--sm bh-btn--icon';
 perfBtn.textContent = '⚙';
 perfBtn.title = 'settings (reloads with url flags)';
+perfBtn.setAttribute('aria-label', 'settings');
 document.getElementById('bar')!.insertBefore(perfBtn, statsEl);
-perfBtn.onclick = () => {
+/** The settings dialog, as a Bulkhead panel: a header with its close, two groups
+ *  of rivet checkboxes, and the commit in the footer. */
+function closePerfDlg(): boolean {
   const old = document.getElementById('perfdlg');
-  if (old) { old.remove(); return; }
+  if (!old) return false;
+  old.remove();
+  perfBtn.classList.remove('on');
+  return true;
+}
+window.addEventListener('keydown', ev => { if (ev.key === 'Escape') closePerfDlg(); });
+perfBtn.onclick = () => {
+  if (closePerfDlg()) return;
   const dlg = document.createElement('div');
   dlg.id = 'perfdlg';
-  dlg.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);'
-    + 'background:#1d2026f2;border:1px solid #3a3f4a;border-radius:10px;'
-    + 'padding:12px 16px;z-index:20;backdrop-filter:blur(4px);min-width:250px;'
-    + 'font-size:13px';
-  const h = document.createElement('div');
-  h.textContent = 'visual subsystems';
-  h.style.cssText = 'font-weight:600;margin-bottom:8px';
-  dlg.append(h);
+  dlg.className = 'bh-panel';
+  dlg.setAttribute('role', 'dialog');
+  dlg.setAttribute('aria-label', 'settings');
+  const head = document.createElement('header');
+  const h = document.createElement('h4');
+  h.textContent = 'settings';
+  const x = document.createElement('button');
+  x.className = 'bh-btn bh-btn--icon bh-btn--sm';
+  x.textContent = '✕';
+  x.setAttribute('aria-label', 'close');
+  x.onclick = () => { closePerfDlg(); };
+  const acts = document.createElement('div');
+  acts.className = 'bh-actions';
+  acts.append(x);
+  head.append(h, acts);
+  const body = document.createElement('div');
+  body.className = 'bh-body';
   const boxes = new Map<string, HTMLInputElement>();
-  for (const [k, label] of PERF_FLAGS) {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = !flagOff(k);
-    boxes.set(k, cb);
-    const span = document.createElement('span');
-    span.textContent = label;
-    row.append(cb, span);
-    dlg.append(row);
-  }
-  const h2 = document.createElement('div');
-  h2.textContent = 'panels';
-  h2.style.cssText = 'font-weight:600;margin:10px 0 6px;padding-top:8px;'
-    + 'border-top:1px solid #ffffff14';
-  dlg.append(h2);
-  for (const [k, label] of VIEW_FLAGS) {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    // From LIVE state, not the URL: both panels can be toggled by key without a
-    // reload, so reading the query string here would show a stale box and then
-    // silently undo the toggle on apply.
-    cb.checked = viewFlagOn(k);
-    boxes.set(k, cb);
-    const span = document.createElement('span');
-    span.textContent = label;
-    row.append(cb, span);
-    dlg.append(row);
-  }
+  const groupOf = (title: string, flags: ReadonlyArray<readonly [string, string]>, on: (k: string) => boolean) => {
+    const fs = document.createElement('fieldset');
+    fs.className = 'bh-fieldset';
+    const lg = document.createElement('legend');
+    lg.className = 'bh-label';
+    lg.textContent = title;
+    fs.append(lg);
+    for (const [k, label] of flags) {
+      const row = document.createElement('label');
+      row.className = 'bh-check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = on(k);
+      boxes.set(k, cb);
+      const span = document.createElement('span');
+      span.textContent = label;
+      row.append(cb, span);
+      fs.append(row);
+    }
+    body.append(fs);
+  };
+  groupOf('visual subsystems', PERF_FLAGS, k => !flagOff(k));
+  // From LIVE state, not the URL: both panels can be toggled by key without a
+  // reload, so reading the query string here would show a stale box and then
+  // silently undo the toggle on apply.
+  groupOf('panels', VIEW_FLAGS, k => viewFlagOn(k));
+  const foot = document.createElement('footer');
+  const cancel = document.createElement('button');
+  cancel.className = 'bh-btn bh-btn--ghost';
+  cancel.textContent = 'cancel';
+  cancel.onclick = () => { closePerfDlg(); };
   const apply = document.createElement('button');
+  apply.className = 'bh-btn bh-btn--primary';
   apply.textContent = 'apply & reload';
-  apply.style.cssText = 'margin-top:10px;width:100%;padding:7px;background:#24404a80;'
-    + 'color:#a6d8ff;border:1px solid #2f6b7a;border-radius:6px;font:inherit';
   apply.onclick = () => {
     const sp = new URLSearchParams(location.search);
     for (const [k] of PERF_FLAGS) {
@@ -2073,8 +2110,11 @@ perfBtn.onclick = () => {
     }
     location.search = sp.toString();
   };
-  dlg.append(apply);
+  foot.append(cancel, apply);
+  dlg.append(head, body, foot);
   document.body.append(dlg);
+  perfBtn.classList.add('on');
+  apply.focus();
 };
 
 function hudFrame(now: number): void {
