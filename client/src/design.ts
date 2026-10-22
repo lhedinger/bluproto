@@ -87,6 +87,9 @@ const P = {
     html: p => `<div class="bh-field">\n  <span class="bh-label" id="pl-segl">${esc(p.label)}</span>\n  <div class="bh-seg" role="radiogroup" aria-labelledby="pl-segl">\n${p.items.split(',').map(s => s.trim()).filter(Boolean).map((s, i) => `    <button role="radio" aria-checked="${i + 1 === p.sel}">${esc(s)}</button>`).join('\n')}\n  </div>\n</div>` },
   meter: { knobs: [K.text('label', 'Label', 'Energy'), K.num('value', 'Value', 64, 0, 100, 1), K.sel('tone', 'Tone', ['normal', 'warn', 'crit', 'busy'], 'normal')],
     html: p => `<div class="bh-meter${p.tone !== 'normal' ? ' bh-meter--' + p.tone : ''}" style="width:min(360px,100%)">\n  <span class="bh-label">${esc(p.label)}${p.tone === 'busy' ? '' : ` · ${p.value} of 100`}</span>\n  <div class="track" role="${p.tone === 'busy' ? 'progressbar' : 'meter'}"${p.tone === 'busy' ? '' : ` aria-valuenow="${p.value}" aria-valuemin="0" aria-valuemax="100"`} aria-label="${esc(p.label)}">\n    <div class="fill" style="width:${p.value}%"></div>\n  </div>\n</div>` },
+  level: { knobs: [K.num('levels', 'Floors', 4, 2, 8, 1), K.num('at', 'Current floor (0 = deepest)', 1, 0, 7, 1), K.num('surface', 'Surface floor', 1, 0, 7, 1)],
+    html: p => { const at = Math.min(p.at, p.levels - 1), d = at - p.surface, name = d > 0 ? `level +${d}` : `level ${d}`;
+      return `<div class="bh-level" role="group" aria-label="level">\n  <div class="bh-updown">\n    <button class="bh-btn" aria-label="up a level"${at >= p.levels - 1 ? ' disabled' : ''}><i class="bh-arrow"></i></button>\n    <button class="bh-btn" aria-label="down a level"${at <= 0 ? ' disabled' : ''}><i class="bh-arrow bh-arrow--down"></i></button>\n  </div>\n  <span class="bh-level-name">${name}</span>\n</div>`; } },
   badge: { knobs: [K.text('label', 'Label', 'Live'), K.sel('tone', 'Tone', ['neutral', 'live', 'warn', 'crit'], 'live')],
     html: p => `<span class="bh-badge${p.tone !== 'neutral' ? ' bh-badge--' + p.tone : ''}">${esc(p.label)}</span>` },
   toast: { knobs: [K.text('msg', 'Message', 'Genome injected · 1 body spawned'), K.sel('tone', 'Tone', ['info', 'warn', 'crit'], 'info'), K.text('action', 'Action (blank = none)', '')],
@@ -109,5 +112,14 @@ document.getElementById('pcopy').addEventListener('click', async e => {
   try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'Copied'; }
   catch { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected'; }
   setTimeout(() => btn.textContent = 'Copy', 1400);
+});
+
+// level stepper specimens: up over down, ends disable instead of wrapping
+document.querySelectorAll('[data-stepper]').forEach(st => {
+  const n = Number(st.dataset.levels), surf = Number(st.dataset.surface); let z = Number(st.dataset.at);
+  const up = st.querySelector('[data-dz="1"]'), dn = st.querySelector('[data-dz="-1"]'), nm = st.querySelector('.bh-level-name');
+  const sync = () => { const d = z - surf; nm.textContent = d > 0 ? `level +${d}` : `level ${d}`; up.disabled = z >= n - 1; dn.disabled = z <= 0; };
+  st.addEventListener('click', e => { const b = e.target.closest('[data-dz]'); if (!b || b.disabled) return; z += Number(b.dataset.dz); sync(); });
+  sync();
 });
 build();
