@@ -275,7 +275,9 @@ Traps that cost real time here:
   the 12px sides and the border were added. `.panel` sets `border-box` so the
   number in the CSS is the number on screen; anything you add inside it should
   not reintroduce the gap.
-- **The toolbar wraps.** On a phone it is two rows, and it grows a row on any
-  screen when debug reveals the constants button. Panels open below
+- **The toolbar wraps, except on a phone.** On a wide screen it grows a row when
+  debug reveals the constants button. Under 600 px it is one row (floor stepper,
+  stats, a toggle) and the tools fold into a sheet under it (`#barTools`); a new
+  toolbar control goes inside `#barTools`, or a phone never shows it. Panels open below
   `--bar-h`, which a `ResizeObserver` measures from the toolbar itself; the
   fixed 52px that preceded it put every panel on top of its own buttons.

@@ -171,6 +171,26 @@ function syncBarHeight(): void {
 new ResizeObserver(syncBarHeight).observe(document.getElementById('bar')!);
 syncBarHeight();
 
+// ---- the toolbar's phone fold -----------------------------------------------
+// Under 600 px the tools fold behind one toggle (the CSS decides when; this only
+// opens and shuts the sheet). A tool that was used puts the sheet away: what it
+// opens is the thing the viewer wanted to look at, and a sheet left over it
+// would be in the way. A select only does that once it has been changed.
+const barEl = document.getElementById('bar')!;
+const barToggle = document.getElementById('barToggle') as HTMLButtonElement;
+const barTools = document.getElementById('barTools')!;
+function setBarOpen(open: boolean): void {
+  barEl.classList.toggle('open', open);
+  barToggle.setAttribute('aria-expanded', String(open));
+  barToggle.classList.toggle('on', open);
+}
+barToggle.onclick = () => setBarOpen(!barEl.classList.contains('open'));
+barTools.addEventListener('click', ev => { if ((ev.target as HTMLElement).closest('button')) setBarOpen(false); });
+barTools.addEventListener('change', () => setBarOpen(false));
+window.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && barEl.classList.contains('open')) { setBarOpen(false); ev.stopImmediatePropagation(); }
+}, true);
+
 // Escape puts away whatever is open, the corner first and the card after it.
 // Two of these panels had no dismissal of their own at all, and none of them
 // answered the key every other window on the machine answers.
@@ -2030,7 +2050,7 @@ perfBtn.className = 'bh-btn bh-btn--sm bh-btn--icon';
 perfBtn.textContent = '⚙';
 perfBtn.title = 'settings (reloads with url flags)';
 perfBtn.setAttribute('aria-label', 'settings');
-document.getElementById('bar')!.insertBefore(perfBtn, statsEl);
+document.getElementById('barTools')!.append(perfBtn); // last of the tools
 /** The settings dialog, as a Bulkhead panel: a header with its close, two groups
  *  of rivet checkboxes, and the commit in the footer. */
 function closePerfDlg(): boolean {

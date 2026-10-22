@@ -188,6 +188,26 @@
            align-items: center; padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
            background: #14171de6; box-shadow: inset 0 -2px 0 0 var(--sh); z-index: var(--z-bar); flex-wrap: wrap; }
     #bar select.bh-input { width: auto; }
+    /* On a wide screen the tools are just more of the row; the toggle does not exist. */
+    #bar .bar-tools { display: contents; }
+    #barToggle { display: none; }
+    .bar-burger { display: block; width: 14px; height: 10px;
+      background: linear-gradient(currentColor 0 2px, transparent 2px 4px, currentColor 4px 6px, transparent 6px 8px, currentColor 8px 10px); }
+    /* On a phone the toolbar is ONE row -- the floor stepper, the stats and the toggle --
+       and the tools fold into a sheet that drops from under it. Wrapping them took three
+       rows of a 844 px screen before the world began. */
+    @container bh (max-width: 599px) {
+      #bar { flex-wrap: nowrap; }
+      #bar.open { z-index: calc(var(--z-panel) + 1); }
+      #barToggle { display: inline-flex; flex: none; }
+      #stats { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+               text-align: right; font-size: 10px; }
+      #bar .bar-tools { display: none; }
+      #bar.open .bar-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: stretch;
+        position: absolute; left: 0; right: 0; top: 100%; padding: 14px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left));
+        background: var(--s0); box-shadow: 0 2px 0 0 var(--sh), 0 8px 0 0 #0007, inset 0 2px 0 0 var(--s2); }
+      #bar.open .bar-tools > .bh-btn, #bar.open .bar-tools > select { width: auto; margin: 2px; }
+    }
     @container bh (max-width: 599px) { #bar { gap: 6px; } #bar select.bh-input--sm { padding-right: 26px; background-position: right 8px center; } }
     #bar .bh-level[hidden], #bar [hidden] { display: none; }
     #stats { margin-left: auto; font: 400 11px var(--f-label); letter-spacing: .04em; color: var(--dim);
@@ -335,6 +355,8 @@
       </div>
       <span class="bh-level-name" id="level" aria-live="polite"></span>
     </div>
+    <!-- the tools: inline on a wide screen, folded into a drop-down sheet on a phone -->
+    <div id="barTools" class="bar-tools">
     <button class="bh-btn bh-btn--sm" id="drone" title="go to the next steward drone and follow it" style="display:none">drone</button>
     <button class="bh-btn bh-btn--sm" id="pause">pause</button>
     <select class="bh-input bh-input--sm" id="speed" title="simulation speed">
@@ -355,7 +377,10 @@
     <button class="bh-btn bh-btn--sm" id="popBtn" title="population by role over time (p)">population</button>
     <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
     <button class="bh-btn bh-btn--sm" id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
+    </div>
     <span id="stats">connecting…</span>
+    <button class="bh-btn bh-btn--sm bh-btn--icon" id="barToggle" aria-expanded="false" aria-controls="barTools"
+      aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
   </div>
   <div id="pop" class="panel half">
     <h3>population by
