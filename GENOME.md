@@ -213,7 +213,7 @@ Leaving it to selection turned out to need more than putting it in the mind. The
 0.25 was one pool constant copied into every founder of every minded clade, and
 a point mutation reaches it about one birth in three hundred — on seed 7 every
 adult hunter still ambled at 0.25 after 20k ticks, blind to its herd a quarter
-of the time. So the pace is now a founder draw like the search leg and cast
+of the time. So the pace is now a founder draw like the search cast
 (`Worlds.drawAmble`): one of the pool slots 0.1, 0.25 or 0.5, and the hunter
 seed is built at whatever pace its founder drew. The scenario-facing
 `starterBrain()` and `hunterBrain()` keep 0.25 as the reference. Whether the
