@@ -1097,12 +1097,11 @@ function genomeTab(d: Record<string, any>): string {
     // Instinct is in the genome and deliberation is in the mind, so the newborn
     // forage drive belongs beside the program it is overridden by.
     row('instinct', g(gm.instinct)),
-    // How it hunts for what it cannot see. A leg in ticks and a swing in
-    // degrees, because radians are not what anyone reads a path in: a long leg
-    // with a narrow cast is a straight transect, a short one with a wide cast
+    // How it hunts for what it cannot see: the cast, in degrees because radians
+    // are not what anyone reads a path in. Narrow is a straight transect, wide
     // is combing the same ground over.
-    row('search', gm.searchLeg === undefined ? '—'
-      : `${g(gm.searchLeg)}t · ${(gm.searchCast * 180 / Math.PI).toFixed(0)}°`),
+    row('search', gm.searchCast === undefined ? '—'
+      : `cast ${(gm.searchCast * 180 / Math.PI).toFixed(0)}°`),
     // Which substrate, and how big. Two decision methods compete in this world
     // behind one seam; "brain: none" was what a network-minded body used to say.
     row('mind', gm.mind === undefined ? '—' : gm.mind === 'none' ? 'none'
