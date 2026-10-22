@@ -384,15 +384,23 @@ public class TestNPC extends NPC {
 	@Unit("radians/tick")
 	public static final double MAX_TURN = 0.35;
 
-	/** The heading this body is searching along, or NaN before it has picked one.
-	 *  Held for a whole leg, so a search is a walk with corners rather than a
-	 *  turn rate re-decided every tick. */
-	/** Salt of the search's cast hash: keeps the swing unrelated to any other
-	 *  hash of the same leg and body. */
-	private static final int SEARCH_CAST_SALT = 1;
-	private double searchHeading = Double.NaN;
-	/** The tick the current search leg runs out. */
-	private long searchLegEnd = Long.MIN_VALUE;
+	/** Salts of explore's three draws per pick: which neighbour, and where in it. */
+	private static final int EXPLORE_TILE_SALT = 2, EXPLORE_X_SALT = 3, EXPLORE_Y_SALT = 4;
+	/** How close (tiles) to its point explore counts as arrived. */
+	@Unit("tiles")
+	private static final double EXPLORE_ARRIVE = 0.1;
+	/** The inner band of a tile explore aims into: never an edge, where a point
+	 *  would sit on the seam with the next tile and arrival would mean a toe
+	 *  over the line. */
+	private static final double EXPLORE_INSET = 0.1;
+	/** The narrowest cone explore will weight by, so a lineage that has cast
+	 *  its spread to nothing still has a cone of some width rather than a
+	 *  division by zero; below it the nearest-to-facing rule decides anyway. */
+	private static final double EXPLORE_MIN_SPREAD = 0.05;
+	/** The point explore is walking to, NaN when it has none. */
+	private double exploreX = Double.NaN, exploreY = Double.NaN;
+	/** How many points this body has picked: the key its draws are hashed on. */
+	private long explorePicks = 0;
 	/** Reach (tiles, beyond touching) of the mind's attack actuator. */
 	@Unit("tiles beyond touching")
 	public static final double ATTACK_REACH = 0.5;
@@ -3661,6 +3669,7 @@ public class TestNPC extends NPC {
 		boolean away = seekWish < 0;
 		boolean pursuing = false; // the goal is named AND the body can see one
 		boolean searching = false; // the goal is named and the body cannot see one yet
+		boolean explored = false; // explore steered and moved the body this tick
 		if (seekClass != AgentIO.SEEK_NONE) {
 			double bearing = seekBearing(seekClass);
 			if (!Double.isNaN(bearing)) {
@@ -3673,9 +3682,10 @@ public class TestNPC extends NPC {
 				// Wanting something you cannot see is a reason to go looking, not a
 				// reason to stand still -- "forage" means find food, not merely walk
 				// at food already in view. HOW to look is the lineage's to decide:
-				// see searchSteer.
+				// see explore. It walks the body itself, at the pace the mind's
+				// throttle sets, so the generic steer-and-move below stands down.
 				searching = true;
-				t = searchSteer(getWorld().getTick());
+				explored = explore(throttle > 0.02 ? throttle * speed : 0);
 			}
 		}
 		// Speed is deliberately NOT the intent's business. An intent says where to go
@@ -3708,13 +3718,15 @@ public class TestNPC extends NPC {
 		if (call > 0) {
 			call(call, clampUnit(a[AgentIO.A_LOUDNESS]));
 		}
-		D = wrap(D + t * MAX_TURN); // steer
-		// Throttle IS the desired speed: 0 is standing still, 1 is flat out at the
-		// genome's top speed. There is no separate gear to engage — the movement
-		// cost is quadratic in speed, so easing off is exactly how a mind saves
-		// energy, and pushing hard is exactly what it pays for.
-		if (throttle > 0.02) {
-			move(throttle * speed, D);
+		if (!explored) {
+			D = wrap(D + t * MAX_TURN); // steer
+			// Throttle IS the desired speed: 0 is standing still, 1 is flat out at
+			// the genome's top speed. There is no separate gear to engage — the
+			// movement cost is quadratic in speed, so easing off is exactly how a
+			// mind saves energy, and pushing hard is exactly what it pays for.
+			if (throttle > 0.02) {
+				move(throttle * speed, D);
+			}
 		}
 		// Nothing here steers vertically. Changing level is the ground's business:
 		// a ramp is floor that spans two levels and carries whatever walks across it,
@@ -4358,43 +4370,165 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * Steering while searching: how far to turn this tick, as a fraction of the
-	 * max turn rate, toward a heading the body HOLDS for a whole leg.
+	 * Blind exploration: walks the body to a point inside a neighbouring tile
+	 * at {@code pace}, and picks the next point when it gets there.
 	 *
-	 * <p>The shape of a search is two genes and nothing else.
-	 * {@link Genome#searchLeg} is how many ticks a bearing is kept;
-	 * {@link Genome#searchCast} is how far the bearing swings when the leg runs
-	 * out. A long leg and a small cast is a straight transect, which is how you
-	 * cross ground with nothing on it; a short leg and a wide cast is
-	 * area-restricted search, which is how you comb the patch you have just
-	 * lost. Both are real strategies, which one pays depends on how the food is
-	 * spread, and so neither is written down here.
+	 * <p>The pick is the whole of the policy. The eight neighbours of the tile
+	 * the body stands on are the candidates; each has to be ground this body
+	 * can stand on ({@link net.hedinger.prototype.engine.Tile#isWalkable}, or
+	 * flyable for a flier) and reachable from where it stands in one step
+	 * ({@link net.hedinger.prototype.engine.World#isConnectedSpace}, which refuses a diagonal squeezed
+	 * between two blocked orthogonals and a level change that is not a ramp's
+	 * own slope). A wall, a hole or water is never picked, so the engine's
+	 * collision test and the body's pin reflex are the backstop rather than
+	 * the method. Each candidate is weighted by where it lies against the
+	 * body's facing, a soft cone: full weight dead ahead, falling straight to
+	 * nothing at {@code cast} radians either side, and nothing beyond. A
+	 * narrow cast is a transect across empty ground, a wide one combs the
+	 * patch it is in, and because the edge is a line rather than a step every
+	 * value of the cast is a different walk, so selection climbs a slope and
+	 * not a staircase. (It was first a bell, {@code exp(cos(angle) / cast)};
+	 * drawn in one room at casts of 0.3, 1.0 and 2.0 the bell covered 92, 63
+	 * and 42 distinct tiles in 1500 ticks against the cone's 93, 112 and 71,
+	 * because a bell never says no to the tile behind.) One is drawn by
+	 * weight, then a point inside it off the tile's edges. Facing is the way
+	 * the body last walked, so straightness is a property of the cast and
+	 * nothing else. When the cone holds no candidate -- a narrow cast facing a
+	 * wall -- the one nearest the facing is taken, which walks the body along
+	 * the wall rather than into it or off in a random direction.
 	 *
-	 * <p>What this replaced was {@code t = S_CLOCK}: the turn RATE read off a
-	 * sine every tick. A sine on the rate integrates to a sawtooth on the
-	 * heading -- about a hundred and thirty degrees each way on a twenty-one
-	 * tick beat -- so every creature in the world zig-zagged, on the same
-	 * period, for most of its life. Nobody chose that; it was the shape of the
-	 * arithmetic. The comment there was right that a search must not freeze and
-	 * must not draw a random, and both still hold: the cast comes off a hash of
-	 * the leg index and the body's id ({@link net.hedinger.prototype.engine.Hash}),
-	 * so a world replays identically.
+	 * <p>Every draw is {@link net.hedinger.prototype.engine.Hash} of how many
+	 * points this body has picked and whose body it is, under a salt per
+	 * draw: deterministic, replayable, no draw on the world's stream. Boxed
+	 * in -- no neighbour qualifies -- it stands and says so, and leaves the
+	 * body to the pin reflex.
+	 *
+	 * @param pace tiles per tick to walk at; at zero or less the body holds
+	 *             its point and does not move, which is a mind choosing to
+	 *             stand still rather than a body that cannot
+	 * @param cast half-width of the cone, radians: how far from its facing
+	 *             the body will consider turning for its next tile
+	 * @return whether it moved the body this tick
 	 */
-	private double searchSteer(long now) {
-		int leg = genome == null ? 25
-				: Math.max(Genome.SEARCH_LEG_MIN, genome.searchLeg);
-		if (Double.isNaN(searchHeading) || now >= searchLegEnd) {
-			double cast = genome == null ? 1.0 : genome.searchCast;
-			double from = Double.isNaN(searchHeading) ? D : searchHeading;
-			// Deterministic, not random: a hash of which leg this is and whose
-			// it is. Two bodies side by side cast differently, the same body
-			// casts differently each leg, and the whole thing replays exactly.
-			long legIndex = Math.floorDiv(now, leg);
-			double swing = net.hedinger.prototype.engine.Hash.signed(legIndex, getID(), SEARCH_CAST_SALT);
-			searchHeading = wrap(from + cast * swing);
-			searchLegEnd = now + leg;
+	protected boolean explore(double pace, double cast) {
+		if (!exploreTargetStands()) {
+			if (!pickExploreTarget(cast)) {
+				return false;
+			}
 		}
-		return clamp(wrap(searchHeading - D) / MAX_TURN, -1, 1);
+		double dx = exploreX - X, dy = exploreY - Y;
+		if (len(dx, dy) <= EXPLORE_ARRIVE) {
+			if (!pickExploreTarget(cast)) {
+				return false;
+			}
+			dx = exploreX - X;
+			dy = exploreY - Y;
+		}
+		double bearing = wrap(Math.atan2(dy, dx) - D);
+		D = wrap(D + clamp(bearing / MAX_TURN, -1, 1) * MAX_TURN);
+		if (pace <= 0) {
+			return false;
+		}
+		move(pace, D);
+		return true;
+	}
+
+	/** {@link #explore(double, double)} with the cast the lineage was born
+	 *  with, {@link Genome#searchCast}: the form a minded body searches in. */
+	protected boolean explore(double pace) {
+		return explore(pace, genome == null ? 1.0 : genome.searchCast);
+	}
+
+	/** The point explore is walking to, {x, y}, or null when it holds none.
+	 *  Package-visible so the suite can pin where a pick lands. */
+	double[] exploreTarget() {
+		return Double.isNaN(exploreX) ? null : new double[] { exploreX, exploreY };
+	}
+
+	/** Whether the held point is still worth walking to: there is one, its
+	 *  tile is still ground for this body, and the body is still next to it
+	 *  (a body carried, fallen or shaken loose onto another tile picks afresh). */
+	private boolean exploreTargetStands() {
+		if (Double.isNaN(exploreX)) {
+			return false;
+		}
+		int tc = (int) Math.floor(exploreX), tr = (int) Math.floor(exploreY);
+		if (Math.abs(tc - (int) Math.floor(X)) > 1 || Math.abs(tr - (int) Math.floor(Y)) > 1) {
+			return false;
+		}
+		return exploreGround(tc, tr);
+	}
+
+	/** Whether a tile is ground this body can be on and step to from here. */
+	private boolean exploreGround(int c, int r) {
+		net.hedinger.prototype.engine.World w = getWorld();
+		if (!w.isValid(c, r, (int) Z)) {
+			return false;
+		}
+		net.hedinger.prototype.engine.Tile t = w.getTile(c, r, (int) Z);
+		if (isFlying() ? !t.isFlyable() : !t.isWalkable()) {
+			return false;
+		}
+		return w.isConnectedSpace(X, Y, Z, c + 0.5, r + 0.5, Z);
+	}
+
+	/** Draws the next point: a neighbouring tile by facing-weighted lot, then a
+	 *  spot inside it. False, with no point held, when no neighbour qualifies. */
+	private boolean pickExploreTarget(double cast) {
+		int cc = (int) Math.floor(X), cr = (int) Math.floor(Y);
+		double spread = Math.max(EXPLORE_MIN_SPREAD, cast);
+		int[] cols = new int[8], rows = new int[8];
+		double[] weight = new double[8];
+		int n = 0, nearest = -1;
+		double total = 0, nearestOff = Double.MAX_VALUE;
+		for (int dr = -1; dr <= 1; dr++) {
+			for (int dc = -1; dc <= 1; dc++) {
+				if ((dc == 0 && dr == 0) || !exploreGround(cc + dc, cr + dr)) {
+					continue;
+				}
+				// A diagonal is walked as a straight line between two points, and
+				// that line crosses one of the two tiles beside it; so both have
+				// to be ground as well, or the body cuts the corner of a hole.
+				if (dc != 0 && dr != 0 && !(exploreGround(cc + dc, cr) && exploreGround(cc, cr + dr))) {
+					continue;
+				}
+				double off = Math.abs(wrap(Math.atan2(dr, dc) - D));
+				cols[n] = cc + dc;
+				rows[n] = cr + dr;
+				weight[n] = Math.max(0, 1 - off / spread);
+				total += weight[n];
+				if (off < nearestOff) {
+					nearestOff = off;
+					nearest = n;
+				}
+				n++;
+			}
+		}
+		explorePicks++;
+		if (n == 0) {
+			exploreX = Double.NaN;
+			exploreY = Double.NaN;
+			return false;
+		}
+		if (total == 0) {
+			weight[nearest] = 1; // nothing inside the cone: the ground nearest the facing
+			total = 1;
+		}
+		double lot = net.hedinger.prototype.engine.Hash.unit(explorePicks, getID(), EXPLORE_TILE_SALT) * total;
+		int pick = n - 1;
+		for (int i = 0; i < n; i++) {
+			lot -= weight[i];
+			if (lot < 0) {
+				pick = i;
+				break;
+			}
+		}
+		double span = 1 - 2 * EXPLORE_INSET;
+		exploreX = cols[pick] + EXPLORE_INSET
+				+ span * net.hedinger.prototype.engine.Hash.unit(explorePicks, getID(), EXPLORE_X_SALT);
+		exploreY = rows[pick] + EXPLORE_INSET
+				+ span * net.hedinger.prototype.engine.Hash.unit(explorePicks, getID(), EXPLORE_Y_SALT);
+		return true;
 	}
 
 	private static double wrap(double a) {

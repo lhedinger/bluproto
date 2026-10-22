@@ -7413,55 +7413,108 @@ public class SimTests {
 		}
 	}
 
-	/**
-	 * How a creature looks for what it cannot see is the lineage's, not the
-	 * world's.
-	 *
-	 * <p>It used to be one line with nothing behind it: the turn RATE was read
-	 * off the S_CLOCK oscillator every tick, and a sine on the rate integrates to
-	 * a sawtooth on the heading — about a hundred and thirty degrees each way on
-	 * a twenty-one tick beat. Every creature in the world zig-zagged, all on the
-	 * same period, through the state a forager spends most of its life in. Nobody
-	 * decided that; it was the shape of the arithmetic.
-	 *
-	 * <p>Two genes replace it, and this pins what they have to buy: that the ends
-	 * of their range are genuinely different ways of searching, and that a
-	 * default searcher no longer saws. The numbers are floors with room in them,
-	 * not the measurements — a scenario that asserted the measurement would fail
-	 * on any honest retune of the pair.
-	 */
-	static class SearchShapeIsTheLineagesOwn extends Scenario {
-		/** Straightness (net displacement over path walked, 0..1) and total turning
-		 *  in radians per hundred ticks, for a body that can never see its goal. */
-		private double[] shape(int leg, double cast) {
-			seed(90);
-			World w = room(160, 160);
-			for (int x = 0; x < 160; x++) {
-				for (int y = 0; y < 160; y++) {
-					w.getTile(x, y, 0).setFertility(0); // barren: always searching
+
+	/** The blind-walk fixture the explore scenarios share: a barren room with a
+	 *  mind that always wants forage it can never see, so the body explores
+	 *  from its first tick at full throttle. */
+	static abstract class ExploreScenario extends Scenario {
+		static final Mind ALWAYS_SEARCHING = new Mind() {
+			@Override
+			public void think(double[] s, double[] a) {
+				a[AgentIO.A_THROTTLE] = 1;
+				a[AgentIO.A_SEEK] = 0.1; // forage: always wanted, never in sight
+			}
+		};
+
+		World barren(int cols, int rows) {
+			World w = room(cols, rows);
+			for (int x = 1; x < cols - 1; x++) {
+				for (int y = 1; y < rows - 1; y++) {
+					w.getTile(x, y, 0).setFertility(0);
 				}
 			}
+			return w;
+		}
+
+		TestNPC explorer(World w, double x, double y, double cast, double heading) {
 			Genome g = new Genome();
 			g.size = 6;
-			g.losRange = 6;
-			g.searchLeg = leg;
+			g.losRange = 3;
 			g.searchCast = cast;
-			Mind ctrl = new Mind() {
-				@Override
-				public void think(double[] s, double[] a) {
-					a[AgentIO.A_THROTTLE] = 1;
-					a[AgentIO.A_SEEK] = 0.1; // forage: always wanted, never in sight
-				}
-			};
-			TestNPC b = TestNPC.minded(80.5, 80.5, 0, g, ctrl).withSpeed(0.2);
+			TestNPC b = TestNPC.minded(x, y, 0, g, ALWAYS_SEARCHING).withSpeed(0.08).withHeading(heading);
 			w.spawnEntity(b);
-			w.think();
-			double px = b.getX(), py = b.getY(), path = 0, turned = 0, last = Double.NaN;
-			int ticks = 1500;
-			for (int i = 0; i < ticks; i++) {
+			w.think(); // spawned; its first think is the next tick
+			return b;
+		}
+	}
+
+	/**
+	 * Explore never picks ground it cannot stand on. The pick is made before the
+	 * step, from the eight neighbours, and a wall, a hole or water is not a
+	 * candidate; so a body exploring a room strewn with all three walks for
+	 * three thousand ticks without once standing on any of them, without
+	 * falling a level, and without the engine's collision test or the pin
+	 * reflex having to save it -- which shows as the body covering real
+	 * ground at its full pace rather than scraping along an obstacle.
+	 */
+	static class ExploreNeverPicksBlockedGround extends ExploreScenario {
+		@Override
+		public void run() {
+			seed(41);
+			World w = barren(24, 18);
+			for (int x = 8; x <= 10; x++) {
+				for (int y = 4; y <= 8; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WALL);
+				}
+			}
+			for (int x = 15; x <= 19; x++) {
+				for (int y = 10; y <= 13; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WATER);
+				}
+			}
+			w.setTile(5, 13, 0, Tile.TileType.TYPE_HOLE);
+			w.setTile(14, 4, 0, Tile.TileType.TYPE_HOLE);
+			for (int y = 1; y <= 6; y++) {
+				w.setTile(17, y, 0, Tile.TileType.TYPE_WALL);
+			}
+			TestNPC b = explorer(w, 4.5, 10.5, 1.0, 0);
+			double path = 0, px = b.getX(), py = b.getY();
+			for (int t = 0; t < 3000; t++) {
 				tick(w, 1);
-				double dx = b.getX() - px, dy = b.getY() - py;
-				double step = Math.hypot(dx, dy);
+				assertEquals("the body stays on its level", 0, b.getLvl());
+				Tile under = w.getTile(b.getX(), b.getY(), 0);
+				assertTrue("at tick " + t + " the body stands on walkable ground, not "
+						+ under.getType(), under.isWalkable());
+				path += Math.hypot(b.getX() - px, b.getY() - py);
+				px = b.getX();
+				py = b.getY();
+			}
+			// 3000 ticks at 0.08 is 240 tiles flat out; losing a third to turning
+			// corners is plenty, losing half means it was pinned somewhere.
+			assertGreater("and it kept walking the whole time (" + (int) path + " tiles)", path, 160);
+		}
+	}
+
+	/**
+	 * Explore leans where it faces, and how hard is the lineage's cast. Each
+	 * neighbour is weighted by a soft cone, full weight dead ahead falling to
+	 * nothing at the cast either side, so a narrow cast all but always walks
+	 * on and a wide one takes most of the eight. Pinned on open ground: a
+	 * body with a narrow cast that starts
+	 * facing east ends well to the east and has walked nearly straight, and
+	 * one with a wide cast has not.
+	 */
+	static class ExploreLeansWhereItFaces extends ExploreScenario {
+		/** {east progress, straightness (net/path), turning in rad per 100 ticks}
+		 *  after 300 ticks from the middle of an open room. */
+		private double[] lean(double cast) {
+			seed(43);
+			World w = barren(80, 80);
+			TestNPC b = explorer(w, 40.5, 40.5, cast, 0);
+			double path = 0, turned = 0, last = Double.NaN, px = b.getX(), py = b.getY();
+			for (int t = 0; t < 300; t++) {
+				tick(w, 1);
+				double dx = b.getX() - px, dy = b.getY() - py, step = Math.hypot(dx, dy);
 				path += step;
 				if (step > 1e-6) {
 					double h = Math.atan2(dy, dx);
@@ -7480,42 +7533,111 @@ public class SimTests {
 				px = b.getX();
 				py = b.getY();
 			}
-			double net = Math.hypot(b.getX() - 80.5, b.getY() - 80.5);
-			return new double[] { path == 0 ? 0 : net / path, turned / ticks * 100 };
+			double net = Math.hypot(b.getX() - 40.5, b.getY() - 40.5);
+			return new double[] { b.getX() - 40.5, path == 0 ? 0 : net / path, turned / 3 };
 		}
 
 		@Override
 		public void run() {
-			// A long leg and a narrow cast is a transect: it commits to a bearing and
-			// covers ground. A short leg and a wide cast combs the same patch over.
-			double[] transect = shape(200, Math.toRadians(30));
-			double[] combing = shape(8, Math.toRadians(170));
-			assertGreater("a long leg with a narrow cast runs straighter than a short "
-					+ "one with a wide cast (" + String.format("%.2f", transect[0]) + " vs "
-					+ String.format("%.2f", combing[0]) + ")", transect[0] - combing[0], 0.2);
-			assertGreater("and the combing lineage turns more for it ("
-					+ String.format("%.1f", combing[1]) + " vs "
-					+ String.format("%.1f", transect[1]) + " rad/100t)",
-					combing[1] - transect[1], 5.0);
-
-			// And the default searcher does not saw. The old per-tick steer measured
-			// 22.5 rad/100t here; anything near that is a zig-zag whoever wrote it.
-			Genome fresh = new Genome();
-			double[] plain = shape(fresh.searchLeg, fresh.searchCast);
-			assertLess("a default searcher walks rather than saws ("
-					+ String.format("%.1f", plain[1]) + " rad/100t)", plain[1], 12.0);
-
-			// Both genes are heritable, bounded and drifting -- the schema owns that,
-			// so this only checks they were actually declared to it.
-			boolean leg = false, cast = false;
+			double[] narrow = lean(0.2), wide = lean(2.5);
+			// The steer this replaced read its turn rate off a sine every tick and
+			// measured 22.5 rad/100t: a zig-zag whoever wrote it. A default
+			// explorer re-aims once a tile, at a point inside the next one, and
+			// that has to read as a walk.
+			double[] plain = lean(new Genome().searchCast);
+			assertLess("a default explorer walks rather than saws ("
+					+ String.format("%.1f", plain[2]) + " rad/100t)", plain[2], 12.0);
+			// The cast is heritable, bounded and drifting -- the schema owns that,
+			// so this only checks it was actually declared to it.
+			boolean cast = false;
 			for (var gene : net.hedinger.prototype.entities.GeneSchema.genes()) {
-				leg |= gene.key.equals("leg");
 				cast |= gene.key.equals("cast");
 			}
-			assertTrue("the search leg is a gene the schema knows", leg);
-			assertTrue("and so is the cast", cast);
+			assertTrue("the cast is a gene the schema knows", cast);
+			assertGreater("a narrow cast carries the body east, the way it faced ("
+					+ String.format("%.1f", narrow[0]) + " tiles)", narrow[0], 12);
+			assertGreater("and mostly straight (" + String.format("%.2f", narrow[1]) + ")", narrow[1], 0.5);
+			assertGreater("a wide cast wanders instead: less east ("
+					+ String.format("%.1f", wide[0]) + " vs " + String.format("%.1f", narrow[0]) + ")",
+					narrow[0] - wide[0], 6);
+			assertLess("and less straight (" + String.format("%.2f", wide[1]) + ")", wide[1], narrow[1] - 0.2);
 		}
 	}
+
+	/**
+	 * An explore point lies inside a neighbouring tile, off its edges. Two
+	 * hundred bodies on one spot, facing every way, each asked for its first
+	 * point: every point is in one of the eight neighbours, never the tile the
+	 * body stands on and never further, and never within a tenth of a tile of
+	 * a seam; and between them the bodies pick every one of the eight, so the
+	 * facing bias is a bias and not a rule.
+	 */
+	static class ExplorePointsLieInsideANeighbour extends ExploreScenario {
+		@Override
+		public void run() {
+			seed(47);
+			World w = barren(12, 12);
+			java.util.Set<String> tiles = new java.util.TreeSet<>();
+			for (int i = 0; i < 200; i++) {
+				Genome g = new Genome();
+				g.size = 6;
+				g.searchCast = 1.0;
+				TestNPC b = TestNPC.minded(5.5, 5.5, 0, g, ALWAYS_SEARCHING).withHeading(i * 2 * Math.PI / 200);
+				w.spawnEntity(b);
+				w.think(); // spawned
+				tick(w, 1); // its first think: explore picks a point before it steps
+				double[] p = b.exploreTarget();
+				assertTrue("body " + i + " holds a point", p != null);
+				int c = (int) Math.floor(p[0]), r = (int) Math.floor(p[1]);
+				assertTrue("in a neighbour, not its own tile (" + c + "," + r + ")", c != 5 || r != 5);
+				assertTrue("and no further than a neighbour (" + c + "," + r + ")",
+						Math.abs(c - 5) <= 1 && Math.abs(r - 5) <= 1);
+				double fx = p[0] - c, fy = p[1] - r;
+				assertTrue("off the tile's edges (" + String.format("%.2f,%.2f", fx, fy) + ")",
+						fx >= 0.1 && fx <= 0.9 && fy >= 0.1 && fy <= 0.9);
+				tiles.add(c + "," + r);
+				b.remove();
+			}
+			assertEquals("between them the bodies picked every neighbour", 8, tiles.size());
+		}
+	}
+
+	/**
+	 * Explore rounds an obstacle rather than scraping along it. A body facing
+	 * the closed end of a corridor would, under a held heading, push into the
+	 * wall until the pin reflex shook it loose and then turn back into it;
+	 * explore never picks the wall, so the body walks out of the dead end at
+	 * full pace and is well away from it within a few hundred ticks.
+	 */
+	static class ExploreRoundsAnObstacle extends ExploreScenario {
+		@Override
+		public void run() {
+			seed(53);
+			World w = barren(30, 12);
+			for (int x = 1; x < 29; x++) {
+				for (int y = 1; y < 11; y++) {
+					if (y < 5 || y > 7) {
+						w.setTile(x, y, 0, Tile.TileType.TYPE_WALL); // a corridor, rows 5..7
+					}
+				}
+			}
+			for (int y = 5; y <= 7; y++) {
+				w.setTile(5, y, 0, Tile.TileType.TYPE_WALL); // closed at the west end
+			}
+			TestNPC b = explorer(w, 6.5, 6.5, 0.3, Math.PI); // a tile from the dead end, facing it
+			double path = 0, px = b.getX(), py = b.getY();
+			for (int t = 0; t < 400; t++) {
+				tick(w, 1);
+				assertTrue("stays on floor", w.getTile(b.getX(), b.getY(), 0).isWalkable());
+				path += Math.hypot(b.getX() - px, b.getY() - py);
+				px = b.getX();
+				py = b.getY();
+			}
+			assertGreater("it has walked out of the dead end (x=" + String.format("%.1f", b.getX()) + ")", b.getX(), 12);
+			assertGreater("at pace the whole way (" + (int) path + " tiles of 32)", path, 24);
+		}
+	}
+
 
 	/**
 	 * A tick that throws stops the world visibly, instead of killing the loop
@@ -19730,7 +19852,6 @@ public class SimTests {
 				new BrainSizeSetsHowMuchAMindTracks(),
 				new SeekWalksToAPatchWithoutSteering(),
 				new AThrownTickStopsTheWorldLoudly(),
-				new SearchShapeIsTheLineagesOwn(),
 				new OneIntentIsAWholeBehaviour(),
 				new HuntIntentClosesAndBites(),
 				new WaypointRemembersAPlace(),
@@ -19744,6 +19865,10 @@ public class SimTests {
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
 				new AHashIsReplayableAndEven(),
+				new ExploreNeverPicksBlockedGround(),
+				new ExploreLeansWhereItFaces(),
+				new ExplorePointsLieInsideANeighbour(),
+				new ExploreRoundsAnObstacle(),
 				new AReseedIsAFounderNotAChampion(),
 				new AMindedHunterHuntsRatherThanGrazes(),
 				new AMindedHuntersBiteIsPricedByTheQuarry(),
