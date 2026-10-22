@@ -188,6 +188,13 @@ table.ref td:first-child { white-space: nowrap; }
         <div class="row"><button class="bh-btn bh-btn--icon" aria-label="Close">✕</button><button class="bh-btn bh-btn--icon" aria-label="Full screen">⛶</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Settings">⚙</button></div>
       </div></div>
 
+      <div class="spec"><div class="cap"><b>Level stepper</b><span>bh-level · bh-updown</span></div><div class="box bh">
+        <div class="row" data-stepper data-levels="4" data-surface="1" data-at="1"><div class="bh-level" role="group" aria-label="level">
+          <div class="bh-updown"><button class="bh-btn" data-dz="1" aria-label="up a level"><i class="bh-arrow"></i></button><button class="bh-btn" data-dz="-1" aria-label="down a level"><i class="bh-arrow bh-arrow--down"></i></button></div>
+          <span class="bh-level-name" aria-live="polite">level 0</span></div></div>
+        <p class="bh-hint" style="margin:0">Up over down, beside the floor's name. Each plate disables at its end of the stack instead of wrapping.</p>
+      </div></div>
+
       <div class="spec"><div class="cap"><b>Switch · Check · Radio</b><span>bh-switch · bh-check</span></div><div class="box bh">
         <div class="bh-inline"><label class="bh-switch"><input type="checkbox" id="g-sw1" checked><span class="knob"></span><span>Smell</span></label>
           <label class="bh-switch"><input type="checkbox" id="g-sw2"><span class="knob"></span><span>Sound</span></label>
@@ -289,7 +296,7 @@ table.ref td:first-child { white-space: nowrap; }
     </div>
     <div class="device" id="device" data-w="1200"><div class="vw world" id="vw">
       <div class="bh"><div class="bh-toolbar" id="vbar">
-        <button class="bh-btn bh-btn--sm">Level 0</button><button class="bh-btn bh-btn--sm">Drone</button><button class="bh-btn bh-btn--sm" aria-pressed="true">Population</button><button class="bh-btn bh-btn--sm">Overlays</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Settings">⚙</button>
+        <div class="bh-level"><div class="bh-updown"><button class="bh-btn" aria-label="up a level"><i class="bh-arrow"></i></button><button class="bh-btn" aria-label="down a level"><i class="bh-arrow bh-arrow--down"></i></button></div><span class="bh-level-name">level 0</span></div><button class="bh-btn bh-btn--sm">Drone</button><button class="bh-btn bh-btn--sm" aria-pressed="true">Population</button><button class="bh-btn bh-btn--sm">Overlays</button><button class="bh-btn bh-btn--icon bh-btn--sm" aria-label="Settings">⚙</button>
         <span class="bh-spacer"></span><span class="bh-stat">tick 2,004,817 · 1,164 bodies · seed 42</span>
       </div></div>
       <div class="minimap" aria-hidden="true"></div>
@@ -316,7 +323,7 @@ table.ref td:first-child { white-space: nowrap; }
     <div class="play">
       <div class="props bh" id="props">
         <div class="bh-field"><label class="bh-label" for="p-comp">Component</label>
-          <select class="bh-input" id="p-comp"><option value="button">Button</option><option value="switch">Switch</option><option value="check">Checkbox / radio</option><option value="slider">Slider</option><option value="field">Text field</option><option value="select">Select</option><option value="tabs">Tabs</option><option value="seg">Segmented</option><option value="meter">Meter</option><option value="badge">Badge</option><option value="toast">Toast</option><option value="dialog">Dialog</option></select></div>
+          <select class="bh-input" id="p-comp"><option value="button">Button</option><option value="switch">Switch</option><option value="check">Checkbox / radio</option><option value="slider">Slider</option><option value="field">Text field</option><option value="select">Select</option><option value="level">Level stepper</option><option value="tabs">Tabs</option><option value="seg">Segmented</option><option value="meter">Meter</option><option value="badge">Badge</option><option value="toast">Toast</option><option value="dialog">Dialog</option></select></div>
         <div id="p-knobs" style="display:grid;gap:14px"></div>
         <div class="bh-field"><span class="bh-label" id="p-wl">Frame width</span><div class="bh-seg" role="radiogroup" aria-labelledby="p-wl" id="p-w"><button role="radio" aria-checked="false" data-w="390">390</button><button role="radio" aria-checked="false" data-w="768">768</button><button role="radio" aria-checked="true" data-w="full">Fill</button></div></div>
         <label class="bh-switch"><input type="checkbox" id="p-world" checked><span class="knob"></span><span>World behind</span></label>

@@ -74,9 +74,9 @@
   font: 400 12px var(--f-label); letter-spacing: .06em; color: var(--fg); background: var(--bg); white-space: nowrap;
   box-shadow: 0 -2px 0 0 var(--lit), -2px 0 0 0 var(--lit), 2px 0 0 0 var(--dark), 0 2px 0 0 var(--dark), 0 4px 0 0 #0009; }
 @media (hover: hover) { .bh-btn:hover { --bg: var(--lit); } }
-.bh-btn:active, .bh-btn[aria-pressed="true"] { top: 2px; --bg: var(--s0);
+.bh-btn:active, .bh-btn[aria-pressed="true"], .bh-btn.on { top: 2px; --bg: var(--s0);
   box-shadow: 0 -2px 0 0 var(--dark), -2px 0 0 0 var(--dark), 2px 0 0 0 var(--lit), 0 2px 0 0 var(--lit); }
-.bh-btn[aria-pressed="true"] { color: var(--lamp-l); }
+.bh-btn[aria-pressed="true"], .bh-btn.on { color: var(--lamp-l); }
 .bh-btn--primary { --bg: var(--red1); --lit: var(--red2); --dark: var(--red0); --fg: #fff; }
 @media (hover: hover) { .bh-btn--primary:hover { --bg: var(--red2); } }
 .bh-btn--primary:active { --bg: var(--red0); }
@@ -111,12 +111,12 @@
 
 /* --- checkbox / radio: rivets */
 .bh-check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; min-height: var(--h-sm); }
-.bh-check input { appearance: none; flex: none; width: 16px; height: 16px; margin: 2px; background: var(--lamp-h); display: grid; place-content: center; cursor: pointer;
+.bh-check input, .bh-box { appearance: none; flex: none; width: 16px; height: 16px; margin: 2px; background: var(--lamp-h); display: grid; place-content: center; cursor: pointer;
   box-shadow: 0 -2px 0 0 var(--sh), -2px 0 0 0 var(--sh), 2px 0 0 0 var(--s2), 0 2px 0 0 var(--s2); }
-.bh-check input:checked::after { content: ""; width: 8px; height: 8px; background: var(--lamp-l); }
-.bh-check input[type=radio]:checked::after { background: var(--red1); }
+.bh-check input:checked::after, .bh-box:checked::after { content: ""; width: 8px; height: 8px; background: var(--lamp-l); }
+.bh-check input[type=radio]:checked::after, .bh-box[type=radio]:checked::after { background: var(--red1); }
 .bh-check input:indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--lamp-l); }
-.bh-check input:disabled, .bh-check input:disabled + span { opacity: .42; cursor: not-allowed; }
+.bh-check input:disabled, .bh-check input:disabled + span, .bh-box:disabled { opacity: .42; cursor: not-allowed; }
 /* parent + children: the parent shows mixed while some children are on, and a press sets them all */
 .bh-subgroup { display: grid; gap: 0; padding-left: 26px; }
 .bh-fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
@@ -126,13 +126,13 @@
 /* --- slider */
 .bh-slider { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; }
 .bh-slider > .bh-label { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; }
-.bh-slider input[type=range] { appearance: none; width: 100%; height: 8px; margin: 10px 2px; background: var(--well); cursor: pointer;
+.bh-slider input[type=range], .bh-range { appearance: none; width: 100%; height: 8px; margin: 10px 2px; background: var(--well); cursor: pointer;
   box-shadow: 0 -2px 0 0 var(--sh), 0 2px 0 0 var(--s2); }
-.bh-slider input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 24px; background: var(--s1);
+.bh-slider input[type=range]::-webkit-slider-thumb, .bh-range::-webkit-slider-thumb { appearance: none; width: 14px; height: 24px; background: var(--s1);
   box-shadow: inset 0 2px 0 0 var(--s2), inset 0 -2px 0 0 var(--sh), inset 2px 0 0 0 var(--s2), inset -2px 0 0 0 var(--sh), 0 2px 0 0 #0008; }
-.bh-slider input[type=range]::-moz-range-thumb { width: 14px; height: 24px; background: var(--s1); border: 0; border-radius: 0; }
-.bh-slider input[type=range]::-moz-range-progress { background: var(--lamp-d); height: 8px; }
-.bh-slider input[type=range]:disabled { opacity: .42; cursor: not-allowed; }
+.bh-slider input[type=range]::-moz-range-thumb, .bh-range::-moz-range-thumb { width: 14px; height: 24px; background: var(--s1); border: 0; border-radius: 0; }
+.bh-slider input[type=range]::-moz-range-progress, .bh-range::-moz-range-progress { background: var(--lamp-d); height: 8px; }
+.bh-slider input[type=range]:disabled, .bh-range:disabled { opacity: .42; cursor: not-allowed; }
 .bh-readout { font: 400 12px var(--f-label); min-width: 6ch; text-align: right; color: var(--lamp-l); background: var(--lamp-h); padding: 5px 8px; font-variant-numeric: tabular-nums;
   box-shadow: 0 -2px 0 0 var(--sh), 0 2px 0 0 var(--s2); }
 .bh-ticks { grid-column: 1; display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); margin-top: -6px; padding: 0 4px; }
@@ -150,12 +150,24 @@
 .bh-input::placeholder { color: var(--lamp-d); }
 .bh-input:disabled { opacity: .42; cursor: not-allowed; }
 .bh-input[aria-invalid="true"] { box-shadow: 0 -2px 0 0 var(--red0), -2px 0 0 0 var(--red0), 2px 0 0 0 var(--red1), 0 2px 0 0 var(--red1); }
+.bh-input--sm { width: auto; min-height: var(--h-sm); padding: 3px 8px; font-size: 12px; }
 textarea.bh-input { min-height: 84px; resize: vertical; line-height: 1.5; }
 select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
   background: var(--lamp-h) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' shape-rendering='crispEdges'%3E%3Cpath fill='%23D0ECFF' d='M0 0h10v2H8v2H6v2H4V4H2V2H0z'/%3E%3C/svg%3E") right 10px center / 10px 6px no-repeat; }
 .bh-search { position: relative; }
 .bh-search .bh-input { padding-left: 30px; }
 .bh-search::before { content: ""; position: absolute; left: 12px; top: 50%; width: 8px; height: 8px; margin-top: -6px; box-shadow: inset 0 0 0 2px var(--lamp-d); pointer-events: none; }
+
+/* --- level stepper: two half-height plates stacked, up over down, beside the floor's name.
+   Up climbs one floor, down descends one; each disables at its end, so the pair says where you are. */
+.bh-level { display: inline-flex; align-items: center; gap: 8px; margin: 2px; }
+.bh-updown { display: inline-grid; grid-template-rows: 1fr 1fr; gap: 4px; }
+.bh-updown .bh-btn { margin: 0; min-height: 0; width: 32px; height: 15px; padding: 0; }
+.bh-updown .bh-btn:active, .bh-updown .bh-btn.on { top: 1px; }
+.bh-arrow { display: block; width: 10px; height: 6px; background: currentColor;
+  clip-path: polygon(4px 0, 6px 0, 6px 2px, 8px 2px, 8px 4px, 10px 4px, 10px 6px, 0 6px, 0 4px, 2px 4px, 2px 2px, 4px 2px); }
+.bh-arrow--down { transform: scaleY(-1); }
+.bh-level-name { font: 400 11px var(--f-label); letter-spacing: .06em; color: var(--ink); min-width: 8ch; white-space: nowrap; }
 
 /* --- segmented control */
 .bh-seg { display: inline-flex; flex-wrap: wrap; margin: 2px; background: var(--lamp-h);
@@ -238,7 +250,10 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
   .bh-btn--sm { min-height: 36px; }
   .bh-btn--icon { width: var(--touch); }
   .bh-btn--icon.bh-btn--sm { width: 36px; }
+  .bh-updown .bh-btn { min-height: 0; width: 44px; height: 22px; padding: 0; }
   .bh-input { min-height: var(--touch); font-size: 16px; } /* 16px stops iOS zooming into the field */
+  .bh-input--sm { min-height: 36px; padding: 2px 8px; }
+  .bh-btn--sm { padding: 0 10px; }
   .bh-switch, .bh-check { min-height: var(--touch); }
   .bh-switch .knob { width: 44px; height: 22px; }
   .bh-switch .knob::after { width: 16px; height: 16px; }
@@ -262,6 +277,7 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
 @media (pointer: coarse) {
   .bh-btn, .bh-input, .bh-seg button, .bh-tabs [role=tab] { min-height: var(--touch); }
   .bh-btn--icon { width: var(--touch); }
+  .bh-updown .bh-btn { min-height: 0; width: 44px; height: 22px; padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bh * { animation: none !important; transition: none !important; }
