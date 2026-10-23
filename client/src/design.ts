@@ -122,4 +122,19 @@ document.querySelectorAll('[data-stepper]').forEach(st => {
   st.addEventListener('click', e => { const b = e.target.closest('[data-dz]'); if (!b || b.disabled) return; z += Number(b.dataset.dz); sync(); });
   sync();
 });
+
+// floor rail specimens: one plate per floor, highest first; a press moves the lamp
+document.querySelectorAll('[data-rail]').forEach(r => {
+  const n = Number(r.dataset.levels), surf = Number(r.dataset.surface); let at = Number(r.dataset.at);
+  for (let z = n - 1; z >= 0; z--) {
+    const d = z - surf, b = document.createElement('button');
+    b.className = 'bh-rail-floor' + (d === 0 ? ' is-surface' : ''); b.dataset.z = String(z);
+    b.textContent = d > 0 ? `+${d}` : d < 0 ? `\u2212${-d}` : '0';
+    b.setAttribute('aria-label', d > 0 ? `level +${d}` : `level ${d}`);
+    r.append(b);
+  }
+  const sync = () => r.querySelectorAll('.bh-rail-floor').forEach(b => b.setAttribute('aria-current', String(Number(b.dataset.z) === at)));
+  r.addEventListener('click', e => { const b = e.target.closest('.bh-rail-floor'); if (b) { at = Number(b.dataset.z); sync(); } });
+  sync();
+});
 build();

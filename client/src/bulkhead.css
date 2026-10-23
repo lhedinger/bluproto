@@ -169,6 +169,20 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
 .bh-arrow--down { transform: scaleY(-1); }
 .bh-level-name { font: 400 11px var(--f-label); letter-spacing: .06em; color: var(--ink); min-width: 8ch; white-space: nowrap; }
 
+/* --- floor rail: every floor as a plate in a vertical column, highest at the top, the
+   current one lit with a lamp on its left and the surface marked with a tick. One press
+   reaches any floor, and the column is a map of the stack. The phone's level control. */
+.bh-rail { display: grid; gap: 4px; padding: 6px; background: #14171de6; box-shadow: 0 0 0 2px var(--sh); }
+.bh-rail-cap { font: 500 9px var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-align: center; }
+.bh-rail-floor { appearance: none; border: 0; margin: 0; cursor: pointer; position: relative; width: 56px; height: 40px;
+  display: flex; align-items: center; justify-content: center; font: 400 12px var(--f-label); color: var(--dim);
+  background: var(--s0); box-shadow: 0 -2px 0 0 var(--s1), 0 2px 0 0 var(--sh); -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) { .bh-rail-floor:hover { color: var(--ink); } }
+.bh-rail-floor:active { background: var(--lamp-h); }
+.bh-rail-floor[aria-current="true"] { color: var(--lamp-l); background: var(--s1);
+  box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh), 0 2px 0 0 var(--sh), -8px 0 0 -2px var(--lamp-l); }
+.bh-rail-floor.is-surface::after { content: ""; position: absolute; left: -10px; top: 50%; width: 6px; height: 2px; margin-top: -1px; background: var(--dim); }
+
 /* --- segmented control */
 .bh-seg { display: inline-flex; flex-wrap: wrap; margin: 2px; background: var(--lamp-h);
   box-shadow: 0 -2px 0 0 var(--sh), -2px 0 0 0 var(--sh), 2px 0 0 0 var(--s2), 0 2px 0 0 var(--s2); }
@@ -251,6 +265,7 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
   .bh-btn--icon { width: var(--touch); }
   .bh-btn--icon.bh-btn--sm { width: 36px; }
   .bh-updown .bh-btn { min-height: 0; width: 44px; height: 22px; padding: 0; }
+  .bh-rail-floor { height: 44px; }
   .bh-input { min-height: var(--touch); font-size: 16px; } /* 16px stops iOS zooming into the field */
   .bh-input--sm { min-height: 36px; padding: 2px 8px; }
   .bh-btn--sm { padding: 0 10px; }
