@@ -187,6 +187,21 @@ function setBarOpen(open: boolean): void {
 barToggle.onclick = () => setBarOpen(!barEl.classList.contains('open'));
 barTools.addEventListener('click', ev => { if ((ev.target as HTMLElement).closest('button')) setBarOpen(false); });
 barTools.addEventListener('change', () => setBarOpen(false));
+/** A group whose controls are all hidden hides itself, label and divider with it:
+ *  a read-only viewer has no simulation or placing controls, and an empty group
+ *  would leave a lone divider on a wide screen and a bare label in the sheet.
+ *  Driven by an observer, so it follows whichever code shows or hides a control. */
+function syncBarGroups(): void {
+  for (const g of Array.from(barTools.querySelectorAll<HTMLElement>('.bar-group'))) {
+    const live = Array.from(g.children).some(c => !(c as HTMLElement).classList.contains('bar-glabel')
+      && (c as HTMLElement).style.display !== 'none' && !(c as HTMLElement).hidden && c.tagName !== 'INPUT');
+    // Only on a change: writing `hidden` re-fires the observer below even with the
+    // same value, and an unconditional write looped it forever and hung the page.
+    if (g.hidden !== !live) g.hidden = !live;
+  }
+}
+new MutationObserver(syncBarGroups).observe(barTools, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'hidden'] });
+syncBarGroups();
 window.addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && barEl.classList.contains('open')) { setBarOpen(false); ev.stopImmediatePropagation(); }
 }, true);
@@ -2050,7 +2065,7 @@ perfBtn.className = 'bh-btn bh-btn--sm bh-btn--icon';
 perfBtn.textContent = '⚙';
 perfBtn.title = 'settings (reloads with url flags)';
 perfBtn.setAttribute('aria-label', 'settings');
-document.getElementById('barTools')!.append(perfBtn); // last of the tools
+document.getElementById('barSettings')!.append(perfBtn); // its own group, last
 /** The settings dialog, as a Bulkhead panel: a header with its close, two groups
  *  of rivet checkboxes, and the commit in the footer. */
 function closePerfDlg(): boolean {

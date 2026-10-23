@@ -189,22 +189,36 @@
            background: #14171de6; box-shadow: inset 0 -2px 0 0 var(--sh); z-index: var(--z-bar); flex-wrap: wrap; }
     #bar select.bh-input { width: auto; }
     /* On a wide screen the tools are just more of the row; the toggle does not exist. */
+    /* Wide screen: the groups sit in the row, a shadow line between them. The views
+       group runs on from the population button beside it, so those read as one set. */
     #bar .bar-tools { display: contents; }
+    #bar .bar-group { display: flex; align-items: center; gap: 4px; padding-left: 10px; margin-left: 4px;
+                      box-shadow: inset 2px 0 0 0 var(--sh); }
+    #bar .bar-group--views { padding-left: 0; margin-left: 0; box-shadow: none; }
+    #bar .bar-group[hidden] { display: none; }
+    #bar .bar-glabel { display: none; }
+    #popBtn { margin-left: 10px; }
     #barToggle { display: none; }
     .bar-burger { display: block; width: 14px; height: 10px;
       background: linear-gradient(currentColor 0 2px, transparent 2px 4px, currentColor 4px 6px, transparent 6px 8px, currentColor 8px 10px); }
-    /* On a phone the toolbar is ONE row -- the floor stepper and the toggle --
+    /* On a phone the toolbar is ONE row -- the floor stepper, population and the toggle --
        and the tools fold into a sheet that drops from under it. Wrapping them took three
        rows of a 844 px screen before the world began. */
     @container bh (max-width: 599px) {
       #bar { flex-wrap: nowrap; }
       #bar.open { z-index: calc(var(--z-panel) + 1); }
       #barToggle { display: inline-flex; flex: none; margin-left: auto; }
+      #popBtn { margin-left: 6px; }
       #bar .bar-tools { display: none; }
-      #bar.open .bar-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: stretch;
+      #bar.open .bar-tools { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch;
         position: absolute; left: 0; right: 0; top: 100%; padding: 14px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left));
         background: var(--s0); box-shadow: 0 2px 0 0 var(--sh), 0 8px 0 0 #0007, inset 0 2px 0 0 var(--s2); }
-      #bar.open .bar-tools > .bh-btn, #bar.open .bar-tools > select { width: auto; margin: 2px; }
+      /* Phone sheet: one block per group, its label over a two-column grid of its controls. */
+      #bar.open .bar-group, #bar.open .bar-group--views { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+        padding: 0; margin: 0; box-shadow: none; }
+      #bar.open .bar-group[hidden] { display: none; }
+      #bar.open .bar-glabel { display: block; grid-column: 1 / -1; }
+      #bar.open .bar-group > .bh-btn, #bar.open .bar-group > select { width: auto; margin: 2px; }
     }
     @container bh (max-width: 599px) { #bar { gap: 6px; } #bar select.bh-input--sm { padding-right: 26px; background-position: right 8px center; } }
     #bar .bh-level[hidden], #bar [hidden] { display: none; }
@@ -369,28 +383,44 @@
       </div>
       <span class="bh-level-name" id="level" aria-live="polite"></span>
     </div>
-    <!-- the tools: inline on a wide screen, folded into a drop-down sheet on a phone -->
-    <div id="barTools" class="bar-tools">
-    <button class="bh-btn bh-btn--sm" id="drone" title="go to the next steward drone and follow it" style="display:none">drone</button>
-    <button class="bh-btn bh-btn--sm" id="pause">pause</button>
-    <select class="bh-input bh-input--sm" id="speed" title="simulation speed">
-      <option value="0.5">0.5×</option>
-      <option value="1" selected>1×</option>
-      <option value="2">2×</option>
-      <option value="4">4×</option>
-    </select>
-    <select class="bh-input bh-input--sm" id="spawn" title="what a tap on open ground drops">
-      <option value="" selected>tap: follow</option>
-      <option value="food">tap: food</option>
-      <option value="crate">tap: crate</option>
-      <option value="hazard">tap: hazard</option>
-      <option value="genome" disabled>tap: genome</option>
-    </select>
-    <button class="bh-btn bh-btn--sm" id="inject" title="load a .genome file, then use 'tap: genome' to place it">⤒ load genome</button>
-    <input id="injectFile" type="file" accept=".genome,.txt,text/plain" style="display:none" />
+    <!-- Population stays on the row at every width: it is the panel people open most,
+         and a phone's row has room for it beside the floor stepper. -->
     <button class="bh-btn bh-btn--sm" id="popBtn" title="population by role over time (p)">population</button>
-    <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
-    <button class="bh-btn bh-btn--sm" id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
+    <!-- The rest, in groups: inline on a wide screen (a divider between groups), folded
+         into a drop-down sheet on a phone (a label over each group). A group whose
+         controls are all hidden hides itself -- see syncBarGroups in main.ts. -->
+    <div id="barTools" class="bar-tools">
+      <div class="bar-group bar-group--views" role="group" aria-label="views">
+        <span class="bh-label bar-glabel">views</span>
+        <button class="bh-btn bh-btn--sm" id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
+        <button class="bh-btn bh-btn--sm" id="drone" title="go to the next steward drone and follow it" style="display:none">drone</button>
+        <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
+      </div>
+      <div class="bar-group" role="group" aria-label="simulation">
+        <span class="bh-label bar-glabel">simulation</span>
+        <button class="bh-btn bh-btn--sm" id="pause">pause</button>
+        <select class="bh-input bh-input--sm" id="speed" title="simulation speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+      <div class="bar-group" role="group" aria-label="placing">
+        <span class="bh-label bar-glabel">placing</span>
+        <select class="bh-input bh-input--sm" id="spawn" title="what a tap on open ground drops">
+          <option value="" selected>tap: follow</option>
+          <option value="food">tap: food</option>
+          <option value="crate">tap: crate</option>
+          <option value="hazard">tap: hazard</option>
+          <option value="genome" disabled>tap: genome</option>
+        </select>
+        <button class="bh-btn bh-btn--sm" id="inject" title="load a .genome file, then use 'tap: genome' to place it">⤒ load genome</button>
+        <input id="injectFile" type="file" accept=".genome,.txt,text/plain" style="display:none" />
+      </div>
+      <div class="bar-group" role="group" aria-label="settings" id="barSettings">
+        <span class="bh-label bar-glabel">settings</span>
+      </div>
     </div>
     <button class="bh-btn bh-btn--sm bh-btn--icon" id="barToggle" aria-expanded="false" aria-controls="barTools"
       aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
