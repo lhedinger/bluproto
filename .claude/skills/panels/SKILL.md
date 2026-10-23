@@ -276,8 +276,8 @@ Traps that cost real time here:
   number in the CSS is the number on screen; anything you add inside it should
   not reintroduce the gap.
 - **The toolbar wraps, except on a phone.** On a wide screen it grows a row when
-  debug reveals the constants button. Under 600 px it is one row (floor stepper,
-  population, a toggle) and the tools fold into a sheet under it (`#barTools`); a new
+  debug reveals the constants button. Under 600 px it is one row (population and a
+  toggle; the floors move to a rail on the right edge, `#floorRail`, under the thumb) and the tools fold into a sheet under it (`#barTools`); a new
   toolbar control goes into one of `#barTools`'s groups, or a phone never shows it.
   Population is the exception and stays on the row at every width. Panels open below
   `--bar-h`, which a `ResizeObserver` measures from the toolbar itself; the

@@ -232,6 +232,16 @@
              padding: 5px 8px; background: #14171de6; box-shadow: 0 0 0 2px var(--sh);
              font: 400 11px var(--f-label); letter-spacing: .04em; color: var(--dim);
              font-variant-numeric: tabular-nums; -webkit-tap-highlight-color: transparent; }
+    /* The floor rail is the phone's level control: a column on the right edge above the
+       minimap, where a right thumb rests. A wide screen keeps the stepper in the toolbar. */
+    #floorRail { position: fixed; z-index: var(--z-minimap); right: max(8px, env(safe-area-inset-right));
+                 bottom: calc(max(8px, env(safe-area-inset-bottom)) + 104px); }
+    #floorRail { display: none; }
+    @container bh (max-width: 599px) {
+      #floorRail:not([hidden]) { display: grid; }
+      #bar .bh-level { display: none; }
+      #popBtn { margin-left: 0; }
+    }
     @container bh (max-width: 599px) {
       /* beside the minimap there is room for the tick and the count; the seed goes */
       #stats { font-size: 10px; max-width: calc(100vw - 186px); }
@@ -457,6 +467,9 @@
     <div id="tuneBody"></div>
     <div class="foot" id="tuneFoot"></div>
   </div>
+  <!-- the phone's level control: every floor in a column on the right edge, under the thumb.
+       Built from the floor count on every hello (buildFloorRail in main.ts). -->
+  <nav class="bh-rail" id="floorRail" aria-label="floors" hidden><span class="bh-rail-cap" aria-hidden="true">floor</span></nav>
   <div id="stats">connecting…</div>
   <div id="toast"></div>
   <div id="inspect" class="panel"></div>

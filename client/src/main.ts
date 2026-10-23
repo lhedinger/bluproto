@@ -67,6 +67,8 @@ const levelCtl = document.getElementById('levelCtl') as HTMLElement;
 const levelLabel = document.getElementById('level') as HTMLElement;
 const levelUp = document.getElementById('levelUp') as HTMLButtonElement;
 const levelDown = document.getElementById('levelDown') as HTMLButtonElement;
+// The phone's level control: every floor in a column on the right edge (bh-rail).
+const floorRail = document.getElementById('floorRail') as HTMLElement;
 const droneBtn = document.getElementById('drone') as HTMLButtonElement;
 const injectBtn = document.getElementById('inject') as HTMLButtonElement;
 const injectFile = document.getElementById('injectFile') as HTMLInputElement;
@@ -667,6 +669,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       net.send({ cmd: 'level', z: currentLevel, below: BELOW_BODIES });
       // Only offer the level switch when the world actually has more than one.
       levelCtl.hidden = m.levels <= 1;
+      buildFloorRail();
       syncLevelCtl();
       // A world with no base carves no charge pads and spawns no drones, and a
       // reset can hand back one that does or does not — so the button asks on
@@ -1629,6 +1632,28 @@ function syncLevelCtl(): void {
   const top = hello ? hello.levels - 1 : 0;
   levelUp.disabled = currentLevel >= top;
   levelDown.disabled = currentLevel <= 0;
+  for (const b of Array.from(floorRail.querySelectorAll<HTMLButtonElement>('.bh-rail-floor'))) {
+    b.setAttribute('aria-current', String(Number(b.dataset.z) === currentLevel));
+  }
+}
+
+/** One plate per floor, highest at the top, labelled from the surface (+2, 0, −1)
+ *  the way levelName counts. Rebuilt on every hello, because a reset can hand back
+ *  a world with a different stack. A world of one floor shows no rail at all. */
+function buildFloorRail(): void {
+  for (const old of Array.from(floorRail.querySelectorAll('.bh-rail-floor'))) old.remove();
+  const n = hello ? hello.levels : 1;
+  floorRail.hidden = n <= 1;
+  for (let z = n - 1; z >= 0; z--) {
+    const d = z - surfaceZ();
+    const b = document.createElement('button');
+    b.className = 'bh-rail-floor' + (d === 0 ? ' is-surface' : '');
+    b.dataset.z = String(z);
+    b.textContent = d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0';
+    b.setAttribute('aria-label', levelName(z));
+    b.onclick = () => stepLevel(z - currentLevel);
+    floorRail.append(b);
+  }
 }
 
 /**
@@ -1637,7 +1662,7 @@ function syncLevelCtl(): void {
  * pair says which way you are going and stops at the ends instead of wrapping.
  */
 function stepLevel(dz: number): void {
-  if (!hello || hello.levels <= 1) return;
+  if (!hello || hello.levels <= 1 || dz === 0) return;
   // Changing level by hand ends the follow. Otherwise the two fight: the button
   // moves the viewer, the followed creature's next poll drags it straight back,
   // and the button looks broken. Asking for a floor outranks being glued to
