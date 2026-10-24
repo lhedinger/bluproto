@@ -102,7 +102,8 @@
     .panel > h3 .szbtn:active, .panel > h3 .x:active { top: 2px; background: var(--s0);
       box-shadow: 0 -2px 0 0 var(--sh), -2px 0 0 0 var(--sh), 2px 0 0 0 var(--s2), 0 2px 0 0 var(--s2); }
     @container bh (max-width: 599px) {
-      .panel > h3 .szbtn, .panel > h3 .x { width: 36px; height: 36px; }
+      .panel > h3 { min-height: 34px; padding: 5px 6px 5px 10px; font-size: 12px; }
+      .panel > h3 .szbtn, .panel > h3 .x { width: 24px; height: 24px; font-size: 12px; }
       /* compact: every corner panel is a sheet from the bottom edge */
       .panel.half, .panel.menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; max-height: 62vh;
         box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
@@ -130,10 +131,15 @@
     #pop h3 .win ~ .szbtn { margin-left: 0; }
     /* compact: the header wraps, and the window readout takes its own line under the
        choices, so the size and close plates stay on screen */
+    /* compact: the title gives way first -- it shrinks to an ellipsis on a zero
+       flex basis, so the choices and the size and close plates always share the
+       first line -- and the window readout takes a line of its own under them */
     @container bh (max-width: 599px) {
-      #pop h3 { flex-wrap: wrap; row-gap: 6px; }
+      #pop h3 { flex-wrap: wrap; row-gap: 4px; gap: 6px; }
+      #pop h3 .ttl { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #pop h3 button { padding: 4px 7px; font-size: 10px; }
       #pop h3 .win { order: 9; flex-basis: 100%; margin-left: 0; }
-      #pop h3 .win ~ .szbtn { margin-left: auto; }
+      #pop h3 .win ~ .szbtn { margin-left: 0; }
     }
     #popCv { width: 100%; flex: 1; min-height: 0; display: block;
              image-rendering: auto; touch-action: auto; }
@@ -210,15 +216,16 @@
       #barToggle { display: inline-flex; flex: none; margin-left: auto; }
       #popBtn { margin-left: 6px; }
       #bar .bar-tools { display: none; }
-      #bar.open .bar-tools { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch;
-        position: absolute; left: 0; right: 0; top: 100%; padding: 14px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left));
+      #bar.open .bar-tools { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch;
+        position: absolute; left: 0; right: 0; top: 100%; padding: 10px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
         background: var(--s0); box-shadow: 0 2px 0 0 var(--sh), 0 8px 0 0 #0007, inset 0 2px 0 0 var(--s2); }
-      /* Phone sheet: one block per group, its label over a two-column grid of its controls. */
-      #bar.open .bar-group, #bar.open .bar-group--views { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+      /* Phone sheet: one row per group, its label first and its controls after it at their
+         own width, wrapping only when a group runs out of room. */
+      #bar.open .bar-group, #bar.open .bar-group--views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
         padding: 0; margin: 0; box-shadow: none; }
       #bar.open .bar-group[hidden] { display: none; }
-      #bar.open .bar-glabel { display: block; grid-column: 1 / -1; }
-      #bar.open .bar-group > .bh-btn, #bar.open .bar-group > select { width: auto; margin: 2px; }
+      #bar.open .bar-glabel { display: block; flex: none; width: 84px; font-size: 10px; }
+      #bar.open .bar-group > .bh-btn:not(.bh-btn--icon), #bar.open .bar-group > select { width: auto; margin: 2px; }
     }
     @container bh (max-width: 599px) { #bar { gap: 6px; } #bar select.bh-input--sm { padding-right: 26px; background-position: right 8px center; } }
     #bar .bh-level[hidden], #bar [hidden] { display: none; }
@@ -436,7 +443,7 @@
       aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
   </div>
   <div id="pop" class="panel half">
-    <h3>population by
+    <h3><span class="ttl">population by</span>
       <button id="popModeRoles" class="on" title="headcount by trophic role">role</button>
       <button id="popModeLin" title="one clade's species over time — is each line breeding on, or is the warden reseeding it?">lineage</button>
       <button id="popClade" style="display:none"
