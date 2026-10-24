@@ -1353,7 +1353,7 @@ public abstract class NPC extends Entity {
 			// actually burns; the resting rhythm anchor (appetite returns in
 			// twice the time thirst does) survives as the GUT_PER_MASS identity.
 			double pace = Math.pow(leanMass(), -0.25) * eff;
-			thirst = Math.min(1.0, thirst + pace / thirstPeriod());
+			thirst = Math.min(1.0, thirst + pace * dryness() / thirstPeriod());
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
 			// keeps whatever partial refill had accrued. Some bodies carry their
@@ -1556,6 +1556,32 @@ public abstract class NPC extends Entity {
 
 	public double getHunger() {
 		return hunger;
+	}
+
+	/**
+	 * How much the air multiplies the thirst clock: the vapour deficit's share.
+	 * A body loses water to the air in proportion to how dry the air is, so a
+	 * tile's humidity scales the rate it dries at, {@code 1 + DRY_AIR_THIRST *
+	 * (1 - humidity)}, normalised to exactly 1 in the air the clock was tuned
+	 * in ({@link net.hedinger.prototype.engine.Climate#HUMID_REFERENCE}, open
+	 * ground in full sun). At 1.3 the air over water halves the rate, a dark
+	 * cave takes a third off it, and the drier air at a vent's mouth adds a
+	 * tenth: the first of the three fields to touch a clock, at the one seam
+	 * VITALS.md 8 names, and a reason to stand by the water or in the shade
+	 * before any clock charges for the sun.
+	 */
+	@Unit("of the thirst rate per unit of vapour deficit")
+	public static double DRY_AIR_THIRST = 1.3;
+
+	/** The air's multiplier on this body's thirst clock where it stands; 1 in
+	 *  the reference air, less in damp air, more in dry. */
+	protected double dryness() {
+		if (getWorld() == null) {
+			return 1.0;
+		}
+		double h = getWorld().climate().humidityAt(X, Y, getLvl());
+		return (1 + DRY_AIR_THIRST * (1 - h))
+				/ (1 + DRY_AIR_THIRST * (1 - net.hedinger.prototype.engine.Climate.HUMID_REFERENCE));
 	}
 
 	/**
