@@ -90,6 +90,20 @@ public class Tile {
 			FLORA_HEATHER = 3, FLORA_MOSS = 4;
 	private int flora = FLORA_GRASS;
 
+	/** Where this tile sits, for a reader handed the tile and not the place:
+	 *  the climate fields are looked up by coordinate. */
+	public int getCol() {
+		return col;
+	}
+
+	public int getRow() {
+		return row;
+	}
+
+	public int getLvl() {
+		return lvl;
+	}
+
 	/** Which plant the sward here is drawn as (one of the {@code FLORA_*}). */
 	public int getFlora() {
 		return flora;

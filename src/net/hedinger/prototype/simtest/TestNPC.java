@@ -3139,6 +3139,14 @@ public class TestNPC extends NPC {
 		case AgentIO.TILE_HAZARD:
 			return t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
 					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE ? 1 : 0;
+		case AgentIO.TILE_SHADE:
+			// Shade is a fact of the light field, not of the tile's type: a
+			// thicket, a cave mouth and the dark all qualify, open sky never.
+			return t.isWalkable() && getWorld().climate().lightAt(t.getCol() + 0.5, t.getRow() + 0.5,
+					t.getLvl()) <= AgentIO.SHADE_LIGHT ? 1 : 0;
+		case AgentIO.TILE_DAMP:
+			return t.isWalkable() && getWorld().climate().humidityAt(t.getCol() + 0.5, t.getRow() + 0.5,
+					t.getLvl()) >= AgentIO.DAMP_HUMID ? 1 : 0;
 		default:
 			if (!t.isWalkable()) {
 				return 0;

@@ -4987,6 +4987,98 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A mind can ask for shade, or for damp ground. The tile actuator names a
+	 * property of ground and the forage channel points at the nearest tile that
+	 * has it; the negative half of the constant pool now names the climate of
+	 * the ground, read off the fields rather than the tile's type. -0.1 is
+	 * shade: light under half of full sun, which a thicket, a cave mouth and
+	 * the dark all are and open sky never is. -0.25 is damp: humidity of half
+	 * or more, a pond's margin or a cave. S_ON_TILE answers for them as it does
+	 * for cover and water.
+	 *
+	 * <p>Pinned in a sunlit room with a thicket and a pond: a mind asking for
+	 * shade is pointed at the thicket and walks into it until the ground
+	 * underfoot says so; one asking for damp is pointed at the water's edge.
+	 * Open ground in full sun is neither. Larger negatives fall back to food
+	 * until there is a comfort band to read warm and cool against.
+	 */
+	static class AMindCanAskForShadeAndDamp extends ExploreScenario {
+		@Override
+		public void run() {
+			seed(23);
+			World w = barren(24, 16);
+			for (int x = 4; x <= 6; x++) {
+				for (int y = 6; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_COVER); // a thicket: shade, west
+				}
+			}
+			for (int x = 17; x <= 19; x++) {
+				for (int y = 6; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WATER); // damp margin, east
+				}
+			}
+			assertEquals("-0.1 names shade", AgentIO.TILE_SHADE, AgentIO.tileWanted(-0.1));
+			assertEquals("-0.25 names damp", AgentIO.TILE_DAMP, AgentIO.tileWanted(-0.25));
+			assertEquals("the larger negatives fall back to food for now", AgentIO.TILE_FOOD, AgentIO.tileWanted(-1));
+			assertEquals("and the positive half is what it was", AgentIO.TILE_COVER, AgentIO.tileWanted(0.25));
+
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertTrue("the thicket is shade", c.lightAt(5.5, 7.5, 0) <= AgentIO.SHADE_LIGHT);
+			assertGreater("the water's edge is damp", c.humidityAt(16.5, 7.5, 0), AgentIO.DAMP_HUMID);
+			assertGreater("open ground is neither", c.lightAt(11.5, 7.5, 0), AgentIO.SHADE_LIGHT);
+			assertLess("", c.humidityAt(11.5, 7.5, 0), AgentIO.DAMP_HUMID);
+
+			for (double want : new double[] { -0.1, -0.25 }) {
+				boolean shade = want == -0.1;
+				Mind m = new Mind() {
+					@Override
+					public void think(double[] s, double[] a) {
+						a[AgentIO.A_TILE] = want;
+						a[AgentIO.A_SEEK] = 0.1; // the ground I asked for
+						// Stand until the ground is in sight: the scan for a new want
+						// runs on a sense tick, and a body that explored meanwhile
+						// would be measured from wherever it had wandered to.
+						a[AgentIO.A_THROTTLE] = s[AgentIO.S_FORAGE_PROX] > 0 ? 1 : 0;
+					}
+				};
+				Genome g = new Genome();
+				g.size = 6;
+				g.losRange = 12;
+				g.losFov = Math.PI * 2; // all round, so which way it happens to face is not the test
+				TestNPC b = TestNPC.minded(11.5, 7.5, 0, g, m).withSpeed(0.08);
+				w.spawnEntity(b);
+				w.think();
+				// A changed want is heard on a sense tick, and otherwise the sweep
+				// runs on its own slow period; wait out both so the scan has run
+				// for the new want whichever tick the body happened to start on.
+				tick(w, TestNPC.FORAGE_SCAN_PERIOD + TestNPC.SENSE_EVERY + 2);
+				double[] s = new double[AgentIO.NUM_SENSORS];
+				b.senseInto(s);
+				assertEquals("on open ground the body is not on what it asked for", 0, (long) s[AgentIO.S_ON_TILE]);
+				double bearing = s[AgentIO.S_FORAGE_BEARING] * Math.PI; // relative to a facing of 0 (east)
+				assertGreater("the channel points at " + (shade ? "the thicket" : "the water"), s[AgentIO.S_FORAGE_PROX], 0);
+				double heading = b.getDirection() + bearing;
+				assertTrue((shade ? "shade lies west" : "damp lies east") + " (" + String.format("%.2f", Math.cos(heading)) + ")",
+						shade ? Math.cos(heading) < -0.5 : Math.cos(heading) > 0.5);
+				boolean arrived = false;
+				for (int t = 0; t < 400 && !arrived; t++) {
+					tick(w, 1);
+					b.senseInto(s);
+					arrived = s[AgentIO.S_ON_TILE] > 0.5;
+				}
+				assertTrue("and the body walks onto it (" + String.format("%.1f,%.1f", b.getX(), b.getY()) + ")", arrived);
+				if (shade) {
+					assertTrue("where the light is low", c.lightAt(b.getX(), b.getY(), 0) <= AgentIO.SHADE_LIGHT);
+				} else {
+					assertGreater("where the air is damp", c.humidityAt(b.getX(), b.getY(), 0), AgentIO.DAMP_HUMID);
+				}
+				b.remove();
+			}
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -19941,6 +20033,7 @@ public class SimTests {
 				new AFounderDrawsItsForagePace(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
+				new AMindCanAskForShadeAndDamp(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
