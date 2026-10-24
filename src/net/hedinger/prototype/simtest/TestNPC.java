@@ -2613,6 +2613,14 @@ public class TestNPC extends NPC {
 		// property? The forage channel looks for it in sight; this says whether
 		// the body is already there -- in cover, in the mud, on food.
 		s[AgentIO.S_ON_TILE] = onWantedTile() ? 1 : 0;
+		// The climate underfoot: the three fields as the body feels them where
+		// it stands. Read every sense tick and costing nothing yet -- what they
+		// will do to the clocks lands after a lineage can act on them.
+		net.hedinger.prototype.engine.Climate climate = getWorld().climate();
+		s[AgentIO.S_LIGHT] = climate.lightAt(X, Y, getLvl());
+		s[AgentIO.S_HUMID] = climate.humidityAt(X, Y, getLvl());
+		s[AgentIO.S_WARMTH] = clamp((climate.temperatureAt(X, Y, getLvl())
+				- net.hedinger.prototype.engine.Climate.TEMP_SURFACE) / AgentIO.WARMTH_SPAN, -1, 1);
 		// The hunt is decided once, here, and both channels that speak for it read
 		// the same answer. A hunter has two names for its food -- SEEK_PREY and,
 		// because its forage IS a body, SEEK_FORAGE -- and if those resolve
@@ -3131,6 +3139,14 @@ public class TestNPC extends NPC {
 		case AgentIO.TILE_HAZARD:
 			return t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE
 					|| t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_MIRE ? 1 : 0;
+		case AgentIO.TILE_SHADE:
+			// Shade is a fact of the light field, not of the tile's type: a
+			// thicket, a cave mouth and the dark all qualify, open sky never.
+			return t.isWalkable() && getWorld().climate().lightAt(t.getCol() + 0.5, t.getRow() + 0.5,
+					t.getLvl()) <= AgentIO.SHADE_LIGHT ? 1 : 0;
+		case AgentIO.TILE_DAMP:
+			return t.isWalkable() && getWorld().climate().humidityAt(t.getCol() + 0.5, t.getRow() + 0.5,
+					t.getLvl()) >= AgentIO.DAMP_HUMID ? 1 : 0;
 		default:
 			if (!t.isWalkable()) {
 				return 0;

@@ -925,6 +925,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
   if ('fat' in d) rows.push(fatRow(d));
+  if ('light' in d) rows.push(row('climate', climateText(d)));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
@@ -1061,6 +1062,7 @@ function attributesTab(d: Record<string, any>): string {
   if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
   if ('fat' in d) status.push(fatRow(d));
+  if ('light' in d) status.push(row('climate', climateText(d)));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   status.push(...carcassRows(d));
   // Which way round the hold goes, the same way the card says it: `attachedTo`
@@ -1308,6 +1310,13 @@ function carcassRows(d: Record<string, any>): string[] {
   return out;
 }
 
+// The climate where the body stands, as its three climate senses read it:
+// light and humidity as shares, the temperature in degrees. One row, so the
+// card says what the creature can feel without growing three bars for it.
+function climateText(d: Record<string, any>): string {
+  return `light ${Math.round(d.light * 100)}% · humid ${Math.round(d.humid * 100)}% · ${d.temperature.toFixed(0)} °C`;
+}
+
 function row(k: string, v: unknown): string {
   return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
 }
@@ -1471,7 +1480,8 @@ const SENSOR_KIND: Record<string, string> = {
   item_prox: 'mag', prey_prox: 'mag', threat_prox: 'mag', health: 'mag',
   near_bearing: 'brg', item_bearing: 'brg', prey_bearing: 'brg',
   threat_bearing: 'brg', kin_bearing: 'brg',
-  near_sizeadv: 'bip', clock: 'bip',
+  near_sizeadv: 'bip', clock: 'bip', warmth: 'bip',
+  light: 'mag', humid: 'mag',
   blocked: 'bool', whisker_l: 'bool', whisker_r: 'bool', hazard_ahead: 'bool',
   item_kind: 'item_kind', carried: 'carried',
 };

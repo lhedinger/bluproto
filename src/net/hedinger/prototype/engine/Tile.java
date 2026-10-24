@@ -65,6 +65,16 @@ public class Tile {
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
 
+	/** How far the air can lower a tile's cap, as a share: the driest air in
+	 *  the world, at a vent's mouth, leaves half. */
+	@Unit("of the cap")
+	public static double MOIST_CAP_MIN = 0.5;
+	/** How far the air can raise it: the air over water and the shade carry a
+	 *  quarter more sward than the open meadow. A margin, not a second field --
+	 *  the soil's fertility is still the ceiling the air bends. */
+	@Unit("of the cap")
+	public static double MOIST_CAP_MAX = 1.25;
+
 	// Fertility scales this tile's vegetation cap: 1 = fully lush, 0 = barren.
 	// A fertility field (see World.generateFertility) makes grass grow patchy,
 	// so the map has rich and poor habitats instead of uniform pasture.
@@ -89,6 +99,20 @@ public class Tile {
 	public static final int FLORA_GRASS = 0, FLORA_FERN = 1, FLORA_FLOWERS = 2,
 			FLORA_HEATHER = 3, FLORA_MOSS = 4;
 	private int flora = FLORA_GRASS;
+
+	/** Where this tile sits, for a reader handed the tile and not the place:
+	 *  the climate fields are looked up by coordinate. */
+	public int getCol() {
+		return col;
+	}
+
+	public int getRow() {
+		return row;
+	}
+
+	public int getLvl() {
+		return lvl;
+	}
 
 	/** Which plant the sward here is drawn as (one of the {@code FLORA_*}). */
 	public int getFlora() {
@@ -230,9 +254,30 @@ public class Tile {
 		return type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW;
 	}
 
-	/** The most vegetation this tile can hold, given its fertility. */
+	/**
+	 * How much the air moves this tile's vegetation cap, as a multiplier: the
+	 * humidity here against the humidity its plant was tuned in
+	 * ({@link net.hedinger.prototype.engine.Climate#referenceHumidity}),
+	 * bounded by {@link #MOIST_CAP_MIN} and {@link #MOIST_CAP_MAX}. Water
+	 * limits biomass: a pond's margin and the shade carry more sward than the
+	 * open sunlit meadow, the parched air at a vent's mouth less. Exactly 1 on
+	 * open ground in full sun, where every grass number was measured, and
+	 * exactly 1 in the cave's own air for the cave's plant, so the fungus is
+	 * not fed for the cave being damp. 1 with no world to read.
+	 */
+	public double moisture() {
+		if (world == null) {
+			return 1.0;
+		}
+		double h = world.climate().humidityAt(col + 0.5, row + 0.5, lvl);
+		double ratio = h / net.hedinger.prototype.engine.Climate.referenceHumidity(world, lvl);
+		return Math.max(MOIST_CAP_MIN, Math.min(MOIST_CAP_MAX, ratio));
+	}
+
+	/** The most vegetation this tile can hold, given its fertility and the air:
+	 *  the soil's ceiling times the moisture's share of it. */
 	public double vegetationCap() {
-		return VEG_MAX * fertility;
+		return VEG_MAX * fertility * moisture();
 	}
 
 	/** True where vegetation can grow: grassy floor, the thin sward rocky
@@ -325,6 +370,14 @@ public class Tile {
 		if (Utils.random(2) == 1) {
 			variant = (1 + Utils.random(10 - 1));
 		}
+	}
+
+	/** Tells a tile which world it was laid in. The grid lays most of its
+	 *  tiles through the constructors that take no world, and a tile that
+	 *  reads the world's fields -- its moisture -- needs to know whose they
+	 *  are; without one it reads as the reference air. */
+	void placedIn(World w) {
+		world = w;
 	}
 
 	/**

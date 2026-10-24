@@ -203,6 +203,16 @@ stay warm) and slows mending; darkness slows intake for sighted foragers.
 None of them need new vitals — they modulate the periods in §5, which is why
 the periods are named constants rather than folded into magic drain values.
 
+The first two are in as one law: **the air's vapour pressure deficit multiplies
+the thirst clock** (`NPC.dryness`), by `1 + DRY_AIR_THIRST · deficit`, the
+deficit being the saturation pressure at the tile's temperature (Tetens) times
+how far from saturated its air is, measured against the air the clock was tuned
+in -- open ground in full sun at the ground's own temperature, which reads
+exactly 1. Damp air slows it (the air over water takes most of the rate off, a
+dark cave nearly half), cool air a little, and hot dry air at a vent's mouth
+triples it. Every body on an ordinary sunlit meadow runs as it did; the
+pressure is only ever the difference from that.
+
 ## 9. Open questions — resolved
 
 All five went as proposed, and are now what the code does:

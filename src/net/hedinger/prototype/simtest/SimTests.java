@@ -2859,13 +2859,13 @@ public class SimTests {
 					count[Tile.FLORA_MOSS], rocky / 4);
 			// The flora is a look, not a diet: the same world generated again reads
 			// the same fertility on every tile whatever it wears, and a tile's cap
-			// is fertility alone.
+			// is fertility and the air alone.
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
 					Tile t = w.getTile(x, y, z);
 					if (t != null && t.getFlora() != Tile.FLORA_GRASS) {
 						assertTrue("the cap ignores the flora",
-								Math.abs(Tile.VEG_MAX * t.getFertility() - t.vegetationCap()) < 1e-12);
+								Math.abs(Tile.VEG_MAX * t.getFertility() * t.moisture() - t.vegetationCap()) < 1e-12);
 					}
 				}
 			}
@@ -4918,6 +4918,309 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A mind senses the climate underfoot. Three channels read the world's
+	 * three fields where the body stands: light 0..1, humidity 0..1, and warmth
+	 * as the tile's temperature against the ground's own over a span of
+	 * degrees, -1..1. They cost nothing and feed nothing yet; they land first
+	 * because a pressure a creature cannot perceive only kills it at random
+	 * (ROADMAP 2b), and a lineage that can read "dark", "damp" and "warmer
+	 * than usual" can act on them before any of the three charges a clock.
+	 *
+	 * <p>Pinned on a two-storey room with a pond upstairs and a vent down: open
+	 * ground is full sun and the ground's own warmth, the pond's edge is
+	 * wetter than the open, the cave is dark and a touch cool, and the vent's
+	 * mouth pegs the warmth sense. Each reading is the field's own number, so
+	 * the sense cannot drift from what the viewer draws.
+	 */
+	static class AMindSensesTheClimateUnderfoot extends Scenario {
+		private double[] senseAt(World w, double x, double y, int z) {
+			Genome g = new Genome();
+			g.size = 6;
+			TestNPC b = TestNPC.minded(x, y, z, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			});
+			w.spawnEntity(b);
+			w.think();
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			b.senseInto(s);
+			b.remove();
+			return s;
+		}
+
+		@Override
+		public void run() {
+			seed(19);
+			World w = room(16, 12, 2);
+			for (int x = 10; x <= 12; x++) {
+				for (int y = 4; y <= 6; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond upstairs
+				}
+			}
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_VENT); // a vent in the cave
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertEquals("every sense has a name", AgentIO.NUM_SENSORS, AgentIO.SENSOR_NAMES.length);
+
+			double[] open = senseAt(w, 3.5, 9.5, 1);
+			assertNear("open ground is full sun", 1.0, open[AgentIO.S_LIGHT], 1e-12);
+			assertNear("and the ground's own warmth", 0.0, open[AgentIO.S_WARMTH], 1e-12);
+			assertNear("and reads the field's humidity", c.humidityAt(3.5, 9.5, 1), open[AgentIO.S_HUMID], 1e-12);
+
+			double[] shore = senseAt(w, 9.5, 5.5, 1);
+			assertGreater("the pond's edge is wetter than the open",
+					shore[AgentIO.S_HUMID], open[AgentIO.S_HUMID] + 0.1);
+
+			double[] cave = senseAt(w, 14.5, 10.5, 0); // the far corner, out of the vent's reach
+			assertNear("the cave is dark", 0.0, cave[AgentIO.S_LIGHT], 1e-12);
+			assertNear("and reads the field's warmth",
+					(c.temperatureAt(14.5, 10.5, 0) - net.hedinger.prototype.engine.Climate.TEMP_SURFACE)
+							/ AgentIO.WARMTH_SPAN, cave[AgentIO.S_WARMTH], 1e-12);
+			assertLess("which is a touch cool", cave[AgentIO.S_WARMTH], 0);
+			assertGreater("and damp", cave[AgentIO.S_HUMID], open[AgentIO.S_HUMID]);
+
+			double[] vent = senseAt(w, 4.5, 4.5, 0);
+			assertNear("the vent's mouth pegs the warmth sense", 1.0, vent[AgentIO.S_WARMTH], 1e-12);
+			assertLess("and its heat dries the air", vent[AgentIO.S_HUMID], cave[AgentIO.S_HUMID]);
+		}
+	}
+
+
+	/**
+	 * A mind can ask for shade, or for damp ground. The tile actuator names a
+	 * property of ground and the forage channel points at the nearest tile that
+	 * has it; the negative half of the constant pool now names the climate of
+	 * the ground, read off the fields rather than the tile's type. -0.1 is
+	 * shade: light under half of full sun, which a thicket, a cave mouth and
+	 * the dark all are and open sky never is. -0.25 is damp: humidity of half
+	 * or more, a pond's margin or a cave. S_ON_TILE answers for them as it does
+	 * for cover and water.
+	 *
+	 * <p>Pinned in a sunlit room with a thicket and a pond: a mind asking for
+	 * shade is pointed at the thicket and walks into it until the ground
+	 * underfoot says so; one asking for damp is pointed at the water's edge.
+	 * Open ground in full sun is neither. Larger negatives fall back to food
+	 * until there is a comfort band to read warm and cool against.
+	 */
+	static class AMindCanAskForShadeAndDamp extends ExploreScenario {
+		@Override
+		public void run() {
+			seed(23);
+			World w = barren(24, 16);
+			for (int x = 4; x <= 6; x++) {
+				for (int y = 6; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_COVER); // a thicket: shade, west
+				}
+			}
+			for (int x = 17; x <= 19; x++) {
+				for (int y = 6; y <= 9; y++) {
+					w.setTile(x, y, 0, Tile.TileType.TYPE_WATER); // damp margin, east
+				}
+			}
+			assertEquals("-0.1 names shade", AgentIO.TILE_SHADE, AgentIO.tileWanted(-0.1));
+			assertEquals("-0.25 names damp", AgentIO.TILE_DAMP, AgentIO.tileWanted(-0.25));
+			assertEquals("the larger negatives fall back to food for now", AgentIO.TILE_FOOD, AgentIO.tileWanted(-1));
+			assertEquals("and the positive half is what it was", AgentIO.TILE_COVER, AgentIO.tileWanted(0.25));
+
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertTrue("the thicket is shade", c.lightAt(5.5, 7.5, 0) <= AgentIO.SHADE_LIGHT);
+			assertGreater("the water's edge is damp", c.humidityAt(16.5, 7.5, 0), AgentIO.DAMP_HUMID);
+			assertGreater("open ground is neither", c.lightAt(11.5, 7.5, 0), AgentIO.SHADE_LIGHT);
+			assertLess("", c.humidityAt(11.5, 7.5, 0), AgentIO.DAMP_HUMID);
+
+			for (double want : new double[] { -0.1, -0.25 }) {
+				boolean shade = want == -0.1;
+				Mind m = new Mind() {
+					@Override
+					public void think(double[] s, double[] a) {
+						a[AgentIO.A_TILE] = want;
+						a[AgentIO.A_SEEK] = 0.1; // the ground I asked for
+						// Stand until the ground is in sight: the scan for a new want
+						// runs on a sense tick, and a body that explored meanwhile
+						// would be measured from wherever it had wandered to.
+						a[AgentIO.A_THROTTLE] = s[AgentIO.S_FORAGE_PROX] > 0 ? 1 : 0;
+					}
+				};
+				Genome g = new Genome();
+				g.size = 6;
+				g.losRange = 12;
+				g.losFov = Math.PI * 2; // all round, so which way it happens to face is not the test
+				TestNPC b = TestNPC.minded(11.5, 7.5, 0, g, m).withSpeed(0.08);
+				w.spawnEntity(b);
+				w.think();
+				// A changed want is heard on a sense tick, and otherwise the sweep
+				// runs on its own slow period; wait out both so the scan has run
+				// for the new want whichever tick the body happened to start on.
+				tick(w, TestNPC.FORAGE_SCAN_PERIOD + TestNPC.SENSE_EVERY + 2);
+				double[] s = new double[AgentIO.NUM_SENSORS];
+				b.senseInto(s);
+				assertEquals("on open ground the body is not on what it asked for", 0, (long) s[AgentIO.S_ON_TILE]);
+				double bearing = s[AgentIO.S_FORAGE_BEARING] * Math.PI; // relative to a facing of 0 (east)
+				assertGreater("the channel points at " + (shade ? "the thicket" : "the water"), s[AgentIO.S_FORAGE_PROX], 0);
+				double heading = b.getDirection() + bearing;
+				assertTrue((shade ? "shade lies west" : "damp lies east") + " (" + String.format("%.2f", Math.cos(heading)) + ")",
+						shade ? Math.cos(heading) < -0.5 : Math.cos(heading) > 0.5);
+				boolean arrived = false;
+				for (int t = 0; t < 400 && !arrived; t++) {
+					tick(w, 1);
+					b.senseInto(s);
+					arrived = s[AgentIO.S_ON_TILE] > 0.5;
+				}
+				assertTrue("and the body walks onto it (" + String.format("%.1f,%.1f", b.getX(), b.getY()) + ")", arrived);
+				if (shade) {
+					assertTrue("where the light is low", c.lightAt(b.getX(), b.getY(), 0) <= AgentIO.SHADE_LIGHT);
+				} else {
+					assertGreater("where the air is damp", c.humidityAt(b.getX(), b.getY(), 0), AgentIO.DAMP_HUMID);
+				}
+				b.remove();
+			}
+		}
+	}
+
+
+	/**
+	 * Dry air dries a body, damp air slows it, and hot air dries it fastest.
+	 * The air a tile holds multiplies the thirst clock by its vapour pressure
+	 * deficit -- the saturation pressure at the tile's temperature times how
+	 * far from saturated the air is, so heat and dryness are one law -- at the
+	 * one seam VITALS.md 8 names, normalised to exactly 1 in the air the clock
+	 * was tuned in, open ground in full sun at the ground's own temperature, so
+	 * a body on an ordinary meadow dries at the rate it always did.
+	 *
+	 * <p>Pinned on inert bodies that cannot drink: one on open sunlit ground,
+	 * whose thirst after a spell is what the bare clock says; one two tiles
+	 * from a pond, out of reach of a drink but in its damp air, which dries
+	 * slower by the deficit's share read off the field; one in a cave, slower
+	 * still; one two tiles from a vent's mouth, in hot parched air, far faster;
+	 * and one beside the coolant run, in cool air, a little slower than the
+	 * open.
+	 */
+	static class DryAirDriesABodyAndDampAirSlowsIt extends Scenario {
+		private TestNPC inert(World w, double x, double y, int z) {
+			Genome g = new Genome();
+			g.size = 8; // the reference body
+			TestNPC b = TestNPC.minded(x, y, z, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			}).grown().withHunger(0.3).withHydration(1.0);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		@Override
+		public void run() {
+			seed(29);
+			World w = room(20, 14, 2);
+			for (int x = 3; x <= 5; x++) {
+				for (int y = 5; y <= 8; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond, upstairs
+				}
+			}
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertNear("open sunlit ground is the reference air",
+					net.hedinger.prototype.engine.Climate.HUMID_REFERENCE, c.humidityAt(15.5, 10.5, 1), 1e-9);
+			assertNear("and reads exactly 1", 1.0, NPC.dryness(c.temperatureAt(15.5, 10.5, 1), c.humidityAt(15.5, 10.5, 1)), 1e-12);
+			TestNPC open = inert(w, 15.5, 10.5, 1);
+			TestNPC shore = inert(w, 7.5, 6.5, 1); // two tiles off the water: damp air, no drink
+			TestNPC cave = inert(w, 15.5, 10.5, 0);
+			// Heat and cold, each in a room of its own so the anomaly reaches
+			// nothing else: a vent's mouth and the coolant run, the body two
+			// tiles off each.
+			World hot = room(14, 10), cold = room(14, 10);
+			hot.setTile(4, 5, 0, Tile.TileType.TYPE_VENT);
+			cold.setTile(4, 5, 0, Tile.TileType.TYPE_COOLANT);
+			TestNPC baked = inert(hot, 6.5, 5.5, 0), chilled = inert(cold, 6.5, 5.5, 0);
+			assertGreater("two tiles from a vent the air is hot", hot.climate().temperatureAt(6.5, 5.5, 0), 25);
+			assertLess("two tiles from the coolant run it is cool", cold.climate().temperatureAt(6.5, 5.5, 0), 14);
+			w.think();
+			hot.think();
+			cold.think();
+			int spell = (int) (NPC.THIRST_PERIOD / 3);
+			tick(w, spell);
+			tick(hot, spell);
+			tick(cold, spell);
+			assertTrue("the shore body never drank", !shore.nearWater());
+			double bare = spell / NPC.THIRST_PERIOD; // the clock at the reference body, undisturbed
+			assertNear("on open sunlit ground the clock runs as it always did",
+					bare, open.getThirst(), bare * 0.02);
+			double deficit = NPC.dryness(c.temperatureAt(7.5, 6.5, 1), c.humidityAt(7.5, 6.5, 1));
+			assertLess("damp air by the pond slows it", shore.getThirst(), open.getThirst() * 0.9);
+			assertNear("by the vapour deficit's share", open.getThirst() * deficit, shore.getThirst(), bare * 0.02);
+			assertLess("and a cave's air slows it too", cave.getThirst(), open.getThirst() * 0.8);
+			assertGreater("hot parched air by a vent dries a body far faster", baked.getThirst(), open.getThirst() * 1.8);
+			assertNear("by the deficit's share, again",
+					Math.min(1.0, open.getThirst() * NPC.dryness(hot.climate().temperatureAt(6.5, 5.5, 0), hot.climate().humidityAt(6.5, 5.5, 0))),
+					baked.getThirst(), bare * 0.05);
+			assertLess("and cool air by the coolant run dries it slower than the open",
+					chilled.getThirst(), open.getThirst() * 0.97);
+		}
+	}
+
+
+	/**
+	 * Moist air holds more grass. Water limits biomass, so a tile's vegetation
+	 * cap is its fertility times the air's share: the humidity here against the
+	 * air its plant was tuned in, bounded either way. Exactly the old cap on
+	 * open ground in full sun, where every grass number was measured, and
+	 * exactly the old cap for a fungus bed in the cave's own air, so the cave
+	 * plant is not fed for the cave being damp; a pond's margin and the shade
+	 * under a thicket carry more, the parched air at a vent's mouth less.
+	 */
+	static class MoistAirHoldsMoreGrass extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(20, 14, 2);
+			for (int x = 3; x <= 5; x++) {
+				for (int y = 5; y <= 8; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond upstairs
+				}
+			}
+			w.setTile(15, 4, 1, Tile.TileType.TYPE_COVER); // a thicket, upstairs
+			// A fungus bed in the dark: the two-storey room punches holes at random
+			// and a cave tile under one is lit, and sun dries air wherever it falls.
+			// The claim is about the cave's own air, so the bed goes where no sun
+			// reaches.
+			int fx = -1, fy = -1;
+			for (int y = 2; y < 12 && fx < 0; y++) {
+				for (int x = 2; x < 18; x++) {
+					if (w.climate().lightAt(x + 0.5, y + 0.5, 0) == 0) {
+						fx = x;
+						fy = y;
+						break;
+					}
+				}
+			}
+			assertTrue("the cave has a dark tile for a fungus bed", fx >= 0);
+			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FUNGUS);
+			// The vent gets a room of its own: its warmth carries, faintly, to
+			// every tile of a cave, and the fungus claim is about undisturbed air.
+			World v = room(12, 10, 2);
+			v.setTile(3, 5, 0, Tile.TileType.TYPE_VENT);
+			Tile open = w.getTile(15, 10, 1), shore = w.getTile(6, 6, 1), shade = w.getTile(15, 4, 1);
+			Tile fungus = w.getTile(fx, fy, 0), byVent = v.getTile(4, 5, 0);
+			assertNear("open ground in full sun holds exactly what it always did",
+					Tile.VEG_MAX * open.getFertility(), open.vegetationCap(), 1e-12);
+			assertNear("and a fungus bed in the cave's own air too",
+					Tile.VEG_MAX * fungus.getFertility(), fungus.vegetationCap(), 1e-12);
+			assertGreater("the pond's margin holds more", shore.vegetationCap(), open.vegetationCap() * 1.1);
+			assertGreater("and so does the shade under a thicket", shade.vegetationCap(), open.vegetationCap() * 1.1);
+			assertTrue("neither past the margin the air is allowed",
+					shore.moisture() <= Tile.MOIST_CAP_MAX && shade.moisture() <= Tile.MOIST_CAP_MAX);
+			assertLess("the parched air at a vent's mouth holds less", byVent.vegetationCap(),
+					Tile.VEG_MAX * byVent.getFertility() * 0.9);
+			assertTrue("and not below the floor", byVent.moisture() >= Tile.MOIST_CAP_MIN);
+			// The cap is a ceiling the grass actually fills: the margin grows past the
+			// old maximum.
+			tick(w, (int) Tile.REGROW_DELAY + 8000);
+			assertGreater("the margin grows past the meadow's old maximum",
+					shore.getVegetation(w.getTick()), Tile.VEG_MAX * 1.05);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -5566,8 +5869,17 @@ public class SimTests {
 	 * underground left at the default -- so a fungus bed laid in a surface
 	 * biodome outgrew the same bed in a cave, and the plateau's rocky sward
 	 * lagged the skirt it is made of. Two plants, two rates, read off the type.
+	 *
+	 * <p>Compared as shares of each tile's cap: the cap is the ground's and
+	 * the air's (a bed under a hole in the cave roof sits in sun-dried air and
+	 * holds a little less), the rate is the plant's, and a logistic curve from
+	 * the same share at the same rate reaches the same share whatever the cap.
 	 */
 	static class RegrowthIsThePlantsNotTheFloors extends Scenario {
+		private static double share(Tile t, long now) {
+			return t.getVegetation(now) / t.vegetationCap();
+		}
+
 		@Override
 		public void run() {
 			seed(5);
@@ -5582,20 +5894,20 @@ public class SimTests {
 			for (Tile t : new Tile[] { caveFungus, skyFungus, rocky, tall, meadow }) {
 				t.setFertility(1.0);
 				// Cropped to 0.4 of cap: above the depletion line, so every tile
-				// starts regrowing at once from the same standing crop.
-				t.graze(w.getTick(), 0.6);
+				// starts regrowing at once from the same standing share.
+				t.graze(w.getTick(), t.getVegetation(w.getTick()) - 0.4 * t.vegetationCap());
 			}
 			tick(w, 400);
 			long now = w.getTick();
 			assertNear("a fungus bed grows the same on either level",
-					caveFungus.getVegetation(now), skyFungus.getVegetation(now), 1e-9);
+					share(caveFungus, now), share(skyFungus, now), 1e-9);
 			assertNear("and the sward is one plant: rocky ground grows as the meadow does",
-					meadow.getVegetation(now), rocky.getVegetation(now), 1e-9);
-			assertNear("tall grass too", meadow.getVegetation(now), tall.getVegetation(now), 1e-9);
+					share(meadow, now), share(rocky, now), 1e-9);
+			assertNear("tall grass too", share(meadow, now), share(tall, now), 1e-9);
 			assertTrue("but the fungus is not the grass: a different plant, a different rate ("
-					+ String.format("%.3f fungus against %.3f grass", caveFungus.getVegetation(now),
-							meadow.getVegetation(now)) + ")",
-					Math.abs(caveFungus.getVegetation(now) - meadow.getVegetation(now)) > 0.01);
+					+ String.format("%.3f fungus against %.3f grass", share(caveFungus, now),
+							share(meadow, now)) + ")",
+					Math.abs(share(caveFungus, now) - share(meadow, now)) > 0.01);
 		}
 	}
 
@@ -12316,9 +12628,12 @@ public class SimTests {
 			int fx = 15 + Tile.dirDx(ramp.rampExit()), fy = 2 + Tile.dirDy(ramp.rampExit());
 			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FLOOR); // its foot, carved out of the rock
 
+			w.setTile(13, 8, 1, Tile.TileType.TYPE_COVER); // a thicket under the sky
 			net.hedinger.prototype.engine.Climate c = w.climate();
 			double f = net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF;
 			assertNear("open ground is in full sun", 1.0, c.lightAt(10.5, 8.5, 1), 1e-12);
+			assertNear("a thicket under the sky is shade: the canopy's toll of the sun",
+					net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER, c.lightAt(13.5, 8.5, 1), 1e-12);
 			assertNear("and so is the hole itself", 1.0, c.lightAt(3.5, 5.5, 1), 1e-12);
 			assertNear("rock takes none", 0.0, c.lightAt(1.5, 1.5, 0), 1e-12);
 			assertNear("the floor under the hole is lit through it", 1.0, c.lightAt(3.5, 5.5, 0), 1e-12);
@@ -13961,13 +14276,16 @@ public class SimTests {
 			assertGreater("both resting bodies burned something", plainBurn, 0.0);
 			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * 1.15);
 
-			// Brain: a long program burns more than a short one, same body.
+			// Brain: a long program burns more than a short one, same body. Both
+			// programs are all NOPs: a random program can write the throttle and
+			// walk, and then the drop is movement rather than the burn under test
+			// -- which is how a wider operand field once flipped this assertion.
 			Genome simple = new Genome();
 			simple.size = 10;
-			simple.brain = net.hedinger.prototype.entities.Brain.random(4);
+			simple.brain = new net.hedinger.prototype.entities.Brain(new int[4][4]);
 			Genome deep = new Genome();
 			deep.size = 10;
-			deep.brain = net.hedinger.prototype.entities.Brain.random(60);
+			deep.brain = new net.hedinger.prototype.entities.Brain(new int[60][4]);
 			double simpleBurn = burnOver(room(12, 12), simple, T);
 			double deepBurn = burnOver(room(12, 12), deep, T);
 			assertGreater("a long brain costs metabolism", deepBurn, simpleBurn * 1.1);
@@ -19865,6 +20183,10 @@ public class SimTests {
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
 				new AHashIsReplayableAndEven(),
+				new AMindSensesTheClimateUnderfoot(),
+				new AMindCanAskForShadeAndDamp(),
+				new DryAirDriesABodyAndDampAirSlowsIt(),
+				new MoistAirHoldsMoreGrass(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

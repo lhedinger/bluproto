@@ -10,6 +10,7 @@ import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Sound;
+import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.simtest.TestNPC;
 
@@ -89,7 +90,8 @@ public final class Mechanics {
 				row("Light, per tile of air", num(net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF), "x",
 						"What survives one step along a passage underground."),
 				row("Light, entering cover", num(net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER), "x",
-						"On top of the step: thicket, reeds and tall grass dim it without stopping it."),
+						"On top of the step: thicket, reeds and tall grass dim it without stopping it, "
+						+ "and a canopy under the sky lets this much of the sun through, so a thicket is shade."),
 				row("A lit grating", num(net.hedinger.prototype.engine.Climate.LIGHT_GRATE), "light",
 						"The facility's own small source."),
 				row("The ground", num(net.hedinger.prototype.engine.Climate.TEMP_SURFACE), "deg C",
@@ -539,6 +541,19 @@ public final class Mechanics {
 		rows(s,
 				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
+				row("Moist air, on the grass", num(Tile.MOIST_CAP_MIN) + " .. " + num(Tile.MOIST_CAP_MAX), "x the cap",
+						"A tile's vegetation cap is its fertility times the air's share: the humidity "
+						+ "here against the air its plant was tuned in, open ground in full sun for the "
+						+ "sward and the cave's own air for fungus. A pond's margin and the shade carry "
+						+ "more, the parched air at a vent's mouth less."),
+				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
+						"The air multiplies the clock: 1 + this times the air's vapour pressure deficit -- "
+						+ "the saturation pressure at the tile's temperature times how far from saturated "
+						+ "the air is, so warm and dry are one law -- measured against open ground in full "
+						+ "sun at the ground's temperature, which reads exactly 1. Over water the rate falls "
+						+ "to " + round(NPC.dryness(17, 1.0), 2) + ", in a dark cave to "
+						+ round(NPC.dryness(16, 0.82), 2) + ", and at a vent's mouth it is "
+						+ round(NPC.dryness(42, 0.12), 1) + " times."),
 				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
 						"At rest. Twice thirst's period — the rhythm anchor, held "
 						+ "by the gut's sizing rather than a clock."),
@@ -637,6 +652,17 @@ public final class Mechanics {
 								+ "channel asks of the ground in sight, asked of the ground "
 								+ "underfoot -- am I in cover, am I in the mud, is there food "
 								+ "here worth eating. Every clade has it."),
+						sense(AgentIO.S_LIGHT, "Light on the tile underfoot, 0 dark to 1 full sun, "
+								+ "read off the climate field. The first of three climate senses, "
+								+ "which land before the climate costs anything: a pressure a "
+								+ "creature cannot perceive only kills it at random."),
+						sense(AgentIO.S_HUMID, "Humidity on the tile underfoot, 0 bone dry to 1 "
+								+ "the air over water."),
+						sense(AgentIO.S_WARMTH, "Warmth on the tile relative to the ground's own "
+								+ "temperature, -1..1 over " + num(AgentIO.WARMTH_SPAN) + " degrees "
+								+ "either side: 0 is the meadow, a vent's mouth pegs at 1, the "
+								+ "coolant run at -1, a mesa top reads a little cold. Degrees are "
+								+ "no use to a mind; \"warmer than usual here\" is."),
 						sense(AgentIO.S_RIDDEN, "What rides it: the weight of its voluntary riders "
 								+ "— a parasite, a hitchhiker — as a share of its own size, 0 for "
 								+ "nothing, clamped at 1. A captive it holds is not a rider. The one "
@@ -799,7 +825,10 @@ public final class Mechanics {
 						act(AgentIO.A_SEEK, "Name a KIND OF THING to head for and the body "
 								+ "steers there by itself — see the next section."),
 						act(AgentIO.A_TILE, "Name a PROPERTY of ground to look for: edible, "
-								+ "hiding, slow going, water, solid, dangerous. Which of those "
+								+ "hiding, slow going, water, solid, dangerous; and, on the "
+								+ "negative side of the pool, the climate of the ground -- shade "
+								+ "(light under half of full sun) and damp (humidity of half or "
+								+ "more), read off the fields rather than the tile. Which of those "
 								+ "is worth wanting is left for selection to discover.")),
 				group("Feeding",
 						act(AgentIO.A_EAT, "Graze the tile underfoot. Meat is not taken this "
@@ -917,7 +946,7 @@ public final class Mechanics {
 	};
 	/** Names for the tile properties, indexed by {@link AgentIO#tileWanted}. */
 	private static final String[] TILE_NAMES = {
-		"edible", "blocks sight", "slow going", "water", "solid", "hazardous",
+		"edible", "blocks sight", "slow going", "water", "solid", "hazardous", "shade", "damp",
 	};
 
 	private static Map<String, Object> pheromones() {

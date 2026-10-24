@@ -1353,7 +1353,7 @@ public abstract class NPC extends Entity {
 			// actually burns; the resting rhythm anchor (appetite returns in
 			// twice the time thirst does) survives as the GUT_PER_MASS identity.
 			double pace = Math.pow(leanMass(), -0.25) * eff;
-			thirst = Math.min(1.0, thirst + pace / thirstPeriod());
+			thirst = Math.min(1.0, thirst + pace * dryness() / thirstPeriod());
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
 			// keeps whatever partial refill had accrued. Some bodies carry their
@@ -1556,6 +1556,55 @@ public abstract class NPC extends Entity {
 
 	public double getHunger() {
 		return hunger;
+	}
+
+	/**
+	 * How much the air multiplies the thirst clock: the vapour deficit's share.
+	 * A body loses water to the air in proportion to the air's vapour pressure
+	 * deficit -- how much more water the air could hold -- which is the
+	 * saturation pressure at the air's temperature times how far from saturated
+	 * it is. So heat and dryness are one law: warm air holds more, and dry air
+	 * has more room. The clock is multiplied by {@code 1 + DRY_AIR_THIRST *
+	 * deficit}, the deficit measured against the air the clock was tuned in
+	 * (open ground in full sun at the ground's own temperature), so that air
+	 * reads exactly 1. At 1.3 the air over water takes most of the rate off, a
+	 * dark cave nearly half, a cool mesa top a little, and the air at a vent's
+	 * mouth, forty degrees and parched, triples it: the two fields at the one
+	 * seam VITALS.md 8 names, and a reason to stand by the water or in the
+	 * shade, and to leave the vent.
+	 */
+	@Unit("of the thirst rate per unit of relative vapour deficit")
+	public static double DRY_AIR_THIRST = 1.3;
+
+	/** Saturation vapour pressure of air at {@code celsius}, in kPa: Tetens'
+	 *  form of the Clausius-Clapeyron curve, the constants the meteorologists'
+	 *  own. 1.94 kPa at the ground's 17 degrees, 8.2 at 42. */
+	public static double saturationPressure(double celsius) {
+		return 0.6108 * Math.exp(17.27 * celsius / (celsius + 237.3));
+	}
+
+	/** The vapour pressure deficit of air at {@code celsius} and relative
+	 *  humidity {@code humidity}: what it could still take, in kPa. */
+	public static double vapourDeficit(double celsius, double humidity) {
+		return saturationPressure(celsius) * Math.max(0, 1 - humidity);
+	}
+
+	/** The thirst clock's multiplier in air at {@code celsius} and
+	 *  {@code humidity}: exactly 1 in the reference air. Static so a scenario
+	 *  can say what a body in a given air should read. */
+	public static double dryness(double celsius, double humidity) {
+		double reference = vapourDeficit(net.hedinger.prototype.engine.Climate.TEMP_SURFACE,
+				net.hedinger.prototype.engine.Climate.HUMID_REFERENCE);
+		return (1 + DRY_AIR_THIRST * vapourDeficit(celsius, humidity) / reference) / (1 + DRY_AIR_THIRST);
+	}
+
+	/** The air's multiplier on this body's thirst clock where it stands. */
+	protected double dryness() {
+		if (getWorld() == null) {
+			return 1.0;
+		}
+		net.hedinger.prototype.engine.Climate c = getWorld().climate();
+		return dryness(c.temperatureAt(X, Y, getLvl()), c.humidityAt(X, Y, getLvl()));
 	}
 
 	/**

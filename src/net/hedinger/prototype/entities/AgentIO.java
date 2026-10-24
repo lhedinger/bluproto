@@ -238,7 +238,34 @@ public final class AgentIO {
 	 *  the mind's to decide. */
 	public static final int S_BIGGER_PROX = 46;
 	public static final int S_BIGGER_BEARING = 47;
-	public static final int NUM_SENSORS = 48;
+	/**
+	 * The climate underfoot, three channels read off the world's fields
+	 * ({@link net.hedinger.prototype.engine.Climate}): what the body can feel
+	 * where it stands, before any of it costs or feeds anything. ROADMAP 2b
+	 * puts sensing before pressure -- a pressure a creature cannot perceive
+	 * only kills it at random -- so these land first, and alone.
+	 *
+	 * <p>{@code S_LIGHT}: light on the tile, 0 dark to 1 full sun.
+	 */
+	public static final int S_LIGHT = 48;
+	/** Humidity on the tile, 0 bone dry to 1 the air over water. */
+	public static final int S_HUMID = 49;
+	/**
+	 * Warmth on the tile relative to the ground's own temperature, -1..1 over
+	 * {@link #WARMTH_SPAN} degrees either side: 0 is the meadow, a vent's
+	 * mouth pegs at 1 and the coolant run at -1, a mesa top reads a little
+	 * cold. Relative rather than absolute because a mind has no use for
+	 * degrees; it has use for "warmer than usual here". When a lineage has a
+	 * thermal optimum of its own this becomes relative to that -- the same
+	 * channel, read as comfort -- which is the one change the sense is built
+	 * to take without moving.
+	 */
+	public static final int S_WARMTH = 50;
+	/** Degrees of warmth either side of the ground's temperature that fill the
+	 *  warmth sense: a unit, the way {@code VEG_MAX} is the food sense's. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public static final double WARMTH_SPAN = 10.0;
+	public static final int NUM_SENSORS = 51;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -250,7 +277,7 @@ public final class AgentIO {
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
 			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile",
-			"bigger_prox", "bigger_bearing" };
+			"bigger_prox", "bigger_bearing", "light", "humid", "warmth" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -311,6 +338,14 @@ public final class AgentIO {
 	 * <p>{@code 0}=food (the default, so a mind that never writes this forages),
 	 * {@code 0.1}=food, {@code 0.25}=blocks sight, {@code 0.5}=slow going,
 	 * {@code 1}=water, {@code 2}=solid, {@code 4}=hazardous underfoot.
+	 *
+	 * <p>The negative half of the pool names the CLIMATE of the ground, read off
+	 * the fields rather than the tile's type: {@code -0.1}=shade (light at or
+	 * under half of full sun: a thicket, a cave mouth, the dark), {@code -0.25}=damp
+	 * (humidity of half or more: a pond's margin, a cave). Warm and cool ground
+	 * join here once a lineage has a comfort band to measure them against; until
+	 * then the larger negatives fall back to food, so a mind that reaches for
+	 * them early loses nothing.
 	 */
 	public static final int A_TILE = A_SPRINT; // the retired sprint slot, put back to work
 	/**
@@ -484,11 +519,33 @@ public final class AgentIO {
 	public static final int TILE_WATER = 3;
 	public static final int TILE_SOLID = 4;
 	public static final int TILE_HAZARD = 5;
+	/** Ground in shade: light at or under {@link #SHADE_LIGHT} of full sun. */
+	public static final int TILE_SHADE = 6;
+	/** Damp ground: humidity at or above {@link #DAMP_HUMID}. */
+	public static final int TILE_DAMP = 7;
+	/** The line at or under which ground counts as shade, as a share of full
+	 *  sun: half, which is what a canopy lets through. Open ground under the sky
+	 *  is 1, a thicket exactly half, a cave 0. */
+	public static final double SHADE_LIGHT = 0.5;
+	/** The line at or above which ground counts as damp: half. Open sunlit
+	 *  ground reads about a quarter, a pond's margin and a cave more than
+	 *  half. */
+	public static final double DAMP_HUMID = 0.5;
 
 	/** Decodes {@link #A_TILE} into a property, on the same geometric-midpoint bands
 	 *  {@link #seekTarget} uses, so each pool constant sits squarely in its own. */
 	public static int tileWanted(double v) {
 		double m = Math.abs(v);
+		if (v < 0 && m >= 0.05) {
+			// The climate family: the sign picks it, the magnitude the property.
+			if (m < 0.175) {
+				return TILE_SHADE;
+			}
+			if (m < 0.375) {
+				return TILE_DAMP;
+			}
+			return TILE_FOOD; // warm and cool, once there is a comfort band to read them by
+		}
 		if (m < 0.175) {
 			return TILE_FOOD; // includes 0: forage is what a silent mind gets
 		}

@@ -38,7 +38,9 @@ public final class Climate {
 	@Unit("per tile")
 	public static final double LIGHT_FALLOFF = 0.8;
 	/** The extra toll for stepping into cover -- thicket, reeds, tall grass --
-	 *  which hides a body and dims the light without stopping it. */
+	 *  which hides a body and dims the light without stopping it; and what a
+	 *  canopy under the open sky lets through to the ground beneath it, so a
+	 *  thicket on the surface is shade and not full sun. */
 	@Unit("per cover tile")
 	public static final double LIGHT_THROUGH_COVER = 0.5;
 	/** A lit grating is lit: the facility's own small source. */
@@ -98,6 +100,15 @@ public final class Climate {
 	 *  visibly meet. */
 	@Unit("of humidity at full sun")
 	public static final double HUMID_SUN_DRY = 0.3;
+	/**
+	 * The air the world was tuned in: open ground under full sun, far from
+	 * water -- the dry surface less what the sun takes. Every clock that now
+	 * reads the humidity is normalised here, so a body on an ordinary sunlit
+	 * meadow runs exactly as it did before the air was read, and the pressure
+	 * is only ever the difference from this.
+	 */
+	@Unit("relative")
+	public static final double HUMID_REFERENCE = HUMID_SURFACE * (1 - HUMID_SUN_DRY * LIGHT_SKY);
 	/** What each degree above the ground's own temperature takes off the air --
 	 *  and each degree below gives back, since cooling air carries less and
 	 *  so reads more full. A vent at +25 halves the humidity at its mouth. */
@@ -177,7 +188,8 @@ public final class Climate {
 	 * through a drop (a hole, a shaft, open air) in the floor above otherwise,
 	 * and at the foot of a ramp down from a lit floor -- and from a lit grating,
 	 * and then spreads along the open tiles, fading a step at a time and losing
-	 * more to cover. Rock takes none and passes none.
+	 * more to cover. Cover under the sky takes the same toll of what falls on
+	 * it, so a thicket is shade. Rock takes none and passes none.
 	 */
 	private double[] lightOf(World w, int z) {
 		double[] src = new double[cols * rows];
@@ -193,6 +205,9 @@ public final class Climate {
 					s = LIGHT_SKY; // the top floor is under the sky
 				} else if (w.getTile(x, y, z + 1).isDrop()) {
 					s = light[z + 1][i]; // light falls through a hole onto the floor below
+				}
+				if (t.blocksSight()) {
+					s *= LIGHT_THROUGH_COVER; // a canopy takes its toll of what falls on it
 				}
 				if (t.getType() == TileType.TYPE_LIGHTGRATE) {
 					s = Math.max(s, LIGHT_GRATE);
@@ -274,6 +289,23 @@ public final class Climate {
 	public static double baseTemperature(World w, int z) {
 		int d = w.depthOf(z);
 		return d >= 0 ? TEMP_SURFACE + TEMP_LAPSE * d : TEMP_UNDERGROUND + TEMP_DEPTH * (-d - 1);
+	}
+
+	/**
+	 * The humidity a floor's plants were tuned in: the floor's own dry air far
+	 * from water, less what the sun takes on a floor under the sky, and bent by
+	 * what the floor's own base temperature takes or gives back -- which is
+	 * what an undisturbed tile of that floor actually reads. On the ground
+	 * this is {@link #HUMID_REFERENCE}; a mesa top is a touch cooler and so
+	 * reads a touch fuller, and the cave reads its sealed rock's air at its
+	 * own temperature. The cave's fungus is a cave plant and is not fed for
+	 * the cave being damp.
+	 */
+	public static double referenceHumidity(World w, int z) {
+		double sun = w.depthOf(z) >= 0 ? LIGHT_SKY : 0;
+		double h = baseHumidity(w, z) * (1.0 - HUMID_SUN_DRY * sun);
+		h *= Math.max(0, 1.0 - HUMID_HEAT_DRY * (baseTemperature(w, z) - TEMP_SURFACE));
+		return Math.max(0, Math.min(1, h));
 	}
 
 	/** The humidity a floor has far from any water: dry on the surface, and the
