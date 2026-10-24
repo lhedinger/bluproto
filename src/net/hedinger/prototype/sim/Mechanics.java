@@ -637,6 +637,17 @@ public final class Mechanics {
 								+ "channel asks of the ground in sight, asked of the ground "
 								+ "underfoot -- am I in cover, am I in the mud, is there food "
 								+ "here worth eating. Every clade has it."),
+						sense(AgentIO.S_LIGHT, "Light on the tile underfoot, 0 dark to 1 full sun, "
+								+ "read off the climate field. The first of three climate senses, "
+								+ "which land before the climate costs anything: a pressure a "
+								+ "creature cannot perceive only kills it at random."),
+						sense(AgentIO.S_HUMID, "Humidity on the tile underfoot, 0 bone dry to 1 "
+								+ "the air over water."),
+						sense(AgentIO.S_WARMTH, "Warmth on the tile relative to the ground's own "
+								+ "temperature, -1..1 over " + num(AgentIO.WARMTH_SPAN) + " degrees "
+								+ "either side: 0 is the meadow, a vent's mouth pegs at 1, the "
+								+ "coolant run at -1, a mesa top reads a little cold. Degrees are "
+								+ "no use to a mind; \"warmer than usual here\" is."),
 						sense(AgentIO.S_RIDDEN, "What rides it: the weight of its voluntary riders "
 								+ "— a parasite, a hitchhiker — as a share of its own size, 0 for "
 								+ "nothing, clamped at 1. A captive it holds is not a rider. The one "
