@@ -338,6 +338,14 @@ public final class AgentIO {
 	 * <p>{@code 0}=food (the default, so a mind that never writes this forages),
 	 * {@code 0.1}=food, {@code 0.25}=blocks sight, {@code 0.5}=slow going,
 	 * {@code 1}=water, {@code 2}=solid, {@code 4}=hazardous underfoot.
+	 *
+	 * <p>The negative half of the pool names the CLIMATE of the ground, read off
+	 * the fields rather than the tile's type: {@code -0.1}=shade (light at or
+	 * under half of full sun: a thicket, a cave mouth, the dark), {@code -0.25}=damp
+	 * (humidity of half or more: a pond's margin, a cave). Warm and cool ground
+	 * join here once a lineage has a comfort band to measure them against; until
+	 * then the larger negatives fall back to food, so a mind that reaches for
+	 * them early loses nothing.
 	 */
 	public static final int A_TILE = A_SPRINT; // the retired sprint slot, put back to work
 	/**
@@ -511,11 +519,33 @@ public final class AgentIO {
 	public static final int TILE_WATER = 3;
 	public static final int TILE_SOLID = 4;
 	public static final int TILE_HAZARD = 5;
+	/** Ground in shade: light at or under {@link #SHADE_LIGHT} of full sun. */
+	public static final int TILE_SHADE = 6;
+	/** Damp ground: humidity at or above {@link #DAMP_HUMID}. */
+	public static final int TILE_DAMP = 7;
+	/** The line at or under which ground counts as shade, as a share of full
+	 *  sun: half, which is what a canopy lets through. Open ground under the sky
+	 *  is 1, a thicket exactly half, a cave 0. */
+	public static final double SHADE_LIGHT = 0.5;
+	/** The line at or above which ground counts as damp: half. Open sunlit
+	 *  ground reads about a quarter, a pond's margin and a cave more than
+	 *  half. */
+	public static final double DAMP_HUMID = 0.5;
 
 	/** Decodes {@link #A_TILE} into a property, on the same geometric-midpoint bands
 	 *  {@link #seekTarget} uses, so each pool constant sits squarely in its own. */
 	public static int tileWanted(double v) {
 		double m = Math.abs(v);
+		if (v < 0 && m >= 0.05) {
+			// The climate family: the sign picks it, the magnitude the property.
+			if (m < 0.175) {
+				return TILE_SHADE;
+			}
+			if (m < 0.375) {
+				return TILE_DAMP;
+			}
+			return TILE_FOOD; // warm and cool, once there is a comfort band to read them by
+		}
 		if (m < 0.175) {
 			return TILE_FOOD; // includes 0: forage is what a silent mind gets
 		}
