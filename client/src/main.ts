@@ -860,6 +860,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   // only for a creature: every living thing has a life gate, but on a crate it
   // is a number with nothing to say.
   rows.push(...vitalsRows(d, !!d.role));
+  if ('light' in d) rows.push(row('climate', climateText(d)));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
@@ -987,6 +988,7 @@ function attributesTab(d: Record<string, any>): string {
   status.push(row('age', d.age));
   if (d.juvenile) status.push(row('grown', d.grown));
   status.push(...vitalsRows(d, true));
+  if ('light' in d) status.push(row('climate', climateText(d)));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   status.push(...carcassRows(d));
   status.push(...holdRows(d));
@@ -1263,6 +1265,13 @@ function carcassRows(d: Record<string, any>): string[] {
   if ('worth' in d) out.push(row('worth', `${d.worth} energy`));
   if ('rotsIn' in d) out.push(row('rots away in', `${d.rotsIn} ticks`));
   return out;
+}
+
+// The climate where the body stands, as its three climate senses read it:
+// light and humidity as shares, the temperature in degrees. One row, so the
+// card says what the creature can feel without growing three bars for it.
+function climateText(d: Record<string, any>): string {
+  return `light ${Math.round(d.light * 100)}% · humid ${Math.round(d.humid * 100)}% · ${d.temperature.toFixed(0)} °C`;
 }
 
 function row(k: string, v: unknown): string {
