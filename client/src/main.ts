@@ -1472,7 +1472,8 @@ const SENSOR_KIND: Record<string, string> = {
   item_prox: 'mag', prey_prox: 'mag', threat_prox: 'mag', health: 'mag',
   near_bearing: 'brg', item_bearing: 'brg', prey_bearing: 'brg',
   threat_bearing: 'brg', kin_bearing: 'brg',
-  near_sizeadv: 'bip', clock: 'bip',
+  near_sizeadv: 'bip', clock: 'bip', warmth: 'bip',
+  light: 'mag', humid: 'mag',
   blocked: 'bool', whisker_l: 'bool', whisker_r: 'bool', hazard_ahead: 'bool',
   item_kind: 'item_kind', carried: 'carried',
 };
