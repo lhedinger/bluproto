@@ -540,6 +540,10 @@ public final class Mechanics {
 		rows(s,
 				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
+				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
+						"The air multiplies the clock: 1 + this times how dry the tile's air is, normalised "
+						+ "to 1 on open ground in full sun. Over water the rate halves, in a dark cave it "
+						+ "loses a third, at a vent's mouth it gains a tenth."),
 				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
 						"At rest. Twice thirst's period — the rhythm anchor, held "
 						+ "by the gut's sizing rather than a clock."),
