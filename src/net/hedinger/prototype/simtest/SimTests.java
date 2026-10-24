@@ -13961,13 +13961,16 @@ public class SimTests {
 			assertGreater("both resting bodies burned something", plainBurn, 0.0);
 			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * 1.15);
 
-			// Brain: a long program burns more than a short one, same body.
+			// Brain: a long program burns more than a short one, same body. Both
+			// programs are all NOPs: a random program can write the throttle and
+			// walk, and then the drop is movement rather than the burn under test
+			// -- which is how a wider operand field once flipped this assertion.
 			Genome simple = new Genome();
 			simple.size = 10;
-			simple.brain = net.hedinger.prototype.entities.Brain.random(4);
+			simple.brain = new net.hedinger.prototype.entities.Brain(new int[4][4]);
 			Genome deep = new Genome();
 			deep.size = 10;
-			deep.brain = net.hedinger.prototype.entities.Brain.random(60);
+			deep.brain = new net.hedinger.prototype.entities.Brain(new int[60][4]);
 			double simpleBurn = burnOver(room(12, 12), simple, T);
 			double deepBurn = burnOver(room(12, 12), deep, T);
 			assertGreater("a long brain costs metabolism", deepBurn, simpleBurn * 1.1);
