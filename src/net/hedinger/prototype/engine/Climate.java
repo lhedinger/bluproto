@@ -100,6 +100,15 @@ public final class Climate {
 	 *  visibly meet. */
 	@Unit("of humidity at full sun")
 	public static final double HUMID_SUN_DRY = 0.3;
+	/**
+	 * The air the world was tuned in: open ground under full sun, far from
+	 * water -- the dry surface less what the sun takes. Every clock that now
+	 * reads the humidity is normalised here, so a body on an ordinary sunlit
+	 * meadow runs exactly as it did before the air was read, and the pressure
+	 * is only ever the difference from this.
+	 */
+	@Unit("relative")
+	public static final double HUMID_REFERENCE = HUMID_SURFACE * (1 - HUMID_SUN_DRY * LIGHT_SKY);
 	/** What each degree above the ground's own temperature takes off the air --
 	 *  and each degree below gives back, since cooling air carries less and
 	 *  so reads more full. A vent at +25 halves the humidity at its mouth. */
@@ -280,6 +289,14 @@ public final class Climate {
 	public static double baseTemperature(World w, int z) {
 		int d = w.depthOf(z);
 		return d >= 0 ? TEMP_SURFACE + TEMP_LAPSE * d : TEMP_UNDERGROUND + TEMP_DEPTH * (-d - 1);
+	}
+
+	/** The humidity a floor's plants were tuned in: {@link #HUMID_REFERENCE} on
+	 *  any floor under the sky, and the sealed rock's own below ground, where
+	 *  there is no sun to take its share. The cave's fungus is a cave plant and
+	 *  is not thirstier for the cave being damp. */
+	public static double referenceHumidity(World w, int z) {
+		return w.depthOf(z) >= 0 ? HUMID_REFERENCE : baseHumidity(w, z);
 	}
 
 	/** The humidity a floor has far from any water: dry on the surface, and the

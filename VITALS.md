@@ -203,6 +203,13 @@ stay warm) and slows mending; darkness slows intake for sighted foragers.
 None of them need new vitals — they modulate the periods in §5, which is why
 the periods are named constants rather than folded into magic drain values.
 
+The first of them is in: **humidity multiplies the thirst clock**
+(`NPC.dryness`), by `1 + DRY_AIR_THIRST · (1 − humidity)` normalised to exactly
+1 in the air the clock was tuned in, open ground in full sun. Damp air slows it
+(the air over water halves it), dry air at a vent's mouth quickens it a little.
+Every body on an ordinary sunlit meadow runs as it did; the pressure is only
+ever the difference from that.
+
 ## 9. Open questions — resolved
 
 All five went as proposed, and are now what the code does:

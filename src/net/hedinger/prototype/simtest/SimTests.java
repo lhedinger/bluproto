@@ -5079,6 +5079,63 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * Dry air dries a body, and damp air slows it. The air a tile holds
+	 * multiplies the thirst clock -- the first of the three climate fields to
+	 * touch a clock, at the one seam VITALS.md 8 names -- and it is normalised
+	 * to exactly 1 in the air the clock was tuned in, open ground in full sun,
+	 * so a body on an ordinary meadow dries at the rate it always did.
+	 *
+	 * <p>Pinned on three identical inert bodies that cannot drink: one on open
+	 * sunlit ground, whose thirst after a spell is what the bare clock says;
+	 * one two tiles from a pond, out of reach of a drink but in its damp air,
+	 * which dries slower; and one in a cave, slower still than the open. The
+	 * ratio by the pond is the vapour deficit's, read off the field.
+	 */
+	static class DryAirDriesABodyAndDampAirSlowsIt extends Scenario {
+		private TestNPC inert(World w, double x, double y, int z) {
+			Genome g = new Genome();
+			g.size = 8; // the reference body
+			TestNPC b = TestNPC.minded(x, y, z, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			}).grown().withHunger(0.3).withHydration(1.0);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		@Override
+		public void run() {
+			seed(29);
+			World w = room(20, 14, 2);
+			for (int x = 3; x <= 5; x++) {
+				for (int y = 5; y <= 8; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond, upstairs
+				}
+			}
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertNear("open sunlit ground is the reference air",
+					net.hedinger.prototype.engine.Climate.HUMID_REFERENCE, c.humidityAt(15.5, 10.5, 1), 1e-9);
+			TestNPC open = inert(w, 15.5, 10.5, 1);
+			TestNPC shore = inert(w, 7.5, 6.5, 1); // two tiles off the water: damp air, no drink
+			TestNPC cave = inert(w, 15.5, 10.5, 0);
+			w.think();
+			int spell = (int) (NPC.THIRST_PERIOD / 3);
+			tick(w, spell);
+			assertTrue("the shore body never drank", !shore.nearWater());
+			double bare = spell / NPC.THIRST_PERIOD; // the clock at the reference body, undisturbed
+			assertNear("on open sunlit ground the clock runs as it always did",
+					bare, open.getThirst(), bare * 0.02);
+			double deficit = (1 + NPC.DRY_AIR_THIRST * (1 - c.humidityAt(7.5, 6.5, 1)))
+					/ (1 + NPC.DRY_AIR_THIRST * (1 - net.hedinger.prototype.engine.Climate.HUMID_REFERENCE));
+			assertLess("damp air by the pond slows it", shore.getThirst(), open.getThirst() * 0.9);
+			assertNear("by the vapour deficit's share", open.getThirst() * deficit, shore.getThirst(), bare * 0.02);
+			assertLess("and a cave's air slows it too", cave.getThirst(), open.getThirst() * 0.8);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20090,6 +20147,7 @@ public class SimTests {
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),
+				new DryAirDriesABodyAndDampAirSlowsIt(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
