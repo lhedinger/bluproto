@@ -2859,13 +2859,13 @@ public class SimTests {
 					count[Tile.FLORA_MOSS], rocky / 4);
 			// The flora is a look, not a diet: the same world generated again reads
 			// the same fertility on every tile whatever it wears, and a tile's cap
-			// is fertility alone.
+			// is fertility and the air alone.
 			for (int x = 0; x < w.getColums(); x++) {
 				for (int y = 0; y < w.getRows(); y++) {
 					Tile t = w.getTile(x, y, z);
 					if (t != null && t.getFlora() != Tile.FLORA_GRASS) {
 						assertTrue("the cap ignores the flora",
-								Math.abs(Tile.VEG_MAX * t.getFertility() - t.vegetationCap()) < 1e-12);
+								Math.abs(Tile.VEG_MAX * t.getFertility() * t.moisture() - t.vegetationCap()) < 1e-12);
 					}
 				}
 			}
@@ -5136,6 +5136,68 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * Moist air holds more grass. Water limits biomass, so a tile's vegetation
+	 * cap is its fertility times the air's share: the humidity here against the
+	 * air its plant was tuned in, bounded either way. Exactly the old cap on
+	 * open ground in full sun, where every grass number was measured, and
+	 * exactly the old cap for a fungus bed in the cave's own air, so the cave
+	 * plant is not fed for the cave being damp; a pond's margin and the shade
+	 * under a thicket carry more, the parched air at a vent's mouth less.
+	 */
+	static class MoistAirHoldsMoreGrass extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(20, 14, 2);
+			for (int x = 3; x <= 5; x++) {
+				for (int y = 5; y <= 8; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond upstairs
+				}
+			}
+			w.setTile(15, 4, 1, Tile.TileType.TYPE_COVER); // a thicket, upstairs
+			// A fungus bed in the dark: the two-storey room punches holes at random
+			// and a cave tile under one is lit, and sun dries air wherever it falls.
+			// The claim is about the cave's own air, so the bed goes where no sun
+			// reaches.
+			int fx = -1, fy = -1;
+			for (int y = 2; y < 12 && fx < 0; y++) {
+				for (int x = 2; x < 18; x++) {
+					if (w.climate().lightAt(x + 0.5, y + 0.5, 0) == 0) {
+						fx = x;
+						fy = y;
+						break;
+					}
+				}
+			}
+			assertTrue("the cave has a dark tile for a fungus bed", fx >= 0);
+			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FUNGUS);
+			// The vent gets a room of its own: its warmth carries, faintly, to
+			// every tile of a cave, and the fungus claim is about undisturbed air.
+			World v = room(12, 10, 2);
+			v.setTile(3, 5, 0, Tile.TileType.TYPE_VENT);
+			Tile open = w.getTile(15, 10, 1), shore = w.getTile(6, 6, 1), shade = w.getTile(15, 4, 1);
+			Tile fungus = w.getTile(fx, fy, 0), byVent = v.getTile(4, 5, 0);
+			assertNear("open ground in full sun holds exactly what it always did",
+					Tile.VEG_MAX * open.getFertility(), open.vegetationCap(), 1e-12);
+			assertNear("and a fungus bed in the cave's own air too",
+					Tile.VEG_MAX * fungus.getFertility(), fungus.vegetationCap(), 1e-12);
+			assertGreater("the pond's margin holds more", shore.vegetationCap(), open.vegetationCap() * 1.1);
+			assertGreater("and so does the shade under a thicket", shade.vegetationCap(), open.vegetationCap() * 1.1);
+			assertTrue("neither past the margin the air is allowed",
+					shore.moisture() <= Tile.MOIST_CAP_MAX && shade.moisture() <= Tile.MOIST_CAP_MAX);
+			assertLess("the parched air at a vent's mouth holds less", byVent.vegetationCap(),
+					Tile.VEG_MAX * byVent.getFertility() * 0.9);
+			assertTrue("and not below the floor", byVent.moisture() >= Tile.MOIST_CAP_MIN);
+			// The cap is a ceiling the grass actually fills: the margin grows past the
+			// old maximum.
+			tick(w, (int) Tile.REGROW_DELAY + 8000);
+			assertGreater("the margin grows past the meadow's old maximum",
+					shore.getVegetation(w.getTick()), Tile.VEG_MAX * 1.05);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -5784,8 +5846,17 @@ public class SimTests {
 	 * underground left at the default -- so a fungus bed laid in a surface
 	 * biodome outgrew the same bed in a cave, and the plateau's rocky sward
 	 * lagged the skirt it is made of. Two plants, two rates, read off the type.
+	 *
+	 * <p>Compared as shares of each tile's cap: the cap is the ground's and
+	 * the air's (a bed under a hole in the cave roof sits in sun-dried air and
+	 * holds a little less), the rate is the plant's, and a logistic curve from
+	 * the same share at the same rate reaches the same share whatever the cap.
 	 */
 	static class RegrowthIsThePlantsNotTheFloors extends Scenario {
+		private static double share(Tile t, long now) {
+			return t.getVegetation(now) / t.vegetationCap();
+		}
+
 		@Override
 		public void run() {
 			seed(5);
@@ -5800,20 +5871,20 @@ public class SimTests {
 			for (Tile t : new Tile[] { caveFungus, skyFungus, rocky, tall, meadow }) {
 				t.setFertility(1.0);
 				// Cropped to 0.4 of cap: above the depletion line, so every tile
-				// starts regrowing at once from the same standing crop.
-				t.graze(w.getTick(), 0.6);
+				// starts regrowing at once from the same standing share.
+				t.graze(w.getTick(), t.getVegetation(w.getTick()) - 0.4 * t.vegetationCap());
 			}
 			tick(w, 400);
 			long now = w.getTick();
 			assertNear("a fungus bed grows the same on either level",
-					caveFungus.getVegetation(now), skyFungus.getVegetation(now), 1e-9);
+					share(caveFungus, now), share(skyFungus, now), 1e-9);
 			assertNear("and the sward is one plant: rocky ground grows as the meadow does",
-					meadow.getVegetation(now), rocky.getVegetation(now), 1e-9);
-			assertNear("tall grass too", meadow.getVegetation(now), tall.getVegetation(now), 1e-9);
+					share(meadow, now), share(rocky, now), 1e-9);
+			assertNear("tall grass too", share(meadow, now), share(tall, now), 1e-9);
 			assertTrue("but the fungus is not the grass: a different plant, a different rate ("
-					+ String.format("%.3f fungus against %.3f grass", caveFungus.getVegetation(now),
-							meadow.getVegetation(now)) + ")",
-					Math.abs(caveFungus.getVegetation(now) - meadow.getVegetation(now)) > 0.01);
+					+ String.format("%.3f fungus against %.3f grass", share(caveFungus, now),
+							share(meadow, now)) + ")",
+					Math.abs(share(caveFungus, now) - share(meadow, now)) > 0.01);
 		}
 	}
 
@@ -20092,6 +20163,7 @@ public class SimTests {
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),
 				new DryAirDriesABodyAndDampAirSlowsIt(),
+				new MoistAirHoldsMoreGrass(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

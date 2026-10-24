@@ -291,12 +291,21 @@ public final class Climate {
 		return d >= 0 ? TEMP_SURFACE + TEMP_LAPSE * d : TEMP_UNDERGROUND + TEMP_DEPTH * (-d - 1);
 	}
 
-	/** The humidity a floor's plants were tuned in: {@link #HUMID_REFERENCE} on
-	 *  any floor under the sky, and the sealed rock's own below ground, where
-	 *  there is no sun to take its share. The cave's fungus is a cave plant and
-	 *  is not thirstier for the cave being damp. */
+	/**
+	 * The humidity a floor's plants were tuned in: the floor's own dry air far
+	 * from water, less what the sun takes on a floor under the sky, and bent by
+	 * what the floor's own base temperature takes or gives back -- which is
+	 * what an undisturbed tile of that floor actually reads. On the ground
+	 * this is {@link #HUMID_REFERENCE}; a mesa top is a touch cooler and so
+	 * reads a touch fuller, and the cave reads its sealed rock's air at its
+	 * own temperature. The cave's fungus is a cave plant and is not fed for
+	 * the cave being damp.
+	 */
 	public static double referenceHumidity(World w, int z) {
-		return w.depthOf(z) >= 0 ? HUMID_REFERENCE : baseHumidity(w, z);
+		double sun = w.depthOf(z) >= 0 ? LIGHT_SKY : 0;
+		double h = baseHumidity(w, z) * (1.0 - HUMID_SUN_DRY * sun);
+		h *= Math.max(0, 1.0 - HUMID_HEAT_DRY * (baseTemperature(w, z) - TEMP_SURFACE));
+		return Math.max(0, Math.min(1, h));
 	}
 
 	/** The humidity a floor has far from any water: dry on the surface, and the
