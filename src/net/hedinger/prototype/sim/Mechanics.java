@@ -89,7 +89,8 @@ public final class Mechanics {
 				row("Light, per tile of air", num(net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF), "x",
 						"What survives one step along a passage underground."),
 				row("Light, entering cover", num(net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER), "x",
-						"On top of the step: thicket, reeds and tall grass dim it without stopping it."),
+						"On top of the step: thicket, reeds and tall grass dim it without stopping it, "
+						+ "and a canopy under the sky lets this much of the sun through, so a thicket is shade."),
 				row("A lit grating", num(net.hedinger.prototype.engine.Climate.LIGHT_GRATE), "light",
 						"The facility's own small source."),
 				row("The ground", num(net.hedinger.prototype.engine.Climate.TEMP_SURFACE), "deg C",
