@@ -811,7 +811,10 @@ public final class Mechanics {
 						act(AgentIO.A_SEEK, "Name a KIND OF THING to head for and the body "
 								+ "steers there by itself — see the next section."),
 						act(AgentIO.A_TILE, "Name a PROPERTY of ground to look for: edible, "
-								+ "hiding, slow going, water, solid, dangerous. Which of those "
+								+ "hiding, slow going, water, solid, dangerous; and, on the "
+								+ "negative side of the pool, the climate of the ground -- shade "
+								+ "(light under half of full sun) and damp (humidity of half or "
+								+ "more), read off the fields rather than the tile. Which of those "
 								+ "is worth wanting is left for selection to discover.")),
 				group("Feeding",
 						act(AgentIO.A_EAT, "Graze the tile underfoot. Meat is not taken this "
@@ -929,7 +932,7 @@ public final class Mechanics {
 	};
 	/** Names for the tile properties, indexed by {@link AgentIO#tileWanted}. */
 	private static final String[] TILE_NAMES = {
-		"edible", "blocks sight", "slow going", "water", "solid", "hazardous",
+		"edible", "blocks sight", "slow going", "water", "solid", "hazardous", "shade", "damp",
 	};
 
 	private static Map<String, Object> pheromones() {
