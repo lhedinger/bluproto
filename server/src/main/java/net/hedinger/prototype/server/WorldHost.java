@@ -746,6 +746,13 @@ final class WorldHost {
 				}
 				if (!n.isDead()) {
 					d.put("health", n.getHealth()); // the life gate, and it has been passed
+					// The climate where it stands: what its three climate senses read,
+					// so a watcher can see what the body can feel. The fields' own
+					// numbers, looked up by coordinate, the way the senses do it.
+					net.hedinger.prototype.engine.Climate c = n.getWorld().climate();
+					d.put("light", round(c.lightAt(n.getX(), n.getY(), n.getLvl())));
+					d.put("humid", round(c.humidityAt(n.getX(), n.getY(), n.getLvl())));
+					d.put("temperature", round(c.temperatureAt(n.getX(), n.getY(), n.getLvl())));
 					// The body's store: fat as a share of what the body can carry, and
 					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
 					d.put("fat", round(n.fatLeft()));
