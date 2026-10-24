@@ -2613,6 +2613,14 @@ public class TestNPC extends NPC {
 		// property? The forage channel looks for it in sight; this says whether
 		// the body is already there -- in cover, in the mud, on food.
 		s[AgentIO.S_ON_TILE] = onWantedTile() ? 1 : 0;
+		// The climate underfoot: the three fields as the body feels them where
+		// it stands. Read every sense tick and costing nothing yet -- what they
+		// will do to the clocks lands after a lineage can act on them.
+		net.hedinger.prototype.engine.Climate climate = getWorld().climate();
+		s[AgentIO.S_LIGHT] = climate.lightAt(X, Y, getLvl());
+		s[AgentIO.S_HUMID] = climate.humidityAt(X, Y, getLvl());
+		s[AgentIO.S_WARMTH] = clamp((climate.temperatureAt(X, Y, getLvl())
+				- net.hedinger.prototype.engine.Climate.TEMP_SURFACE) / AgentIO.WARMTH_SPAN, -1, 1);
 		// The hunt is decided once, here, and both channels that speak for it read
 		// the same answer. A hunter has two names for its food -- SEEK_PREY and,
 		// because its forage IS a body, SEEK_FORAGE -- and if those resolve

@@ -61,9 +61,10 @@ public final class Brain {
 	 * the same silence. Kept a multiple of {@link #NUM_REG} and of the constant
 	 * pool (both 12) so register and immediate operands stay uniformly
 	 * distributed, and with headroom above the sensor count so the next channel
-	 * added does not have to touch this.
+	 * added does not have to touch this. Raised from 48 to 60 when the three
+	 * climate senses took the count to 51.
 	 */
-	private static final int FIELD = 48;
+	private static final int FIELD = 60;
 
 	public static final int MAX_LEN = 64;
 	/** Instructions executed per tick unless the caller overrides it; with a

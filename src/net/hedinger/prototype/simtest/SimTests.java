@@ -4918,6 +4918,75 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A mind senses the climate underfoot. Three channels read the world's
+	 * three fields where the body stands: light 0..1, humidity 0..1, and warmth
+	 * as the tile's temperature against the ground's own over a span of
+	 * degrees, -1..1. They cost nothing and feed nothing yet; they land first
+	 * because a pressure a creature cannot perceive only kills it at random
+	 * (ROADMAP 2b), and a lineage that can read "dark", "damp" and "warmer
+	 * than usual" can act on them before any of the three charges a clock.
+	 *
+	 * <p>Pinned on a two-storey room with a pond upstairs and a vent down: open
+	 * ground is full sun and the ground's own warmth, the pond's edge is
+	 * wetter than the open, the cave is dark and a touch cool, and the vent's
+	 * mouth pegs the warmth sense. Each reading is the field's own number, so
+	 * the sense cannot drift from what the viewer draws.
+	 */
+	static class AMindSensesTheClimateUnderfoot extends Scenario {
+		private double[] senseAt(World w, double x, double y, int z) {
+			Genome g = new Genome();
+			g.size = 6;
+			TestNPC b = TestNPC.minded(x, y, z, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			});
+			w.spawnEntity(b);
+			w.think();
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			b.senseInto(s);
+			b.remove();
+			return s;
+		}
+
+		@Override
+		public void run() {
+			seed(19);
+			World w = room(16, 12, 2);
+			for (int x = 10; x <= 12; x++) {
+				for (int y = 4; y <= 6; y++) {
+					w.setTile(x, y, 1, Tile.TileType.TYPE_WATER); // a pond upstairs
+				}
+			}
+			w.setTile(4, 4, 0, Tile.TileType.TYPE_VENT); // a vent in the cave
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertEquals("every sense has a name", AgentIO.NUM_SENSORS, AgentIO.SENSOR_NAMES.length);
+
+			double[] open = senseAt(w, 3.5, 9.5, 1);
+			assertNear("open ground is full sun", 1.0, open[AgentIO.S_LIGHT], 1e-12);
+			assertNear("and the ground's own warmth", 0.0, open[AgentIO.S_WARMTH], 1e-12);
+			assertNear("and reads the field's humidity", c.humidityAt(3.5, 9.5, 1), open[AgentIO.S_HUMID], 1e-12);
+
+			double[] shore = senseAt(w, 9.5, 5.5, 1);
+			assertGreater("the pond's edge is wetter than the open",
+					shore[AgentIO.S_HUMID], open[AgentIO.S_HUMID] + 0.1);
+
+			double[] cave = senseAt(w, 14.5, 10.5, 0); // the far corner, out of the vent's reach
+			assertNear("the cave is dark", 0.0, cave[AgentIO.S_LIGHT], 1e-12);
+			assertNear("and reads the field's warmth",
+					(c.temperatureAt(14.5, 10.5, 0) - net.hedinger.prototype.engine.Climate.TEMP_SURFACE)
+							/ AgentIO.WARMTH_SPAN, cave[AgentIO.S_WARMTH], 1e-12);
+			assertLess("which is a touch cool", cave[AgentIO.S_WARMTH], 0);
+			assertGreater("and damp", cave[AgentIO.S_HUMID], open[AgentIO.S_HUMID]);
+
+			double[] vent = senseAt(w, 4.5, 4.5, 0);
+			assertNear("the vent's mouth pegs the warmth sense", 1.0, vent[AgentIO.S_WARMTH], 1e-12);
+			assertLess("and its heat dries the air", vent[AgentIO.S_HUMID], cave[AgentIO.S_HUMID]);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -19868,6 +19937,7 @@ public class SimTests {
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
 				new AHashIsReplayableAndEven(),
+				new AMindSensesTheClimateUnderfoot(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
