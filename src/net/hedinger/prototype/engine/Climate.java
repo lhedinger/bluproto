@@ -38,7 +38,9 @@ public final class Climate {
 	@Unit("per tile")
 	public static final double LIGHT_FALLOFF = 0.8;
 	/** The extra toll for stepping into cover -- thicket, reeds, tall grass --
-	 *  which hides a body and dims the light without stopping it. */
+	 *  which hides a body and dims the light without stopping it; and what a
+	 *  canopy under the open sky lets through to the ground beneath it, so a
+	 *  thicket on the surface is shade and not full sun. */
 	@Unit("per cover tile")
 	public static final double LIGHT_THROUGH_COVER = 0.5;
 	/** A lit grating is lit: the facility's own small source. */
@@ -177,7 +179,8 @@ public final class Climate {
 	 * through a drop (a hole, a shaft, open air) in the floor above otherwise,
 	 * and at the foot of a ramp down from a lit floor -- and from a lit grating,
 	 * and then spreads along the open tiles, fading a step at a time and losing
-	 * more to cover. Rock takes none and passes none.
+	 * more to cover. Cover under the sky takes the same toll of what falls on
+	 * it, so a thicket is shade. Rock takes none and passes none.
 	 */
 	private double[] lightOf(World w, int z) {
 		double[] src = new double[cols * rows];
@@ -193,6 +196,9 @@ public final class Climate {
 					s = LIGHT_SKY; // the top floor is under the sky
 				} else if (w.getTile(x, y, z + 1).isDrop()) {
 					s = light[z + 1][i]; // light falls through a hole onto the floor below
+				}
+				if (t.blocksSight()) {
+					s *= LIGHT_THROUGH_COVER; // a canopy takes its toll of what falls on it
 				}
 				if (t.getType() == TileType.TYPE_LIGHTGRATE) {
 					s = Math.max(s, LIGHT_GRATE);
