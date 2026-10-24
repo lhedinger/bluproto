@@ -547,9 +547,13 @@ public final class Mechanics {
 						+ "sward and the cave's own air for fungus. A pond's margin and the shade carry "
 						+ "more, the parched air at a vent's mouth less."),
 				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
-						"The air multiplies the clock: 1 + this times how dry the tile's air is, normalised "
-						+ "to 1 on open ground in full sun. Over water the rate halves, in a dark cave it "
-						+ "loses a third, at a vent's mouth it gains a tenth."),
+						"The air multiplies the clock: 1 + this times the air's vapour pressure deficit -- "
+						+ "the saturation pressure at the tile's temperature times how far from saturated "
+						+ "the air is, so warm and dry are one law -- measured against open ground in full "
+						+ "sun at the ground's temperature, which reads exactly 1. Over water the rate falls "
+						+ "to " + round(NPC.dryness(17, 1.0), 2) + ", in a dark cave to "
+						+ round(NPC.dryness(16, 0.82), 2) + ", and at a vent's mouth it is "
+						+ round(NPC.dryness(42, 0.12), 1) + " times."),
 				row("Hunger, sated → starving", num((long) NPC.HUNGER_PERIOD), "ticks",
 						"At rest. Twice thirst's period — the rhythm anchor, held "
 						+ "by the gut's sizing rather than a clock."),

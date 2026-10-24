@@ -5081,17 +5081,21 @@ public class SimTests {
 
 
 	/**
-	 * Dry air dries a body, and damp air slows it. The air a tile holds
-	 * multiplies the thirst clock -- the first of the three climate fields to
-	 * touch a clock, at the one seam VITALS.md 8 names -- and it is normalised
-	 * to exactly 1 in the air the clock was tuned in, open ground in full sun,
-	 * so a body on an ordinary meadow dries at the rate it always did.
+	 * Dry air dries a body, damp air slows it, and hot air dries it fastest.
+	 * The air a tile holds multiplies the thirst clock by its vapour pressure
+	 * deficit -- the saturation pressure at the tile's temperature times how
+	 * far from saturated the air is, so heat and dryness are one law -- at the
+	 * one seam VITALS.md 8 names, normalised to exactly 1 in the air the clock
+	 * was tuned in, open ground in full sun at the ground's own temperature, so
+	 * a body on an ordinary meadow dries at the rate it always did.
 	 *
-	 * <p>Pinned on three identical inert bodies that cannot drink: one on open
-	 * sunlit ground, whose thirst after a spell is what the bare clock says;
-	 * one two tiles from a pond, out of reach of a drink but in its damp air,
-	 * which dries slower; and one in a cave, slower still than the open. The
-	 * ratio by the pond is the vapour deficit's, read off the field.
+	 * <p>Pinned on inert bodies that cannot drink: one on open sunlit ground,
+	 * whose thirst after a spell is what the bare clock says; one two tiles
+	 * from a pond, out of reach of a drink but in its damp air, which dries
+	 * slower by the deficit's share read off the field; one in a cave, slower
+	 * still; one two tiles from a vent's mouth, in hot parched air, far faster;
+	 * and one beside the coolant run, in cool air, a little slower than the
+	 * open.
 	 */
 	static class DryAirDriesABodyAndDampAirSlowsIt extends Scenario {
 		private TestNPC inert(World w, double x, double y, int z) {
@@ -5118,21 +5122,40 @@ public class SimTests {
 			net.hedinger.prototype.engine.Climate c = w.climate();
 			assertNear("open sunlit ground is the reference air",
 					net.hedinger.prototype.engine.Climate.HUMID_REFERENCE, c.humidityAt(15.5, 10.5, 1), 1e-9);
+			assertNear("and reads exactly 1", 1.0, NPC.dryness(c.temperatureAt(15.5, 10.5, 1), c.humidityAt(15.5, 10.5, 1)), 1e-12);
 			TestNPC open = inert(w, 15.5, 10.5, 1);
 			TestNPC shore = inert(w, 7.5, 6.5, 1); // two tiles off the water: damp air, no drink
 			TestNPC cave = inert(w, 15.5, 10.5, 0);
+			// Heat and cold, each in a room of its own so the anomaly reaches
+			// nothing else: a vent's mouth and the coolant run, the body two
+			// tiles off each.
+			World hot = room(14, 10), cold = room(14, 10);
+			hot.setTile(4, 5, 0, Tile.TileType.TYPE_VENT);
+			cold.setTile(4, 5, 0, Tile.TileType.TYPE_COOLANT);
+			TestNPC baked = inert(hot, 6.5, 5.5, 0), chilled = inert(cold, 6.5, 5.5, 0);
+			assertGreater("two tiles from a vent the air is hot", hot.climate().temperatureAt(6.5, 5.5, 0), 25);
+			assertLess("two tiles from the coolant run it is cool", cold.climate().temperatureAt(6.5, 5.5, 0), 14);
 			w.think();
+			hot.think();
+			cold.think();
 			int spell = (int) (NPC.THIRST_PERIOD / 3);
 			tick(w, spell);
+			tick(hot, spell);
+			tick(cold, spell);
 			assertTrue("the shore body never drank", !shore.nearWater());
 			double bare = spell / NPC.THIRST_PERIOD; // the clock at the reference body, undisturbed
 			assertNear("on open sunlit ground the clock runs as it always did",
 					bare, open.getThirst(), bare * 0.02);
-			double deficit = (1 + NPC.DRY_AIR_THIRST * (1 - c.humidityAt(7.5, 6.5, 1)))
-					/ (1 + NPC.DRY_AIR_THIRST * (1 - net.hedinger.prototype.engine.Climate.HUMID_REFERENCE));
+			double deficit = NPC.dryness(c.temperatureAt(7.5, 6.5, 1), c.humidityAt(7.5, 6.5, 1));
 			assertLess("damp air by the pond slows it", shore.getThirst(), open.getThirst() * 0.9);
 			assertNear("by the vapour deficit's share", open.getThirst() * deficit, shore.getThirst(), bare * 0.02);
 			assertLess("and a cave's air slows it too", cave.getThirst(), open.getThirst() * 0.8);
+			assertGreater("hot parched air by a vent dries a body far faster", baked.getThirst(), open.getThirst() * 1.8);
+			assertNear("by the deficit's share, again",
+					Math.min(1.0, open.getThirst() * NPC.dryness(hot.climate().temperatureAt(6.5, 5.5, 0), hot.climate().humidityAt(6.5, 5.5, 0))),
+					baked.getThirst(), bare * 0.05);
+			assertLess("and cool air by the coolant run dries it slower than the open",
+					chilled.getThirst(), open.getThirst() * 0.97);
 		}
 	}
 
