@@ -12385,9 +12385,12 @@ public class SimTests {
 			int fx = 15 + Tile.dirDx(ramp.rampExit()), fy = 2 + Tile.dirDy(ramp.rampExit());
 			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FLOOR); // its foot, carved out of the rock
 
+			w.setTile(13, 8, 1, Tile.TileType.TYPE_COVER); // a thicket under the sky
 			net.hedinger.prototype.engine.Climate c = w.climate();
 			double f = net.hedinger.prototype.engine.Climate.LIGHT_FALLOFF;
 			assertNear("open ground is in full sun", 1.0, c.lightAt(10.5, 8.5, 1), 1e-12);
+			assertNear("a thicket under the sky is shade: the canopy's toll of the sun",
+					net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER, c.lightAt(13.5, 8.5, 1), 1e-12);
 			assertNear("and so is the hole itself", 1.0, c.lightAt(3.5, 5.5, 1), 1e-12);
 			assertNear("rock takes none", 0.0, c.lightAt(1.5, 1.5, 0), 1e-12);
 			assertNear("the floor under the hole is lit through it", 1.0, c.lightAt(3.5, 5.5, 0), 1e-12);
