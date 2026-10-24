@@ -278,12 +278,18 @@
        taller than an unwrapped one. Opaque and full-bleed for the same reason
        the header is: rows must not show through as they pass under it. */
     #inspect .tabs { position: sticky; top: var(--inspect-head, 33px); z-index: 1;
-                     display: flex; gap: 2px; margin: -8px -12px 8px;
+                     display: flex; gap: 2px; margin: 0 -12px 8px;
                      padding: 0 10px; background: var(--s0); overflow-x: auto; scrollbar-width: none;
+                     /* flex: none, or it vanishes: the panel is a flex column, and a child that
+                        scrolls sideways may be shrunk to nothing once a long tab fills the panel */
+                     flex: none;
                      box-shadow: inset 0 -2px 0 0 var(--sh); }
     #inspect .tabs button { background: none; border: none; color: var(--dim); flex: none;
                             font: 400 11px var(--f-label); letter-spacing: .06em; min-height: 34px; padding: 0 12px;
                             cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    /* the header gives up its bottom margin to the tabs instead of the tabs reaching back
+       over it: a negative top margin on a sticky bar leaves a window once it sticks */
+    #inspect > h3:has(+ .tabs) { margin-bottom: 0; }
     @media (hover: hover) { #inspect .tabs button:hover { color: var(--ink); } }
     #inspect .tabs button.on { color: var(--ink); background: var(--s1); box-shadow: inset 0 2px 0 0 var(--s2); }
     @container bh (max-width: 599px) { #inspect .tabs button { min-height: var(--touch); } }
