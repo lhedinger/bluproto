@@ -10,6 +10,7 @@ import net.hedinger.prototype.entities.AgentIO;
 import net.hedinger.prototype.entities.Brain;
 import net.hedinger.prototype.entities.Genome;
 import net.hedinger.prototype.entities.Sound;
+import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.entities.NPC;
 import net.hedinger.prototype.simtest.TestNPC;
 
@@ -540,6 +541,11 @@ public final class Mechanics {
 		rows(s,
 				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
+				row("Moist air, on the grass", num(Tile.MOIST_CAP_MIN) + " .. " + num(Tile.MOIST_CAP_MAX), "x the cap",
+						"A tile's vegetation cap is its fertility times the air's share: the humidity "
+						+ "here against the air its plant was tuned in, open ground in full sun for the "
+						+ "sward and the cave's own air for fungus. A pond's margin and the shade carry "
+						+ "more, the parched air at a vent's mouth less."),
 				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
 						"The air multiplies the clock: 1 + this times how dry the tile's air is, normalised "
 						+ "to 1 on open ground in full sun. Over water the rate halves, in a dark cave it "

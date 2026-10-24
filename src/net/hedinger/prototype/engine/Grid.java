@@ -1914,9 +1914,11 @@ public class Grid {
 	boolean setTile(int c, int r, int l, Tile.TileType t) {
 		if (c < 1 || r < 1 || c >= world.cols - 1 || r >= world.rows - 1) {
 			tiles[c][r] = new Tile(c, r, l, Tile.TileType.TYPE_WALL);
+			tiles[c][r].placedIn(world);
 			return false;
 		}
 		tiles[c][r] = new Tile(c, r, l, t);
+		tiles[c][r].placedIn(world);
 		return true;
 	}
 
