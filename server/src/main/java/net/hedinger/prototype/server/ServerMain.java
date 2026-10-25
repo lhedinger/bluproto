@@ -449,6 +449,14 @@ public final class ServerMain {
 				ctx.status(400).json(Map.of("ok", false, "error", String.valueOf(e.getMessage())));
 			}
 		});
+		app.post("/api/genome/compare", ctx -> {
+			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
+			try {
+				ctx.json(net.hedinger.prototype.sim.GenomeEditor.compare(body.path("a").asText(""), body.path("b").asText("")));
+			} catch (IllegalArgumentException e) {
+				ctx.status(400).json(Map.of("ok", false, "error", String.valueOf(e.getMessage())));
+			}
+		});
 		app.post("/api/genome/assemble", ctx -> {
 			JsonNode body = Protocol.read(ctx.body().isBlank() ? "{}" : ctx.body());
 			try {
