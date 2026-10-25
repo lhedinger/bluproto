@@ -4966,7 +4966,7 @@ public class SimTests {
 
 			double[] open = senseAt(w, 3.5, 9.5, 1);
 			assertNear("open ground is full sun", 1.0, open[AgentIO.S_LIGHT], 1e-12);
-			assertNear("and the ground's own warmth", 0.0, open[AgentIO.S_WARMTH], 1e-12);
+			assertNear("and the air a default genome is built for", 0.0, open[AgentIO.S_WARMTH], 1e-12);
 			assertNear("and reads the field's humidity", c.humidityAt(3.5, 9.5, 1), open[AgentIO.S_HUMID], 1e-12);
 
 			double[] shore = senseAt(w, 9.5, 5.5, 1);
@@ -4975,9 +4975,9 @@ public class SimTests {
 
 			double[] cave = senseAt(w, 14.5, 10.5, 0); // the far corner, out of the vent's reach
 			assertNear("the cave is dark", 0.0, cave[AgentIO.S_LIGHT], 1e-12);
-			assertNear("and reads the field's warmth",
-					(c.temperatureAt(14.5, 10.5, 0) - net.hedinger.prototype.engine.Climate.TEMP_SURFACE)
-							/ AgentIO.WARMTH_SPAN, cave[AgentIO.S_WARMTH], 1e-12);
+			assertNear("and reads the field's warmth against the default band of 8",
+					(c.temperatureAt(14.5, 10.5, 0) - net.hedinger.prototype.engine.Climate.TEMP_SURFACE) / 8.0,
+					cave[AgentIO.S_WARMTH], 1e-12);
 			assertLess("which is a touch cool", cave[AgentIO.S_WARMTH], 0);
 			assertGreater("and damp", cave[AgentIO.S_HUMID], open[AgentIO.S_HUMID]);
 
@@ -5021,7 +5021,8 @@ public class SimTests {
 			}
 			assertEquals("-0.1 names shade", AgentIO.TILE_SHADE, AgentIO.tileWanted(-0.1));
 			assertEquals("-0.25 names damp", AgentIO.TILE_DAMP, AgentIO.tileWanted(-0.25));
-			assertEquals("the larger negatives fall back to food for now", AgentIO.TILE_FOOD, AgentIO.tileWanted(-1));
+			assertEquals("-0.5 names warm ground", AgentIO.TILE_WARM, AgentIO.tileWanted(-0.5));
+			assertEquals("-1 names cool ground", AgentIO.TILE_COOL, AgentIO.tileWanted(-1));
 			assertEquals("and the positive half is what it was", AgentIO.TILE_COVER, AgentIO.tileWanted(0.25));
 
 			net.hedinger.prototype.engine.Climate c = w.climate();
@@ -5275,6 +5276,88 @@ public class SimTests {
 			Genome a = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE), b = a.copy();
 			assertTrue("and copy with the genome", a.thermalOptimum == b.thermalOptimum && a.thermalBreadth == b.thermalBreadth
 					&& a.thermogenesis == b.thermogenesis && a.insulation == b.insulation);
+		}
+	}
+
+
+	/**
+	 * The warmth sense is comfort, and a mind can ask for warmer or cooler
+	 * ground. With a comfort band in the genome the warmth channel reads the
+	 * tile against it: a lineage built for 10 degrees reads the 17-degree
+	 * meadow as hot and one built for 24 reads it as cold, where a lineage
+	 * built for the meadow reads 0. Warm and cool ground are the last two of
+	 * the tile actuator's climate family, a degree or more than the tile
+	 * underfoot, so a cold body asking for warm ground is pointed up the
+	 * temperature field toward a vent and walks there, and a hot one asking
+	 * for cool ground is pointed away from it.
+	 */
+	static class AMindFeelsItsOwnComfortAndSeeksWarmth extends ExploreScenario {
+		private double warmthOf(World w, double optimum, double breadth) {
+			Genome g = new Genome();
+			g.size = 6;
+			g.thermalOptimum = optimum;
+			g.thermalBreadth = breadth;
+			TestNPC b = TestNPC.minded(6.5, 6.5, 0, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			});
+			w.spawnEntity(b);
+			w.think();
+			double[] s = new double[AgentIO.NUM_SENSORS];
+			b.senseInto(s);
+			b.remove();
+			return s[AgentIO.S_WARMTH];
+		}
+
+		@Override
+		public void run() {
+			seed(53);
+			World plain = barren(12, 12);
+			assertNear("a lineage built for the meadow reads it as its own air", 0.0, warmthOf(plain, 17, 8), 1e-12);
+			assertNear("one built for 10 degrees with a band of 5 reads it hot", 1.0, warmthOf(plain, 10, 5), 1e-12);
+			assertNear("one built for 24 with a band of 5 reads it cold", -1.0, warmthOf(plain, 24, 5), 1e-12);
+			assertNear("and one built for 13 with a band of 8 reads it half way to hot", 0.5, warmthOf(plain, 13, 8), 1e-12);
+
+			World w = barren(30, 12);
+			for (int y = 1; y <= 10; y++) {
+				w.setTile(27, y, 0, Tile.TileType.TYPE_VENT); // a warm east wall
+			}
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertGreater("the field warms toward the vents", c.temperatureAt(20.5, 5.5, 0), c.temperatureAt(10.5, 5.5, 0) + 3);
+			for (double want : new double[] { -0.5, -1 }) {
+				boolean warm = want == -0.5;
+				Mind m = new Mind() {
+					@Override
+					public void think(double[] s, double[] a) {
+						a[AgentIO.A_TILE] = want;
+						a[AgentIO.A_SEEK] = 0.1;
+						a[AgentIO.A_THROTTLE] = s[AgentIO.S_FORAGE_PROX] > 0 ? 1 : 0;
+					}
+				};
+				Genome g = new Genome();
+				g.size = 6;
+				g.losRange = 8;
+				g.losFov = Math.PI * 2;
+				// The warm-seeker starts in the mild middle, the cool-seeker nearer
+				// the vents, where a degree of difference lies within its sight.
+				TestNPC b = TestNPC.minded(warm ? 15.5 : 21.5, 5.5, 0, g, m).withSpeed(0.08);
+				w.spawnEntity(b);
+				w.think();
+				tick(w, TestNPC.FORAGE_SCAN_PERIOD + TestNPC.SENSE_EVERY + 2);
+				double[] s = new double[AgentIO.NUM_SENSORS];
+				b.senseInto(s);
+				assertGreater("the channel points at " + (warm ? "warmer" : "cooler") + " ground", s[AgentIO.S_FORAGE_PROX], 0);
+				double before = c.temperatureAt(b.getX(), b.getY(), 0);
+				tick(w, 300);
+				double after = c.temperatureAt(b.getX(), b.getY(), 0);
+				if (warm) {
+					assertGreater("asking for warm ground walks the body up the field (" + String.format("%.1f -> %.1f", before, after) + ")", after, before + 1);
+				} else {
+					assertLess("asking for cool ground walks it down (" + String.format("%.1f -> %.1f", before, after) + ")", after, before - 1);
+				}
+				b.remove();
+			}
 		}
 	}
 
@@ -20301,6 +20384,7 @@ public class SimTests {
 				new DryAirDriesABodyAndDampAirSlowsIt(),
 				new MoistAirHoldsMoreGrass(),
 				new AFounderDrawsHowItStandsTheAir(),
+				new AMindFeelsItsOwnComfortAndSeeksWarmth(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

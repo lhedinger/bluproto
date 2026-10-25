@@ -251,20 +251,20 @@ public final class AgentIO {
 	/** Humidity on the tile, 0 bone dry to 1 the air over water. */
 	public static final int S_HUMID = 49;
 	/**
-	 * Warmth on the tile relative to the ground's own temperature, -1..1 over
-	 * {@link #WARMTH_SPAN} degrees either side: 0 is the meadow, a vent's
-	 * mouth pegs at 1 and the coolant run at -1, a mesa top reads a little
-	 * cold. Relative rather than absolute because a mind has no use for
-	 * degrees; it has use for "warmer than usual here". When a lineage has a
-	 * thermal optimum of its own this becomes relative to that -- the same
-	 * channel, read as comfort -- which is the one change the sense is built
-	 * to take without moving.
+	 * Warmth on the tile as comfort: the tile's temperature against the
+	 * lineage's own band ({@link Genome#thermalOptimum},
+	 * {@link Genome#thermalBreadth}), -1..1. 0 is the air the body is built
+	 * for, -1 the cold edge of its band and everything colder, +1 the hot edge
+	 * and everything hotter. Relative rather than in degrees because a mind
+	 * has no use for degrees; it has use for "too cold for me here". It first
+	 * read the tile against the ground's own temperature over ten degrees,
+	 * which is exactly what a genome that drew no band still reads.
 	 */
 	public static final int S_WARMTH = 50;
-	/** Degrees of warmth either side of the ground's temperature that fill the
-	 *  warmth sense: a unit, the way {@code VEG_MAX} is the food sense's. */
+	/** How much warmer or cooler than the tile underfoot a tile has to be to
+	 *  count as warm or cool ground: a degree, the field's own grain. */
 	@net.hedinger.prototype.engine.Unit("degrees C")
-	public static final double WARMTH_SPAN = 10.0;
+	public static final double TILE_DEGREE = 1.0;
 	public static final int NUM_SENSORS = 51;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
@@ -342,10 +342,9 @@ public final class AgentIO {
 	 * <p>The negative half of the pool names the CLIMATE of the ground, read off
 	 * the fields rather than the tile's type: {@code -0.1}=shade (light at or
 	 * under half of full sun: a thicket, a cave mouth, the dark), {@code -0.25}=damp
-	 * (humidity of half or more: a pond's margin, a cave). Warm and cool ground
-	 * join here once a lineage has a comfort band to measure them against; until
-	 * then the larger negatives fall back to food, so a mind that reaches for
-	 * them early loses nothing.
+	 * (humidity of half or more: a pond's margin, a cave), {@code -0.5}=warm and
+	 * {@code -1}=cool (a degree or more warmer or cooler than the tile underfoot,
+	 * so seeking either climbs the temperature field toward the body's band).
 	 */
 	public static final int A_TILE = A_SPRINT; // the retired sprint slot, put back to work
 	/**
@@ -523,6 +522,11 @@ public final class AgentIO {
 	public static final int TILE_SHADE = 6;
 	/** Damp ground: humidity at or above {@link #DAMP_HUMID}. */
 	public static final int TILE_DAMP = 7;
+	/** Warm ground: at least {@link #TILE_DEGREE} warmer than the tile the body
+	 *  stands on, so seeking it climbs the temperature field. */
+	public static final int TILE_WARM = 8;
+	/** Cool ground: at least {@link #TILE_DEGREE} cooler than the tile underfoot. */
+	public static final int TILE_COOL = 9;
 	/** The line at or under which ground counts as shade, as a share of full
 	 *  sun: half, which is what a canopy lets through. Open ground under the sky
 	 *  is 1, a thicket exactly half, a cave 0. */
@@ -544,7 +548,10 @@ public final class AgentIO {
 			if (m < 0.375) {
 				return TILE_DAMP;
 			}
-			return TILE_FOOD; // warm and cool, once there is a comfort band to read them by
+			if (m < 0.75) {
+				return TILE_WARM;
+			}
+			return TILE_COOL;
 		}
 		if (m < 0.175) {
 			return TILE_FOOD; // includes 0: forage is what a silent mind gets
