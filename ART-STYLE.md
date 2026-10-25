@@ -168,9 +168,14 @@ One sun, straight overhead-north. The grammar:
   tick, never the wall clock. Drawn from 12 px a tile up only, where an
   art-pixel is at least a device pixel.
 - **What shows through a hole moves with its own depth.** The client draws the
-  level below scaled about the screen centre by `PARALLAX` (0.94), which is the
-  projection of a plane one storey further from the eye: pan by *d* and the top
-  layer moves *d* while the floor below moves 0.94*d*. That slide is the whole
+  level below scaled about the screen centre by `parallaxFactor(scale)` =
+  1 / (1 + scale / `PARALLAX_ZOOM`), with `PARALLAX_ZOOM` 500 and the scale in
+  device px per tile: the projection of a plane one storey further from an eye
+  at a fixed height, so the deeper floor recedes more the closer you zoom. Pan
+  by *d* and the top layer moves *d* while the floor below moves 0.98*d* at the
+  fit zoom (~9 px a tile), 0.94*d* at 30 and 0.83*d* at 100. `parallax=0` (the
+  URL or the ⚙ dialog) pins the factor to 1: the floors below still show
+  through every pit, they just stop sliding. That slide is the whole
   point of the transparency — it is what separates "there is a place down
   there" from "someone painted rock on the lid", and no amount of texture in a
   painted stand-in can produce it. Nothing dims the lower floor on the way up;
