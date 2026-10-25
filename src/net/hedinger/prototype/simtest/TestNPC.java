@@ -4471,18 +4471,6 @@ public class TestNPC extends NPC {
 		return explore(pace, genome == null ? 1.0 : genome.searchCast);
 	}
 
-	/** The centre of this body's comfort band, in degrees: the gene's, or the
-	 *  ground's own temperature for a body with no genome. */
-	double thermalOptimum() {
-		return genome == null ? net.hedinger.prototype.engine.Climate.TEMP_SURFACE : genome.thermalOptimum;
-	}
-
-	/** Half-width of this body's comfort band, in degrees; a band of 8 for a
-	 *  body with no genome, which is the default gene. */
-	double thermalBreadth() {
-		return genome == null ? 8.0 : Math.max(net.hedinger.prototype.entities.Genome.THERMAL_BAND_MIN, genome.thermalBreadth);
-	}
-
 	/** The point explore is walking to, {x, y}, or null when it holds none.
 	 *  Package-visible so the suite can pin where a pick lands. */
 	double[] exploreTarget() {

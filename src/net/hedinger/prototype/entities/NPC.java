@@ -126,6 +126,29 @@ public abstract class NPC extends Entity {
 	 *  and thought cost nothing extra. */
 	@Unit("")
 	public static final double REF_TURN = 5, REF_BRAIN_LEN = 16;
+	/**
+	 * What cold costs an endotherm: the resting burn it adds per degree below
+	 * its comfort band, for a bare body of mass 1, as a share of the basal
+	 * rate. A warm-blooded body holds its temperature by burning, and loses
+	 * heat through its surface, so the cost scales with mass to the two
+	 * thirds against a basal burn of mass to the three quarters -- small
+	 * bodies suffer cold more, which is Bergmann's rule for free. Scaled by
+	 * the lineage's thermogenesis (an ectotherm pays nothing and is as slow
+	 * as the air instead) and by what its coat keeps in. At a tenth, a bare
+	 * endotherm ten degrees under its band burns double.
+	 */
+	@Unit("of the basal rate per degree C")
+	public static double COLD_BURN = 0.1;
+	/**
+	 * What a coat costs to carry: resting burn at full insulation, at mass 1,
+	 * as a share of the basal rate, scaling with mass to the three quarters
+	 * like the other capability surcharges. Priced so insulation is a trade
+	 * and not a free skin: a full coat on the meadow is a fifteen per cent
+	 * burn for nothing, and pays for itself from about two degrees under the
+	 * band.
+	 */
+	@Unit("of the basal rate at full coat")
+	public static double INSULATION_BURN = 0.15;
 	/** Energy/tick per unit of sight area beyond the reference, at mass 1. */
 	@Unit("energy/tick per tile·rad")
 	public static double PERCEPTION_BURN = 5.0e-6;
@@ -1158,7 +1181,9 @@ public abstract class NPC extends Entity {
 		double agility = AGILITY_BURN * m34 * (genome.turnRate - REF_TURN);
 		int brainLen = genome.brain != null ? genome.brain.length() : (int) REF_BRAIN_LEN;
 		double thought = BRAIN_BURN * m34 * (brainLen - REF_BRAIN_LEN);
-		double burn = base + perception + agility + thought;
+		// A coat is tissue too: carried everywhere, paid for in every air.
+		double coat = BASAL_RATE * m34 * INSULATION_BURN * genome.insulation;
+		double burn = base + perception + agility + thought + coat;
 		return Math.max(burn, base * CAPABILITY_FLOOR);
 	}
 
@@ -1401,7 +1426,10 @@ public abstract class NPC extends Entity {
 			// mint itself instead made childhood longer than a life.
 			double exertion = Math.min(1.0, EXERTION_WALK * base / Math.max(travel, 1e-12));
 			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor * exertion;
-			double out = base + grip + travel;
+			// Cold: what a warm-blooded body burns to stay warm below its band,
+			// paid whether it rides or walks or stands.
+			double cold = coldCost();
+			double out = base + grip + travel + cold;
 			// Only conversion that lands in the books draws down the gut: at
 			// full glycogen the mint stops instead of burning the meal for nothing.
 			double minted = Math.min(regen, Math.max(0, cap - glycogen + out));
@@ -1444,7 +1472,9 @@ public abstract class NPC extends Entity {
 			// needs, at the pace-of-life rate (fast burners heal faster and pay
 			// for it in appetite). Wounds themselves come from combat, as ever.
 			if (hunger >= DEPRIVED && starving() && age % DEPRIVATION_PERIOD == 0) {
-				damage(1, "starvation");
+				// A body starving while it pays to stay warm died of the cold:
+				// the corpse names what emptied it.
+				damage(1, cold > 0 ? "cold" : "starvation");
 			}
 			if (thirst >= DEPRIVED && age % DEPRIVATION_PERIOD == DEPRIVATION_PERIOD / 2) {
 				damage(1, "thirst"); // offset phase: two pegged needs erode faster
@@ -1596,6 +1626,40 @@ public abstract class NPC extends Entity {
 		double reference = vapourDeficit(net.hedinger.prototype.engine.Climate.TEMP_SURFACE,
 				net.hedinger.prototype.engine.Climate.HUMID_REFERENCE);
 		return (1 + DRY_AIR_THIRST * vapourDeficit(celsius, humidity) / reference) / (1 + DRY_AIR_THIRST);
+	}
+
+	/** The centre of this body's comfort band, in degrees: the gene's, or the
+	 *  ground's own temperature for a body with no genome. */
+	public double thermalOptimum() {
+		return genome == null ? net.hedinger.prototype.engine.Climate.TEMP_SURFACE : genome.thermalOptimum;
+	}
+
+	/** Half-width of this body's comfort band, in degrees: the gene's, floored
+	 *  at the gene's own minimum, or the default band for a body with no genome. */
+	public double thermalBreadth() {
+		return genome == null ? 8.0 : Math.max(Genome.THERMAL_BAND_MIN, genome.thermalBreadth);
+	}
+
+	/** How far below its band the air where this body stands is, in degrees;
+	 *  0 inside or above it. */
+	protected double coldGap() {
+		if (getWorld() == null) {
+			return 0;
+		}
+		double t = getWorld().climate().temperatureAt(X, Y, getLvl());
+		return Math.max(0, thermalOptimum() - thermalBreadth() - t);
+	}
+
+	/** The energy this body burns this tick to stay warm: {@link #COLD_BURN}
+	 *  per degree under its band, on its surface rather than its mass, for
+	 *  the warm-blooded share of it and the share its coat lets out. */
+	protected double coldCost() {
+		double gap = coldGap();
+		if (gap <= 0 || genome == null) {
+			return 0;
+		}
+		return BASAL_RATE * Math.pow(leanMass(), 2.0 / 3.0) * COLD_BURN * gap
+				* genome.thermogenesis * (1 - genome.insulation);
 	}
 
 	/** The air's multiplier on this body's thirst clock where it stands. */
