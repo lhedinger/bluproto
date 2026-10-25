@@ -148,8 +148,17 @@
       #pop h3 { gap: 6px; }
       #pop h3 button:not(.szbtn, .x) { padding: 4px 7px; font-size: 10px; }
     }
+    /* The lineage diagram's scrollbar, on top: a recessed rail and a raised
+       Bulkhead thumb. Thick enough to grab on a phone; the chart drags too. */
+    #pop .pop-rail { position: relative; flex: none; height: 14px; margin: 0 0 6px; background: var(--well);
+                     box-shadow: inset 0 2px 0 0 var(--sh); cursor: pointer; touch-action: none; }
+    #pop .pop-rail > i { position: absolute; left: 0; top: 2px; bottom: 0; background: var(--s1);
+                         box-shadow: inset 0 2px 0 0 var(--s2), inset -2px 0 0 0 var(--sh); }
+    @media (hover: hover) { #pop .pop-rail:hover > i { background: var(--s2); } }
+    #pop .pop-rail:focus-visible { outline: 2px solid var(--lamp-l); outline-offset: 2px; }
+    @container bh (max-width: 599px) { #pop .pop-rail { height: 18px; } }
     #popCv { width: 100%; flex: 1; min-height: 0; display: block;
-             image-rendering: auto; touch-action: auto; }
+             image-rendering: auto; touch-action: pan-y; } /* sideways is the lineage diagram's own scroll */
     /* Wraps: the lineage lens can carry a dozen-plus species where roles have
        four, and a legend that clips is a legend that lies by omission. */
     #popKey { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px;
@@ -461,6 +470,8 @@
         title="cycle which clade the diagram shows — a lineage never crosses clades, so one clade at a time loses nothing">herbivore</button>
       <span class="win" id="popWin"></span>
       <button type="button" class="szbtn" title="full screen">⛶</button><button type="button" class="x" title="close" aria-label="close">✕</button></h3>
+    <div id="popScroll" class="pop-rail" role="scrollbar" aria-label="scroll the stages"
+         aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden><i></i></div>
     <canvas id="popCv"></canvas>
     <div id="popKey"></div>
   </div>

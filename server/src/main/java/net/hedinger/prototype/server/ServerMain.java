@@ -156,7 +156,20 @@ public final class ServerMain {
 		// with exact per-individual flows between them — continuations, drifts
 		// across a species boundary, births and deaths. Counts say how many; a
 		// flow says where the heads went, which no series of totals can.
-		app.get("/api/lineage/flows", ctx -> ctx.json(host.lineageFlows()));
+		app.get("/api/lineage/flows", ctx -> {
+			// ?cols=N asks for up to N columns (clamped to the ring); absent, the
+			// panel's twelve. A malformed number is the default, not a 500.
+			int cols = WorldHost.LINEAGE_COLS;
+			String q = ctx.queryParam("cols");
+			if (q != null) {
+				try {
+					cols = Integer.parseInt(q);
+				} catch (NumberFormatException e) {
+					cols = WorldHost.LINEAGE_COLS;
+				}
+			}
+			ctx.json(host.lineageFlows(cols));
+		});
 
 		// Prometheus text exposition of the same numbers, for scraping.
 		app.get("/metrics", ctx -> {

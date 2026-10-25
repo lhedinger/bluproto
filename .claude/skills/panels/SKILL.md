@@ -168,6 +168,27 @@ and transitions, the calculus changes — and then reach for small utilities
 stays under our control. Requirements like stable lane ordering and non-linear
 widths are exactly what a general layout engine will fight.
 
+### A time series that outgrows the screen scrolls; it does not squeeze
+
+The lineage Sankey drew twelve columns into whatever width it had: eight hours
+as twelve samples forty minutes apart, a lens opened at half size, ribbons as
+slivers, and a line that bloomed and died between two columns was never drawn.
+Now the lineage lens opens **full screen** (and gives the roles chart its own
+size back on the way out), asks for every stage (`/api/lineage/flows?cols=100`),
+lays them out at a fixed pitch, and scrolls sideways past the panel's width.
+
+- **The scrollbar is on top, and drawn**: a Bulkhead rail and thumb above the
+  chart (`.pop-rail`). A phone hides a native scrollbar until you are already
+  scrolling, so a native one is no affordance. The chart drags and wheels too;
+  the rail takes arrow, Page, Home and End keys.
+- **Open on now, and stay there** until the reader scrolls back; a new stage
+  landing must not push the present off the edge.
+- **The canvas stays the panel's size** and redraws at the offset. A hundred
+  columns at device resolution is wider than a browser will allocate.
+- **Name what is on screen**: labels sit beside the first and last columns in
+  view, on a dark plate so they read over the ribbons, and pointing at any bar
+  writes its species, count and age into the header's readout line.
+
 ### Non-linear scales say so, and print their numbers
 
 The lineage Sankey's ribbon width is `1 + log₁₀(heads)`, because a linear scale
