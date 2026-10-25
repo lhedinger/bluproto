@@ -118,19 +118,38 @@ function pair(parent: HTMLElement, label: string,
   parent.append(outer);
 }
 
-/** A canvas repainted every frame with the elapsed seconds. */
+// Every live figure on the page shares ONE animation loop, and a figure is
+// painted only while it is on screen. Each had its own requestAnimationFrame
+// and repainted all page long, so a reader at the top paid for every figure
+// below the fold, every frame.
+type Live = { g: CanvasRenderingContext2D; paint: (g: CanvasRenderingContext2D, t: number) => void };
+const live = new Map<Element, Live>();
+const visible = new Set<Live>();
+const t0 = performance.now();
+const seen = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const l = live.get(e.target);
+    if (!l) continue;
+    if (e.isIntersecting) visible.add(l); else visible.delete(l);
+  }
+}, { rootMargin: '100px' });
+function liveLoop(): void {
+  const t = (performance.now() - t0) / 1000;
+  for (const l of visible) l.paint(l.g, t);
+  requestAnimationFrame(liveLoop);
+}
+requestAnimationFrame(liveLoop);
+
+/** A canvas repainted every frame it is on screen, with the elapsed seconds. */
 function liveCanvas(w: number, h: number,
     paint: (g: CanvasRenderingContext2D, t: number) => void): HTMLCanvasElement {
   const cv = document.createElement('canvas');
   cv.width = w;
   cv.height = h;
-  const g = cv.getContext('2d')!;
-  const t0 = performance.now();
-  const tick = () => {
-    paint(g, (performance.now() - t0) / 1000);
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  const l = { g: cv.getContext('2d')!, paint };
+  live.set(cv, l);
+  paint(l.g, 0); // a first frame, so a figure is never blank before it scrolls in
+  seen.observe(cv);
   return cv;
 }
 
@@ -495,7 +514,9 @@ for (const [act, name, meaning] of EXPR) {
       const n = (m.entities || []).find((e: EntityState) => e.kind.startsWith('npc.') && e.pheno);
       if (m.type === 'full' && n) { resolve({ pheno: n.pheno, rgb: n.rgb }); ws.close(); }
     };
-    setTimeout(() => resolve({ pheno: 0, rgb: 0 }), 20000);
+    // Closed either way: left open past the timeout, the page streamed the
+    // whole world for as long as it stayed open, to find nothing.
+    setTimeout(() => { ws.close(); resolve({ pheno: 0, rgb: 0 }); }, 20000);
   });
   const pheno = found.pheno;
   // No live phenotype (the stream never delivered one inside the timeout) is

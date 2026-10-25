@@ -42,10 +42,7 @@ export class Net {
     const ws = new WebSocket(proto + location.host + '/api/world/stream?bin=1');
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
-    ws.onopen = () => {
-      this.backoff = 500;
-      this.setStatus('open');
-    };
+    ws.onopen = () => this.setStatus('open');
     ws.onmessage = ev => {
       // Instrumented: parsing + applying a herd-sized delta is main-thread
       // work the frame loop never sees — the perf HUD reads these to tell
@@ -53,7 +50,14 @@ export class Net {
       const t0 = performance.now();
       const bin = ev.data instanceof ArrayBuffer;
       const msg = bin ? decodeBin(ev.data) : JSON.parse(ev.data) as ServerMsg;
-      if (msg) this.onMsg(msg, t0);
+      // A frame this client cannot read leaves every later delta applied to
+      // the wrong base. Dropping the link is the resync: the reconnect's first
+      // message is a full snapshot.
+      if (!msg) { ws.close(); return; }
+      // The backoff resets on the first MESSAGE, not on open: a server that
+      // accepts and then drops at once would otherwise be redialled every 500 ms.
+      this.backoff = 500;
+      this.onMsg(msg, t0);
       const stats = Net.streamStats;
       stats.msgMs += (performance.now() - t0 - stats.msgMs) * 0.2;
       const bytes = bin ? (ev.data as ArrayBuffer).byteLength : ev.data.length;
@@ -67,7 +71,8 @@ export class Net {
     };
     ws.onclose = () => {
       this.setStatus('closed');
-      setTimeout(() => this.connect(), this.backoff);
+      // Jittered, so a fleet of tabs dropped by one deploy does not redial in step.
+      setTimeout(() => this.connect(), this.backoff * (0.75 + Math.random() * 0.5));
       this.backoff = Math.min(5000, this.backoff * 2);
     };
   }

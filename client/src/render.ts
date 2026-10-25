@@ -795,15 +795,13 @@ export function render(
       // The fetched atlas is colour-neutral (one per SHAPE); this path has no
       // tint shader, so it stamps from a re-tinted copy baked once per
       // (shape, colour) — see atlas.tintedFor.
-      const tinted = tintedFor(e.pheno, e.rgb, atlas);
-      const tk = e.pheno + ':' + e.rgb;
       if (box <= CELL / MIP) {
-        // Far zoom: one stamp from the quarter-size mip.
+        // Far zoom: one stamp from the quarter-size mip, tinted at mip size.
         const c = CELL / MIP;
-        const src = atlasMipFor(tk, tinted);
+        const src = tintedFor(e.pheno, e.rgb, atlasMipFor(e.pheno, atlas), true);
         g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
-        const src = tinted;
+        const src = tintedFor(e.pheno, e.rgb, atlas);
         g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
       }
     } else {
