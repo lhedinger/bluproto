@@ -17,7 +17,7 @@ import {
   CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize,
 } from './panels';
 import { fmtSpan, popOn } from './population';
-import { bodyScanCanvas, planFor, stateOf } from './bodyScan';
+import { bodyScanCanvas, comfortWord, planFor, stateOf } from './bodyScan';
 
 /** Every clock the viewer keeps, in ms, in one place. */
 const MS = {
@@ -1282,7 +1282,7 @@ function climateText(d: Record<string, any>): string {
   // ectotherm of its speed, and reads full for a warm-blooded body.
   if ('comfort' in d) {
     const c = d.comfort as number;
-    s += ` · ${c <= -1 ? 'cold' : c >= 1 ? 'hot' : c < -0.5 ? 'cool' : c > 0.5 ? 'warm' : 'at home'}`;
+    s += ` · ${comfortWord(c)}`;
     if (d.pace < 0.995) s += ` · pace ${Math.round(d.pace * 100)}%`;
   }
   return s;
