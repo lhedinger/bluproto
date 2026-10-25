@@ -164,8 +164,8 @@ function climatePixels(field: ClimateField, grid: Uint8Array, range: ClimateRang
 //
 // Colours are the water ramps' own highlights, pinned by a scenario
 // (TheWaterGlintsAreTheRampsHighlights) because Java cannot read this file.
-export const GLINT_WATER = 0x3172b0;    // GroundTextures.RAMP[CLS_WATER][2]
-export const GLINT_SHALLOWS = 0x63becd; // RAMP[CLS_SHALLOWS][2]
+const GLINT_WATER = 0x3172b0;    // GroundTextures.RAMP[CLS_WATER][2]
+const GLINT_SHALLOWS = 0x63becd; // RAMP[CLS_SHALLOWS][2]
 /** Lattice pitch in art-px: nine cells a tile, at most one glint each. */
 const GLINT_C = 4;
 /** Per water kind (index = the mask byte): colour, expected glints per tile,
@@ -174,14 +174,14 @@ const GLINT_C = 4;
  *  is the rate of events across the water, so a calm surface wants few
  *  glints each lit long (half its period, swelling and dimming over seconds)
  *  rather than many each winking briefly. */
-export const GLINT_KINDS: ReadonlyArray<{ col: number; per: number; pmin: number; pmax: number; lit: number } | null> = [
+const GLINT_KINDS: ReadonlyArray<{ col: number; per: number; pmin: number; pmax: number; lit: number } | null> = [
   null,
   { col: GLINT_WATER, per: 0.5, pmin: 150, pmax: 360, lit: 0.5 },    // 1 open water
   { col: GLINT_SHALLOWS, per: 1.2, pmin: 90, pmax: 210, lit: 0.5 },  // 2 shallows
   { col: GLINT_WATER, per: 0.3, pmin: 240, pmax: 480, lit: 0.5 },    // 3 tannin pool
   { col: GLINT_WATER, per: 0.15, pmin: 270, pmax: 540, lit: 0.5 },   // 4 mire
 ];
-export interface Glint { x: number; y: number; kind: number; period: number; phase: number }
+interface Glint { x: number; y: number; kind: number; period: number; phase: number }
 
 /** Every glint a level will ever show, from its water mask: world-absolute
  *  art-pixel positions, each with its own period and phase. */
@@ -212,7 +212,7 @@ export function glintsFor(water: Uint8Array, cols: number, rows: number): Glint[
 
 /** Where a glint is in its blink at `tick`: -1 while dark, else 0..1 across
  *  the lit window. */
-export function glintLit(gl: Glint, tick: number): number {
+function glintLit(gl: Glint, tick: number): number {
   const k = GLINT_KINDS[gl.kind]!;
   const u = (((tick + gl.phase) % gl.period) + gl.period) % gl.period / gl.period;
   return u > k.lit ? -1 : u / k.lit;

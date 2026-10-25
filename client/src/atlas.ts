@@ -9,7 +9,7 @@
 // on-screen body match the entity's true radius).
 export const CELL = 96;
 export const DIRS = 8;
-export const ANIM = 8;
+const ANIM = 8;
 // 0.18 of the cell, down from 0.22 when the bodies grew variants: the smallest
 // body (r = 2) is baked at 9px per art-pixel, and the reach a horn or a halo
 // needs had to fit inside 48px. Moves only together with AtlasBaker.
@@ -19,7 +19,7 @@ export const ART_RADIUS = 0.18 * CELL;
  *  for pixel-art style partial coverage — the ground bake's dithers, the
  *  depletion masks and the corpse dissolve all read from this one table so
  *  every partial coverage in the world erodes on the same grid. */
-export const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 const cache = new Map<number, HTMLCanvasElement | null>(); // null = loading
 

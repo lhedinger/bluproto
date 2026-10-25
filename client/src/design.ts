@@ -1,6 +1,5 @@
 // The /help/design page: the Bulkhead reference and its playground. Plain DOM,
 // no dependencies, like the rest of the client.
-/* eslint-disable */
 // @ts-nocheck -- page glue over the system's markup; the system itself is CSS.
 
 // ---- swatches

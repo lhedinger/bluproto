@@ -24,7 +24,7 @@
  *  shallows ramp, the tank the crystal ramp, the gut the grass ramp or the
  *  bloom red the rest of the world's flesh wears, fat the sand ramp. Each pair
  *  is {bright, dim}: an edge and a fill. */
-export const SCAN = {
+const SCAN = {
   bg: '#0b0f17', grid: '#10192a', band: '#12303a',
   skin: ['#D0ECFF', '#2b6a78'] as const,
   hurt: ['#E0455F', '#7c2434'] as const,
@@ -117,7 +117,7 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
  * from the skin outward, so nothing crosses an organ; without, it is the card
  * thumbnail, the body alone.
  */
-export function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
+function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
     W: number, H: number, px: number, labels: boolean): void {
   const cell = (x: number, y: number, c: string) => { g.fillStyle = c; g.fillRect(x * px, y * px, px, px); };
   g.fillStyle = SCAN.bg;

@@ -5,6 +5,7 @@
 import type { Camera } from './camera';
 import { F_DEAD } from './protocol';
 import type { WorldState } from './state';
+import { CORPSE_RGB, hex } from './artCore';
 import type { WorldMeta } from './render';
 
 export function drawMinimap(
@@ -28,7 +29,7 @@ export function drawMinimap(
     const e = t.curr;
     if (e.kind === 'phero') continue;
     if (Math.round(e.z) !== level) continue; // mirror the main view's level
-    g.fillStyle = (e.flags & F_DEAD) ? '#5a5f66'
+    g.fillStyle = (e.flags & F_DEAD) ? hex(CORPSE_RGB)
       : e.kind.startsWith('item.') ? '#d0c090'
       : '#' + e.rgb.toString(16).padStart(6, '0');
     g.fillRect(e.x * sx - 1, e.y * sy - 1, 2, 2);

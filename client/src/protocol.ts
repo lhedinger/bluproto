@@ -59,6 +59,7 @@ export interface HelloMsg {
   layers: string[];
   chunkTiles: number; // baked ground is served as chunkTiles-square map chunks
   build: string; // server process id; changes on every restart/redeploy
+  tps?: number; // sim ticks per second; optional so an older server still parses
 }
 
 export interface FullMsg { type: 'full'; tick: number; entities: EntityState[]; total?: number; }

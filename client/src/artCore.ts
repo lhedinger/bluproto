@@ -15,3 +15,17 @@ export function hash01(x: number, y: number, s: number): number {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) & 0x7fffffff) / 0x7fffffff;
 }
+
+/** The spent grey of a dead body drawn without its sprite: a corpse's dot, in
+ *  both renderers and on the minimap. */
+export const CORPSE_RGB = 0x5a5f66;
+/** A living body whose sprite has not landed yet: the dot, with no marker. */
+export const PENDING_RGB = 0x555a63;
+/** The void behind the world, wherever no ground is drawn. */
+export const VOID_RGB = 0x14161a;
+
+/** `rgb` as a CSS hex colour. */
+export const hex = (rgb: number): string => '#' + rgb.toString(16).padStart(6, '0');
+/** `rgb` as the 0..1 channels the GL batcher takes. */
+export const rgbF = (rgb: number): [number, number, number] =>
+  [((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255];

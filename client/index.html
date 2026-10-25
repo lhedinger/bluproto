@@ -14,7 +14,11 @@
     /* Every floating surface stacks on this scale rather than on a number
        somebody picked in the moment. The panels all share one layer because
        only one of them is ever open (see .panel below). */
-    :root { --z-bar: 2; --z-minimap: 3; --z-panel: 5; --z-toast: 10;
+    :root { --z-bar: 2; --z-minimap: 3; --z-panel: 5; --z-dialog: 8; --z-toast: 10;
+            /* What the bottom corners hold up, measured from the bottom inset: the
+               status plate and its gap, and the minimap with its ring and gap.
+               Whatever sits above one of them clears it by these. */
+            --stats-top: 34px; --mm-top: 104px;
             /* How far down a panel starts. Measured from the toolbar itself
                (see syncBarHeight in main.ts) because the toolbar WRAPS: on a
                phone it is two rows, and the 52px every panel used to assume
@@ -59,7 +63,7 @@
                          0 2px 0 0 var(--sh), 0 6px 0 0 #0007; }
     .panel.open { display: flex; }
     .panel.card { left: max(8px, env(safe-area-inset-left));
-                  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 34px); /* above the status readout */
+                  bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--stats-top)); /* above the status readout */
                   width: min(240px, 46vw); }
     .panel.menu { top: var(--bar-h); right: max(8px, env(safe-area-inset-right)); }
     .panel.half { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
@@ -122,36 +126,27 @@
     @media (max-height: 500px) {
       .panel.half { height: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
     }
-    #hud { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(var(--bar-h) + 8px); /* clear of the minimap it used to sit on */ z-index: var(--z-panel); display: none;
+    #hud { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(var(--bar-h) + 8px); /* clear of the minimap it used to sit on */ z-index: var(--z-panel);
            font: 11px/1.5 var(--f-ui); color: var(--ink);
            background: #14171de6; padding: 6px 8px; box-shadow: 0 0 0 2px var(--sh);
            white-space: pre; pointer-events: none; }
-    /* The population graph: headcount by trophic role over time. Sits above the
-       bar and away from the inspect panel (bottom-left) and minimap. Its canvas
-       is drawn at device resolution and CSS-scaled down, so the 1px series lines
-       stay sharp on a phone -- unlike the world canvas it is a chart, not art,
-       so `pixelated` would be exactly wrong here. */
-    /* The chart flexes to whatever size the panel was given and redraws there.
-       The window readout already takes the free space, so the size toggle sits
-       next to it rather than claiming a second `margin-left: auto` and
-       splitting the gap with it. */
-    #pop h3 { gap: 10px; }
-    #pop h3 .win { margin-left: auto; opacity: .6; font: 11px var(--f-ui); letter-spacing: 0;
-                   font-variant-numeric: tabular-nums;
-                   /* one line that gives way, so the size and close plates are never pushed off */
-                   min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #pop h3 .win ~ .szbtn { margin-left: 0; }
-    /* compact: the header wraps, and the window readout takes its own line under the
-       choices, so the size and close plates stay on screen */
-    /* compact: the title gives way first -- it shrinks to an ellipsis on a zero
-       flex basis, so the choices and the size and close plates always share the
-       first line -- and the window readout takes a line of its own under them */
+    /* The population graph. Its canvas is drawn at device resolution and
+       CSS-scaled down, so the 1px series lines stay sharp on a phone -- unlike
+       the world canvas it is a chart, not art, so `pixelated` would be exactly
+       wrong here. The chart flexes to whatever size the panel was given and
+       redraws there.
+       The header: the title gives way first -- it shrinks to an ellipsis on a
+       zero flex basis, so the choices and the size and close plates always share
+       the first line -- and the window readout takes a line of its own under
+       them at every width. Sharing the first line, the lineage lens's third
+       choice left it no room at all. */
+    #pop h3 { gap: 10px; flex-wrap: wrap; row-gap: 4px; }
+    #pop h3 .ttl { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #pop h3 .win { order: 9; flex-basis: 100%; opacity: .6; font: 11px var(--f-ui); letter-spacing: 0;
+                   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     @container bh (max-width: 599px) {
-      #pop h3 { flex-wrap: wrap; row-gap: 4px; gap: 6px; }
-      #pop h3 .ttl { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #pop h3 { gap: 6px; }
       #pop h3 button:not(.szbtn, .x) { padding: 4px 7px; font-size: 10px; }
-      #pop h3 .win { order: 9; flex-basis: 100%; margin-left: 0; }
-      #pop h3 .win ~ .szbtn { margin-left: 0; }
     }
     #popCv { width: 100%; flex: 1; min-height: 0; display: block;
              image-rendering: auto; touch-action: auto; }
@@ -173,7 +168,7 @@
     @container bh (max-width: 599px) { #ovl label { min-height: var(--touch); } }
     /* a group heading: Bulkhead's label, over a shadow line */
     #tuning .grp, #inspect .grp { margin: 12px 0 4px; padding-top: 8px; box-shadow: inset 0 2px 0 0 var(--sh);
-                   font: 500 11px var(--f-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); opacity: 1; border: 0; }
+                   font: 500 11px var(--f-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
     #tuning .trow { display: flex; align-items: center; gap: 8px; padding: 2px 0;
                     font-size: 12px; }
     #tuning .trow .tname { flex: 0 1 118px; overflow: hidden; white-space: nowrap;
@@ -195,7 +190,10 @@
     #popKey span { display: flex; align-items: center; gap: 5px; cursor: pointer;
                    -webkit-tap-highlight-color: transparent; }
     #popKey span.off { opacity: .4; }
-    #popKey i { width: 9px; height: 9px; display: inline-block; box-shadow: 0 0 0 1px var(--sh); }
+    #popKey span.static { cursor: default; }
+    /* the faint outer ring keeps a near-black species a swatch, not a gap */
+    #popKey i { width: 9px; height: 9px; display: inline-block; background: var(--fill);
+                box-shadow: inset 0 0 0 1px var(--ring, var(--fill)), 0 0 0 1px #ffffff2e; }
     /* image-rendering: the world canvas renders at 1x CSS pixels (see resize()
        in main.ts) and the browser upscales it on hiDPI displays — pixelated
        keeps the fat art-pixels crisp instead of smearing them. */
@@ -206,14 +204,12 @@
            align-items: center; padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
            background: #14171de6; box-shadow: inset 0 -2px 0 0 var(--sh); z-index: var(--z-bar); flex-wrap: wrap; }
     #bar select.bh-input { width: auto; }
-    /* On a wide screen the tools are just more of the row; the toggle does not exist. */
     /* Wide screen: the groups sit in the row, a shadow line between them. The views
        group runs on from the population button beside it, so those read as one set. */
     #bar .bar-tools { display: contents; }
     #bar .bar-group { display: flex; align-items: center; gap: 4px; padding-left: 10px; margin-left: 4px;
                       box-shadow: inset 2px 0 0 0 var(--sh); }
     #bar .bar-group--views { padding-left: 0; margin-left: 0; box-shadow: none; }
-    #bar .bar-group[hidden] { display: none; }
     #bar .bar-glabel { display: none; }
     #popBtn { margin-left: 10px; }
     #barToggle { display: none; }
@@ -226,7 +222,6 @@
       #bar { flex-wrap: nowrap; }
       #bar.open { z-index: calc(var(--z-panel) + 1); }
       #barToggle { display: inline-flex; flex: none; margin-left: auto; }
-      #popBtn { margin-left: 6px; }
       #bar .bar-tools { display: none; }
       #bar.open .bar-tools { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch;
         position: absolute; left: 0; right: 0; top: 100%; padding: 10px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
@@ -235,17 +230,15 @@
          own width, wrapping only when a group runs out of room. */
       #bar.open .bar-group, #bar.open .bar-group--views { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
         padding: 0; margin: 0; box-shadow: none; }
-      #bar.open .bar-group[hidden] { display: none; }
       #bar.open .bar-glabel { display: block; flex: none; width: 84px; font-size: 10px; }
       #bar.open .bar-group > .bh-btn:not(.bh-btn--icon), #bar.open .bar-group > select { width: auto; margin: 2px; }
     }
     @container bh (max-width: 599px) { #bar { gap: 6px; } #bar select.bh-input--sm { padding-right: 26px; background-position: right 8px center; } }
-    #bar .bh-level[hidden], #bar [hidden] { display: none; }
     /* The status readout lives in the bottom-left corner, off the toolbar: a small dark
        plate, Bulkhead's readout type. It is still the triple-tap that toggles debug. The
        entity card opens above it rather than over it; on a phone the card is a sheet
        across the bottom and covers it while it is up. */
-    #stats { position: fixed; z-index: var(--z-minimap);
+    #stats { position: fixed; z-index: var(--z-minimap); cursor: pointer; /* triple-tap toggles debug */
              left: max(8px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom));
              max-width: calc(100vw - 190px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
              padding: 5px 8px; background: #14171de6; box-shadow: 0 0 0 2px var(--sh);
@@ -254,8 +247,7 @@
     /* The floor rail is the phone's level control: a column on the right edge above the
        minimap, where a right thumb rests. A wide screen keeps the stepper in the toolbar. */
     #floorRail { position: fixed; z-index: var(--z-minimap); right: max(8px, env(safe-area-inset-right));
-                 bottom: calc(max(8px, env(safe-area-inset-bottom)) + 104px); }
-    #floorRail { display: none; }
+                 bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mm-top)); display: none; }
     @container bh (max-width: 599px) {
       #floorRail:not([hidden]) { display: grid; }
       #bar .bh-level { display: none; }
@@ -267,15 +259,16 @@
       #stats .stat-seed { display: none; }
     }
     /* Bulkhead's toast: a dark plate with one lit lamp. */
-    #toast { position: fixed; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 40px); left: 50%; /* above the readout row */
+    #toast { position: fixed; bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--stats-top) + 6px); left: 50%; /* above the readout row */
              transform: translateX(-50%); background: var(--lamp-h); color: var(--ink);
              display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px);
              padding: 9px 12px; opacity: 0; transition: opacity .25s steps(3);
              box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh), 0 2px 0 0 var(--sh), 0 4px 0 0 #0009;
              pointer-events: none; z-index: var(--z-toast); } /* above every panel */
+    #toast.show { opacity: 1; }
     #toast::before { content: ""; flex: none; width: 8px; height: 8px; background: var(--lamp-l); }
     @container bh (max-width: 599px) {
-      #toast { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 108px); } /* clear of the minimap */
+      #toast { bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--mm-top) + 4px); } /* clear of the minimap */
     }
     /* #inspect is three surfaces sharing one element, and which one it is at
        any moment is the ANCHOR class it wears (see the panel system above):
@@ -289,7 +282,7 @@
        header's measured height, set in main.ts, because a wrapped title is
        taller than an unwrapped one. Opaque and full-bleed for the same reason
        the header is: rows must not show through as they pass under it. */
-    #inspect .tabs { position: sticky; top: var(--inspect-head, 33px); z-index: 1;
+    #inspect .tabs { position: sticky; top: var(--inspect-head, 40px); z-index: 1;
                      display: flex; gap: 2px; margin: 0 -12px 8px;
                      padding: 0 10px; background: var(--s0); overflow-x: auto; scrollbar-width: none;
                      /* flex: none, or it vanishes: the panel is a flex column, and a child that
@@ -331,7 +324,7 @@
     #inspect td { padding: 1px 0; }
     #inspect td.k { color: var(--dim); }
     #inspect td.v { text-align: right; font-variant-numeric: tabular-nums;
-                    word-break: break-word; max-width: 62%; }
+                    word-break: break-word; }
     #inspect .mono { opacity: .7; font: 11px var(--f-ui); }
     #inspect h3 + .grp { box-shadow: none; padding-top: 0; margin-top: 2px; }
     /* the inspector's links are Bulkhead plates */
@@ -399,7 +392,7 @@
                     font: 500 11px var(--f-ui); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
     #ovl .legend { margin-left: auto; text-transform: none; letter-spacing: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
     /* the settings dialog: a Bulkhead panel at the centre, docked to the bottom on a phone */
-    #perfdlg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20;
+    #perfdlg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: var(--z-dialog);
                width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 24px); margin: 0; }
     @container bh (max-width: 599px) {
       #perfdlg { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 85vh; }
@@ -408,7 +401,7 @@
 </head>
 <body class="bh bh-root">
   <div id="app"><canvas id="cv"></canvas><canvas id="fx"></canvas></div>
-  <div id="hud"></div>
+  <div id="hud" hidden></div>
   <div id="bar">
     <!-- the floor stepper: up over down, beside the floor's name (bh-level) -->
     <div class="bh-level" id="levelCtl" role="group" aria-label="level" hidden>

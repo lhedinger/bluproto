@@ -32,15 +32,18 @@ final class Protocol {
 
 	/** {@code chunkPx} is the pixels-per-tile of the served chunk PNGs (the
 	 *  art resolution), distinct from {@code tileSize} (the render/bake
-	 *  resolution some assets still use). */
+	 *  resolution some assets still use). {@code tps} is the sim's tick rate, so
+	 *  a viewer turning tick counts into ages need not borrow it from another
+	 *  panel's payload or guess it. */
 	record Hello(String type, long seed, int cols, int rows, int levels, int surface, int tileSize,
 			int chunkPx, long tick, boolean paused, double speed, List<String> layers, int chunkTiles,
-			String build) {
+			String build, int tps) {
 		static Hello of(long seed, int cols, int rows, int levels, int surface, int tileSize,
 				int chunkPx, long tick, boolean paused, double speed, List<String> layers,
 				int chunkTiles, String build) {
 			return new Hello("hello", seed, cols, rows, levels, surface, tileSize, chunkPx, tick,
-					paused, speed, layers, chunkTiles, build);
+					paused, speed, layers, chunkTiles, build,
+					net.hedinger.prototype.sim.SimulationRunner.TICKS_PER_SECOND);
 		}
 	}
 

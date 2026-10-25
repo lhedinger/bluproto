@@ -16,8 +16,21 @@ import { flagOff, flagOn } from './flags';
 import {
   CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize,
 } from './panels';
-import { fmtSpan, popOn, popTps } from './population';
+import { fmtSpan, popOn } from './population';
 import { bodyScanCanvas, planFor, stateOf } from './bodyScan';
+
+/** Every clock the viewer keeps, in ms, in one place. */
+const MS = {
+  vegPoll: 4000,    // vegetation deltas
+  detailPoll: 1000, // a creature's card: glycogen and state tick live
+  tilePoll: 600,    // a tile's food, fast enough to watch grazing happen
+  mindPoll: 500,    // a program counter polled at 1 Hz reads as frozen
+  fetchRetry: 8000, // a failed chunk or low map is asked for again after this
+  lowMapGate: 2000, // how long the level's chunks wait for its low map
+  toast: 2500,
+  tripleTap: 600,   // the window for the stats readout's debug triple-tap
+  hudText: 250,     // the perf HUD's text refresh
+} as const;
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
 const fx = document.getElementById('fx') as HTMLCanvasElement;
@@ -72,7 +85,7 @@ cv.addEventListener('webglcontextrestored', () => {
 const g = glr
   ? fx.getContext('2d')! // the overlay: transparent above the GL world
   : cv.getContext('2d', { alpha: false })!;
-if (!glr) fx.style.display = 'none';
+if (!glr) fx.hidden = true;
 const statsEl = document.getElementById('stats')!;
 const pauseBtn = document.getElementById('pause') as HTMLButtonElement;
 const speedSel = document.getElementById('speed') as HTMLSelectElement;
@@ -128,7 +141,7 @@ barTools.addEventListener('change', () => setBarOpen(false));
 function syncBarGroups(): void {
   for (const g of Array.from(barTools.querySelectorAll<HTMLElement>('.bar-group'))) {
     const live = Array.from(g.children).some(c => !(c as HTMLElement).classList.contains('bar-glabel')
-      && (c as HTMLElement).style.display !== 'none' && !(c as HTMLElement).hidden && c.tagName !== 'INPUT');
+      && !(c as HTMLElement).hidden && c.tagName !== 'INPUT');
     // Only on a change: writing `hidden` re-fires the observer below even with the
     // same value, and an unconditional write looped it forever and hung the page.
     if (g.hidden !== !live) g.hidden = !live;
@@ -194,7 +207,11 @@ let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 // on software-rendered canvases), while a canvas source blits at memcpy speed.
 // One copy per chunk at decode time buys back every frame thereafter.
 const chunkCache = new Map<string, HTMLCanvasElement | null>(); // null = loading
-function chunkImage(cx: number, cy: number, z: number, fetch: boolean): HTMLCanvasElement | null {
+/** The renderer asks by level, not just by chunk: the level in view needs its
+ *  own chunks, and the one below it needs the few its holes look down onto
+ *  (render.belowChunks). Both live in the same cache, keyed by level.
+ *  `request` false is a peek: what is decoded, and no fetch. */
+function getChunk(cx: number, cy: number, z: number, request: boolean): HTMLCanvasElement | null {
   const v = hello ? hello.build : '0';
   // The bake carries no vegetation (server ground classes are type-only) —
   // vegetation renders as one-tile sprites stamped over these chunks by the
@@ -203,7 +220,7 @@ function chunkImage(cx: number, cy: number, z: number, fetch: boolean): HTMLCanv
   const key = `${v}/${z}/${name}`;
   const hit = chunkCache.get(key);
   if (hit !== undefined) return hit;
-  if (!fetch) return null; // a peek: what is decoded, and no request
+  if (!request) return null; // a peek: what is decoded, and no request
   // The low map goes first. While the viewed level's is in flight no chunk is
   // requested at all: fetched side by side, one small picture queued behind
   // fifty-four bigger ones and landed after most of them, which made it
@@ -229,16 +246,10 @@ function chunkImage(cx: number, cy: number, z: number, fetch: boolean): HTMLCanv
   img.onerror = () => {
     setTimeout(() => {
       if (chunkCache.get(key) === null) chunkCache.delete(key);
-    }, 8000);
+    }, MS.fetchRetry);
   };
   img.src = `/api/world/layers/${z}/${name}.png?v=${v}`;
   return null;
-}
-/** The renderer asks by level, not just by chunk: the level in view needs its
- *  own chunks, and the one below it needs the few its holes look down onto
- *  (render.belowChunks). Both live in the same cache, keyed by level. */
-function getChunk(cx: number, cy: number, z: number, fetch: boolean): HTMLCanvasElement | null {
-  return chunkImage(cx, cy, z, fetch);
 }
 /** The level's low map -- the whole floor in one small picture -- fetched and
  *  cached exactly like a chunk, under the same build tag. The renderer paints
@@ -255,7 +266,7 @@ function lowMapImage(z: number): HTMLCanvasElement | null {
   const hit = lowMapCache.get(key);
   if (hit !== undefined) return hit;
   lowMapCache.set(key, null);
-  if (z === currentLevel) lowMapGateUntil = performance.now() + 2000;
+  if (z === currentLevel) lowMapGateUntil = performance.now() + MS.lowMapGate;
   const img = new Image(), alpha = new Image();
   let loaded = 0;
   const join = () => {
@@ -273,7 +284,7 @@ function lowMapImage(z: number): HTMLCanvasElement | null {
     c.putImageData(colour, 0, 0);
     lowMapCache.set(key, copy);
   };
-  const retry = () => { setTimeout(() => { if (lowMapCache.get(key) === null) lowMapCache.delete(key); }, 8000); };
+  const retry = () => { setTimeout(() => { if (lowMapCache.get(key) === null) lowMapCache.delete(key); }, MS.fetchRetry); };
   img.onload = join;
   alpha.onload = join;
   img.onerror = retry;
@@ -386,7 +397,7 @@ function startVegPolling(): void {
   if (VEG_OFF) return;
   clearInterval(vegTimer);
   pollVeg();
-  vegTimer = window.setInterval(() => { if (!document.hidden) void pollVeg(); }, 4000);
+  vegTimer = window.setInterval(() => { if (!document.hidden) void pollVeg(); }, MS.vegPoll);
 }
 
 // Static cover mask (one byte per tile, 1 = thicket) fetched once per level, so
@@ -483,7 +494,7 @@ const net = new Net(onMsg, s => {
 // world — hide every mutating control so the toolbar shows only what works.
 if (net.readOnly) {
   for (const el of [pauseBtn, speedSel, spawnSel, injectBtn]) {
-    el.style.display = 'none';
+    el.hidden = true;
   }
 }
 
@@ -603,7 +614,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       // reset can hand back one that does or does not — so the button asks on
       // every hello and shows itself only if there is a rank to cycle.
       void fetchDroneRank();
-      reflect();
+      syncPauseBtn();
       break;
     }
     case 'full':
@@ -618,7 +629,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
     case 'status':
       paused = m.paused;
       speedSel.value = String(m.speed);
-      reflect();
+      syncPauseBtn();
       break;
     case 'error':
       toast(m.message);
@@ -725,8 +736,7 @@ function select(id: number, sightUnseen = false): void {
   }
   refreshDetail();
   clearInterval(detailTimer);
-  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshDetail(); }, 1000); // glycogen/state tick live
-  reflect();
+  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshDetail(); }, MS.detailPoll); // glycogen/state tick live
 }
 
 // Debug tile inspector: poll a tile's fertility/food so grazing is watchable.
@@ -737,8 +747,7 @@ function selectTile(x: number, y: number, z: number): void {
   syncMindPoll();
   refreshTileDetail();
   clearInterval(detailTimer);
-  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshTileDetail(); }, 600);
-  reflect();
+  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshTileDetail(); }, MS.tilePoll);
 }
 
 function deselect(): void {
@@ -751,7 +760,6 @@ function deselect(): void {
   inspectDetail = null;
   lineageFor = -1;
   closePanel(inspectEl);
-  reflect();
 }
 // The inspector is in the corner group only while it is a panel; as a card it
 // is exempt, and claimRightColumn skips it (see there).
@@ -839,36 +847,19 @@ function renderInspectSimple(d: Record<string, any>): void {
   if (d.diedOf) rows.push(row('died of', d.diedOf));
   if (d.action) rows.push(row('doing', d.action));
   if (d.state) rows.push(row('state', d.state));
-  // Who has hold of whom. The server has always sent this and the panel has
-  // never shown it, so a creature slung over another's back read as a creature
-  // standing still. `attachedTo` alone does not say which way round it is —
-  // `grabbed` is what separates a captive from a passenger.
-  if (d.attachedTo >= 0) {
-    rows.push(d.grabbed ? row('held by', `#${d.attachedTo}`)
-      : row('riding', `#${d.attachedTo}`));
-  }
+  // Without these a creature slung over another's back read as one standing still.
+  rows.push(...holdRows(d));
   if (d.species) rows.push(row('species', d.species));
   // A corpse's own facts sit under its identity: what it was comes first,
   // then what is left of it, which is the part anything still alive cares about.
   rows.push(...carcassRows(d));
-  // The same words the debug attributes use: `hauling` names the body being
-  // dragged, `carrying` is a load on its back. The card had them swapped.
-  if ('hauling' in d) rows.push(row('hauling', `#${d.hauling}`));
   if (d.carrying) rows.push(row('carrying', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
-  // The four books (VITALS.md), for anyone following a creature — not a debug
-  // detail: health is whether it lives, glycogen what it can do, fed and watered
-  // why it is doing what it is doing. All four count the SAME way up — see
-  // sated() — so a creature in trouble is four draining bars rather than two
-  // full ones and two empty, which is what the needs read as when shown raw.
-  if ('health' in d && d.role) {
-    rows.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
-  }
-  if ('glycogen' in d) rows.push(glycogenRow(d));
-  if ('hunger' in d) rows.push(bar('fed', ...sated(d.hunger)));
-  if ('thirst' in d) rows.push(bar('watered', ...sated(d.thirst)));
-  if ('fat' in d) rows.push(fatRow(d));
+  // The books are for anyone following a creature, not a debug detail. Health
+  // only for a creature: every living thing has a life gate, but on a crate it
+  // is a number with nothing to say.
+  rows.push(...vitalsRows(d, !!d.role));
   // gen 0 is a creature the world (or you) placed; every birth adds one.
   if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
   if ('durability' in d) rows.push(row('durability', d.durability));
@@ -900,6 +891,7 @@ function renderInspectSimple(d: Record<string, any>): void {
 // tree in the middle of one creature's biology.
 type InspectTab = 'attributes' | 'body' | 'genome' | 'mind' | 'lineage';
 let inspectTab: InspectTab = 'attributes';
+let inspectPanelSize: 'half' | 'full' = 'full'; // the debug panel's, as the viewer last set it
 let inspectDetail: Record<string, any> | null = null;
 let lineageData: Record<string, any> | null = null;
 let lineageFor = -1; // which entity lineageData describes
@@ -940,9 +932,10 @@ function renderInspectDebug(d: Record<string, any>): void {
   inspectEl.innerHTML = header(swatch, name, d.id, true)
       + `<div class="tabs">${tabs}</div>` + body;
   // A whole creature is what this panel is for, so it opens full screen — but
-  // the size the viewer last chose survives the poll that rebuilds it, and
-  // survives walking from one creature to the next.
-  showInspect(inspectEl.classList.contains('half') ? 'half' : 'full');
+  // the size the viewer last chose survives the poll that rebuilds it, walking
+  // from one creature to the next, and a spell as a card with debug off. Read
+  // back from the class it did not: the card had replaced it.
+  showInspect(inspectPanelSize);
   // The body tab is a canvas, not markup: the scan drawn at 4 px a cell with
   // its callouts, from the same books the attributes tab lists as bars.
   const scanHost = inspectEl.querySelector('.scan');
@@ -993,28 +986,10 @@ function attributesTab(d: Record<string, any>): string {
   if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
   if (d.juvenile) status.push(row('grown', d.grown));
-  // The four books (VITALS.md): health the life gate, glycogen the action
-  // budget, hunger and thirst the needs that rise between meals and drinks.
-  // Inverted into satisfactions the same way the entity card does it, so the
-  // two panels never disagree about which way is up.
-  // Guarded like the other three: a corpse is sent none of the four books,
-  // because death is where they stop.
-  if ('health' in d) {
-    status.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
-  }
-  if ('glycogen' in d) status.push(glycogenRow(d));
-  if ('hunger' in d) status.push(bar('fed', ...sated(d.hunger)));
-  if ('thirst' in d) status.push(bar('watered', ...sated(d.thirst)));
-  if ('fat' in d) status.push(fatRow(d));
+  status.push(...vitalsRows(d, true));
   if (d.diedOf) status.push(row('died of', d.diedOf));
   status.push(...carcassRows(d));
-  // Which way round the hold goes, the same way the card says it: `attachedTo`
-  // alone cannot tell a passenger from a captive, and folded into a flags blob
-  // as "attached→#12" it did not try to.
-  if (d.attachedTo >= 0) {
-    status.push(d.grabbed ? row('held by', `#${d.attachedTo}`) : row('riding', `#${d.attachedTo}`));
-  }
-  if ('hauling' in d) status.push(row('hauling', `#${d.hauling}`));
+  status.push(...holdRows(d));
   if ('mass' in d) status.push(row('mass', `${d.mass} × reference`));
   const fl: string[] = [];
   if (d.dead) fl.push('dead');
@@ -1092,6 +1067,47 @@ function genomeTab(d: Record<string, any>): string {
   ]);
 }
 
+/** The body's store: fat as a share of what the body can carry, with the
+ *  mass it amounts to. A fed life reads as a full bar; a starving body draws
+ *  it down before its health goes. */
+/**
+ * The four books (VITALS.md) and the store, in one order for the card and the
+ * debug panel alike — health the life gate, glycogen the action budget, fed and
+ * watered the needs, all counting the SAME way up (see sated()), so a creature
+ * in trouble is four draining bars. One function so the two panels cannot drift:
+ * they had, once over which way the needs pointed and once over the labels.
+ * A corpse is sent none of the books, because death is where they stop.
+ */
+function vitalsRows(d: Record<string, any>, health: boolean): string[] {
+  const out: string[] = [];
+  if (health && 'health' in d) {
+    out.push(bar('health', d.health, Math.max(0, Math.min(1, d.health / 100))));
+  }
+  if ('glycogen' in d) out.push(glycogenRow(d));
+  if ('hunger' in d) out.push(bar('fed', ...sated(d.hunger)));
+  if ('thirst' in d) out.push(bar('watered', ...sated(d.thirst)));
+  if ('fat' in d) out.push(fatRow(d));
+  return out;
+}
+
+/** Who has hold of whom. `attachedTo` alone cannot tell a passenger from a
+ *  captive — `grabbed` says which way round it is — and `hauling` names the
+ *  body being dragged. */
+function holdRows(d: Record<string, any>): string[] {
+  const out: string[] = [];
+  if (d.attachedTo >= 0) {
+    out.push(d.grabbed ? row('held by', `#${d.attachedTo}`) : row('riding', `#${d.attachedTo}`));
+  }
+  if ('hauling' in d) out.push(row('hauling', `#${d.hauling}`));
+  return out;
+}
+
+function fatRow(d: Record<string, any>): string {
+  const f = Math.max(0, Math.min(1, Number(d.fat)));
+  const mass = typeof d.fatMass === 'number' ? ` (${d.fatMass.toFixed(2)} mass)` : '';
+  return bar('fat', `${Math.round(f * 100)}%${mass}`, f);
+}
+
 /**
  * The glycogen book as a fraction of THIS body's store.
  *
@@ -1102,15 +1118,6 @@ function genomeTab(d: Record<string, any>): string {
  * look right. Shared now so they cannot disagree again, and when the cap is
  * missing the number is printed rather than a bar drawn against a guess.
  */
-/** The body's store: fat as a share of what the body can carry, with the
- *  mass it amounts to. A fed life reads as a full bar; a starving body draws
- *  it down before its health goes. */
-function fatRow(d: Record<string, any>): string {
-  const f = Math.max(0, Math.min(1, Number(d.fat)));
-  const mass = typeof d.fatMass === 'number' ? ` (${d.fatMass.toFixed(2)} mass)` : '';
-  return bar('fat', `${Math.round(f * 100)}%${mass}`, f);
-}
-
 function glycogenRow(d: Record<string, any>): string {
   const e = Number(d.glycogen);
   const cap = Number(d.glycogenCap);
@@ -1173,7 +1180,7 @@ function linNode(n2: Record<string, any>, glyph: string, rel: string, nowTick: n
   const present = n2.status !== 'gone';
   const sw = `<span class="sw" style="background:#${Number(n2.rgb).toString(16).padStart(6, '0')}"></span>`;
   const born = n2.born >= 0 && hello
-    ? `born ${fmtSpan((nowTick - n2.born) / popTps())} ago` : '';
+    ? `born ${fmtSpan((nowTick - n2.born) / (hello.tps ?? 33))} ago` : '';
   const gen = n2.generation >= 0 ? `gen ${n2.generation}` : '';
   const meta = esc([gen, born, alive ? '' : String(n2.status)].filter(Boolean).join(' · '));
   return `<div class="node${present ? ' link' : ''}${alive ? '' : ' dead'}"`
@@ -1223,7 +1230,9 @@ function bar(k: string, v: unknown, pct: number): string {
  *  render just replaced. */
 function showInspect(size: PanelSize): void {
   openPanel(inspectEl, size);
-  wirePanelChrome(inspectEl, deselect);
+  wirePanelChrome(inspectEl, deselect, () => {
+    inspectPanelSize = inspectEl.classList.contains('full') ? 'full' : 'half';
+  });
 }
 
 /** What a carcass still offers, for both inspector surfaces. A corpse is a
@@ -1289,7 +1298,7 @@ function syncMindPoll(): void {
     mindFor = selectedId!;
   }
   void refreshMind();
-  mindTimer = window.setInterval(() => { if (!document.hidden) void refreshMind(); }, 500);
+  mindTimer = window.setInterval(() => { if (!document.hidden) void refreshMind(); }, MS.mindPoll);
 }
 
 async function refreshMind(): Promise<void> {
@@ -1589,7 +1598,6 @@ mm.addEventListener('click', ev => {
   cam.cx = w.x;
   cam.cy = w.y;
   cam.followId = null;
-  reflect();
 });
 
 pauseBtn.onclick = () => net.send({ cmd: paused ? 'resume' : 'pause' });
@@ -1662,10 +1670,7 @@ function stepLevel(dz: number): void {
   // moves the viewer, the followed creature's next poll drags it straight back,
   // and the button looks broken. Asking for a floor outranks being glued to
   // something on a different one. The selection stays — only the camera lets go.
-  if (cam.followId !== null) {
-    cam.followId = null;
-    reflect();
-  }
+  cam.followId = null;
   goToLevel(currentLevel + dz);
 }
 levelUp.onclick = () => stepLevel(1);
@@ -1733,7 +1738,7 @@ droneBtn.onclick = async () => {
   droneLabel();
 };
 
-function reflect(): void {
+function syncPauseBtn(): void {
   pauseBtn.textContent = paused ? 'resume' : 'pause';
   pauseBtn.classList.toggle('on', paused);
 }
@@ -1839,8 +1844,7 @@ rightColumn.push({ el: tuningEl, close: closeTuning });
 
 /** Slider bounds around the boot default: room to quadruple, floor at zero. */
 function tuneMax(def: number, value: number): number {
-  const base = Math.max(Math.abs(def) * 4, Math.abs(value) * 1.25, 1e-6);
-  return base;
+  return Math.max(Math.abs(def) * 4, Math.abs(value) * 1.25, 1e-6);
 }
 
 async function openTuning(): Promise<void> {
@@ -1978,12 +1982,6 @@ tuneBtn.onclick = () => {
 // rather than the plain card. It does NOT change what the gestures mean: a tap
 // selects and a long press inspects the ground, in either mode.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
-// Debug hands the console the two live objects everything renders from — the
-// world state and the camera — so a person (or a headless test) can ask "what
-// tracks exist and where would this one be on screen" instead of guessing.
-if (debugOn) {
-  (window as unknown as Record<string, unknown>).__dbg = { state, cam };
-}
 function applyDebug(): void {
   // Re-render whatever is open in the new context (simple card <-> full dump).
   if (selectedId !== null) refreshDetail();
@@ -2004,7 +2002,6 @@ function setDebug(on: boolean): void {
 // status line never flips it. The "d" key does the same on desktop.
 let tickTaps = 0;
 let tickTapTimer = 0;
-statsEl.style.cursor = 'pointer';
 statsEl.title = 'tap 3× for debug';
 statsEl.addEventListener('click', () => {
   clearTimeout(tickTapTimer);
@@ -2013,7 +2010,7 @@ statsEl.addEventListener('click', () => {
     setDebug(!debugOn);
     return;
   }
-  tickTapTimer = window.setTimeout(() => (tickTaps = 0), 600);
+  tickTapTimer = window.setTimeout(() => (tickTaps = 0), MS.tripleTap);
 });
 window.addEventListener('keydown', ev => {
   if ((ev.key === 'd' || ev.key === 'D') && isShortcut(ev)) setDebug(!debugOn);
@@ -2023,9 +2020,9 @@ applyDebug(); // reflect ?debug=true on load
 let toastTimer = 0;
 function toast(msg: string): void {
   toastEl.textContent = msg;
-  (toastEl as HTMLElement).style.opacity = '1';
+  toastEl.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => ((toastEl as HTMLElement).style.opacity = '0'), 2500);
+  toastTimer = window.setTimeout(() => toastEl.classList.remove('show'), MS.toast);
 }
 
 // ---- frame loop ------------------------------------------------------------
@@ -2062,10 +2059,10 @@ try {
 window.addEventListener('keydown', (ev) => {
   if (ev.key === 'h' && isShortcut(ev)) {
     hudOn = !hudOn;
-    hudEl.style.display = hudOn ? 'block' : 'none';
+    hudEl.hidden = !hudOn;
   }
 });
-if (hudOn) hudEl.style.display = 'block';
+hudEl.hidden = !hudOn;
 
 // ---- the ⚙ settings dialog -------------------------------------------------
 // Checkboxes for the visual subsystems and the optional panels, applied by
@@ -2077,7 +2074,7 @@ if (hudOn) hudEl.style.display = 'block';
 // press 'h' or to hand-edit the query string — including the two toggles that
 // are not about performance at all. A settings button you have to know a
 // keystroke to find is not a settings button.
-if (MINIMAP_OFF) mm.style.display = 'none';
+if (MINIMAP_OFF) mm.hidden = true;
 /** Whether a panel is showing right now. Live state, since both can be toggled
  *  by key; falls back to the query string for anything not wired to a variable. */
 function viewFlagOn(k: string): boolean {
@@ -2194,7 +2191,7 @@ function hudFrame(now: number): void {
     cbMs: hudCbEma, longN: hudLongN, longMax: hudLongMax,
     scale: cam.scale, firstFullMs: firstFullAt, now,
   };
-  if (!hudOn || now - hudLastText < 250) return;
+  if (!hudOn || now - hudLastText < MS.hudText) return;
   hudLastText = now;
   // Capture-and-reset the since-last-redraw maxima BEFORE building the text —
   // and print the captured values. (The first version printed the variable it
@@ -2245,7 +2242,6 @@ function frame(now: number): void {
     } else if (cam.followId !== selectedId) {
       // Nothing is polling this one, so there is no way to learn where it went.
       cam.followId = null;
-      reflect();
     }
     // Otherwise hold the camera and keep following. A track can vanish because
     // the creature died OR because it walked to another level and fell out of a

@@ -10,7 +10,7 @@ import {
 import type { Camera } from './camera';
 import { flagOff } from './flags';
 import { actionOf, F_CARRYING, F_DEAD, F_GRABBED } from './protocol';
-import { ART, hash01 } from './artCore';
+import { ART, CORPSE_RGB, PENDING_RGB, VOID_RGB, hash01, hex, rgbF } from './artCore';
 import {
   GLYPH_MIN_BODY_PX, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
@@ -19,7 +19,7 @@ import { VEG_STAGE_MASK, VEG_VARIANTS, vegKindOf, vegetationTileFor, type VegKin
 
 // The split-out drawing modules are part of this one's public face: callers
 // import from './render' and need not know where a painter lives.
-export { ART, hash01 } from './artCore';
+export { ART, CORPSE_RGB, PENDING_RGB, VOID_RGB, hash01, hex, rgbF } from './artCore';
 export * from './fixtures';
 export * from './vegArt';
 export * from './fx';
@@ -27,6 +27,12 @@ import type { EntityState } from './protocol';
 import type { Track, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
+
+/** How far past the screen edge a body is still drawn: its own reach plus a ring. */
+const CULL_PX = 60;
+/** Bodies on the floor below sit under the veil's darkness, not competing with it. */
+const BELOW_ALPHA = 0.7;
+const CORPSE_F = rgbF(CORPSE_RGB), PENDING_F = rgbF(PENDING_RGB), VOID_F = rgbF(VOID_RGB);
 
 // ---- the vegetation layer, chunked ----------------------------------------
 //
@@ -182,13 +188,13 @@ let getLowMap: (z: number) => HTMLCanvasElement | null = () => null;
 /** A chunk lookup. `fetch` false is a peek: the chunk if it has been decoded,
  *  and no request otherwise. Chunks are requested only for the viewport at
  *  near zoom; everything else is the low map's job. */
-export type ChunkSource = (cx: number, cy: number, z: number, fetch: boolean) => HTMLCanvasElement | null;
+type ChunkSource = (cx: number, cy: number, z: number, fetch: boolean) => HTMLCanvasElement | null;
 /** The chunk range a view wants, inclusive, one chunk of margin for panning --
  *  or null at far zoom, where the low map is the ground and no chunk is
  *  fetched at all. The doubled world is 198 chunks and 3.7 MB a level; at fit
  *  zoom on a phone that is 25 seconds of downloading for a picture the 34 KB
  *  low map already shows at 2 px a tile. */
-export function wantedChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+function wantedChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
     chunkTiles: number): [number, number, number, number] | null {
   if (cam.scale < ART || chunkTiles <= 0) return null;
   const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
@@ -348,13 +354,13 @@ function groundLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 // past 12 px/tile was a feature nobody saw — at fit zoom the openings are
 // small, but a hole that is dark blue nothing until the third wheel-click
 // reads as a bug, not a hole.
-export const PARALLAX_ZOOM = 500;
+const PARALLAX_ZOOM = 500;
 /** The factor one storey down at this zoom (device px per tile): parallax=0
  *  in the URL (or the ⚙ dialog) pins it to 1.0 — the floors below still show
  *  through every pit, they just stop sliding. A viewer preference as much as
  *  a perf experiment: the slide is a depth cue some eyes read as the world
  *  coming apart. */
-export const parallaxFactor = (scale: number): number =>
+const parallaxFactor = (scale: number): number =>
   PARALLAX_OFF ? 1.0 : 1 / (1 + scale / PARALLAX_ZOOM);
 
 // Whether a decoded chunk has any see-through art-pixel, memoised against the
@@ -528,7 +534,7 @@ const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
     bodyPx: number, col: string, dead: boolean): void {
   const s = bodyPx;
-  g.fillStyle = dead ? '#5a5f66' : col;
+  g.fillStyle = dead ? hex(CORPSE_RGB) : col;
   g.fillRect(x - s / 2, y - s / 2, s, s);
 }
 
@@ -559,7 +565,7 @@ export function render(
 ): void {
   const cv = g.canvas;
   const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
-  g.fillStyle = '#14161a';
+  g.fillStyle = hex(VOID_RGB);
   g.fillRect(0, 0, cv.width, cv.height);
   if (!meta) return;
 
@@ -683,20 +689,20 @@ export function render(
     // Doors reach up to `span` tiles from their anchor, so they get their own
     // generous cull instead of the point cull below.
     if (e.kind.startsWith('door.')) {
-      const m = (e.size + 1) * cam.scale + 60;
+      const m = (e.size + 1) * cam.scale + CULL_PX;
       if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
       drawDoor(g, cam, e);
       continue;
     }
     // A switch's indicator trail reaches its wired door, so cull loosely too.
     if (e.kind.startsWith('switch.')) {
-      const m = 8 * cam.scale + 60;
+      const m = 8 * cam.scale + CULL_PX;
       if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
       drawSwitch(g, cam, e, state.tracks.get(e.pheno)?.curr);
       continue;
     }
 
-    if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
+    if (s.x < -CULL_PX || s.y < -CULL_PX || s.x > cv.width + CULL_PX || s.y > cv.height + CULL_PX) continue;
 
     if (e.kind === 'phero') {
       if (PHERO_OFF) continue;
@@ -774,7 +780,7 @@ export function render(
         g.drawImage(src, dc * c, dr * c, c, c,
           s.x - box / 2, s.y - box / 2, box, box);
       } else {
-        g.fillStyle = '#555a63'; // no sprite yet: a spent dot, no marker over it
+        g.fillStyle = hex(PENDING_RGB); // no sprite yet: a spent dot, no marker over it
         g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
       }
       continue;
@@ -923,25 +929,21 @@ function nestStamp(): HTMLCanvasElement {
 /** Item glyphs baked once per (kind, colour) — painted by the same drawItem
  *  the 2D path runs, at a reference radius, then scaled by the GPU. */
 const ITEM_R = 24;
+const ITEM_STAMP = ITEM_R * 4; // the stamp's side: a reference body with room for its reach
 const itemStamps = new Map<string, HTMLCanvasElement>();
 function itemStamp(kind: string, rgb: number): HTMLCanvasElement {
   const key = kind + ':' + rgb;
   let cv = itemStamps.get(key);
   if (!cv) {
     cv = document.createElement('canvas');
-    cv.width = 96;
-    cv.height = 96;
-    drawItem(cv.getContext('2d')!, kind, 48, 48, ITEM_R, '#' + rgb.toString(16).padStart(6, '0'));
+    cv.width = ITEM_STAMP;
+    cv.height = ITEM_STAMP;
+    drawItem(cv.getContext('2d')!, kind, ITEM_STAMP / 2, ITEM_STAMP / 2, ITEM_R, hex(rgb));
     itemStamps.set(key, cv);
   }
   return cv;
 }
 
-/** The sentinel glyph baked once per colour as a strip of DIRS heading frames —
- *  same painter as the 2D path, at a reference radius, then scaled by the GPU.
- *  A sentinel has a front, so unlike an item it needs a column per heading; it
- *  reuses the creature atlases' bucket count and their sticky headingCol so the
- *  two never disagree about which way a body is pointing. */
 /**
  * The steward's drone: a HAND-AUTHORED pixel stamp, the exact twin of the Java
  * renderer's DronePainter — same two silhouettes, same shading rule, same steel
@@ -1036,7 +1038,8 @@ const SENTINEL_OVAL = [
  *  iron is a housing colour and against the deck it reads as a hole punched in
  *  the machine rather than an edge turned from the light. */
 const HAZARD_RGB = 0xd8b028;
-const scale = (rgb: number, f: number): string => {
+/** `rgb` with each channel multiplied by `f`, as a CSS hex: a ramp step. */
+const shadeHex = (rgb: number, f: number): string => {
   const c = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
   return '#' + ((c(((rgb >> 16) & 0xff) * f) << 16) | (c(((rgb >> 8) & 0xff) * f) << 8)
     | c((rgb & 0xff) * f)).toString(16).padStart(6, '0');
@@ -1048,12 +1051,12 @@ const scale = (rgb: number, f: number): string => {
  *  section 4's own x0.65 and x1.18. Section 2 asks for exactly this promotion —
  *  an accent common enough to read as a texture IS a ramp colour now. */
 const SENTINEL_SHADES: Record<string, string> = {
-  H: scale(HAZARD_RGB, 1.18),   // hull, lit north edge
+  H: shadeHex(HAZARD_RGB, 1.18),   // hull, lit north edge
   M: '#d8b028',                 // hull, mid
   I: '#14161f',                 // hull, sunk south edge — iron, see below
-  h: scale(HAZARD_RGB, 1.18),   // plate, lit
+  h: shadeHex(HAZARD_RGB, 1.18),   // plate, lit
   m: '#d8b028',
-  d: scale(HAZARD_RGB, 0.65),   // plate, sunk — yellow: a plate is thin
+  d: shadeHex(HAZARD_RGB, 0.65),   // plate, sunk — yellow: a plate is thin
   K: '#17171a',                 // the hazard checker's black, a marking
   C: '#14161f',                 // pylon: chassis iron
   A: '#E0455F',                 // the warning lamp, the signal family's red
@@ -1205,7 +1208,7 @@ const LOADER_DROP = 1;
  *  sc/12 exactly as everywhere else. */
 export function drawLoader(g: CanvasRenderingContext2D, x: number, y: number,
     sc: number, bucket: number): void {
-  const p = Math.max(1, sc / 12);
+  const p = Math.max(1, sc / ART);
   const f = LOADER_FACING[((bucket % DIRS) + DIRS) % DIRS];
   blit(g, f, x, y + LOADER_DROP * p, p, LOADER_CONTACT);
   blit(g, f, x, y, p, null);
@@ -1213,7 +1216,7 @@ export function drawLoader(g: CanvasRenderingContext2D, x: number, y: number,
 
 export function drawSentinel(g: CanvasRenderingContext2D, x: number, y: number,
     sc: number, bucket: number): void {
-  const p = Math.max(1, sc / 12); // one art-pixel on screen
+  const p = Math.max(1, sc / ART); // one art-pixel on screen
   blit(g, SENTINEL_OVAL, x, y + SENTINEL_LIFT * p, p, SENTINEL_SHADOW);
   blit(g, SENTINEL_FACING[((bucket % DIRS) + DIRS) % DIRS], x, y, p, null);
 }
@@ -1296,7 +1299,7 @@ export function renderGL(
   const lap = (k: keyof typeof sec) => { const n = performance.now(); sec[k] += n - t0; t0 = n; };
   const cv = og.canvas;
   const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
-  glr.begin(cv.width, cv.height, 0x14 / 255, 0x16 / 255, 0x1a / 255);
+  glr.begin(cv.width, cv.height, VOID_F[0], VOID_F[1], VOID_F[2]);
   og.clearRect(0, 0, cv.width, cv.height);
   if (!meta) return { ...glr.end(), ...sec };
 
@@ -1384,19 +1387,19 @@ export function renderGL(
     const s = cam.worldToScreen(p.x, p.y);
 
     if (e.kind.startsWith('door.')) {
-      const m = (e.size + 1) * cam.scale + 60;
+      const m = (e.size + 1) * cam.scale + CULL_PX;
       if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
       ovDoors.push(e);
       continue;
     }
     if (e.kind.startsWith('switch.')) {
-      const m = 8 * cam.scale + 60;
+      const m = 8 * cam.scale + CULL_PX;
       if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
       ovSwitches.push([e, state.tracks.get(e.pheno)?.curr]);
       continue;
     }
 
-    if (s.x < -60 || s.y < -60 || s.x > cv.width + 60 || s.y > cv.height + 60) continue;
+    if (s.x < -CULL_PX || s.y < -CULL_PX || s.x > cv.width + CULL_PX || s.y > cv.height + CULL_PX) continue;
 
     if (e.kind === 'phero') {
       if (PHERO_OFF) continue;
@@ -1418,7 +1421,7 @@ export function renderGL(
 
     if (e.kind === 'nest') {
       const stamp = nestStamp();
-      const px = cam.scale / 12;
+      const px = cam.scale / ART;
       glr.sprite('nest', stamp, 1, 0, 0, 11, 9,
         s.x - 5.5 * px, s.y - 4.5 * px, 11 * px, 9 * px);
       continue;
@@ -1427,8 +1430,9 @@ export function renderGL(
     if (e.kind.startsWith('item.')) {
       const stamp = itemStamp(e.kind, e.rgb);
       const k = r / ITEM_R;
-      glr.sprite('item:' + e.kind + ':' + e.rgb, stamp, 1, 0, 0, 96, 96,
-        s.x - 48 * k, s.y - 48 * k, 96 * k, 96 * k);
+      const side = ITEM_STAMP * k;
+      glr.sprite('item:' + e.kind + ':' + e.rgb, stamp, 1, 0, 0, ITEM_STAMP, ITEM_STAMP,
+        s.x - side / 2, s.y - side / 2, side, side);
       continue;
     }
 
@@ -1440,7 +1444,7 @@ export function renderGL(
       const stamp = loader ? loaderStamp() : droneStamp();
       const n = loader ? LOADER_N : SENTINEL_N;
       const cell = loader ? LOADER_CELL : SENTINEL_CELL;
-      const dst = n * (cam.scale / 12);
+      const dst = n * (cam.scale / ART);
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
       glr.sprite(loader ? 'loader' : 'drone', stamp, 1, cell * dc, 0, cell, cell,
@@ -1452,7 +1456,7 @@ export function renderGL(
     if (e.flags & F_DEAD) {
       if (dots) {
         const sq = bodyPx;
-        glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, 0x5a / 255, 0x5f / 255, 0x66 / 255, 1);
+        glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, CORPSE_F[0], CORPSE_F[1], CORPSE_F[2], 1);
         continue;
       }
       const dead = atlasFor(e.pheno);
@@ -1469,7 +1473,7 @@ export function renderGL(
         glr.sprite((c === CELL ? 'corpse:' : 'corpsem:') + e.pheno + ':' + decayStage(e.aux),
           corpse, 1, dc * c, 0, c, c, s.x - box / 2, s.y - box / 2, box, box);
       } else {
-        glr.quad(s.x - r, s.y - r, r * 2, r * 2, 0x55 / 255, 0x5a / 255, 0x63 / 255, 1);
+        glr.quad(s.x - r, s.y - r, r * 2, r * 2, PENDING_F[0], PENDING_F[1], PENDING_F[2], 1);
       }
       continue;
     }
@@ -1811,12 +1815,12 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
   return out;
 }
 
-export function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
+function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
     state: WorldState, renderTime: number, level: number): void {
   const bodies = belowBodies(cam, state, renderTime, level, g.canvas.width, g.canvas.height);
   if (bodies.length === 0) return;
   g.save();
-  g.globalAlpha = 0.7; // under the veil's darkness, not competing with it
+  g.globalAlpha = BELOW_ALPHA;
   for (const b of bodies) {
     drawDot(g, b.x, b.y, b.px, b.col, b.dead);
   }
@@ -1832,13 +1836,12 @@ export function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
  *  is the population -- eleven hundred bodies of alternating colour broke
  *  the batch on nearly every one, a thousand draw calls and as many
  *  textures a frame, none of them ever evicted. */
-const BELOW_DEAD_RGB = 0x5a5f66;
-export function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
+function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
     state: WorldState, renderTime: number, level: number,
     w: number, h: number): void {
   for (const b of belowBodies(cam, state, renderTime, level, w, h)) {
-    const rgb = b.dead ? BELOW_DEAD_RGB : b.rgb;
+    const rgb = b.dead ? CORPSE_RGB : b.rgb;
     glr.quad(b.x - b.px / 2, b.y - b.px / 2, b.px, b.px,
-        ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 0.7);
+        ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, BELOW_ALPHA);
   }
 }
