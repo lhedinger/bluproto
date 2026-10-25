@@ -112,7 +112,7 @@
       .panel.card { left: 0; right: 0; bottom: 0; width: auto; box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
     }
     .panel > h3:not(:has(.szbtn)) .x { margin-left: auto; }
-    #hud { position: fixed; right: 8px; bottom: 8px; z-index: var(--z-panel); display: none;
+    #hud { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(var(--bar-h) + 8px); /* clear of the minimap it used to sit on */ z-index: var(--z-panel); display: none;
            font: 11px/1.5 var(--f-ui); color: var(--ink);
            background: #14171de6; padding: 6px 8px; box-shadow: 0 0 0 2px var(--sh);
            white-space: pre; pointer-events: none; }

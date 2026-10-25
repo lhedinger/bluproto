@@ -126,7 +126,7 @@ function bodySection(): string {
     <div class="ed-row"><label>clade <select id="clade">${clades}</select></label>
       <span class="ed-badge" id="sexual">${last?.sexual ? 'courts' : 'buds'}</span>
       <label class="ed-raw"><input type="checkbox" id="raw" ${raw ? 'checked' : ''}> raw values (no clamp: an experiment, and it says so)</label></div>
-    <table class="facts genes"><thead><tr><th>gene</th><th>value</th><th></th><th>unit</th><th>bounds · drift</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="scroll"><table class="facts genes"><thead><tr><th>gene</th><th>value</th><th></th><th>unit</th><th>bounds · drift</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 
@@ -188,7 +188,7 @@ function mindSection(): string {
     <p class="note">One instruction a row: the opcode, then what each operand names — a register, a sensor
     to read, an actuator to write, or an immediate from the constant pool. The text column is the
     simulation's own disassembly of the row, read back from the line. ${draft.code.length} of ${schema.maxLen} instructions.</p>
-    <table class="facts prog"><thead><tr><th>#</th><th>op</th><th>x</th><th>y</th><th>z</th><th>reads as</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="scroll"><table class="facts prog"><thead><tr><th>#</th><th>op</th><th>x</th><th>y</th><th>z</th><th>reads as</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="ed-row"><button class="ed-btn" id="addRow">+ instruction</button></div>
   </div>`;
 }

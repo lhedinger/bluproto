@@ -527,6 +527,14 @@ export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
   g.fillRect(x - s / 2, y - s / 2, s, s);
 }
 
+/** The walk cycle's clock: wall time scaled by the sim's speed, held while it
+ *  is paused. Fed the wall clock, a paused world walked on the spot and a
+ *  world at 4× strode at the pace of 1×. */
+let gaitMs = 0;
+export function advanceGait(dtMs: number, simSpeed: number): void {
+  gaitMs += Math.min(dtMs, 250) * simSpeed;
+}
+
 export function render(
   g: CanvasRenderingContext2D,
   cam: Camera,
@@ -782,7 +790,7 @@ export function render(
       // flicker rather than turning.
       const cc = headingCol(p.dir, t.col ?? -1);
       t.col = cc;
-      const { row: rr } = cell(p.dir, nowMs, e.id);
+      const { row: rr } = cell(p.dir, gaitMs, e.id);
       g.imageSmoothingEnabled = false;
       // The fetched atlas is colour-neutral (one per SHAPE); this path has no
       // tint shader, so it stamps from a re-tinted copy baked once per
@@ -1479,7 +1487,7 @@ export function renderGL(
       // walking would otherwise flip the pose at frame rate.
       const cc = headingCol(p.dir, t.col ?? -1);
       t.col = cc;
-      const { row: rr } = cell(p.dir, nowMs, e.id);
+      const { row: rr } = cell(p.dir, gaitMs, e.id);
       // Far zoom: quarter-size mip source, same threshold as the 2D path. This
       // is not just fewer pixels — the herd view is where EVERY phenotype is on
       // screen at once, and only the small mip textures can all stay resident.
