@@ -874,6 +874,23 @@ public abstract class NPC extends Entity {
 	 *  The tunable for how long carrion is worth walking to. */
 	@Unit("exponent on decay progress")
 	public static double ROT_SHAPE = 2.0;
+	/** How much faster a carcass spoils and rots for every ten degrees the air
+	 *  at it is above its floor's own temperature: the Q10 of decomposition,
+	 *  two. A body beside a vent turns and thins in a fraction of the time one
+	 *  by the coolant run takes; on the meadow and in the undisturbed cave the
+	 *  clocks run as they always did. Read once, where the body fell, since a
+	 *  corpse does not move and the air does not change. */
+	@Unit("x per 10 deg C")
+	public static double ROT_Q10 = 2.0;
+	/** The air's multiplier on this corpse's clocks, fixed at death. */
+	private double rotPace = 1.0;
+
+	/** The air's multiplier on spoilage and rot where this body lies:
+	 *  {@link #ROT_Q10} to the power of the tenths of a degree the air is over
+	 *  the floor's own temperature. 1 where there is no world to read. */
+	public double rotPace() {
+		return rotPace;
+	}
 
 	/** Fresh meat on this corpse, in body-mass units; 0 for the living and for
 	 *  a body that has turned. */
@@ -947,7 +964,7 @@ public abstract class NPC extends Entity {
 	 * The meal a hunter takes leaves the rest exactly as fresh as it found it.
 	 */
 	private void spoil() {
-		double k = Math.log((1 + FRESH_SEED) / FRESH_SEED) / Math.max(1, FRESH_TICKS);
+		double k = rotPace * Math.log((1 + FRESH_SEED) / FRESH_SEED) / Math.max(1, FRESH_TICKS);
 		double seed = FRESH_SEED * FRESH_SHARE; // a share of a reference body's fresh meat
 		double turned = Math.min(fresh, k * (spoiled + seed));
 		if (fresh - turned < 1e-9) {
@@ -2001,6 +2018,16 @@ public abstract class NPC extends Entity {
 			fat = 0;
 			eaten = 0;
 			spoiled = 0;
+			// The air where the body fell sets the pace of its clocks from here:
+			// warm air spoils and rots it faster, cold air slower, by the Q10.
+			if (getWorld() != null) {
+				double t = getWorld().climate().temperatureAt(X, Y, getLvl());
+				double base = net.hedinger.prototype.engine.Climate.baseTemperature(getWorld(), getLvl());
+				rotPace = Math.pow(ROT_Q10, (t - base) / 10.0);
+				if (deathspan > 0) {
+					deathspan = Math.max(1, (int) Math.round(deathspan / rotPace)); // 0 is "gone at once" and stays so
+				}
+			}
 		}
 		age = -1;
 	}

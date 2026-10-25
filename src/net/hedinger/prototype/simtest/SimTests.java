@@ -5655,6 +5655,76 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A carcass rots faster in warm air and slower in cold. Decomposition has
+	 * a Q10 of two: spoilage and rot both run that much faster for every ten
+	 * degrees the air at the body is over its floor's own temperature, read
+	 * once where the body fell, since a corpse does not move. On the meadow
+	 * and in the undisturbed cave the clocks run as they always did, which the
+	 * corpse scenarios already pin; this pins the ends.
+	 *
+	 * <p>Three identical bodies killed on the same tick, one by a vent wall,
+	 * one by the coolant run, one on the meadow: the warm one turns and thins
+	 * first, the cold one last, each by the Q10's share of its span.
+	 */
+	static class ACarcassRotsFasterInWarmAir extends Scenario {
+		private TestNPC corpse(World w) {
+			Genome g = Genome.phenotype(10, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC b = TestNPC.breeder(5.5, 2.5, 0, g);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		@Override
+		public void run() {
+			seed(73);
+			World warm = room(12, 12), cold = room(12, 12), plain = room(12, 12);
+			for (int x = 1; x <= 10; x++) {
+				warm.setTile(x, 1, 0, Tile.TileType.TYPE_VENT);
+				cold.setTile(x, 1, 0, Tile.TileType.TYPE_COOLANT);
+			}
+			TestNPC hot = corpse(warm), chilled = corpse(cold), mild = corpse(plain);
+			for (World w : new World[] { warm, cold, plain }) {
+				tick(w, 2);
+			}
+			int span = mild.getDeathspan();
+			for (TestNPC b : new TestNPC[] { hot, chilled, mild }) {
+				b.damage(500);
+			}
+			for (World w : new World[] { warm, cold, plain }) {
+				tick(w, 1);
+			}
+			double tHot = warm.climate().temperatureAt(5.5, 2.5, 0), tCold = cold.climate().temperatureAt(5.5, 2.5, 0);
+			assertNear("on the meadow the clock is what it was", 1.0, mild.rotPace(), 1e-12);
+			assertNear("by the vents it runs at the Q10's share", Math.pow(NPC.ROT_Q10, (tHot - 17) / 10), hot.rotPace(), 1e-9);
+			assertNear("by the coolant run too", Math.pow(NPC.ROT_Q10, (tCold - 17) / 10), chilled.rotPace(), 1e-9);
+			assertGreater("the warm body's clock runs well over half again as fast", hot.rotPace(), 1.5);
+			assertLess("the cold body's well under", chilled.rotPace(), 0.8);
+			assertEquals("the meadow corpse keeps the span it earned", span, mild.getDeathspan());
+			assertLess("the warm corpse's span is shorter by the pace", hot.getDeathspan(), span * 0.7);
+			assertGreater("the cold corpse's longer", chilled.getDeathspan(), span * 1.25);
+			int turnHot = -1, turnMild = -1, turnCold = -1;
+			for (int t = 0; t < 6000; t++) {
+				for (World w : new World[] { warm, cold, plain }) {
+					tick(w, 1);
+				}
+				if (turnHot < 0 && hot.freshMeat() <= 0) {
+					turnHot = t;
+				}
+				if (turnMild < 0 && mild.freshMeat() <= 0) {
+					turnMild = t;
+				}
+				if (turnCold < 0 && chilled.freshMeat() <= 0) {
+					turnCold = t;
+				}
+			}
+			assertTrue("all three turned within the spell", turnHot >= 0 && turnMild >= 0 && turnCold >= 0);
+			assertLess("the warm body turned first", turnHot, turnMild * 0.7);
+			assertGreater("and the cold body last", turnCold, turnMild * 1.25);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20683,6 +20753,7 @@ public class SimTests {
 				new HeatCostsWaterAndACoatMakesItWorse(),
 				new AnEctothermIsAsSlowAsTheAirIsCold(),
 				new TheSwardGrowsAtThePaceOfItsAir(),
+				new ACarcassRotsFasterInWarmAir(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
