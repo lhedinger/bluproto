@@ -138,6 +138,132 @@ public final class GenomeEditor {
 	}
 
 	/**
+	 * Two genomes side by side, the way a code diff shows two files: every
+	 * body gene with both values and how far apart they sit within the gene's
+	 * own range, the clade and markers, and the two programs aligned row by
+	 * row so a changed, inserted or deleted instruction stands out against the
+	 * ones both share. At the top, one number.
+	 *
+	 * <p>The number is the mean of a body similarity and a mind similarity,
+	 * each 0..1. A gene's distance is {@code |a - b|} over its schema range
+	 * (or over the larger of the two values when the range is unbounded),
+	 * capped at 1; the body similarity is one minus the mean distance. The
+	 * mind similarity is the longest common subsequence of the two programs'
+	 * instructions over the longer program's length, which is the fraction of
+	 * a diff that is not coloured. Both are plain enough to check by eye, and
+	 * both are reported alongside the mean so the mean never has to be trusted
+	 * on its own. A different clade does not move the number: it is reported
+	 * as its own fact, because a hunter and a grazer with the same genes are
+	 * exactly as alike as the genes say, and as different as the clade says.
+	 */
+	public static Map<String, Object> compare(String a, String b) {
+		Genome ga = GenomeCodec.decode(a), gb = GenomeCodec.decode(b);
+		Map<String, Object> out = new LinkedHashMap<>();
+		List<Map<String, Object>> genes = new ArrayList<>();
+		double dist = 0;
+		int n = 0;
+		for (GeneSchema.Gene gene : GeneSchema.genes()) {
+			double va = gene.get(ga), vb = gene.get(gb);
+			double span = Double.isInfinite(gene.hi) ? Math.max(Math.abs(va), Math.abs(vb)) : gene.hi - gene.lo;
+			double d = span <= 0 ? (va == vb ? 0 : 1) : Math.min(1.0, Math.abs(va - vb) / span);
+			Map<String, Object> row = new LinkedHashMap<>();
+			row.put("key", gene.key);
+			row.put("unit", gene.unit);
+			row.put("a", va);
+			row.put("b", vb);
+			row.put("distance", d);
+			genes.add(row);
+			dist += d;
+			n++;
+		}
+		double body = n == 0 ? 1 : 1 - dist / n;
+		out.put("genes", genes);
+		out.put("cladeA", ga.clade.wireName());
+		out.put("cladeB", gb.clade.wireName());
+		out.put("sameClade", ga.clade == gb.clade);
+		out.put("markerSimilarity", ga.similarityTo(gb));
+		// The programs, aligned by longest common subsequence over disassembled
+		// rows -- the same text the inspector shows, so a row reads as equal
+		// exactly when it would look equal.
+		String[] da = ga.brain == null ? new String[0] : strip(ga.brain.disassemble(AgentIO.SENSOR_NAMES, AgentIO.ACT_NAMES));
+		String[] db = gb.brain == null ? new String[0] : strip(gb.brain.disassemble(AgentIO.SENSOR_NAMES, AgentIO.ACT_NAMES));
+		List<Map<String, Object>> rows = new ArrayList<>();
+		int common = align(da, db, rows);
+		int longer = Math.max(da.length, db.length);
+		double mind = longer == 0 ? 1 : (double) common / longer;
+		out.put("mind", rows);
+		out.put("mindLengthA", da.length);
+		out.put("mindLengthB", db.length);
+		out.put("mindCommon", common);
+		out.put("bodySimilarity", body);
+		out.put("mindSimilarity", mind);
+		out.put("similarity", (body + mind) / 2);
+		return out;
+	}
+
+	private static String[] strip(String[] disasm) {
+		String[] out = new String[disasm.length];
+		for (int i = 0; i < disasm.length; i++) {
+			out[i] = disasm[i].replaceFirst("^[> ]*\\d+\\s*", "");
+		}
+		return out;
+	}
+
+	/** Longest-common-subsequence alignment of two instruction listings into
+	 *  diff rows ({@code equal}, {@code change}, {@code insert}, {@code delete},
+	 *  each with the text on either side or null); returns the common count. */
+	private static int align(String[] a, String[] b, List<Map<String, Object>> rows) {
+		int[][] lcs = new int[a.length + 1][b.length + 1];
+		for (int i = a.length - 1; i >= 0; i--) {
+			for (int j = b.length - 1; j >= 0; j--) {
+				lcs[i][j] = a[i].equals(b[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+			}
+		}
+		int i = 0, j = 0, common = 0;
+		List<String> pendingA = new ArrayList<>(), pendingB = new ArrayList<>();
+		while (i < a.length || j < b.length) {
+			if (i < a.length && j < b.length && a[i].equals(b[j])) {
+				flush(rows, pendingA, pendingB);
+				rows.add(row("equal", a[i], b[j]));
+				i++;
+				j++;
+				common++;
+			} else if (j < b.length && (i >= a.length || lcs[i][j + 1] >= lcs[i + 1][j])) {
+				pendingB.add(b[j++]);
+			} else {
+				pendingA.add(a[i++]);
+			}
+		}
+		flush(rows, pendingA, pendingB);
+		return common;
+	}
+
+	/** A run of unmatched rows on both sides is shown as changes, paired in
+	 *  order, with the longer side's remainder as inserts or deletes. */
+	private static void flush(List<Map<String, Object>> rows, List<String> pa, List<String> pb) {
+		int k = 0;
+		for (; k < pa.size() && k < pb.size(); k++) {
+			rows.add(row("change", pa.get(k), pb.get(k)));
+		}
+		for (int i = k; i < pa.size(); i++) {
+			rows.add(row("delete", pa.get(i), null));
+		}
+		for (int i = k; i < pb.size(); i++) {
+			rows.add(row("insert", null, pb.get(i)));
+		}
+		pa.clear();
+		pb.clear();
+	}
+
+	private static Map<String, Object> row(String kind, String a, String b) {
+		Map<String, Object> r = new LinkedHashMap<>();
+		r.put("kind", kind);
+		r.put("a", a);
+		r.put("b", b);
+		return r;
+	}
+
+	/**
 	 * The form's values put back together. {@code base} is an encoded genome to
 	 * start from (null for a blank one); {@code genes} overwrite by key;
 	 * {@code clade} is a clade code; {@code code} is the program as rows of four

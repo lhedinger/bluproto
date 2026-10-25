@@ -5478,6 +5478,61 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * Two genomes compared read like a code diff, with one number on top. A
+	 * genome against itself is 1.0 on body and mind with every program row
+	 * equal; against its own mutated child it is less than 1 and more than a
+	 * stranger; a program with one instruction rewritten shows exactly one
+	 * changed row and the mind similarity of one row in its length; the
+	 * number is the same whichever side a genome is on; and a clade
+	 * difference is reported, not folded into the number.
+	 */
+	static class TwoGenomesReadLikeADiff extends Scenario {
+		@Override
+		@SuppressWarnings("unchecked")
+		public void run() {
+			seed(33);
+			var E = net.hedinger.prototype.sim.GenomeEditor.class;
+			Genome a = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE);
+			String la = net.hedinger.prototype.entities.GenomeCodec.encode(a);
+			var self = net.hedinger.prototype.sim.GenomeEditor.compare(la, la);
+			assertNear("a genome is wholly like itself", 1.0, (Double) self.get("similarity"), 1e-12);
+			var rows = (java.util.List<java.util.Map<String, Object>>) self.get("mind");
+			assertTrue("and every row of its program is equal", rows.size() == a.brain.length()
+					&& rows.stream().allMatch(r -> "equal".equals(r.get("kind"))));
+
+			Genome child = Genome.child(a, 0.3);
+			String lc = net.hedinger.prototype.entities.GenomeCodec.encode(child);
+			var kin = net.hedinger.prototype.sim.GenomeEditor.compare(la, lc);
+			Genome stranger = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
+			String ls = net.hedinger.prototype.entities.GenomeCodec.encode(stranger);
+			var far = net.hedinger.prototype.sim.GenomeEditor.compare(la, ls);
+			double k = (Double) kin.get("similarity"), f = (Double) far.get("similarity");
+			assertTrue("a heavily mutated child is less than itself (" + k + ")", k < 1.0);
+			assertTrue("and still nearer than a founder of another clade (" + k + " vs " + f + ")", k > f);
+			assertTrue("the clade difference is its own fact", !(Boolean) far.get("sameClade") && (Boolean) kin.get("sameClade"));
+			assertNear("the number does not care which side a genome is on", f,
+					(Double) net.hedinger.prototype.sim.GenomeEditor.compare(ls, la).get("similarity"), 1e-12);
+
+			// One instruction rewritten: one changed row, the rest equal.
+			int[][] code = a.brain.code();
+			int[][] edited = new int[code.length][];
+			for (int i = 0; i < code.length; i++) {
+				edited[i] = code[i].clone();
+			}
+			edited[3][0] = Brain.NOP; // whatever row 3 was, it is a nop now
+			Genome one = net.hedinger.prototype.entities.GenomeCodec.decode(la);
+			one.brain = new Brain(edited);
+			var diff = net.hedinger.prototype.sim.GenomeEditor.compare(la, net.hedinger.prototype.entities.GenomeCodec.encode(one));
+			var drows = (java.util.List<java.util.Map<String, Object>>) diff.get("mind");
+			long changed = drows.stream().filter(r -> !"equal".equals(r.get("kind"))).count();
+			assertTrue("one rewritten instruction is one coloured row (" + changed + ")", changed == 1);
+			assertNear("and the mind similarity is the rest of the program", (code.length - 1.0) / code.length,
+					(Double) diff.get("mindSimilarity"), 1e-12);
+			assertNear("while the body is untouched", 1.0, (Double) diff.get("bodySimilarity"), 1e-12);
+		}
+	}
+
 	/** Offspring inherit a mutated genome; crossover mixes two parents. */
 	static class GenomeInheritance extends Scenario {
 		@Override
@@ -19763,6 +19818,7 @@ public class SimTests {
 				new HitchhikerBrainClimbsAboard(),
 				new ALineageCannotFossilise(),
 				new TheEditorPutsBackWhatItTookApart(),
+				new TwoGenomesReadLikeADiff(),
 				new GenomeInheritance(),
 				new GrazerDepletesSubstrate(),
 				new RegrowthIsThePlantsNotTheFloors(),
