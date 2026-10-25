@@ -5361,6 +5361,89 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * Cold costs an endotherm and not an ectotherm, and a coat is a trade. A
+	 * warm-blooded body below its comfort band burns to stay warm, COLD_BURN
+	 * of the basal rate per degree on its surface, for the warm-blooded share
+	 * of it and the share its coat lets out; the coat itself is priced into
+	 * the burn in every air. An ectotherm pays nothing for the cold here (it
+	 * pays in pace, elsewhere). A body that starves while it pays to stay
+	 * warm died of the cold, and its corpse says so.
+	 *
+	 * <p>Pinned on resting, starving, motionless bodies (no movement, no
+	 * regeneration, so the drop is pure burn) in a room chilled by the coolant
+	 * run against the same bodies on the meadow: the bare endotherm burns far
+	 * more in the cold, the coated one less than the bare but more than the
+	 * meadow's bare body, the ectotherm in the cold the same as the meadow's
+	 * endotherm, and a coat on the meadow costs its price. And a bare
+	 * endotherm left to starve in the cold dies of "cold".
+	 */
+	static class ColdCostsAnEndothermAndNotAnEctotherm extends Scenario {
+		private World chilled() {
+			World w = room(12, 12);
+			for (int x = 1; x <= 10; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_COOLANT);
+				w.setTile(x, 10, 0, Tile.TileType.TYPE_COOLANT);
+			}
+			return w;
+		}
+
+		private Genome body(double thermogenesis, double insulation) {
+			Genome g = new Genome();
+			g.size = 8;
+			g.thermalOptimum = 20; // at home on the meadow, which sits inside 16..24
+			g.thermalBreadth = 4;
+			g.thermogenesis = thermogenesis;
+			g.insulation = insulation;
+			return g;
+		}
+
+		private double burnOver(World w, Genome g, int ticks) {
+			// A tile from the coolant run in the chilled room; the same spot on the meadow.
+			TestNPC b = TestNPC.minded(5.5, 2.5, 0, g).grown().withGlycogen(5.0).withHunger(1.0);
+			w.spawnEntity(b);
+			double e0 = b.getGlycogen();
+			tick(w, ticks);
+			return e0 - b.getGlycogen();
+		}
+
+		@Override
+		public void run() {
+			seed(59);
+			World cold = chilled();
+			double t = cold.climate().temperatureAt(5.5, 2.5, 0);
+			assertLess("a tile from the coolant run is well under a band of 20 +/- 4", t, 11);
+			int T = 300;
+			double meadowBare = burnOver(room(12, 12), body(1, 0), T);
+			double meadowCoat = burnOver(room(12, 12), body(1, 1), T);
+			double coldBare = burnOver(chilled(), body(1, 0), T);
+			double coldCoat = burnOver(chilled(), body(1, 1), T);
+			double coldEcto = burnOver(chilled(), body(0, 0), T);
+			assertGreater("a bare endotherm burns far more in the cold", coldBare, meadowBare * 1.4);
+			assertLess("a coat keeps that in", coldCoat, coldBare * 0.8);
+			assertGreater("but a coat is not free: it costs on the meadow", meadowCoat, meadowBare * 1.1);
+			assertNear("and in the cold a full coat costs exactly its price and no cold", meadowCoat, coldCoat, meadowBare * 0.02);
+			assertNear("an ectotherm pays nothing for the cold", meadowBare, coldEcto, meadowBare * 0.02);
+			// Left to starve in the cold, the corpse names what emptied it.
+			World grave = chilled();
+			TestNPC doomed = TestNPC.minded(5.5, 2.5, 0, body(1, 0)).grown().withGlycogen(0.2).withHunger(1.0);
+			grave.spawnEntity(doomed);
+			for (int i = 0; i < 20000 && !doomed.isDead(); i++) {
+				tick(grave, 1);
+			}
+			assertTrue("the starving endotherm died", doomed.isDead());
+			assertTrue("of the cold, says its corpse (" + doomed.getDeathCause() + ")", "cold".equals(doomed.getDeathCause()));
+			World meadow = room(12, 12);
+			TestNPC starved = TestNPC.minded(5.5, 2.5, 0, body(1, 0)).grown().withGlycogen(0.2).withHunger(1.0);
+			meadow.spawnEntity(starved);
+			for (int i = 0; i < 20000 && !starved.isDead(); i++) {
+				tick(meadow, 1);
+			}
+			assertTrue("while the same body on the meadow starved (" + starved.getDeathCause() + ")", "starvation".equals(starved.getDeathCause()));
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20385,6 +20468,7 @@ public class SimTests {
 				new MoistAirHoldsMoreGrass(),
 				new AFounderDrawsHowItStandsTheAir(),
 				new AMindFeelsItsOwnComfortAndSeeksWarmth(),
+				new ColdCostsAnEndothermAndNotAnEctotherm(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

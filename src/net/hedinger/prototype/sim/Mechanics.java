@@ -546,6 +546,15 @@ public final class Mechanics {
 						+ "here against the air its plant was tuned in, open ground in full sun for the "
 						+ "sward and the cave's own air for fungus. A pond's margin and the shade carry "
 						+ "more, the parched air at a vent's mouth less."),
+				row("Cold, on the burn", num(NPC.COLD_BURN), "of basal per deg C under the band",
+						"A warm-blooded body burns to stay warm below its comfort band: this much of the "
+						+ "basal rate per degree, on its surface (mass to the two thirds) rather than its "
+						+ "mass, for the warm-blooded share of it and the share its coat lets out. An "
+						+ "ectotherm pays nothing. A body starving while it pays this died of the cold."),
+				row("A coat, on the burn", num(NPC.INSULATION_BURN), "of basal at full insulation",
+						"Carried everywhere, paid for in every air, like sight and a long brain: a full "
+						+ "coat on the meadow is burn for nothing and pays for itself from about two "
+						+ "degrees under the band."),
 				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
 						"The air multiplies the clock: 1 + this times the air's vapour pressure deficit -- "
 						+ "the saturation pressure at the tile's temperature times how far from saturated "
