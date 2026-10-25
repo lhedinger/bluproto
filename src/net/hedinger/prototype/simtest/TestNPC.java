@@ -1653,7 +1653,9 @@ public class TestNPC extends NPC {
 	 * a brief contact is worth a mouthful rather than nothing at all.
 	 */
 	private boolean biteDue() {
-		return age - lastBiteAt >= PRED_BITE_PERIOD;
+		// A cold ectotherm bites as slowly as it walks: the period stretches by
+		// what the air leaves it of its pace.
+		return age - lastBiteAt >= PRED_BITE_PERIOD / Math.max(1e-6, thermalPerformance());
 	}
 
 	/**
