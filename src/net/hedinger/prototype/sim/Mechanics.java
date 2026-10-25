@@ -1176,7 +1176,29 @@ public final class Mechanics {
 				row("Forage instinct", "0 – 1", "",
 						"A born-in drive to seek food, seeded into a newborn's steering; the "
 						+ "mind overrides it once it decides, so a random-brained founder still "
-						+ "has a working instinct to build on."));
+						+ "has a working instinct to build on."),
+				row("Search cast", "0 – π", "radians",
+						"How wide a body's exploring sweeps: the cone, either side of its "
+						+ "facing, that the next step of a search is drawn from. Narrow runs "
+						+ "straight lines, wide wanders; a mind can override it per step."),
+				row("Comfort optimum", num(Genome.THERMAL_OPT_MIN) + " – " + num(Genome.THERMAL_OPT_MAX), "°C",
+						"The air this lineage is built for. Founders draw "
+						+ num(Genome.THERMAL_OPT_LO) + " – " + num(Genome.THERMAL_OPT_HI)
+						+ ", around the surface's own " + num(net.hedinger.prototype.engine.Climate.TEMP_SURFACE)
+						+ "; the warmth sense reads 0 here."),
+				row("Comfort band", num(Genome.THERMAL_BAND_LO) + " – " + num(Genome.THERMAL_BAND_HI) + " at seeding", "°C",
+						"Half-width of the band around the optimum inside which the air costs "
+						+ "nothing. Beyond it the cold burn, the heat thirst and an ectotherm's "
+						+ "slowing all scale with the gap, so a wide band is tolerance and a "
+						+ "narrow one is a specialist."),
+				row("Warm-blooded", "0 – 1", "",
+						"How much of its own warmth a body makes. At 1 it holds full pace in any "
+						+ "air and pays the cold burn below its band; at 0 it pays nothing for "
+						+ "cold but is as slow as the air is far from its band."),
+				row("Coat", "0 – 1", "",
+						"Insulation: scales the cold burn down by (1 − coat) and the heat thirst "
+						+ "up by (1 + coat). A trade with no free setting, priced by the air the "
+						+ "body stands in and nothing else."));
 		return s;
 	}
 
