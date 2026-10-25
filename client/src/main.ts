@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { VEG_KIND_MASK, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
+import { VEG_KIND_MASK, advanceGait, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import { bodyScanCanvas, planFor, stateOf } from './bodyScan';
@@ -51,6 +51,20 @@ if (glPref !== '0' && glUsable(glPref === '1')) {
     glr = null; // constructor failure: #cv may be poisoned, but this is rare
   }
 }
+// A lost context (driver reset, GPU memory pressure, a backgrounded phone) is
+// a blank world until the page reloads unless the loss is claimed: the
+// preventDefault is what makes the browser offer it back, and the renderer is
+// then rebuilt on it from nothing, its textures re-uploaded as they are drawn.
+let glLost = false;
+cv.addEventListener('webglcontextlost', ev => { ev.preventDefault(); glLost = true; });
+cv.addEventListener('webglcontextrestored', () => {
+  try {
+    glr = new GLRenderer(cv, glPref === '1');
+    glLost = false;
+  } catch {
+    location.reload(); // the overlay is already a 2D context, so #cv cannot fall back
+  }
+});
 const g = glr
   ? fx.getContext('2d')! // the overlay: transparent above the GL world
   : cv.getContext('2d', { alpha: false })!;
@@ -204,15 +218,14 @@ function syncBarGroups(): void {
 }
 new MutationObserver(syncBarGroups).observe(barTools, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'hidden'] });
 syncBarGroups();
-window.addEventListener('keydown', ev => {
-  if (ev.key === 'Escape' && barEl.classList.contains('open')) { setBarOpen(false); ev.stopImmediatePropagation(); }
-}, true);
-
-// Escape puts away whatever is open, the corner first and the card after it.
-// Two of these panels had no dismissal of their own at all, and none of them
-// answered the key every other window on the machine answers.
+// Escape puts away ONE thing, the topmost: the folded-out toolbar, then the
+// settings dialog, then the corner panel, then the card. It was three listeners
+// that each closed their own, so one press closed the dialog and the panel
+// behind it together.
 window.addEventListener('keydown', ev => {
   if (ev.key !== 'Escape') return;
+  if (barEl.classList.contains('open')) { setBarOpen(false); return; }
+  if (closePerfDlg()) return;
   const open = rightColumn.filter(p => p.el.classList.contains('open'));
   const corner = open.find(p => !p.el.classList.contains('card'));
   (corner ?? open[0])?.close();
@@ -806,6 +819,7 @@ function selectTile(x: number, y: number, z: number): void {
   selectedId = null;
   cam.followId = null;
   selectedTile = { x, y, z };
+  syncMindPoll();
   refreshTileDetail();
   clearInterval(detailTimer);
   detailTimer = window.setInterval(refreshTileDetail, 600);
@@ -818,6 +832,9 @@ function deselect(): void {
   cam.followId = null; // closing the inspector also stops following
   clearInterval(detailTimer);
   clearInterval(mindTimer);
+  mindPollFor = null;
+  inspectDetail = null;
+  lineageFor = -1;
   closePanel(inspectEl);
   reflect();
 }
@@ -827,10 +844,16 @@ rightColumn.push({ el: inspectEl, close: deselect });
 
 async function refreshDetail(): Promise<void> {
   if (selectedId === null) return;
+  // An answer is only applied to the body it was asked about: select A, then B
+  // inside the second A's fetch takes, and A's reply landed on B's card — or a
+  // 404 for a dead A deselected B.
+  const id = selectedId;
   try {
-    const r = await fetch(`/api/world/entity/${selectedId}`);
+    const r = await fetch(`/api/world/entity/${id}`);
+    if (selectedId !== id) return;
     if (!r.ok) { deselect(); return; }
     const d = await r.json();
+    if (selectedId !== id) return;
     // Follow it downstairs. The entity stream is filtered to the watched level,
     // so a creature that changes level simply stops arriving — from the stream
     // alone it is indistinguishable from one that died. This endpoint is not
@@ -847,12 +870,16 @@ async function refreshDetail(): Promise<void> {
 }
 
 async function refreshTileDetail(): Promise<void> {
-  if (!selectedTile) return;
+  const asked = selectedTile;
+  if (!asked) return;
   try {
-    const { x, y, z } = selectedTile;
+    const { x, y, z } = asked;
     const r = await fetch(`/api/world/tile/${z}/${x}/${y}`);
+    if (selectedTile !== asked) return;
     if (!r.ok) { deselect(); return; }
-    renderTileInspect(await r.json());
+    const d = await r.json();
+    if (selectedTile !== asked) return;
+    renderTileInspect(d);
   } catch {
     /* transient; keep the last panel */
   }
@@ -935,6 +962,7 @@ function renderInspectSimple(d: Record<string, any>): void {
   const thumb = inspectEl.querySelector('.scan');
   if (thumb) thumb.appendChild(bodyScanCanvas(planFor(d.role), stateOf(d), 48, 24, 3, false));
   showInspect('card');
+  syncMindPoll(); // leaving debug leaves the mind tab with nothing to show
 }
 
 // Debug context: the whole creature in ONE panel of tabs — attributes
@@ -1185,6 +1213,9 @@ function lineageTab(d: Record<string, any>): string {
     fetch(`/api/world/lineage/${d.id}`)
       .then(r => (r.ok ? r.json() : null))
       .then(j => {
+        // A failed trace forgets it was asked, so the next poll asks again
+        // instead of the tab reading "tracing…" for as long as it stays open.
+        if (!j && lineageFor === d.id) lineageFor = -1;
         if (j && lineageFor === d.id) {
           lineageData = j;
           if (inspectTab === 'lineage' && inspectDetail?.id === d.id) {
@@ -1192,7 +1223,7 @@ function lineageTab(d: Record<string, any>): string {
           }
         }
       })
-      .catch(() => { /* the tab just keeps saying tracing */ });
+      .catch(() => { if (lineageFor === d.id) lineageFor = -1; });
   }
   const L = lineageData;
   if (!L) return '<div class="lin end">tracing…</div>';
@@ -1323,12 +1354,18 @@ function row(k: string, v: unknown): string {
 let mindTimer = 0;
 let mindData: Record<string, any> | null = null;
 let mindFor = -1; // which entity mindData describes
+let mindPollFor: number | null = null; // which entity the running poll is for
 
 /** Starts the mind poll while its tab is open and stops it otherwise — called
  *  wherever the tab, the selection, or the panel's existence can change. */
 function syncMindPoll(): void {
-  const want = inspectTab === 'mind' && selectedId !== null;
+  const want = debugOn && inspectTab === 'mind' && selectedId !== null
+    && inspectEl.classList.contains('open');
+  // Idempotent: the panel's 1 Hz rebuild calls this too, and restarting the
+  // poll every time doubled its requests and reset its phase.
+  if (want && mindPollFor === selectedId) return;
   clearInterval(mindTimer);
+  mindPollFor = want ? selectedId : null;
   if (!want) return;
   if (mindFor !== selectedId) {
     mindData = null;
@@ -1994,6 +2031,7 @@ function setDebug(on: boolean): void {
   // Tile inspection is no longer debug-only — a long press reaches it in any
   // mode — so leaving debug must not tear down a selection the user made.
   applyDebug();
+  syncMindPoll();
   toast(`debug mode ${debugOn ? 'on' : 'off'}`);
 }
 // Triple-tap the tick readout toggles debug — deliberate, so a stray tap on the
@@ -2100,7 +2138,6 @@ function closePerfDlg(): boolean {
   perfBtn.classList.remove('on');
   return true;
 }
-window.addEventListener('keydown', ev => { if (ev.key === 'Escape') closePerfDlg(); });
 perfBtn.onclick = () => {
   if (closePerfDlg()) return;
   const dlg = document.createElement('div');
@@ -2224,8 +2261,11 @@ function hudFrame(now: number): void {
 let lastStats = 0;
 let lastMini = 0;
 let miniCx = NaN, miniCy = NaN, miniScale = NaN;
+let lastFrameAt = 0;
 function frame(now: number): void {
   const cb0 = performance.now();
+  advanceGait(lastFrameAt ? now - lastFrameAt : 0, paused ? 0 : (parseFloat(speedSel.value) || 1));
+  lastFrameAt = now;
   // A fixed fraction behind the interval the stream is actually sending at:
   // the server halves its rate for a big world, and a delay tuned to 10 Hz
   // would run out of interpolation and hold every body still for the second
@@ -2253,7 +2293,9 @@ function frame(now: number): void {
 
   const chunkPx = hello ? (hello.chunkPx ?? hello.tileSize) : 0;
   const sel = { id: selectedId, tile: selectedTile };
-  if (glr) {
+  if (glr && glLost) {
+    g.clearRect(0, 0, g.canvas.width, g.canvas.height); // the world waits for its context
+  } else if (glr) {
     hudGl = renderGL(glr, g, cam, state, meta, chunkTiles, chunkPx, getChunk,
       vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
   } else {
