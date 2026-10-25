@@ -140,16 +140,6 @@ public abstract class NPC extends Entity {
 	@Unit("of the basal rate per degree C")
 	public static double COLD_BURN = 0.1;
 	/**
-	 * What a coat costs to carry: resting burn at full insulation, at mass 1,
-	 * as a share of the basal rate, scaling with mass to the three quarters
-	 * like the other capability surcharges. Priced so insulation is a trade
-	 * and not a free skin: a full coat on the meadow is a fifteen per cent
-	 * burn for nothing, and pays for itself from about two degrees under the
-	 * band.
-	 */
-	@Unit("of the basal rate at full coat")
-	public static double INSULATION_BURN = 0.15;
-	/**
 	 * What heat costs in water: how much faster the thirst clock runs per
 	 * degree above the comfort band, for a bare body. Above its band a body
 	 * holds its temperature by evaporating, which is water the air's own
@@ -1210,9 +1200,7 @@ public abstract class NPC extends Entity {
 		double agility = AGILITY_BURN * m34 * (genome.turnRate - REF_TURN);
 		int brainLen = genome.brain != null ? genome.brain.length() : (int) REF_BRAIN_LEN;
 		double thought = BRAIN_BURN * m34 * (brainLen - REF_BRAIN_LEN);
-		// A coat is tissue too: carried everywhere, paid for in every air.
-		double coat = BASAL_RATE * m34 * INSULATION_BURN * genome.insulation;
-		double burn = base + perception + agility + thought + coat;
+		double burn = base + perception + agility + thought;
 		return Math.max(burn, base * CAPABILITY_FLOOR);
 	}
 

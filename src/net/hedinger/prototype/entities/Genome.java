@@ -404,9 +404,13 @@ public class Genome {
 	public double thermogenesis = 1.0;
 	/**
 	 * Insulation, 0..1 -- fur, a fat shell, a shell. Lowers what cold costs
-	 * an endotherm, raises what heat costs in water, and is priced into the
-	 * resting burn like sight is, so a coat is never free. The default is
-	 * none, which is what every body was.
+	 * an endotherm and raises what heat costs in water, which is the whole of
+	 * its price: a coat is a trade between the cold and the heat, free where
+	 * there is neither. It was first also a tax on the resting burn, to make
+	 * sure it was never free, and measured on seed 42 that tax halved the
+	 * hunters' births for a trait that bought them nothing on the meadow; a
+	 * price a body pays in every air is not a trade. The default is none,
+	 * which is what every body was.
 	 */
 	public double insulation = 0.0;
 	/**
