@@ -555,6 +555,11 @@ public final class Mechanics {
 						"Carried everywhere, paid for in every air, like sight and a long brain: a full "
 						+ "coat on the meadow is burn for nothing and pays for itself from about two "
 						+ "degrees under the band."),
+				row("Heat, on the thirst clock", num(NPC.HEAT_THIRST), "of the rate per deg C over the band",
+						"Above its comfort band a body keeps cool by evaporating, water the air's own "
+						+ "deficit does not account for: this much faster per degree over, doubled at "
+						+ "full coat, for every lineage alike. A body parched while it spends water to "
+						+ "keep cool died of the heat."),
 				row("Dry air, on the thirst clock", num(NPC.DRY_AIR_THIRST), "x per unit of vapour deficit",
 						"The air multiplies the clock: 1 + this times the air's vapour pressure deficit -- "
 						+ "the saturation pressure at the tile's temperature times how far from saturated "

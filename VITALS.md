@@ -213,6 +213,14 @@ dark cave nearly half), cool air a little, and hot dry air at a vent's mouth
 triples it. Every body on an ordinary sunlit meadow runs as it did; the
 pressure is only ever the difference from that.
 
+The comfort band (GENOME.md: `thermalOptimum`, `thermalBreadth`) brings the
+other two seams in. **Cold below the band multiplies the burn**: an endotherm
+pays `COLD_BURN` of basal per degree on its surface, less what its coat keeps
+in, and a body starving while it pays died of "cold". **Heat above the band
+multiplies the thirst clock** again, `HEAT_THIRST` per degree over, doubled at
+full coat, for every lineage; a body parched while it keeps cool died of
+"heat". Inside the band the air costs nothing beyond its deficit.
+
 ## 9. Open questions — resolved
 
 All five went as proposed, and are now what the code does:

@@ -149,6 +149,18 @@ public abstract class NPC extends Entity {
 	 */
 	@Unit("of the basal rate at full coat")
 	public static double INSULATION_BURN = 0.15;
+	/**
+	 * What heat costs in water: how much faster the thirst clock runs per
+	 * degree above the comfort band, for a bare body. Above its band a body
+	 * holds its temperature by evaporating, which is water the air's own
+	 * deficit does not account for; a coat holds the heat in and doubles the
+	 * price at full insulation. At a twentieth, a bare body ten degrees over
+	 * its band spends half again the water. Every lineage pays this, the
+	 * ectotherm as the endotherm: an overheating body cools or dies either
+	 * way, and here it cools.
+	 */
+	@Unit("of the thirst rate per degree C")
+	public static double HEAT_THIRST = 0.05;
 	/** Energy/tick per unit of sight area beyond the reference, at mass 1. */
 	@Unit("energy/tick per tile·rad")
 	public static double PERCEPTION_BURN = 5.0e-6;
@@ -1378,7 +1390,8 @@ public abstract class NPC extends Entity {
 			// actually burns; the resting rhythm anchor (appetite returns in
 			// twice the time thirst does) survives as the GUT_PER_MASS identity.
 			double pace = Math.pow(leanMass(), -0.25) * eff;
-			thirst = Math.min(1.0, thirst + pace * dryness() / thirstPeriod());
+			double heat = heatGap();
+			thirst = Math.min(1.0, thirst + pace * dryness() * heatThirst(heat) / thirstPeriod());
 			// Drinking: a rate held over ticks, never a refill — a body beside
 			// water sips as it goes about its business, and walking off mid-drink
 			// keeps whatever partial refill had accrued. Some bodies carry their
@@ -1477,7 +1490,9 @@ public abstract class NPC extends Entity {
 				damage(1, cold > 0 ? "cold" : "starvation");
 			}
 			if (thirst >= DEPRIVED && age % DEPRIVATION_PERIOD == DEPRIVATION_PERIOD / 2) {
-				damage(1, "thirst"); // offset phase: two pegged needs erode faster
+				// Offset phase: two pegged needs erode faster. A body parched while
+				// it spends water to keep cool died of the heat.
+				damage(1, heat > 0 ? "heat" : "thirst");
 			}
 			if (health < 100 && hunger < NEED_LOW && thirst < NEED_LOW
 					&& age % Math.max(1, (int) Math.round(MEND_PERIOD / eff)) == 0) {
@@ -1648,6 +1663,26 @@ public abstract class NPC extends Entity {
 		}
 		double t = getWorld().climate().temperatureAt(X, Y, getLvl());
 		return Math.max(0, thermalOptimum() - thermalBreadth() - t);
+	}
+
+	/** How far above its band the air where this body stands is, in degrees;
+	 *  0 inside or below it. */
+	protected double heatGap() {
+		if (getWorld() == null) {
+			return 0;
+		}
+		double t = getWorld().climate().temperatureAt(X, Y, getLvl());
+		return Math.max(0, t - thermalOptimum() - thermalBreadth());
+	}
+
+	/** The thirst clock's multiplier for keeping cool {@code gap} degrees over
+	 *  the band: 1 inside it, {@link #HEAT_THIRST} per degree beyond, doubled
+	 *  at full coat. */
+	protected double heatThirst(double gap) {
+		if (gap <= 0) {
+			return 1.0;
+		}
+		return 1.0 + HEAT_THIRST * gap * (1 + (genome == null ? 0 : genome.insulation));
 	}
 
 	/** The energy this body burns this tick to stay warm: {@link #COLD_BURN}
