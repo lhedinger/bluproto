@@ -379,6 +379,37 @@ public class Genome {
 	 */
 	public double reserve = 0.0;
 	/**
+	 * The temperature this lineage is built for, in degrees C: the centre of
+	 * its comfort band. With {@link #thermalBreadth} it is the whole of what a
+	 * body feels as cold or heat -- the warmth sense reads the tile against
+	 * it, cold below the band costs an endotherm burn, heat above it costs
+	 * water, and an ectotherm's performance falls away from it either side.
+	 * The default is the ground's own temperature, so a genome that never
+	 * drew one is at home on the meadow and pays nothing there.
+	 */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public double thermalOptimum = net.hedinger.prototype.engine.Climate.TEMP_SURFACE;
+	/** Half-width of the comfort band, in degrees C: how far from its optimum
+	 *  a body is before the air costs it anything. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public double thermalBreadth = 8.0;
+	/**
+	 * How much of its warmth this lineage makes itself, 0..1: 1 is an
+	 * endotherm, which holds its performance in any air and pays for cold
+	 * with burn; 0 an ectotherm, which pays nothing for cold and is as slow
+	 * as the air is; between is a real strategy, not a blend of two. The
+	 * default is the endotherm, which is what every body was before the air
+	 * could be felt.
+	 */
+	public double thermogenesis = 1.0;
+	/**
+	 * Insulation, 0..1 -- fur, a fat shell, a shell. Lowers what cold costs
+	 * an endotherm, raises what heat costs in water, and is priced into the
+	 * resting burn like sight is, so a coat is never free. The default is
+	 * none, which is what every body was.
+	 */
+	public double insulation = 0.0;
+	/**
 	 * How widely a lineage casts about when it explores, in radians: the spread
 	 * of the facing-weighted draw that picks its next tile. Zero is a lineage
 	 * that all but always walks on, a transect across barren ground;
@@ -573,7 +604,31 @@ public class Genome {
 		// exhaustion floor to half the store, appended after sight for the same
 		// reason again.
 		g.reserve = RESERVE_LO + Utils.random() * (RESERVE_HI - RESERVE_LO);
+		// And how it stands the air, appended after the reserve for the same
+		// reason again.
+		spreadThermal(g);
 		return g;
+	}
+
+	/**
+	 * Draws a founder's thermal genes: where its comfort band sits and how wide
+	 * it is, how much of its warmth it makes, how much coat it wears.
+	 *
+	 * <p>The optimum is drawn either side of the ground's own temperature,
+	 * {@link #THERMAL_OPT_LO}..{@link #THERMAL_OPT_HI}, with a band of
+	 * {@link #THERMAL_BAND_LO}..{@link #THERMAL_BAND_HI}, so most founders are
+	 * at home on the meadow and the ones at the edges pay a little there and
+	 * are the ones at home on a mesa top or beside a vent. Thermogenesis and
+	 * insulation are drawn across their whole range: the endotherm and the
+	 * ectotherm are both real strategies, as are the bare and the furred, and
+	 * which pays where is for each population to find. Founders are noisy
+	 * seeding, not a configuration to get right.
+	 */
+	public static void spreadThermal(Genome g) {
+		g.thermalOptimum = THERMAL_OPT_LO + Utils.random() * (THERMAL_OPT_HI - THERMAL_OPT_LO);
+		g.thermalBreadth = THERMAL_BAND_LO + Utils.random() * (THERMAL_BAND_HI - THERMAL_BAND_LO);
+		g.thermogenesis = Utils.random();
+		g.insulation = Utils.random();
 	}
 
 	/** Where founders' {@link #reserve} lines are drawn from: just above the
@@ -582,6 +637,23 @@ public class Genome {
 	 *  never runs, which is selection's to try and not a founder's to start at. */
 	@net.hedinger.prototype.engine.Unit("of glycogen")
 	public static final double RESERVE_LO = 0.05, RESERVE_HI = 0.5, RESERVE_MAX = 0.9;
+
+	/** Where founders' comfort bands are drawn: centred on the ground's own
+	 *  temperature, five degrees either side. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public static final double THERMAL_OPT_LO = net.hedinger.prototype.engine.Climate.TEMP_SURFACE - 5,
+			THERMAL_OPT_HI = net.hedinger.prototype.engine.Climate.TEMP_SURFACE + 5;
+	/** How wide a founder's band is drawn: a narrow specialist to a broad
+	 *  generalist. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public static final double THERMAL_BAND_LO = 4, THERMAL_BAND_HI = 10;
+	/** The gene's own bounds on the optimum: anything a tile in this world can
+	 *  read, from the coolant run to a vent's mouth. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public static final double THERMAL_OPT_MIN = -5, THERMAL_OPT_MAX = 45;
+	/** The gene's own bounds on the band: never nothing, never everything. */
+	@net.hedinger.prototype.engine.Unit("degrees C")
+	public static final double THERMAL_BAND_MIN = 1, THERMAL_BAND_MAX = 25;
 
 	public Genome copy() {
 		Genome g = new Genome();
