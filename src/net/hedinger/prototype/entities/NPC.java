@@ -1438,7 +1438,8 @@ public abstract class NPC extends Entity {
 			// Growth and the refill happen at rest and are untouched: slowing the
 			// mint itself instead made childhood longer than a life.
 			double exertion = Math.min(1.0, EXERTION_WALK * base / Math.max(travel, 1e-12));
-			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor * exertion;
+			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor * exertion
+					* thermalPerformance(); // a cold ectotherm digests as slowly as it walks
 			// Cold: what a warm-blooded body burns to stay warm below its band,
 			// paid whether it rides or walks or stands.
 			double cold = coldCost();
@@ -1653,6 +1654,31 @@ public abstract class NPC extends Entity {
 	 *  at the gene's own minimum, or the default band for a body with no genome. */
 	public double thermalBreadth() {
 		return genome == null ? 8.0 : Math.max(Genome.THERMAL_BAND_MIN, genome.thermalBreadth);
+	}
+
+	/**
+	 * How much of its pace this body has in the air where it stands, 0..1.
+	 * Inside its comfort band every body has all of it. Outside, a
+	 * warm-blooded body still has all of it -- that is what the cold burn and
+	 * the heat's water buy -- and a cold-blooded one falls away on a bell,
+	 * {@code exp(-(gap / breadth)^2)} with the gap measured from the band's
+	 * edge, so a band's width past its edge is a third of its pace. Between
+	 * the two strategies the share is {@link Genome#thermogenesis}: what the
+	 * body makes for itself it keeps, the rest is the air's. Multiplies the
+	 * walk, the digestion and a hunter's bite cadence, which is where an
+	 * ectotherm pays for the cold it does not burn against.
+	 */
+	public double thermalPerformance() {
+		if (genome == null || genome.thermogenesis >= 1 || getWorld() == null) {
+			return 1.0;
+		}
+		double t = getWorld().climate().temperatureAt(X, Y, getLvl());
+		double gap = Math.max(0, Math.abs(t - thermalOptimum()) - thermalBreadth());
+		if (gap <= 0) {
+			return 1.0;
+		}
+		double bell = Math.exp(-(gap / thermalBreadth()) * (gap / thermalBreadth()));
+		return genome.thermogenesis + (1 - genome.thermogenesis) * bell;
 	}
 
 	/** How far below its band the air where this body stands is, in degrees;
@@ -2433,6 +2459,12 @@ public abstract class NPC extends Entity {
 		if (!canExert()) {
 			speed = Math.min(speed, this.speed * CRAWL_SPEED);
 		}
+
+		// The air's pace: an ectotherm outside its band is as slow as the air
+		// is far from it, an endotherm is not. Applied here, at the one choke
+		// point every walk goes through, so a chase, a flight, an explore and
+		// a drive to open ground all slow alike.
+		speed *= thermalPerformance();
 
 		dX = speed * Math.cos(D);
 		dY = speed * Math.sin(D);

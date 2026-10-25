@@ -219,7 +219,10 @@ pays `COLD_BURN` of basal per degree on its surface, less what its coat keeps
 in, and a body starving while it pays died of "cold". **Heat above the band
 multiplies the thirst clock** again, `HEAT_THIRST` per degree over, doubled at
 full coat, for every lineage; a body parched while it keeps cool died of
-"heat". Inside the band the air costs nothing beyond its deficit.
+"heat". Inside the band the air costs nothing beyond its deficit. **An
+ectotherm pays in pace instead of burn**: outside its band its walk, its
+digestion and its bite cadence fall on a bell from the band's edge
+(`NPC.thermalPerformance`), by the share of its warmth it does not make itself.
 
 ## 9. Open questions — resolved
 

@@ -555,6 +555,12 @@ public final class Mechanics {
 						"Carried everywhere, paid for in every air, like sight and a long brain: a full "
 						+ "coat on the meadow is burn for nothing and pays for itself from about two "
 						+ "degrees under the band."),
+				row("An ectotherm's pace", "exp(-(gap / band)^2)", "of its pace",
+						"Outside its comfort band a cold-blooded body is as slow as the air is far from "
+						+ "the band: a band's width past the edge is a third of its pace, on the walk, the "
+						+ "digestion and a hunter's bite cadence alike. A warm-blooded body keeps all of "
+						+ "its pace; that is what its cold burn and its heat's water buy. Between the two "
+						+ "the share is the thermogenesis gene."),
 				row("Heat, on the thirst clock", num(NPC.HEAT_THIRST), "of the rate per deg C over the band",
 						"Above its comfort band a body keeps cool by evaporating, water the air's own "
 						+ "deficit does not account for: this much faster per degree over, doubled at "

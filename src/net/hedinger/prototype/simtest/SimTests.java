@@ -5512,6 +5512,83 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * An ectotherm is as slow as the air is cold, and digests as slowly. A
+	 * cold-blooded body pays nothing for the cold in burn; outside its band it
+	 * falls away on a bell from the band's edge instead, on the walk, the
+	 * digestion and a hunter's bite cadence, by the share of its warmth it
+	 * does not make itself. A warm-blooded body keeps all of its pace, which
+	 * is what its cold burn buys. Inside the band the two are the same body.
+	 *
+	 * <p>Pinned a tile from the coolant run against the meadow: an ectotherm
+	 * walking flat out covers a fraction of the ground there that it covers on
+	 * the meadow, the fraction the bell says, where an endotherm covers the
+	 * same ground in both; and a fed, resting ectotherm's store refills slower
+	 * in the cold than the same body's on the meadow.
+	 */
+	static class AnEctothermIsAsSlowAsTheAirIsCold extends Scenario {
+		private World chilled() {
+			World w = room(14, 12);
+			for (int x = 1; x <= 12; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_COOLANT);
+			}
+			return w;
+		}
+
+		private Genome body(double thermogenesis) {
+			Genome g = new Genome();
+			g.size = 8;
+			g.thermalOptimum = 20;
+			g.thermalBreadth = 4;
+			g.thermogenesis = thermogenesis;
+			return g;
+		}
+
+		private double groundCovered(World w, Genome g) {
+			TestNPC b = TestNPC.minded(3.5, 2.5, 0, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_THROTTLE] = 1;
+					a[AgentIO.A_TURN] = 0;
+				}
+			}).grown().withHeading(0).withSpeed(0.05);
+			w.spawnEntity(b);
+			w.think();
+			double x0 = b.getX();
+			tick(w, 100);
+			return b.getX() - x0;
+		}
+
+		private double refilled(World w, Genome g) {
+			TestNPC b = TestNPC.minded(3.5, 2.5, 0, g).grown().withHunger(0.0);
+			b.withGlycogen(b.glycogenCapacity() * 0.5);
+			w.spawnEntity(b);
+			double e0 = b.getGlycogen();
+			tick(w, 300);
+			return b.getGlycogen() - e0;
+		}
+
+		@Override
+		public void run() {
+			seed(67);
+			double t = chilled().climate().temperatureAt(3.5, 2.5, 0);
+			double gap = Math.max(0, 20 - 4 - t);
+			assertGreater("a tile from the coolant run is under a band of 20 +/- 4", gap, 3);
+			double bell = Math.exp(-(gap / 4) * (gap / 4));
+			double endoMeadow = groundCovered(room(14, 12), body(1)), endoCold = groundCovered(chilled(), body(1));
+			double ectoMeadow = groundCovered(room(14, 12), body(0)), ectoCold = groundCovered(chilled(), body(0));
+			assertGreater("the bodies walked", endoMeadow, 3);
+			assertNear("an endotherm walks the same in the cold", endoMeadow, endoCold, endoMeadow * 0.03);
+			assertNear("an ectotherm on the meadow walks as the endotherm does", endoMeadow, ectoMeadow, endoMeadow * 0.03);
+			assertNear("and in the cold it has the bell's share of its pace (" + String.format("%.2f", bell) + ")",
+					ectoMeadow * bell, ectoCold, ectoMeadow * 0.05);
+			double fedMeadow = refilled(room(14, 12), body(0)), fedCold = refilled(chilled(), body(0));
+			assertGreater("a fed ectotherm refills its store on the meadow", fedMeadow, 0);
+			assertLess("and slower in the cold", fedCold, fedMeadow * 0.8);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20538,6 +20615,7 @@ public class SimTests {
 				new AMindFeelsItsOwnComfortAndSeeksWarmth(),
 				new ColdCostsAnEndothermAndNotAnEctotherm(),
 				new HeatCostsWaterAndACoatMakesItWorse(),
+				new AnEctothermIsAsSlowAsTheAirIsCold(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
