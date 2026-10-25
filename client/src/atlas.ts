@@ -78,13 +78,21 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
   cache.set(pheno, null); // mark in-flight so we fetch once
   const img = new Image();
   img.onload = () => {
+    // Evicted while in flight: the LRU already let it go, and writing it back
+    // would resurrect a resident nothing tracks as touched.
+    if (cache.get(pheno) !== null) return;
     const cv = document.createElement('canvas');
     cv.width = img.naturalWidth;
     cv.height = img.naturalHeight;
     cv.getContext('2d')!.drawImage(img, 0, 0);
     cache.set(pheno, cv);
   };
-  img.onerror = () => cache.set(pheno, null);
+  // A failed fetch forgets it was asked after a pause, so the next sighting
+  // refetches. Left as the in-flight marker, one dropped request kept that
+  // shape a dot for the life of the tab.
+  img.onerror = () => {
+    setTimeout(() => { if (cache.get(pheno) === null) cache.delete(pheno); }, 8000);
+  };
   img.src = `/api/world/atlas/${pheno}.png`;
   return null;
 }
@@ -103,11 +111,24 @@ export function atlasCount(): number {
  * sprite size by a non-GL browser; the LRU sweep drops them with their shape.
  */
 const tintCache = new Map<number | string, HTMLCanvasElement>();
+/** Tinted copies kept at once. Each is a colour of a shape, and a long-evolved
+ *  herd is many colours of few shapes, so the per-shape sweep alone let one
+ *  shape hold hundreds of 2.4 MB copies. Least-recently drawn goes first; the
+ *  cap sits well above what one screen draws, so the visible set never thrashes. */
+const TINT_CAP = 192;
 
-export function tintedFor(pheno: number, rgb: number, atlas: HTMLCanvasElement): HTMLCanvasElement {
-  const key = pheno + ':' + rgb;
+/** `atlas` may be the full sheet or its quarter-size mip (`mip` true): far
+ *  zoom tints the mip directly, a sixteenth of the pixels, rather than tinting
+ *  the full sheet and downscaling the result. */
+export function tintedFor(pheno: number, rgb: number, atlas: HTMLCanvasElement, mip = false): HTMLCanvasElement {
+  const key = pheno + (mip ? ':m:' : ':') + rgb;
   const hit = tintCache.get(key);
-  if (hit) return hit;
+  if (hit) {
+    tintCache.delete(key); // re-insert: Map order is the LRU order
+    tintCache.set(key, hit);
+    return hit;
+  }
+  if (tintCache.size >= TINT_CAP) tintCache.delete(tintCache.keys().next().value!);
   const cv = document.createElement('canvas');
   cv.width = atlas.width;
   cv.height = atlas.height;

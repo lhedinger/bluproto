@@ -484,7 +484,7 @@ function startVegPolling(): void {
   if (VEG_OFF) return;
   clearInterval(vegTimer);
   pollVeg();
-  vegTimer = window.setInterval(pollVeg, 4000);
+  vegTimer = window.setInterval(() => { if (!document.hidden) void pollVeg(); }, 4000);
 }
 
 // Static cover mask (one byte per tile, 1 = thicket) fetched once per level, so
@@ -823,7 +823,7 @@ function select(id: number, sightUnseen = false): void {
   }
   refreshDetail();
   clearInterval(detailTimer);
-  detailTimer = window.setInterval(refreshDetail, 1000); // glycogen/state tick live
+  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshDetail(); }, 1000); // glycogen/state tick live
   reflect();
 }
 
@@ -835,7 +835,7 @@ function selectTile(x: number, y: number, z: number): void {
   syncMindPoll();
   refreshTileDetail();
   clearInterval(detailTimer);
-  detailTimer = window.setInterval(refreshTileDetail, 600);
+  detailTimer = window.setInterval(() => { if (!document.hidden) void refreshTileDetail(); }, 600);
   reflect();
 }
 
@@ -1385,7 +1385,7 @@ function syncMindPoll(): void {
     mindFor = selectedId!;
   }
   void refreshMind();
-  mindTimer = window.setInterval(refreshMind, 500);
+  mindTimer = window.setInterval(() => { if (!document.hidden) void refreshMind(); }, 500);
 }
 
 async function refreshMind(): Promise<void> {
@@ -2977,5 +2977,9 @@ window.addEventListener('keydown', ev => {
 window.addEventListener('resize', () => { if (popOn) popDraw(); });
 // The poll beat. Only runs while the panel is open — a closed graph costs the
 // server nothing.
-setInterval(() => { if (popOn) popPoll(); }, 1000);
+setInterval(() => { if (popOn && !document.hidden) popPoll(); }, 1000);
+// The polls above skip a hidden tab: a phone in a pocket fetched vegetation,
+// the inspector and the chart for nobody. Coming back catches the ground up at
+// once rather than on the next beat.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && meta) void pollVeg(); });
 popApply();
