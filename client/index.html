@@ -308,10 +308,13 @@
     #inspect .tabs button.on { color: var(--ink); background: var(--s1); box-shadow: inset 0 2px 0 0 var(--s2); }
     @container bh (max-width: 599px) { #inspect .tabs button { min-height: var(--touch); } }
     #inspect .lin { font-size: 12px; }
-    /* The body scan: a canvas on the panel's own fill, centred, never scaled by
-       CSS -- it is drawn at its cell size and a stretched cell is a blur. */
+    /* The body scan: a canvas on the panel's own fill, centred. The page's
+       canvas rule stretches it to the panel's width, which the pixelated
+       rendering keeps crisp; but a full panel on a wide screen would blow a
+       96-cell picture up past anything a cell grid gains from and push its
+       thermometer under the fold, so it stops at 640px and sits centred. */
     #inspect .scan { display: flex; justify-content: center; padding: 8px 0; }
-    #inspect .scan canvas { image-rendering: pixelated; box-shadow: 0 0 0 2px var(--sh); }
+    #inspect .scan canvas { image-rendering: pixelated; box-shadow: 0 0 0 2px var(--sh); max-width: 640px; }
     #inspect .scan.card { padding: 4px 0 6px; }
     #inspect .lin .node { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
     #inspect .lin .node.link { cursor: pointer; }

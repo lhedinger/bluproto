@@ -22,8 +22,9 @@
 
 /** The world's own colours. The skin and leaders are the crystal glint and the
  *  shallows ramp, the tank the crystal ramp, the gut the grass ramp or the
- *  bloom red the rest of the world's flesh wears, fat the sand ramp. Each pair
- *  is {bright, dim}: an edge and a fill. */
+ *  bloom red the rest of the world's flesh wears, fat the sand ramp, the coat
+ *  a pale fur a step lighter than the fat it wraps, so the two bands never
+ *  read as one. Each pair is {bright, dim}: an edge and a fill. */
 const SCAN = {
   bg: '#0b0f17', grid: '#10192a', band: '#12303a',
   skin: ['#D0ECFF', '#2b6a78'] as const,
@@ -33,6 +34,7 @@ const SCAN = {
   gutBlood: ['#E0455F', '#7c2434'] as const,
   tank: ['#7d96c8', '#38466e'] as const,
   water: ['#63becd', '#2b6a78'] as const,
+  coat: ['#c0aa7e', '#98865c'] as const,
   mind: '#ffffff', mouth: '#F0E8C6', sense: '#2b6a78', label: '#8b93a3',
 };
 
@@ -51,8 +53,36 @@ export interface Plan {
   sense: [number, number][]; mouth: [number, number][]; grip: [number, number][];
 }
 
+/** How a body stands the air, when it has a lineage that says: its comfort
+ *  band in degrees, how much of its warmth it makes, how much coat it wears,
+ *  and the air it is in right now -- the tile's temperature, its comfort
+ *  (-1 at the cold edge of the band .. +1 at the hot edge) and the pace the
+ *  air leaves it (1 for a warm-blooded body, less for a cold-blooded one
+ *  outside its band). */
+export interface Thermal {
+  optimum: number; breadth: number; thermogenesis: number; insulation: number;
+  temperature: number; comfort: number; pace: number;
+}
+
 export interface BodyState {
   hunger: number; thirst: number; fat: number; glycogen: number; health: number;
+  /** Absent for a body with no lineage (an item, a corpse). */
+  thermal?: Thermal;
+}
+
+/** The thermometer's reach, in degrees: the span a lineage's optimum may
+ *  draw from, which also covers the coldest coolant run and the mouth of a
+ *  vent. A reading past either end sits at that end. */
+export const THERMO_MIN = -5, THERMO_MAX = 45;
+
+/** Rows the thermometer strip adds under the labelled scan. */
+export const THERMO_ROWS = 13;
+
+/** The word for a comfort reading: at home inside the band, cool or warm in
+ *  its outer halves, cold or hot past its edges. One copy, shared with the
+ *  inspector's climate line. */
+export function comfortWord(c: number): string {
+  return c <= -1 ? 'cold' : c >= 1 ? 'hot' : c < -0.5 ? 'cool' : c > 0.5 ? 'warm' : 'at home';
 }
 
 /** The sated reference state, for the catalog and for a body with no books. */
@@ -163,6 +193,17 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
       if (bayer(x, y) < 0.6) cell(x, y, skin[1]);
     }
   }
+  // the coat: a dithered ring of fur two cells out from the skin, as dense as
+  // the insulation gene -- a bare body draws nothing, a full coat a thick pelt
+  // that still never reads as a second skin
+  const coat = s.thermal ? clamp01(s.thermal.insulation) : 0;
+  if (coat > 0.02) {
+    const near = (x: number, y: number) => body(x + 1, y) || body(x - 1, y) || body(x, y + 1) || body(x, y - 1);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (body(x, y) || near(x, y)) continue;
+      if ((near(x + 1, y) || near(x - 1, y) || near(x, y + 1) || near(x, y - 1)) && bayer(x, y) < coat * 0.75) cell(x, y, SCAN.coat[1]);
+    }
+  }
   // the authored marks: feelers, mouth, hooks, and the mind
   for (const [x, y] of plan.sense) cell(Math.round(W * x), Math.round(H * y), SCAN.sense);
   for (const [x, y] of plan.mouth) cell(Math.round(W * x), Math.round(H * y), SCAN.mouth);
@@ -200,6 +241,46 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
     g.fillStyle = col[0];
     g.fillText(v, lx, ly + font + 1);
   }
+  if (s.thermal) drawThermometer(g, s.thermal, W, H, px, font);
+}
+
+/**
+ * The thermometer strip under the labelled scan: a rail from
+ * {@link THERMO_MIN} to {@link THERMO_MAX} degrees, the lineage's comfort band
+ * as a bright segment on it with its optimum marked, and the air the body is
+ * in as a tick above -- skin-coloured inside the band, water-blue below it,
+ * hurt-red above. Two lines of text say the rest: the comfort word, the
+ * degrees, and the pace the air leaves the body; then the two genes the
+ * picture cannot carry as shape, how warm-blooded it is and how much coat.
+ */
+function drawThermometer(g: CanvasRenderingContext2D, t: Thermal, W: number, H: number, px: number, font: number): void {
+  const cell = (x: number, y: number, c: string) => { g.fillStyle = c; g.fillRect(x * px, y * px, px, px); };
+  const x0 = 4, x1 = W - 5;                       // the rail's cells
+  const col = (deg: number) => Math.round(x0 + (x1 - x0) * clamp01((deg - THERMO_MIN) / (THERMO_MAX - THERMO_MIN)));
+  const rail = H + 3;
+  for (let x = x0; x <= x1; x++) cell(x, rail, SCAN.grid);
+  for (let deg = 0; deg <= 40; deg += 10) { cell(col(deg), rail - 1, SCAN.band); cell(col(deg), rail + 1, SCAN.band); }
+  // the band: bright edges, dim fill, the optimum a bright cell in the middle
+  const lo = col(t.optimum - t.breadth), hi = col(t.optimum + t.breadth);
+  for (let x = lo; x <= hi; x++) cell(x, rail, x === lo || x === hi ? SCAN.fat[0] : SCAN.fat[1]);
+  cell(col(t.optimum), rail, SCAN.fat[0]);
+  // the air: a three-cell tick standing on the rail
+  const tx = col(t.temperature);
+  const tc = t.comfort <= -1 ? SCAN.water[0] : t.comfort >= 1 ? SCAN.hurt[0] : SCAN.skin[0];
+  for (let y = rail - 3; y < rail; y++) cell(tx, y, tc);
+  g.textBaseline = 'top';
+  g.textAlign = 'left';
+  const lx = x0 * px, ly = (rail + 3) * px;
+  const d = (v: number) => `${Math.round(v)}`;
+  const pct = (v: number) => `${Math.round(clamp01(v) * 100)}%`;
+  g.fillStyle = SCAN.label;
+  g.fillText('warmth', lx, ly);
+  g.fillStyle = tc;
+  const pace = t.pace < 0.995 ? ` · pace ${pct(t.pace)}` : '';
+  g.fillText(`${comfortWord(t.comfort)} · ${d(t.temperature)} °C in a ${d(t.optimum - t.breadth)}–${d(t.optimum + t.breadth)} band${pace}`,
+      lx + font * 4.5, ly);
+  g.fillStyle = SCAN.label;
+  g.fillText(`warm-blooded ${pct(t.thermogenesis)} · coat ${pct(t.insulation)}`, lx + font * 4.5, ly + font + 2);
 }
 
 /** The body's books as the scan reads them, from an inspector detail payload.
@@ -209,12 +290,19 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
 export function stateOf(d: Record<string, any>): BodyState {
   const num = (v: unknown, dflt: number) => typeof v === 'number' && Number.isFinite(v) ? v : dflt;
   const cap = num(d.glycogenCap, 0);
+  const gm = d.genome;
+  const thermal: Thermal | undefined = gm && typeof gm.thermalOptimum === 'number' && typeof d.comfort === 'number' ? {
+    optimum: gm.thermalOptimum, breadth: num(gm.thermalBreadth, 1),
+    thermogenesis: num(gm.thermogenesis, 1), insulation: num(gm.insulation, 0),
+    temperature: num(d.temperature, gm.thermalOptimum), comfort: d.comfort, pace: num(d.pace, 1),
+  } : undefined;
   return {
     hunger: num(d.hunger, SATED.hunger),
     thirst: num(d.thirst, SATED.thirst),
     fat: num(d.fat, SATED.fat),
     glycogen: cap > 0 ? num(d.glycogen, 0) / cap : SATED.glycogen,
     health: 'health' in d ? num(d.health, 100) / 100 : 1,
+    thermal,
   };
 }
 
@@ -222,7 +310,7 @@ export function stateOf(d: Record<string, any>): BodyState {
 export function bodyScanCanvas(plan: Plan, s: BodyState, W: number, H: number, px: number, labels: boolean): HTMLCanvasElement {
   const cv = document.createElement('canvas');
   cv.width = W * px;
-  cv.height = H * px;
+  cv.height = (H + (labels && s.thermal ? THERMO_ROWS : 0)) * px;
   drawBodyScan(cv.getContext('2d')!, plan, s, W, H, px, labels);
   return cv;
 }
