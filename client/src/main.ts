@@ -459,10 +459,7 @@ async function pollVeg(): Promise<void> {
     const j = await r.json();
     if (epoch !== levelEpoch) return;
     if (j.states !== undefined) {
-      const bin = atob(j.states);
-      const a = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-      vegGrid = a;
+      vegGrid = b64ToBytes(j.states);
       vegSeq = j.seq;
       vegVersion++;
     } else if (j.changes !== undefined && vegGrid) {
@@ -489,19 +486,32 @@ function startVegPolling(): void {
 
 // Static cover mask (one byte per tile, 1 = thicket) fetched once per level, so
 // the renderer can draw a shrub canopy over the entities standing in cover.
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s);
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+
+/** A static per-level byte grid (cover, water, a climate field), fetched for
+ *  the current level and handed back only if the level has not moved on in
+ *  the meantime; `still` is the caller's own staleness test on top. */
+async function fetchLevelGrid(path: string, still = () => true):
+    Promise<{ bytes: Uint8Array; j: Record<string, any> } | null> {
+  const epoch = levelEpoch;
+  const r = await fetch(`${path}/${currentLevel}?v=${hello ? hello.build : '0'}`);
+  if (epoch !== levelEpoch || !still() || !r.ok) return null;
+  const j = await r.json();
+  if (epoch !== levelEpoch || !still()) return null;
+  return { bytes: b64ToBytes(j.data), j };
+}
+
 let coverGrid: Uint8Array | null = null;
 async function fetchCover(): Promise<void> {
-  const epoch = levelEpoch;
   coverGrid = null;
   try {
-    const r = await fetch(`/api/world/cover/${currentLevel}?v=${hello ? hello.build : '0'}`);
-    if (epoch !== levelEpoch || !r.ok) return; // stale: the level moved on
-    const j = await r.json();
-    if (epoch !== levelEpoch) return;
-    const bin = atob(j.data);
-    const a = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    coverGrid = a;
+    const g = await fetchLevelGrid('/api/world/cover');
+    if (g) coverGrid = g.bytes;
   } catch {
     /* transient; leave the canopy off until the next fetch */
   }
@@ -511,17 +521,10 @@ async function fetchCover(): Promise<void> {
 // fetched once per level, so the renderer can twinkle each water its own way.
 let waterGrid: Uint8Array | null = null;
 async function fetchWater(): Promise<void> {
-  const epoch = levelEpoch;
   waterGrid = null;
   try {
-    const r = await fetch(`/api/world/water/${currentLevel}?v=${hello ? hello.build : '0'}`);
-    if (epoch !== levelEpoch || !r.ok) return; // stale: the level moved on
-    const j = await r.json();
-    if (epoch !== levelEpoch) return;
-    const bin = atob(j.data);
-    const a = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    waterGrid = a;
+    const g = await fetchLevelGrid('/api/world/water');
+    if (g) waterGrid = g.bytes;
   } catch {
     /* transient; the water lies still until the next fetch */
   }
@@ -535,22 +538,16 @@ async function fetchWater(): Promise<void> {
 let climGrid: Uint8Array | null = null;
 let climRange: ClimateRange | null = null;
 async function fetchClimate(): Promise<void> {
-  const epoch = levelEpoch;
   const field = climChoice;
   climGrid = null;
   climRange = null;
   climLegend();
   if (!field) return;
   try {
-    const r = await fetch(`/api/world/climate/${field}/${currentLevel}?v=${hello ? hello.build : '0'}`);
-    if (epoch !== levelEpoch || field !== climChoice || !r.ok) return; // stale: the level or the choice moved on
-    const j = await r.json();
-    if (epoch !== levelEpoch || field !== climChoice) return;
-    const bin = atob(j.data);
-    const a = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    climGrid = a;
-    climRange = { min: j.min, max: j.max, mid: j.mid };
+    const g = await fetchLevelGrid(`/api/world/climate/${field}`, () => field === climChoice);
+    if (!g) return; // stale: the level or the choice moved on
+    climGrid = g.bytes;
+    climRange = { min: g.j.min, max: g.j.max, mid: g.j.mid };
     climLegend();
   } catch {
     /* transient; the layer stays off until the next fetch */
@@ -949,8 +946,10 @@ function renderInspectSimple(d: Record<string, any>): void {
   // A corpse's own facts sit under its identity: what it was comes first,
   // then what is left of it, which is the part anything still alive cares about.
   rows.push(...carcassRows(d));
-  if ('hauling' in d) rows.push(row('carrying', `#${d.hauling}`));
-  if (d.carrying) rows.push(row('hauling', 'cargo'));
+  // The same words the debug attributes use: `hauling` names the body being
+  // dragged, `carrying` is a load on its back. The card had them swapped.
+  if ('hauling' in d) rows.push(row('hauling', `#${d.hauling}`));
+  if (d.carrying) rows.push(row('carrying', 'cargo'));
   if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
   if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
   // The four books (VITALS.md), for anyone following a creature — not a debug
@@ -1504,8 +1503,11 @@ async function downloadGenome(id: number): Promise<void> {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([d.genome], { type: 'text/plain' }));
     a.download = `creature-${id}.genome`;
+    document.body.append(a); // Firefox ignores a click on a detached anchor
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
+    // Revoked a beat later: revoking in the same task can cancel the download.
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast('genome saved');
   } catch {
     toast('save failed');
@@ -1751,7 +1753,7 @@ async function fetchDroneRank(): Promise<void> {
   } catch {
     /* transient: keep whatever we had */
   }
-  droneBtn.style.display = droneRank.length ? 'inline-block' : 'none';
+  droneBtn.hidden = !droneRank.length;
   droneLabel();
 }
 
@@ -1835,7 +1837,7 @@ function climApply(): void {
   const on = climBoxes.find(b => b.checked);
   const v = on ? on.value : '';
   climChoice = v === 'light' || v === 'temperature' || v === 'humidity' ? v : null;
-  ovlBtn.style.fontWeight = ovlSmell || ovlSound || climChoice ? '600' : '';
+  ovlBtn.classList.toggle('lit', !!(ovlSmell || ovlSound || climChoice));
   try { localStorage.setItem('climField', climChoice ?? ''); } catch { /* per-session only */ }
   fetchClimate();
 }
@@ -1843,7 +1845,7 @@ for (const b of climBoxes) b.onchange = climApply;
 function ovlApply(): void {
   ovlSmell = ovlSmellBox.checked;
   ovlSound = ovlSoundBox.checked;
-  ovlBtn.style.fontWeight = ovlSmell || ovlSound || climChoice ? '600' : '';
+  ovlBtn.classList.toggle('lit', !!(ovlSmell || ovlSound || climChoice));
   try {
     localStorage.setItem('ovlSmell', ovlSmell ? '1' : '0');
     localStorage.setItem('ovlSound', ovlSound ? '1' : '0');
@@ -1853,8 +1855,8 @@ ovlSmellBox.onchange = ovlApply;
 ovlSoundBox.onchange = ovlApply;
 ovlApply();
 // A menu, not a panel: two checkboxes, sized by what they are. The button
-// lights while the menu is open (as every toolbar button does) and goes bold
-// while an overlay is actually painting, which outlives the menu.
+// lights while the menu is open (as every toolbar button does) and wears its
+// pilot lamp while an overlay is actually painting, which outlives the menu.
 function closeOvl(): void {
   closePanel(ovlEl);
   ovlBtn.classList.remove('on');
@@ -1885,7 +1887,9 @@ const tuneFoot = document.getElementById('tuneFoot')!;
 type TuneRow = { key: string; loaded: number; input: HTMLInputElement; row: HTMLElement };
 let tuneRows: TuneRow[] = [];
 
+let tuneEpoch = 0; // bumped per open and close: a slow load lands only on its own panel
 function closeTuning(): void {
+  tuneEpoch++; // a load still in flight now has no panel to fill
   closePanel(tuningEl);
   tuneBtn.classList.remove('on');
   tuneRows = [];
@@ -1900,6 +1904,7 @@ function tuneMax(def: number, value: number): number {
 }
 
 async function openTuning(): Promise<void> {
+  const epoch = ++tuneEpoch;
   openPanel(tuningEl);
   tuneBtn.classList.add('on');
   tuneBody.textContent = 'loading…';
@@ -1909,10 +1914,11 @@ async function openTuning(): Promise<void> {
   try {
     const r = await fetch('/api/tuning');
     const d = await r.json();
+    if (epoch !== tuneEpoch) return; // closed and reopened while this was in flight
     if (!r.ok || !d.ok) throw new Error();
     constants = d.constants;
   } catch {
-    tuneBody.textContent = 'failed to load /api/tuning';
+    if (epoch === tuneEpoch) tuneBody.textContent = 'failed to load /api/tuning';
     return;
   }
   const editable = !net.readOnly;
@@ -1949,7 +1955,9 @@ async function openTuning(): Promise<void> {
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.className = 'bh-range';
-      slider.min = '0';
+      // Symmetric about zero for a constant that is, or defaults, negative: a
+      // floor of 0 put its own value off the end of the track.
+      slider.min = c.def < 0 || c.value < 0 ? String(-tuneMax(c.def, c.value)) : '0';
       slider.max = String(tuneMax(c.def, c.value));
       slider.step = String(tuneMax(c.def, c.value) / 400);
       slider.value = String(c.value);
@@ -2040,7 +2048,7 @@ function applyDebug(): void {
   // Re-render whatever is open in the new context (simple card <-> full dump).
   if (selectedId !== null) refreshDetail();
   statsEl.title = debugOn ? 'debug on — tap 3× to turn off' : 'tap 3× for debug';
-  tuneBtn.style.display = debugOn ? '' : 'none';
+  tuneBtn.hidden = !debugOn;
   if (!debugOn) closeTuning();
 }
 function setDebug(on: boolean): void {
@@ -2481,7 +2489,7 @@ function popPoll(force = false): void {
   popFetching = true;
   popLastFetch = now;
   const mode = popMode;
-  fetch(mode === 'roles' ? 'api/population' : 'api/lineage/flows')
+  fetch(mode === 'roles' ? '/api/population' : '/api/lineage/flows')
     .then(r => (r.ok ? r.json() : null))
     .then((d: (PopData & FlowData) | null) => {
       if (!d) return;
@@ -2491,7 +2499,13 @@ function popPoll(force = false): void {
       popDraw();
     })
     .catch(() => { /* a missing sample is not worth a toast */ })
-    .finally(() => { popFetching = false; });
+    .finally(() => {
+      popFetching = false;
+      // The lens switched while this was in flight, and the switch's own forced
+      // fetch was turned away by the in-flight guard: ask for the new lens now,
+      // not at its next beat (half a minute away for lineages).
+      if (mode !== popMode && popOn) popPoll(true);
+    });
 }
 
 function popDraw(): void {
@@ -2951,7 +2965,7 @@ function popSetMode(m: 'roles' | 'lineages'): void {
   popMode = m;
   popModeRoles.classList.toggle('on', m === 'roles');
   popModeLin.classList.toggle('on', m === 'lineages');
-  popCladeBtn.style.display = m === 'lineages' ? '' : 'none';
+  popCladeBtn.hidden = m !== 'lineages';
   popDraw();
   popPoll(true);
 }

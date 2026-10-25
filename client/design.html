@@ -53,7 +53,7 @@ table.ref th { font: 400 11px var(--f-label); letter-spacing: .06em; color: var(
 table.ref td:first-child { white-space: nowrap; }
 
 /* ============================================================= PAGE FIXTURES */
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 18px; }
 .spec { display: grid; gap: 10px; align-content: start; min-width: 0; }
 .spec > .cap { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .spec > .cap b { font: 400 12px var(--f-label); letter-spacing: .06em; }
@@ -76,22 +76,18 @@ table.ref td:first-child { white-space: nowrap; }
 .vw .anchor .bh-panel { width: 100%; }
 .vw .a-card { left: 12px; bottom: 12px; width: 300px; }
 .vw .a-menu { right: 12px; top: calc(var(--bar, 54px) + 8px); width: 260px; }
-.vw .a-half { right: 12px; top: calc(var(--bar, 54px) + 8px); width: 480px; height: calc(50% - 20px); }
+.vw .a-half { right: 12px; top: calc(var(--bar, 54px) + 8px); width: min(480px, calc(100% - 24px)); height: calc(50% - 20px); }
 .vw .a-full { left: 12px; right: 12px; top: calc(var(--bar, 54px) + 8px); bottom: 12px; }
 .vw .minimap { position: absolute; right: 12px; bottom: 12px; width: 120px; height: 80px; background: #22402acc; z-index: 2; box-shadow: 0 0 0 2px var(--sh); }
-@container vw (min-width: 600px) and (max-width: 1023px) {
-  .vw .a-half { width: calc(50% - 18px); height: calc(100% - var(--bar, 54px) - 20px); }
-}
 @container vw (max-width: 599px) {
   /* phone: the corner panels become sheets from the bottom edge, the card spans the width */
   .vw .a-card { left: 0; right: 0; bottom: 0; width: auto; }
   .vw .a-menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 70%; }
-  .vw .a-half { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 60%; }
+  .vw .a-half { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 62%; }
   .vw .a-full { left: 0; right: 0; bottom: 0; top: var(--bar, 54px); }
   .vw .anchor .bh-panel { margin: 0; box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
   .vw .bh-panel > header::before { content: ""; position: absolute; left: 50%; top: 4px; width: 32px; height: 4px; margin-left: -16px; background: var(--s2); }
   .vw .bh-panel > header { padding-top: 12px; }
-  .vw .minimap { display: none; }
 }
 
 /* playground */
@@ -170,7 +166,7 @@ table.ref td:first-child { white-space: nowrap; }
         <tr><td><code>--u</code></td><td>2 px</td><td>One art-pixel at UI scale. Every bevel, notch and drop is a multiple.</td></tr>
         <tr><td><code>--sp1 … --sp6</code></td><td>4 · 8 · 12 · 16 · 24 · 32</td><td>Gaps inside and between components.</td></tr>
         <tr><td><code>--h-sm / md / lg</code></td><td>28 · 34 · 42 px</td><td>Control heights on a pointer device.</td></tr>
-        <tr><td><code>--touch</code></td><td>44 px</td><td>Minimum hit target in compact width and on any coarse pointer.</td></tr>
+        <tr><td><code>--touch</code></td><td>30 px</td><td>Minimum hit target in compact width and on any coarse pointer.</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -286,12 +282,12 @@ table.ref td:first-child { white-space: nowrap; }
   <!-- ============================================================ LAYOUT -->
   <section class="band" id="layout">
     <h2>Layout &amp; breakpoints <span>the viewer at three widths</span></h2>
-    <p>Breakpoints are widths of the viewer root, so everything in the viewer switches together, and the mock below switches when you change its width. Panels keep the viewer's four anchors from the panels skill: card, menu, half and full. On a phone the corner panels become sheets from the bottom edge, controls grow to 44&nbsp;px, and dialogues dock to the bottom.</p>
+    <p>Breakpoints are widths of the viewer root, so everything in the viewer switches together, and the mock below switches when you change its width. Panels keep the viewer's four anchors from the panels skill: card, menu, half and full. On a phone the corner panels become sheets from the bottom edge, controls take the 30&nbsp;px touch height (24&nbsp;px small), and dialogues dock to the bottom.</p>
     <div class="tablewrap"><table class="ref">
       <thead><tr><th>Width</th><th>Range</th><th>Panels</th><th>Controls</th></tr></thead>
       <tbody>
-        <tr><td>compact</td><td>&lt; 600 px</td><td>card, menu and half become bottom sheets (60% tall). Full fills under the toolbar. Minimap hidden.</td><td>44 px targets, 16 px field text, footers stack, label/value rows stack, dialogues dock to the bottom.</td></tr>
-        <tr><td>medium</td><td>600 – 1023 px</td><td>half takes the right half at full height. Toolbar may wrap to two rows.</td><td>Base sizes. Touch sizes if the pointer is coarse.</td></tr>
+        <tr><td>compact</td><td>&lt; 600 px</td><td>card, menu and half become bottom sheets (62% tall). Full fills under the toolbar. The toolbar folds behind its menu button; floors move to the rail above the minimap.</td><td>30 px targets (24 px small), 16 px field text, footers stack, label/value rows stack, dialogues dock to the bottom.</td></tr>
+        <tr><td>medium</td><td>600 – 1023 px</td><td>The expanded anchors: no rule of its own.</td><td>Base sizes. Touch sizes if the pointer is coarse.</td></tr>
         <tr><td>expanded</td><td>≥ 1024 px</td><td>half is 480 px × 50% at the top right. Card bottom left. Menu under the toolbar.</td><td>Base sizes.</td></tr>
       </tbody>
     </table></div>

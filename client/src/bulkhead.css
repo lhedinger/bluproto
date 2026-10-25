@@ -80,6 +80,9 @@
 .bh-btn:active, .bh-btn[aria-pressed="true"], .bh-btn.on { top: 2px; --bg: var(--s0);
   box-shadow: 0 -2px 0 0 var(--dark), -2px 0 0 0 var(--dark), 2px 0 0 0 var(--lit), 0 2px 0 0 var(--lit); }
 .bh-btn[aria-pressed="true"], .bh-btn.on { color: var(--lamp-l); }
+/* a pilot lamp: something this button controls is running, whether or not its
+   menu is open -- the corner pip, so it reads apart from .on's lit label */
+.bh-btn.lit::after { content: ""; position: absolute; top: 3px; right: 3px; width: 4px; height: 4px; background: var(--lamp-l); }
 .bh-btn--primary { --bg: var(--red1); --lit: var(--red2); --dark: var(--red0); --fg: #fff; }
 @media (hover: hover) { .bh-btn--primary:hover { --bg: var(--red2); } }
 .bh-btn--primary:active { --bg: var(--red0); }
@@ -248,6 +251,8 @@ select.bh-input { appearance: none; padding-right: 30px; cursor: pointer;
 /* --- dialog */
 .bh-scrim { position: absolute; inset: 0; z-index: 5; background: #000a; display: grid; place-items: center; padding: 16px; }
 .bh-scrim[hidden] { display: none; }
+/* `hidden` wins over any component's own display, so code shows and hides with the attribute */
+.bh [hidden] { display: none !important; }
 .bh-dialog { width: min(420px, 100%); max-height: 100%; }
 
 /* --- toolbar */

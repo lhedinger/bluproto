@@ -333,12 +333,12 @@
     #inspect .mono { opacity: .7; font: 11px var(--f-ui); }
     #inspect h3 + .grp { box-shadow: none; padding-top: 0; margin-top: 2px; }
     /* the inspector's links are Bulkhead plates */
-    #inspect .mindlink, #inspect .mind .save { display: block; width: calc(100% - 4px); border: 0; margin: 12px 2px 4px; text-align: center; cursor: pointer; position: relative; top: 0;
+    #inspect .mind .save { display: block; width: calc(100% - 4px); border: 0; margin: 12px 2px 4px; text-align: center; cursor: pointer; position: relative; top: 0;
       font: 400 12px var(--f-label); letter-spacing: .06em; color: var(--ink); background: var(--s1); padding: 9px;
       -webkit-tap-highlight-color: transparent;
       box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh), 0 2px 0 0 var(--sh), 0 4px 0 0 #0009; }
-    @media (hover: hover) { #inspect .mindlink:hover, #inspect .mind .save:hover { background: var(--s2); } }
-    #inspect .mindlink:active, #inspect .mind .save:active { top: 2px; background: var(--s0);
+    @media (hover: hover) { #inspect .mind .save:hover { background: var(--s2); } }
+    #inspect .mind .save:active { top: 2px; background: var(--s0);
       box-shadow: 0 -2px 0 0 var(--sh), -2px 0 0 0 var(--sh), 2px 0 0 0 var(--s2), 0 2px 0 0 var(--s2); }
     /* The mind TAB of the inspector: the creature's evolvable program, live I/O
        and registers. It was a panel of its own, with its own frame, position
@@ -426,8 +426,8 @@
       <div class="bar-group bar-group--views" role="group" aria-label="views">
         <span class="bh-label bar-glabel">views</span>
         <button class="bh-btn bh-btn--sm" id="ovlBtn" title="sense overlays: smell and sound heatmaps">overlays</button>
-        <button class="bh-btn bh-btn--sm" id="drone" title="go to the next steward drone and follow it" style="display:none">drone</button>
-        <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" style="display:none">constants</button>
+        <button class="bh-btn bh-btn--sm" id="drone" title="go to the next steward drone and follow it" hidden>drone</button>
+        <button class="bh-btn bh-btn--sm" id="tuneBtn" title="every simulation constant (debug mode)" hidden>constants</button>
       </div>
       <div class="bar-group" role="group" aria-label="simulation">
         <span class="bh-label bar-glabel">simulation</span>
@@ -462,7 +462,7 @@
     <h3><span class="ttl">population by</span>
       <button id="popModeRoles" class="on" title="headcount by trophic role">role</button>
       <button id="popModeLin" title="one clade's species over time — is each line breeding on, or is the warden reseeding it?">lineage</button>
-      <button id="popClade" style="display:none"
+      <button id="popClade" hidden
         title="cycle which clade the diagram shows — a lineage never crosses clades, so one clade at a time loses nothing">herbivore</button>
       <span class="win" id="popWin"></span>
       <button type="button" class="szbtn" title="full screen">⛶</button><button type="button" class="x" title="close" aria-label="close">✕</button></h3>
