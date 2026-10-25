@@ -65,6 +65,11 @@ public class Tile {
 	private double vegStored = VEG_MAX; // density at vegTick
 	private long vegTick = 0; // tick vegStored was last written
 
+	/** How far from its floor's own temperature a plant grows at a third of its
+	 *  pace: the sward's thermal tolerance. A vent's +25 at the mouth is past
+	 *  it; six tiles off, at +6, the ground grows at three quarters. */
+	@Unit("degrees C")
+	public static double PLANT_TEMP_BREADTH = 12.0;
 	/** How far the air can lower a tile's cap, as a share: the driest air in
 	 *  the world, at a vent's mouth, leaves half. */
 	@Unit("of the cap")
@@ -246,12 +251,37 @@ public class Tile {
 		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
 	}
 
-	/** Logistic regrow rate of whatever grows here, read off the tile's TYPE:
+	/** Logistic regrow rate of whatever grows here, read off the tile's TYPE --
 	 *  {@link #FUNGUS_REGROW} on a fungus bed, {@link #GRASS_REGROW} on every
-	 *  sward. It is not a per-tile field, so the same plant can never be given
-	 *  two speeds by whichever worldgen pass laid it. */
+	 *  sward; not a per-tile field, so the same plant can never be given two
+	 *  speeds by whichever worldgen pass laid it -- times the air's share of it
+	 *  ({@link #warmth}): temperature sets the pace of growth, water its bulk. */
 	public double regrowRate() {
-		return type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW;
+		return (type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW) * warmth();
+	}
+
+	/**
+	 * How much the air's temperature moves this tile's regrowth rate, as a
+	 * multiplier: a bell around the floor's own base temperature
+	 * ({@link net.hedinger.prototype.engine.Climate#baseTemperature}), of width
+	 * {@link #PLANT_TEMP_BREADTH}, and nothing at all at or below freezing.
+	 * Temperature sets the pace of development, which is why it is on the rate
+	 * and not the cap. Exactly 1 on any undisturbed tile of any floor -- the
+	 * meadow, a mesa top at its own cooler base, the cave at its own -- so the
+	 * sward and the fungus grow as they always did wherever no vent or pipe
+	 * reaches; the ground a vent warms grows slower, the ground the coolant
+	 * run chills slower still. 1 with no world to read.
+	 */
+	public double warmth() {
+		if (world == null) {
+			return 1.0;
+		}
+		double t = world.climate().temperatureAt(col + 0.5, row + 0.5, lvl);
+		if (t <= 0) {
+			return 0;
+		}
+		double gap = (t - net.hedinger.prototype.engine.Climate.baseTemperature(world, lvl)) / PLANT_TEMP_BREADTH;
+		return Math.exp(-gap * gap);
 	}
 
 	/**

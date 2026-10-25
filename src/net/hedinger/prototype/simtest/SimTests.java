@@ -5589,6 +5589,72 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * The sward grows at the pace of its air. Temperature sets the pace of
+	 * growth, so a tile's regrowth rate is its plant's times a bell around the
+	 * floor's own temperature: exactly the old rate on any undisturbed tile --
+	 * the meadow, and the cave for the cave's plant at the cave's own
+	 * temperature -- slower in the ground a vent warms or the coolant run
+	 * chills, and nothing at all at or below freezing. Water set the bulk a
+	 * tile can hold; this is the pace it climbs to it at.
+	 *
+	 * <p>Pinned on stripped tiles regrowing side by side: the open meadow
+	 * climbs as it always did, a tile beside the vents and a tile beside the
+	 * coolant run both lag it by the bell's share, and the cave's fungus bed in
+	 * undisturbed cave air climbs at its own full pace.
+	 */
+	static class TheSwardGrowsAtThePaceOfItsAir extends Scenario {
+		@Override
+		public void run() {
+			seed(71);
+			World w = room(30, 12, 2);
+			for (int y = 1; y <= 10; y++) {
+				w.setTile(1, y, 1, Tile.TileType.TYPE_VENT); // a warm west wall upstairs
+				w.setTile(28, y, 1, Tile.TileType.TYPE_COOLANT); // and a cold east wall
+			}
+			int fx = -1, fy = -1;
+			for (int y = 2; y < 10 && fx < 0; y++) {
+				for (int x = 2; x < 28; x++) {
+					if (w.climate().lightAt(x + 0.5, y + 0.5, 0) == 0) {
+						fx = x;
+						fy = y;
+						break;
+					}
+				}
+			}
+			assertTrue("the cave has a dark tile for a fungus bed", fx >= 0);
+			w.setTile(fx, fy, 0, Tile.TileType.TYPE_FUNGUS);
+			Tile meadow = w.getTile(14, 5, 1), warm = w.getTile(3, 5, 1), cold = w.getTile(26, 5, 1), fungus = w.getTile(fx, fy, 0);
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			// A vent's warmth and a pipe's chill carry faintly across a whole floor,
+			// so "undisturbed" is pinned in a room with neither; the middle of this
+			// one reads a fraction of a degree warm and grows a hair slower for it.
+			Tile plain = room(10, 10).getTile(5, 5, 0);
+			assertNear("an undisturbed meadow grows at the sward's own rate", Tile.GRASS_REGROW, plain.regrowRate(), 1e-12);
+			assertNear("and the fungus bed, in the cave's own air, at the fungus's", Tile.FUNGUS_REGROW, fungus.regrowRate(), 1e-12);
+			assertNear("the middle of a room with a vent wall and a pipe wall is within a hair of it",
+					Tile.GRASS_REGROW, meadow.regrowRate(), Tile.GRASS_REGROW * 0.01);
+			double warmGap = (c.temperatureAt(3.5, 5.5, 1) - 17) / Tile.PLANT_TEMP_BREADTH;
+			double coldGap = (c.temperatureAt(26.5, 5.5, 1) - 17) / Tile.PLANT_TEMP_BREADTH;
+			assertGreater("the ground by the vents is warm", warmGap, 0.3);
+			assertLess("and by the coolant run cold", coldGap, -0.3);
+			assertNear("the warm ground grows at the bell's share", Tile.GRASS_REGROW * Math.exp(-warmGap * warmGap), warm.regrowRate(), 1e-12);
+			assertNear("and the cold ground too", Tile.GRASS_REGROW * Math.exp(-coldGap * coldGap), cold.regrowRate(), 1e-12);
+			tick(w, 1);
+			for (Tile t : new Tile[] { meadow, warm, cold }) {
+				t.setFertility(1.0);
+				t.graze(w.getTick(), t.getVegetation(w.getTick()) - 0.4 * t.vegetationCap());
+			}
+			tick(w, 400);
+			long now = w.getTick();
+			double share = meadow.getVegetation(now) / meadow.vegetationCap();
+			assertGreater("the meadow climbs", share, 0.5);
+			assertLess("the warm ground lags it", warm.getVegetation(now) / warm.vegetationCap(), share - 0.03);
+			assertLess("and the cold ground too", cold.getVegetation(now) / cold.vegetationCap(), share - 0.03);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20616,6 +20682,7 @@ public class SimTests {
 				new ColdCostsAnEndothermAndNotAnEctotherm(),
 				new HeatCostsWaterAndACoatMakesItWorse(),
 				new AnEctothermIsAsSlowAsTheAirIsCold(),
+				new TheSwardGrowsAtThePaceOfItsAir(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
