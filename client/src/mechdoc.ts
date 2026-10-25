@@ -64,7 +64,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
-export function mechSection(m: MechSection, into: HTMLElement): void {
+function mechSection(m: MechSection, into: HTMLElement): void {
   const h = el('h2', m.title);
   h.id = m.id;
   into.append(h);

@@ -20,7 +20,7 @@ import { ART, hash01 } from './artCore';
  *  bytes they always sent -- 0x80 and 0x40 -- from when the field was two
  *  flags; the surface floras take the low indices, which are the tile's own
  *  FLORA_* numbering. */
-export const VEG_KIND_SHIFT = 3;
+const VEG_KIND_SHIFT = 3;
 export const VEG_KIND_MASK = 0xF8;
 /** The low bits: growth stage, 0 = nothing stands here, 1..5. For a crop that
  *  is how much has grown; for a cactus it is how old the plant is. */

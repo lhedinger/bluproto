@@ -540,7 +540,7 @@ function popKeyDraw(): void {
     [WARDEN, 'reseeded', 'a founder the warden landed since the previous stage'],
   ] as const) {
     const el = document.createElement('span');
-    el.style.cursor = 'default';
+    el.className = 'static'; // a caption, not a toggle
     el.title = title;
     el.appendChild(keySwatch(fill, '#c8cdd560'));
     el.appendChild(document.createTextNode(label));
@@ -557,7 +557,7 @@ function popKeyDraw(): void {
   }
   for (const sp of (st ? st.species : []).filter(x => linCladeMatch(x.key))) {
     const el = document.createElement('span');
-    el.style.cursor = 'default';
+    el.className = 'static'; // a caption, not a toggle
     el.title = `${sp.key}: over the window, ${bred.get(sp.key) ?? 0} heads bred, `
       + `${reseed.get(sp.key) ?? 0} reseeded by the warden`;
     const rgb = liftForDark(sp.rgb);
@@ -572,8 +572,8 @@ function popKeyDraw(): void {
  *  without it a near-black species reads as a gap on this near-black panel. */
 function keySwatch(fill: string, ring: string): HTMLElement {
   const dot = document.createElement('i');
-  dot.style.background = fill;
-  dot.style.boxShadow = `inset 0 0 0 1px ${ring}, 0 0 0 1px #ffffff2e`;
+  dot.style.setProperty('--fill', fill);
+  dot.style.setProperty('--ring', ring);
   return dot;
 }
 
@@ -637,8 +637,3 @@ window.addEventListener('resize', () => { if (popOn) popDraw(); });
 setInterval(() => { if (popOn && !document.hidden) popPoll(); }, 1000);
 
 popApply();
-
-/** Sim ticks per second, from the last population sample (33 until one lands). */
-export function popTps(): number {
-  return popData?.tps ?? 33;
-}

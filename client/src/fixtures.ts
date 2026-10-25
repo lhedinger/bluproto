@@ -2,6 +2,7 @@
 // link, the loading placeholder and the action glyphs. Split out of render.ts;
 // render.ts re-exports it.
 
+import { ART } from './artCore';
 import type { Camera } from './camera';
 import {
   ACT_AFFILIATE, ACT_ATTACK, ACT_CARRY, ACT_FLEE, ACT_GRAZE, ACT_HUNT, ACT_MATE,
@@ -127,7 +128,7 @@ export function drawDoor(g: CanvasRenderingContext2D, cam: Camera, e: EntityStat
   const reach = (span / 2) * ext; // leaf length from each end, tiles
   const blast = e.kind === 'door.blast';
   const grate = e.kind === 'door.grate';
-  const th = (blast ? 5 : 3) / 12; // bar thickness, tiles
+  const th = (blast ? 5 : 3) / ART; // bar thickness, tiles
   const col = '#' + e.rgb.toString(16).padStart(6, '0');
   const sc = cam.scale;
   const seam = 'rgba(0,0,0,0.45)';
@@ -215,7 +216,7 @@ const NEST_SHADES: Record<string, string> = {
 /** A nest: the authored stamp scaled to one art-pixel per cell — drawn
  *  sprite-style, no computed geometry, no smooth curves (ART-STYLE.md). */
 export function drawNest(g: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
-  const p = Math.max(1, sc / 12); // one art-pixel on screen
+  const p = Math.max(1, sc / ART); // one art-pixel on screen
   const x0 = x - (NEST_STAMP[0].length / 2) * p;
   const y0 = y - (NEST_STAMP.length / 2) * p;
   for (let row = 0; row < NEST_STAMP.length; row++) {

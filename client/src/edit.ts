@@ -62,11 +62,11 @@ async function load(line: string): Promise<void> {
 function loadSection(): string {
   return `<div class="ed-section" id="load"><h2>load</h2>
     <div class="ed-load">
-      <input type="file" id="file" accept=".genome,text/plain">
+      <input type="file" id="file" aria-label="genome file" accept=".genome,text/plain">
       <span class="drop" id="drop">or drop a .genome file here</span>
       <button class="ed-btn" id="blank">start blank</button>
     </div>
-    <textarea id="paste" placeholder="or paste an encoded genome line (g6;size=…;brain=…) and press load"></textarea>
+    <textarea id="paste" aria-label="encoded genome line" placeholder="or paste an encoded genome line (g6;size=…;brain=…) and press load"></textarea>
     <div class="ed-row"><button class="ed-btn" id="pasteBtn">load pasted line</button><span class="ed-msg" id="msg"></span></div>
   </div>`;
 }
@@ -160,7 +160,7 @@ function wireBody(): void {
 function operandCell(kind: string, r: number, c: number, v: number): string {
   const sel = (opts: string[], n: number) => {
     const cur = mod(v, n);
-    return `<select data-r="${r}" data-c="${c}">${opts.map((o, i) =>
+    return `<select aria-label="row ${r} operand ${'xyz'[c - 1] ?? c}" data-r="${r}" data-c="${c}">${opts.map((o, i) =>
       `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   };
   switch (kind) {
@@ -180,7 +180,7 @@ function mindSection(): string {
     const ops = schema.ops.map(o => `<option value="${o.op}" ${o.op === op.op ? 'selected' : ''}>${o.name}</option>`).join('');
     const cells = op.operands.map((k, c) => `<td>${operandCell(k, r, c + 1, row[c + 1])}</td>`).join('');
     const text = (dis[r] ?? '').replace(/^[> ]*\d+\s*/, '');
-    return `<tr><td class="n">${r}</td><td><select data-r="${r}" data-c="0">${ops}</select></td>${cells}
+    return `<tr><td class="n">${r}</td><td><select aria-label="row ${r} opcode" data-r="${r}" data-c="0">${ops}</select></td>${cells}
       <td class="dis">${esc(text)}</td>
       <td class="ctl"><button data-act="up" data-r="${r}" title="move up">↑</button><button data-act="down" data-r="${r}" title="move down">↓</button><button data-act="ins" data-r="${r}" title="insert after">+</button><button data-act="del" data-r="${r}" title="delete">✕</button></td></tr>`;
   }).join('');
@@ -228,7 +228,7 @@ function outSection(): string {
     ? `<button class="ed-btn" id="placeBtn">place at the surface's centre</button>`
     : `<span class="ed-msg ok">placing needs the world's command token (open this page from the world with one).</span>`;
   return `<div class="ed-section ed-out" id="out"><h2>line</h2>
-    <textarea id="line" readonly>${esc(line)}</textarea>
+    <textarea id="line" aria-label="the assembled genome line" readonly>${esc(line)}</textarea>
     <div class="ed-row"><button class="ed-btn" id="saveBtn" ${line ? '' : 'disabled'}>⤓ save .genome</button>
       <button class="ed-btn" id="handBtn" ${line ? '' : 'disabled'}>hand to the world (tap to place)</button>${line ? place : ''}
       <span class="ed-msg" id="outMsg"></span></div>
