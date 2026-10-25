@@ -388,6 +388,11 @@ public final class Mechanics {
 						+ "one. What spoils uneaten becomes decayed meat. A bite takes fresh meat off and "
 						+ "leaves the rest as fresh as it found it: the rate runs on what has spoiled, "
 						+ "not on what is gone. Decay does not start until it is gone."),
+				row("Warm air, on a carcass", num(NPC.ROT_Q10), "x per 10 deg C over the floor's own",
+						"Spoilage and rot both run faster in warm air and slower in cold, by this much "
+						+ "for every ten degrees the air at the body is over its floor's own temperature -- "
+						+ "the Q10 of decomposition. Read once, where the body fell. On the meadow and in "
+						+ "the undisturbed cave the clocks run as they always did."),
 				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
 						"Holds together early and thins out late, reaching nothing exactly as the corpse "
 						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "
