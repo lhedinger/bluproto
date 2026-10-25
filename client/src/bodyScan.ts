@@ -2,7 +2,7 @@
 // read by the inspector's body tab and the entity card. Every mark is a cell;
 // "glow" is a bright outline cell and one dim halo cell beside it, never a
 // blur. The drawing is a pure function of the body plan, the five live
-// numbers it gauges, and nothing else -- there is no RNG and no wall clock in
+// numbers it gauges, its thermals, and nothing else -- there is no RNG and no wall clock in
 // here, so the same creature in the same state is the same picture.
 //
 // What it shows, and why as organs rather than bars: the four plans differ in
@@ -143,7 +143,8 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 /**
  * Draws the scan into {@code g}: a grid of {@code W} by {@code H} cells at
  * {@code px} device pixels each. With {@code labels} the margins carry the
- * callouts (gut, fat, water, glycogen, hp) with leaders drawn as cell runs
+ * callouts (gut, fat, water, glycogen, hp, and the coat when the body has a
+ * lineage) with leaders drawn as cell runs
  * from the skin outward, so nothing crosses an organ; without, it is the card
  * thumbnail, the body alone.
  */
@@ -220,6 +221,13 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
     [0.28, 0.24, 0.10, 0.14, SCAN.fat, 'fat', pct(s.fat)],
     [0.86, 0.46, 0.90, 0.46, skin, 'hp', `${Math.round(health * 100)}`],
   ];
+  // the coat is the one thermal the picture carries as shape, so it gets a
+  // leader like the stores do: the left flank, on the row between the brow's
+  // feelers above and the mouth below, pointing at the pelt. The left side
+  // is where the plans differ most in reach (a hunter's snout, a parasite's
+  // small body), so the leader starts a fixed six cells clear of each plan's
+  // own wall rather than at one column for all.
+  if (s.thermal) callouts.push([0.52 - plan.rx - 0.06, 0.46, 0.10, 0.46, SCAN.coat, 'coat', pct(s.thermal.insulation)]);
   const font = Math.max(9, Math.round(px * 2.5));
   g.font = `${font}px ui-monospace, Menlo, Consolas, monospace`;
   g.textBaseline = 'top';
@@ -250,8 +258,9 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
  * as a bright segment on it with its optimum marked, and the air the body is
  * in as a tick above -- skin-coloured inside the band, water-blue below it,
  * hurt-red above. Two lines of text say the rest: the comfort word, the
- * degrees, and the pace the air leaves the body; then the two genes the
- * picture cannot carry as shape, how warm-blooded it is and how much coat.
+ * degrees, and the pace the air leaves the body; then the one gene the
+ * picture cannot carry as shape, how warm-blooded it is. The coat is drawn
+ * on the body and read off it by its own callout.
  */
 function drawThermometer(g: CanvasRenderingContext2D, t: Thermal, W: number, H: number, px: number, font: number): void {
   const cell = (x: number, y: number, c: string) => { g.fillStyle = c; g.fillRect(x * px, y * px, px, px); };
@@ -280,7 +289,7 @@ function drawThermometer(g: CanvasRenderingContext2D, t: Thermal, W: number, H: 
   g.fillText(`${comfortWord(t.comfort)} · ${d(t.temperature)} °C in a ${d(t.optimum - t.breadth)}–${d(t.optimum + t.breadth)} band${pace}`,
       lx + font * 4.5, ly);
   g.fillStyle = SCAN.label;
-  g.fillText(`warm-blooded ${pct(t.thermogenesis)} · coat ${pct(t.insulation)}`, lx + font * 4.5, ly + font + 2);
+  g.fillText(`warm-blooded ${pct(t.thermogenesis)}`, lx + font * 4.5, ly + font + 2);
 }
 
 /** The body's books as the scan reads them, from an inspector detail payload.
