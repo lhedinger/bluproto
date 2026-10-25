@@ -1368,19 +1368,54 @@ function mindBody(d: Record<string, any>): string {
     '<div class="grp">actuators — what it drives</div>' + aOut +
     head + `<div class="prog">${prog}</div>` + regBlock +
     '<button type="button" class="save">⤓ save genome</button>' +
-    '<button type="button" class="save edit">✎ edit a copy</button>';
+    '<button type="button" class="save edit">✎ edit a copy</button>' +
+    `<button type="button" class="save cmp">${compareLabel()}</button>`;
+}
+
+// Two taps compare two creatures: the first tap remembers this one as A (so
+// the label says so, derived from what is remembered rather than from what was
+// last set), the second opens /compare with this one as B. Remembered in
+// localStorage so it survives the inspector re-rendering between the taps.
+const COMPARE_KEY = 'compareA';
+function compareLabel(): string {
+  let a: string | null = null;
+  try { a = localStorage.getItem(COMPARE_KEY); } catch { /* private mode */ }
+  return a ? `⇄ compare with ${a.split('\t')[0]} (A)` : '⇄ compare: set as A';
 }
 
 /** The save and edit buttons are rewritten by every mind poll, so their
  *  handlers are too. */
 function wireSave(): void {
-  const save = inspectEl.querySelector('.save:not(.edit)');
+  const save = inspectEl.querySelector('.save:not(.edit):not(.cmp)');
   const edit = inspectEl.querySelector('.save.edit');
+  const cmp = inspectEl.querySelector('.save.cmp');
   if (selectedId !== null) {
     const id = selectedId;
     save?.addEventListener('click', () => downloadGenome(id));
     edit?.addEventListener('click', () => openEditor(id));
+    cmp?.addEventListener('click', () => compareStep(id));
   }
+}
+
+async function compareStep(id: number): Promise<void> {
+  try {
+    const r = await fetch(`/api/world/genome/${id}`);
+    if (!r.ok) { toast('no genome'); return; }
+    const d = await r.json();
+    if (!d.hasBrain || !d.genome) { toast('no brain to compare'); return; }
+    let a: string | null = null;
+    try { a = localStorage.getItem(COMPARE_KEY); } catch { /* private mode */ }
+    if (!a) {
+      try { localStorage.setItem(COMPARE_KEY, `creature ${id}\t${d.genome}`); } catch { /* private mode */ }
+      toast(`A is creature ${id}: tap another creature, then compare`);
+      const el = inspectEl.querySelector('.save.cmp'); if (el) el.textContent = compareLabel();
+      return;
+    }
+    const [la, ga] = a.split('\t');
+    try { localStorage.removeItem(COMPARE_KEY); } catch { /* private mode */ }
+    window.open('/compare#a=' + encodeURIComponent(ga) + '&la=' + encodeURIComponent(la)
+      + '&b=' + encodeURIComponent(d.genome) + '&lb=' + encodeURIComponent('creature ' + id), 'bluproto-compare');
+  } catch { toast('compare unavailable'); }
 }
 
 // Open the genome editor (/edit) on a copy of this creature's genome. The

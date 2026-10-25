@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bluproto — compare genomes</title>
+</head>
+<body>
+  <h1>compare genomes</h1>
+  <p class="note" id="intro">Two genomes side by side, read like a code diff. One number on top:
+  the mean of a body similarity (one minus each gene's distance across its own range, averaged)
+  and a mind similarity (the share of the longer program that the two share, instruction for
+  instruction). Both halves are shown beside it, so the mean never has to be trusted alone. A
+  clade difference is reported as its own fact and does not move the number. Load each side from
+  a creature's id, a <code>.genome</code> file or a pasted line; from the world, the inspector's
+  compare button fills A with one creature and B with the next.</p>
+  <nav class="nav" id="pagenav">
+    <button type="button" id="navtoggle" aria-expanded="false" aria-controls="navlinks">contents</button>
+    <div class="links" id="navlinks"><a href="#slots">load</a><a href="#score">score</a><a href="#body">body</a><a
+      href="#mind">mind</a><a class="ext" href="/edit">the editor →</a><a class="ext" href="/">← the world</a></div>
+  </nav>
+  <div id="root"></div>
+  <script type="module" src="/src/compare.ts"></script>
+</body>
+</html>

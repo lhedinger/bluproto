@@ -25,3 +25,30 @@ table.prog tr.pc td { background: rgba(120, 180, 255, .18); }
 .ed-badge { display: inline-block; padding: .05rem .45rem; border-radius: 999px; border: 1px solid currentColor; font-size: .76rem; opacity: .8; }
 button.ed-btn { padding: .3rem .7rem; }
 label.ed-raw { font-size: .85rem; opacity: .85; }
+
+/* ---- the comparison page: two slots, a score, a gene table and a program diff */
+.cmp-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 720px) { .cmp-slots { grid-template-columns: 1fr; } }
+.cmp-slot { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .6rem .8rem; min-width: 0; }
+.cmp-slot h3 { margin: 0 0 .4rem; }
+.cmp-slot .ed-load input[type=text] { width: 9rem; font-family: ui-monospace, Menlo, monospace; }
+.cmp-slot textarea { width: 100%; min-height: 2.6rem; font-family: ui-monospace, Menlo, monospace; font-size: .74rem; box-sizing: border-box; }
+.cmp-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem 1.4rem; }
+.cmp-score .big { font-size: 2.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cmp-score .part { font-variant-numeric: tabular-nums; opacity: .85; }
+.cmp-score .part b { font-size: 1.1rem; }
+table.cmp-genes td, table.cmp-genes th { font-variant-numeric: tabular-nums; }
+table.cmp-genes td.num { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+table.cmp-genes tr.diff td { background: rgba(255, 170, 0, .10); }
+table.cmp-genes .bar { display: inline-block; height: .55rem; background: #e0902a; vertical-align: middle; border-radius: 2px; }
+table.cmp-genes .barwrap { width: 7rem; display: inline-block; }
+table.cmp-diff { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; width: 100%; }
+table.cmp-diff td { padding: .1rem .4rem; white-space: pre; vertical-align: top; }
+table.cmp-diff td.n { opacity: .45; text-align: right; width: 2.2rem; }
+table.cmp-diff td.side { width: 50%; }
+table.cmp-diff tr.change td.side { background: rgba(255, 170, 0, .14); }
+table.cmp-diff tr.delete td.a { background: rgba(230, 70, 70, .16); }
+table.cmp-diff tr.delete td.b, table.cmp-diff tr.insert td.a { background: rgba(128,128,128,.08); }
+table.cmp-diff tr.insert td.b { background: rgba(60, 180, 90, .16); }
+.cmp-legend { font-size: .8rem; opacity: .75; display: flex; gap: 1rem; flex-wrap: wrap; margin: .3rem 0; }
+.cmp-legend i { display: inline-block; width: .9rem; height: .7rem; vertical-align: middle; margin-right: .3rem; border-radius: 2px; }
