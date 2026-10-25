@@ -63,8 +63,11 @@ const K = {
 };
 const P = {
   button: { knobs: [K.text('label', 'Label', 'Spawn'), K.sel('variant', 'Variant', ['primary', 'secondary', 'ghost', 'caution'], 'primary'), K.sel('size', 'Size', ['sm', 'md', 'lg'], 'md'),
-      K.bool('icon', 'Icon only (✕)', false), K.bool('pressed', 'Pressed', false), K.bool('busy', 'Busy', false), K.bool('block', 'Full width', false), K.bool('disabled', 'Disabled', false)],
+      K.bool('icon', 'Icon only (✕)', false), K.bool('pressed', 'Pressed', false), K.bool('busy', 'Busy', false), K.bool('block', 'Full width', false), K.bool('disabled', 'Disabled', false),
+      K.bool('link', 'A link (anchor to a page)', false)],
     html: p => { const c = ['bh-btn']; if (p.variant !== 'secondary') c.push('bh-btn--' + p.variant); if (p.size !== 'md') c.push('bh-btn--' + p.size); if (p.icon) c.push('bh-btn--icon'); if (p.block) c.push('bh-btn--block');
+      // an anchor wears the same plate: for a page that opens elsewhere, not an action here
+      if (p.link) return `<a class="${c.join(' ')}" href="/help" target="_blank" rel="noopener">${esc(p.label)}</a>`;
       return `<button class="${c.join(' ')}"${p.icon ? ` aria-label="${esc(p.label)}"` : ''}${p.pressed ? ' aria-pressed="true"' : ''}${p.busy ? ' aria-busy="true"' : ''}${p.disabled ? ' disabled' : ''}>${p.icon ? '✕' : esc(p.label)}</button>`; } },
   switch: { knobs: [K.text('label', 'Label', 'Water glints'), K.bool('checked', 'On', true), K.bool('disabled', 'Disabled', false)],
     html: p => `<label class="bh-switch">\n  <input type="checkbox" id="pl-sw"${p.checked ? ' checked' : ''}${p.disabled ? ' disabled' : ''}>\n  <span class="knob"></span><span>${esc(p.label)}</span>\n</label>` },

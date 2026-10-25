@@ -92,6 +92,10 @@
 .bh-btn--ghost { --bg: transparent; box-shadow: none; color: var(--dim); }
 @media (hover: hover) { .bh-btn--ghost:hover { --bg: var(--s1); color: var(--ink); } }
 .bh-btn--ghost:active { box-shadow: none; }
+/* a link that is a button: an anchor wears the plate without the browser's
+   underline and visited colour, so a page opened elsewhere sits on the bar
+   beside the controls that act here */
+a.bh-btn { text-decoration: none; color: var(--fg); }
 .bh-btn--sm { min-height: var(--h-sm); padding: 0 10px; font-size: 11px; }
 .bh-btn--lg { min-height: var(--h-lg); padding: 0 20px; font-size: 13px; }
 .bh-btn--icon { padding: 0; width: var(--h-md); font-family: var(--f-ui); font-size: 14px; }
