@@ -5368,21 +5368,21 @@ public class SimTests {
 
 
 	/**
-	 * Cold costs an endotherm and not an ectotherm, and a coat is a trade. A
+	 * Cold costs an endotherm and not an ectotherm, and a coat keeps it in. A
 	 * warm-blooded body below its comfort band burns to stay warm, COLD_BURN
 	 * of the basal rate per degree on its surface, for the warm-blooded share
-	 * of it and the share its coat lets out; the coat itself is priced into
-	 * the burn in every air. An ectotherm pays nothing for the cold here (it
-	 * pays in pace, elsewhere). A body that starves while it pays to stay
-	 * warm died of the cold, and its corpse says so.
+	 * of it and the share its coat lets out. The coat costs nothing in the
+	 * burn: its price is the heat it traps, charged where there is heat. An
+	 * ectotherm pays nothing for the cold here (it pays in pace, elsewhere).
+	 * A body that starves while it pays to stay warm died of the cold, and
+	 * its corpse says so.
 	 *
 	 * <p>Pinned on resting, starving, motionless bodies (no movement, no
 	 * regeneration, so the drop is pure burn) in a room chilled by the coolant
 	 * run against the same bodies on the meadow: the bare endotherm burns far
-	 * more in the cold, the coated one less than the bare but more than the
-	 * meadow's bare body, the ectotherm in the cold the same as the meadow's
-	 * endotherm, and a coat on the meadow costs its price. And a bare
-	 * endotherm left to starve in the cold dies of "cold".
+	 * more in the cold, the coated one exactly what the meadow's bare body
+	 * burns, as does the ectotherm, and a coat on the meadow costs nothing.
+	 * And a bare endotherm left to starve in the cold dies of "cold".
 	 */
 	static class ColdCostsAnEndothermAndNotAnEctotherm extends Scenario {
 		private World chilled() {
@@ -5426,9 +5426,8 @@ public class SimTests {
 			double coldCoat = burnOver(chilled(), body(1, 1), T);
 			double coldEcto = burnOver(chilled(), body(0, 0), T);
 			assertGreater("a bare endotherm burns far more in the cold", coldBare, meadowBare * 1.4);
-			assertLess("a coat keeps that in", coldCoat, coldBare * 0.8);
-			assertGreater("but a coat is not free: it costs on the meadow", meadowCoat, meadowBare * 1.1);
-			assertNear("and in the cold a full coat costs exactly its price and no cold", meadowCoat, coldCoat, meadowBare * 0.02);
+			assertNear("a full coat keeps all of that in", meadowBare, coldCoat, meadowBare * 0.02);
+			assertNear("and costs nothing in the burn on the meadow", meadowBare, meadowCoat, meadowBare * 0.02);
 			assertNear("an ectotherm pays nothing for the cold", meadowBare, coldEcto, meadowBare * 0.02);
 			// Left to starve in the cold, the corpse names what emptied it.
 			World grave = chilled();

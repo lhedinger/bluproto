@@ -561,10 +561,6 @@ public final class Mechanics {
 						+ "basal rate per degree, on its surface (mass to the two thirds) rather than its "
 						+ "mass, for the warm-blooded share of it and the share its coat lets out. An "
 						+ "ectotherm pays nothing. A body starving while it pays this died of the cold."),
-				row("A coat, on the burn", num(NPC.INSULATION_BURN), "of basal at full insulation",
-						"Carried everywhere, paid for in every air, like sight and a long brain: a full "
-						+ "coat on the meadow is burn for nothing and pays for itself from about two "
-						+ "degrees under the band."),
 				row("An ectotherm's pace", "exp(-(gap / band)^2)", "of its pace",
 						"Outside its comfort band a cold-blooded body is as slow as the air is far from "
 						+ "the band: a band's width past the edge is a third of its pace, on the walk, the "

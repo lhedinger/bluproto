@@ -370,8 +370,9 @@ life:
   costs water, and an ectotherm's performance falls away from the optimum either
   side. `thermogenesis` is how much of its warmth the lineage makes — 1 an
   endotherm, 0 an ectotherm, between a real strategy — and `insulation` its
-  coat, which lowers the cold cost, raises the heat cost and is priced into the
-  burn like sight. Founders draw the optimum five degrees either side of the
+  coat, which lowers the cold cost and raises the heat cost, and is priced by
+  nothing else: a trade between the cold and the heat, free where there is
+  neither. Founders draw the optimum five degrees either side of the
   ground's own temperature with a band of 4–10, and the two shares across their
   whole range; the defaults are the ground's temperature, a band of 8, an
   endotherm and no coat, which is what every body was before the air could be

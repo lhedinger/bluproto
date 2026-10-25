@@ -216,7 +216,8 @@ pressure is only ever the difference from that.
 The comfort band (GENOME.md: `thermalOptimum`, `thermalBreadth`) brings the
 other two seams in. **Cold below the band multiplies the burn**: an endotherm
 pays `COLD_BURN` of basal per degree on its surface, less what its coat keeps
-in, and a body starving while it pays died of "cold". **Heat above the band
+in, and a body starving while it pays died of "cold". The coat is priced only
+by the heat it traps (below), not by the burn. **Heat above the band
 multiplies the thirst clock** again, `HEAT_THIRST` per degree over, doubled at
 full coat, for every lineage; a body parched while it keeps cool died of
 "heat". Inside the band the air costs nothing beyond its deficit. **An
