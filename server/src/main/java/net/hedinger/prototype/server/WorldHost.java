@@ -752,7 +752,13 @@ final class WorldHost {
 					net.hedinger.prototype.engine.Climate c = n.getWorld().climate();
 					d.put("light", round(c.lightAt(n.getX(), n.getY(), n.getLvl())));
 					d.put("humid", round(c.humidityAt(n.getX(), n.getY(), n.getLvl())));
-					d.put("temperature", round(c.temperatureAt(n.getX(), n.getY(), n.getLvl())));
+					double t = c.temperatureAt(n.getX(), n.getY(), n.getLvl());
+					d.put("temperature", round(t));
+					// And what that air is to this body: where it sits against the
+					// lineage's comfort band, -1 cold edge to +1 hot edge, and how much
+					// of its pace the air leaves it (all of it, for an endotherm).
+					d.put("comfort", round(Math.max(-1, Math.min(1, (t - n.thermalOptimum()) / n.thermalBreadth()))));
+					d.put("pace", round(n.thermalPerformance()));
 					// The body's store: fat as a share of what the body can carry, and
 					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
 					d.put("fat", round(n.fatLeft()));

@@ -1276,7 +1276,16 @@ function carcassRows(d: Record<string, any>): string[] {
 // light and humidity as shares, the temperature in degrees. One row, so the
 // card says what the creature can feel without growing three bars for it.
 function climateText(d: Record<string, any>): string {
-  return `light ${Math.round(d.light * 100)}% · humid ${Math.round(d.humid * 100)}% · ${d.temperature.toFixed(0)} °C`;
+  let s = `light ${Math.round(d.light * 100)}% · humid ${Math.round(d.humid * 100)}% · ${d.temperature.toFixed(0)} °C`;
+  // What that air is to this body: comfort reads 0 at home, -1 at the cold edge
+  // of its band and beyond, +1 at the hot; pace is what the air leaves an
+  // ectotherm of its speed, and reads full for a warm-blooded body.
+  if ('comfort' in d) {
+    const c = d.comfort as number;
+    s += ` · ${c <= -1 ? 'cold' : c >= 1 ? 'hot' : c < -0.5 ? 'cool' : c > 0.5 ? 'warm' : 'at home'}`;
+    if (d.pace < 0.995) s += ` · pace ${Math.round(d.pace * 100)}%`;
+  }
+  return s;
 }
 
 function row(k: string, v: unknown): string {
