@@ -2619,8 +2619,11 @@ public class TestNPC extends NPC {
 		net.hedinger.prototype.engine.Climate climate = getWorld().climate();
 		s[AgentIO.S_LIGHT] = climate.lightAt(X, Y, getLvl());
 		s[AgentIO.S_HUMID] = climate.humidityAt(X, Y, getLvl());
-		s[AgentIO.S_WARMTH] = clamp((climate.temperatureAt(X, Y, getLvl())
-				- net.hedinger.prototype.engine.Climate.TEMP_SURFACE) / AgentIO.WARMTH_SPAN, -1, 1);
+		// Warmth is comfort: the tile against the lineage's own band, so 0 is
+		// "where I am built for", -1 the cold edge of the band and beyond, +1
+		// the hot. A genome that drew no band reads the ground's temperature
+		// over a band of 8, which is what the sense read before there were bands.
+		s[AgentIO.S_WARMTH] = clamp((climate.temperatureAt(X, Y, getLvl()) - thermalOptimum()) / thermalBreadth(), -1, 1);
 		// The hunt is decided once, here, and both channels that speak for it read
 		// the same answer. A hunter has two names for its food -- SEEK_PREY and,
 		// because its forage IS a body, SEEK_FORAGE -- and if those resolve
@@ -3147,6 +3150,19 @@ public class TestNPC extends NPC {
 		case AgentIO.TILE_DAMP:
 			return t.isWalkable() && getWorld().climate().humidityAt(t.getCol() + 0.5, t.getRow() + 0.5,
 					t.getLvl()) >= AgentIO.DAMP_HUMID ? 1 : 0;
+		case AgentIO.TILE_WARM:
+		case AgentIO.TILE_COOL: {
+			// Warm and cool are relative to where the body stands, a degree or
+			// more either way, so seeking one is a climb up or down the field
+			// toward the body's band: the nearest tile that is warmer than here.
+			if (!t.isWalkable()) {
+				return 0;
+			}
+			double here = getWorld().climate().temperatureAt(X, Y, getLvl());
+			double there = getWorld().climate().temperatureAt(t.getCol() + 0.5, t.getRow() + 0.5, t.getLvl());
+			return tileWanted == AgentIO.TILE_WARM ? (there >= here + AgentIO.TILE_DEGREE ? 1 : 0)
+					: (there <= here - AgentIO.TILE_DEGREE ? 1 : 0);
+		}
 		default:
 			if (!t.isWalkable()) {
 				return 0;
@@ -4453,6 +4469,18 @@ public class TestNPC extends NPC {
 	 *  with, {@link Genome#searchCast}: the form a minded body searches in. */
 	protected boolean explore(double pace) {
 		return explore(pace, genome == null ? 1.0 : genome.searchCast);
+	}
+
+	/** The centre of this body's comfort band, in degrees: the gene's, or the
+	 *  ground's own temperature for a body with no genome. */
+	double thermalOptimum() {
+		return genome == null ? net.hedinger.prototype.engine.Climate.TEMP_SURFACE : genome.thermalOptimum;
+	}
+
+	/** Half-width of this body's comfort band, in degrees; a band of 8 for a
+	 *  body with no genome, which is the default gene. */
+	double thermalBreadth() {
+		return genome == null ? 8.0 : Math.max(net.hedinger.prototype.entities.Genome.THERMAL_BAND_MIN, genome.thermalBreadth);
 	}
 
 	/** The point explore is walking to, {x, y}, or null when it holds none.

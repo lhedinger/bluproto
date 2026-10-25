@@ -658,11 +658,11 @@ public final class Mechanics {
 								+ "creature cannot perceive only kills it at random."),
 						sense(AgentIO.S_HUMID, "Humidity on the tile underfoot, 0 bone dry to 1 "
 								+ "the air over water."),
-						sense(AgentIO.S_WARMTH, "Warmth on the tile relative to the ground's own "
-								+ "temperature, -1..1 over " + num(AgentIO.WARMTH_SPAN) + " degrees "
-								+ "either side: 0 is the meadow, a vent's mouth pegs at 1, the "
-								+ "coolant run at -1, a mesa top reads a little cold. Degrees are "
-								+ "no use to a mind; \"warmer than usual here\" is."),
+						sense(AgentIO.S_WARMTH, "Warmth on the tile as comfort: its temperature "
+								+ "against the lineage's own band, -1..1. 0 is the air the body is "
+								+ "built for, -1 the cold edge of its band and everything colder, +1 "
+								+ "the hot edge and hotter. Degrees are no use to a mind; \"too cold "
+								+ "for me here\" is."),
 						sense(AgentIO.S_RIDDEN, "What rides it: the weight of its voluntary riders "
 								+ "— a parasite, a hitchhiker — as a share of its own size, 0 for "
 								+ "nothing, clamped at 1. A captive it holds is not a rider. The one "
@@ -827,9 +827,11 @@ public final class Mechanics {
 						act(AgentIO.A_TILE, "Name a PROPERTY of ground to look for: edible, "
 								+ "hiding, slow going, water, solid, dangerous; and, on the "
 								+ "negative side of the pool, the climate of the ground -- shade "
-								+ "(light under half of full sun) and damp (humidity of half or "
-								+ "more), read off the fields rather than the tile. Which of those "
-								+ "is worth wanting is left for selection to discover.")),
+								+ "(light under half of full sun), damp (humidity of half or "
+								+ "more), warm and cool (a degree or more than the tile underfoot, "
+								+ "so seeking either climbs the temperature field) -- read off the "
+								+ "fields rather than the tile. Which of those is worth wanting is "
+								+ "left for selection to discover.")),
 				group("Feeding",
 						act(AgentIO.A_EAT, "Graze the tile underfoot. Meat is not taken this "
 								+ "way — a carcass is bitten, over many ticks.")),
@@ -946,7 +948,7 @@ public final class Mechanics {
 	};
 	/** Names for the tile properties, indexed by {@link AgentIO#tileWanted}. */
 	private static final String[] TILE_NAMES = {
-		"edible", "blocks sight", "slow going", "water", "solid", "hazardous", "shade", "damp",
+		"edible", "blocks sight", "slow going", "water", "solid", "hazardous", "shade", "damp", "warm", "cool",
 	};
 
 	private static Map<String, Object> pheromones() {
