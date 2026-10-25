@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#14161a" />
   <title>Evarium — Live World — Early Alpha</title>
   <!-- Bulkhead, the design system (client/src/bulkhead.css; reference at /help/design). -->
@@ -63,9 +63,11 @@
                   width: min(240px, 46vw); }
     .panel.menu { top: var(--bar-h); right: max(8px, env(safe-area-inset-right)); }
     .panel.half { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
-                  width: min(480px, calc(100vw - 16px)); height: 50vh; }
+                  width: min(480px, calc(100vw - 16px)); height: 50vh; height: 50dvh; }
     .panel.full { top: var(--bar-h); right: max(8px, env(safe-area-inset-right));
-                  left: max(8px, env(safe-area-inset-left)); bottom: 8px; }
+                  left: max(8px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom)); }
+    /* a menu longer than the screen scrolls inside itself rather than off the bottom */
+    .panel.menu { max-height: calc(100vh - var(--bar-h) - 16px); max-height: calc(100dvh - var(--bar-h) - 16px); }
     /* The title stays put while the body scrolls under it. Opaque — not the
        panel's translucent fill — so rows cannot show through as they pass, and
        full-bleed sideways via negative SIDE margins against the panel's own
@@ -91,7 +93,7 @@
     /* Both are Bulkhead icon plates: raised, and sinking when pressed. */
     .panel > h3 .szbtn, .panel > h3 .x {
       flex: none; display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; position: relative; top: 0; cursor: pointer;
+      width: 28px; height: 28px; position: relative; top: 0; cursor: pointer; border: 0; padding: 0;
       font: 13px var(--f-ui); letter-spacing: 0; color: var(--ink); background: var(--s1);
       -webkit-tap-highlight-color: transparent;
       box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh),
@@ -105,13 +107,21 @@
       .panel > h3 { min-height: 34px; padding: 5px 6px 5px 10px; font-size: 12px; }
       .panel > h3 .szbtn, .panel > h3 .x { width: 24px; height: 24px; font-size: 12px; }
       /* compact: every corner panel is a sheet from the bottom edge */
-      .panel.half, .panel.menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; max-height: 62vh;
+      /* Sheets sit on the bottom edge and pad past the home indicator; dvh so the
+         browser's own collapsing toolbar does not push their foot off screen. */
+      .panel.half, .panel.menu, .panel.full, .panel.card { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+      .panel.half, .panel.menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; max-height: 62vh; max-height: 62dvh;
         box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
-      .panel.half { height: 62vh; }
+      .panel.half { height: 62vh; height: 62dvh; }
       .panel.full { left: 0; right: 0; bottom: 0; box-shadow: 0 -2px 0 0 var(--s2); }
       .panel.card { left: 0; right: 0; bottom: 0; width: auto; box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
     }
     .panel > h3:not(:has(.szbtn)) .x { margin-left: auto; }
+    /* A landscape phone is wide enough for the desktop anchors but not tall
+       enough for a half-height panel: it takes the height under the bar. */
+    @media (max-height: 500px) {
+      .panel.half { height: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
+    }
     #hud { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(var(--bar-h) + 8px); /* clear of the minimap it used to sit on */ z-index: var(--z-panel); display: none;
            font: 11px/1.5 var(--f-ui); color: var(--ink);
            background: #14171de6; padding: 6px 8px; box-shadow: 0 0 0 2px var(--sh);
@@ -301,7 +311,7 @@
     #inspect .scan.card { padding: 4px 0 6px; }
     #inspect .lin .node { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
     #inspect .lin .node.link { cursor: pointer; }
-    #inspect .lin .node.link:hover { background: #ffffff0a; }
+    @media (hover: hover) { #inspect .lin .node.link:hover { background: #ffffff0a; } }
     #inspect .lin .up { opacity: .45; width: 14px; text-align: center; }
     #inspect .lin .who { flex: 1; }
     #inspect .lin .meta { opacity: .6; font-variant-numeric: tabular-nums; }
@@ -323,7 +333,7 @@
     #inspect .mono { opacity: .7; font: 11px var(--f-ui); }
     #inspect h3 + .grp { box-shadow: none; padding-top: 0; margin-top: 2px; }
     /* the inspector's links are Bulkhead plates */
-    #inspect .mindlink, #inspect .mind .save { margin: 12px 2px 4px; text-align: center; cursor: pointer; position: relative; top: 0;
+    #inspect .mindlink, #inspect .mind .save { display: block; width: calc(100% - 4px); border: 0; margin: 12px 2px 4px; text-align: center; cursor: pointer; position: relative; top: 0;
       font: 400 12px var(--f-label); letter-spacing: .06em; color: var(--ink); background: var(--s1); padding: 9px;
       -webkit-tap-highlight-color: transparent;
       box-shadow: 0 -2px 0 0 var(--s2), -2px 0 0 0 var(--s2), 2px 0 0 0 var(--sh), 0 2px 0 0 var(--sh), 0 4px 0 0 #0009; }
@@ -455,12 +465,12 @@
       <button id="popClade" style="display:none"
         title="cycle which clade the diagram shows — a lineage never crosses clades, so one clade at a time loses nothing">herbivore</button>
       <span class="win" id="popWin"></span>
-      <span class="szbtn" title="full screen">⛶</span><span class="x" title="close">✕</span></h3>
+      <button type="button" class="szbtn" title="full screen">⛶</button><button type="button" class="x" title="close" aria-label="close">✕</button></h3>
     <canvas id="popCv"></canvas>
     <div id="popKey"></div>
   </div>
   <div id="ovl" class="panel menu">
-    <h3>sense overlays<span class="x" title="close">✕</span></h3>
+    <h3>sense overlays<button type="button" class="x" title="close" aria-label="close">✕</button></h3>
     <label><input class="bh-box" type="checkbox" id="ovlSmell" />
       <span class="sw" style="background:#e628be"></span>smell — pheromone clouds</label>
     <label><input class="bh-box" type="checkbox" id="ovlSound" />
@@ -475,8 +485,8 @@
       <span class="sw" style="background:#2f8fd6"></span>humidity — dry to wet</label>
   </div>
   <div id="tuning" class="panel half">
-    <h3>simulation constants<span class="szbtn" title="full screen">⛶</span><span
-      class="x" title="close">✕</span></h3>
+    <h3>simulation constants<button type="button" class="szbtn" title="full screen">⛶</button><button
+      type="button" class="x" title="close" aria-label="close">✕</button></h3>
     <div id="tuneBody"></div>
     <div class="foot" id="tuneFoot"></div>
   </div>
@@ -484,7 +494,7 @@
        Built from the floor count on every hello (buildFloorRail in main.ts). -->
   <nav class="bh-rail" id="floorRail" aria-label="floors" hidden><span class="bh-rail-cap" aria-hidden="true">floor</span></nav>
   <div id="stats">connecting…</div>
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
   <div id="inspect" class="panel"></div>
   <canvas id="minimap" width="150" height="90"></canvas>
   <script type="module" src="/src/main.ts"></script>

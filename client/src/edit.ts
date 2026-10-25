@@ -114,10 +114,10 @@ function bodySection(): string {
   const rows = schema.genes.map(g => {
     const v = draft!.genes[g.key] ?? 0;
     const range = g.hi === null ? '' :
-      `<input type="range" data-gene="${g.key}" min="${g.lo}" max="${g.hi}" step="${stepFor(g)}" value="${v}">`;
+      `<input type="range" aria-label="${esc(g.key)} slider" data-gene="${esc(g.key)}" min="${g.lo}" max="${g.hi}" step="${stepFor(g)}" value="${v}">`;
     const bounds = g.hi === null ? `≥ ${g.lo}` : `${g.lo} – ${g.hi}`;
-    return `<tr data-row="${g.key}" class="${clamped.has(g.key) ? 'clamped' : ''}"><td>${esc(g.key)}</td>
-      <td><input type="number" data-gene="${g.key}" step="${stepFor(g)}" value="${v}"></td>
+    return `<tr data-row="${esc(g.key)}" class="${clamped.has(g.key) ? 'clamped' : ''}"><td>${esc(g.key)}</td>
+      <td><input type="number" aria-label="${esc(g.key)}" data-gene="${esc(g.key)}" step="${stepFor(g)}" value="${v}"></td>
       <td>${range}</td><td class="unit">${esc(g.unit)}</td>
       <td class="bounds">${bounds} · ${g.drift.toLowerCase()}</td></tr>`;
   }).join('');

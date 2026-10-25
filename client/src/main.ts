@@ -139,12 +139,16 @@ function closePanel(el: HTMLElement): void {
  *  current anchor every time rather than written once. The inspector rebuilds
  *  its header on each 1 Hz poll, and a hardcoded glyph came straight back
  *  offering "full screen" on a panel that was already half. */
+/** A panel's close: a real button, so it is reachable by Tab and answers Enter. */
+const CLOSE_BTN = '<button type="button" class="x" title="close" aria-label="close">✕</button>';
+
 function syncSizeBtn(el: HTMLElement): void {
   const b = el.querySelector(':scope > h3 .szbtn') as HTMLElement | null;
   if (!b) return;
   const full = el.classList.contains('full');
   b.textContent = full ? '⊟' : '⛶';
   b.title = full ? 'half screen' : 'full screen';
+  b.setAttribute('aria-label', b.title);
 }
 
 /**
@@ -218,6 +222,15 @@ function syncBarGroups(): void {
 }
 new MutationObserver(syncBarGroups).observe(barTools, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'hidden'] });
 syncBarGroups();
+/** A bare key press outside any field: what a one-letter shortcut answers to.
+ *  Not with a modifier (ctrl+d is the browser's bookmark, cmd+p its print), not
+ *  auto-repeat (a held key flickered debug on and off), not while typing. */
+function isShortcut(ev: KeyboardEvent): boolean {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return false;
+  const t = ev.target as HTMLElement;
+  return !(t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName));
+}
+
 // Escape puts away ONE thing, the topmost: the folded-out toolbar, then the
 // settings dialog, then the corner panel, then the card. It was three listeners
 // that each closed their own, so one press closed the dialog and the panel
@@ -904,8 +917,8 @@ function renderTileInspect(d: Record<string, any>): void {
     bar('food', `${food.toFixed(3)} / ${cap.toFixed(3)}`, pct),
   ];
   inspectEl.innerHTML =
-    `<h3>tile <span class="mono">${d.x},${d.y}</span> · L${d.z}` +
-    `<span class="x" title="close">✕</span></h3>` +
+    `<h3>tile <span class="mono">${Number(d.x)},${Number(d.y)}</span> · L${Number(d.z)}` +
+    `${CLOSE_BTN}</h3>` +
     `<table>${rows.join('')}</table>`;
   showInspect('card');
 }
@@ -1258,12 +1271,12 @@ function linNode(n2: Record<string, any>, glyph: string, rel: string, nowTick: n
   const born = n2.born >= 0 && hello
     ? `born ${fmtSpan((nowTick - n2.born) / (popData?.tps ?? 33))} ago` : '';
   const gen = n2.generation >= 0 ? `gen ${n2.generation}` : '';
-  const meta = [gen, born, alive ? '' : n2.status].filter(Boolean).join(' · ');
+  const meta = esc([gen, born, alive ? '' : String(n2.status)].filter(Boolean).join(' · '));
   return `<div class="node${present ? ' link' : ''}${alive ? '' : ' dead'}"`
-    + (present ? ` data-id="${n2.id}"` : '')
+    + (present ? ` data-id="${Number(n2.id)}"` : '')
     + `><span class="up">${glyph}</span>${sw}`
-    + `<span class="who">${rel} — ${String(n2.species).replace('/', ' · ')} `
-    + `<span class="mono">#${n2.id}</span></span>`
+    + `<span class="who">${rel} — ${esc(String(n2.species).replace('/', ' · '))} `
+    + `<span class="mono">#${Number(n2.id)}</span></span>`
     + `<span class="meta">${meta}</span></div>`;
 }
 
@@ -1273,9 +1286,9 @@ function header(swatch: number, label: string, id: unknown, sizer = false): stri
   // written out at render time it came back stale on every poll. Its own class
   // too, not "x": the close wiring takes the first ".x" it finds, and a size
   // toggle that closed the panel would be a trap.
-  const sz = sizer ? '<span class="szbtn"></span>' : '';
+  const sz = sizer ? '<button type="button" class="szbtn"></button>' : '';
   return `<h3><span class="sw" style="background:#${swatch.toString(16).padStart(6, '0')}"></span>` +
-    `${label} <span class="mono">#${id}</span>${sz}<span class="x" title="close">✕</span></h3>`;
+    `${esc(label)} <span class="mono">#${esc(String(id))}</span>${sz}${CLOSE_BTN}</h3>`;
 }
 function group(title: string, rows: string[]): string {
   const body = rows.filter(Boolean).join('');
@@ -1340,7 +1353,7 @@ function carcassRows(d: Record<string, any>): string[] {
 }
 
 function row(k: string, v: unknown): string {
-  return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+  return `<tr><td class="k">${esc(k)}</td><td class="v">${esc(String(v))}</td></tr>`;
 }
 
 // ---- mind tab ---------------------------------------------------------------
@@ -1450,8 +1463,8 @@ function mindBody(d: Record<string, any>): string {
     '<div class="grp">sensors — what it perceives</div>' + sIn +
     '<div class="grp">actuators — what it drives</div>' + aOut +
     head + `<div class="prog">${prog}</div>` + regBlock +
-    '<div class="save" role="button">⤓ save genome</div>' +
-    '<div class="save edit" role="button">✎ edit a copy</div>';
+    '<button type="button" class="save">⤓ save genome</button>' +
+    '<button type="button" class="save edit">✎ edit a copy</button>';
 }
 
 /** The save and edit buttons are rewritten by every mind poll, so their
@@ -1560,7 +1573,7 @@ function channelRow(c: { name: string; value: number }, kinds: Record<string, st
     }
   }
   const cls = 'ch' + (quiet ? ' dim' : '') + (fire ? ' fire' : '');
-  return `<div class="${cls}"><span class="nm">${c.name}</span>` +
+  return `<div class="${cls}"><span class="nm">${esc(String(c.name))}</span>` +
     `<span class="vis">${vis}</span><span class="val mono">${val}</span></div>`;
 }
 
@@ -1620,8 +1633,11 @@ function insClass(ln: string): string {
   return '';
 }
 
+/** Text for markup: everything the server names (a species, a role, a sensor)
+ *  goes through here before it meets innerHTML. Quotes too, so it is safe in
+ *  an attribute as well as between tags. */
 function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
 // Minimap: tap to recentre the camera there (drops follow).
@@ -1921,6 +1937,7 @@ async function openTuning(): Promise<void> {
 
     const canEdit = editable && !c.frozen;
     const num = document.createElement('input');
+    num.setAttribute('aria-label', c.key); // the name cell is a span, not a <label>
     if (c.type === 'boolean') {
       num.type = 'checkbox';
       num.className = 'bh-box';
@@ -1937,6 +1954,7 @@ async function openTuning(): Promise<void> {
       slider.step = String(tuneMax(c.def, c.value) / 400);
       slider.value = String(c.value);
       slider.disabled = !canEdit;
+      slider.setAttribute('aria-label', `${c.key} slider`);
       num.type = 'number';
       num.className = 'bh-input bh-input--sm';
       num.step = 'any';
@@ -2050,10 +2068,7 @@ statsEl.addEventListener('click', () => {
   tickTapTimer = window.setTimeout(() => (tickTaps = 0), 600);
 });
 window.addEventListener('keydown', ev => {
-  const tag = (ev.target as HTMLElement).tagName;
-  if (ev.key !== 'd' && ev.key !== 'D') return;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  setDebug(!debugOn);
+  if ((ev.key === 'd' || ev.key === 'D') && isShortcut(ev)) setDebug(!debugOn);
 });
 applyDebug(); // reflect ?debug=true on load
 
@@ -2097,7 +2112,7 @@ try {
   }).observe({ type: 'longtask' });
 } catch { /* API missing (e.g. Safari): the HUD line just stays 0 */ }
 window.addEventListener('keydown', (ev) => {
-  if (ev.key === 'h' && !(ev.target instanceof HTMLInputElement)) {
+  if (ev.key === 'h' && isShortcut(ev)) {
     hudOn = !hudOn;
     hudEl.style.display = hudOn ? 'block' : 'none';
   }
@@ -2536,7 +2551,7 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
     ctx.lineTo(padL + gw, Math.round(yAt(v)) + 0.5);
   }
   ctx.stroke();
-  ctx.fillStyle = '#8b93a3';
+  ctx.fillStyle = '#9aa2b1';
   ctx.font = `${10 * dpr}px ui-monospace, monospace`;
   ctx.textAlign = 'right';
   ctx.fillText(String(max), padL - 4 * dpr, yAt(max) + 8 * dpr);
@@ -2804,7 +2819,7 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   // When each stage was, as time before now, under every column that has the
   // room; a cramped chart names only its ends. The scale note sits in the
   // same band: a non-linear width must say it is one.
-  ctx.fillStyle = '#8b93a3';
+  ctx.fillStyle = '#9aa2b1';
   ctx.font = `${8.5 * dpr}px ui-monospace, monospace`;
   const lastTick = d.stages[K - 1].tick;
   ctx.fillText('width ≈ 1+log₁₀ heads', padX, padT + gh + 11 * dpr);
@@ -2826,7 +2841,7 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
 }
 
 function gathering(ctx: CanvasRenderingContext2D, dpr: number, x: number, y: number): void {
-  ctx.fillStyle = '#8b93a3';
+  ctx.fillStyle = '#9aa2b1';
   ctx.font = `${11 * dpr}px ui-monospace, monospace`;
   ctx.fillText('gathering…', x, y);
 }
@@ -2954,9 +2969,7 @@ popCladeBtn.onclick = () => {
 wirePanelChrome(popEl, closePop, popDraw);
 rightColumn.push({ el: popEl, close: closePop });
 window.addEventListener('keydown', ev => {
-  const tag = (ev.target as HTMLElement).tagName;
-  if (ev.key !== 'p' && ev.key !== 'P') return;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if ((ev.key !== 'p' && ev.key !== 'P') || !isShortcut(ev)) return;
   popOn = !popOn;
   popApply();
 });

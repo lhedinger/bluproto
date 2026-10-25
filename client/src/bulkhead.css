@@ -20,7 +20,7 @@
   color-scheme: dark;
   /* steel bulkhead ramp (GroundTextures CLS_STEELWALL) + rack steel for wells */
   --sh: #1d2026; --s0: #30343d; --s1: #4d535f; --s2: #6e7583; --well: #14171d;
-  --ink: #d8dee8; --dim: #8b93a3; --faint: #5b6270;
+  --ink: #d8dee8; --dim: #9aa2b1; /* 4.5:1 on --s0, the plate most dim text sits on */ --faint: #5b6270;
   /* signal family (ART-STYLE §2) */
   --red0: #7c2434; --red1: #E0455F; --red2: #F0788C;
   --lamp-h: #14161f; --lamp-d: #6a7280; --lamp-l: #D0ECFF;
