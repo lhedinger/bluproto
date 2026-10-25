@@ -541,6 +541,11 @@ public final class Mechanics {
 		rows(s,
 				row("Thirst, slaked → parched", num((long) NPC.THIRST_PERIOD), "ticks",
 						round(NPC.THIRST_PERIOD / TPS / 60, 1) + " min at the reference body."),
+				row("Warm air, on the grass", num(Tile.PLANT_TEMP_BREADTH), "deg C to a third of the pace",
+						"A tile's regrowth rate is its plant's times a bell around the floor's own "
+						+ "temperature, this wide: exactly the old rate on any undisturbed tile of any "
+						+ "floor, slower in the ground a vent warms or the coolant run chills, nothing "
+						+ "at or below freezing. Temperature sets the pace of growth, water its bulk."),
 				row("Moist air, on the grass", num(Tile.MOIST_CAP_MIN) + " .. " + num(Tile.MOIST_CAP_MAX), "x the cap",
 						"A tile's vegetation cap is its fertility times the air's share: the humidity "
 						+ "here against the air its plant was tuned in, open ground in full sun for the "
