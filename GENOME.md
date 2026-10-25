@@ -364,6 +364,18 @@ life:
   a carcass is a walk, not a sprint. A chase is paid from the store, and a
   hunter used to sprint at any glycogen above the exhaustion floor: one lost
   chase in ten ended collapsed. Founders draw 0.05–0.5; zero is no line.
+- **A lineage stands the air by four genes.** `thermalOptimum` and
+  `thermalBreadth` are its comfort band, in degrees: the warmth sense reads the
+  tile against the band, cold below it costs an endotherm burn, heat above it
+  costs water, and an ectotherm's performance falls away from the optimum either
+  side. `thermogenesis` is how much of its warmth the lineage makes — 1 an
+  endotherm, 0 an ectotherm, between a real strategy — and `insulation` its
+  coat, which lowers the cold cost, raises the heat cost and is priced into the
+  burn like sight. Founders draw the optimum five degrees either side of the
+  ground's own temperature with a band of 4–10, and the two shares across their
+  whole range; the defaults are the ground's temperature, a band of 8, an
+  endotherm and no coat, which is what every body was before the air could be
+  felt, and pays nothing on the meadow.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on

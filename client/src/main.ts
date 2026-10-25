@@ -1037,6 +1037,11 @@ function genomeTab(d: Record<string, any>): string {
     row('sight', `${g(gm.losRange)} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
     row('metabolism', g(gm.metabolism)), row('max age', g(gm.maxAge)),
     row('locomotion', gm.flying ? 'flying' : 'walking'),
+    // How it stands the air: the comfort band in degrees, how much of its
+    // warmth it makes (1 an endotherm, 0 an ectotherm), how much coat it wears.
+    row('comfort', gm.thermalOptimum === undefined ? '—'
+      : `${gm.thermalOptimum.toFixed(1)} °C ± ${gm.thermalBreadth.toFixed(1)}`),
+    row('warm-blooded', g(gm.thermogenesis)), row('coat', g(gm.insulation)),
   ]) + group('temperament', [
     row('predatory', g(gm.predatory)), row('xenophobia', g(gm.xenophobia)),
     row('gregarious', g(gm.gregariousness)), row('boldness', g(gm.boldness)),

@@ -5221,6 +5221,63 @@ public class SimTests {
 		}
 	}
 
+
+	/**
+	 * A founder draws how it stands the air. Four genes: the comfort band's
+	 * centre and half-width, how much of its warmth the lineage makes, how
+	 * much coat it wears. Founders draw the optimum either side of the
+	 * ground's own temperature with a band from a narrow specialist's to a
+	 * broad generalist's, and the two shares across their whole range, so the
+	 * endotherm and the ectotherm, the bare and the furred, all start in the
+	 * seed. A genome that never drew them is the ground's temperature, a band
+	 * of 8, an endotherm and no coat: every body as it was before the air
+	 * could be felt. All four are the schema's, so they copy, drift and go on
+	 * the wire like every other gene.
+	 */
+	static class AFounderDrawsHowItStandsTheAir extends Scenario {
+		@Override
+		public void run() {
+			seed(37);
+			Genome plain = new Genome();
+			assertNear("a genome that drew nothing is built for the ground's temperature",
+					net.hedinger.prototype.engine.Climate.TEMP_SURFACE, plain.thermalOptimum, 1e-12);
+			assertNear("with a band of 8", 8.0, plain.thermalBreadth, 1e-12);
+			assertNear("an endotherm", 1.0, plain.thermogenesis, 1e-12);
+			assertNear("and no coat", 0.0, plain.insulation, 1e-12);
+			double optLo = 99, optHi = -99, bandLo = 99, bandHi = -99, thermoLo = 9, thermoHi = -9, coatLo = 9, coatHi = -9;
+			for (int i = 0; i < 400; i++) {
+				Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(
+						i % 2 == 0 ? Genome.Clade.HERBIVORE : Genome.Clade.PREDATOR);
+				optLo = Math.min(optLo, g.thermalOptimum);
+				optHi = Math.max(optHi, g.thermalOptimum);
+				bandLo = Math.min(bandLo, g.thermalBreadth);
+				bandHi = Math.max(bandHi, g.thermalBreadth);
+				thermoLo = Math.min(thermoLo, g.thermogenesis);
+				thermoHi = Math.max(thermoHi, g.thermogenesis);
+				coatLo = Math.min(coatLo, g.insulation);
+				coatHi = Math.max(coatHi, g.insulation);
+			}
+			assertLess("founders draw optima below the ground's temperature", optLo,
+					net.hedinger.prototype.engine.Climate.TEMP_SURFACE - 3);
+			assertGreater("and above it", optHi, net.hedinger.prototype.engine.Climate.TEMP_SURFACE + 3);
+			assertTrue("within the founder range", optLo >= Genome.THERMAL_OPT_LO && optHi <= Genome.THERMAL_OPT_HI);
+			assertLess("narrow bands", bandLo, Genome.THERMAL_BAND_LO + 1);
+			assertGreater("and broad ones", bandHi, Genome.THERMAL_BAND_HI - 1);
+			assertLess("ectotherms", thermoLo, 0.1);
+			assertGreater("and endotherms", thermoHi, 0.9);
+			assertLess("bare bodies", coatLo, 0.1);
+			assertGreater("and furred ones", coatHi, 0.9);
+			java.util.Set<String> keys = new java.util.TreeSet<>();
+			for (var gene : net.hedinger.prototype.entities.GeneSchema.genes()) {
+				keys.add(gene.key);
+			}
+			assertTrue("all four are genes the schema knows", keys.containsAll(java.util.List.of("topt", "tband", "thermo", "coat")));
+			Genome a = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE), b = a.copy();
+			assertTrue("and copy with the genome", a.thermalOptimum == b.thermalOptimum && a.thermalBreadth == b.thermalBreadth
+					&& a.thermogenesis == b.thermogenesis && a.insulation == b.insulation);
+		}
+	}
+
 	/**
 	 * Every sensor is reachable by an evolved mind.
 	 *
@@ -20243,6 +20300,7 @@ public class SimTests {
 				new AMindCanAskForShadeAndDamp(),
 				new DryAirDriesABodyAndDampAirSlowsIt(),
 				new MoistAirHoldsMoreGrass(),
+				new AFounderDrawsHowItStandsTheAir(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

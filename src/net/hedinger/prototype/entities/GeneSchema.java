@@ -193,6 +193,20 @@ public final class GeneSchema {
 		// sat before this one until the body stopped holding headings.)
 		add("cast", "radians", Drift.ADD, 0, Genome.SEARCH_CAST_MAX, false,
 				g -> g.searchCast, (g, v) -> g.searchCast = v);
+		// How a lineage stands the air: its comfort band, how much of its warmth
+		// it makes, how much coat it wears. Appended, so every draw before them is
+		// unshifted. The optimum drifts additively, since a degree is a degree
+		// wherever the band sits; the band multiplicatively, being a magnitude;
+		// the two shares additively and floored at zero, since a pure ectotherm
+		// and a bare body are strategies and not degenerate cases.
+		add("topt", "degrees C", Drift.ADD, Genome.THERMAL_OPT_MIN, Genome.THERMAL_OPT_MAX, false,
+				g -> g.thermalOptimum, (g, v) -> g.thermalOptimum = v);
+		add("tband", "degrees C", Drift.MULT, Genome.THERMAL_BAND_MIN, Genome.THERMAL_BAND_MAX, false,
+				g -> g.thermalBreadth, (g, v) -> g.thermalBreadth = v);
+		add("thermo", "", Drift.ADD, 0, 1, false,
+				g -> g.thermogenesis, (g, v) -> g.thermogenesis = v);
+		add("coat", "", Drift.ADD, 0, 1, false,
+				g -> g.insulation, (g, v) -> g.insulation = v);
 		// The form of a newborn's endowment: how much of it is a meal in the gut
 		// and how much is glycogen. Additive over the whole unit range, both
 		// corners reachable, because both corners are strategies that lose for
