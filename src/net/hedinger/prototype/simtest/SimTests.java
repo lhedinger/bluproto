@@ -5152,8 +5152,13 @@ public class SimTests {
 			assertNear("by the vapour deficit's share", open.getThirst() * deficit, shore.getThirst(), bare * 0.02);
 			assertLess("and a cave's air slows it too", cave.getThirst(), open.getThirst() * 0.8);
 			assertGreater("hot parched air by a vent dries a body far faster", baked.getThirst(), open.getThirst() * 1.8);
-			assertNear("by the deficit's share, again",
-					Math.min(1.0, open.getThirst() * NPC.dryness(hot.climate().temperatureAt(6.5, 5.5, 0), hot.climate().humidityAt(6.5, 5.5, 0))),
+			// The deficit's share, and the heat's: a default genome's band is
+			// 17 +/- 8, and two tiles from a vent is over it, so the body also
+			// spends water keeping cool (HeatCostsWaterAndACoatMakesItWorse).
+			double hotT = hot.climate().temperatureAt(6.5, 5.5, 0);
+			double keepingCool = 1 + NPC.HEAT_THIRST * Math.max(0, hotT - 17 - 8);
+			assertNear("by the deficit's share and the heat's",
+					Math.min(1.0, open.getThirst() * NPC.dryness(hotT, hot.climate().humidityAt(6.5, 5.5, 0)) * keepingCool),
 					baked.getThirst(), bare * 0.05);
 			assertLess("and cool air by the coolant run dries it slower than the open",
 					chilled.getThirst(), open.getThirst() * 0.97);
@@ -5441,6 +5446,69 @@ public class SimTests {
 				tick(meadow, 1);
 			}
 			assertTrue("while the same body on the meadow starved (" + starved.getDeathCause() + ")", "starvation".equals(starved.getDeathCause()));
+		}
+	}
+
+
+	/**
+	 * Heat above the band costs water, and a coat makes it worse. Above its
+	 * comfort band a body keeps cool by evaporating, water the air's own
+	 * deficit does not account for: the thirst clock runs HEAT_THIRST faster
+	 * per degree over, doubled at full coat, for every lineage alike. A body
+	 * parched while it keeps cool died of the heat, and its corpse says so.
+	 *
+	 * <p>Pinned on inert bodies that cannot drink, a tile from a vent wall, in
+	 * the same hot air: one built for the meadow is over its band and dries
+	 * faster than one built for the heat, by the heat's share exactly; a
+	 * coated body built for the meadow dries faster still; and the overheated
+	 * body dies of "heat" where the one at home in the heat dies of "thirst".
+	 */
+	static class HeatCostsWaterAndACoatMakesItWorse extends Scenario {
+		private World baked() {
+			World w = room(12, 12);
+			for (int x = 1; x <= 10; x++) {
+				w.setTile(x, 1, 0, Tile.TileType.TYPE_VENT);
+			}
+			return w;
+		}
+
+		private TestNPC body(World w, double optimum, double insulation) {
+			Genome g = new Genome();
+			g.size = 8;
+			g.thermalOptimum = optimum;
+			g.thermalBreadth = 4;
+			g.insulation = insulation;
+			TestNPC b = TestNPC.minded(5.5, 2.5, 0, g, new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+				}
+			}).grown().withHunger(0.2).withHydration(1.0);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		@Override
+		public void run() {
+			seed(61);
+			World w = baked();
+			double t = w.climate().temperatureAt(5.5, 2.5, 0);
+			assertGreater("a tile from the vents the air is well over a band of 17 +/- 4", t, 28);
+			TestNPC meadowBuilt = body(w, 17, 0), heatBuilt = body(w, t, 0), coated = body(w, 17, 1);
+			w.think();
+			int spell = (int) (NPC.THIRST_PERIOD / 6);
+			tick(w, spell);
+			double gap = t - 17 - 4;
+			assertGreater("a body over its band dries faster than one at home in the heat",
+					meadowBuilt.getThirst(), heatBuilt.getThirst() * 1.3);
+			assertNear("by the heat's share exactly", heatBuilt.getThirst() * (1 + NPC.HEAT_THIRST * gap),
+					meadowBuilt.getThirst(), heatBuilt.getThirst() * 0.03);
+			assertNear("and a coat doubles that share", heatBuilt.getThirst() * (1 + 2 * NPC.HEAT_THIRST * gap),
+					coated.getThirst(), heatBuilt.getThirst() * 0.03);
+			for (int i = 0; i < 40000 && !(meadowBuilt.isDead() && heatBuilt.isDead()); i++) {
+				tick(w, 1);
+			}
+			assertTrue("the overheated body died of the heat (" + meadowBuilt.getDeathCause() + ")", "heat".equals(meadowBuilt.getDeathCause()));
+			assertTrue("the one at home in it, of plain thirst (" + heatBuilt.getDeathCause() + ")", "thirst".equals(heatBuilt.getDeathCause()));
 		}
 	}
 
@@ -20469,6 +20537,7 @@ public class SimTests {
 				new AFounderDrawsHowItStandsTheAir(),
 				new AMindFeelsItsOwnComfortAndSeeksWarmth(),
 				new ColdCostsAnEndothermAndNotAnEctotherm(),
+				new HeatCostsWaterAndACoatMakesItWorse(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
