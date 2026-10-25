@@ -1520,6 +1520,8 @@ final class WorldHost {
 	 *  census's long-exposure photograph, not its live feed. */
 	static final int STAGE_SEC = 300;
 	static final int STAGE_KEEP = 100;
+	/** Columns the lineage flows carry when the caller does not ask for more. */
+	static final int LINEAGE_COLS = 12;
 
 	/** Who existed, at one instant: ids sorted ascending, species parallel. */
 	record StageSnap(long tick, int[] ids, String[] species) { }
@@ -1649,14 +1651,19 @@ final class WorldHost {
 	}
 
 	/**
-	 * The Sankey series for {@code /api/lineage/flows}: up to {@code MAX_COLS}
+	 * The Sankey series for {@code /api/lineage/flows}: up to {@code maxCols}
 	 * stages chosen evenly across the ring (the first and the latest always
 	 * among them), each with its species headcounts, plus the exact flows
 	 * between each drawn pair. Diffed between the CHOSEN stages, so drawing
 	 * fewer columns never invents or loses a head.
+	 *
+	 * <p>Twelve by default, what a corner panel has room for. The full-screen
+	 * diagram scrolls and asks for every stage the ring holds: twelve columns
+	 * stood for eight hours, forty minutes apart, and a line that bloomed and
+	 * died between two of them was never drawn at all.
 	 */
-	java.util.Map<String, Object> lineageFlows() {
-		final int maxCols = 12;
+	java.util.Map<String, Object> lineageFlows(int maxCols) {
+		maxCols = Math.max(2, Math.min(STAGE_KEEP, maxCols));
 		java.util.List<StageSnap> h = stageHistory;
 		java.util.List<StageSnap> cols = new java.util.ArrayList<StageSnap>();
 		int n = h.size();

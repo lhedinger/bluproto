@@ -17,6 +17,13 @@ const popBtn = document.getElementById('popBtn') as HTMLButtonElement;
 const popCv = document.getElementById('popCv') as HTMLCanvasElement;
 const popKey = document.getElementById('popKey') as HTMLElement;
 const popWin = document.getElementById('popWin') as HTMLElement;
+/** The lineage diagram's scrollbar, ABOVE the chart: a Bulkhead rail and its
+ *  thumb, drawn rather than native because a phone hides a native scrollbar
+ *  until you are already scrolling. The canvas stays the size of the panel and
+ *  redraws at the offset, so a hundred stages never ask for a canvas wider
+ *  than a browser will allocate. */
+const popScroll = document.getElementById('popScroll') as HTMLElement;
+const popThumb = popScroll.firstElementChild as HTMLElement;
 
 /** Series colours: herbivore green, predator red, scavenger amber, parasite
  *  violet. Distinct in luminance as well as hue, so the lines stay separable
@@ -132,7 +139,7 @@ function popPoll(force = false): void {
   popFetching = true;
   popLastFetch = now;
   const mode = popMode;
-  fetch(mode === 'roles' ? '/api/population' : '/api/lineage/flows')
+  fetch(mode === 'roles' ? '/api/population' : `/api/lineage/flows?cols=${LIN_MAX_COLS}`)
     .then(r => (r.ok ? r.json() : null))
     .then((d: (PopData & FlowData) | null) => {
       if (!d) return;
@@ -165,6 +172,7 @@ function popDraw(): void {
   if (popMode === 'lineages') {
     sankeyDraw(ctx, w, h, dpr);
   } else {
+    syncLinScroll(0);
     rolesDraw(ctx, w, h, dpr);
   }
   popKeyDraw();
@@ -280,6 +288,130 @@ function rolesDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: num
  *  left edges as flows claim their spans. */
 type SankeyNode = { x: number; yTop: number; h: number; rgb: string; outCur: number; inCur: number };
 
+/** Every stage the server's ring holds (WorldHost.STAGE_KEEP). */
+const LIN_MAX_COLS = 100;
+/** Column pitch in CSS px once the stages outgrow the panel: room for a
+ *  ribbon to be followed across and a time label under every column. */
+const LIN_PITCH = 72, LIN_PITCH_PHONE = 56;
+/** Pinned to the latest stage: true until the reader scrolls back, so a new
+ *  stage landing keeps "now" in view instead of pushing it off the edge. */
+let linFollow = true;
+/** The bars as last drawn, in device px, for the pointer readout. */
+let linHits: Array<{ x: number; y: number; w: number; h: number; key: string; count: number; tick: number }> = [];
+let linSummary = '';
+let linPointing = false;
+let linLastTick = 0, linTps = 33;
+
+/** The diagram's horizontal offset and extent, in CSS px. */
+let linScroll = 0, linContent = 0, linView = 0;
+const linMax = () => Math.max(0, linContent - linView);
+
+/** Sizes the rail to the diagram (content 0: nothing to scroll, rail hidden),
+ *  keeps the view on now while following, and places the thumb. */
+function syncLinScroll(contentCss: number, viewCss = 0): void {
+  const on = contentCss > 0;
+  if (popScroll.hidden === on) {
+    popScroll.hidden = !on;
+    // The rail takes height from the chart under it: draw again at the new size.
+    requestAnimationFrame(popDraw);
+  }
+  linContent = contentCss;
+  linView = viewCss;
+  if (!on) return;
+  linScroll = linFollow ? linMax() : Math.min(linScroll, linMax());
+  const track = popScroll.clientWidth;
+  const tw = Math.max(28, track * Math.min(1, linView / linContent));
+  popThumb.style.width = `${tw}px`;
+  popThumb.style.transform = `translateX(${linMax() > 0 ? (linScroll / linMax()) * (track - tw) : 0}px)`;
+  popScroll.setAttribute('aria-valuenow', String(Math.round(linMax() > 0 ? (100 * linScroll) / linMax() : 100)));
+}
+
+let linRaf = 0;
+function setLinScroll(x: number): void {
+  linScroll = Math.max(0, Math.min(linMax(), x));
+  // Following stops the moment the reader leaves the right edge, and resumes
+  // when they come back to it.
+  linFollow = linScroll >= linMax() - 2;
+  if (!linRaf) linRaf = requestAnimationFrame(() => { linRaf = 0; popDraw(); });
+}
+
+// The rail: drag the thumb, or press anywhere on the rail to bring the thumb
+// there. Arrow keys step a stage, Page keys a screen, Home and End the ends.
+let thumbFrom: { x: number; scroll: number } | null = null;
+popScroll.addEventListener('pointerdown', ev => {
+  const r = popScroll.getBoundingClientRect();
+  const tw = popThumb.offsetWidth;
+  const perPx = linMax() / Math.max(1, r.width - tw);
+  if (ev.target !== popThumb) setLinScroll((ev.clientX - r.left - tw / 2) * perPx);
+  thumbFrom = { x: ev.clientX, scroll: linScroll };
+  popScroll.setPointerCapture(ev.pointerId);
+  ev.preventDefault();
+});
+popScroll.addEventListener('pointermove', ev => {
+  if (!thumbFrom) return;
+  const r = popScroll.getBoundingClientRect();
+  const perPx = linMax() / Math.max(1, r.width - popThumb.offsetWidth);
+  setLinScroll(thumbFrom.scroll + (ev.clientX - thumbFrom.x) * perPx);
+});
+const endThumb = () => { thumbFrom = null; };
+popScroll.addEventListener('pointerup', endThumb);
+popScroll.addEventListener('pointercancel', endThumb);
+popScroll.addEventListener('keydown', ev => {
+  const step = (linView < 600 ? LIN_PITCH_PHONE : LIN_PITCH);
+  const by: Record<string, number> = { ArrowLeft: -step, ArrowRight: step, PageUp: -linView, PageDown: linView };
+  if (ev.key in by) setLinScroll(linScroll + by[ev.key]);
+  else if (ev.key === 'Home') setLinScroll(0);
+  else if (ev.key === 'End') setLinScroll(linMax());
+  else return;
+  ev.preventDefault();
+});
+
+// The chart itself scrolls too: a horizontal drag (a finger, or a mouse held
+// down), and a wheel, vertical or sideways. The track is the visible
+// affordance; nobody should have to aim for it.
+let dragX: number | null = null;
+popCv.addEventListener('pointerdown', ev => {
+  if (popMode !== 'lineages' || popScroll.hidden) return;
+  dragX = ev.clientX;
+  popCv.setPointerCapture(ev.pointerId);
+});
+popCv.addEventListener('pointermove', ev => {
+  if (dragX !== null) {
+    setLinScroll(linScroll - (ev.clientX - dragX));
+    dragX = ev.clientX;
+  }
+  linReadout(ev);
+});
+const endDrag = () => { dragX = null; };
+popCv.addEventListener('pointerup', endDrag);
+popCv.addEventListener('pointercancel', endDrag);
+popCv.addEventListener('pointerleave', () => {
+  linPointing = false;
+  if (popMode === 'lineages') popWin.textContent = linSummary;
+});
+popCv.addEventListener('wheel', ev => {
+  if (popMode !== 'lineages' || popScroll.hidden) return;
+  ev.preventDefault();
+  setLinScroll(linScroll + (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY));
+}, { passive: false });
+
+/** Names the bar under the pointer in the readout line: which species, how
+ *  many heads, and when. The middle columns carry no labels, and a log-width
+ *  bar cannot be read as a number, so this is how a middle column is read. */
+function linReadout(ev: PointerEvent): void {
+  if (popMode !== 'lineages') return;
+  const r = popCv.getBoundingClientRect();
+  const dpr = popCv.width / Math.max(1, r.width);
+  const x = (ev.clientX - r.left) * dpr, y = (ev.clientY - r.top) * dpr;
+  const slack = 6 * dpr; // a bar is 9 px wide; a finger is not
+  const hit = linHits.find(b => x >= b.x - slack && x <= b.x + b.w + slack && y >= b.y && y <= b.y + b.h);
+  linPointing = !!hit;
+  if (!hit) { popWin.textContent = linSummary; return; }
+  const ago = (linLastTick - hit.tick) / linTps;
+  popWin.textContent = `${speciesLabel(hit.key)} · ${hit.count} head${hit.count === 1 ? '' : 's'} · `
+    + (ago <= 0 ? 'now' : `${fmtSpan(ago)} ago`);
+}
+
 /**
  * The lineage Sankey. Each stage is a column of species bars; ribbons carry
  * each head to where it actually went — a species into itself, into another
@@ -313,6 +445,14 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   }
   const K = d.stages.length;
   const nodeW = 9 * dpr, gap = 4 * dpr;
+  // Every stage at a pitch a ribbon can be followed across; past the panel's
+  // width the diagram scrolls (the track above it) rather than squeezing.
+  const minPitch = (w / dpr < 600 ? LIN_PITCH_PHONE : LIN_PITCH) * dpr;
+  const pitch = Math.max(minPitch, (gw - nodeW) / (K - 1));
+  const contentW = (K - 1) * pitch + nodeW + 2 * padX;
+  const scrolls = contentW > w + 1;
+  syncLinScroll(scrolls ? contentW / dpr : 0, w / dpr);
+  const scrollX = scrolls ? linScroll * dpr : 0;
   const real = (k: string) => k !== 'reseed' && k !== 'unknown' && k !== 'died';
 
   // The clade filter, applied to columns and flows alike.
@@ -362,7 +502,14 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   }
   perU = Math.min(perU, 32 * dpr);
 
-  const colX = (c: number) => padX + ((gw - nodeW) * c) / (K - 1);
+  const colX = (c: number) => padX + c * pitch - scrollX;
+  // Columns on screen, with one either side so a ribbon entering from off the
+  // edge is drawn; and the first and last WHOLE ones, which carry the names.
+  const cMin = Math.max(0, Math.floor((scrollX - padX) / pitch) - 1);
+  const cMax = Math.min(K - 1, Math.ceil((scrollX + w) / pitch) + 1);
+  let cLeft = cMin, cRight = cMax;
+  while (cLeft < cMax && colX(cLeft) < padX - 1) cLeft++;
+  while (cRight > cLeft && colX(cRight) + nodeW > w - padX + 1) cRight--;
   const cols: Array<Map<string, SankeyNode>> = [];
   for (let c = 0; c < K; c++) {
     const m = new Map<string, SankeyNode>();
@@ -386,7 +533,7 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   // Ribbons first, bars over them. Flows sorted by their source's vertical
   // position then their destination's, so spans claim node edges top-down and
   // ribbons cross as little as this data allows.
-  for (let c = 0; c + 1 < K; c++) {
+  for (let c = cMin; c + 1 <= cMax; c++) {
     const from = cols[c], to = cols[c + 1];
     const order = (m: Map<string, SankeyNode>, k: string) =>
       m.has(k) ? m.get(k)!.yTop : Number.MAX_VALUE;
@@ -449,10 +596,14 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
     }
   }
 
-  for (let c = 0; c < K; c++) {
-    for (const node of cols[c].values()) {
+  linHits = [];
+  for (let c = cMin; c <= cMax; c++) {
+    for (const [key, node] of cols[c]) {
       ctx.fillStyle = node.rgb;
       ctx.fillRect(node.x, node.yTop, nodeW, Math.max(node.h, 1));
+      const sp = specs[c].find(x => x.key === key)!;
+      linHits.push({ x: node.x, y: node.yTop, w: nodeW, h: Math.max(node.h, 4 * dpr),
+        key, count: sp.count, tick: d.stages[c].tick });
     }
   }
 
@@ -460,15 +611,23 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   // cannot be read as a number, so the numbers are written where the eye
   // lands; middle columns are read by tint and by following a ribbon home.
   ctx.font = `${9.5 * dpr}px ui-monospace, monospace`;
-  for (const [c, align] of [[0, 'left'], [K - 1, 'right']] as Array<[number, CanvasTextAlign]>) {
+  // Beside the first and last columns ON SCREEN, so a scrolled diagram still
+  // names what it shows.
+  for (const [c, align] of [[cLeft, 'left'], [cRight, 'right']] as Array<[number, CanvasTextAlign]>) {
     ctx.textAlign = align;
     for (const sp of specs[c]) {
       const node = cols[c].get(sp.key)!;
       if (node.h < 9 * dpr) continue; // thin bars lean on the legend
+      // On a plate: at full pitch a name runs across the ribbons beside it, and
+      // bare text over a bright ribbon could not be read.
+      const label = `${speciesLabel(sp.key)} ${sp.count}`;
+      const tx = align === 'left' ? node.x + nodeW + 4 * dpr : node.x - 4 * dpr;
+      const ty = node.yTop + node.h / 2 + 3.5 * dpr;
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(20, 22, 31, 0.82)'; // --lamp-h, the readout plate
+      ctx.fillRect(align === 'left' ? tx - 3 * dpr : tx - tw - 3 * dpr, ty - 10 * dpr, tw + 6 * dpr, 13 * dpr);
       ctx.fillStyle = '#c8cdd5';
-      ctx.fillText(`${speciesLabel(sp.key)} ${sp.count}`,
-          align === 'left' ? node.x + nodeW + 4 * dpr : node.x - 4 * dpr,
-          node.yTop + node.h / 2 + 3.5 * dpr);
+      ctx.fillText(label, tx, ty);
     }
   }
   ctx.textAlign = 'left';
@@ -481,20 +640,23 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   const lastTick = d.stages[K - 1].tick;
   ctx.fillText('width ≈ 1+log₁₀ heads', padX, padT + gh + 11 * dpr);
   ctx.textAlign = 'center';
-  const roomy = (gw - nodeW) / (K - 1) >= 46 * dpr;
+  const roomy = pitch >= 46 * dpr;
   const noteEnd = padX + ctx.measureText('width ≈ 1+log₁₀ heads').width + 6 * dpr;
-  for (let c = 0; c < K; c++) {
+  for (let c = cMin; c <= cMax; c++) {
     if (!roomy && c !== 0 && c !== K - 1) continue;
-    if (c === 0) continue; // its slot holds the scale note
+    if (c === 0 && !scrolls) continue; // its slot holds the scale note
     const ago = (lastTick - d.stages[c].tick) / d.tps;
-    const label = c === K - 1 ? 'now' : `-${fmtSpan(ago)}`;
+    const label = c === K - 1 ? 'now' : `-${fmtAgo(ago)}`;
     const x = colX(c) + nodeW / 2;
     if (x - ctx.measureText(label).width / 2 < noteEnd) continue; // under the note
     ctx.fillText(label, x, padT + gh + 11 * dpr);
   }
   ctx.textAlign = 'left';
-  popWin.textContent =
-      `${fmtSpan((lastTick - d.stages[0].tick) / d.tps)} · ${K} stages`;
+  linSummary = `${fmtSpan((lastTick - d.stages[0].tick) / d.tps)} · ${K} stages`
+      + (scrolls ? ' · drag or scroll for earlier' : '');
+  linLastTick = lastTick;
+  linTps = d.tps;
+  if (!linPointing) popWin.textContent = linSummary;
 }
 
 function gathering(ctx: CanvasRenderingContext2D, dpr: number, x: number, y: number): void {
@@ -591,6 +753,14 @@ function niceCeil(v: number): number {
   return 10 * mag;
 }
 
+/** An axis offset: like fmtSpan, but past the hour as hours AND minutes, so
+ *  stages five minutes apart never print the same label twice ("1.8h" did). */
+function fmtAgo(sec: number): string {
+  if (sec < 3600) return fmtSpan(Math.min(sec, 3599));
+  const m = Math.round(sec / 60);
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+}
+
 export function fmtSpan(sec: number): string {
   if (sec < 90) return `${Math.round(sec)}s`;
   if (sec < 5400) return `${Math.round(sec / 60)}m`;
@@ -603,12 +773,24 @@ popBtn.onclick = () => { popOn = !popOn; popApply(); };
 // heading while the request is in flight.
 const popModeRoles = document.getElementById('popModeRoles') as HTMLButtonElement;
 const popModeLin = document.getElementById('popModeLin') as HTMLButtonElement;
+/** The size the roles chart had before the lineage lens took the screen. */
+let rolesSize: 'half' | 'full' = 'half';
 function popSetMode(m: 'roles' | 'lineages'): void {
   if (popMode === m) return;
   popMode = m;
   popModeRoles.classList.toggle('on', m === 'roles');
   popModeLin.classList.toggle('on', m === 'lineages');
   popCladeBtn.hidden = m !== 'lineages';
+  // The lineage diagram is read at full screen: a column per stage needs the
+  // width, and a ribbon one head wide needs the height. Going back to roles
+  // gives the chart the size it had.
+  if (m === 'lineages') {
+    rolesSize = popEl.classList.contains('full') ? 'full' : 'half';
+    openPanel(popEl, 'full');
+  } else {
+    openPanel(popEl, rolesSize);
+  }
+  linFollow = true; // a lens opened fresh opens on now
   popDraw();
   popPoll(true);
 }
