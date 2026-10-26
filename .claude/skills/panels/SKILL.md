@@ -189,6 +189,14 @@ lays them out at a fixed pitch, and scrolls sideways past the panel's width.
   view, on a dark plate so they read over the ribbons, and pointing at any bar
   writes its species, count and age into the header's readout line.
 
+- **Detail is opt-in.** By default each species is one ribbon as thick as its
+  headcount, on a LINEAR scale (`width ∝ heads`, 2 px floor): nothing opens
+  from the gaps, nothing closes into them. The `detail` switch under the chart
+  brings back every passage — bred, held, died, reseeded — on the log scale
+  below, and the legend's kinds and bred/reseeded counts with it. The fingers
+  each death and reseed draw were the first thing a reader asked about; a
+  picture that needs its legend to be read at all is not the default one.
+
 ### Non-linear scales say so, and print their numbers
 
 The lineage Sankey's ribbon width is `1 + log₁₀(heads)`, because a linear scale
