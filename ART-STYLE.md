@@ -154,7 +154,7 @@ One sun, straight overhead-north. The grammar:
   tile completely. A pit with nothing under it — the lowest level's — is
   opaque void shade all the way, and reads bottomless because it is. Grate
   gaps and drop-shafts are small pits and take the identical treatment.
-- **Water glints are live, and the only moving light.** The bake scatters a
+- **Water glints are live light.** The bake scatters a
   few fixed 2-px glints in each water's highlight; the web client adds the
   ones that come and go (`render.ts` `glintsFor`/`drawGlints`, from the
   server's per-tile water mask). Each kind sparkles its own way — shallows
@@ -167,6 +167,32 @@ One sun, straight overhead-north. The grammar:
   phase are hashed from world position; the phase runs on the simulation
   tick, never the wall clock. Drawn from 12 px a tile up only, where an
   art-pixel is at least a device pixel.
+- **Moving water moves; still water never does.** The bake draws every water
+  still -- `waterTop` has no directional strokes because from straight above
+  still water has no profile to band -- and the web client moves only what a
+  river laid (`client/src/flow.ts`, from `/api/world/flow/{z}`). Which way and
+  how fast are **stored** by the river carver as it walks downhill
+  (`World.setFlow`), never guessed from the water around a tile: a channel's
+  upstream and downstream ends look the same, which is the belt lesson (§7).
+  Three things move. *The drift* is the bake's own water pixels carried
+  downstream -- a state re-composites the bake, never repaints it (§6) -- and
+  because a texture shifted by a growing offset must jump back somewhere, two
+  copies half a tile apart are mixed by **ordered dither**, each weighted to
+  nothing as it resets: every pixel is one copy or the other, never a blend,
+  and the loop shows no seam. Only pixels that are water in the bake move,
+  judged by hue (the bake tints its ramps, so an exact match missed most of a
+  river); a bank's laps stay exactly where the autotiler drew them. *The
+  dashes* are short runs of the water's own base and highlight riding lanes
+  downstream, fastest away from the banks, outrunning the drift: the texture
+  says moving, the dashes say which way and how fast. *Whitewater* is the
+  shallows ramp, densest where the river is roughest -- rapids, and a
+  **cascade**, which takes the grammar for a drop: a lit lip, and past it the
+  sunk band of deeper water below the step. Three speeds, one grammar (slow
+  0.05, brook 0.12, rapids 0.4 art-px a tick), all on the sim tick; drawn
+  under every body and plant, so a swimmer is never painted over; from 12 px
+  a tile up only, like the glints. Waterfalls between levels -- over a pit's
+  lip, down a cliff face, into a plunge pool -- are drawn on the exploration
+  sheet and wait for water that can actually cross a level.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `parallaxFactor(scale)` =
   1 / (1 + scale / `PARALLAX_ZOOM`), with `PARALLAX_ZOOM` 500 and the scale in
@@ -669,6 +695,17 @@ The precedents, so nobody pays twice:
   drawn over true per role at each zoom. A ratio above 1 is a floor, wherever
   it hides.
 
+- **The lip that vanished on a brook** -- a cascade was first drawn as the
+  exploration sheet drew it, a whitewater bar across the channel in the
+  shallows highlight, and on the sheet's deep blue river it read at once. The
+  world's rivers are mostly one-tile brooks the shore pass lays as shallows,
+  whose own bake is already that highlight: the bar drew, and the
+  `flow=0` comparison counted its pixels, and nobody could see it. The fix
+  was §4's drop grammar, which the bar had skipped -- a lit lip *and* the sunk
+  band past it, a ramp deeper -- because a step is a change in height, and
+  height reads by its shadow, not its highlight. **Judge a mark on the ground
+  it will actually sit on**, not the one the sheet was drawn over: a sheet
+  is a hypothesis about the world, and the world had less contrast to give.
 - **The clade that was one body in a dozen greens** — every clade had a body
   plan, and within the plan a lineage could differ by leg count and a
   one-pixel mark. Both were there, both were heritable, and neither read at
