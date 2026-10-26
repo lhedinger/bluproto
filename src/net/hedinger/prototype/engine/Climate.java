@@ -144,6 +144,23 @@ public final class Climate {
 		return at(light, x, y, z, 0);
 	}
 
+	/**
+	 * The light that falls ON the tile holding {@code (x, y)}, before the
+	 * tile's own canopy takes its toll: what a plant there grows by. The
+	 * raster holds what a body under the canopy sees, which for a tall grass
+	 * or a thicket is half of what reached it; the grass is not shaded by
+	 * itself, so the plant's read divides the toll back out. On open ground the
+	 * two reads are the same number.
+	 */
+	public double lightOn(World w, double x, double y, int z) {
+		double l = lightAt(x, y, z);
+		Tile t = w.getTile((int) Math.floor(x), (int) Math.floor(y), z);
+		if (t != null && !t.isSolid() && t.blocksSight()) {
+			return Math.min(LIGHT_SKY, l / LIGHT_THROUGH_COVER);
+		}
+		return l;
+	}
+
 	/** Temperature on the tile holding {@code (x, y)} of level {@code z}, in
 	 *  degrees C; the ground's off the map. */
 	public double temperatureAt(double x, double y, int z) {

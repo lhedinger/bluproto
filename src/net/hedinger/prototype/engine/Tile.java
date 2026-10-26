@@ -255,9 +255,42 @@ public class Tile {
 	 *  {@link #FUNGUS_REGROW} on a fungus bed, {@link #GRASS_REGROW} on every
 	 *  sward; not a per-tile field, so the same plant can never be given two
 	 *  speeds by whichever worldgen pass laid it -- times the air's share of it
-	 *  ({@link #warmth}): temperature sets the pace of growth, water its bulk. */
+	 *  ({@link #warmth}) and the light's ({@link #sunlight}): temperature and
+	 *  light set the pace of growth, water its bulk. */
 	public double regrowRate() {
-		return (type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW) * warmth();
+		return (type == TileType.TYPE_FUNGUS ? FUNGUS_REGROW : GRASS_REGROW) * warmth() * sunlight();
+	}
+
+	/** The light at which the sward grows at half its full-sun pace, as a
+	 *  share of the sky's: the saturation constant of its light response.
+	 *  Photosynthesis saturates -- the first light is worth the most -- so the
+	 *  response is {@code L (1 + K) / (L + K)}: exactly 1 in full sun, where
+	 *  every grass number was measured; about 0.84 two tiles into a cave from
+	 *  a hole in its roof, half at a quarter sun, nothing in the dark. The
+	 *  fungus is the cave's plant and does not read it. 0 or less turns the
+	 *  light off for the sward, which is what every sward had before. */
+	@Unit("share of the sky, half pace")
+	public static double PLANT_SHADE_K = 0.5;
+
+	/**
+	 * How much the light moves this tile's regrowth rate, as a multiplier: the
+	 * sward's saturating response to the light on it, {@link #PLANT_SHADE_K}
+	 * its constant. Light sets the pace of growth with temperature, which is
+	 * why it is on the rate and not the cap. Reads the light that falls on the
+	 * tile ({@link net.hedinger.prototype.engine.Climate#lightOn}), not what a
+	 * body under its canopy sees: a tall grass is not shaded by itself, so
+	 * every sward under the sky reads exactly 1 and the surface is as it was.
+	 * A sward in a cave grows by whatever light reaches it through a hole or
+	 * off a grating, and not at all in the dark; a fungus bed reads 1 whatever
+	 * the light, because the cave's plant and the sward never compete on this
+	 * axis. 1 with no world to read.
+	 */
+	public double sunlight() {
+		if (world == null || type == TileType.TYPE_FUNGUS || PLANT_SHADE_K <= 0) {
+			return 1.0;
+		}
+		double l = world.climate().lightOn(world, col + 0.5, row + 0.5, lvl);
+		return l * (1 + PLANT_SHADE_K) / (l + PLANT_SHADE_K);
 	}
 
 	/**
