@@ -12354,6 +12354,67 @@ public class SimTests {
 	}
 
 	/**
+	 * The moving-water layer paints only with the water and shallows ramps, and
+	 * reads the flow's directions in the order the engine packs them.
+	 *
+	 * <p>Java cannot run {@code client/src/flow.ts}, so this reads the file.
+	 * Its marks -- dashes, whitewater, the lip and the drop of a cascade -- are
+	 * the one thing in it that is not a pixel the bake drew, and a dash in a
+	 * picked blue is the palette-from-nowhere bug in a new place (§7). The
+	 * direction table is the other thing worth pinning: the carver writes
+	 * {@link World#FLOW_DX} order, and a client table in another order would
+	 * draw every river flowing the wrong way with nothing else to say so.
+	 */
+	static class TheMovingWaterIsPaintedFromItsRamps extends Scenario {
+		@Override
+		public void run() {
+			String src;
+			try {
+				src = java.nio.file.Files.readString(java.nio.file.Path.of("client/src/flow.ts"));
+			} catch (java.io.IOException e) {
+				throw new AssertionError("the flow layer is not where the guide says", e);
+			}
+			java.util.Set<Integer> allowed = new java.util.HashSet<>();
+			for (int cls : new int[] { GroundTextures.CLS_WATER, GroundTextures.CLS_SHALLOWS }) {
+				for (int i = 0; i < 3; i++) {
+					allowed.add(GroundTextures.rampColor(cls, i));
+				}
+			}
+			java.util.regex.Matcher m = java.util.regex.Pattern
+					.compile("const (WATER|SHALLOWS) = \\[([^\\]]*)\\]").matcher(src);
+			int seen = 0;
+			while (m.find()) {
+				for (String lit : m.group(2).split(",")) {
+					int c = Integer.parseInt(lit.trim().substring(2), 16);
+					assertTrue("0x" + Integer.toHexString(c) + " is a water or shallows ramp colour",
+							allowed.contains(c));
+					seen++;
+				}
+			}
+			assertEquals("both ramps are named, three shades each", 6, seen);
+			// No colour anywhere else in the file: every mark is drawn from those two.
+			java.util.regex.Matcher any = java.util.regex.Pattern
+					.compile("0x([0-9a-fA-F]{6})\\b").matcher(src);
+			while (any.find()) {
+				int c = Integer.parseInt(any.group(1), 16);
+				assertTrue("0x" + any.group(1) + " in flow.ts is one of the two ramps", allowed.contains(c));
+			}
+			for (String axis : new String[] { "FDX", "FDY" }) {
+				java.util.regex.Matcher d = java.util.regex.Pattern
+						.compile("const " + axis + " = \\[([^\\]]*)\\]").matcher(src);
+				assertTrue("the client names its " + axis + " table", d.find());
+				String[] parts = d.group(1).split(",");
+				int[] want = axis.equals("FDX") ? World.FLOW_DX : World.FLOW_DY;
+				assertEquals(axis + " has the eight directions", 8, parts.length);
+				for (int i = 0; i < 8; i++) {
+					assertEquals(axis + "[" + i + "] matches World's packing order",
+							want[i], Integer.parseInt(parts[i].trim()));
+				}
+			}
+		}
+	}
+
+	/**
 	 * The body scan is painted from the world's ramps and accents. Every hex
 	 * literal in {@code client/src/bodyScan.ts} is a ramp colour, a sanctioned
 	 * accent, or one of the panel's own tokens -- nothing invented, which is
@@ -20590,6 +20651,7 @@ public class SimTests {
 				new PerceptionIsOneGatherOnTheClock(),
 				new AHostMendsWhatOneRiderDrinks(),
 				new TheBodyScanIsPaintedFromRamps(),
+				new TheMovingWaterIsPaintedFromItsRamps(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
