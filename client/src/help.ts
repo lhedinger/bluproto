@@ -23,8 +23,9 @@ import {
   DOT_LOD_SCALE, VEG_KINDS, VEG_STAGES, VEG_VARIANTS, VEIL_ALPHA,
   drawActionGlyph, drawCarryLink, drawDoor, drawDot, drawItem, drawNest, drawPlaceholder,
   drawLoader, drawRing, drawSentinel, drawSwitch, ductLidTile, pheroPuff, veilTile, vegetationTileFor,
-  ART, drawGlints, glintsFor,
+  ART, drawGlints, glintsFor, setFlowGrid,
 } from './render';
+import { flowLayers } from './flow';
 import { el, renderMechPage, syncNavPad } from './mechdoc';
 import { PLANS, SATED, bodyScanCanvas, type BodyState } from './bodyScan';
 
@@ -443,6 +444,14 @@ const waters = section('Water glints',
   + 'pool rare and slow, mire rarer — from the same glintsFor/drawGlints code, over the '
   + 'server\'s ground bake. Phase runs on the simulation tick.');
 
+const moving = section('Moving water',
+  'The rivers, moving: one reach of each speed from the world running now, drawn by the '
+  + 'live flow layer over that world\'s own bake. The drift is the bake\'s water pixels carried '
+  + 'downstream (two copies half a tile apart, ordered-dithered so the loop never jumps), the '
+  + 'dashes ride lanes fastest away from the banks, and rapids and cascades break white in the '
+  + 'shallows ramp. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
+  + 'second, since the page follows no world clock.');
+
 const bakes = section('Atlas bakes',
   'What the viewer itself makes of a creature\'s server-baked sprite atlas: the living '
   + 'stamp and the drained corpse bake (colour stripped, body kept). '
@@ -506,11 +515,13 @@ for (const [act, name, meaning] of EXPR) {
   // A live phenotype from the stream, so the atlas endpoint has it baked. The
   // atlas is keyed by SHAPE and baked colour-neutral; the creature's rgb rides
   // the same stream entity, and the page re-tints exactly as the live view does.
+  let worldHello: { surface?: number; chunkTiles: number; build: string } | null = null;
   const found = await new Promise<{ pheno: number; rgb: number }>((resolve) => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/api/world/stream`);
     ws.onmessage = (ev) => {
       const m = JSON.parse(ev.data);
+      if (m.type === 'hello') worldHello = m;
       const n = (m.entities || []).find((e: EntityState) => e.kind.startsWith('npc.') && e.pheno);
       if (m.type === 'full' && n) { resolve({ pheno: n.pheno, rgb: n.rgb }); ws.close(); }
     };
@@ -598,6 +609,65 @@ for (const [act, name, meaning] of EXPR) {
       g.drawImage(ground, 0, 0, DC, DC);
       drawGlints(g, glints, Math.floor(t * 33), -ART * px, -ART * px, px, ART, ART, 6 * ART, 6 * ART);
     });
+  }
+
+  // Moving water: a reach of each tier from the live world, the flow layer over
+  // that world's chunks. The layer is a single grid at a time, so the page
+  // hands it the surface's and draws every window from it.
+  const hw = worldHello as { surface?: number; chunkTiles: number; build: string } | null;
+  if (hw) {
+    const z = hw.surface ?? 0, CT = hw.chunkTiles;
+    const dec = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+    const fj = await fetch(`/api/world/flow/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const wj = await fetch(`/api/world/water/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (fj && wj) {
+      const flow = dec(fj.data), water = dec(wj.data), cols = fj.cols, rows = fj.rows;
+      setFlowGrid(flow, water, cols, rows, z);
+      const chunks = new Map<string, HTMLCanvasElement>();
+      const getChunk = (cx: number, cy: number) => chunks.get(`${cx}_${cy}`) ?? null;
+      // The tile of each tier with the most moving water around it: a reach, not a trickle.
+      const pick = (want: (f: number) => boolean) => {
+        let best = -1, at = -1;
+        for (let i = 0; i < flow.length; i++) {
+          if (!flow[i] || !want(flow[i])) continue;
+          let n = 0;
+          for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) n += flow[i + dy * cols + dx] ? 1 : 0;
+          if (n > best) { best = n; at = i; }
+        }
+        return at;
+      };
+      const N = 7, DC = 280, px = DC / (N * ART); // a 7-tile window
+      for (const [name, want] of [
+        ['slow river', (f: number) => (f & 3) === 1], ['brook', (f: number) => (f & 3) === 2],
+        ['rapids', (f: number) => (f & 3) === 3 && !(f & 32)], ['cascade step', (f: number) => (f & 32) !== 0],
+      ] as const) {
+        const i = pick(want);
+        if (i < 0) continue;
+        const x0 = Math.max(0, (i % cols) - 3), y0 = Math.max(0, ((i / cols) | 0) - 3);
+        // every chunk the window, and the drift's upstream reach, can touch
+        for (let cy = Math.floor((y0 - 1) / CT); cy <= Math.floor((y0 + N) / CT); cy++) {
+          for (let cx = Math.floor((x0 - 1) / CT); cx <= Math.floor((x0 + N) / CT); cx++) {
+            if (cx < 0 || cy < 0 || chunks.has(`${cx}_${cy}`)) continue;
+            const cv = await loadCanvas(`/api/world/layers/${z}/${cx}_${cy}.png?v=${hw.build}`);
+            if (cv) chunks.set(`${cx}_${cy}`, cv);
+          }
+        }
+        pair(moving, name, DC, DC, (g, t) => {
+          g.imageSmoothingEnabled = false;
+          const tick = Math.floor(t * 33) + 1000;
+          const at = (wx: number, wy: number) => [(wx - x0) * ART * px, (wy - y0) * ART * px] as const;
+          for (const [k, cv] of chunks) {
+            const [cx, cy] = k.split('_').map(Number);
+            const [dx, dy] = at(cx * CT, cy * CT);
+            g.drawImage(cv, dx, dy, cv.width * px, cv.height * px);
+          }
+          for (const f of flowLayers(ART, { x0, y0, x1: x0 + N, y1: y0 + N }, CT, z, getChunk, tick)) {
+            const [dx, dy] = at(f.wx, f.wy);
+            g.drawImage(f.cv, dx, dy, f.cv.width * px, f.cv.height * px);
+          }
+        });
+      }
+    }
   }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
