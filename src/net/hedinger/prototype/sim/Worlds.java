@@ -4128,11 +4128,49 @@ public final class Worlds {
 				runRiver(w, cols, rows, sx, sy);
 			}
 		}
+		stillDeadEnds(w, cols, rows);
 	}
 
-	/** One river: walk downhill with a light meander, carving as it goes. */
+	/**
+	 * A river's last reach is still water wherever the channel stops short:
+	 * at the rim, in a basin, or where the walk ended early. Left moving, its
+	 * marks would slide into the bank it ends against. One pass: stilling a
+	 * cell leaves the one upstream pointing into still water, which is right
+	 * -- water flows into still water.
+	 */
+	private static void stillDeadEnds(World w, int cols, int rows) {
+		for (int y = 1; y < rows - 1; y++) {
+			for (int x = 1; x < cols - 1; x++) {
+				int f = w.getFlow(x, y, SURFACE_Z);
+				if (f == 0) {
+					continue;
+				}
+				int d = World.flowDirOf(f);
+				Tile.TileType t = w.getTile(x + World.FLOW_DX[d], y + World.FLOW_DY[d], SURFACE_Z).getType();
+				if (t != Tile.TileType.TYPE_WATER && t != Tile.TileType.TYPE_SHALLOWS) {
+					w.setFlow(x, y, SURFACE_Z, 0, World.FLOW_STILL, false);
+				}
+			}
+		}
+	}
+
+	/**
+	 * How steep a step down the elevation field has to be before the river runs
+	 * fast over it, and before its bed breaks the surface clean across the
+	 * channel (a cascade). In units of the field's own value per tile; set off
+	 * the distribution of steps the carver actually takes (seeds 42, 3 and 7:
+	 * p83 and p97 of the drop), so rapids are one stretch in six, cascades one in thirty.
+	 */
+	static final double RAPIDS_DROP = 0.040, STEP_DROP = 0.052;
+
+	/** One river: walk downhill with a light meander, carving as it goes. The
+	 *  water it lays is given the way it flows -- the step the walk takes next
+	 *  -- and how fast: a brook near the spring, a slow river lower down,
+	 *  rapids and cascades where the ground falls away under it. Recording
+	 *  this draws on no random stream, so the world it carves is unchanged. */
 	private static void runRiver(World w, int cols, int rows, int x, int y) {
 		int prevDx = 0, prevDy = 0, sinceFord = 0;
+		int[] cell = new int[8]; // the channel cells this step laid, as x,y pairs
 		for (int steps = 0; steps < cols + rows; steps++) {
 			if (x < 3 || y < 3 || x >= cols - 3 || y >= rows - 3) {
 				return; // reached the rim
@@ -4143,6 +4181,7 @@ public final class Worlds {
 			// The channel: a brook near the spring, two tiles wide lower down.
 			boolean ford = ++sinceFord >= 9;
 			int width = steps < 12 ? 1 : 2;
+			int laid = 0;
 			for (int dx = 0; dx < width; dx++) {
 				for (int dy = 0; dy < width; dy++) {
 					int cx = x + dx, cy = y + dy;
@@ -4152,6 +4191,8 @@ public final class Worlds {
 					w.setTile(cx, cy, SURFACE_Z, ford
 							? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_WATER);
 					w.getTile(cx, cy, SURFACE_Z).setFertility(0);
+					cell[laid++] = cx;
+					cell[laid++] = cy;
 				}
 			}
 			if (ford) {
@@ -4190,6 +4231,16 @@ public final class Worlds {
 					}
 				}
 				return;
+			}
+			// The water just laid moves the way the walk goes next, as fast as
+			// the ground falls: the field's own drop, not the jittered and
+			// cliff-weighted score the walk chose by.
+			double drop = here - Utils.noise2(x + bx, y + by, 0.055);
+			int speed = drop > RAPIDS_DROP ? World.FLOW_RAPIDS
+					: steps < 12 ? World.FLOW_STREAM : World.FLOW_SLOW;
+			int dir = World.flowDir(bx, by);
+			for (int i = 0; i < laid; i += 2) {
+				w.setFlow(cell[i], cell[i + 1], SURFACE_Z, dir, speed, drop > STEP_DROP);
 			}
 			prevDx = bx;
 			prevDy = by;
