@@ -557,6 +557,13 @@ public final class Mechanics {
 						+ "temperature, this wide: exactly the old rate on any undisturbed tile of any "
 						+ "floor, slower in the ground a vent warms or the coolant run chills, nothing "
 						+ "at or below freezing. Temperature sets the pace of growth, water its bulk."),
+				row("Dim light, on the eye", num(NPC.SIGHT_AMBIENT), "of the sky, always there",
+						"A body's sight range in light L is its sight gene times L (1 + dark) / (L + dark), "
+						+ "dark its night-eye gene: the whole of it under the open sky for every eye, "
+						+ "falling away as the light does, sooner for an eye that needs more of it, "
+						+ "nothing in the pitch dark. This is the light every body has to see by even "
+						+ "where the rasters read none: none, so a cave with no hole is blind ground "
+						+ "and a hunter there hunts by sound. Hearing and scent read no light."),
 				row("Light, on the grass", num(Tile.PLANT_SHADE_K), "of the sky for half pace",
 						"The sward's regrowth rate is also times its light response, L (1 + K) / (L + K) "
 						+ "with K this: the first light is worth the most, as photosynthesis saturates. "
@@ -668,7 +675,9 @@ public final class Mechanics {
 		rows(s,
 				row("Channels", num(AgentIO.NUM_SENSORS), "", "All filled every tick."),
 				row("Sight range", num(new Genome().losRange), "tiles",
-						"A gene; it mutates, so lineages evolve keener or dimmer eyes."),
+						"A gene; it mutates, so lineages evolve keener or dimmer eyes. In dim light "
+						+ "the eye keeps only part of it, by the night-eye gene; in the pitch dark "
+						+ "none, and a body goes by sound and scent."),
 				row("Field of view", round(Math.toDegrees(new Genome().losFov), 0) + "°", "",
 						"Also a gene. Sight is facing-gated; smell is not."),
 				row("Kin recognition", num(Genome.MARKER_DIMS) + " heritable markers", "",
@@ -1213,7 +1222,15 @@ public final class Mechanics {
 				row("Coat", "0 – 1", "",
 						"Insulation: scales the cold burn down by (1 − coat) and the heat thirst "
 						+ "up by (1 + coat). A trade with no free setting, priced by the air the "
-						+ "body stands in and nothing else."));
+						+ "body stands in and nothing else."),
+				row("Night eye", num(Genome.NIGHT_EYE_MIN) + " – " + num(Genome.NIGHT_EYE_MAX), "of the sky",
+						"How much light the eye needs: the light at which it keeps half its sight. "
+						+ "Founders draw " + num(Genome.NIGHT_EYE_LO) + " – " + num(Genome.NIGHT_EYE_HI)
+						+ "; the default is the high end, a day creature. Sight in any light is the "
+						+ "range gene times L (1 + dark) / (L + dark), whole in full sun for every eye, "
+						+ "nothing in the pitch dark. Priced in the perception burn by the sight it "
+						+ "keeps in the shade, so a night eye pays everywhere and earns only where "
+						+ "the light is low."));
 		return s;
 	}
 

@@ -154,6 +154,19 @@ public abstract class NPC extends Entity {
 	/** Energy/tick per unit of sight area beyond the reference, at mass 1. */
 	@Unit("energy/tick per tile·rad")
 	public static double PERCEPTION_BURN = 5.0e-6;
+	/** The light a body always has to see by, even where the rasters read
+	 *  none: a floor under the light the eye's law reads. None; a cave with no
+	 *  hole is pitch dark and nothing sees in it, which is the night niche's
+	 *  edge, where a hunter hunts by sound. 1 would make every eye a day eye
+	 *  in any light, which is what every eye was before the light was read. */
+	@Unit("share of the sky")
+	public static double SIGHT_AMBIENT = 0.0;
+	/** The light a night eye is priced at: the shade under a thicket. The eye
+	 *  joins the perception burn's sight product as the sight it keeps in this
+	 *  light against what the default eye keeps, so a night eye pays more
+	 *  everywhere and a dim one less, and the default pays exactly nothing. */
+	@Unit("share of the sky")
+	public static final double SIGHT_PRICE_LIGHT = net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER;
 	/** Energy/tick per turn-rate step beyond the reference, at mass 1. */
 	@Unit("energy/tick per step")
 	public static double AGILITY_BURN = 5.0e-6;
@@ -1223,7 +1236,7 @@ public abstract class NPC extends Entity {
 		// (see the constants): keen sight, quick turns and a long brain each add to
 		// the burn, a myopic/sluggish/simple body saves — bounded below so nothing
 		// ever exists for free. All scale with mass^0.75, like the base.
-		double sight = genome.losRange * genome.losFov;
+		double sight = genome.losRange * genome.losFov * eyeCost(genome.nightEye);
 		double perception = PERCEPTION_BURN * m34 * (sight - REF_SIGHT);
 		double agility = AGILITY_BURN * m34 * (genome.turnRate - REF_TURN);
 		int brainLen = genome.brain != null ? genome.brain.length() : (int) REF_BRAIN_LEN;
@@ -1939,6 +1952,49 @@ public abstract class NPC extends Entity {
 		return LOS_RANGE;
 	}
 
+	/**
+	 * How much of its sight an eye keeps in a given light: the saturating
+	 * {@code L (1 + dark) / (L + dark)}, exactly 1 in full sun for any eye,
+	 * falling away as the light does, sooner for an eye that needs more of
+	 * it. {@link #SIGHT_AMBIENT} floors the light.
+	 *
+	 * @param light the light at the viewer, as a share of the sky's
+	 * @param dark  the eye's {@link Genome#nightEye}
+	 */
+	public static double dimSight(double light, double dark) {
+		double l = Math.max(light, SIGHT_AMBIENT);
+		if (l <= 0) {
+			return 0;
+		}
+		return l * (1 + dark) / (l + dark);
+	}
+
+	/** The perception burn's factor for an eye: the sight it keeps in the
+	 *  shade ({@link #SIGHT_PRICE_LIGHT}) against what the default eye keeps
+	 *  there. 1 for the default. */
+	public static double eyeCost(double dark) {
+		double ref = dimSight(SIGHT_PRICE_LIGHT, Genome.NIGHT_EYE_HI);
+		return ref > 0 ? dimSight(SIGHT_PRICE_LIGHT, dark) / ref : 1;
+	}
+
+	/** How far this body sees right now: its sight gene times what its eye
+	 *  keeps of it in the light where it stands. The whole of it under the
+	 *  open sky; less in a cave, by the eye; nothing in the pitch dark. The
+	 *  gene's range where there is no world to read. */
+	public double sightRange() {
+		if (getWorld() == null) {
+			return LOS_RANGE;
+		}
+		double dark = genome != null ? genome.nightEye : Genome.NIGHT_EYE_HI;
+		return LOS_RANGE * dimSight(getWorld().climate().lightAt(X, Y, getLvl()), dark);
+	}
+
+	/** Whether this body sees {@code e} from where it stands: in its field of
+	 *  view, within the sight its eye keeps in this light, with a clear line. */
+	public boolean sees(Entity e) {
+		return isInLOS(e);
+	}
+
 	public double getLosFov() {
 		return LOS_FOV;
 	}
@@ -2171,7 +2227,7 @@ public abstract class NPC extends Entity {
 	}
 
 	protected boolean isInLOS() {
-		return getWorld().hasLOS(X, Y, Z, D, tX, tY, tZ, LOS_RANGE, LOS_FOV);
+		return getWorld().hasLOS(X, Y, Z, D, tX, tY, tZ, sightRange(), LOS_FOV);
 	}
 
 	protected boolean isInLOS(Entity e) {
@@ -2179,7 +2235,7 @@ public abstract class NPC extends Entity {
 			return false;
 		}
 
-		return getWorld().hasLOS(X, Y, Z, D, e.getX(), e.getY(), e.getZ(), LOS_RANGE, LOS_FOV);
+		return getWorld().hasLOS(X, Y, Z, D, e.getX(), e.getY(), e.getZ(), sightRange(), LOS_FOV);
 	}
 
 	protected boolean isInLOS(double dist, double fov) {
@@ -2197,7 +2253,7 @@ public abstract class NPC extends Entity {
 	}
 
 	protected boolean isInLOS(double x, double y, double z) {
-		return getWorld().hasLOS(X, Y, Z, D, x, y, z, LOS_RANGE, LOS_FOV);
+		return getWorld().hasLOS(X, Y, Z, D, x, y, z, sightRange(), LOS_FOV);
 	}
 
 	protected boolean isInLOS(double x, double y, double z, double dist, double fov) {
@@ -2811,7 +2867,7 @@ public abstract class NPC extends Entity {
 		String[] types = new String[1];
 		types[0] = type;
 
-		return seeTarget(t, LOS_RANGE, LOS_FOV, types, include);
+		return seeTarget(t, sightRange(), LOS_FOV, types, include);
 	}
 
 	/**
@@ -2849,7 +2905,7 @@ public abstract class NPC extends Entity {
 	 * @return if Entity t is a valid target
 	 */
 	protected boolean seeTarget(NPC t, String[] types, boolean include) {
-		return seeTarget(t, LOS_RANGE, LOS_FOV, types, include);
+		return seeTarget(t, sightRange(), LOS_FOV, types, include);
 	}
 
 	/**
@@ -2927,15 +2983,16 @@ public abstract class NPC extends Entity {
 		// period is one of the two clocks (Scan).
 		if (net.hedinger.prototype.engine.Scan.due(age, getID(), SEARCH_FREQ)) {
 			// Bounded nearest-K gather: cost is O(K), not O(local density).
-			return getWorld().searchNearestNPC(X, Y, Z, D, LOS_RANGE, LOS_FOV, getID(), MAX_NEIGHBORS);
+			return getWorld().searchNearestNPC(X, Y, Z, D, sightRange(), LOS_FOV, getID(), MAX_NEIGHBORS);
 		}
 
 		// Revalidate the cached list in place -- no defensive copy needed, the
 		// output map is separate and nothing here mutates the source.
 		TreeMap<Double, NPC> output = new TreeMap<Double, NPC>();
 		if (ts != null) {
+			double reach = sightRange(); // one read of the light for the whole list
 			for (NPC e : ts.values()) {
-				if (seeTarget(e, LOS_RANGE, LOS_FOV, "", false)) {
+				if (seeTarget(e, reach, LOS_FOV, "", false)) {
 					if (isFriendly() && e.isHostile()) {
 						if (!isDead() && !e.isDead()) {
 							e.mark();
@@ -3006,7 +3063,7 @@ public abstract class NPC extends Entity {
 	 */
 	protected TreeMap<Double, NPC> getTargets(TreeMap<Double, NPC> ts, String[] types,
 			boolean include) {
-		return getTargets(SEARCH_FREQ, ts, LOS_RANGE, LOS_FOV, types, include);
+		return getTargets(SEARCH_FREQ, ts, sightRange(), LOS_FOV, types, include);
 	}
 
 	/**

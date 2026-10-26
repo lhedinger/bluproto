@@ -759,6 +759,8 @@ final class WorldHost {
 					// of its pace the air leaves it (all of it, for an endotherm).
 					d.put("comfort", round(Math.max(-1, Math.min(1, (t - n.thermalOptimum()) / n.thermalBreadth()))));
 					d.put("pace", round(n.thermalPerformance()));
+					// What the light here leaves of its sight, 1 under the open sky.
+					d.put("sight", round(n.getLosRange() > 0 ? n.sightRange() / n.getLosRange() : 1));
 					// The body's store: fat as a share of what the body can carry, and
 					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
 					d.put("fat", round(n.fatLeft()));
@@ -832,6 +834,7 @@ final class WorldHost {
 					gm.put("turnRate", g.turnRate);
 					gm.put("losRange", round(g.losRange));
 					gm.put("losFov", round(g.losFov));
+					gm.put("nightEye", round(g.nightEye));
 					gm.put("metabolism", round(g.metabolism));
 					gm.put("maxAge", g.maxAge);
 					gm.put("markers", new double[] { round(g.markers[0]), round(g.markers[1]),

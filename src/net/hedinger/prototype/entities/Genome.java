@@ -37,6 +37,17 @@ public class Genome {
 	public int turnRate = 5;
 	public double losRange = 10;
 	public double losFov = Math.PI * 0.5;
+	/**
+	 * How much light this lineage's eye needs: the light, as a share of the
+	 * sky's, at which it keeps half its sight. Sight range in light {@code L}
+	 * is the gene's range times {@code L (1 + dark) / (L + dark)}: exactly the
+	 * whole of it in full sun whatever the eye, falling away as the light does,
+	 * sooner for a large value and later for a small one. Nothing sees in no
+	 * light at all. A night eye is priced in the perception burn by the sight
+	 * it keeps in the shade. The default is the dimmest founder draw, the day
+	 * creature every body was before the light could be read.
+	 */
+	public double nightEye = NIGHT_EYE_HI;
 	public double metabolism = 0.02;
 	/**
 	 * Ticks a body of the REFERENCE mass and the REFERENCE pace lives before old
@@ -611,7 +622,23 @@ public class Genome {
 		// And how it stands the air, appended after the reserve for the same
 		// reason again.
 		spreadThermal(g);
+		// And how much light its eye needs, appended after the thermal draws
+		// for the same reason again.
+		spreadNightEye(g);
 		return g;
+	}
+
+	/**
+	 * Draws a founder's {@link #nightEye}: {@link #NIGHT_EYE_LO}..{@link #NIGHT_EYE_HI},
+	 * uniform, so the founding herd and its hunters hold eyes from one that
+	 * is nearly as good in a cave's dim light as in the sun to one that is
+	 * half blind out of the sun. Which end pays is the world's to settle: the
+	 * night eye costs perception burn everywhere and earns it only where the
+	 * light is low, which on the surface is nowhere and in the caves is
+	 * everywhere.
+	 */
+	public static void spreadNightEye(Genome g) {
+		g.nightEye = NIGHT_EYE_LO + Utils.random() * (NIGHT_EYE_HI - NIGHT_EYE_LO);
 	}
 
 	/**
@@ -655,6 +682,14 @@ public class Genome {
 	 *  read, from the coolant run to a vent's mouth. */
 	@net.hedinger.prototype.engine.Unit("degrees C")
 	public static final double THERMAL_OPT_MIN = -5, THERMAL_OPT_MAX = 45;
+	/** Where founders' {@link #nightEye} is drawn from: an eye that keeps half
+	 *  its sight at a twentieth of the sun to one that needs half the sun for
+	 *  it. The high end is the default and the day creature. */
+	public static final double NIGHT_EYE_LO = 0.05, NIGHT_EYE_HI = 0.5;
+	/** The gene's own bounds: a floor above zero, since the law divides by
+	 *  the light plus this and an eye that needs no light is not an eye; a
+	 *  ceiling where even the open sky is dim to it. */
+	public static final double NIGHT_EYE_MIN = 0.01, NIGHT_EYE_MAX = 2.0;
 	/** The gene's own bounds on the band: never nothing, never everything. */
 	@net.hedinger.prototype.engine.Unit("degrees C")
 	public static final double THERMAL_BAND_MIN = 1, THERMAL_BAND_MAX = 25;

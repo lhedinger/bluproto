@@ -377,6 +377,15 @@ life:
   whole range; the defaults are the ground's temperature, a band of 8, an
   endotherm and no coat, which is what every body was before the air could be
   felt, and pays nothing on the meadow.
+- **A lineage's eye needs a certain light.** `nightEye` is the light, as a
+  share of the sky's, at which the eye keeps half its sight: range in light
+  `L` is the sight gene times `L (1 + dark) / (L + dark)`, the whole of it in
+  full sun for every eye, falling away as the light does, nothing in the pitch
+  dark. Priced in the perception burn by the sight it keeps in the shade, so a
+  night eye pays everywhere and earns only in a cave or under a canopy, which
+  is the night niche: a hunter that hunts by sound. Founders draw 0.05–0.5;
+  the default is 0.5, the day creature every body was before the light could
+  be read, and pays nothing.
 - **A grazer walks off a patch at a line its greed sets.** `greed` is the
   exponent on value in every food scan; for a grazer it is also the share of a
   tile's cap below which the ground is not worth standing on
