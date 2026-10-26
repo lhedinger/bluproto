@@ -49,6 +49,14 @@ function watery(rgb: number): boolean {
   const r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
   return b > 1.5 * r && b >= 0.75 * g;
 }
+/** Shallows (teal) rather than open water (blue): green close to blue. The
+ *  shoreline curves between the two through the middle of tiles, so a source
+ *  pixel is taken only from the same water as the pixel it replaces -- or the
+ *  drift would drag the deep pool across its own outline, back onto the tile
+ *  grid. */
+function teal(rgb: number): boolean {
+  return ((rgb >> 8) & 255) > 0.77 * (rgb & 255);
+}
 
 /** World.FLOW_DX / FLOW_DY: the eight directions, clockwise from east. */
 const FDX = [1, 1, 0, -1, -1, -1, 0, 1];
@@ -59,6 +67,8 @@ const SPEED = [0, 0.05, 0.12, 0.4];
 const DASHES = [0, 0.08, 0.12, 0.14];
 /** The drift's period, in art-pixels: one tile, so the two copies are half a tile apart. */
 const CYCLE = ART;
+/** Art-px over which the motion fades out against still water. */
+const FADE = 6;
 /** Rebuild at most every this many ticks: the fastest mark moves a pixel in 2.5. */
 const REBUILD_TICKS = 2;
 
@@ -197,6 +207,16 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
       return nx < 0 || ny < 0 || nx >= cols || ny >= rows || !wet![ny * cols + nx];
     });
     const shear = banked ? 0.45 : 1;
+    // Still water beside this tile (a pond the river runs into): the motion
+    // fades out toward it over FADE art-px by ordered dither, or the drifted
+    // texture would stop dead at the tile line and draw the tile as a box.
+    const stillAt = (ox: number, oy: number) => {
+      const nx = tx + ox, ny = ty + oy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) return false;
+      const j = ny * cols + nx;
+      return !!wet![j] && !grid![j];
+    };
+    const stillN = stillAt(0, -1), stillS = stillAt(0, 1), stillW = stillAt(-1, 0), stillE = stillAt(1, 0);
     const spd = SPEED[speed];
     // The drift: two copies of the bake, CYCLE apart in phase, dithered by weight.
     const a = mod(spd * 0.6 * t, CYCLE);
@@ -209,13 +229,19 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
         const gx = tx * ART + ai, gy = ty * ART + aj;
         const own = bakeAt(gx, gy, chunkTiles, level, getChunk);
         if (own < 0 || !watery(own)) continue; // bank laps stay the bake's
+        let edge = FADE;
+        if (stillN) edge = Math.min(edge, aj);
+        if (stillS) edge = Math.min(edge, ART - 1 - aj);
+        if (stillW) edge = Math.min(edge, ai);
+        if (stillE) edge = Math.min(edge, ART - 1 - ai);
+        if (edge < FADE && bayer(gx, gy) >= (edge + 0.5) / FADE) continue; // still, as the pond beside it
         const o = bayer(gx, gy) < wA ? oa : ob;
         let col = own;
         const sx = gx - fx * o, sy = gy - fy * o;
         const stx = Math.floor(sx / ART), sty = Math.floor(sy / ART);
         if (stx >= 0 && sty >= 0 && stx < cols && sty < rows && wet![sty * cols + stx] === kind) {
           const src = bakeAt(sx, sy, chunkTiles, level, getChunk);
-          if (src >= 0 && watery(src)) col = src;
+          if (src >= 0 && watery(src) && teal(src) === teal(own)) col = src;
         }
         // Lanes run along the flow; u is the distance downstream, lane the one across.
         const u = gx * fx + gy * fy, lane = gy * fx - gx * fy;
