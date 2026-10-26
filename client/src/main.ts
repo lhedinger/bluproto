@@ -1057,6 +1057,9 @@ function genomeTab(d: Record<string, any>): string {
   ]) + group('body', [
     row('size', g(gm.size)), row('speed', g(gm.speed)), row('turn rate', g(gm.turnRate)),
     row('sight', `${g(gm.losRange)} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
+    // How much light the eye needs: the share of the sky at which it keeps
+    // half its sight. Small is a night eye.
+    row('night eye', g(gm.nightEye)),
     row('metabolism', g(gm.metabolism)), row('max age', g(gm.maxAge)),
     row('locomotion', gm.flying ? 'flying' : 'walking'),
     // How it stands the air: the comfort band in degrees, how much of its
@@ -1306,6 +1309,8 @@ function climateText(d: Record<string, any>): string {
     const c = d.comfort as number;
     s += ` · ${comfortWord(c)}`;
     if (d.pace < 0.995) s += ` · pace ${Math.round(d.pace * 100)}%`;
+    // and what the light leaves of its sight, when it is not the whole of it
+    if (typeof d.sight === 'number' && d.sight < 0.995) s += ` · sees ${Math.round(d.sight * 100)}%`;
   }
   return s;
 }

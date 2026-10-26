@@ -5676,6 +5676,98 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A night eye sees in dim light, and pays for it.
+	 *
+	 * <p>Section 4.4 of the climate plan, the eye half. Sight range in light L
+	 * is the sight gene times L (1 + dark) / (L + dark), dark the night-eye
+	 * gene. The law first: every eye keeps the whole of its sight in full sun,
+	 * none in no light, and in dim light the night eye keeps more; the default
+	 * eye is priced at exactly one, a night eye above it, a dim eye below.
+	 * Then the world: two identical caves lit through one hole each, a body
+	 * two tiles into the dim, facing a quarry nine tiles off within its
+	 * ten-tile gene. The night eye sees it; the day eye, which keeps only part of its
+	 * range in that light, does not. Under the sky the day eye sees the same
+	 * quarry at the same distance, and in a cave with no hole the night eye
+	 * sees nothing two tiles off, because nothing sees in no light. Last the
+	 * price, as the capability-cost scenario measures it: a resting night-eyed
+	 * body burns more than a resting default one, and a dim-eyed body less.
+	 */
+	static class ANightEyeSeesInDimLightAndPaysForIt extends Scenario {
+		private Genome eye(double dark) {
+			Genome g = Genome.phenotype(8, 0.0, 5, 10, Math.PI * 2, 100000);
+			g.nightEye = dark;
+			return g;
+		}
+
+		/** A body standing still, facing east, where every quarry here stands. */
+		private TestNPC still(World w, double x, double y, int z, Genome g) {
+			TestNPC b = TestNPC.breeder(x, y, z, g).withHeading(0);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		private double burnOver(World w, double dark, int ticks) {
+			Genome g = new Genome();
+			g.size = 10;
+			g.nightEye = dark;
+			TestNPC b = TestNPC.minded(5.5, 5.5, 0, g).grown().withGlycogen(5.0).withHunger(1.0);
+			w.spawnEntity(b);
+			double e0 = b.getGlycogen();
+			tick(w, ticks);
+			return e0 - b.getGlycogen();
+		}
+
+		@Override
+		public void run() {
+			seed(76);
+			double lo = Genome.NIGHT_EYE_LO, hi = Genome.NIGHT_EYE_HI;
+			assertNear("every eye keeps the whole of its sight in full sun", 1.0, NPC.dimSight(1.0, lo), 1e-12);
+			assertNear("the day eye too", 1.0, NPC.dimSight(1.0, hi), 1e-12);
+			assertNear("no eye sees in no light", 0.0, NPC.dimSight(0.0, lo), 1e-12);
+			assertGreater("in dim light the night eye keeps more of its sight", NPC.dimSight(0.25, lo), NPC.dimSight(0.25, hi) + 0.25);
+			assertNear("the default eye is priced at exactly one", 1.0, NPC.eyeCost(hi), 1e-12);
+			assertGreater("a night eye costs more", NPC.eyeCost(lo), 1.2);
+			assertLess("a dim eye less", NPC.eyeCost(Genome.NIGHT_EYE_MAX), 0.95);
+			// two caves, each lit through one hole in its roof
+			World nightCave = room(30, 12, 2), dayCave = room(30, 12, 2);
+			nightCave.setTile(10, 5, 1, Tile.TileType.TYPE_HOLE);
+			dayCave.setTile(10, 5, 1, Tile.TileType.TYPE_HOLE);
+			double dim = nightCave.climate().lightAt(12.5, 5.5, 0);
+			assertNear("the two caves are lit alike", dim, dayCave.climate().lightAt(12.5, 5.5, 0), 1e-12);
+			assertGreater("two tiles from the hole the cave is dim", dim, 0.5);
+			assertLess("and not lit", dim, 0.8);
+			TestNPC night = still(nightCave, 12.5, 5.5, 0, eye(lo)), nightQuarry = still(nightCave, 21.5, 5.5, 0, eye(hi));
+			TestNPC day = still(dayCave, 12.5, 5.5, 0, eye(hi)), dayQuarry = still(dayCave, 21.5, 5.5, 0, eye(hi));
+			tick(nightCave, 1);
+			tick(dayCave, 1);
+			assertNear("the night eye's reach is the law's", 10 * NPC.dimSight(dim, lo), night.sightRange(), 1e-9);
+			assertNear("and the day eye's", 10 * NPC.dimSight(dim, hi), day.sightRange(), 1e-9);
+			assertGreater("the night eye reaches the quarry nine tiles off", night.sightRange(), 9.0);
+			assertLess("the day eye does not", day.sightRange(), 9.0);
+			assertTrue("so the night eye sees it", night.sees(nightQuarry));
+			assertTrue("and the day eye does not", !day.sees(dayQuarry));
+			// under the sky the day eye sees the same quarry at the same distance
+			World sky = room(30, 12);
+			TestNPC dayOut = still(sky, 12.5, 5.5, 0, eye(hi)), skyQuarry = still(sky, 21.5, 5.5, 0, eye(hi));
+			tick(sky, 1);
+			assertNear("under the sky the day eye has the whole of its sight", 10.0, dayOut.sightRange(), 1e-9);
+			assertTrue("and sees the quarry", dayOut.sees(skyQuarry));
+			// in a cave with no hole nothing sees
+			World dark = room(30, 12, 2);
+			TestNPC blind = still(dark, 12.5, 5.5, 0, eye(lo)), near = still(dark, 14.5, 5.5, 0, eye(hi));
+			tick(dark, 1);
+			assertNear("in the pitch dark sight is nothing", 0.0, blind.sightRange(), 1e-12);
+			assertTrue("so even the night eye sees nothing two tiles off", !blind.sees(near));
+			// the price
+			int T = 300;
+			double plain = burnOver(room(12, 12), hi, T), keen = burnOver(room(12, 12), lo, T), dimmed = burnOver(room(12, 12), Genome.NIGHT_EYE_MAX, T);
+			assertGreater("a resting body burned something", plain, 0.0);
+			assertGreater("a night eye costs more burn", keen, plain * 1.02);
+			assertLess("and a dim eye less", dimmed, plain * 0.995);
+		}
+	}
+
 	static class TheSwardGrowsAtThePaceOfItsAir extends Scenario {
 		@Override
 		public void run() {
@@ -20973,6 +21065,7 @@ public class SimTests {
 				new ACarcassRotsFasterInWarmAir(),
 				new ACarcassTurnsFasterInDampAir(),
 				new TheSwardGrowsByItsLight(),
+				new ANightEyeSeesInDimLightAndPaysForIt(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
