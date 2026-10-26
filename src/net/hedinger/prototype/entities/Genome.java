@@ -685,10 +685,12 @@ public class Genome {
 	/** Where founders' {@link #nightEye} is drawn from: an eye that keeps half
 	 *  its sight at a twentieth of the sun to one that needs half the sun for
 	 *  it. The high end is the default and the day creature. */
+	@net.hedinger.prototype.engine.Unit("share of the sky")
 	public static final double NIGHT_EYE_LO = 0.05, NIGHT_EYE_HI = 0.5;
 	/** The gene's own bounds: a floor above zero, since the law divides by
 	 *  the light plus this and an eye that needs no light is not an eye; a
 	 *  ceiling where even the open sky is dim to it. */
+	@net.hedinger.prototype.engine.Unit("share of the sky")
 	public static final double NIGHT_EYE_MIN = 0.01, NIGHT_EYE_MAX = 2.0;
 	/** The gene's own bounds on the band: never nothing, never everything. */
 	@net.hedinger.prototype.engine.Unit("degrees C")
