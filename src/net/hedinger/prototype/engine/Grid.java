@@ -1215,24 +1215,49 @@ public class Grid {
 			return cls;
 		}
 		int gx = x * A + ai, gy = y * A + aj;
+		// Shorelines are drawn by their own rule (see shoreAt): where water
+		// meets open ground, the two trade pixels along a smoothed, wandering
+		// line, and the laps below only settle water against water and land
+		// against land.
+		int fam = LAP_ANY;
+		int shore = shoreAt(x, y, gx, gy, cls);
+		if (shore == SHORE_WET || shore == SHORE_NONE && isWetClass(cls)) {
+			// Deep water against the shallows round it: the same smoothed line,
+			// one step in -- a pond's deep middle is a pool, not a notched box.
+			int depth = deepAt(x, y, gx, gy);
+			if (depth >= 0) {
+				return depth;
+			}
+		}
+		if (shore == SHORE_WET) {
+			if (!isWetClass(cls)) {
+				return shoreClass(x, y, gx, gy, true);
+			}
+			fam = LAP_WET;
+		} else if (shore == SHORE_DRY) {
+			if (isWetClass(cls)) {
+				return shoreClass(x, y, gx, gy, false);
+			}
+			fam = LAP_DRY;
+		}
 		// Cardinal laps, deepest wins so corner pockets fill naturally.
 		int best = cls, bestDepth = 0;
-		int n = lapClassAt(x, y - 1, own);
+		int n = lapClassAt(x, y - 1, own, fam);
 		if (n >= 0 && aj < lapDepth(gx, n * 4 + 0)) {
 			int d = lapDepth(gx, n * 4 + 0) - aj;
 			if (d > bestDepth) { best = n; bestDepth = d; }
 		}
-		int s = lapClassAt(x, y + 1, own);
+		int s = lapClassAt(x, y + 1, own, fam);
 		if (s >= 0 && aj >= A - lapDepth(gx, s * 4 + 1)) {
 			int d = aj - (A - lapDepth(gx, s * 4 + 1)) + 1;
 			if (d > bestDepth) { best = s; bestDepth = d; }
 		}
-		int w = lapClassAt(x - 1, y, own);
+		int w = lapClassAt(x - 1, y, own, fam);
 		if (w >= 0 && ai < lapDepth(gy, w * 4 + 2)) {
 			int d = lapDepth(gy, w * 4 + 2) - ai;
 			if (d > bestDepth) { best = w; bestDepth = d; }
 		}
-		int e = lapClassAt(x + 1, y, own);
+		int e = lapClassAt(x + 1, y, own, fam);
 		if (e >= 0 && ai >= A - lapDepth(gy, e * 4 + 3)) {
 			int d = ai - (A - lapDepth(gy, e * 4 + 3)) + 1;
 			if (d > bestDepth) { best = e; bestDepth = d; }
@@ -1243,19 +1268,19 @@ public class Grid {
 		// Rounded outer corners: where two cardinals share a higher diagonal
 		// neighbour, the diagonal's lap rounds the corner with a quarter-arc.
 		int R = 4; // corner radius, art-px
-		int nw = lapClassAt(x - 1, y - 1, own);
+		int nw = lapClassAt(x - 1, y - 1, own, fam);
 		if (nw >= 0 && ai < R && aj < R && dist2(ai, aj, R, R) > R * R) {
 			return nw;
 		}
-		int ne = lapClassAt(x + 1, y - 1, own);
+		int ne = lapClassAt(x + 1, y - 1, own, fam);
 		if (ne >= 0 && ai >= A - R && aj < R && dist2(ai, aj, A - 1 - R, R) > R * R) {
 			return ne;
 		}
-		int sw = lapClassAt(x - 1, y + 1, own);
+		int sw = lapClassAt(x - 1, y + 1, own, fam);
 		if (sw >= 0 && ai < R && aj >= A - R && dist2(ai, aj, R, A - 1 - R) > R * R) {
 			return sw;
 		}
-		int se = lapClassAt(x + 1, y + 1, own);
+		int se = lapClassAt(x + 1, y + 1, own, fam);
 		if (se >= 0 && ai >= A - R && aj >= A - R && dist2(ai, aj, A - 1 - R, A - 1 - R) > R * R) {
 			return se;
 		}
@@ -1263,14 +1288,168 @@ public class Grid {
 	}
 
 	/** The neighbour's class if it out-ranks {@code ownRank} (so it laps into
-	 *  this tile), else -1. */
-	private int lapClassAt(int cx, int cy, int ownRank) {
+	 *  this tile), else -1. {@code fam} narrows who may lap: on a shoreline the
+	 *  water/land boundary belongs to {@link #shoreAt}, so only the pixel's own
+	 *  side -- water among waters, land among lands -- laps here. */
+	private int lapClassAt(int cx, int cy, int ownRank, int fam) {
 		int c = groundClassAt(cx, cy);
 		if (c < 0) {
 			return -1;
 		}
+		if (fam == LAP_WET && !isWetClass(c) || fam == LAP_DRY && isWetClass(c)) {
+			return -1;
+		}
 		int r = edgeRank(c);
 		return r > ownRank ? c : -1;
+	}
+
+	private static final int LAP_ANY = 0, LAP_WET = 1, LAP_DRY = 2;
+	private static final int SHORE_NONE = 0, SHORE_WET = 1, SHORE_DRY = 2;
+
+	/** Open water and the wading shallows: the two that take the smoothed
+	 *  shoreline. A bog's pool and mire keep their own blend (see poolBlend). */
+	private static boolean isWetClass(int c) {
+		return c == GroundTextures.CLS_WATER || c == GroundTextures.CLS_SHALLOWS;
+	}
+
+	/** Half-width of the shoreline's smoothing, in art-pixels. */
+	private static final double SHORE_R = 8;
+	/** How far the shoreline wanders off the smoothed line, as a share of the
+	 *  coverage scale: two to three art-pixels either way along a straight bank. */
+	private static final double SHORE_WANDER = 0.32;
+
+	/** The tent kernel's cumulative weight up to {@code t} art-px from its centre. */
+	private static double tentCdf(double t) {
+		double R = SHORE_R;
+		if (t <= -R) {
+			return 0;
+		}
+		if (t <= 0) {
+			return (t + R) * (t + R) / (2 * R * R);
+		}
+		if (t < R) {
+			return 1 - (R - t) * (R - t) / (2 * R * R);
+		}
+		return 1;
+	}
+
+	/**
+	 * Which side of a shoreline art-pixel (gx, gy) of tile (x, y) falls on, or
+	 * {@link #SHORE_NONE} where no shoreline is near.
+	 *
+	 * <p>The tile grid's water mask, smoothed by a tent filter {@link #SHORE_R}
+	 * art-px wide and read exactly at the pixel (the filter is separable, so a
+	 * tile's share is a product of two one-dimensional integrals), then cut at
+	 * a threshold that wanders with world-position noise. Straight banks stay
+	 * on the tile line and wander a pixel or two; every corner, either way
+	 * round, rounds; a brook that steps east-south-east-south becomes a smooth
+	 * diagonal; a pond is a pond and not a notched square. The laps it
+	 * replaced were 1-3 px saw-teeth on four-pixel runs with right-angled
+	 * bends -- a tileset's edge, where the mockup the rivers were drawn to had
+	 * banks.
+	 *
+	 * <p>Only where water meets open ground: a bank of rock, a wall or a pit
+	 * keeps the edge it had (those are drawn shapes of their own), so any of
+	 * them in reach turns the rule off for the pixel.
+	 */
+	private int shoreAt(int x, int y, int gx, int gy, int cls) {
+		boolean wet = false, dry = false;
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				int c = groundClassAt(x + dx, y + dy);
+				if (c < 0 || edgeRank(c) <= 0) {
+					return SHORE_NONE; // rock, a structure, a pit, the rim
+				}
+				if (isWetClass(c)) {
+					wet = true;
+				} else {
+					dry = true;
+				}
+			}
+		}
+		if (!wet || !dry) {
+			return SHORE_NONE;
+		}
+		double cover = wetCover(x, y, gx, gy, null);
+		double cut = 0.5 + SHORE_WANDER * (Utils.noise2(gx / 12.0 + 71.3, gy / 12.0 + 5.1, 0.6) - 0.5) * 2;
+		return cover > cut ? SHORE_WET : SHORE_DRY;
+	}
+
+	/** Open water or shallows for a wet pixel where both are in reach (and
+	 *  nothing but open ground and water is), by the smoothed coverage of open
+	 *  water alone; -1 where only one of the two is near. */
+	private int deepAt(int x, int y, int gx, int gy) {
+		boolean deep = false, shallow = false;
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				int c = groundClassAt(x + dx, y + dy);
+				if (c < 0 || edgeRank(c) <= 0) {
+					return -1;
+				}
+				deep |= c == GroundTextures.CLS_WATER;
+				shallow |= c == GroundTextures.CLS_SHALLOWS;
+			}
+		}
+		if (!deep || !shallow) {
+			return -1;
+		}
+		int A = GroundTextures.ART;
+		double cx = gx + 0.5, cy = gy + 0.5, cover = 0;
+		for (int dy = -1; dy <= 1; dy++) {
+			double wy = tentCdf((y + dy + 1) * A - cy) - tentCdf((y + dy) * A - cy);
+			for (int dx = -1; dx <= 1; dx++) {
+				double wx = tentCdf((x + dx + 1) * A - cx) - tentCdf((x + dx) * A - cx);
+				if (wx > 0 && wy > 0 && groundClassAt(x + dx, y + dy) == GroundTextures.CLS_WATER) {
+					cover += wx * wy;
+				}
+			}
+		}
+		double cut = 0.5 + SHORE_WANDER * (Utils.noise2(gx / 12.0 + 13.7, gy / 12.0 + 41.9, 0.6) - 0.5) * 2;
+		return cover > cut ? GroundTextures.CLS_WATER : GroundTextures.CLS_SHALLOWS;
+	}
+
+	/** The smoothed water coverage at pixel (gx, gy) in [0, 1]. With {@code
+	 *  pick} non-null, also returns there the class of the wet (pick[0] = 1) or
+	 *  dry (pick[0] = 0) tile that weighs most at the pixel. */
+	private double wetCover(int x, int y, int gx, int gy, int[] pick) {
+		int A = GroundTextures.ART;
+		double cx = gx + 0.5, cy = gy + 0.5;
+		double cover = 0, best = -1;
+		int bestCls = -1;
+		for (int dy = -1; dy <= 1; dy++) {
+			double wy = tentCdf((y + dy + 1) * A - cy) - tentCdf((y + dy) * A - cy);
+			if (wy <= 0) {
+				continue;
+			}
+			for (int dx = -1; dx <= 1; dx++) {
+				double wx = tentCdf((x + dx + 1) * A - cx) - tentCdf((x + dx) * A - cx);
+				if (wx <= 0) {
+					continue;
+				}
+				int c = groundClassAt(x + dx, y + dy);
+				boolean w = isWetClass(c);
+				if (w) {
+					cover += wx * wy;
+				}
+				if (pick != null && w == (pick[0] == 1) && wx * wy > best) {
+					best = wx * wy;
+					bestCls = c;
+				}
+			}
+		}
+		if (pick != null) {
+			pick[0] = bestCls;
+		}
+		return cover;
+	}
+
+	/** The class a pixel on the far side of the shoreline takes: the wet (or
+	 *  dry) tile that weighs most there -- open water or shallows into a bank,
+	 *  meadow or sand into the water. */
+	private int shoreClass(int x, int y, int gx, int gy, boolean wantWet) {
+		int[] pick = { wantWet ? 1 : 0 };
+		wetCover(x, y, gx, gy, pick);
+		return pick[0] >= 0 ? pick[0] : groundClassAt(x, y);
 	}
 
 	private static int dist2(int ax, int ay, int bx, int by) {

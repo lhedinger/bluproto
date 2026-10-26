@@ -58,6 +58,7 @@ public final class ServerTests {
 		bandAndWholeBakeAgree();
 		theWaterMaskNamesEachWater();
 		theRiversFlowDownTheirOwnChannels();
+		shorelinesAreBanksNotSawTeeth();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
 		aCarcassSaysWhatItIsWorth();
@@ -1290,6 +1291,67 @@ public final class ServerTests {
 		check("every cascade is in rapids: " + stepsInRapids + "/" + steps, stepsInRapids == steps);
 		check("the lakes stay still: " + stillWater + " still water tiles", stillWater > moving);
 		check("a level that does not exist has no flow", host.flow(99) == null);
+	}
+
+	/**
+	 * Water meets open ground along a bank, not a tileset's edge: on a straight
+	 * one-tile channel, long enough for the wander to go both ways, the
+	 * shoreline moves at most one art-pixel for each one along it (the scallop laps it replaced jumped two at every four-pixel
+	 * run), wanders off the tile line without straying past three pixels, and
+	 * is not ruler-straight; at a bend the outer corner rounds off into land
+	 * and the inner corner fills with water. Asserted on the bake the server
+	 * serves, judged by hue, because a picture of the shoreline is the only
+	 * thing that says it is smooth.
+	 */
+	static void shorelinesAreBanksNotSawTeeth() {
+		net.hedinger.prototype.engine.World w = new net.hedinger.prototype.engine.World(32, 12, 1);
+		for (int x = 1; x < 31; x++) {
+			for (int y = 1; y < 11; y++) {
+				w.setTile(x, y, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_FLOOR);
+			}
+		}
+		for (int x = 2; x <= 29; x++) {
+			w.setTile(x, 3, 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER); // the straight channel
+		}
+		int[][] ell = { { 3, 7 }, { 4, 7 }, { 5, 7 }, { 6, 7 }, { 6, 8 }, { 6, 9 } }; // east, then turning south
+		for (int[] t : ell) {
+			w.setTile(t[0], t[1], 0, net.hedinger.prototype.engine.Tile.TileType.TYPE_WATER);
+		}
+		java.awt.image.BufferedImage img = LayerBaker.bakeLevelImage(w, LayerBaker.chunkRenderer(w), 0);
+		int A = net.hedinger.prototype.engine.GroundTextures.ART;
+		// Device px per art-px is fractional (a tile is not a multiple of 12
+		// px), so each art-pixel is sampled at its own centre, not on a stride.
+		double px = img.getWidth() / (32.0 * A);
+		java.util.function.BiPredicate<Integer, Integer> wet = (gx, gy) -> {
+			int c = img.getRGB((int) ((gx + 0.5) * px), (int) ((gy + 0.5) * px));
+			int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+			return b > 1.5 * r && b >= 0.75 * g;
+		};
+		// The north bank of the channel, column by column away from its ends.
+		int line = 3 * A, lo = 99, hi = -99, worstStep = 0, prev = Integer.MIN_VALUE;
+		for (int gx = 4 * A; gx < 28 * A; gx++) {
+			int gy = 2 * A;
+			while (gy < 4 * A && !wet.test(gx, gy)) {
+				gy++;
+			}
+			int off = gy - line;
+			lo = Math.min(lo, off);
+			hi = Math.max(hi, off);
+			if (prev != Integer.MIN_VALUE) {
+				worstStep = Math.max(worstStep, Math.abs(off - prev));
+			}
+			prev = off;
+		}
+		check("a straight bank moves at most a pixel per pixel along it: worst step " + worstStep,
+				worstStep <= 1);
+		// The filter and the wander put the line within three pixels of the
+		// tile edge either way (SHORE_R 8, SHORE_WANDER 0.32).
+		check("and stays within three pixels of the tile line: " + lo + ".." + hi, lo >= -3 && hi <= 3);
+		check("and wanders both ways off it, it is not ruler-straight: " + lo + ".." + hi, lo < 0 && hi > 0);
+		// The bend at (6, 7): its outer (north-east) corner is land, the inner
+		// corner -- the south-west corner of that tile's neighbour (5, 8) -- water.
+		check("the outer corner of a bend rounds off into land", !wet.test(6 * A + A - 1, 7 * A));
+		check("and the inner corner fills with water", wet.test(5 * A + A - 1, 8 * A));
 	}
 
 	/**
