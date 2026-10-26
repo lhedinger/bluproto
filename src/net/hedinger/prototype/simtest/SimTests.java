@@ -5695,9 +5695,15 @@ public class SimTests {
 				tick(w, 1);
 			}
 			double tHot = warm.climate().temperatureAt(5.5, 2.5, 0), tCold = cold.climate().temperatureAt(5.5, 2.5, 0);
+			double hHot = warm.climate().humidityAt(5.5, 2.5, 0), hCold = cold.climate().humidityAt(5.5, 2.5, 0);
+			double href = net.hedinger.prototype.engine.Climate.referenceHumidity(plain, 0);
 			assertNear("on the meadow the clock is what it was", 1.0, mild.rotPace(), 1e-12);
-			assertNear("by the vents it runs at the Q10's share", Math.pow(NPC.ROT_Q10, (tHot - 17) / 10), hot.rotPace(), 1e-9);
-			assertNear("by the coolant run too", Math.pow(NPC.ROT_Q10, (tCold - 17) / 10), chilled.rotPace(), 1e-9);
+			// The vents and the coolant run move the humidity too (heat dries the
+			// air), so the exact pin is the whole law, and the Q10 term alone bounds
+			// it from the side the humidity pushes.
+			assertNear("by the vents it runs at the law", NPC.rotPace(tHot, 17, hHot, href), hot.rotPace(), 1e-9);
+			assertNear("by the coolant run too", NPC.rotPace(tCold, 17, hCold, href), chilled.rotPace(), 1e-9);
+			assertLess("the vents' dried air holds the warm clock under the Q10 alone", hot.rotPace(), Math.pow(NPC.ROT_Q10, (tHot - 17) / 10));
 			assertGreater("the warm body's clock runs well over half again as fast", hot.rotPace(), 1.5);
 			assertLess("the cold body's well under", chilled.rotPace(), 0.8);
 			assertEquals("the meadow corpse keeps the span it earned", span, mild.getDeathspan());
@@ -5721,6 +5727,81 @@ public class SimTests {
 			assertTrue("all three turned within the spell", turnHot >= 0 && turnMild >= 0 && turnCold >= 0);
 			assertLess("the warm body turned first", turnHot, turnMild * 0.7);
 			assertGreater("and the cold body last", turnCold, turnMild * 1.25);
+		}
+	}
+
+	/**
+	 * A carcass turns faster in damp air and lasts longer in dry.
+	 *
+	 * <p>Decomposition slows as the air dries (Section 4.2 of the climate plan:
+	 * rot clock by humidity). Three identical bodies die on three identical
+	 * floors at the same temperature: one a tile from a pond, whose air is
+	 * far damper than the meadow's for all the sun on it; one on the open meadow, the reference air that reads
+	 * exactly 1; one in a walled room with nothing to wet or dry it, which is
+	 * the meadow again. The wet body's clock runs faster by the law, its span
+	 * is shorter by the same factor, and it turns first; the two dry bodies
+	 * agree with each other to the tick, because the humidity term is
+	 * normalised to the floor's own air and a floor with nothing on it is that
+	 * air. Temperature is held equal so this pins the humidity term alone.
+	 */
+	static class ACarcassTurnsFasterInDampAir extends Scenario {
+		private TestNPC corpse(World w) {
+			Genome g = Genome.phenotype(10, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC b = TestNPC.breeder(5.5, 2.5, 0, g);
+			w.spawnEntity(b);
+			return b;
+		}
+
+		@Override
+		public void run() {
+			seed(74);
+			World wet = room(12, 12), plain = room(12, 12), again = room(12, 12);
+			for (int x = 1; x <= 10; x++) {
+				wet.setTile(x, 1, 0, Tile.TileType.TYPE_WATER);
+			}
+			TestNPC damp = corpse(wet), mild = corpse(plain), twin = corpse(again);
+			for (World w : new World[] { wet, plain, again }) {
+				tick(w, 2);
+			}
+			int span = mild.getDeathspan();
+			for (TestNPC b : new TestNPC[] { damp, mild, twin }) {
+				b.damage(500);
+			}
+			for (World w : new World[] { wet, plain, again }) {
+				tick(w, 1);
+			}
+			double tWet = wet.climate().temperatureAt(5.5, 2.5, 0), tPlain = plain.climate().temperatureAt(5.5, 2.5, 0);
+			double hWet = wet.climate().humidityAt(5.5, 2.5, 0), hPlain = plain.climate().humidityAt(5.5, 2.5, 0);
+			double href = net.hedinger.prototype.engine.Climate.referenceHumidity(plain, 0);
+			assertNear("water does not change the air's temperature", tPlain, tWet, 1e-9);
+			assertNear("the open meadow is the reference air", href, hPlain, 1e-9);
+			assertGreater("a tile from the pond the air is far damper than the meadow, even under the sun", hWet, href * 2);
+			assertNear("on the meadow the clock is what it was", 1.0, mild.rotPace(), 1e-12);
+			assertNear("and in the bare room too", 1.0, twin.rotPace(), 1e-12);
+			assertNear("by the pond it runs at the law", NPC.rotPace(tWet, 17, hWet, href), damp.rotPace(), 1e-9);
+			assertGreater("which is better than a quarter faster", damp.rotPace(), 1.25);
+			assertLess("and under the law's own ceiling", damp.rotPace(), 1 / (NPC.ROT_DRY_SLOW + (1 - NPC.ROT_DRY_SLOW) * href) + 1e-9);
+			assertEquals("the meadow corpse keeps the span it earned", span, mild.getDeathspan());
+			assertEquals("so does its twin", span, twin.getDeathspan());
+			assertLess("the damp corpse's span is shorter by the pace", damp.getDeathspan(), span * 0.8);
+			int turnWet = -1, turnMild = -1, turnTwin = -1;
+			for (int t = 0; t < 6000; t++) {
+				for (World w : new World[] { wet, plain, again }) {
+					tick(w, 1);
+				}
+				if (turnWet < 0 && damp.freshMeat() <= 0) {
+					turnWet = t;
+				}
+				if (turnMild < 0 && mild.freshMeat() <= 0) {
+					turnMild = t;
+				}
+				if (turnTwin < 0 && twin.freshMeat() <= 0) {
+					turnTwin = t;
+				}
+			}
+			assertTrue("all three turned within the spell", turnWet >= 0 && turnMild >= 0 && turnTwin >= 0);
+			assertEquals("the two dry bodies turned on the same tick", turnMild, turnTwin);
+			assertLess("the damp body turned first", turnWet, turnMild * 0.8);
 		}
 	}
 
@@ -20815,6 +20896,7 @@ public class SimTests {
 				new AnEctothermIsAsSlowAsTheAirIsCold(),
 				new TheSwardGrowsAtThePaceOfItsAir(),
 				new ACarcassRotsFasterInWarmAir(),
+				new ACarcassTurnsFasterInDampAir(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),
