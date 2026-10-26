@@ -10,7 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
-import { VEG_KIND_MASK, advanceGait, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
+import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
@@ -441,9 +441,30 @@ async function fetchWater(): Promise<void> {
   try {
     const g = await fetchLevelGrid('/api/world/water');
     if (g) waterGrid = g.bytes;
+    syncFlow();
   } catch {
     /* transient; the water lies still until the next fetch */
   }
+}
+
+// Static flow (World.getFlow's byte a tile) for the moving-water layer, which
+// also needs the water mask: the two arrive separately and the layer is handed
+// both once both are in.
+let flowGrid: Uint8Array | null = null;
+async function fetchFlow(): Promise<void> {
+  flowGrid = null;
+  syncFlow();
+  try {
+    const g = await fetchLevelGrid('/api/world/flow');
+    if (g) flowGrid = g.bytes;
+    syncFlow();
+  } catch {
+    /* transient; the water lies still until the next fetch */
+  }
+}
+function syncFlow(): void {
+  setFlowGrid(flowGrid && waterGrid ? flowGrid : null, waterGrid,
+      meta?.cols ?? 0, meta?.rows ?? 0, currentLevel);
 }
 
 // The chosen climate field for the current level, fetched once per level and
@@ -600,6 +621,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       startVegPolling();
       fetchCover();
       fetchWater();
+      fetchFlow();
       fetchClimate();
       // Tell the server which level to stream. The client says this on every
       // connection now, not only when someone taps: after a reconnect the two
@@ -1645,6 +1667,7 @@ function goToLevel(z: number): void {
   startVegPolling(); // grass grid is per-level
   fetchCover(); // cover mask is per-level
   fetchWater(); // so is the water mask
+  fetchFlow(); // and which way it moves
   fetchClimate(); // and so is the climate field
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.

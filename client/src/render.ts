@@ -16,6 +16,7 @@ import {
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
 } from './fixtures';
 import { VEG_STAGE_MASK, VEG_VARIANTS, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
+import { flowLayers } from './flow';
 
 // The split-out drawing modules are part of this one's public face: callers
 // import from './render' and need not know where a painter lives.
@@ -23,6 +24,16 @@ export { ART, CORPSE_RGB, PENDING_RGB, VOID_RGB, hash01, hex, rgbF } from './art
 export * from './fixtures';
 export * from './vegArt';
 export * from './fx';
+export { setFlowGrid } from './flow';
+
+/** The moving water in view (flow.ts), as chunk canvases with their world
+ *  origin: drawn over the ground and under everything standing on it, so a
+ *  swimmer is never painted over. */
+function flowInView(cam: Camera, w: number, h: number, chunkTiles: number, level: number,
+    getChunk: ChunkSource, tick: number) {
+  const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(w, h);
+  return flowLayers(cam.scale, { x0: tl.x, y0: tl.y, x1: br.x, y1: br.y }, chunkTiles, level, getChunk, tick);
+}
 import type { EntityState } from './protocol';
 import type { Pose, WorldState } from './state';
 
@@ -661,6 +672,15 @@ export function render(
           g.drawImage(low, wx * sx, wy * sy, cw * sx, ch * sy, o.x, o.y, cw * cam.scale, ch * cam.scale);
         }
       }
+    }
+  }
+
+  // Moving water over the still bake, under the plants and the bodies.
+  if (chunkTiles > 0) {
+    g.imageSmoothingEnabled = false;
+    for (const f of flowInView(cam, cv.width, cv.height, chunkTiles, level, getChunk, state.tick)) {
+      const o = cam.worldToScreen(f.wx, f.wy);
+      g.drawImage(f.cv, o.x, o.y, chunkTiles * cam.scale, chunkTiles * cam.scale);
     }
   }
 
@@ -1377,6 +1397,12 @@ export function renderGL(
       } else {
         glr.layer('ground:' + level, ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
       }
+    }
+    // Moving water over the still bake, under the plants and the bodies.
+    for (const f of flowInView(cam, cv.width, cv.height, chunkTiles, level, getChunk, state.tick)) {
+      const o = cam.worldToScreen(f.wx, f.wy);
+      const side = chunkTiles * cam.scale;
+      glr.layer('flow:' + level + ':' + f.key, f.cv, f.rev, null, o.x, o.y, side, side);
     }
     if (veg) {
       vegLayerUpdate(meta, chunkTiles, veg, vegRev, level, nowMs);
