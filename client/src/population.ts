@@ -299,6 +299,19 @@ let linFollow = true;
 /** The bars as last drawn, in device px, for the pointer readout. */
 let linHits: Array<{ x: number; y: number; w: number; h: number; key: string; count: number; tick: number }> = [];
 let linSummary = '';
+/** The lineage diagram's detail: off, one ribbon per species, as thick as its
+ *  population; on, every passage — bred and held, the warden's reseeds in, the
+ *  lines that ended out. Remembered per viewer. */
+const popDetail = document.getElementById('popDetail') as HTMLElement;
+const popDetailBox = popDetail.querySelector('input') as HTMLInputElement;
+let linDetail = false;
+try { linDetail = localStorage.getItem('linDetail') === '1'; } catch { /* per-session only */ }
+popDetailBox.checked = linDetail;
+popDetailBox.onchange = () => {
+  linDetail = popDetailBox.checked;
+  try { localStorage.setItem('linDetail', linDetail ? '1' : '0'); } catch { /* per-session only */ }
+  popDraw();
+};
 let linPointing = false;
 let linLastTick = 0, linTps = 33;
 
@@ -457,9 +470,12 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
 
   // The clade filter, applied to columns and flows alike.
   const specs = d.stages.map(st => st.species.filter(sp => linCladeMatch(sp.key)));
+  // Without detail there are no passages to draw, only each species carried
+  // from one column to the next, so the flows are not consulted at all.
+  const detail = linDetail;
   const flowsAt: Array<FlowData['flows']> = [];
   for (let c = 0; c + 1 < K; c++) {
-    flowsAt.push(d.flows.filter(f => f.stage === c
+    flowsAt.push(!detail ? [] : d.flows.filter(f => f.stage === c
         && (real(f.from) ? linCladeMatch(f.from)
             : real(f.to) ? linCladeMatch(f.to) : false)));
   }
@@ -478,8 +494,11 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
       if (real(f.to)) unitsIn[c + 1].set(f.to, (unitsIn[c + 1].get(f.to) ?? 0) + uOf(f.n));
     }
   }
-  const nodeUnits = (c: number, key: string, count: number) =>
-    Math.max(unitsIn[c].get(key) ?? 0, unitsOut[c].get(key) ?? 0) || uOf(count);
+  // Without detail the thickness IS the headcount, linearly: the log scale is
+  // for keeping a one-head passage visible, and there are no passages here,
+  // only whole species, so it would only hide what the line exists to show.
+  const nodeUnits = (c: number, key: string, count: number) => !detail ? count
+    : Math.max(unitsIn[c].get(key) ?? 0, unitsOut[c].get(key) ?? 0) || uOf(count);
 
   // One units-to-pixels scale for the whole diagram, set by the crowdest
   // column — and capped, so a filter that leaves one species does not balloon
@@ -500,8 +519,11 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
         padX + 4 * dpr, padT + gh / 2 + 14 * dpr);
     return;
   }
-  perU = Math.min(perU, 32 * dpr);
+  perU = Math.min(perU, (detail ? 32 : 8) * dpr);
 
+  // A bar's height in px; without detail never under 2 px, so one head shows.
+  const barH = (c: number, key: string, count: number) =>
+    Math.max(detail ? 0 : 2 * dpr, nodeUnits(c, key, count) * perU);
   const colX = (c: number) => padX + c * pitch - scrollX;
   // Columns on screen, with one either side so a ribbon entering from off the
   // edge is drawn; and the first and last WHOLE ones, which carry the names.
@@ -517,11 +539,11 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
     // every column. A filtered view of two species otherwise sat capped at
     // the bottom of an empty chart, reading as a footer rather than a flow.
     let colH = -gap;
-    for (const sp of specs[c]) colH += nodeUnits(c, sp.key, sp.count) * perU + gap;
+    for (const sp of specs[c]) colH += barH(c, sp.key, sp.count) + gap;
     let y = padT + gh - Math.max(0, (gh - colH) / 2);
     for (const sp of specs[c]) {
       const uIn = unitsIn[c].get(sp.key) ?? 0, uOut = unitsOut[c].get(sp.key) ?? 0;
-      const bh = nodeUnits(c, sp.key, sp.count) * perU;
+      const bh = barH(c, sp.key, sp.count);
       y -= bh;
       m.set(sp.key, { x: colX(c), yTop: y, h: bh, rgb: liftForDark(sp.rgb),
         inCur: y + (bh - uIn * perU) / 2, outCur: y + (bh - uOut * perU) / 2 });
@@ -533,6 +555,28 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   // Ribbons first, bars over them. Flows sorted by their source's vertical
   // position then their destination's, so spans claim node edges top-down and
   // ribbons cross as little as this data allows.
+  // Without detail: one ribbon per species between every pair of columns it
+  // stands in, its thickness the bar's at each end — the population, read as
+  // a line. Nothing opens from the gap and nothing closes into it.
+  if (!detail) {
+    for (let c = cMin; c + 1 <= cMax; c++) {
+      const x0 = colX(c) + nodeW, x1 = colX(c + 1), mx = (x0 + x1) / 2;
+      for (const [key, a] of cols[c]) {
+        const b = cols[c + 1].get(key);
+        if (!b) continue;
+        ctx.beginPath();
+        ctx.moveTo(x0, a.yTop);
+        ctx.bezierCurveTo(mx, a.yTop, mx, b.yTop, x1, b.yTop);
+        ctx.lineTo(x1, b.yTop + b.h);
+        ctx.bezierCurveTo(mx, b.yTop + b.h, mx, a.yTop + a.h, x0, a.yTop + a.h);
+        ctx.closePath();
+        ctx.fillStyle = a.rgb;
+        ctx.globalAlpha = 0.5;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
   for (let c = cMin; c + 1 <= cMax; c++) {
     const from = cols[c], to = cols[c + 1];
     const order = (m: Map<string, SankeyNode>, k: string) =>
@@ -638,10 +682,11 @@ function sankeyDraw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: nu
   ctx.fillStyle = '#9aa2b1';
   ctx.font = `${8.5 * dpr}px ui-monospace, monospace`;
   const lastTick = d.stages[K - 1].tick;
-  ctx.fillText('width ≈ 1+log₁₀ heads', padX, padT + gh + 11 * dpr);
+  const note = detail ? 'width ≈ 1+log₁₀ heads' : 'width ∝ heads';
+  ctx.fillText(note, padX, padT + gh + 11 * dpr);
   ctx.textAlign = 'center';
   const roomy = pitch >= 46 * dpr;
-  const noteEnd = padX + ctx.measureText('width ≈ 1+log₁₀ heads').width + 6 * dpr;
+  const noteEnd = padX + ctx.measureText(note).width + 6 * dpr;
   for (let c = cMin; c <= cMax; c++) {
     if (!roomy && c !== 0 && c !== K - 1) continue;
     if (c === 0 && !scrolls) continue; // its slot holds the scale note
@@ -695,10 +740,13 @@ function popKeyDraw(): void {
   }
   const st = linData && linData.stages.length
       ? linData.stages[linData.stages.length - 1] : null;
-  // What the ribbons mean, first: the reading is in the kinds.
-  for (const [fill, label, title] of [
+  // What the ribbons mean, first: the reading is in the kinds. Without detail
+  // every ribbon is one kind -- a species, as thick as its count -- and the
+  // key is just the species.
+  for (const [fill, label, title] of !linDetail ? [] : [
     ['#c8cdd580', 'bred', 'descended from a head of the previous stage'],
     ['#c8cdd530', 'held', 'the same body, still alive'],
+    ['#c8cdd55a', 'died', 'a line that ended: nothing of it at the next stage'],
     [WARDEN, 'reseeded', 'a founder the warden landed since the previous stage'],
   ] as const) {
     const el = document.createElement('span');
@@ -724,8 +772,8 @@ function popKeyDraw(): void {
       + `${reseed.get(sp.key) ?? 0} reseeded by the warden`;
     const rgb = liftForDark(sp.rgb);
     el.appendChild(keySwatch(rgb, rgb));
-    el.appendChild(document.createTextNode(
-      `${speciesLabel(sp.key)} ${sp.count} · bred ${bred.get(sp.key) ?? 0} · reseeded ${reseed.get(sp.key) ?? 0}`));
+    el.appendChild(document.createTextNode(`${speciesLabel(sp.key)} ${sp.count}` + (linDetail
+      ? ` · bred ${bred.get(sp.key) ?? 0} · reseeded ${reseed.get(sp.key) ?? 0}` : '')));
     popKey.appendChild(el);
   }
 }
@@ -781,6 +829,7 @@ function popSetMode(m: 'roles' | 'lineages'): void {
   popModeRoles.classList.toggle('on', m === 'roles');
   popModeLin.classList.toggle('on', m === 'lineages');
   popCladeBtn.hidden = m !== 'lineages';
+  popDetail.hidden = m !== 'lineages';
   // The lineage diagram is read at full screen: a column per stage needs the
   // width, and a ribbon one head wide needs the height. Going back to roles
   // gives the chart the size it had.

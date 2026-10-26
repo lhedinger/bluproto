@@ -161,6 +161,7 @@
              image-rendering: auto; touch-action: pan-y; } /* sideways is the lineage diagram's own scroll */
     /* Wraps: the lineage lens can carry a dozen-plus species where roles have
        four, and a legend that clips is a legend that lies by omission. */
+    #pop .pop-detail { align-self: flex-start; margin-top: 4px; font: 11px var(--f-ui); color: var(--dim); }
     #popKey { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px;
               font: 11px/1.6 var(--f-ui); font-variant-numeric: tabular-nums; }
     /* role / lineage / clade: a segmented choice set into the header */
@@ -481,6 +482,8 @@
     <div id="popScroll" class="pop-rail" role="scrollbar" aria-label="scroll the stages"
          aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden><i></i></div>
     <canvas id="popCv"></canvas>
+    <label class="bh-switch pop-detail" id="popDetail" hidden
+           title="every passage: bred and held, reseeds in, lines that ended out"><input type="checkbox"><span class="knob"></span><span>detail</span></label>
     <div id="popKey"></div>
   </div>
   <div id="ovl" class="panel menu">
