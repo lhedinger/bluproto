@@ -603,6 +603,19 @@ public final class ServerMain {
 					"data", java.util.Base64.getEncoder().encodeToString(c)));
 		});
 
+		// Static per-tile flow (speed | dir << 2 | step << 5, 0 still) for the
+		// moving-water layer. Fetched once per level, like the water mask.
+		app.get("/api/world/flow/{z}", ctx -> {
+			byte[] c = host.flow(Integer.parseInt(ctx.pathParam("z")));
+			if (c == null) {
+				ctx.status(404);
+				return;
+			}
+			var w = host.runner().world();
+			ctx.json(Map.of("cols", w.getColums(), "rows", w.getRows(),
+					"data", java.util.Base64.getEncoder().encodeToString(c)));
+		});
+
 		// Tap-to-inspect a tile (debug): type, fertility, live vegetation/food.
 		app.get("/api/world/tile/{z}/{x}/{y}", ctx -> {
 			var d = host.tileDetail(Integer.parseInt(ctx.pathParam("x")),

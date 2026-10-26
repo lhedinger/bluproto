@@ -1232,6 +1232,18 @@ final class WorldHost {
 	}
 
 	/**
+	 * Per-tile moving water for the flow overlay: one byte per tile of level z,
+	 * packed as {@link net.hedinger.prototype.engine.World#getFlow} packs it
+	 * ({@code speed | dir << 2 | step << 5}, 0 still). Static for the life of
+	 * the world, like the water mask beside it, so the client fetches it once
+	 * per level and moves the water the bake can only draw still.
+	 */
+	byte[] flow(int z) {
+		net.hedinger.prototype.engine.World w = runner.world();
+		return z < 0 || z >= w.getLevels() ? null : w.flowLevel(z);
+	}
+
+	/**
 	 * One climate field of one level -- "light", "temperature" or "humidity" --
 	 * quantised to a byte a tile over its own range, with the range alongside
 	 * so the viewer can label a legend in the field's units. Static: the

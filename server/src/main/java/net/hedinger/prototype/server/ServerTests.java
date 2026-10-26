@@ -57,6 +57,7 @@ public final class ServerTests {
 		theBakeIsOpaqueExceptWhereYouCanSeeDown();
 		bandAndWholeBakeAgree();
 		theWaterMaskNamesEachWater();
+		theRiversFlowDownTheirOwnChannels();
 		machineryIsNotInspectedForFoodAndWater();
 		genomeDetailIsTheWholeGenome();
 		aCarcassSaysWhatItIsWorth();
@@ -1232,6 +1233,63 @@ public final class ServerTests {
 		check("the demo surface has all four waters to sparkle: " + java.util.Arrays.toString(seen),
 				seen[1] > 0 && seen[2] > 0 && seen[3] > 0 && seen[4] > 0);
 		check("a level that does not exist has no mask", host.water(99) == null);
+	}
+
+	/**
+	 * The flow the moving-water layer draws is the rivers' own: every tile
+	 * that moves is wet, points at more water downstream (a channel that
+	 * flowed into its own bank would draw marks sliding into the grass), and
+	 * the demo surface has every tier to show -- slow river, brook, rapids.
+	 * A cascade is a step steep enough to break the surface, so it is always
+	 * in rapids; there are few enough (one stretch in thirty, across seeds)
+	 * that one world may have none, and the catalog shows the art regardless.
+	 * Still water stays still: the lakes the rivers run into carry no flow,
+	 * or a lake would drift like a stream.
+	 */
+	static void theRiversFlowDownTheirOwnChannels() {
+		WorldHost host = new WorldHost(42);
+		host.runner().pause();
+		net.hedinger.prototype.engine.World w = host.runner().world();
+		int z = w.getSurfaceZ(), cols = w.getColums();
+		byte[] f = host.flow(z);
+		byte[] m = host.water(z);
+		check("the flow is one byte a tile", f.length == cols * w.getRows());
+		int moving = 0, wet = 0, onward = 0, steps = 0, stepsInRapids = 0, stillWater = 0;
+		int[] tier = new int[4];
+		for (int y = 0; y < w.getRows(); y++) {
+			for (int x = 0; x < cols; x++) {
+				int b = f[y * cols + x] & 0xff;
+				int kind = m[y * cols + x];
+				if (b == 0) {
+					if (kind == 1) {
+						stillWater++;
+					}
+					continue;
+				}
+				moving++;
+				tier[net.hedinger.prototype.engine.World.flowSpeed(b)]++;
+				if (net.hedinger.prototype.engine.World.flowStep(b)) {
+					steps++;
+					stepsInRapids += net.hedinger.prototype.engine.World.flowSpeed(b)
+							== net.hedinger.prototype.engine.World.FLOW_RAPIDS ? 1 : 0;
+				}
+				wet += kind == 1 || kind == 2 ? 1 : 0;
+				int d = net.hedinger.prototype.engine.World.flowDirOf(b);
+				int nx = x + net.hedinger.prototype.engine.World.FLOW_DX[d];
+				int ny = y + net.hedinger.prototype.engine.World.FLOW_DY[d];
+				int nk = m[ny * cols + nx];
+				onward += nk >= 1 && nk <= 2 ? 1 : 0;
+			}
+		}
+		check("the demo surface has rivers that move: " + moving + " tiles", moving > 100);
+		check("every moving tile is water or a ford: " + wet + "/" + moving, wet == moving);
+		check("each one flows on into water, not into its bank: " + onward + "/" + moving,
+				onward >= moving * 0.97);
+		check("slow river, brook and rapids all appear: " + java.util.Arrays.toString(tier),
+				tier[1] > 0 && tier[2] > 0 && tier[3] > 0);
+		check("every cascade is in rapids: " + stepsInRapids + "/" + steps, stepsInRapids == steps);
+		check("the lakes stay still: " + stillWater + " still water tiles", stillWater > moving);
+		check("a level that does not exist has no flow", host.flow(99) == null);
 	}
 
 	/**
