@@ -109,6 +109,18 @@ inventing new ones.
 - **Autotiled edges** — boundaries are *drawn shapes, not noise*: the
   higher-ranked terrain laps 1–3 px into its neighbour in scalloped runs with
   quarter-round corners (`resolveEdge`), deterministic and tile-anchored.
+  **Shorelines are the exception** (`Grid.shoreAt`): where open water or
+  shallows meet open ground, and where deep water meets the shallows round it,
+  the tile mask is smoothed by a tent filter eight art-px wide -- read exactly
+  per pixel, the filter being separable -- and cut at a threshold that wanders
+  with world-position noise. Straight banks stay on the tile line and wander
+  two or three pixels; every bend rounds, either way round; a brook that
+  steps east-south-east-south is a smooth diagonal, and a pond is a pond. The
+  scallop laps drew a tileset's edge, saw-teeth on four-pixel runs with
+  right-angled bends, where a river wants banks. Rock, walls and pits in reach
+  keep their own edges, which are drawn shapes of their own. The moving-water
+  layer (§4) moves water only within its own water and fades out by dither
+  against still water, so neither drags the outline back onto the grid.
 - **Crack networks** — seams for baked ground (badland clay, flagstones):
   the crack colour is the ramp's own shadow shade — "soft creases, never hard
   black lines".
