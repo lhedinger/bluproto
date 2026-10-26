@@ -41,13 +41,19 @@ export function drawRank(e: EntityState): number {
 }
 
 /** Steps longer than this between two poses are a teleport (a ramp, a
- *  respawn), not motion, and must not widen the cull margin for everyone
- *  else. */
+ *  respawn), not motion, and must not widen the cull margin or hurry the
+ *  frame pacing for everyone else. */
 const TELEPORT_TILES = 2;
-/** Updates the worst step is remembered over: enough that a quiet beat does
- *  not narrow the cull margin mid-chase, few enough that a sprint stops
- *  mattering soon after it ends. */
+/** Updates a step measure is remembered over: enough that a quiet beat does
+ *  not drop the pace mid-chase, few enough that a sprint stops mattering soon
+ *  after it ends. */
 const STEP_MEMORY = 8;
+/** Step histogram resolution for the pacer's percentile: 1/16-tile buckets up
+ *  to the teleport bound. */
+const STEP_BUCKET = 16;
+const STEP_BUCKETS = TELEPORT_TILES * STEP_BUCKET;
+/** The share of moving bodies the pacer keeps under its pixel budget. */
+const PACE_QUANTILE = 0.9;
 
 export class WorldState {
   readonly tracks = new Map<number, Track>();
@@ -55,9 +61,12 @@ export class WorldState {
   /** The painter's-order array of every track, rebuilt lazily — see ordered(). */
   private sorted: Track[] = [];
   private sortedStale = true;
-  /** Worst per-update step (tiles) of the last STEP_MEMORY updates, a ring. */
+  /** Worst per-update step (tiles) of the last STEP_MEMORY updates, a ring,
+   *  and beside it the PACE_QUANTILE step of each — see maxStep / paceStep. */
   private steps = new Float64Array(STEP_MEMORY);
+  private paceSteps = new Float64Array(STEP_MEMORY);
   private stepAt = 0;
+  private hist = new Uint32Array(STEP_BUCKETS);
 
   applyFull(msg: FullMsg, now: number): void {
     this.tick = msg.tick;
@@ -70,13 +79,19 @@ export class WorldState {
 
   applyDelta(msg: DeltaMsg, now: number): void {
     this.tick = msg.tick;
-    let worst = 0;
+    let worst = 0, moved = 0;
+    const hist = this.hist;
+    hist.fill(0);
     for (const e of msg.upsert) {
       const t = this.tracks.get(e.id);
       if (t) {
         const dx = e.x - t.curr.x, dy = e.y - t.curr.y;
         const d2 = dx * dx + dy * dy;
-        if (d2 > worst && d2 <= TELEPORT_TILES * TELEPORT_TILES) worst = d2;
+        if (d2 > 0 && d2 <= TELEPORT_TILES * TELEPORT_TILES) {
+          if (d2 > worst) worst = d2;
+          hist[Math.min(STEP_BUCKETS - 1, Math.floor(Math.sqrt(d2) * STEP_BUCKET))]++;
+          moved++;
+        }
         t.prev = t.curr;
         t.tPrev = t.tCurr;
         t.curr = e;
@@ -88,7 +103,20 @@ export class WorldState {
     for (const id of msg.gone) {
       this.tracks.delete(id);
     }
-    this.steps[this.stepAt++ % STEP_MEMORY] = Math.sqrt(worst);
+    // The quantile step: the bucket the PACE_QUANTILE'th mover falls in, by
+    // its upper edge.
+    let pace = 0;
+    if (moved > 0) {
+      const want = PACE_QUANTILE * moved;
+      let seen = 0;
+      for (let b = 0; b < STEP_BUCKETS; b++) {
+        seen += hist[b];
+        if (seen >= want) { pace = (b + 1) / STEP_BUCKET; break; }
+      }
+    }
+    const slot = this.stepAt++ % STEP_MEMORY;
+    this.steps[slot] = Math.sqrt(worst);
+    this.paceSteps[slot] = pace;
     // Any delta can change the order: a birth, a death (corpses rank under
     // the living), a body that walked a ramp in. Sorting once per delta is
     // the saving — the stream beats at 5-10 Hz, the frame at 60.
@@ -117,6 +145,18 @@ export class WorldState {
   maxStep(): number {
     let m = 0;
     for (let i = 0; i < STEP_MEMORY; i++) if (this.steps[i] > m) m = this.steps[i];
+    return m;
+  }
+
+  /** How far a typical fast body moves between updates, in tiles: the
+   *  PACE_QUANTILE step over recent updates. The frame pacer budgets screen
+   *  motion against THIS rather than maxStep: one sprinting hunter would
+   *  otherwise hold the whole map view at full frame rate, and what it gives
+   *  up is that the fastest tenth of the bodies may step a few pixels between
+   *  frames at the far zoom instead of a fraction of one. */
+  paceStep(): number {
+    let m = 0;
+    for (let i = 0; i < STEP_MEMORY; i++) if (this.paceSteps[i] > m) m = this.paceSteps[i];
     return m;
   }
 
