@@ -122,6 +122,7 @@ async function runPath(browser, glParam) {
       scale: +last.scale.toFixed(2),
       frameMsMedian: +med(pick('frameMs')).toFixed(1),
       frameMsP90: +q(pick('frameMs'), 0.9).toFixed(1),
+      drawMsMedian: +med(pick('drawMs')).toFixed(1),
       fpsMedian: +(1000 / med(pick('frameMs'))).toFixed(1),
       drawCalls: Math.round(med(pick('drawCalls'))),
       quads: Math.round(med(pick('quads'))),
@@ -161,9 +162,9 @@ await browser.close();
 for (const run of runs) {
   const label = run.scenarios[0]?.renderer || `gl=${run.glParam}`;
   console.log(`\n=== ${label} · first snapshot ${run.firstFullMs}ms after page start ===`);
-  console.table(run.scenarios.map(({ name, cluster, frameMsMedian, frameMsP90, fpsMedian, drawCalls,
+  console.table(run.scenarios.map(({ name, cluster, frameMsMedian, frameMsP90, drawMsMedian, fpsMedian, drawCalls,
     quads, uploadMsP90, secLayersMed, secEntsMed, secTailMed, streamMs, streamKb, tex, atlases, onLevel }) => ({
-    zoom: name, herd: cluster, 'ms(med)': frameMsMedian, 'ms(p90)': frameMsP90, fps: fpsMedian,
+    zoom: name, herd: cluster, 'ms(med)': frameMsMedian, 'ms(p90)': frameMsP90, 'draw ms': drawMsMedian, fps: fpsMedian,
     calls: drawCalls, quads, 'up(p90)': uploadMsP90,
     layers: secLayersMed, ents: secEntsMed, tail: secTailMed,
     'stream ms': streamMs, kb: streamKb, tex, atlases, onLevel,

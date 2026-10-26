@@ -2062,6 +2062,8 @@ let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0,
   secLayers: 0, secEnts: 0, secTail: 0 };
 let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
 let hudFrameEma = 16.7;
+let hudDrawEma = 16.7; // interval between DRAWN frames — the pacer's output
+let hudLastDraw = 0;
 let hudCbEma = 0; // JS spent INSIDE the rAF callback — the part of the frame that is ours
 let hudLastFrame = 0;
 let hudLastText = 0;
@@ -2197,16 +2199,20 @@ perfBtn.onclick = () => {
   apply.focus();
 };
 
-function hudFrame(now: number): void {
+function hudFrame(now: number, drawn: boolean): void {
   if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
   hudLastFrame = now;
+  if (drawn) {
+    if (hudLastDraw > 0) hudDrawEma += (Math.min(500, now - hudLastDraw) - hudDrawEma) * 0.08;
+    hudLastDraw = now;
+  }
   hudUpMax = Math.max(hudUpMax, hudGl.uploadMs);
   // Structured mirror of the HUD for the automated benchmark (client/bench):
   // numbers, not display text, so the harness never parses a string. Published
   // every frame whether or not the HUD is visible.
   (window as unknown as Record<string, unknown>).__bluPerf = {
     renderer: glr ? 'webgl' : 'canvas2d',
-    frameMs: hudFrameEma,
+    frameMs: hudFrameEma, drawMs: hudDrawEma, paceMs: paceMs(),
     drawCalls: hudGl.drawCalls, quads: hudGl.quads, uploadMs: hudGl.uploadMs,
     secLayers: hudGl.secLayers, secEnts: hudGl.secEnts, secTail: hudGl.secTail,
     streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
@@ -2232,6 +2238,7 @@ function hudFrame(now: number): void {
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'}${perfOffStr ? ` · OFF: ${perfOffStr}` : ''}`
     + ` · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms · cb ${hudCbEma.toFixed(1)})`
+    + ` · draws ${(1000 / hudDrawEma).toFixed(0)}/s (pace ${paceMs().toFixed(0)} ms)`
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
       + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
@@ -2245,11 +2252,48 @@ function hudFrame(now: number): void {
 let lastStats = 0;
 let lastMini = 0;
 let miniCx = NaN, miniCy = NaN, miniScale = NaN;
-let lastFrameAt = 0;
+// ---- frame pacing ----------------------------------------------------------
+// The browser offers 60 frames a second; the world does not need them all.
+// Bodies move a median 0.09 tiles per stream update (measured on the live
+// world), which at the whole-map zoom of ~3 px/tile is a quarter of a pixel
+// per update and a two-hundredth per frame — fifty-nine of every sixty frames
+// redrew a picture nothing had changed. So a frame is drawn when the fastest
+// body on the stream could have moved PACE_PX on screen since the last one,
+// never slower than PACE_FLOOR_MS (births, deaths, decay, the gait and the
+// vegetation repaint all ride on the floor), and at once whenever the camera
+// moved, so a pan or a pinch never waits. Zoomed in, a body crosses PACE_PX in
+// a frame and the pacer asks for all sixty; zoomed out it settles near the
+// floor.
+//
+// "The fastest body" is the 90th-percentile mover (state.paceStep), not the
+// outright fastest: a single sprinting hunter was enough to hold the whole
+// map view at 30 draws a second for everyone else's quarter-pixel. What that
+// gives up: the fastest tenth of the bodies may step a couple of pixels
+// between frames at the far zoom instead of a fraction of one. Everything
+// else loses only sub-pixel motion nobody could see.
+const PACE_PX = 0.5;
+const PACE_FLOOR_MS = 100;
+let lastDrawAt = 0;
+/** The camera as last drawn: a change forces a frame. */
+let drawnCx = NaN, drawnCy = NaN, drawnScale = NaN, drawnLevel = -1, drawnW = 0, drawnH = 0;
+/** Milliseconds a drawn frame may stand before motion would show. */
+function paceMs(): number {
+  if (paused) return PACE_FLOOR_MS;
+  const stepPx = state.paceStep() * cam.scale; // a typical fast body's move per update, on screen
+  if (stepPx <= 0) return PACE_FLOOR_MS;
+  return Math.min(PACE_FLOOR_MS, PACE_PX * Net.streamStats.intervalMs / stepPx);
+}
 function frame(now: number): void {
+  const cameraMoved = cam.cx !== drawnCx || cam.cy !== drawnCy || cam.scale !== drawnScale
+    || currentLevel !== drawnLevel || cv.width !== drawnW || cv.height !== drawnH;
+  if (!cameraMoved && now - lastDrawAt < paceMs()) {
+    hudFrame(now, false);
+    requestAnimationFrame(frame);
+    return;
+  }
   const cb0 = performance.now();
-  advanceGait(lastFrameAt ? now - lastFrameAt : 0, paused ? 0 : (parseFloat(speedSel.value) || 1));
-  lastFrameAt = now;
+  advanceGait(lastDrawAt ? now - lastDrawAt : 0, paused ? 0 : (parseFloat(speedSel.value) || 1));
+  lastDrawAt = now;
   // A fixed fraction behind the interval the stream is actually sending at:
   // the server halves its rate for a big world, and a delay tuned to 10 Hz
   // would run out of interpolation and hold every body still for the second
@@ -2274,6 +2318,11 @@ function frame(now: number): void {
     // within a second — it either takes us to the new level or deselects.
   }
 
+  // Recorded after the follow moved it, so following paces like the bodies
+  // instead of forcing every frame.
+  drawnCx = cam.cx; drawnCy = cam.cy; drawnScale = cam.scale;
+  drawnLevel = currentLevel; drawnW = cv.width; drawnH = cv.height;
+
   const chunkPx = hello ? (hello.chunkPx ?? hello.tileSize) : 0;
   const sel = { id: selectedId, tile: selectedTile };
   if (glr && glLost) {
@@ -2294,7 +2343,7 @@ function frame(now: number): void {
   if (ovlSmell || ovlSound) {
     drawSenseHeat(g, cam, state, renderTime, currentLevel, ovlSmell, ovlSound, now);
   }
-  hudFrame(now);
+  hudFrame(now, true);
   // The minimap is ambient, not mission-critical: entity drift redraws at
   // 4 Hz, but a camera move redraws at once so the viewport rectangle never
   // visibly lags a pan or zoom.
