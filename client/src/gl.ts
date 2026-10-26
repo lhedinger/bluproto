@@ -392,17 +392,19 @@ export class GLRenderer {
       this.gl.bindTexture(this.gl.TEXTURE_2D, tex);
       this.boundKey = key;
     }
-    let o = this.vertCount * 4 * FLOATS_PER_VERT;
+    // Unrolled, no helper closure: this runs once per body per frame, and a
+    // closure allocated per quad was measurable garbage at herd scale.
+    const o = this.vertCount * 4 * FLOATS_PER_VERT;
     const v = this.verts;
-    const put = (x: number, y: number, u: number, vv: number) => {
-      v[o] = x; v[o + 1] = y; v[o + 2] = u; v[o + 3] = vv;
-      v[o + 4] = r; v[o + 5] = g; v[o + 6] = b; v[o + 7] = a; v[o + 8] = mode;
-      o += FLOATS_PER_VERT;
-    };
-    put(dx, dy, u0, v0);
-    put(dx + dw, dy, u1, v0);
-    put(dx + dw, dy + dh, u1, v1);
-    put(dx, dy + dh, u0, v1);
+    const x1 = dx + dw, y1 = dy + dh;
+    v[o] = dx; v[o + 1] = dy; v[o + 2] = u0; v[o + 3] = v0;
+    v[o + 4] = r; v[o + 5] = g; v[o + 6] = b; v[o + 7] = a; v[o + 8] = mode;
+    v[o + 9] = x1; v[o + 10] = dy; v[o + 11] = u1; v[o + 12] = v0;
+    v[o + 13] = r; v[o + 14] = g; v[o + 15] = b; v[o + 16] = a; v[o + 17] = mode;
+    v[o + 18] = x1; v[o + 19] = y1; v[o + 20] = u1; v[o + 21] = v1;
+    v[o + 22] = r; v[o + 23] = g; v[o + 24] = b; v[o + 25] = a; v[o + 26] = mode;
+    v[o + 27] = dx; v[o + 28] = y1; v[o + 29] = u0; v[o + 30] = v1;
+    v[o + 31] = r; v[o + 32] = g; v[o + 33] = b; v[o + 34] = a; v[o + 35] = mode;
     this.vertCount++;
     this.stats.quads++;
   }
