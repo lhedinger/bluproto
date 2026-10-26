@@ -24,7 +24,7 @@ export * from './fixtures';
 export * from './vegArt';
 export * from './fx';
 import type { EntityState } from './protocol';
-import type { Track, WorldState } from './state';
+import type { Pose, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
 
@@ -538,6 +538,41 @@ export function drawDot(g: CanvasRenderingContext2D, x: number, y: number,
   g.fillRect(x - s / 2, y - s / 2, s, s);
 }
 
+/**
+ * Whether a body received at screen (rx, ry) can touch the canvas. `reach` is
+ * everything that can carry its drawing away from that point: its radius on
+ * screen, and one stream step — an interpolated pose lies between the last
+ * two received ones, so it is within a step of the latest, and a cull on the
+ * received pose with that step in the margin is exact. CULL_PX stays for the
+ * badges and rings that hang off a body.
+ *
+ * Culling BEFORE interpolating is the point: at near zoom nearly every body on
+ * the level is off screen, and each used to pay a lerp, an angle lerp and two
+ * projections to find that out.
+ */
+function onScreen(rx: number, ry: number, reach: number, w: number, h: number): boolean {
+  const m = CULL_PX + reach * SPRITE_REACH;
+  return rx >= -m && ry >= -m && rx <= w + m && ry <= h + m;
+}
+/** A sprite's drawn box over its body radius (the atlas cell's padding —
+ *  horns, halos — see ART_RADIUS), rounded up. */
+const SPRITE_REACH = Math.ceil(CELL / (2 * ART_RADIUS));
+
+/** A second pose scratch, for the one place two live at once: a carried body
+ *  and its carrier, whose tether needs both ends. */
+const CARRIER: Pose = { x: 0, y: 0, dir: 0 };
+
+/** The GL texture keys of a phenotype's atlas and its mip, built once: a
+ *  string per body per frame was measurable garbage at herd scale. */
+const atlasKeys = new Map<number, string>();
+const atlasMipKeys = new Map<number, string>();
+function atlasKey(pheno: number, mip: boolean): string {
+  const m = mip ? atlasMipKeys : atlasKeys;
+  let k = m.get(pheno);
+  if (k === undefined) { k = (mip ? 'atlasm:' : 'atlas:') + pheno; m.set(pheno, k); }
+  return k;
+}
+
 /** The walk cycle's clock: wall time scaled by the sim's speed, held while it
  *  is paused. Fed the wall clock, a paused world walked on the spot and a
  *  world at 4× strode at the pace of 1×. */
@@ -667,48 +702,45 @@ export function render(
     g.restore();
   }
 
-  // Painter's order: haze, then dead, then items, then living creatures.
-  const order = (t: Track): number =>
-    t.curr.kind === 'phero' ? 0
-      : t.curr.kind.startsWith('switch.') || t.curr.kind === 'nest' ? 1 // floor fixtures lowest
-      : t.curr.kind.startsWith('door.') ? 2
-      : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
-  // Secondary sort by phenotype: a GPU canvas batches consecutive draws from
-  // the SAME source texture, and each phenotype's atlas is its own texture —
-  // interleaved phenotypes break every batch. Within a class the paint order
-  // is otherwise arbitrary, so grouping by atlas is free.
-  const tracks = [...state.tracks.values()]
-    .sort((a, b) => order(a) - order(b) || a.curr.pheno - b.curr.pheno);
+  // Painter's order (state.drawRank): haze, then dead, then items, then
+  // living creatures, grouped by phenotype — sorted once per stream message,
+  // not once per frame.
+  const tracks = state.ordered();
+  const stepPx = state.maxStep() * cam.scale;
+  const cvW = cv.width, cvH = cv.height;
 
   for (const t of tracks) {
     const e = t.curr;
     if (Math.round(e.z) !== level) continue; // only entities on the shown level
-    const p = state.sample(t, renderTime);
-    const s = cam.worldToScreen(p.x, p.y);
+    // Cull on the RECEIVED pose, before interpolating (see onScreen): the
+    // thousands of bodies off screen at near zoom cost one compare each.
+    const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
 
     // Doors reach up to `span` tiles from their anchor, so they get their own
     // generous cull instead of the point cull below.
     if (e.kind.startsWith('door.')) {
       const m = (e.size + 1) * cam.scale + CULL_PX;
-      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
       drawDoor(g, cam, e);
       continue;
     }
     // A switch's indicator trail reaches its wired door, so cull loosely too.
     if (e.kind.startsWith('switch.')) {
       const m = 8 * cam.scale + CULL_PX;
-      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
       drawSwitch(g, cam, e, state.tracks.get(e.pheno)?.curr);
       continue;
     }
 
-    if (s.x < -CULL_PX || s.y < -CULL_PX || s.x > cv.width + CULL_PX || s.y > cv.height + CULL_PX) continue;
+    if (!onScreen(rx, ry, e.size * cam.scale + stepPx, cvW, cvH)) continue;
+    const p = state.sample(t, renderTime);
+    const sx = cam.screenX(p.x), sy = cam.screenY(p.y);
 
     if (e.kind === 'phero') {
       if (PHERO_OFF) continue;
       const r = Math.max(2, e.size * cam.scale);
       g.imageSmoothingEnabled = true; // the haze's tint stays soft by design
-      g.drawImage(pheroPuff(), s.x - r, s.y - r, r * 2, r * 2);
+      g.drawImage(pheroPuff(), sx - r, sy - r, r * 2, r * 2);
       g.imageSmoothingEnabled = false;
       continue;
     }
@@ -719,18 +751,17 @@ export function render(
     // Carry link under the bodies.
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
-      const cp = state.sample(carrier, renderTime);
-      const cs = cam.worldToScreen(cp.x, cp.y);
-      if (!OVERLAY_OFF) drawCarryLink(g, s.x, s.y, cs.x, cs.y, cam.scale);
+      const cp = state.sample(carrier, renderTime, CARRIER);
+      if (!OVERLAY_OFF) drawCarryLink(g, sx, sy, cam.screenX(cp.x), cam.screenY(cp.y), cam.scale);
     }
 
     if (e.kind === 'nest') {
-      drawNest(g, s.x, s.y, cam.scale);
+      drawNest(g, sx, sy, cam.scale);
       continue;
     }
 
     if (e.kind.startsWith('item.')) {
-      drawItem(g, e.kind, s.x, s.y, r, '#' + e.rgb.toString(16).padStart(6, '0'));
+      drawItem(g, e.kind, sx, sy, r, '#' + e.rgb.toString(16).padStart(6, '0'));
       continue;
     }
 
@@ -741,8 +772,8 @@ export function render(
     if (e.kind === 'npc.stewarddrone' || e.kind === 'npc.facilityloader') {
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
-      if (e.kind === 'npc.facilityloader') drawLoader(g, s.x, s.y, cam.scale, dc);
-      else drawSentinel(g, s.x, s.y, cam.scale, dc);
+      if (e.kind === 'npc.facilityloader') drawLoader(g, sx, sy, cam.scale, dc);
+      else drawSentinel(g, sx, sy, cam.scale, dc);
       continue;
     }
 
@@ -752,7 +783,7 @@ export function render(
     const bodyPx = e.size * cam.scale * 2;
     if (e.flags & F_DEAD) {
       if (dots) {
-        drawDot(g, s.x, s.y, bodyPx, '', true);
+        drawDot(g, sx, sy, bodyPx, '', true);
         continue;
       }
       // A corpse keeps its body and loses its colour. It is not decoration: it
@@ -778,10 +809,10 @@ export function render(
           ? corpseFor(e.pheno, dead, e.aux)
           : corpseMipFor(e.pheno, dead, e.aux);
         g.drawImage(src, dc * c, dr * c, c, c,
-          s.x - box / 2, s.y - box / 2, box, box);
+          sx - box / 2, sy - box / 2, box, box);
       } else {
         g.fillStyle = hex(PENDING_RGB); // no sprite yet: a spent dot, no marker over it
-        g.beginPath(); g.arc(s.x, s.y, r, 0, 7); g.fill();
+        g.beginPath(); g.arc(sx, sy, r, 0, 7); g.fill();
       }
       continue;
     }
@@ -793,7 +824,7 @@ export function render(
     // fetch takes instead.
     const atlas = dots ? null : atlasFor(e.pheno);
     if (dots) {
-      drawDot(g, s.x, s.y, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
+      drawDot(g, sx, sy, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
     } else if (atlas) {
       const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
       // Sticky heading bucket (see atlas.headingCol): neighbouring columns are
@@ -810,15 +841,15 @@ export function render(
         // Far zoom: one stamp from the quarter-size mip, tinted at mip size.
         const c = CELL / MIP;
         const src = tintedFor(e.pheno, e.rgb, atlasMipFor(e.pheno, atlas), true);
-        g.drawImage(src, cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box);
+        g.drawImage(src, cc * c, rr * c, c, c, sx - box / 2, sy - box / 2, box, box);
       } else {
         const src = tintedFor(e.pheno, e.rgb, atlas);
-        g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, s.x - box / 2, s.y - box / 2, box, box);
+        g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, sx - box / 2, sy - box / 2, box, box);
       }
     } else {
       // The colour string is built only here: the atlas path never needs it,
       // and building one per creature per frame is measurable at herd scale.
-      drawPlaceholder(g, s.x, s.y, r, p.dir,
+      drawPlaceholder(g, sx, sy, r, p.dir,
         '#' + e.rgb.toString(16).padStart(6, '0'));
     }
 
@@ -830,18 +861,18 @@ export function render(
     // zoomed-out map view. Badges therefore fade out as you pull back and appear
     // as you zoom in on what a creature is actually doing.
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
-      if (!OVERLAY_OFF) drawActionGlyph(g, s.x, s.y - r * 2.0, r * 0.95, actionOf(e.flags));
+      if (!OVERLAY_OFF) drawActionGlyph(g, sx, sy - r * 2.0, r * 0.95, actionOf(e.flags));
     }
 
     if (OVERLAY_OFF) { /* badges, rings and links are the experiment's cost */ }
-    else if (e.flags & F_GRABBED) drawRing(g, 'grabbed', s.x, s.y, r);
-    else if (e.flags & F_CARRYING) drawRing(g, 'carrying', s.x, s.y, r);
+    else if (e.flags & F_GRABBED) drawRing(g, 'grabbed', sx, sy, r);
+    else if (e.flags & F_CARRYING) drawRing(g, 'carrying', sx, sy, r);
 
     // Follow highlight: a gentle pulsing ring around the tracked creature.
-    if (cam.followId === e.id) drawRing(g, 'follow', s.x, s.y, r, renderTime);
+    if (cam.followId === e.id) drawRing(g, 'follow', sx, sy, r, renderTime);
     // Selection highlight: a steady amber ring on the inspected creature, so it's
     // obvious which one the panel describes (distinct from the follow pulse).
-    if (selection.id === e.id) drawRing(g, 'selected', s.x, s.y, r);
+    if (selection.id === e.id) drawRing(g, 'selected', sx, sy, r);
   }
 
   // Concealment over the creatures: anything standing in a walkable
@@ -864,9 +895,12 @@ export function render(
     // neighbourhood Grid.renderConcealment veils), and an empty duct shows
     // its floor.
     const lids = new Set<number>();
+    const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
     for (const t of tracks) {
       const e = t.curr;
       if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
+      if (rx < -lidPad || ry < -lidPad || rx > cvW + lidPad || ry > cvH + lidPad) continue;
       const ex = Math.floor(e.x), ey = Math.floor(e.y);
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -1372,40 +1406,39 @@ export function renderGL(
   const ovGlyphs: Array<[number, number, number, number]> = [];
   const ovRings: Array<['grabbed' | 'carrying' | 'follow' | 'selected', number, number, number]> = [];
 
-  const order = (t: Track): number =>
-    t.curr.kind === 'phero' ? 0
-      : t.curr.kind.startsWith('switch.') || t.curr.kind === 'nest' ? 1
-      : t.curr.kind.startsWith('door.') ? 2
-      : (t.curr.flags & F_DEAD) ? 2 : t.curr.kind.startsWith('item.') ? 3 : 4;
-  const tracks = [...state.tracks.values()]
-    .sort((a, b) => order(a) - order(b) || a.curr.pheno - b.curr.pheno);
+  // Painter's order (state.drawRank), sorted once per stream message.
+  const tracks = state.ordered();
+  const stepPx = state.maxStep() * cam.scale;
+  const cvW = cv.width, cvH = cv.height;
 
   for (const t of tracks) {
     const e = t.curr;
     if (Math.round(e.z) !== level) continue;
-    const p = state.sample(t, renderTime);
-    const s = cam.worldToScreen(p.x, p.y);
+    // Cull on the RECEIVED pose, before interpolating (see onScreen).
+    const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
 
     if (e.kind.startsWith('door.')) {
       const m = (e.size + 1) * cam.scale + CULL_PX;
-      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
       ovDoors.push(e);
       continue;
     }
     if (e.kind.startsWith('switch.')) {
       const m = 8 * cam.scale + CULL_PX;
-      if (s.x < -m || s.y < -m || s.x > cv.width + m || s.y > cv.height + m) continue;
+      if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
       ovSwitches.push([e, state.tracks.get(e.pheno)?.curr]);
       continue;
     }
 
-    if (s.x < -CULL_PX || s.y < -CULL_PX || s.x > cv.width + CULL_PX || s.y > cv.height + CULL_PX) continue;
+    if (!onScreen(rx, ry, e.size * cam.scale + stepPx, cvW, cvH)) continue;
+    const p = state.sample(t, renderTime);
+    const sx = cam.screenX(p.x), sy = cam.screenY(p.y);
 
     if (e.kind === 'phero') {
       if (PHERO_OFF) continue;
       const r = Math.max(2, e.size * cam.scale);
       const puff = pheroPuff();
-      glr.sprite('phero', puff, 1, 0, 0, puff.width, puff.height, s.x - r, s.y - r, r * 2, r * 2);
+      glr.sprite('phero', puff, 1, 0, 0, puff.width, puff.height, sx - r, sy - r, r * 2, r * 2);
       continue;
     }
     if (e.kind === 'sound') continue; // an event, not a body: the sense overlay draws it
@@ -1414,16 +1447,15 @@ export function renderGL(
 
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
-      const cp = state.sample(carrier, renderTime);
-      const cs = cam.worldToScreen(cp.x, cp.y);
-      ovLinks.push([s.x, s.y, cs.x, cs.y]);
+      const cp = state.sample(carrier, renderTime, CARRIER);
+      ovLinks.push([sx, sy, cam.screenX(cp.x), cam.screenY(cp.y)]);
     }
 
     if (e.kind === 'nest') {
       const stamp = nestStamp();
       const px = cam.scale / ART;
       glr.sprite('nest', stamp, 1, 0, 0, 11, 9,
-        s.x - 5.5 * px, s.y - 4.5 * px, 11 * px, 9 * px);
+        sx - 5.5 * px, sy - 4.5 * px, 11 * px, 9 * px);
       continue;
     }
 
@@ -1432,7 +1464,7 @@ export function renderGL(
       const k = r / ITEM_R;
       const side = ITEM_STAMP * k;
       glr.sprite('item:' + e.kind + ':' + e.rgb, stamp, 1, 0, 0, ITEM_STAMP, ITEM_STAMP,
-        s.x - side / 2, s.y - side / 2, side, side);
+        sx - side / 2, sy - side / 2, side, side);
       continue;
     }
 
@@ -1448,7 +1480,7 @@ export function renderGL(
       const dc = headingCol(p.dir, t.col ?? -1);
       t.col = dc;
       glr.sprite(loader ? 'loader' : 'drone', stamp, 1, cell * dc, 0, cell, cell,
-        s.x - dst / 2, s.y - dst / 2, dst, dst);
+        sx - dst / 2, sy - dst / 2, dst, dst);
       continue;
     }
 
@@ -1456,7 +1488,7 @@ export function renderGL(
     if (e.flags & F_DEAD) {
       if (dots) {
         const sq = bodyPx;
-        glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq, CORPSE_F[0], CORPSE_F[1], CORPSE_F[2], 1);
+        glr.quad(sx - sq / 2, sy - sq / 2, sq, sq, CORPSE_F[0], CORPSE_F[1], CORPSE_F[2], 1);
         continue;
       }
       const dead = atlasFor(e.pheno);
@@ -1471,9 +1503,9 @@ export function renderGL(
         const corpse = c === CELL
           ? corpseFor(e.pheno, dead, e.aux) : corpseMipFor(e.pheno, dead, e.aux);
         glr.sprite((c === CELL ? 'corpse:' : 'corpsem:') + e.pheno + ':' + decayStage(e.aux),
-          corpse, 1, dc * c, 0, c, c, s.x - box / 2, s.y - box / 2, box, box);
+          corpse, 1, dc * c, 0, c, c, sx - box / 2, sy - box / 2, box, box);
       } else {
-        glr.quad(s.x - r, s.y - r, r * 2, r * 2, PENDING_F[0], PENDING_F[1], PENDING_F[2], 1);
+        glr.quad(sx - r, sy - r, r * 2, r * 2, PENDING_F[0], PENDING_F[1], PENDING_F[2], 1);
       }
       continue;
     }
@@ -1486,7 +1518,7 @@ export function renderGL(
       // block while the sprite streams in): solid quads, batched together.
       const sq = dots ? bodyPx : r * 1.4;
       const rgb = e.rgb;
-      glr.quad(s.x - sq / 2, s.y - sq / 2, sq, sq,
+      glr.quad(sx - sq / 2, sy - sq / 2, sq, sq,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
     } else {
       const box = r * 2 * (CELL / (2 * ART_RADIUS));
@@ -1500,21 +1532,20 @@ export function renderGL(
       // screen at once, and only the small mip textures can all stay resident.
       const c = box <= CELL / MIP ? CELL / MIP : CELL;
       const src = c === CELL ? atlas : atlasMipFor(e.pheno, atlas);
-      const key = c === CELL ? 'atlas:' : 'atlasm:';
       // The atlas is colour-neutral (one per SHAPE); the creature's rgb rides
       // the quad and the ramp shader re-tints it — see gl.ts mode 1.
-      glr.sprite(key + e.pheno, src, 1,
-        cc * c, rr * c, c, c, s.x - box / 2, s.y - box / 2, box, box, 1, e.rgb);
+      glr.sprite(atlasKey(e.pheno, c !== CELL), src, 1,
+        cc * c, rr * c, c, c, sx - box / 2, sy - box / 2, box, box, 1, e.rgb);
     }
 
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
       const act = actionOf(e.flags);
-      if (act) ovGlyphs.push([s.x, s.y - r * 2.0, r * 0.95, act]);
+      if (act) ovGlyphs.push([sx, sy - r * 2.0, r * 0.95, act]);
     }
-    if (e.flags & F_GRABBED) ovRings.push(['grabbed', s.x, s.y, r]);
-    else if (e.flags & F_CARRYING) ovRings.push(['carrying', s.x, s.y, r]);
-    if (cam.followId === e.id) ovRings.push(['follow', s.x, s.y, r]);
-    if (selection.id === e.id) ovRings.push(['selected', s.x, s.y, r]);
+    if (e.flags & F_GRABBED) ovRings.push(['grabbed', sx, sy, r]);
+    else if (e.flags & F_CARRYING) ovRings.push(['carrying', sx, sy, r]);
+    if (cam.followId === e.id) ovRings.push(['follow', sx, sy, r]);
+    if (selection.id === e.id) ovRings.push(['selected', sx, sy, r]);
   }
 
   lap('secEnts');
@@ -1527,9 +1558,12 @@ export function renderGL(
       glr.layer('canopy:' + level, canopy, canopyRev, canopyPatchRects, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
     }
     const lids = new Set<number>();
+    const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
     for (const t of tracks) {
       const e = t.curr;
       if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+      const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
+      if (rx < -lidPad || ry < -lidPad || rx > cvW + lidPad || ry > cvH + lidPad) continue;
       const ex = Math.floor(e.x), ey = Math.floor(e.y);
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -1795,15 +1829,18 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
   if (BELOW_OFF || level - 1 < 0) return out;
   const f = parallaxFactor(cam.scale); // the same factor the ground below slid by
   const cx = w / 2, cy = h / 2;
+  const stepPx = state.maxStep() * cam.scale * f;
   for (const t of state.tracks.values()) {
     const e = t.curr;
     if (Math.round(e.z) !== level - 1) continue;
     const k = e.kind;
     if (!k.startsWith('npc.') && !k.startsWith('item.')) continue;
+    // Cull on the received pose before interpolating (see onScreen); the
+    // parallax shrinks the step along with everything else.
+    const rx = cx + (cam.screenX(e.x) - cx) * f, ry = cy + (cam.screenY(e.y) - cy) * f;
+    if (!onScreen(rx, ry, stepPx, w, h)) continue;
     const p = state.sample(t, renderTime);
-    const s = cam.worldToScreen(p.x, p.y);
-    const sx = cx + (s.x - cx) * f, sy = cy + (s.y - cy) * f;
-    if (sx < -20 || sy < -20 || sx > w + 20 || sy > h + 20) continue;
+    const sx = cx + (cam.screenX(p.x) - cx) * f, sy = cy + (cam.screenY(p.y) - cy) * f;
     out.push({
       x: sx, y: sy,
       px: Math.max(3, e.size * cam.scale * f * 1.6),

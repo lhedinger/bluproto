@@ -39,6 +39,16 @@ export class Camera {
     };
   }
 
+  /** worldToScreen, one axis at a time: no object per call, for the entity
+   *  walk that projects every body on the level every frame. */
+  screenX(x: number): number {
+    return this.canvas.width / 2 + (x - this.cx) * this.scale;
+  }
+
+  screenY(y: number): number {
+    return this.canvas.height / 2 + (y - this.cy) * this.scale;
+  }
+
   screenToWorld(px: number, py: number): { x: number; y: number } {
     return {
       x: this.cx + (px - this.canvas.width / 2) / this.scale,
