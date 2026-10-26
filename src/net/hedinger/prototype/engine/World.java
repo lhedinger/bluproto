@@ -1285,6 +1285,93 @@ public class World {
 		return climate;
 	}
 
+	// ---- moving water --------------------------------------------------------
+	/**
+	 * Which way, and how fast, the water on a tile is moving: one byte a tile
+	 * a level, written by whoever lays the water (the river carver today) and
+	 * read only by the art. Zero is still water -- a lake, a pond, a pool.
+	 *
+	 * <p>STORED, for the reason a ramp's uphill side and a belt's run are
+	 * stored (see {@link Tile#getBeltRun}): a channel has an upstream end and
+	 * a downstream end, and no arrangement of the water around a tile can say
+	 * which is which. Held here rather than on the Tile because a tile is
+	 * replaced whenever it is written, and the passes after the rivers (the
+	 * shore fringe, a later river crossing) would wipe it.
+	 *
+	 * <p>Packed {@code speed | dir << 2 | step << 5}: speed one of the
+	 * {@code FLOW_*} tiers, dir the eight compass points clockwise from east
+	 * ({@link #FLOW_DX}, {@link #FLOW_DY}), step set where the bed drops
+	 * sharply enough to break the surface across the channel (a cascade).
+	 */
+	private byte[][] flow;
+	public static final int FLOW_STILL = 0, FLOW_SLOW = 1, FLOW_STREAM = 2, FLOW_RAPIDS = 3;
+	/** Unit steps of the eight flow directions, clockwise from east (y down). */
+	public static final int[] FLOW_DX = { 1, 1, 0, -1, -1, -1, 0, 1 };
+	public static final int[] FLOW_DY = { 0, 1, 1, 1, 0, -1, -1, -1 };
+
+	/** The direction index of a unit step, or -1 for (0, 0). */
+	public static int flowDir(int dx, int dy) {
+		for (int i = 0; i < 8; i++) {
+			if (FLOW_DX[i] == Integer.signum(dx) && FLOW_DY[i] == Integer.signum(dy)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	/** Sets the water on a tile moving {@code dir} at {@code speed}; a speed of
+	 *  {@link #FLOW_STILL} makes it still. */
+	public void setFlow(int c, int r, int l, int dir, int speed, boolean step) {
+		if (!isValid(c, r, l)) {
+			return;
+		}
+		if (flow == null) {
+			flow = new byte[levels.length][];
+		}
+		if (flow[l] == null) {
+			flow[l] = new byte[cols * rows];
+		}
+		flow[l][r * cols + c] = (byte) (speed == FLOW_STILL ? 0
+				: (speed & 3) | (dir & 7) << 2 | (step ? 1 << 5 : 0));
+	}
+
+	/** The packed flow of a tile (0 still; see {@link #flow}). Moving water
+	 *  needs water: a tile written over since the river was laid -- a ramp cut
+	 *  into the bank, a slab -- has no flow, whatever its byte still says. */
+	public int getFlow(int c, int r, int l) {
+		if (flow == null || !isValid(c, r, l) || flow[l] == null) {
+			return 0;
+		}
+		Tile.TileType t = levels[l].getTile(c, r).getType();
+		return t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS
+				? flow[l][r * cols + c] & 0xff : 0;
+	}
+
+	public static int flowSpeed(int packed) {
+		return packed & 3;
+	}
+
+	public static int flowDirOf(int packed) {
+		return (packed >> 2) & 7;
+	}
+
+	public static boolean flowStep(int packed) {
+		return (packed & (1 << 5)) != 0;
+	}
+
+	/** A copy of one level's flow bytes, row-major (all zero where nothing moves). */
+	public byte[] flowLevel(int l) {
+		byte[] out = new byte[cols * rows];
+		if (flow != null && l >= 0 && l < levels.length && flow[l] != null) {
+			for (int r = 0; r < rows; r++) {
+				for (int c = 0; c < cols; c++) {
+					out[r * cols + c] = (byte) getFlow(c, r, l);
+				}
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * Which map the sightlines were traced on. Advances on every change to
 	 * what a ray can cross -- a tile written, a door swung -- so a sightline
