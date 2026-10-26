@@ -393,6 +393,12 @@ public final class Mechanics {
 						+ "for every ten degrees the air at the body is over its floor's own temperature -- "
 						+ "the Q10 of decomposition. Read once, where the body fell. On the meadow and in "
 						+ "the undisturbed cave the clocks run as they always did."),
+				row("Dry air, on a carcass", num(NPC.ROT_DRY_SLOW), "of the clock at zero humidity",
+						"Decomposition slows as the air dries: the clock runs whole in saturated air and "
+						+ "this share of it in bone-dry air, linearly between, against what the floor's own "
+						+ "undisturbed air leaves running. A body on a pond's margin turns and thins faster "
+						+ "than one on the sand; one at a vent's mouth gets some of its warm-air hurry back "
+						+ "from the heat having dried the air. Compounds with the warm-air term; read once."),
 				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
 						"Holds together early and thins out late, reaching nothing exactly as the corpse "
 						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "

@@ -872,14 +872,42 @@ public abstract class NPC extends Entity {
 	 *  corpse does not move and the air does not change. */
 	@Unit("x per 10 deg C")
 	public static double ROT_Q10 = 2.0;
+	/** The share of the rot clock that still runs in bone-dry air: decomposition
+	 *  slows as the air dries, linearly from the whole clock at saturation to
+	 *  this much at zero humidity, and the floor's own undisturbed air reads
+	 *  exactly 1 so the meadow and the cave keep the clocks they always had.
+	 *  A body on a pond's margin turns and thins faster than one on the sand;
+	 *  one at a vent's mouth, where the heat has dried the air, gets some of
+	 *  its warm-air hurry back. */
+	@Unit("share of the clock at zero humidity")
+	public static double ROT_DRY_SLOW = 0.5;
 	/** The air's multiplier on this corpse's clocks, fixed at death. */
 	private double rotPace = 1.0;
 
 	/** The air's multiplier on spoilage and rot where this body lies:
-	 *  {@link #ROT_Q10} to the power of the tenths of a degree the air is over
-	 *  the floor's own temperature. 1 where there is no world to read. */
+	 *  {@link #rotPace(double, double, double, double)} of the air at the body
+	 *  against its floor's own. 1 where there is no world to read. */
 	public double rotPace() {
 		return rotPace;
+	}
+
+	/**
+	 * The air's multiplier on a corpse's clocks: {@link #ROT_Q10} to the power
+	 * of the tenths of a degree the air is over the floor's own temperature,
+	 * times how much of the clock the air's humidity leaves running against
+	 * what the floor's own undisturbed air leaves. Both terms read exactly 1
+	 * in that reference air, so the law changes nothing where nothing is
+	 * different and compounds where a vent or a pond makes the air its own.
+	 *
+	 * @param t    temperature at the body, degrees C
+	 * @param base the floor's own base temperature
+	 * @param h    humidity at the body, 0..1
+	 * @param href the floor's own undisturbed humidity
+	 */
+	public static double rotPace(double t, double base, double h, double href) {
+		double wet = ROT_DRY_SLOW + (1 - ROT_DRY_SLOW) * h;
+		double ref = ROT_DRY_SLOW + (1 - ROT_DRY_SLOW) * href;
+		return Math.pow(ROT_Q10, (t - base) / 10.0) * wet / ref;
 	}
 
 	/** Fresh meat on this corpse, in body-mass units; 0 for the living and for
@@ -2007,11 +2035,14 @@ public abstract class NPC extends Entity {
 			eaten = 0;
 			spoiled = 0;
 			// The air where the body fell sets the pace of its clocks from here:
-			// warm air spoils and rots it faster, cold air slower, by the Q10.
+			// warm air spoils and rots it faster, cold air slower, by the Q10;
+			// damp air faster and dry air slower, against the floor's own air.
 			if (getWorld() != null) {
 				double t = getWorld().climate().temperatureAt(X, Y, getLvl());
 				double base = net.hedinger.prototype.engine.Climate.baseTemperature(getWorld(), getLvl());
-				rotPace = Math.pow(ROT_Q10, (t - base) / 10.0);
+				double h = getWorld().climate().humidityAt(X, Y, getLvl());
+				double href = net.hedinger.prototype.engine.Climate.referenceHumidity(getWorld(), getLvl());
+				rotPace = rotPace(t, base, h, href);
 				if (deathspan > 0) {
 					deathspan = Math.max(1, (int) Math.round(deathspan / rotPace)); // 0 is "gone at once" and stays so
 				}
