@@ -5603,6 +5603,79 @@ public class SimTests {
 	 * coolant run both lag it by the bell's share, and the cave's fungus bed in
 	 * undisturbed cave air climbs at its own full pace.
 	 */
+	/**
+	 * The sward grows by its light, and the fungus does not.
+	 *
+	 * <p>Section 4.4 of the climate plan, the plant half: a saturating light
+	 * response on the regrowth rate. Five tiles, every one at its floor's own
+	 * temperature and humidity so the light term is pinned alone. Under the
+	 * sky: open meadow, which is the reference and reads exactly the old rate;
+	 * and a tall grass, which the light raster halves for the bodies hiding in
+	 * it but which is not shaded by itself, so it too reads the old rate and
+	 * the surface is as it was. In the cave: a sward under the dim light that
+	 * falls through a hole in the roof, which grows at the response's share;
+	 * a sward laid in the dark of a cave with no hole, which grows nothing at
+	 * all; and a fungus bed in that dark, which grows at the fungus's own rate
+	 * as it always did. Then
+	 * a spell of regrowth from a grazed-down state shows the order in the
+	 * grass itself.
+	 */
+	static class TheSwardGrowsByItsLight extends Scenario {
+		@Override
+		public void run() {
+			seed(75);
+			World w = room(30, 12, 2);
+			w.setTile(23, 5, 1, Tile.TileType.TYPE_TALLGRASS);
+			w.setTile(10, 5, 1, Tile.TileType.TYPE_HOLE); // a hole in the cave's roof
+			int mx = 12, my = 5; // two steps into the cave from the light that falls through it
+			double dim = w.climate().lightAt(mx + 0.5, my + 0.5, 0);
+			assertGreater("two tiles from the hole the cave is dim, not dark", dim, 0.3);
+			assertLess("and dim, not lit", dim, 0.9);
+			// Light fades by a step and never quite reaches nothing in an open
+			// cave with a hole in it, so the dark cases get a cave of their own,
+			// with no hole at all.
+			World cave = room(12, 12, 2);
+			int fx = 3, fy = 3, dx = 8, dy = 8;
+			cave.setTile(fx, fy, 0, Tile.TileType.TYPE_FUNGUS);
+			assertNear("a cave with no hole is dark", 0.0, cave.climate().lightAt(dx + 0.5, dy + 0.5, 0), 1e-12);
+			Tile meadow = w.getTile(6, 5, 1), tall = w.getTile(23, 5, 1), dimmed = w.getTile(mx, my, 0), buried = cave.getTile(dx, dy, 0), fungus = cave.getTile(fx, fy, 0);
+			net.hedinger.prototype.engine.Climate c = w.climate();
+			assertNear("the open meadow is in full sun", 1.0, c.lightAt(6.5, 5.5, 1), 1e-12);
+			assertNear("a body in the tall grass sees half of it", net.hedinger.prototype.engine.Climate.LIGHT_THROUGH_COVER, c.lightAt(23.5, 5.5, 1), 1e-12);
+			assertNear("but the grass itself has the whole sun on it", 1.0, c.lightOn(w, 23.5, 5.5, 1), 1e-12);
+			assertNear("the cave's dim tile still reads its dim light", dim, c.lightOn(w, mx + 0.5, my + 0.5, 0), 1e-12);
+			assertNear("the meadow grows at the sward's own rate", 1.0, meadow.sunlight(), 1e-12);
+			assertNear("and so does the tall grass: a plant is not shaded by itself", 1.0, tall.sunlight(), 1e-12);
+			assertNear("the dim cave sward at the response's share", dim * (1 + Tile.PLANT_SHADE_K) / (dim + Tile.PLANT_SHADE_K), dimmed.sunlight(), 1e-12);
+			assertLess("which is under the full rate", dimmed.sunlight(), 0.95);
+			assertGreater("and well over the light's own share, as the response saturates", dimmed.sunlight(), dim + 0.05);
+			assertNear("the buried sward grows nothing", 0.0, buried.sunlight(), 1e-12);
+			assertNear("the fungus bed reads no light at all", 1.0, fungus.sunlight(), 1e-12);
+			assertNear("and grows at the fungus's own rate", Tile.FUNGUS_REGROW, fungus.regrowRate(), Tile.FUNGUS_REGROW * 0.01);
+			assertNear("the meadow's rate is the old rate within a hair", Tile.GRASS_REGROW, meadow.regrowRate(), Tile.GRASS_REGROW * 0.01);
+			tick(w, 1);
+			tick(cave, 1);
+			for (Tile t : new Tile[] { meadow, tall, dimmed }) {
+				t.setFertility(1.0);
+				t.graze(w.getTick(), t.getVegetation(w.getTick()) - 0.4 * t.vegetationCap());
+			}
+			buried.setFertility(1.0);
+			buried.graze(cave.getTick(), buried.getVegetation(cave.getTick()) - 0.4 * buried.vegetationCap());
+			double buriedStart = buried.getVegetation(cave.getTick());
+			tick(w, 400);
+			tick(cave, 400);
+			long now = w.getTick();
+			double sun = meadow.getVegetation(now) / meadow.vegetationCap();
+			double tallShare = tall.getVegetation(now) / tall.vegetationCap();
+			double dimShare = dimmed.getVegetation(now) / dimmed.vegetationCap();
+			assertGreater("the meadow climbs", sun, 0.5);
+			assertNear("the tall grass climbs with it, to the tick", sun, tallShare, 1e-9);
+			assertGreater("the dim cave sward climbs too", dimShare, 0.4);
+			assertLess("but behind the meadow", dimShare, sun - 0.02);
+			assertNear("the buried sward stands where it was grazed to", buriedStart, buried.getVegetation(cave.getTick()), 1e-9);
+		}
+	}
+
 	static class TheSwardGrowsAtThePaceOfItsAir extends Scenario {
 		@Override
 		public void run() {
@@ -6525,10 +6598,12 @@ public class SimTests {
 			World w = room(7, 7, 2);
 			w.setTile(2, 2, 0, Tile.TileType.TYPE_FUNGUS);
 			w.setTile(2, 2, 1, Tile.TileType.TYPE_FUNGUS);
-			w.setTile(4, 4, 0, Tile.TileType.TYPE_ROCKY);
+			// The rocky ground sits under the sky with the meadow it is compared
+			// to: a sward grows by its light, and a cave tile may be dark.
+			w.setTile(5, 5, 1, Tile.TileType.TYPE_ROCKY);
 			w.setTile(4, 4, 1, Tile.TileType.TYPE_TALLGRASS);
 			Tile caveFungus = w.getTile(2, 2, 0), skyFungus = w.getTile(2, 2, 1);
-			Tile rocky = w.getTile(4, 4, 0), tall = w.getTile(4, 4, 1), meadow = w.getTile(3, 3, 1);
+			Tile rocky = w.getTile(5, 5, 1), tall = w.getTile(4, 4, 1), meadow = w.getTile(3, 3, 1);
 			tick(w, 1); // the clock off zero
 			for (Tile t : new Tile[] { caveFungus, skyFungus, rocky, tall, meadow }) {
 				t.setFertility(1.0);
@@ -20897,6 +20972,7 @@ public class SimTests {
 				new TheSwardGrowsAtThePaceOfItsAir(),
 				new ACarcassRotsFasterInWarmAir(),
 				new ACarcassTurnsFasterInDampAir(),
+				new TheSwardGrowsByItsLight(),
 				new ExploreNeverPicksBlockedGround(),
 				new ExploreLeansWhereItFaces(),
 				new ExplorePointsLieInsideANeighbour(),

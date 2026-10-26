@@ -557,6 +557,15 @@ public final class Mechanics {
 						+ "temperature, this wide: exactly the old rate on any undisturbed tile of any "
 						+ "floor, slower in the ground a vent warms or the coolant run chills, nothing "
 						+ "at or below freezing. Temperature sets the pace of growth, water its bulk."),
+				row("Light, on the grass", num(Tile.PLANT_SHADE_K), "of the sky for half pace",
+						"The sward's regrowth rate is also times its light response, L (1 + K) / (L + K) "
+						+ "with K this: the first light is worth the most, as photosynthesis saturates. "
+						+ "Read as the light that falls on the tile, not what a body under its canopy sees, "
+						+ "so a tall grass is not shaded by itself and every sward under the sky grows at "
+						+ "exactly the full rate. In a cave a sward grows by what reaches it through a hole "
+						+ "or off a grating -- about 0.84 two tiles in from a hole, half at a quarter sun -- "
+						+ "and not at all in the dark. The fungus is the cave's plant and reads none of it, "
+						+ "so the two plants never compete on light."),
 				row("Moist air, on the grass", num(Tile.MOIST_CAP_MIN) + " .. " + num(Tile.MOIST_CAP_MAX), "x the cap",
 						"A tile's vegetation cap is its fertility times the air's share: the humidity "
 						+ "here against the air its plant was tuned in, open ground in full sun for the "
