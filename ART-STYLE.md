@@ -202,9 +202,16 @@ One sun, straight overhead-north. The grammar:
   sunk band of deeper water below the step. Three speeds, one grammar (slow
   0.05, brook 0.12, rapids 0.4 art-px a tick), all on the sim tick; drawn
   under every body and plant, so a swimmer is never painted over; from 12 px
-  a tile up only, like the glints. Waterfalls between levels -- over a pit's
-  lip, down a cliff face, into a plunge pool -- are drawn on the exploration
-  sheet and wait for water that can actually cross a level.
+  a tile up only, like the glints. Where water changes level it carries
+  a mark (`World.FLOW_FALL`, `FLOW_PLUNGE`). The **lip** of a fall breaks
+  white along the edge it pours over, and the **sheet** is drawn into the drop
+  ahead -- streaks running down fast in the water ramp, the shallows
+  highlight on their leading ends, thinning by ordered dither with every
+  art-pixel of fall until the pit veil's dark takes them, and only in lanes
+  where water reaches the lip, so a fall is as wide as its river. A storey
+  down, the **plunge pool** churns at its core in the shallows ramp and sends
+  out ripple rings -- authored stamps, radius 4, 7 and 10, the newest in the
+  highlight and the one before in the base -- one every eight ticks.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `parallaxFactor(scale)` =
   1 / (1 + scale / `PARALLAX_ZOOM`), with `PARALLAX_ZOOM` 500 and the scale in
