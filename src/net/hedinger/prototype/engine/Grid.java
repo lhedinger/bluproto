@@ -541,9 +541,14 @@ public class Grid {
 						String code = t.getTileCode();
 						for (int aj = 0; aj < A; aj++) {
 							for (int ai = 0; ai < A; ai++) {
-								if (ProcTiles.rampVoidPixel(code, downhill, ai, aj)) {
-									veilPixel(g2, ox + x * ts + ai * ts / A, oy + y * ts + aj * ts / A,
-											(ai + 1) * ts / A - ai * ts / A, (aj + 1) * ts / A - aj * ts / A);
+								int px0 = ox + x * ts + ai * ts / A, py0 = oy + y * ts + aj * ts / A;
+								int pw = (ai + 1) * ts / A - ai * ts / A, ph = (aj + 1) * ts / A - aj * ts / A;
+								int over = dropFlankPixel(x, y, downhill, code, ai, aj);
+								if (over >= 0) {
+									g2.setColor(new Color(over));
+									g2.fillRect(px0, py0, pw, ph);
+								} else if (ProcTiles.rampVoidPixel(code, downhill, ai, aj)) {
+									veilPixel(g2, px0, py0, pw, ph);
 								}
 							}
 						}
@@ -565,14 +570,11 @@ public class Grid {
 				// A pit rims every side it meets ground — except where a DOWN ramp
 				// pours in: the ramp's own bands fade to the pit's dark, so a lip
 				// between them would cut the descent with an earth line.
-				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE)
-						|| isType(x, y - 1, Tile.TileType.TYPE_RAMPDOWN);
-				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE)
-						|| isType(x, y + 1, Tile.TileType.TYPE_RAMPDOWN);
-				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE)
-						|| isType(x - 1, y, Tile.TileType.TYPE_RAMPDOWN);
-				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE)
-						|| isType(x + 1, y, Tile.TileType.TYPE_RAMPDOWN);
+				// Its flanks are the ground it is cut from, and keep the rim.
+				boolean holeN = isType(x, y - 1, Tile.TileType.TYPE_HOLE) || rampPoursInto(x, y - 1, x, y);
+				boolean holeS = isType(x, y + 1, Tile.TileType.TYPE_HOLE) || rampPoursInto(x, y + 1, x, y);
+				boolean holeW = isType(x - 1, y, Tile.TileType.TYPE_HOLE) || rampPoursInto(x - 1, y, x, y);
+				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE) || rampPoursInto(x + 1, y, x, y);
 				// Nor where rock beside it goes straight on down: see cliffBeside.
 				holeN |= cliffBeside(x, y - 1);
 				holeS |= cliffBeside(x, y + 1);
@@ -681,7 +683,10 @@ public class Grid {
 							boolean sRim = !holeS && aj >= A - 2;
 							boolean wRim = !holeW && ai < 2;
 							boolean eRim = !holeE && ai >= A - 2;
-							if (nRim) {
+							int flank = rampFlankAt(x, y, ai, aj, gx, gy);
+							if (flank >= 0) {
+								col = flank;
+							} else if (nRim) {
 								col = GroundTextures.rampColor(cl,
 										GroundTextures.bayer(gx, gy) < 0.75 ? 2 : 1);
 							} else if (sRim || wRim || eRim) {
@@ -1290,6 +1295,95 @@ public class Grid {
 			return se;
 		}
 		return cls;
+	}
+
+	/**
+	 * A down ramp's flank, carried into the pit beside it: the colour of the
+	 * art-pixel (ai, aj) of pit tile (x, y) where it falls inside the scallop
+	 * of a ramp's open side, or -1.
+	 *
+	 * <p>A ramp is a square sprite, so a pit beside one kept a tile's straight
+	 * edge along it while the rest of the drop's outline scalloped -- on the
+	 * sky, where every climb is cut into a table's edge, a square pier jutting
+	 * into each drop. Lapping the table's ground in along the ramp only
+	 * stuck a ribbon of sward on the stone. What the outline carries on in is
+	 * the ramp itself: its stone at that point of the slope, scalloped out
+	 * past the tile -- and nothing where it has reached
+	 * the void -- the foot still pours in clean.
+	 */
+	private int rampFlankAt(int x, int y, int ai, int aj, int gx, int gy) {
+		int A = GroundTextures.ART;
+		for (int k = 0; k < 4; k++) {
+			int nx = x + Tile.dirDx(k), ny = y + Tile.dirDy(k);
+			if (!isType(nx, ny, Tile.TileType.TYPE_RAMPDOWN) || rampPoursInto(nx, ny, x, y)) {
+				continue;
+			}
+			Tile t = tiles[nx][ny];
+			int downhill = Tile.opposite(t.getRampUphill());
+			if (nx + Tile.dirDx(downhill) == x && ny + Tile.dirDy(downhill) == y) {
+				continue;
+			}
+			int up = t.getRampUphill();
+			if (nx + Tile.dirDx(up) == x && ny + Tile.dirDy(up) == y) {
+				continue; // its head: the ground it climbs from
+			}
+			// Depth into this tile from the shared edge, and the ramp's pixel
+			// across that edge in the same lane.
+			int depth, rai, raj, lane;
+			if (Tile.dirDx(k) > 0) { depth = A - 1 - ai; rai = 0; raj = aj; lane = gy; }
+			else if (Tile.dirDx(k) < 0) { depth = ai; rai = A - 1; raj = aj; lane = gy; }
+			else if (Tile.dirDy(k) > 0) { depth = A - 1 - aj; rai = ai; raj = 0; lane = gx; }
+			else { depth = aj; rai = ai; raj = A - 1; lane = gx; }
+			int reach = lapDepth(lane, GroundTextures.CLS_STONE * 4 + k);
+			if (depth >= reach) {
+				continue;
+			}
+			String code = t.getTileCode();
+			if (ProcTiles.rampVoidPixel(code, downhill, rai, raj)) {
+				continue; // the slope has reached the dark: the pit's own
+			}
+			// The body's shade: the channel's, near the foot, is darker than the
+			// veil over the pit and drew a black outline round the ramp. The
+			// sprite's own channel on this side is lifted to match (dropFlankPixel),
+			// and the pit's rim lies beyond as it does along any ground.
+			return ProcTiles.downRampShade(code, downhill, rai, raj, false);
+		}
+		return -1;
+	}
+
+	/**
+	 * On a down ramp's side that opens onto a pit, its own edge pixel: the
+	 * sprite cuts a dark channel down every open side, which reads as the
+	 * slope cut into ground -- and where the side is a drop, as a crease
+	 * between the stone and the flank the pit carries on past it
+	 * ({@link #rampFlankAt}). There the edge takes the body's shade instead,
+	 * or -1 to leave the sprite (and the void band) as they are.
+	 */
+	private int dropFlankPixel(int x, int y, int downhill, String code, int ai, int aj) {
+		int A = GroundTextures.ART;
+		boolean horiz = downhill == 1 || downhill == 3;
+		int b = horiz ? aj : ai;
+		if (b != 0 && b != A - 1) {
+			return -1;
+		}
+		int nx = x + (horiz ? 0 : b == 0 ? -1 : 1), ny = y + (horiz ? (b == 0 ? -1 : 1) : 0);
+		if (!isType(nx, ny, Tile.TileType.TYPE_HOLE)) {
+			return -1;
+		}
+		int bi = horiz ? ai : (b == 0 ? 1 : A - 2), bj = horiz ? (b == 0 ? 1 : A - 2) : aj;
+		if (ProcTiles.rampVoidPixel(code, downhill, bi, bj)) {
+			return -1; // the slope's own dark band runs out to the edge
+		}
+		return ProcTiles.downRampShade(code, downhill, ai, aj, false);
+	}
+
+	/** Whether (nx, ny) is a down ramp whose foot is the tile (x, y). */
+	private boolean rampPoursInto(int nx, int ny, int x, int y) {
+		if (!isType(nx, ny, Tile.TileType.TYPE_RAMPDOWN)) {
+			return false;
+		}
+		int up = tiles[nx][ny].getRampUphill();
+		return nx - Tile.dirDx(up) == x && ny - Tile.dirDy(up) == y;
 	}
 
 	/** The neighbour's class if it out-ranks {@code ownRank} (so it laps into
