@@ -1305,12 +1305,17 @@ public class World {
 	 * The marks say where water changes level: {@link #FLOW_FALL} on the lip
 	 * a river pours over, {@link #FLOW_PLUNGE} on the pool it lands in a
 	 * storey down (still water, so a plunge tile may have speed 0). On a
-	 * plunge pool the step bit marks the core, where the column lands.
+	 * plunge pool the step bit marks the core, where the column lands; the
+	 * core's dir is the way the fall was travelling, and since a pool never
+	 * moves its speed field is free to say {@link #FLOW_FACE}: rock stands
+	 * under the lip, so the fall comes down that rock's face.
 	 */
 	private byte[][] flow;
 	public static final int FLOW_STILL = 0, FLOW_SLOW = 1, FLOW_STREAM = 2, FLOW_RAPIDS = 3;
 	/** Flow marks (see {@link #flow}): the lip of a fall, a plunge pool. */
 	public static final int FLOW_FALL = 1 << 6, FLOW_PLUNGE = 1 << 7;
+	/** A plunge core's speed field where its fall comes down a rock face. */
+	public static final int FLOW_FACE = 1;
 	/** Unit steps of the eight flow directions, clockwise from east (y down). */
 	public static final int[] FLOW_DX = { 1, 1, 0, -1, -1, -1, 0, 1 };
 	public static final int[] FLOW_DY = { 0, 1, 1, 1, 0, -1, -1, -1 };
@@ -1380,6 +1385,11 @@ public class World {
 	/** A plunge pool: still water a fall lands in from the storey above. */
 	public static boolean flowPlunge(int packed) {
 		return (packed & FLOW_PLUNGE) != 0;
+	}
+
+	/** A plunge pool's core whose fall comes down a rock face (see {@link #flow}). */
+	public static boolean flowDownFace(int packed) {
+		return flowPlunge(packed) && flowStep(packed) && flowSpeed(packed) == FLOW_FACE;
 	}
 
 	/** A copy of one level's flow bytes, row-major (all zero where nothing moves). */
