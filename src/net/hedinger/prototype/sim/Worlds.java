@@ -4661,12 +4661,18 @@ public final class Worlds {
 	 * nothing from the random stream.
 	 */
 	private static void layFords(World w, int cols, int rows, int z) {
-		java.util.HashSet<Integer> bankless = new java.util.HashSet<Integer>();
-		for (int round = 0; round < 64; round++) {
+		// Every tile is tried once -- waded where a crossing can be laid, set
+		// aside where it cannot -- so each round settles one, and the pass ends
+		// only when no reach is left far from a crossing it could have. A fixed
+		// number of rounds spent most of them on the tiles between rock a long
+		// reach is made of, and quit with a plain reach still fifteen tiles
+		// from a ford.
+		java.util.HashSet<Integer> tried = new java.util.HashSet<Integer>();
+		for (;;) {
 			int[] dist = fordDistances(w, cols, rows, z);
 			int worst = -1, at = -1;
 			for (int i = 0; i < dist.length; i++) {
-				if (w.getFlow(i % cols, i / cols, z) == 0 || bankless.contains(i)) {
+				if (w.getFlow(i % cols, i / cols, z) == 0 || tried.contains(i)) {
 					continue;
 				}
 				int d = dist[i] < 0 ? Integer.MAX_VALUE : dist[i];
@@ -4678,9 +4684,9 @@ public final class Worlds {
 			if (at < 0) {
 				return;
 			}
+			tried.add(at);
 			int x = at % cols, y = at / cols;
 			if (!crossable(w, x, y, z)) {
-				bankless.add(at);
 				continue;
 			}
 			int dir = World.flowDirOf(w.getFlow(x, y, z));
@@ -4694,14 +4700,36 @@ public final class Worlds {
 		}
 	}
 
-	/** Whether a river tile has ground to stand on across both banks. A ford
-	 *  joins two banks; where the river runs between rock -- cut through the
-	 *  rim, or a gorge wall -- there is nothing to cross to, and wading the
-	 *  water there only made an island no body could reach. */
+	/** Whether a crossing could be laid at a river tile: ground to stand on
+	 *  across both banks, and nothing across the channel that must stay deep.
+	 *  A ford joins two banks; where the river runs between rock -- cut
+	 *  through the rim, or a gorge wall -- there is nothing to cross to, and
+	 *  wading the water there only made an island no body could reach. A
+	 *  fall's lip and a plunge pool's core are deep by nature, and a tile in
+	 *  line with one would be waded without ever becoming a way across. */
 	public static boolean crossable(World w, int x, int y, int z) {
-		int dir = World.flowDirOf(w.getFlow(x, y, z));
+		int f = w.getFlow(x, y, z);
+		if (World.flowFalls(f) || World.flowPlunge(f)) {
+			return false;
+		}
+		int dir = World.flowDirOf(f);
 		int px = -World.FLOW_DY[dir], py = World.FLOW_DX[dir];
-		return bankWalkable(w, x, y, z, px, py) && bankWalkable(w, x, y, z, -px, -py);
+		return bankWalkable(w, x, y, z, px, py) && bankWalkable(w, x, y, z, -px, -py)
+				&& wadeable(w, x, y, z, px, py) && wadeable(w, x, y, z, -px, -py);
+	}
+
+	/** Whether every wet tile from (x, y) along (dx, dy), as far as a ford
+	 *  reaches, can be waded or already is: none is a lip or a pool's core
+	 *  still deep. */
+	private static boolean wadeable(World w, int x, int y, int z, int dx, int dy) {
+		for (int k = 1; k < 8 && isWet(w, x + k * dx, y + k * dy, z); k++) {
+			int f = w.getFlow(x + k * dx, y + k * dy, z);
+			if ((World.flowFalls(f) || World.flowPlunge(f))
+					&& !w.getTile(x + k * dx, y + k * dy, z).isWalkable()) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** Whether the first dry tile beyond the water, from (x, y) along (dx, dy),
