@@ -3476,16 +3476,51 @@ public final class Worlds {
 	 * span simply goes without; nothing downstream depends on one existing.
 	 */
 	private static void carveRavine(World w, int cols, int rows) {
+		// Two passes over candidate spans: first for one that swallows a river
+		// (see pourIntoGorge), then, if none fits, for one that keeps clear of
+		// water as the gorge always did.
+		for (int pass = 0; pass < 2; pass++) {
+			if (carveRavine(w, cols, rows, pass == 0)) {
+				return;
+			}
+		}
+	}
+
+	private static boolean carveRavine(World w, int cols, int rows, boolean swallow) {
+		// To swallow a river the gorge is aimed: at a river tile with open cave
+		// floor under it, the band laid so the river crosses it mid-gorge, well
+		// clear of both causeways. Random spans almost never cross a river over
+		// open cave -- one world in five, measured.
+		java.util.ArrayList<int[]> aims = new java.util.ArrayList<int[]>();
+		if (swallow) {
+			for (int y = 8; y < rows - 8; y++) {
+				for (int x = 8; x < cols - 8; x++) {
+					if (w.getFlow(x, y, SURFACE_Z) != 0 && w.getTile(x, y, CAVE_Z).isWalkable()) {
+						aims.add(new int[] { x, y });
+					}
+				}
+			}
+			if (aims.isEmpty()) {
+				return false;
+			}
+		}
 		for (int attempt = 0; attempt < 60; attempt++) {
 			boolean horizontal = (attempt & 1) == 0;
 			int len = 26 + Utils.random(8);
 			int along = horizontal ? cols : rows;
 			int across = horizontal ? rows : cols;
 			if (along < len + 12 || across < 20) {
-				return; // a map too small for a gorge
+				return true; // a map too small for a gorge: nothing to retry
 			}
 			int s0 = 6 + Utils.random(along - len - 12);
 			int c0 = 8 + Utils.random(across - 16);
+			int[] aim = null;
+			if (swallow) {
+				aim = aims.get(Utils.random(aims.size()));
+				int ra = horizontal ? aim[0] : aim[1], rc = horizontal ? aim[1] : aim[0];
+				s0 = Math.max(6, Math.min(along - len - 6, ra - len / 2));
+				c0 = rc;
+			}
 
 			// The band, precomputed so fitting and carving see the same tiles.
 			// The drift is a clamped random walk — one tile of sideways wander
@@ -3503,18 +3538,41 @@ public final class Worlds {
 				band[t][0] = c0 + off;
 				band[t][1] = width;
 			}
+			if (aim != null) {
+				// Shift the whole band across so it covers the aimed tile where
+				// it passes it: the wander is the noise's, the place is the aim's.
+				int ta = (horizontal ? aim[0] : aim[1]) - s0;
+				if (ta < 0 || ta >= len) {
+					continue;
+				}
+				int shift = (horizontal ? aim[1] : aim[0]) - band[ta][0];
+				for (int t = 0; t < len; t++) {
+					band[t][0] += shift;
+				}
+			}
+			int c1 = len / 3, c2 = 2 * len / 3; // the causeways, two tiles each
 			boolean fits = true;
+			int swallowed = 0, landings = 0;
 			for (int t = 0; t < len && fits; t++) {
+				boolean causeway = t == c1 || t == c1 + 1 || t == c2 || t == c2 + 1;
 				for (int d = 0; d < band[t][1] && fits; d++) {
 					int x = horizontal ? s0 + t : band[t][0] + d;
 					int y = horizontal ? band[t][0] + d : s0 + t;
-					fits = ravineCarvable(w, cols, rows, x, y);
+					if (swallow && w.getFlow(x, y, SURFACE_Z) != 0) {
+						// The river may cross the cut, but not on a causeway (it
+						// would cut the banks' crossing); somewhere under it the
+						// cave must be open floor for the fall to land on.
+						fits = !causeway;
+						swallowed++;
+						landings += w.getTile(x, y, CAVE_Z).isWalkable() ? 1 : 0;
+					} else {
+						fits = ravineCarvable(w, cols, rows, x, y, swallow);
+					}
 				}
 			}
-			if (!fits) {
+			if (!fits || swallow && landings == 0) {
 				continue;
 			}
-			int c1 = len / 3, c2 = 2 * len / 3; // the causeways, two tiles each
 			for (int t = 0; t < len; t++) {
 				if (t == c1 || t == c1 + 1 || t == c2 || t == c2 + 1) {
 					continue; // the untouched ground the banks cross on
@@ -3533,8 +3591,181 @@ public final class Worlds {
 					}
 				}
 			}
-			return;
+			if (swallow) {
+				pourIntoGorge(w, cols, rows, horizontal, len);
+			}
+			return true;
 		}
+		return false;
+	}
+
+	/**
+	 * The river the gorge was sited across falls into it.
+	 *
+	 * <p>Before the gorge was allowed near water, a gorge cutting a river's
+	 * middle "would leave its lower half flowing from nowhere". That half is
+	 * now the point: the water goes DOWN. Every river tile whose next step is
+	 * the drop becomes a lip ({@link World#FLOW_FALL}, at rapids), and on the
+	 * cave floor under the drop the fall lands in a plunge pool
+	 * ({@link World#FLOW_PLUNGE}, its core under the lip), from which the
+	 * river carries on as a stream along the gorge's bed. The surface reach
+	 * past the gorge, which nothing feeds any more, is a dry bed of mud --
+	 * stopping where any other water still flows into it, so a confluence
+	 * downstream keeps the river that joins it.
+	 *
+	 * <p>Called before the reseal and the shallows pass, so the cave's new
+	 * water gets its wading fringe and anything it cut off is sealed.
+	 */
+	private static void pourIntoGorge(World w, int cols, int rows, boolean horizontal, int len) {
+		java.util.ArrayList<int[]> lips = new java.util.ArrayList<int[]>();
+		java.util.ArrayDeque<Integer> dry = new java.util.ArrayDeque<Integer>();
+		java.util.HashSet<Integer> dried = new java.util.HashSet<Integer>();
+		for (int y = 1; y < rows - 1; y++) {
+			for (int x = 1; x < cols - 1; x++) {
+				int f = w.getFlow(x, y, SURFACE_Z);
+				if (f == 0) {
+					continue;
+				}
+				int d = World.flowDirOf(f);
+				if (w.getTile(x + World.FLOW_DX[d], y + World.FLOW_DY[d], SURFACE_Z).getType()
+						== Tile.TileType.TYPE_HOLE) {
+					w.setFlow(x, y, SURFACE_Z, d, World.FLOW_RAPIDS, false, World.FLOW_FALL);
+					lips.add(new int[] { x, y, d });
+					continue;
+				}
+				// Beside the drop but flowing away from it: the far bank's reach.
+				for (int k = 0; k < 4; k++) {
+					int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+					if (w.getTile(nx, ny, SURFACE_Z).getType() == Tile.TileType.TYPE_HOLE) {
+						if (dried.add(y * cols + x)) {
+							dry.add(y * cols + x);
+						}
+						break;
+					}
+				}
+			}
+		}
+		// Follow the dry reach downstream while nothing else feeds it.
+		while (!dry.isEmpty()) {
+			int c = dry.poll(), cx = c % cols, cy = c / cols;
+			int d = World.flowDirOf(w.getFlow(cx, cy, SURFACE_Z));
+			int nx = cx + World.FLOW_DX[d], ny = cy + World.FLOW_DY[d];
+			int n = ny * cols + nx;
+			if (dried.contains(n) || w.getFlow(nx, ny, SURFACE_Z) == 0) {
+				continue;
+			}
+			boolean onlyUs = true;
+			for (int dy = -1; dy <= 1 && onlyUs; dy++) {
+				for (int dx = -1; dx <= 1 && onlyUs; dx++) {
+					int mx = nx + dx, my = ny + dy, mf = w.getFlow(mx, my, SURFACE_Z);
+					if ((dx != 0 || dy != 0) && mf != 0
+							&& mx + World.FLOW_DX[World.flowDirOf(mf)] == nx
+							&& my + World.FLOW_DY[World.flowDirOf(mf)] == ny
+							&& !dried.contains(my * cols + mx)) {
+						onlyUs = false; // another river runs in here: it keeps the bed
+					}
+				}
+			}
+			if (onlyUs) {
+				dried.add(n);
+				dry.add(n);
+			}
+		}
+		for (int c : dried) {
+			int x = c % cols, y = c / cols;
+			w.setFlow(x, y, SURFACE_Z, 0, World.FLOW_STILL, false);
+			setBare(w, x, y, SURFACE_Z, Tile.TileType.TYPE_MUD);
+		}
+		// The plunge pools, and the stream each one feeds along the gorge bed.
+		for (int[] lip : lips) {
+			int hx = lip[0] + World.FLOW_DX[lip[2]], hy = lip[1] + World.FLOW_DY[lip[2]];
+			if (!landing(w, hx, hy)) {
+				continue; // the cut went on down here; nowhere for this fall to land
+			}
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int px = hx + dx, py = hy + dy;
+					if (w.getTile(px, py, SURFACE_Z).getType() == Tile.TileType.TYPE_HOLE
+							&& landing(w, px, py)) {
+						// A wide river has lips side by side, and their pools overlap:
+						// a core stays a core whichever lip's pool is laid over it.
+						int had = w.getFlow(px, py, CAVE_Z);
+						boolean core = dx == 0 && dy == 0 || World.flowPlunge(had) && World.flowStep(had);
+						setBare(w, px, py, CAVE_Z, Tile.TileType.TYPE_WATER);
+						w.setFlow(px, py, CAVE_Z, 0, World.FLOW_STILL, core, World.FLOW_PLUNGE);
+					}
+				}
+			}
+		}
+		if (!lips.isEmpty()) {
+			int[] lip = lips.get(0);
+			runGorgeStream(w, cols, rows, lip[0] + World.FLOW_DX[lip[2]], lip[1] + World.FLOW_DY[lip[2]],
+					horizontal, len);
+		}
+	}
+
+	/** Open cave floor under the drop, or a neighbouring lip's pool already on it. */
+	private static boolean landing(World w, int x, int y) {
+		return w.getTile(x, y, CAVE_Z).isWalkable() || World.flowPlunge(w.getFlow(x, y, CAVE_Z));
+	}
+
+	/** The river's way on from its plunge pool: a one-tile stream along the
+	 *  gorge's bed (the cave floor under the cut), toward whichever end of the
+	 *  gorge is farther, ending in a small pond where the bed does. Stays
+	 *  under the drop by stepping sideways with the gorge's own wander. */
+	private static void runGorgeStream(World w, int cols, int rows, int x, int y, boolean horizontal, int len) {
+		int ax = horizontal ? 1 : 0, ay = horizontal ? 0 : 1; // along the gorge
+		int px = ay, py = ax; // across it
+		int ahead = 0, behind = 0;
+		for (int k = 1; k < len && underGorge(w, x + k * ax, y + k * ay); k++) {
+			ahead++;
+		}
+		for (int k = 1; k < len && underGorge(w, x - k * ax, y - k * ay); k++) {
+			behind++;
+		}
+		if (behind > ahead) {
+			ax = -ax;
+			ay = -ay;
+		}
+		int dir = World.flowDir(ax, ay);
+		java.util.HashSet<Integer> been = new java.util.HashSet<Integer>();
+		been.add(y * cols + x);
+		for (int step = 0; step < len; step++) {
+			int nx = -1, ny = -1;
+			for (int side : new int[] { 0, 1, -1 }) {
+				int cx = x + ax + side * px, cy = y + ay + side * py;
+				int cf = w.getFlow(cx, cy, CAVE_Z);
+				// on through the plunge pool's own water, never back over the stream
+				if (underGorge(w, cx, cy) && !been.contains(cy * cols + cx)
+						&& (cf == 0 || World.flowPlunge(cf))) {
+					nx = cx;
+					ny = cy;
+					break;
+				}
+			}
+			if (nx < 0) {
+				break;
+			}
+			if (w.getFlow(x, y, CAVE_Z) == 0 || !World.flowPlunge(w.getFlow(x, y, CAVE_Z))) {
+				w.setFlow(x, y, CAVE_Z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false);
+			}
+			if (!World.flowPlunge(w.getFlow(nx, ny, CAVE_Z))) {
+				setBare(w, nx, ny, CAVE_Z, Tile.TileType.TYPE_WATER);
+			}
+			been.add(ny * cols + nx);
+			x = nx;
+			y = ny;
+		}
+		if (!World.flowPlunge(w.getFlow(x, y, CAVE_Z))) {
+			w.setFlow(x, y, CAVE_Z, dir, World.FLOW_STILL, false); // the stream's end pools, still
+		}
+	}
+
+	/** Open cave floor under the surface's drop. */
+	private static boolean underGorge(World w, int x, int y) {
+		return w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_HOLE
+				&& (w.getTile(x, y, CAVE_Z).isWalkable()
+				|| w.getTile(x, y, CAVE_Z).getType() == Tile.TileType.TYPE_WATER);
 	}
 
 	/**
@@ -3855,6 +4086,13 @@ public final class Worlds {
 	 *  well inside the rim, nothing man-made or already sunken within three
 	 *  tiles, no water within one. */
 	private static boolean ravineCarvable(World w, int cols, int rows, int x, int y) {
+		return ravineCarvable(w, cols, rows, x, y, false);
+	}
+
+	/** As above; with {@code riverOk}, moving water (a river) may lie beside
+	 *  the cut -- it is what the gorge is sited to swallow -- while still
+	 *  water (a lake, a pond) keeps its distance as before. */
+	private static boolean ravineCarvable(World w, int cols, int rows, int x, int y, boolean riverOk) {
 		if (x < 4 || y < 4 || x >= cols - 4 || y >= rows - 4) {
 			return false;
 		}
@@ -3883,7 +4121,8 @@ public final class Worlds {
 					return false;
 				}
 				if (near && (n == Tile.TileType.TYPE_WATER
-						|| n == Tile.TileType.TYPE_SHALLOWS)) {
+						|| n == Tile.TileType.TYPE_SHALLOWS)
+						&& !(riverOk && w.getFlow(x + dx, y + dy, SURFACE_Z) != 0)) {
 					return false;
 				}
 			}
@@ -5071,3 +5310,4 @@ public final class Worlds {
 		return Math.max(1, (int) Math.round(base * scale));
 	}
 }
+

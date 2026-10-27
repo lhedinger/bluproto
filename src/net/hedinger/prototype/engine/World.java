@@ -1298,13 +1298,19 @@ public class World {
 	 * replaced whenever it is written, and the passes after the rivers (the
 	 * shore fringe, a later river crossing) would wipe it.
 	 *
-	 * <p>Packed {@code speed | dir << 2 | step << 5}: speed one of the
+	 * <p>Packed {@code speed | dir << 2 | step << 5 | marks}: speed one of the
 	 * {@code FLOW_*} tiers, dir the eight compass points clockwise from east
 	 * ({@link #FLOW_DX}, {@link #FLOW_DY}), step set where the bed drops
 	 * sharply enough to break the surface across the channel (a cascade).
+	 * The marks say where water changes level: {@link #FLOW_FALL} on the lip
+	 * a river pours over, {@link #FLOW_PLUNGE} on the pool it lands in a
+	 * storey down (still water, so a plunge tile may have speed 0). On a
+	 * plunge pool the step bit marks the core, where the column lands.
 	 */
 	private byte[][] flow;
 	public static final int FLOW_STILL = 0, FLOW_SLOW = 1, FLOW_STREAM = 2, FLOW_RAPIDS = 3;
+	/** Flow marks (see {@link #flow}): the lip of a fall, a plunge pool. */
+	public static final int FLOW_FALL = 1 << 6, FLOW_PLUNGE = 1 << 7;
 	/** Unit steps of the eight flow directions, clockwise from east (y down). */
 	public static final int[] FLOW_DX = { 1, 1, 0, -1, -1, -1, 0, 1 };
 	public static final int[] FLOW_DY = { 0, 1, 1, 1, 0, -1, -1, -1 };
@@ -1322,6 +1328,13 @@ public class World {
 	/** Sets the water on a tile moving {@code dir} at {@code speed}; a speed of
 	 *  {@link #FLOW_STILL} makes it still. */
 	public void setFlow(int c, int r, int l, int dir, int speed, boolean step) {
+		setFlow(c, r, l, dir, speed, step, 0);
+	}
+
+	/** As {@link #setFlow(int, int, int, int, int, boolean)}, with flow marks
+	 *  ({@link #FLOW_FALL}, {@link #FLOW_PLUNGE}); a marked tile keeps its byte
+	 *  even when still. */
+	public void setFlow(int c, int r, int l, int dir, int speed, boolean step, int marks) {
 		if (!isValid(c, r, l)) {
 			return;
 		}
@@ -1331,8 +1344,8 @@ public class World {
 		if (flow[l] == null) {
 			flow[l] = new byte[cols * rows];
 		}
-		flow[l][r * cols + c] = (byte) (speed == FLOW_STILL ? 0
-				: (speed & 3) | (dir & 7) << 2 | (step ? 1 << 5 : 0));
+		flow[l][r * cols + c] = (byte) (speed == FLOW_STILL && marks == 0 ? 0
+				: (speed & 3) | (dir & 7) << 2 | (step ? 1 << 5 : 0) | (marks & (FLOW_FALL | FLOW_PLUNGE)));
 	}
 
 	/** The packed flow of a tile (0 still; see {@link #flow}). Moving water
@@ -1357,6 +1370,16 @@ public class World {
 
 	public static boolean flowStep(int packed) {
 		return (packed & (1 << 5)) != 0;
+	}
+
+	/** The lip of a fall: this water pours over into the open drop ahead. */
+	public static boolean flowFalls(int packed) {
+		return (packed & FLOW_FALL) != 0;
+	}
+
+	/** A plunge pool: still water a fall lands in from the storey above. */
+	public static boolean flowPlunge(int packed) {
+		return (packed & FLOW_PLUNGE) != 0;
 	}
 
 	/** A copy of one level's flow bytes, row-major (all zero where nothing moves). */
