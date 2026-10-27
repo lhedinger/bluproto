@@ -58,6 +58,8 @@ function teal(rgb: number): boolean {
   return ((rgb >> 8) & 255) > 0.77 * (rgb & 255);
 }
 
+/** World.FLOW_FALL / FLOW_PLUNGE: the lip of a fall, a plunge pool. */
+const FALL = 1 << 6, PLUNGE = 1 << 7;
 /** World.FLOW_DX / FLOW_DY: the eight directions, clockwise from east. */
 const FDX = [1, 1, 0, -1, -1, -1, 0, 1];
 const FDY = [0, 1, 1, 1, 0, -1, -1, -1];
@@ -198,7 +200,8 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
     const tx = i % cols, ty = (i / cols) | 0;
     const f = grid![i], kind = wet![i];
     if (kind !== 1 && kind !== 2) continue;
-    const speed = f & 3, dir = (f >> 2) & 7, step = (f & 32) !== 0;
+    const falls = (f & FALL) !== 0, plunge = (f & PLUNGE) !== 0;
+    const speed = f & 3, dir = (f >> 2) & 7, step = (f & 32) !== 0 && !plunge; // on a pool the bit is its core
     const fx = FDX[dir], fy = FDY[dir];
     const ramp = kind === 2 ? SHALLOWS : WATER;
     // A channel drags at its banks: a tile with dry ground beside it runs slower.
@@ -258,7 +261,17 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
           const seg = Math.floor(uu / 11), k = mod(uu, 11);
           if (hash01(seg, lane, 33) < DASHES[speed] && k < 3) col = k === 0 ? ramp[1] : ramp[2];
         }
-        if (step) {
+        if (falls) {
+          // The lip of a fall: the river breaks white along the edge it pours
+          // over -- the last two art-px before the drop -- and streaks just
+          // behind it as the run quickens. The sheet itself is drawn into the
+          // drop ahead (paintFall).
+          const along = fx * (ai - (ART - 1) / 2) + fy * (aj - (ART - 1) / 2); // -5.5 .. 5.5
+          if (along >= 3.5) col = hash01(lane >> 1, Math.floor(t / 2), 87) < 0.75 ? SHALLOWS[2] : SHALLOWS[1];
+          else if (along >= 0.5 && hash01(lane, Math.floor((u - Math.floor(0.6 * t)) / 3), 89) < 0.3) col = SHALLOWS[1];
+        } else if (plunge) {
+          col = plungeAt(col, tx, ty, gx, gy, t);
+        } else if (step) {
           // A cascade: the bed drops, so it takes §4's grammar for a drop -- a
           // lit lip (whitewater flickering on the tick) and, just past it, the
           // sunk band of the water below the step, with foam churned into it.
@@ -277,6 +290,93 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
         d[ly * W + lx] = 0xff000000 | ((col & 0xff) << 16) | (col & 0xff00) | ((col >> 16) & 0xff);
       }
     }
+    if (falls) paintFall(d, W, tx, ty, fx, fy, wx0, wy0, chunkTiles, level, getChunk, t);
   }
   L.cv.getContext('2d')!.putImageData(L.img, 0, 0);
+}
+
+/** How far a falling sheet reads into the drop, in art-px, before the dark
+ *  under the veil takes it. */
+const FALL_REACH = 12;
+
+/**
+ * The sheet of a fall, drawn into the drop past its lip (the hole tile the
+ * lip flows into), as ART-STYLE §4 has it: streaks running down fast in the
+ * water ramp with the shallows highlight on their leading ends, thinning by
+ * ordered dither with every art-px of fall until the pit veil's dark takes
+ * them. A lane falls only where water reaches the lip in it, so the sheet is
+ * as wide as the river at its edge and the bank's laps make no water.
+ */
+function paintFall(d: Uint32Array, W: number, tx: number, ty: number, fx: number, fy: number,
+    wx0: number, wy0: number, chunkTiles: number, level: number, getChunk: ChunkSource, t: number): void {
+  const hx = tx + fx, hy = ty + fy;
+  if (hx < wx0 || hy < wy0 || hx >= wx0 + chunkTiles || hy >= wy0 + chunkTiles) return; // the drop is in the next chunk
+  for (let aj = 0; aj < ART; aj++) {
+    for (let ai = 0; ai < ART; ai++) {
+      const gx = hx * ART + ai, gy = hy * ART + aj;
+      // how far below the lip, and the lip pixel in the same lane
+      const fall = fx > 0 ? ai : fx < 0 ? ART - 1 - ai : fy > 0 ? aj : ART - 1 - aj;
+      const lipX = fx !== 0 ? (fx > 0 ? tx * ART + ART - 1 : tx * ART) : gx;
+      const lipY = fy !== 0 ? (fy > 0 ? ty * ART + ART - 1 : ty * ART) : gy;
+      const lip = bakeAt(lipX, lipY, chunkTiles, level, getChunk);
+      if (lip < 0 || !watery(lip)) continue;
+      if (bayer(gx, gy) >= 1 - fall / FALL_REACH) continue; // the dark takes it
+      const lane = gy * fx - gx * fy;
+      const u = fall - Math.floor(0.9 * t) + Math.floor(hash01(lane, 1, 67) * 97);
+      const seg = Math.floor(u / 6), k = mod(u, 6);
+      const col = hash01(seg, lane, 69) < 0.55 && k < 2 ? (k === 0 ? SHALLOWS[1] : WATER[2])
+        : fall < 3 ? WATER[1] : WATER[0];
+      const lx = gx - wx0 * ART, ly = gy - wy0 * ART;
+      d[ly * W + lx] = 0xff000000 | ((col & 0xff) << 16) | (col & 0xff00) | ((col >> 16) & 0xff);
+    }
+  }
+}
+
+// Ripple rings, authored (ART-STYLE §5: discrete shapes are drawn stamps, not
+// distance tests), radius 4, 7 and 10, centred on the pool's core.
+const RINGS: string[][] = [
+  ['...###...', '.##...##.', '.#.....#.', '#.......#', '#.......#', '#.......#', '.#.....#.', '.##...##.', '...###...'],
+  ['.....#####.....', '...##.....##...', '..#.........#..', '.#...........#.', '.#...........#.',
+    '#.............#', '#.............#', '#.............#', '#.............#', '#.............#',
+    '.#...........#.', '.#...........#.', '..#.........#..', '...##.....##...', '.....#####.....'],
+  ['.......#######.......', '.....##.......##.....', '....#...........#....', '...#.............#...',
+    '..#...............#..', '.#.................#.', '.#.................#.', '#...................#',
+    '#...................#', '#...................#', '#...................#', '#...................#',
+    '#...................#', '#...................#', '.#.................#.', '.#.................#.',
+    '..#...............#..', '...#.............#...', '....#...........#....', '.....##.......##.....',
+    '.......#######.......'],
+];
+/** Ticks each ring is shown before the next, larger one. */
+const RING_TICKS = 8;
+
+/**
+ * A plunge pool, where a fall lands a storey down: the core (the tile under
+ * the lip) churns in the shallows ramp, re-hashed every two ticks, and rings
+ * leave it -- one at a time, each a little wider, the newest in the water
+ * highlight and the one before it in the base.
+ */
+function plungeAt(col: number, tx: number, ty: number, gx: number, gy: number, t: number): number {
+  let cx = -1, cy = -1;
+  for (let oy = -1; oy <= 1 && cx < 0; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const nx = tx + ox, ny = ty + oy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const g = grid![ny * cols + nx];
+      if ((g & PLUNGE) && (g & 32)) { cx = nx; cy = ny; break; }
+    }
+  }
+  if (cx < 0) return col;
+  const dx = gx - (cx * ART + 6), dy = gy - (cy * ART + 6);
+  if (Math.abs(dx) <= 3 && Math.abs(dy) <= 3) {
+    return hash01(gx, gy + Math.floor(t / 2) * 13, 93) < 0.55 ? SHALLOWS[2] : SHALLOWS[1];
+  }
+  const phase = Math.floor(t / RING_TICKS) % RINGS.length;
+  const on = (r: number) => {
+    const st = RINGS[r], n = st.length >> 1;
+    const row = st[dy + n];
+    return row !== undefined && row[dx + n] === '#';
+  };
+  if (on(phase)) return WATER[2];
+  if (phase > 0 && on(phase - 1)) return WATER[1];
+  return col;
 }
