@@ -1331,12 +1331,13 @@ public final class ServerTests {
 		int[] fd = net.hedinger.prototype.sim.Worlds.fordDistances(w, cols2, rows2, z);
 		int far = 0, cutOff = 0;
 		for (int i = 0; i < fd.length; i++) {
-			if (w.getFlow(i % cols2, i / cols2, z) == 0) {
+			// between rock, nobody is on either side to cross
+			if (w.getFlow(i % cols2, i / cols2, z) == 0
+					|| !net.hedinger.prototype.sim.Worlds.crossable(w, i % cols2, i / cols2, z)) {
 				continue;
 			}
 			if (fd[i] < 0) {
-				// between rock, nobody is on either side to cross
-				cutOff += net.hedinger.prototype.sim.Worlds.crossable(w, i % cols2, i / cols2, z) ? 1 : 0;
+				cutOff++;
 			} else {
 				far = Math.max(far, fd[i]);
 			}
