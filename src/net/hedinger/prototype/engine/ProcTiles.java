@@ -308,6 +308,31 @@ public final class ProcTiles {
 	 * shows through the foot of the ramp as it does through the pit the ramp
 	 * pours into -- a ramp down is a way into a hole, not a picture of one.
 	 */
+	/**
+	 * A down ramp's colour at art-pixel (ai, aj) of its own tile, read off the
+	 * same ladder the sprite paints -- or, with {@code channel}, the dark
+	 * channel shade its open sides take (one step further down). For the bake
+	 * to carry a ramp's flank on past its tile (Grid.rampFlankAt).
+	 */
+	public static int downRampShade(String code, int downhill, int ai, int aj, boolean channel) {
+		Color mid = new Color(
+				(RAMP_LO.getRed() + RAMP_HI.getRed()) / 2,
+				(RAMP_LO.getGreen() + RAMP_HI.getGreen()) / 2,
+				(RAMP_LO.getBlue() + RAMP_HI.getBlue()) / 2);
+		Color[] shades = { RAMP_HI, mid, RAMP_LO, HOLE_DARK };
+		int A = GroundTextures.ART;
+		boolean horiz = downhill == 1 || downhill == 3;
+		// The body's shade in this lane (one pixel in from the flank, past the
+		// channel), or the channel's.
+		int bi = horiz ? ai : Math.max(1, Math.min(A - 2, ai));
+		int bj = horiz ? Math.max(1, Math.min(A - 2, aj)) : aj;
+		int idx = rampLadder(code, false, downhill, bi, bj);
+		if (channel && idx < 3) {
+			idx++;
+		}
+		return shades[idx].getRGB() & 0xffffff;
+	}
+
 	public static boolean rampVoidPixel(String code, int downhill, int ai, int aj) {
 		return rampLadder(code, false, downhill, ai, aj) == 3;
 	}
