@@ -51,12 +51,16 @@ out over hours that it existed to show could not be read at that size at all. A
 chart worth opening is worth reading. (It is now full only, with no sizer: a
 panel that is only ever read at one size should not offer the other.)
 
-**The header holds the title, a readout and the close, nothing else.** A
-panel's choices -- which lens, which clade, detail on or off -- are tabs under
-the header (`.bh-tabs`, as the inspector's) or a tool row of Bulkhead controls
-above the content (`.bh-seg`, `.bh-switch`). The population panel's lens and
-clade buttons used to sit in the header beside the title, hand-styled, and
-wrapped it onto two lines on a phone.
+**The header holds the title and the close, nothing else.** A panel's
+choices -- which lens, which clade, detail on or off -- are tabs under the
+header (`.bh-tabs`, as the inspector's) or a tool row of Bulkhead controls
+above the content (`.bh-seg`, `.bh-switch`), and a readout is a line of its
+own above the content. The population panel's lens and clade buttons used to
+sit in the header beside the title, hand-styled, and wrapped it onto two lines
+on a phone; its readout sat there too and was the first thing a phone
+truncated. On a phone a segmented choice fills its row as equal cells
+(`flex: 1 1 0` on the buttons) rather than wrapping the last name alone onto
+a second line.
 
 **A card is not a small panel, it is a different thing** — a caption on the
 world, like the plain entity card and the tile dump. Content that only makes
