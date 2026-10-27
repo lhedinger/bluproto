@@ -623,11 +623,11 @@ export function render(
     if (layer) {
       const o = cam.worldToScreen(0, 0);
       g.imageSmoothingEnabled = false;
+      // The view down from the low maps ALONE at far zoom, as the ground
+      // itself is: a chunk that landed while zoomed in used to be drawn here
+      // too, minified, as a crisp striped rectangle on the smooth map, and
+      // its straight edges slid against the ground under parallax.
       for (const [, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
-        g.drawImage(img, bx, by, bw, bh);
-      }
-      for (const [, , img, bx, by, bw, bh] of
-          belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
         g.drawImage(img, bx, by, bw, bh);
       }
       drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the ground next
@@ -1384,9 +1384,17 @@ export function renderGL(
     for (const [z, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
       glr.layer('belowlo:' + z, img, 0, null, bx, by, bw, bh);
     }
-    for (const [key, z, img, bx, by, bw, bh] of
-        belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
-      glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
+    // Chunks sharpen the view down at near zoom only. Below ART the ground
+    // samples its low mirror, and the floors under it must do the same:
+    // these textures carry no mipmaps, and a chunk that had landed while
+    // zoomed in was drawn 2-4x minified — a crisp, moiré-striped rectangle
+    // on the smooth low map, its straight edges sliding against the ground
+    // under parallax as the viewer panned.
+    if (!lowZoom) {
+      for (const [key, z, img, bx, by, bw, bh] of
+          belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
+        glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
+      }
     }
     // Bodies on the floor below ride between the two layers: the batcher
     // draws in submission order, so the ground quad occludes them next.
