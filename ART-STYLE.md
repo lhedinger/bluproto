@@ -147,7 +147,11 @@ One sun, straight overhead-north. The grammar:
   terrain overhangs it in scalloped, corner-rounded laps and a gorge's
   outline is a drawn shape, not a staircase of tile edges — ground breaks
   off over a drop, and nothing pours out of one. Shafts and catwalk gaps
-  stay square: machine-cut openings are.
+  stay square: machine-cut openings are. In the sky a hole takes **no rim
+  against rock that carries on down** (the world's border, a stack, the
+  base of a higher table): there is no ground there to break off, only a
+  sheer face carrying its own edge, and the lip along it drew every storey's
+  border as a ledge.
 - **A pit is a hole, not a picture of one.** Inside the lip, a hole with a
   level under it is one flat veil of **translucent black at
   `RenderFx.holeDepth` opacity** with real alpha beneath (`Grid.pitFloor`,
