@@ -117,7 +117,9 @@ function speciesLabel(key: string): string {
 }
 
 function popApply(): void {
-  if (popOn) openPanel(popEl); else closePanel(popEl);
+  // Always the whole screen: a chart worth opening is worth reading, and the
+  // lineage diagram's column per stage needs the width at any size.
+  if (popOn) openPanel(popEl, 'full'); else closePanel(popEl);
   popBtn.classList.toggle('on', popOn);
   if (popOn) {
     popPoll(true);
@@ -818,39 +820,42 @@ export function fmtSpan(sec: number): string {
 popBtn.onclick = () => { popOn = !popOn; popApply(); };
 // The lens tabs. Switching draws whatever that lens already holds and forces a
 // fresh fetch, so the panel never shows one lens's numbers under the other's
-// heading while the request is in flight.
+// heading while the request is in flight. The lens is module state (popMode);
+// the tab bar only reflects it.
 const popModeRoles = document.getElementById('popModeRoles') as HTMLButtonElement;
 const popModeLin = document.getElementById('popModeLin') as HTMLButtonElement;
-/** The size the roles chart had before the lineage lens took the screen. */
-let rolesSize: 'half' | 'full' = 'half';
+const popTools = document.getElementById('popTools') as HTMLElement;
 function popSetMode(m: 'roles' | 'lineages'): void {
   if (popMode === m) return;
   popMode = m;
-  popModeRoles.classList.toggle('on', m === 'roles');
-  popModeLin.classList.toggle('on', m === 'lineages');
-  popCladeBtn.hidden = m !== 'lineages';
-  popDetail.hidden = m !== 'lineages';
-  // The lineage diagram is read at full screen: a column per stage needs the
-  // width, and a ribbon one head wide needs the height. Going back to roles
-  // gives the chart the size it had.
-  if (m === 'lineages') {
-    rolesSize = popEl.classList.contains('full') ? 'full' : 'half';
-    openPanel(popEl, 'full');
-  } else {
-    openPanel(popEl, rolesSize);
-  }
+  popModeRoles.setAttribute('aria-selected', String(m === 'roles'));
+  popModeLin.setAttribute('aria-selected', String(m === 'lineages'));
+  popTools.hidden = m !== 'lineages'; // the clade and detail controls are the lineage lens's own
+  popWin.textContent = ''; // the other lens's readout must not caption this one while it gathers
   linFollow = true; // a lens opened fresh opens on now
   popDraw();
   popPoll(true);
 }
 popModeRoles.onclick = () => popSetMode('roles');
 popModeLin.onclick = () => popSetMode('lineages');
-const popCladeBtn = document.getElementById('popClade') as HTMLButtonElement;
-popCladeBtn.onclick = () => {
-  linClade = LIN_CLADES[(LIN_CLADES.indexOf(linClade) + 1) % LIN_CLADES.length];
-  popCladeBtn.textContent = linClade;
-  popDraw();
-};
+// The clade, a segmented choice: every clade is a plate, the shown one lit.
+// Derived from linClade every time rather than remembered by the buttons.
+const popCladeSeg = document.getElementById('popClade') as HTMLElement;
+function syncCladeSeg(): void {
+  for (const b of popCladeSeg.querySelectorAll('button')) {
+    b.setAttribute('aria-checked', String(b.dataset.clade === linClade));
+  }
+}
+for (const c of LIN_CLADES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('role', 'radio');
+  b.dataset.clade = c;
+  b.textContent = c;
+  b.onclick = () => { linClade = c; syncCladeSeg(); popDraw(); };
+  popCladeSeg.appendChild(b);
+}
+syncCladeSeg();
 // The chart is the one panel that has to repaint when it changes size: its
 // canvas is sized in device pixels, so reflowing alone would stretch the last
 // frame rather than draw a new one.

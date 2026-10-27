@@ -135,19 +135,21 @@
        the world canvas it is a chart, not art, so `pixelated` would be exactly
        wrong here. The chart flexes to whatever size the panel was given and
        redraws there.
-       The header: the title gives way first -- it shrinks to an ellipsis on a
-       zero flex basis, so the choices and the size and close plates always share
-       the first line -- and the window readout takes a line of its own under
-       them at every width. Sharing the first line, the lineage lens's third
-       choice left it no room at all. */
-    #pop h3 { gap: 10px; flex-wrap: wrap; row-gap: 4px; }
-    #pop h3 .ttl { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #pop h3 .win { order: 9; flex-basis: 100%; opacity: .6; font: 11px var(--f-ui); letter-spacing: 0;
+       The header holds the title, the readout and the close, nothing else:
+       the lenses are tabs under it and the lineage lens's controls a row of
+       their own, so the header never wraps. The readout gives way first. */
+    #pop h3 { gap: 10px; }
+    #pop h3 .ttl { flex: none; }
+    #pop h3 .win { flex: 1 1 0; min-width: 0; opacity: .6; font: 11px var(--f-ui); letter-spacing: 0;
                    font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    @container bh (max-width: 599px) {
-      #pop h3 { gap: 6px; }
-      #pop h3 button:not(.szbtn, .x) { padding: 4px 7px; font-size: 10px; }
-    }
+    /* The lens tabs, full-bleed under the header like the inspector's, and the
+       header gives up its bottom margin to them (a negative top margin on a
+       sticky bar leaves a window once it sticks). */
+    #pop > .bh-tabs { margin: 0 -12px 8px; flex: none; }
+    #pop > h3:has(+ .bh-tabs) { margin-bottom: 0; }
+    /* The lineage lens's tool row: the clade choice and the detail switch. */
+    #pop .pop-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 8px; flex: none; }
+    #pop .pop-tools .bh-switch { font: 11px var(--f-ui); color: var(--dim); }
     /* The lineage diagram's scrollbar, on top: a recessed rail and a raised
        Bulkhead thumb. Thick enough to grab on a phone; the chart drags too. */
     #pop .pop-rail { position: relative; flex: none; height: 14px; margin: 0 0 6px; background: var(--well);
@@ -161,15 +163,8 @@
              image-rendering: auto; touch-action: pan-y; } /* sideways is the lineage diagram's own scroll */
     /* Wraps: the lineage lens can carry a dozen-plus species where roles have
        four, and a legend that clips is a legend that lies by omission. */
-    #pop .pop-detail { align-self: flex-start; margin-top: 4px; font: 11px var(--f-ui); color: var(--dim); }
     #popKey { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px;
               font: 11px/1.6 var(--f-ui); font-variant-numeric: tabular-nums; }
-    /* role / lineage / clade: a segmented choice set into the header */
-    #pop h3 button:not(.szbtn, .x) { background: var(--lamp-h); border: none; color: var(--dim); cursor: pointer;
-                     font: 400 11px var(--f-label); letter-spacing: .06em; padding: 5px 9px; margin: 0;
-                     box-shadow: inset 0 2px 0 0 var(--sh); -webkit-tap-highlight-color: transparent; }
-    #pop h3 button:not(.szbtn, .x).on { color: var(--lamp-l); background: var(--s0); box-shadow: inset 0 -2px 0 0 var(--s2); }
-    #pop h3 #popClade { color: var(--ink); background: var(--s0); }
     /* Two checkboxes hanging off a toolbar button: a menu, sized by what it
        holds. The round swatch is the colour that overlay paints the world. */
     #ovl label { display: flex; align-items: center; gap: 10px; padding: 3px 0; min-height: 28px;
@@ -471,19 +466,27 @@
     <button class="bh-btn bh-btn--sm bh-btn--icon" id="barToggle" aria-expanded="false" aria-controls="barTools"
       aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
   </div>
-  <div id="pop" class="panel half">
-    <h3><span class="ttl">population by</span>
-      <button id="popModeRoles" class="on" title="headcount by trophic role">role</button>
-      <button id="popModeLin" title="one clade's species over time — is each line breeding on, or is the warden reseeding it?">lineage</button>
-      <button id="popClade" hidden
-        title="cycle which clade the diagram shows — a lineage never crosses clades, so one clade at a time loses nothing">herbivore</button>
-      <span class="win" id="popWin"></span>
-      <button type="button" class="szbtn" title="full screen">⛶</button><button type="button" class="x" title="close" aria-label="close">✕</button></h3>
+  <div id="pop" class="panel full">
+    <h3><span class="ttl">population</span><span class="win" id="popWin"></span>
+      <button type="button" class="x" title="close" aria-label="close">✕</button></h3>
+    <!-- The lenses are tabs of the one panel, like the inspector's: a role
+         headcount over time, or one clade's species over time. -->
+    <div class="bh-tabs" role="tablist" aria-label="lens">
+      <button type="button" role="tab" id="popModeRoles" aria-selected="true" title="headcount by trophic role">by role</button>
+      <button type="button" role="tab" id="popModeLin" aria-selected="false"
+        title="one clade's species over time — is each line breeding on, or is the warden reseeding it?">by lineage</button>
+    </div>
+    <!-- The lineage lens's own controls, a row of their own above the chart:
+         which clade (a lineage never crosses clades, so one at a time loses
+         nothing) and whether every passage is drawn. -->
+    <div class="pop-tools" id="popTools" hidden>
+      <div class="bh-seg" role="radiogroup" aria-label="clade" id="popClade"></div>
+      <label class="bh-switch" id="popDetail"
+             title="every passage: bred and held, reseeds in, lines that ended out"><input type="checkbox"><span class="knob"></span><span>detail</span></label>
+    </div>
     <div id="popScroll" class="pop-rail" role="scrollbar" aria-label="scroll the stages"
          aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden><i></i></div>
     <canvas id="popCv"></canvas>
-    <label class="bh-switch pop-detail" id="popDetail" hidden
-           title="every passage: bred and held, reseeds in, lines that ended out"><input type="checkbox"><span class="knob"></span><span>detail</span></label>
     <div id="popKey"></div>
   </div>
   <div id="ovl" class="panel menu">
