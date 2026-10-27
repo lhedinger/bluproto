@@ -398,7 +398,7 @@ function hasHoles(chunk: HTMLCanvasElement): boolean {
 
 /** For every visible chunk whose art has holes, the chunks below it and the
  *  screen rects their parallax puts them in, deepest first: [key, z, canvas,
- *  x, y, w, h]. Where the level below is itself holed over the same chunk —
+ *  x, y, w, h], ordered deepest FLOOR first. Where the level below is itself holed over the same chunk —
  *  the gorge cutting through two storeys — the level under THAT is drawn
  *  first at the factor squared, a plane two storeys from the eye, so the stack reads
  *  as one deepening cut rather than a hole with a hole painted on its
@@ -410,12 +410,20 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   const out: Array<[number, number, HTMLCanvasElement, number, number, number, number]> = [];
   if (level - 1 < 0 || chunkTiles <= 0) return out;
   const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
-  const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
+  const mx = cvW / 2, my = cvH / 2;
+  // The chunks the DEEPEST floor needs to fill the screen: every floor down
+  // shrinks toward the centre, so the screen's edge reaches further into the
+  // world on it than on the top. Ranged off the top floor's view alone, a
+  // floor below ran out of chunks short of the edge, and there its low map
+  // showed through with its own veil on top of the chunks' -- a dark band
+  // down the side of the screen, doubly veiled.
+  const deep = parallaxFactor(cam.scale) ** level;
+  const tl = cam.screenToWorld(mx - mx / deep, my - my / deep);
+  const br = cam.screenToWorld(mx + (cvW - mx) / deep, my + (cvH - my) / deep);
   const cx0 = Math.max(0, Math.floor(tl.x / chunkTiles));
   const cy0 = Math.max(0, Math.floor(tl.y / chunkTiles));
   const cx1 = Math.min(cxN - 1, Math.floor(br.x / chunkTiles));
   const cy1 = Math.min(cyN - 1, Math.floor(br.y / chunkTiles));
-  const mx = cvW / 2, my = cvH / 2;
   // Every chunk edge is computed as a SHARED grid line and rounded once, so
   // two neighbours land on the identical device pixel. The obvious per-chunk
   // rect (origin + width, both scaled) is continuous in float math but lets
@@ -437,9 +445,11 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   };
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
-      // A peek, never a request: the top chunk is fetched by the ground pass
-      // for the viewport at near zoom, and only a decoded chunk knows its
-      // holes. The chunk beneath is requested only for a holed top, and the
+      // Requested, not peeked: the ground pass fetches the top chunks for its
+      // own view, and the floors below reach past it (see `deep`), so a top
+      // chunk out there would never land and nothing would be looked down
+      // through it. Only a decoded chunk knows its holes; the chunk beneath
+      // is requested only for a holed top, and the
       // one beneath THAT only for a holed chunk beneath — so the view down
       // goes as deep as the openings do and no deeper. Three storeys of sky
       // over the ground made this a walk rather than a pair: from the top
@@ -447,7 +457,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
       // parallax compounds on the way.
       const key = cx + cy * cxN;
       const stack: Array<[number, number, HTMLCanvasElement, number, number, number, number]> = [];
-      let above = getChunk(cx, cy, level, false);
+      let above = getChunk(cx, cy, level, true);
       let factor = 1;
       for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
         const below = getChunk(cx, cy, z, true);
@@ -456,9 +466,18 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
         stack.push([key, z, below, ...rect(cx, cy, factor)]);
         above = below;
       }
-      for (let i = stack.length - 1; i >= 0; i--) out.push(stack[i]); // deepest first
+      out.push(...stack);
     }
   }
+  // Deepest FLOOR first across every chunk, not deepest first chunk by chunk.
+  // A floor further down shrinks further toward the screen centre, so a
+  // chunk's deep floors reach a few pixels past the seam with its neighbour;
+  // drawn as part of their own chunk's stack, they landed after the
+  // neighbour's upper floors and painted over those floors' veils there --
+  // a bright line down every seam where the stacks met (3 px at 12 px/tile
+  // from the top storey). Floor by floor, each level covers the one under
+  // it whatever chunk either came from. Stable, so a floor keeps chunk order.
+  out.sort((a, b) => a[1] - b[1]);
   return out;
 }
 
