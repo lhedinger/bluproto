@@ -1279,7 +1279,9 @@ public final class ServerTests {
 				int nx = x + net.hedinger.prototype.engine.World.FLOW_DX[d];
 				int ny = y + net.hedinger.prototype.engine.World.FLOW_DY[d];
 				int nk = m[ny * cols + nx];
-				onward += nk >= 1 && nk <= 2 ? 1 : 0;
+				boolean overLip = net.hedinger.prototype.engine.World.flowFalls(b)
+						&& w.getTile(nx, ny, z).getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE;
+				onward += nk >= 1 && nk <= 2 || overLip ? 1 : 0; // or over the lip into the drop
 			}
 		}
 		check("the demo surface has rivers that move: " + moving + " tiles", moving > 100);

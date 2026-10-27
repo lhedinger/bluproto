@@ -12602,6 +12602,54 @@ public class SimTests {
 	}
 
 	/**
+	 * The gorge is sited across a river when one offers, and the river falls in:
+	 * every lip on the surface pours into the drop, and under each lip, on the
+	 * cave floor, lies the core of the plunge pool it lands in -- unless the cut
+	 * goes on down through that floor too, and the water with it. Here rather than in
+	 * the server tests because a world must be built on a quiet random stream --
+	 * the server tests leave hosts' sim threads drawing from it, and a world
+	 * generated among them comes out differently from one run to the next.
+	 */
+	static class TheGorgeSwallowsARiver extends Scenario {
+		@Override
+		public void run() {
+			int worlds = 0, withFall = 0, pools = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int z = w.getSurfaceZ(), lips = 0, landed = 0;
+				for (int y = 1; y < w.getRows() - 1; y++) {
+					for (int x = 1; x < w.getColums() - 1; x++) {
+						int f = w.getFlow(x, y, z);
+						if (!World.flowFalls(f)) {
+							continue;
+						}
+						lips++;
+						int d = World.flowDirOf(f);
+						int hx = x + World.FLOW_DX[d], hy = y + World.FLOW_DY[d];
+						assertTrue("seed " + seed + ": the lip at " + x + "," + y + " pours into the drop",
+								w.getTile(hx, hy, z).getType() == Tile.TileType.TYPE_HOLE);
+						int under = w.getFlow(hx, hy, z - 1);
+						boolean core = World.flowPlunge(under) && World.flowStep(under);
+						assertTrue("seed " + seed + ": under the lip at " + x + "," + y
+								+ " a plunge pool, or the drop goes on down",
+								core || w.getTile(hx, hy, z - 1).getType() == Tile.TileType.TYPE_HOLE);
+						landed += core ? 1 : 0;
+					}
+				}
+				worlds++;
+				if (lips > 0) {
+					withFall++;
+					pools += landed > 0 ? 1 : 0;
+				}
+			}
+			assertGreater("and in most of them the river lands in a plunge pool", pools, withFall / 2);
+			// The gorge is aimed at a river with open cave under it, and goes
+			// without (keeping clear of water as before) where none offers.
+			assertTrue("most worlds' gorge swallows a river: " + withFall + "/" + worlds, withFall >= 4);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -20900,6 +20948,7 @@ public class SimTests {
 				new AHostMendsWhatOneRiderDrinks(),
 				new TheBodyScanIsPaintedFromRamps(),
 				new TheMovingWaterIsPaintedFromItsRamps(),
+				new TheGorgeSwallowsARiver(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),

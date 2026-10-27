@@ -59,7 +59,8 @@ public final class Tuning {
 			"Tile.FLORA_HEATHER", "Tile.FLORA_MOSS",
 			"NPC.STATUS_SLEEP", "NPC.STATUS_IDLE", "NPC.STATUS_ALERT",
 			"NPC.STATUS_THREAT",
-			"World.FLOW_STILL", "World.FLOW_SLOW", "World.FLOW_STREAM", "World.FLOW_RAPIDS");
+			"World.FLOW_STILL", "World.FLOW_SLOW", "World.FLOW_STREAM", "World.FLOW_RAPIDS",
+			"World.FLOW_FALL", "World.FLOW_PLUNGE");
 
 	/** Key -> field, in survey order. Built once; the class list is fixed. */
 	private static final Map<String, Field> FIELDS = survey();
