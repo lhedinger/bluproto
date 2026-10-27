@@ -58,8 +58,9 @@ function teal(rgb: number): boolean {
   return ((rgb >> 8) & 255) > 0.77 * (rgb & 255);
 }
 
-/** World.FLOW_FALL / FLOW_PLUNGE: the lip of a fall, a plunge pool. */
-const FALL = 1 << 6, PLUNGE = 1 << 7;
+/** World.FLOW_FALL / FLOW_PLUNGE: the lip of a fall, a plunge pool; World.FLOW_FACE,
+ *  a pool core's speed field where its fall comes down a rock face. */
+const FALL = 1 << 6, PLUNGE = 1 << 7, FACE = 1;
 /** World.FLOW_DX / FLOW_DY: the eight directions, clockwise from east. */
 const FDX = [1, 1, 0, -1, -1, -1, 0, 1];
 const FDY = [0, 1, 1, 1, 0, -1, -1, -1];
@@ -291,6 +292,9 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
       }
     }
     if (falls) paintFall(d, W, tx, ty, fx, fy, wx0, wy0, chunkTiles, level, getChunk, t);
+    // A core whose fall comes down a rock face, from the north: the face is
+    // drawn (§4), so the water is seen running down it.
+    if (plunge && (f & 32) && speed === FACE && fx === 0 && fy === 1) paintFace(d, W, tx, ty - 1, wx0, wy0, chunkTiles, t);
   }
   L.cv.getContext('2d')!.putImageData(L.img, 0, 0);
 }
@@ -326,6 +330,41 @@ function paintFall(d: Uint32Array, W: number, tx: number, ty: number, fx: number
       const seg = Math.floor(u / 6), k = mod(u, 6);
       const col = hash01(seg, lane, 69) < 0.55 && k < 2 ? (k === 0 ? SHALLOWS[1] : WATER[2])
         : fall < 3 ? WATER[1] : WATER[0];
+      const lx = gx - wx0 * ART, ly = gy - wy0 * ART;
+      d[ly * W + lx] = 0xff000000 | ((col & 0xff) << 16) | (col & 0xff00) | ((col >> 16) & 0xff);
+    }
+  }
+}
+
+/** The face band of a wall tile (Grid.wallDepth): the cornice row, then the face to the tile's foot. */
+const CORNICE = Math.floor(ART * 0.55);
+/** Half the width of a fall down a face, in art-px: a spring's brook is one tile of water. */
+const FACE_HALF = 3;
+
+/**
+ * A fall seen from the foot of its cliff (ART-STYLE §4): the sheet runs down
+ * the wall's face band over the pool -- whitewater where it leaves the
+ * cornice, streaks falling fast in the water ramp, spray where it meets the
+ * pool -- the outermost lanes dithered to half so the sheet has no hard edge
+ * against the rock.
+ */
+function paintFace(d: Uint32Array, W: number, tx: number, ty: number,
+    wx0: number, wy0: number, chunkTiles: number, t: number): void {
+  if (ty < wy0 || ty >= wy0 + chunkTiles || tx < wx0 || tx >= wx0 + chunkTiles) return;
+  const mid = (ART >> 1);
+  for (let aj = CORNICE; aj < ART; aj++) {
+    for (let ai = mid - FACE_HALF; ai <= mid + FACE_HALF - 1; ai++) {
+      const gx = tx * ART + ai, gy = ty * ART + aj;
+      const outer = ai === mid - FACE_HALF || ai === mid + FACE_HALF - 1;
+      if (outer && bayer(gx, gy) >= 0.5) continue;
+      let col: number;
+      if (aj === CORNICE) col = hash01(gx, Math.floor(t / 2), 95) < 0.7 ? SHALLOWS[2] : SHALLOWS[1];
+      else if (aj === ART - 1) col = hash01(gx, Math.floor(t / 2), 91) < 0.6 ? SHALLOWS[2] : SHALLOWS[1]; // spray at the foot
+      else {
+        const u = aj - Math.floor(0.9 * t) + Math.floor(hash01(gx, 3, 97) * 97);
+        const seg = Math.floor(u / 4), k = mod(u, 4);
+        col = hash01(seg, gx, 99) < 0.7 && k < 3 ? (k === 2 ? SHALLOWS[1] : WATER[2]) : outer ? WATER[0] : WATER[1];
+      }
       const lx = gx - wx0 * ART, ly = gy - wy0 * ART;
       d[ly * W + lx] = 0xff000000 | ((col & 0xff) << 16) | (col & 0xff00) | ((col >> 16) & 0xff);
     }
