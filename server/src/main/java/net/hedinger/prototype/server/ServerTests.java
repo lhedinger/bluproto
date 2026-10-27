@@ -1335,7 +1335,8 @@ public final class ServerTests {
 				continue;
 			}
 			if (fd[i] < 0) {
-				cutOff++;
+				// between rock, nobody is on either side to cross
+				cutOff += net.hedinger.prototype.sim.Worlds.crossable(w, i % cols2, i / cols2, z) ? 1 : 0;
 			} else {
 				far = Math.max(far, fd[i]);
 			}
