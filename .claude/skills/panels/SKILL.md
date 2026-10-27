@@ -31,7 +31,21 @@ differs between them:
 Under 600 px wide (Bulkhead's *compact* width) the corner anchors become sheets
 from the bottom edge: `.half` and `.menu` span the width from the bottom up,
 `.card` spans the width at the bottom, `.full` fills everything under the
-toolbar. Those rules live in `index.html` beside the anchors themselves.
+toolbar. Those rules live in `index.html` beside the anchors themselves. A
+phone's `.half` is a true half (50dvh) and its `.card` is capped at that, so
+the upper half of the screen stays the world's.
+
+### A panel that covers the world moves the focus, not the subject out of view
+
+The inspector describes a body; it must not open on top of it. The follow
+glues a creature to the centre of what the inspector leaves UNCOVERED
+(`viewFocus` in main.ts): the band between the toolbar and a sheet's top edge
+on a phone, the width left of the column on a wide screen, and nothing moves
+for a full panel. The inspector's rect is measured when it opens, resizes or
+the window does, never copied from the stylesheet. A selected body that is not
+followed -- an item, a corpse, a tile -- is revealed once on open if the panel
+landed over it. On a phone the debug inspector opens as the half sheet for the
+same reason, unless the viewer has set its size.
 
 ### Controls are Bulkhead, never hand-styled
 
