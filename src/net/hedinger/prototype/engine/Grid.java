@@ -1250,25 +1250,39 @@ public class Grid {
 			}
 			fam = LAP_DRY;
 		}
+		// A pit a down ramp pours into opens as wide as the ramp: the laps
+		// from its sides start at nothing on the ramp's edge and deepen one
+		// art-px for every two away from it, and no corner rounds there. Left
+		// to lap at full depth, the side ground pinched the mouth narrower than
+		// the slope coming down into it -- the ramp's dark foot band ran out
+		// past the pit on both sides, a step at every descent.
+		int cap = Integer.MAX_VALUE;
+		for (int k = 0; k < 4 && cls == GroundTextures.CLS_HOLE; k++) {
+			if (rampPoursInto(x + Tile.dirDx(k), y + Tile.dirDy(k), x, y)) {
+				int dist = Tile.dirDx(k) > 0 ? A - 1 - ai : Tile.dirDx(k) < 0 ? ai
+						: Tile.dirDy(k) > 0 ? A - 1 - aj : aj;
+				cap = Math.min(cap, dist / 2);
+			}
+		}
 		// Cardinal laps, deepest wins so corner pockets fill naturally.
 		int best = cls, bestDepth = 0;
 		int n = lapClassAt(x, y - 1, own, fam);
-		if (n >= 0 && aj < lapDepth(gx, n * 4 + 0)) {
+		if (n >= 0 && aj < Math.min(cap, lapDepth(gx, n * 4 + 0))) {
 			int d = lapDepth(gx, n * 4 + 0) - aj;
 			if (d > bestDepth) { best = n; bestDepth = d; }
 		}
 		int s = lapClassAt(x, y + 1, own, fam);
-		if (s >= 0 && aj >= A - lapDepth(gx, s * 4 + 1)) {
+		if (s >= 0 && aj >= A - Math.min(cap, lapDepth(gx, s * 4 + 1))) {
 			int d = aj - (A - lapDepth(gx, s * 4 + 1)) + 1;
 			if (d > bestDepth) { best = s; bestDepth = d; }
 		}
 		int w = lapClassAt(x - 1, y, own, fam);
-		if (w >= 0 && ai < lapDepth(gy, w * 4 + 2)) {
+		if (w >= 0 && ai < Math.min(cap, lapDepth(gy, w * 4 + 2))) {
 			int d = lapDepth(gy, w * 4 + 2) - ai;
 			if (d > bestDepth) { best = w; bestDepth = d; }
 		}
 		int e = lapClassAt(x + 1, y, own, fam);
-		if (e >= 0 && ai >= A - lapDepth(gy, e * 4 + 3)) {
+		if (e >= 0 && ai >= A - Math.min(cap, lapDepth(gy, e * 4 + 3))) {
 			int d = ai - (A - lapDepth(gy, e * 4 + 3)) + 1;
 			if (d > bestDepth) { best = e; bestDepth = d; }
 		}
@@ -1278,6 +1292,9 @@ public class Grid {
 		// Rounded outer corners: where two cardinals share a higher diagonal
 		// neighbour, the diagonal's lap rounds the corner with a quarter-arc.
 		int R = 4; // corner radius, art-px
+		if (cap < R) {
+			return cls; // on a ramp's edge: no corner pinches the mouth
+		}
 		int nw = lapClassAt(x - 1, y - 1, own, fam);
 		if (nw >= 0 && ai < R && aj < R && dist2(ai, aj, R, R) > R * R) {
 			return nw;
