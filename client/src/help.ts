@@ -449,7 +449,8 @@ const moving = section('Moving water',
   + 'live flow layer over that world\'s own bake. The drift is the bake\'s water pixels carried '
   + 'downstream (two copies half a tile apart, ordered-dithered so the loop never jumps), the '
   + 'dashes ride lanes fastest away from the banks, and rapids and cascades break white in the '
-  + 'shallows ramp. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
+  + 'shallows ramp; where a gorge swallows a river it pours over a lip into the drop and lands in a '
+  + 'plunge pool on the cave floor below. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
   + 'second, since the page follows no world clock.');
 
 const bakes = section('Atlas bakes',
@@ -612,62 +613,74 @@ for (const [act, name, meaning] of EXPR) {
   }
 
   // Moving water: a reach of each tier from the live world, the flow layer over
-  // that world's chunks. The layer is a single grid at a time, so the page
-  // hands it the surface's and draws every window from it.
+  // that world's chunks -- and its falls, whose lip is on the surface and whose
+  // plunge pool is a storey down. The layer holds one level's grid at a time,
+  // so every figure hands it its own before it draws.
   const hw = worldHello as { surface?: number; chunkTiles: number; build: string } | null;
   if (hw) {
-    const z = hw.surface ?? 0, CT = hw.chunkTiles;
+    const CT = hw.chunkTiles, sz = hw.surface ?? 0;
     const dec = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-    const fj = await fetch(`/api/world/flow/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
-    const wj = await fetch(`/api/world/water/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
-    if (fj && wj) {
-      const flow = dec(fj.data), water = dec(wj.data), cols = fj.cols, rows = fj.rows;
-      setFlowGrid(flow, water, cols, rows, z);
-      const chunks = new Map<string, HTMLCanvasElement>();
-      const getChunk = (cx: number, cy: number) => chunks.get(`${cx}_${cy}`) ?? null;
-      // The tile of each tier with the most moving water around it: a reach, not a trickle.
-      const pick = (want: (f: number) => boolean) => {
-        let best = -1, at = -1;
-        for (let i = 0; i < flow.length; i++) {
-          if (!flow[i] || !want(flow[i])) continue;
-          let n = 0;
-          for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) n += flow[i + dy * cols + dx] ? 1 : 0;
-          if (n > best) { best = n; at = i; }
-        }
-        return at;
-      };
-      const N = 7, DC = 280, px = DC / (N * ART); // a 7-tile window
-      for (const [name, want] of [
-        ['slow river', (f: number) => (f & 3) === 1], ['brook', (f: number) => (f & 3) === 2],
-        ['rapids', (f: number) => (f & 3) === 3 && !(f & 32)], ['cascade step', (f: number) => (f & 32) !== 0],
-      ] as const) {
-        const i = pick(want);
-        if (i < 0) continue;
-        const x0 = Math.max(0, (i % cols) - 3), y0 = Math.max(0, ((i / cols) | 0) - 3);
-        // every chunk the window, and the drift's upstream reach, can touch
-        for (let cy = Math.floor((y0 - 1) / CT); cy <= Math.floor((y0 + N) / CT); cy++) {
-          for (let cx = Math.floor((x0 - 1) / CT); cx <= Math.floor((x0 + N) / CT); cx++) {
-            if (cx < 0 || cy < 0 || chunks.has(`${cx}_${cy}`)) continue;
-            const cv = await loadCanvas(`/api/world/layers/${z}/${cx}_${cy}.png?v=${hw.build}`);
-            if (cv) chunks.set(`${cx}_${cy}`, cv);
-          }
-        }
-        pair(moving, name, DC, DC, (g, t) => {
-          g.imageSmoothingEnabled = false;
-          const tick = Math.floor(t * 33) + 1000;
-          const at = (wx: number, wy: number) => [(wx - x0) * ART * px, (wy - y0) * ART * px] as const;
-          for (const [k, cv] of chunks) {
-            const [cx, cy] = k.split('_').map(Number);
-            const [dx, dy] = at(cx * CT, cy * CT);
-            g.drawImage(cv, dx, dy, cv.width * px, cv.height * px);
-          }
-          for (const f of flowLayers(ART, { x0, y0, x1: x0 + N, y1: y0 + N }, CT, z, getChunk, tick)) {
-            const [dx, dy] = at(f.wx, f.wy);
-            g.drawImage(f.cv, dx, dy, f.cv.width * px, f.cv.height * px);
-          }
-        });
+    const grids = new Map<number, { flow: Uint8Array; water: Uint8Array; cols: number; rows: number } | null>();
+    const gridOf = async (z: number) => {
+      if (!grids.has(z)) {
+        const fj = await fetch(`/api/world/flow/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        const wj = await fetch(`/api/world/water/${z}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        grids.set(z, fj && wj ? { flow: dec(fj.data), water: dec(wj.data), cols: fj.cols, rows: fj.rows } : null);
       }
-    }
+      return grids.get(z)!;
+    };
+    const chunks = new Map<string, HTMLCanvasElement>();
+    const N = 7, DC = 280, px = DC / (N * ART); // a 7-tile window
+    const reach = async (z: number, name: string, want: (f: number) => boolean) => {
+      const G = await gridOf(z);
+      if (!G) return;
+      const { flow, water, cols, rows } = G;
+      // The tile with the most moving water around it: a reach, not a trickle.
+      let best = -1, i = -1;
+      for (let k = 0; k < flow.length; k++) {
+        if (!flow[k] || !want(flow[k])) continue;
+        let n = 0;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) n += flow[k + dy * cols + dx] ? 1 : 0;
+        if (n > best) { best = n; i = k; }
+      }
+      if (i < 0) return;
+      const x0 = Math.max(0, (i % cols) - 3), y0 = Math.max(0, ((i / cols) | 0) - 3);
+      // every chunk the window, and the drift's upstream reach, can touch
+      const mine: Array<[number, number, HTMLCanvasElement]> = [];
+      for (let cy = Math.floor((y0 - 1) / CT); cy <= Math.floor((y0 + N) / CT); cy++) {
+        for (let cx = Math.floor((x0 - 1) / CT); cx <= Math.floor((x0 + N) / CT); cx++) {
+          if (cx < 0 || cy < 0) continue;
+          const key = `${z}/${cx}_${cy}`;
+          if (!chunks.has(key)) {
+            const cv = await loadCanvas(`/api/world/layers/${z}/${cx}_${cy}.png?v=${hw.build}`);
+            if (cv) chunks.set(key, cv);
+          }
+          const cv = chunks.get(key);
+          if (cv) mine.push([cx, cy, cv]);
+        }
+      }
+      const getChunk = (cx: number, cy: number) => chunks.get(`${z}/${cx}_${cy}`) ?? null;
+      pair(moving, name, DC, DC, (g, t) => {
+        g.imageSmoothingEnabled = false;
+        const tick = Math.floor(t * 33) + 1000;
+        const at = (wx: number, wy: number) => [(wx - x0) * ART * px, (wy - y0) * ART * px] as const;
+        for (const [cx, cy, cv] of mine) {
+          const [dx, dy] = at(cx * CT, cy * CT);
+          g.drawImage(cv, dx, dy, cv.width * px, cv.height * px);
+        }
+        setFlowGrid(flow, water, cols, rows, z);
+        for (const f of flowLayers(ART, { x0, y0, x1: x0 + N, y1: y0 + N }, CT, z, getChunk, tick)) {
+          const [dx, dy] = at(f.wx, f.wy);
+          g.drawImage(f.cv, dx, dy, f.cv.width * px, f.cv.height * px);
+        }
+      });
+    };
+    await reach(sz, 'slow river', f => (f & 3) === 1 && !(f & 64));
+    await reach(sz, 'brook', f => (f & 3) === 2);
+    await reach(sz, 'rapids', f => (f & 3) === 3 && !(f & 32) && !(f & 64));
+    await reach(sz, 'cascade step', f => (f & 32) !== 0 && !(f & 192));
+    await reach(sz, 'waterfall: the lip, from above', f => (f & 64) !== 0);
+    await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 128) !== 0 && (f & 32) !== 0);
   }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
