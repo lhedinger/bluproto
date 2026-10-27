@@ -1176,8 +1176,15 @@ public final class Worlds {
 		// left unreachable — a cavern no stairwell found is rock again ----
 		resealFromSurface(w, cols, rows);
 
-		// ---- shallows: every shore-touching water tile becomes a walkable,
-		// wading fringe, so lakes have fords instead of hard edges ----
+		// ---- shallows: every shore-touching STANDING water tile becomes a
+		// walkable, wading fringe, so lakes have fords instead of hard edges.
+		// Moving water is a river: its brook, the reach the carver lays at a
+		// brook's pace, is wadeable the whole way, and the channel below it
+		// keeps its depth with the fords the carver laid across it. Fringed
+		// like a lake, a two-tile channel was shallows end to end. Done here,
+		// after the gorge and the links between floors, rather than by the
+		// carver: a brook that was wadeable when the floors were linked moved
+		// the links, and with them everything drawn after ----
 		for (int z = CAVE_Z; z <= SURFACE_Z; z++) {
 			java.util.ArrayList<int[]> shore = new java.util.ArrayList<int[]>();
 			for (int x = 1; x < cols - 1; x++) {
@@ -1185,6 +1192,15 @@ public final class Worlds {
 					if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_WATER) {
 						continue;
 					}
+					int f = w.getFlow(x, y, z);
+					boolean brook = (f & 3) != 0 && World.flowSpeed(f) == World.FLOW_STREAM
+							&& !World.flowFalls(f) && !World.flowPlunge(f);
+					if ((f & 3) != 0 && !brook) {
+						continue; // the channel keeps its depth
+					}
+					// A brook is waded where it touches walkable ground, as a lake
+					// is fringed: a stub of brook locked in rock stays deep, or the
+					// skyline would cut a ramp down onto a pocket with no way out.
 					for (int k = 0; k < 4; k++) {
 						int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0);
 						int ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
@@ -1216,6 +1232,7 @@ public final class Worlds {
 		// which only wade what is there and measure the river as it will stay.
 		stillDeadEnds(w, cols, rows);
 		layFords(w, cols, rows, SURFACE_Z);
+		joinAcrossWater(w, cols, rows, SURFACE_Z);
 		return w;
 	}
 
@@ -4610,9 +4627,13 @@ public final class Worlds {
 	 * standing water, a basin with no way down (where it ponds), or the rim.
 	 *
 	 * <p>Crossable by construction: every few steps the whole cross-section is
-	 * laid as SHALLOWS (a ford), and the later shore pass fringes the rest of
-	 * the channel — so rivers structure the map without severing the walkable
-	 * region (the audit's connectivity gate holds).
+	 * laid as SHALLOWS (a ford), the shore pass later makes the brook near the
+	 * spring wadeable the whole way, and the fords pass guarantees a crossing
+	 * within reach wherever these fell short — so rivers structure the map
+	 * without severing the walkable region (the audit's connectivity gate
+	 * holds). The channel lower down keeps its depth: fringed on both banks
+	 * like a lake, a two-tile river was shallows end to end, its fords
+	 * indistinguishable from the rest and its deep water never seen.
 	 */
 	private static void carveRivers(World w, int cols, int rows) {
 		int n = Math.max(2, (int) Math.round(cols * (double) rows / 3000.0));
@@ -4645,12 +4666,12 @@ public final class Worlds {
 	/**
 	 * Guarantees the crossings the carver's fords only make likely.
 	 *
-	 * <p>The carver lays a ford every ninth step, and the shallows pass turns
-	 * every water tile touching land into a wading fringe, so most of a river
-	 * can be waded already. But a ford can be carved over by the next step, a
-	 * reach can widen into a pool whose middle stays deep, and "likely" is how
-	 * seed 42 came to have a 29-tile reach with no way across it at all --
-	 * found by measuring, once rivers ran the length they were meant to.
+	 * <p>The carver lays a ford every ninth step, and the shallows pass makes
+	 * the brook wadeable the whole way, so a river can be waded here and
+	 * there. But a ford can be carved over by the next step, a reach can
+	 * widen into a pool whose middle stays deep, and "likely" is how seed 42
+	 * came to have a 29-tile reach with no way across it at all -- found by
+	 * measuring, once rivers ran the length they were meant to.
 	 *
 	 * <p>A tile is a crossing when the whole width of the water through it,
 	 * across the flow, can be walked. Every river tile is measured by its
@@ -4700,6 +4721,97 @@ public final class Worlds {
 		}
 	}
 
+	/**
+	 * Guarantees what the fords only make likely: that no walkable ground is
+	 * cut off from the rest by water. A river that keeps its depth can close
+	 * the one way out of a pocket -- a few tiles of bank between rock and the
+	 * rim with a mesa's ramp landing on them, which the fringed river used to
+	 * join to the plain -- and a ford every eight tiles along the river says
+	 * nothing about a bank that can only be left across it. Every walkable
+	 * region of the floor that is not the mainland and touches water gets
+	 * the shortest wet path from it to the mainland waded. A region water
+	 * cannot reach is left as it is; the world was whole before the rivers
+	 * kept their depth, so there is none.
+	 */
+	private static void joinAcrossWater(World w, int cols, int rows, int z) {
+		for (int round = 0; round < 64; round++) {
+			int[] comp = new int[cols * rows];
+			int n = 0, main = 0, mainSize = 0;
+			java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+			for (int i = 0; i < comp.length; i++) {
+				if (comp[i] != 0 || !w.getTile(i % cols, i / cols, z).isWalkable()) {
+					continue;
+				}
+				int size = 0;
+				comp[i] = ++n;
+				q.add(i);
+				while (!q.isEmpty()) {
+					int c = q.poll();
+					size++;
+					int cx = c % cols, cy = c / cols;
+					for (int k = 0; k < 4; k++) {
+						int nx = cx + Tile.dirDx(k), ny = cy + Tile.dirDy(k);
+						if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) {
+							continue;
+						}
+						int j = ny * cols + nx;
+						if (comp[j] == 0 && w.getTile(nx, ny, z).isWalkable()) {
+							comp[j] = n;
+							q.add(j);
+						}
+					}
+				}
+				if (size > mainSize) {
+					mainSize = size;
+					main = n;
+				}
+			}
+			if (n <= 1) {
+				return;
+			}
+			// The shortest wet path from any stranded tile to the mainland: a
+			// flood through water from every stranded region at once, parents
+			// kept, stopped at the first mainland tile reached.
+			int[] from = new int[cols * rows];
+			java.util.Arrays.fill(from, -1);
+			for (int i = 0; i < comp.length; i++) {
+				if (comp[i] != 0 && comp[i] != main) {
+					from[i] = i;
+					q.add(i);
+				}
+			}
+			int reached = -1;
+			while (!q.isEmpty() && reached < 0) {
+				int c = q.poll();
+				int cx = c % cols, cy = c / cols;
+				for (int k = 0; k < 4 && reached < 0; k++) {
+					int nx = cx + Tile.dirDx(k), ny = cy + Tile.dirDy(k);
+					if (nx < 1 || ny < 1 || nx >= cols - 1 || ny >= rows - 1) {
+						continue;
+					}
+					int j = ny * cols + nx;
+					if (from[j] >= 0) {
+						continue;
+					}
+					if (comp[j] == main) {
+						from[j] = c;
+						reached = j;
+					} else if (isWet(w, nx, ny, z) && !World.flowFalls(w.getFlow(nx, ny, z))
+							&& !World.flowPlunge(w.getFlow(nx, ny, z))) {
+						from[j] = c;
+						q.add(j);
+					}
+				}
+			}
+			if (reached < 0) {
+				return; // nothing left that water can join
+			}
+			for (int c = from[reached]; from[c] != c; c = from[c]) {
+				wade(w, c % cols, c / cols, z);
+			}
+		}
+	}
+
 	/** Whether a crossing could be laid at a river tile: ground to stand on
 	 *  across both banks, and nothing across the channel that must stay deep.
 	 *  A ford joins two banks; where the river runs between rock -- cut
@@ -4745,6 +4857,10 @@ public final class Worlds {
 	}
 
 	private static void wade(World w, int x, int y, int z) {
+		int f = w.getFlow(x, y, z);
+		if (World.flowFalls(f) || World.flowPlunge(f)) {
+			return; // a lip, or a plunge pool: deep by its nature, and marked for the art
+		}
 		if (w.getTile(x, y, z).getType() == Tile.TileType.TYPE_WATER) {
 			w.setTile(x, y, z, Tile.TileType.TYPE_SHALLOWS);
 			w.getTile(x, y, z).setFertility(0);
