@@ -31,7 +31,37 @@ public final class ServerTests {
 	 * all facts about how a demo world is served, and the smaller demo is one.
 	 */
 	static WorldHost hostAtTheSizeTheTestsWereWrittenFor(long seed) {
-		return new WorldHost(seed, 144, 88, "demo");
+		return onAQuietStream(() -> new WorldHost(seed, 144, 88, "demo"));
+	}
+
+	/** A host on the whole map, for what is claimed about its rivers and
+	 *  its bake: the tests that measure the world the viewer actually gets. */
+	static WorldHost hostOnTheWholeMap(long seed) {
+		return onAQuietStream(() -> new WorldHost(seed));
+	}
+
+	/**
+	 * Every host the suite has built. A host starts its sim loop at
+	 * construction and ticks until the JVM exits, and the engine has one
+	 * random stream, so the hosts of finished tests were still drawing from
+	 * it while the next test's world was built -- and the world under a test
+	 * was never quite the one its seed names: the longest river on seed 42
+	 * measured anywhere from 60 to 163 tiles across runs of the same commit,
+	 * and the farthest reach from a ford 7, 8 or 9. A new host stops every
+	 * one before it, so each world is built on a quiet stream and is the
+	 * world its seed names, run after run. No test needs a host once it has
+	 * returned.
+	 */
+	private static final java.util.List<WorldHost> hosts = new java.util.ArrayList<WorldHost>();
+
+	private static WorldHost onAQuietStream(java.util.function.Supplier<WorldHost> build) {
+		for (WorldHost h : hosts) {
+			h.runner().stop();
+		}
+		hosts.clear();
+		WorldHost h = build.get();
+		hosts.add(h);
+		return h;
 	}
 
 	public static void main(String[] args) throws Exception {
@@ -1210,7 +1240,7 @@ public final class ServerTests {
 	 * glitter.
 	 */
 	static void theWaterMaskNamesEachWater() {
-		WorldHost host = new WorldHost(42);
+		WorldHost host = hostOnTheWholeMap(42);
 		host.runner().pause();
 		net.hedinger.prototype.engine.World w = host.runner().world();
 		int z = w.getSurfaceZ();
@@ -1248,7 +1278,7 @@ public final class ServerTests {
 	 * or a lake would drift like a stream.
 	 */
 	static void theRiversFlowDownTheirOwnChannels() {
-		WorldHost host = new WorldHost(42);
+		WorldHost host = hostOnTheWholeMap(42);
 		host.runner().pause();
 		net.hedinger.prototype.engine.World w = host.runner().world();
 		int z = w.getSurfaceZ(), cols = w.getColums();
@@ -1652,7 +1682,7 @@ public final class ServerTests {
 		// The real, full-size world: this claim is about what the served world
 		// contains -- a cactus of every age -- and on the 144x88 demo the
 		// desert is small enough that a rung can simply not occur.
-		WorldHost host = new WorldHost(42);
+		WorldHost host = hostOnTheWholeMap(42);
 		java.util.Map<Integer, Integer> rungs = new java.util.TreeMap<>();
 		int cacti = 0;
 		for (int z = 0; z < host.levelsForTest(); z++) {
