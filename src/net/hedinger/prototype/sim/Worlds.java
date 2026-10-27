@@ -4982,6 +4982,7 @@ public final class Worlds {
 	 *  this draws on no random stream, so the world it carves is unchanged. */
 	private static void runRiver(World w, int cols, int rows, int x, int y) {
 		int prevDx = 0, prevDy = 0, sinceFord = 0;
+		boolean steepBefore = false; // the step before this one already broke the surface
 		int[] cell = new int[8]; // the channel cells this step laid, as x,y pairs
 		// Every tile this river has laid. Arriving on water ends a river only
 		// if the water was someone else's -- a lake, an earlier river. A two-wide
@@ -5060,8 +5061,23 @@ public final class Worlds {
 			int speed = drop > RAPIDS_DROP ? World.FLOW_RAPIDS
 					: steps < 12 ? World.FLOW_STREAM : World.FLOW_SLOW;
 			int dir = World.flowDir(bx, by);
+			// A cascade is one lip across the channel, where the bed first
+			// breaks the surface: the field often stays steep for several
+			// steps, and a step flag on every cell of every steep block drew a
+			// staircase of lips a tile apart. Only the first steep step of a
+			// run carries it, and only one row or column of the block. Blocks
+			// overlap by half, the next one relaying the cells on this one's
+			// downstream side, so the lip goes on the cells this block keeps:
+			// its trailing edge, whose own downstream edge is where the bed
+			// drops into the block below.
+			boolean steep = drop > STEP_DROP;
+			boolean lip = steep && !steepBefore;
+			steepBefore = steep;
 			for (int i = 0; i < laid; i += 2) {
-				w.setFlow(cell[i], cell[i + 1], SURFACE_Z, dir, speed, drop > STEP_DROP);
+				int cx = cell[i], cy = cell[i + 1];
+				boolean kept = bx > 0 ? cx == x : bx < 0 ? cx == x + width - 1
+						: by > 0 ? cy == y : cy == y + width - 1;
+				w.setFlow(cx, cy, SURFACE_Z, dir, speed, lip && kept);
 			}
 			prevDx = bx;
 			prevDy = by;
