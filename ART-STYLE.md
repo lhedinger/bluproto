@@ -211,7 +211,14 @@ One sun, straight overhead-north. The grammar:
   where water reaches the lip, so a fall is as wide as its river. A storey
   down, the **plunge pool** churns at its core in the shallows ramp and sends
   out ripple rings -- authored stamps, radius 4, 7 and 10, the newest in the
-  highlight and the one before in the base -- one every eight ticks.
+  highlight and the one before in the base -- one every eight ticks. Where
+  rock stands under the lip (a table's edge always; a gorge's where its wall
+  is rock) the pool's core says so (`FLOW_FACE`), and a fall from the north
+  is seen from the foot too, since only a south face is drawn: the **face
+  sheet** runs down the wall's face band over the pool -- whitewater on the
+  cornice row, streaks falling in the water ramp, spray on the foot row --
+  six art-px wide, a spring's brook being one tile of water, its outer lanes
+  dithered to half against the rock.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `parallaxFactor(scale)` =
   1 / (1 + scale / `PARALLAX_ZOOM`), with `PARALLAX_ZOOM` 500 and the scale in
