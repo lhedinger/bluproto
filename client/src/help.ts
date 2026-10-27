@@ -450,7 +450,8 @@ const moving = section('Moving water',
   + 'downstream (two copies half a tile apart, ordered-dithered so the loop never jumps), the '
   + 'dashes ride lanes fastest away from the banks, and rapids and cascades break white in the '
   + 'shallows ramp; where a gorge swallows a river it pours over a lip into the drop and lands in a '
-  + 'plunge pool on the cave floor below. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
+  + 'plunge pool on the cave floor below, and a spring on a table runs to its edge and falls off the '
+  + 'cliff, down its face and into a pool at the foot. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
   + 'second, since the page follows no world clock.');
 
 const bakes = section('Atlas bakes',
@@ -613,8 +614,8 @@ for (const [act, name, meaning] of EXPR) {
   }
 
   // Moving water: a reach of each tier from the live world, the flow layer over
-  // that world's chunks -- and its falls, whose lip is on the surface and whose
-  // plunge pool is a storey down. The layer holds one level's grid at a time,
+  // that world's chunks -- and its falls, whose lip is a storey above the
+  // plunge pool: a gorge's, and a spring's off a table. The layer holds one level's grid at a time,
   // so every figure hands it its own before it draws.
   const hw = worldHello as { surface?: number; chunkTiles: number; build: string } | null;
   if (hw) {
@@ -675,12 +676,14 @@ for (const [act, name, meaning] of EXPR) {
         }
       });
     };
-    await reach(sz, 'slow river', f => (f & 3) === 1 && !(f & 64));
-    await reach(sz, 'brook', f => (f & 3) === 2);
+    await reach(sz, 'slow river', f => (f & 3) === 1 && !(f & 192));
+    await reach(sz, 'brook', f => (f & 3) === 2 && !(f & 192));
     await reach(sz, 'rapids', f => (f & 3) === 3 && !(f & 32) && !(f & 64));
     await reach(sz, 'cascade step', f => (f & 32) !== 0 && !(f & 192));
     await reach(sz, 'waterfall: the lip, from above', f => (f & 64) !== 0);
     await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 128) !== 0 && (f & 32) !== 0);
+    await reach(sz + 1, 'spring: off the table, from above', f => (f & 64) !== 0 && ((f >> 2) & 7) === 2);
+    await reach(sz, 'spring: down the face, from its foot', f => (f & 160) === 160 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
   }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
