@@ -1267,6 +1267,9 @@ public final class ServerTests {
 					}
 					continue;
 				}
+				if (net.hedinger.prototype.engine.World.flowPlunge(b)) {
+					continue; // a plunge pool is still water, marked for its fall
+				}
 				moving++;
 				tier[net.hedinger.prototype.engine.World.flowSpeed(b)]++;
 				if (net.hedinger.prototype.engine.World.flowStep(b)) {

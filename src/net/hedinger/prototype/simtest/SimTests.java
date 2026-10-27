@@ -12650,6 +12650,60 @@ public class SimTests {
 	}
 
 	/**
+	 * A spring rises on a table and falls off it: every lip on a storey of the
+	 * sky pours into the open drop, and a storey down under it lies the core of
+	 * the plunge pool it lands in, carrying the way the fall travelled -- and,
+	 * since a table stands on rock, the face it comes down. On the ground the
+	 * pool feeds a brook. None of it walls anything off: the world is still
+	 * one connected place.
+	 */
+	static class ASpringFallsOffTheTable extends Scenario {
+		@Override
+		public void run() {
+			int withSpring = 0, brooks = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int s = w.getSurfaceZ(), lips = 0;
+				for (int z = s + 1; z < w.getLevels(); z++) {
+					for (int y = 1; y < w.getRows() - 1; y++) {
+						for (int x = 1; x < w.getColums() - 1; x++) {
+							int f = w.getFlow(x, y, z);
+							if (!World.flowFalls(f)) {
+								continue;
+							}
+							lips++;
+							int d = World.flowDirOf(f);
+							int hx = x + World.FLOW_DX[d], hy = y + World.FLOW_DY[d];
+							String at = "seed " + seed + ": the lip at " + x + "," + y + "," + z;
+							assertTrue(at + " pours into the drop",
+									w.getTile(hx, hy, z).getType() == Tile.TileType.TYPE_HOLE);
+							int under = w.getFlow(hx, hy, z - 1);
+							assertTrue(at + " lands in a pool's core, a storey down",
+									World.flowPlunge(under) && World.flowStep(under));
+							assertTrue(at + ": the core carries the fall's way", World.flowDirOf(under) == d);
+							assertTrue(at + ": and comes down the rock's face", World.flowDownFace(under));
+							if (z - 1 == s) {
+								for (int k = 0; k < 4; k++) {
+									int f2 = w.getFlow(hx + Tile.dirDx(k) * 2, hy + Tile.dirDy(k) * 2, s);
+									if (f2 != 0 && !World.flowPlunge(f2)) {
+										brooks++; // running water just past the pool
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+				withSpring += lips > 0 ? 1 : 0;
+				assertTrue("seed " + seed + ": every walkable tile still reachable",
+						net.hedinger.prototype.sim.WorldAudit.connectivity(w).fullyConnected());
+			}
+			assertTrue("every world has a spring: " + withSpring + "/5", withSpring == 5);
+			assertGreater("and pools on the ground feed brooks", brooks, 0);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -14163,8 +14217,12 @@ public class SimTests {
 									continue; // the base of a higher table: a cliff going up, not a wall
 								} else if (n != Tile.TileType.TYPE_ROCKY
 										&& n != Tile.TileType.TYPE_RAMPDOWN
-										&& n != Tile.TileType.TYPE_RAMPUP) {
-									walled++; // (a RAMPUP beside a table is the climb to the storey above)
+										&& n != Tile.TileType.TYPE_RAMPUP
+										&& n != Tile.TileType.TYPE_SHALLOWS
+										&& n != Tile.TileType.TYPE_WATER) {
+									// (a RAMPUP beside a table is the climb to the storey
+									// above; water is a spring's brook across the table)
+									walled++;
 								}
 							}
 						}
@@ -20949,6 +21007,7 @@ public class SimTests {
 				new TheBodyScanIsPaintedFromRamps(),
 				new TheMovingWaterIsPaintedFromItsRamps(),
 				new TheGorgeSwallowsARiver(),
+				new ASpringFallsOffTheTable(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
