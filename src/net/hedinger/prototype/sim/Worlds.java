@@ -4414,15 +4414,12 @@ public final class Worlds {
 				return;
 			}
 			int x = at % cols, y = at / cols;
-			int dir = World.flowDirOf(w.getFlow(x, y, z));
-			int px = -World.FLOW_DY[dir], py = World.FLOW_DX[dir];
-			// A ford joins two banks. Where the river runs between rock -- cut
-			// through the rim, or a gorge wall -- there is nothing to cross to,
-			// and wading the water there only made an island no body could reach.
-			if (!bankWalkable(w, x, y, z, px, py) || !bankWalkable(w, x, y, z, -px, -py)) {
+			if (!crossable(w, x, y, z)) {
 				bankless.add(at);
 				continue;
 			}
+			int dir = World.flowDirOf(w.getFlow(x, y, z));
+			int px = -World.FLOW_DY[dir], py = World.FLOW_DX[dir];
 			wade(w, x, y, z);
 			for (int s = -1; s <= 1; s += 2) {
 				for (int k = 1; k < 8 && isWet(w, x + s * k * px, y + s * k * py, z); k++) {
@@ -4430,6 +4427,16 @@ public final class Worlds {
 				}
 			}
 		}
+	}
+
+	/** Whether a river tile has ground to stand on across both banks. A ford
+	 *  joins two banks; where the river runs between rock -- cut through the
+	 *  rim, or a gorge wall -- there is nothing to cross to, and wading the
+	 *  water there only made an island no body could reach. */
+	public static boolean crossable(World w, int x, int y, int z) {
+		int dir = World.flowDirOf(w.getFlow(x, y, z));
+		int px = -World.FLOW_DY[dir], py = World.FLOW_DX[dir];
+		return bankWalkable(w, x, y, z, px, py) && bankWalkable(w, x, y, z, -px, -py);
 	}
 
 	/** Whether the first dry tile beyond the water, from (x, y) along (dx, dy),
