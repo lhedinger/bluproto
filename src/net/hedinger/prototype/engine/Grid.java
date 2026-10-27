@@ -573,6 +573,11 @@ public class Grid {
 						|| isType(x - 1, y, Tile.TileType.TYPE_RAMPDOWN);
 				boolean holeE = isType(x + 1, y, Tile.TileType.TYPE_HOLE)
 						|| isType(x + 1, y, Tile.TileType.TYPE_RAMPDOWN);
+				// Nor where rock beside it goes straight on down: see cliffBeside.
+				holeN |= cliffBeside(x, y - 1);
+				holeS |= cliffBeside(x, y + 1);
+				holeW |= cliffBeside(x - 1, y);
+				holeE |= cliffBeside(x + 1, y);
 				int sx = ox + x * ts, sy = oy + y * ts;
 				for (int aj = 0; aj < A; aj++) {
 					int by0 = aj * ts / A, by1 = (aj + 1) * ts / A;
@@ -1574,6 +1579,21 @@ public class Grid {
 		}
 		int up = tiles[nx][ny].getRampUphill();
 		return nx + Tile.dirDx(up) == tx && ny + Tile.dirDy(up) == ty;
+	}
+
+	/**
+	 * Rock beside a sky opening that carries on down: the world's border, a
+	 * stack, the base of a higher table. A pit's rim is ground breaking off
+	 * over the drop, and here there is no ground -- the rock face drops
+	 * sheer, carrying its own edge (its lit top, its silhouette), and the
+	 * rim's crumbling dashes and dropouts along it drew the border of every
+	 * storey of sky as a ledge. Only above the ground, where rock under rock
+	 * is the rule (a table stands only on rock); a pit's lip against a cave
+	 * or surface wall is left as it is.
+	 */
+	private boolean cliffBeside(int nx, int ny) {
+		return level > world.getSurfaceZ() && isWallish(nx, ny)
+				&& world.getTile(nx, ny, level - 1).isSolid();
 	}
 
 	/** Open vertical space, for shaft rims: the drop continues into another
