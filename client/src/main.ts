@@ -14,8 +14,7 @@ import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGli
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
-  CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize,
-} from './panels';
+  CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize, isCompact } from './panels';
 import { fmtSpan, popOn } from './population';
 import { bodyScanCanvas, comfortWord, planFor, stateOf } from './bodyScan';
 
@@ -111,9 +110,11 @@ const injectFile = document.getElementById('injectFile') as HTMLInputElement;
  *  used to assume was one row's worth and a panel opened over its own buttons.
  *  Observed rather than recomputed at call sites: wrapping is the browser's
  *  decision, and it is the only thing that actually knows. */
+let barH = 52; // the toolbar's height in CSS px, as last measured
 function syncBarHeight(): void {
   const h = document.getElementById('bar')!.getBoundingClientRect().height;
-  document.documentElement.style.setProperty('--bar-h', `${Math.ceil(h) + 4}px`);
+  barH = Math.ceil(h) + 4;
+  document.documentElement.style.setProperty('--bar-h', `${barH}px`);
 }
 new ResizeObserver(syncBarHeight).observe(document.getElementById('bar')!);
 syncBarHeight();
@@ -914,7 +915,11 @@ function renderInspectSimple(d: Record<string, any>): void {
 // tree in the middle of one creature's biology.
 type InspectTab = 'attributes' | 'body' | 'genome' | 'mind' | 'lineage';
 let inspectTab: InspectTab = 'attributes';
-let inspectPanelSize: 'half' | 'full' = 'full'; // the debug panel's, as the viewer last set it
+/** The debug panel's size, as the viewer last set it with the sizer -- or
+ *  null until they have: then a phone opens it as the half sheet, so the
+ *  creature it describes stays in view above it, and a wide screen opens it
+ *  full, where a whole creature's dump has the room it needs. */
+let inspectPanelSize: 'half' | 'full' | null = null;
 let inspectDetail: Record<string, any> | null = null;
 let lineageData: Record<string, any> | null = null;
 let lineageFor = -1; // which entity lineageData describes
@@ -954,11 +959,12 @@ function renderInspectDebug(d: Record<string, any>): void {
   else body = mindTab();
   inspectEl.innerHTML = header(swatch, name, d.id, true)
       + `<div class="tabs">${tabs}</div>` + body;
-  // A whole creature is what this panel is for, so it opens full screen — but
-  // the size the viewer last chose survives the poll that rebuilds it, walking
-  // from one creature to the next, and a spell as a card with debug off. Read
-  // back from the class it did not: the card had replaced it.
-  showInspect(inspectPanelSize);
+  // Full on a wide screen, where a whole creature's dump has the room, and
+  // the half sheet on a phone, where full would hide the creature -- unless
+  // the viewer has set a size, which survives the poll that rebuilds the
+  // panel, walking from one creature to the next, and a spell as a card with
+  // debug off. Read back from the class it did not: the card had replaced it.
+  showInspect(inspectPanelSize ?? (isCompact() ? 'half' : 'full'));
   // The body tab is a canvas, not markup: the scan drawn at 4 px a cell with
   // its callouts, from the same books the attributes tab lists as bars.
   const scanHost = inspectEl.querySelector('.scan');
@@ -1265,6 +1271,71 @@ function showInspect(size: PanelSize): void {
   wirePanelChrome(inspectEl, deselect, () => {
     inspectPanelSize = inspectEl.classList.contains('full') ? 'full' : 'half';
   });
+  syncInspectRect();
+  revealSelected();
+}
+
+// ---- keeping the subject in view ------------------------------------------
+// The inspector covers part of the world: the lower half of a phone's screen
+// as a sheet, a column on the right of a wide one. A followed creature used to
+// be glued to the CENTRE of the canvas, which on a phone is under the sheet --
+// the panel described a body nobody could see. The follow now glues it to the
+// centre of what the inspector leaves uncovered: the band between the toolbar
+// and a sheet's top edge, or the width left of a column. A full panel leaves
+// nothing uncovered and moves nothing.
+//
+// Measured, not assumed: the inspector's rect is read when it opens, resizes
+// or the window does, so the band follows whatever the stylesheet decides at
+// this width -- the sheet's height, the card's content-sized height, the
+// column's width -- rather than a copy of those numbers here.
+let inspectRect: DOMRect | null = null;
+function syncInspectRect(): void {
+  inspectRect = inspectEl.classList.contains('open') ? inspectEl.getBoundingClientRect() : null;
+}
+new ResizeObserver(syncInspectRect).observe(inspectEl);
+window.addEventListener('resize', syncInspectRect);
+
+/** Where on the canvas (CSS px, which the canvas is drawn at) a followed body
+ *  should sit: the centre of what the inspector leaves uncovered. */
+function viewFocus(): { x: number; y: number } {
+  const W = cv.width, H = cv.height;
+  const f = { x: W / 2, y: H / 2 };
+  const r = inspectRect;
+  if (!r || r.width === 0) return f;
+  const sheet = r.width >= W - 2 && r.bottom >= H - 2;        // spans the bottom edge: a phone's sheet or card
+  const column = !sheet && r.right >= W - 20 && r.top <= barH + 8; // the right-hand column of a wide screen
+  if (sheet && r.top - barH >= 80) f.y = (barH + r.top) / 2;
+  else if (column && r.left >= 160) f.x = r.left / 2;
+  return f;
+}
+
+/** Puts the camera where the focus shows world point (x, y). */
+function focusOn(x: number, y: number): void {
+  const f = viewFocus();
+  cam.cx = x - (f.x - cv.width / 2) / cam.scale;
+  cam.cy = y - (f.y - cv.height / 2) / cam.scale;
+}
+
+/** A selected body that is NOT followed -- an item, a corpse, a tile -- is
+ *  revealed once when the inspector opens over it: the panel must not open on
+ *  top of the thing it describes. A followed one needs nothing here; the
+ *  frame loop keeps it in the focus. */
+function revealSelected(): void {
+  if (cam.followId !== null) return;
+  let wx: number, wy: number;
+  if (selectedId !== null) {
+    const t = state.tracks.get(selectedId);
+    if (!t) return;
+    wx = t.curr.x; wy = t.curr.y;
+  } else if (selectedTile) {
+    wx = selectedTile.x + 0.5; wy = selectedTile.y + 0.5;
+  } else {
+    return;
+  }
+  const r = inspectRect;
+  if (!r) return;
+  const sx = cam.screenX(wx), sy = cam.screenY(wy);
+  if (sx >= r.left && sx <= r.right && sy >= r.top && sy <= r.bottom) focusOn(wx, wy);
 }
 
 /** What a carcass still offers, for both inspector surfaces. A corpse is a
@@ -2333,8 +2404,7 @@ function frame(now: number): void {
     const t = state.tracks.get(cam.followId);
     if (t) {
       const p = state.sample(t, renderTime);
-      cam.cx = p.x;
-      cam.cy = p.y;
+      focusOn(p.x, p.y); // the centre of what the inspector leaves uncovered
     } else if (cam.followId !== selectedId) {
       // Nothing is polling this one, so there is no way to learn where it went.
       cam.followId = null;

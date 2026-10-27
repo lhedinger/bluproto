@@ -92,6 +92,14 @@ export function wirePanelChrome(el: HTMLElement, close: () => void, onResize?: (
   if (x) x.onclick = close;
 }
 
+/** Whether the viewer is at Bulkhead's compact width, where the corner panels
+ *  are sheets from the bottom edge (the `@container bh (max-width: 599px)`
+ *  rules in index.html). The body is the container, so the viewport's width
+ *  is its width. */
+export function isCompact(): boolean {
+  return window.matchMedia('(max-width: 599px)').matches;
+}
+
 /** A bare key press outside any field: what a one-letter shortcut answers to.
  *  Not with a modifier (ctrl+d is the browser's bookmark, cmd+p its print), not
  *  auto-repeat (a held key flickered debug on and off), not while typing. */

@@ -116,9 +116,15 @@
       .panel.half, .panel.menu, .panel.full, .panel.card { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
       .panel.half, .panel.menu { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; max-height: 62vh; max-height: 62dvh;
         box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
-      .panel.half { height: 62vh; height: 62dvh; }
+      /* Half means half: the sheet takes the lower half and the world keeps
+         the upper, where the follow puts the creature it describes. */
+      .panel.half { height: 50vh; height: 50dvh; }
       .panel.full { left: 0; right: 0; bottom: 0; box-shadow: 0 -2px 0 0 var(--s2); }
-      .panel.card { left: 0; right: 0; bottom: 0; width: auto; box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
+      /* The card too keeps to the lower half: a creature's card with its body
+         scan ran to three quarters of a phone's height, over the creature. It
+         scrolls inside itself past that. */
+      .panel.card { left: 0; right: 0; bottom: 0; width: auto; max-height: 50vh; max-height: 50dvh;
+                    box-shadow: 0 -2px 0 0 var(--s2), 0 -6px 0 0 #0007; }
     }
     .panel > h3:not(:has(.szbtn)) .x { margin-left: auto; }
     /* A landscape phone is wide enough for the desktop anchors but not tall
