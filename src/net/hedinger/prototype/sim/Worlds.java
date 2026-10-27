@@ -1211,6 +1211,10 @@ public final class Worlds {
 		// ---- fords: no stretch of river is far from a place to wade it ----
 		// After the springs, whose brooks and pools change where a river can
 		// be waded; the skyline never reads water, so it can come before.
+		// After every pass that shapes the water or builds across it, so every
+		// river end they left pointing at ground is stilled; before the fords,
+		// which only wade what is there and measure the river as it will stay.
+		stillDeadEnds(w, cols, rows);
 		layFords(w, cols, rows, SURFACE_Z);
 		return w;
 	}
@@ -4631,7 +4635,6 @@ public final class Worlds {
 				runRiver(w, cols, rows, sx, sy);
 			}
 		}
-		stillDeadEnds(w, cols, rows);
 	}
 
 	/** The farthest, in tiles along a river, that any reach may be from a
@@ -4774,10 +4777,18 @@ public final class Worlds {
 
 	/**
 	 * A river's last reach is still water wherever the channel stops short:
-	 * at the rim, in a basin, or where the walk ended early. Left moving, its
-	 * marks would slide into the bank it ends against. One pass: stilling a
-	 * cell leaves the one upstream pointing into still water, which is right
-	 * -- water flows into still water.
+	 * at the rim, in a basin, against a causeway or a landing a later pass
+	 * laid across it. Left moving, its marks would slide into the bank it ends
+	 * against. Runs after every pass that shapes the water or builds across
+	 * it, because a channel built over keeps the flow the carver gave it:
+	 * water flowing into a wall, or still carrying a current on a tile that is
+	 * now stone. Before the fords pass, which only wades and measures each
+	 * reach of river as it will stay: a head-on meeting stilled after the
+	 * fords splits a reach from the crossing it was measured by. A fall is not a dead end: water pointing at a drop leaves over
+	 * the edge, and a lip or a plunge pool's core carries its mark and its
+	 * way whatever lies beyond it. Two rivers meeting head-on in one valley are stilled at the
+	 * meeting. One pass: stilling a cell leaves the one upstream pointing
+	 * into still water, which is right -- water flows into still water.
 	 */
 	private static void stillDeadEnds(World w, int cols, int rows) {
 		for (int y = 1; y < rows - 1; y++) {
@@ -4786,9 +4797,25 @@ public final class Worlds {
 				if (f == 0) {
 					continue;
 				}
+				if (World.flowFalls(f) || World.flowPlunge(f)) {
+					continue; // a lip, or the pool's core under one: marked, and pointing where the fall goes
+				}
+				Tile.TileType here = w.getTile(x, y, SURFACE_Z).getType();
+				if (here != Tile.TileType.TYPE_WATER && here != Tile.TileType.TYPE_SHALLOWS) {
+					w.setFlow(x, y, SURFACE_Z, 0, World.FLOW_STILL, false); // built over: no water here now
+					continue;
+				}
 				int d = World.flowDirOf(f);
-				Tile.TileType t = w.getTile(x + World.FLOW_DX[d], y + World.FLOW_DY[d], SURFACE_Z).getType();
-				if (t != Tile.TileType.TYPE_WATER && t != Tile.TileType.TYPE_SHALLOWS) {
+				int nx = x + World.FLOW_DX[d], ny = y + World.FLOW_DY[d];
+				Tile next = w.getTile(nx, ny, SURFACE_Z);
+				if (next.isDrop()) {
+					continue; // a fall
+				}
+				Tile.TileType t = next.getType();
+				int nf = w.getFlow(nx, ny, SURFACE_Z);
+				boolean headOn = nf != 0 && nx + World.FLOW_DX[World.flowDirOf(nf)] == x
+						&& ny + World.FLOW_DY[World.flowDirOf(nf)] == y;
+				if ((t != Tile.TileType.TYPE_WATER && t != Tile.TileType.TYPE_SHALLOWS) || headOn) {
 					w.setFlow(x, y, SURFACE_Z, 0, World.FLOW_STILL, false);
 				}
 			}
