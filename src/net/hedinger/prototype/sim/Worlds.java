@@ -1202,6 +1202,8 @@ public final class Worlds {
 				w.getTile(p[0], p[1], z).setFertility(0);
 			}
 		}
+		// ---- fords: no stretch of river is far from a place to wade it ----
+		layFords(w, cols, rows, SURFACE_Z);
 
 		// Last, so it reads the FINAL surface: every pass that could carve a
 		// hilltop away (the ravine, the installation's shell, both seals) has
@@ -4131,6 +4133,137 @@ public final class Worlds {
 		stillDeadEnds(w, cols, rows);
 	}
 
+	/** The farthest, in tiles along a river, that any reach may be from a
+	 *  crossing. A herd driven to the bank is never more than this from a way
+	 *  over, and a hunter is never more than this from the far side. */
+	public static final int FORD_GAP = 8;
+
+	/**
+	 * Guarantees the crossings the carver's fords only make likely.
+	 *
+	 * <p>The carver lays a ford every ninth step, and the shallows pass turns
+	 * every water tile touching land into a wading fringe, so most of a river
+	 * can be waded already. But a ford can be carved over by the next step, a
+	 * reach can widen into a pool whose middle stays deep, and "likely" is how
+	 * seed 42 came to have a 29-tile reach with no way across it at all --
+	 * found by measuring, once rivers ran the length they were meant to.
+	 *
+	 * <p>A tile is a crossing when the whole width of the water through it,
+	 * across the flow, can be walked. Every river tile is measured by its
+	 * distance along the river to the nearest crossing; wherever that is more
+	 * than {@link #FORD_GAP}, or there is none at all, that tile's whole width
+	 * becomes shallows and the river is measured again -- unless the water
+	 * there runs between rock, where a ford has no banks to join. Pure: draws
+	 * nothing from the random stream.
+	 */
+	private static void layFords(World w, int cols, int rows, int z) {
+		java.util.HashSet<Integer> bankless = new java.util.HashSet<Integer>();
+		for (int round = 0; round < 64; round++) {
+			int[] dist = fordDistances(w, cols, rows, z);
+			int worst = -1, at = -1;
+			for (int i = 0; i < dist.length; i++) {
+				if (w.getFlow(i % cols, i / cols, z) == 0 || bankless.contains(i)) {
+					continue;
+				}
+				int d = dist[i] < 0 ? Integer.MAX_VALUE : dist[i];
+				if (d > FORD_GAP && d > worst) {
+					worst = d;
+					at = i;
+				}
+			}
+			if (at < 0) {
+				return;
+			}
+			int x = at % cols, y = at / cols;
+			int dir = World.flowDirOf(w.getFlow(x, y, z));
+			int px = -World.FLOW_DY[dir], py = World.FLOW_DX[dir];
+			// A ford joins two banks. Where the river runs between rock -- cut
+			// through the rim, or a gorge wall -- there is nothing to cross to,
+			// and wading the water there only made an island no body could reach.
+			if (!bankWalkable(w, x, y, z, px, py) || !bankWalkable(w, x, y, z, -px, -py)) {
+				bankless.add(at);
+				continue;
+			}
+			wade(w, x, y, z);
+			for (int s = -1; s <= 1; s += 2) {
+				for (int k = 1; k < 8 && isWet(w, x + s * k * px, y + s * k * py, z); k++) {
+					wade(w, x + s * k * px, y + s * k * py, z);
+				}
+			}
+		}
+	}
+
+	/** Whether the first dry tile beyond the water, from (x, y) along (dx, dy),
+	 *  is ground a body can stand on. */
+	private static boolean bankWalkable(World w, int x, int y, int z, int dx, int dy) {
+		for (int k = 1; k < 9; k++) {
+			int bx = x + k * dx, by = y + k * dy;
+			if (!isWet(w, bx, by, z)) {
+				return w.getTile(bx, by, z).isWalkable();
+			}
+		}
+		return false;
+	}
+
+	private static void wade(World w, int x, int y, int z) {
+		if (w.getTile(x, y, z).getType() == Tile.TileType.TYPE_WATER) {
+			w.setTile(x, y, z, Tile.TileType.TYPE_SHALLOWS);
+			w.getTile(x, y, z).setFertility(0);
+		}
+	}
+
+	private static boolean isWet(World w, int x, int y, int z) {
+		Tile.TileType t = w.getTile(x, y, z).getType();
+		return t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS;
+	}
+
+	/** Each river tile's distance, along the river, to the nearest crossing
+	 *  (-1 where none is reachable): see {@link #layFords}. */
+	public static int[] fordDistances(World w, int cols, int rows, int z) {
+		int[] dist = new int[cols * rows];
+		java.util.Arrays.fill(dist, -1);
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+		for (int y = 2; y < rows - 2; y++) {
+			for (int x = 2; x < cols - 2; x++) {
+				int f = w.getFlow(x, y, z);
+				if (f == 0 || !w.getTile(x, y, z).isWalkable()) {
+					continue;
+				}
+				int d = World.flowDirOf(f), px = -World.FLOW_DY[d], py = World.FLOW_DX[d];
+				boolean across = true;
+				for (int s = -1; s <= 1 && across; s += 2) {
+					for (int k = 1; k < 8 && isWet(w, x + s * k * px, y + s * k * py, z); k++) {
+						if (!w.getTile(x + s * k * px, y + s * k * py, z).isWalkable()) {
+							across = false;
+							break;
+						}
+					}
+				}
+				if (across) {
+					dist[y * cols + x] = 0;
+					q.add(y * cols + x);
+				}
+			}
+		}
+		while (!q.isEmpty()) {
+			int c = q.poll(), cx = c % cols, cy = c / cols;
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int nx = cx + dx, ny = cy + dy;
+					if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) {
+						continue;
+					}
+					int j = ny * cols + nx;
+					if (dist[j] < 0 && w.getFlow(nx, ny, z) != 0) {
+						dist[j] = dist[c] + 1;
+						q.add(j);
+					}
+				}
+			}
+		}
+		return dist;
+	}
+
 	/**
 	 * A river's last reach is still water wherever the channel stops short:
 	 * at the rim, in a basin, or where the walk ended early. Left moving, its
@@ -4171,11 +4304,19 @@ public final class Worlds {
 	private static void runRiver(World w, int cols, int rows, int x, int y) {
 		int prevDx = 0, prevDy = 0, sinceFord = 0;
 		int[] cell = new int[8]; // the channel cells this step laid, as x,y pairs
+		// Every tile this river has laid. Arriving on water ends a river only
+		// if the water was someone else's -- a lake, an earlier river. A two-wide
+		// channel's next step east or south lands on a cell it carved itself
+		// that same step, and the bare type test took that for a lake, so every
+		// river ended at its first such step: about fifty tiles each, the rest
+		// of the map dry.
+		java.util.HashSet<Integer> own = new java.util.HashSet<Integer>();
 		for (int steps = 0; steps < cols + rows; steps++) {
 			if (x < 3 || y < 3 || x >= cols - 3 || y >= rows - 3) {
 				return; // reached the rim
 			}
-			if (steps > 4 && w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WATER) {
+			if (steps > 4 && w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WATER
+					&& !own.contains(y * cols + x)) {
 				return; // joined a lake (or an earlier river)
 			}
 			// The channel: a brook near the spring, two tiles wide lower down.
@@ -4193,6 +4334,7 @@ public final class Worlds {
 					w.getTile(cx, cy, SURFACE_Z).setFertility(0);
 					cell[laid++] = cx;
 					cell[laid++] = cy;
+					own.add(cy * cols + cx);
 				}
 			}
 			if (ford) {
