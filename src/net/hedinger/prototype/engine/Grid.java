@@ -1561,6 +1561,14 @@ public class Grid {
 		if (isWallish(nx, ny)) {
 			return true;
 		}
+		if (nx < 0 || ny < 0 || nx >= world.cols || ny >= world.rows) {
+			// Past the world's edge: the border is rock that carries on, not a
+			// mass fronting open ground. Read as open, it drew a cliff face along
+			// the south edge of every floor, over nothing -- and from the sky,
+			// each floor's own face through the holes at its own parallax, a
+			// stack of ledges down the bottom of the screen.
+			return true;
+		}
 		if (!isType(nx, ny, Tile.TileType.TYPE_RAMPUP)) {
 			return false;
 		}
