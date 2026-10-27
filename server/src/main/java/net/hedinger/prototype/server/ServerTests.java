@@ -1291,6 +1291,55 @@ public final class ServerTests {
 		check("every cascade is in rapids: " + stepsInRapids + "/" + steps, stepsInRapids == steps);
 		check("the lakes stay still: " + stillWater + " still water tiles", stillWater > moving);
 		check("a level that does not exist has no flow", host.flow(99) == null);
+
+		// Rivers run their length: the carver once ended every two-wide river at
+		// its first step east or south, on its own fresh channel, so none passed
+		// about fifty tiles (87 on this world once fixed). The longest river, by
+		// moving tiles joined along it:
+		int cols2 = w.getColums(), rows2 = w.getRows();
+		boolean[] seen = new boolean[cols2 * rows2];
+		int longest = 0;
+		for (int i = 0; i < seen.length; i++) {
+			if (seen[i] || w.getFlow(i % cols2, i / cols2, z) == 0) {
+				continue;
+			}
+			int size = 0;
+			java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+			q.add(i);
+			seen[i] = true;
+			while (!q.isEmpty()) {
+				int c = q.poll();
+				size++;
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						int nx = c % cols2 + dx, ny = c / cols2 + dy;
+						if (nx >= 0 && ny >= 0 && nx < cols2 && ny < rows2 && !seen[ny * cols2 + nx]
+								&& w.getFlow(nx, ny, z) != 0) {
+							seen[ny * cols2 + nx] = true;
+							q.add(ny * cols2 + nx);
+						}
+					}
+				}
+			}
+			longest = Math.max(longest, size);
+		}
+		check("rivers run past their first bend: the longest is " + longest + " moving tiles", longest > 60);
+		// And a long river is never a wall: every reach is within FORD_GAP tiles,
+		// along the river, of a place its whole width can be waded.
+		int[] fd = net.hedinger.prototype.sim.Worlds.fordDistances(w, cols2, rows2, z);
+		int far = 0, cutOff = 0;
+		for (int i = 0; i < fd.length; i++) {
+			if (w.getFlow(i % cols2, i / cols2, z) == 0) {
+				continue;
+			}
+			if (fd[i] < 0) {
+				cutOff++;
+			} else {
+				far = Math.max(far, fd[i]);
+			}
+		}
+		check("every reach of river is near a ford: farthest " + far + " tiles, none cut off (" + cutOff + ")",
+				cutOff == 0 && far <= net.hedinger.prototype.sim.Worlds.FORD_GAP);
 	}
 
 	/**
