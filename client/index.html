@@ -135,21 +135,30 @@
        the world canvas it is a chart, not art, so `pixelated` would be exactly
        wrong here. The chart flexes to whatever size the panel was given and
        redraws there.
-       The header holds the title, the readout and the close, nothing else:
-       the lenses are tabs under it and the lineage lens's controls a row of
-       their own, so the header never wraps. The readout gives way first. */
-    #pop h3 { gap: 10px; }
-    #pop h3 .ttl { flex: none; }
-    #pop h3 .win { flex: 1 1 0; min-width: 0; opacity: .6; font: 11px var(--f-ui); letter-spacing: 0;
-                   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+       The header holds the title and the close, nothing else: the lenses are
+       tabs under it, the lineage lens's controls a row of their own, and the
+       readout a line of its own above the chart -- in the header it was the
+       first thing a phone truncated. */
+    #pop h3 .ttl { flex: 1; }
     /* The lens tabs, full-bleed under the header like the inspector's, and the
        header gives up its bottom margin to them (a negative top margin on a
        sticky bar leaves a window once it sticks). */
     #pop > .bh-tabs { margin: 0 -12px 8px; flex: none; }
     #pop > h3:has(+ .bh-tabs) { margin-bottom: 0; }
     /* The lineage lens's tool row: the clade choice and the detail switch. */
-    #pop .pop-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0 0 8px; flex: none; }
+    #pop .pop-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+                      gap: 6px 16px; margin: 0 0 8px; flex: none; }
     #pop .pop-tools .bh-switch { font: 11px var(--f-ui); color: var(--dim); }
+    #pop .pop-readout { flex: none; min-height: 1.5em; margin: 0 0 6px; color: var(--dim);
+                        font: 11px/1.5 var(--f-ui); font-variant-numeric: tabular-nums;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* A phone: the four clades share the row as equal cells rather than
+       wrapping the last one onto a line of its own, and the switch takes the
+       row under them. */
+    @container bh (max-width: 599px) {
+      #pop .pop-tools .bh-seg { display: flex; flex: 1 1 100%; margin: 2px 0; }
+      #pop .pop-tools .bh-seg button { flex: 1 1 0; padding: 0 4px; }
+    }
     /* The lineage diagram's scrollbar, on top: a recessed rail and a raised
        Bulkhead thumb. Thick enough to grab on a phone; the chart drags too. */
     #pop .pop-rail { position: relative; flex: none; height: 14px; margin: 0 0 6px; background: var(--well);
@@ -467,7 +476,7 @@
       aria-label="tools" title="tools"><i class="bar-burger" aria-hidden="true"></i></button>
   </div>
   <div id="pop" class="panel full">
-    <h3><span class="ttl">population</span><span class="win" id="popWin"></span>
+    <h3><span class="ttl">population</span>
       <button type="button" class="x" title="close" aria-label="close">✕</button></h3>
     <!-- The lenses are tabs of the one panel, like the inspector's: a role
          headcount over time, or one clade's species over time. -->
@@ -484,6 +493,9 @@
       <label class="bh-switch" id="popDetail"
              title="every passage: bred and held, reseeds in, lines that ended out"><input type="checkbox"><span class="knob"></span><span>detail</span></label>
     </div>
+    <!-- The readout: the window the chart covers, or the bar under the
+         pointer. A line of its own, so a phone never truncates it. -->
+    <div class="pop-readout" id="popWin" aria-live="polite"></div>
     <div id="popScroll" class="pop-rail" role="scrollbar" aria-label="scroll the stages"
          aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100" tabindex="0" hidden><i></i></div>
     <canvas id="popCv"></canvas>
