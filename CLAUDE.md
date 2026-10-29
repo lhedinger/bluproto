@@ -84,6 +84,24 @@ cost was recalibrated, the ceiling turned out to be a founder predator's ability
 to run prey down at all — healthy at 0.8, gone by 1.0 — and that, not the
 arithmetic, is what picked the number.
 
+## Investigating
+
+- **Worldgen assertions belong in SimTests, over fixed seeds.** The server
+  tests leave hosts' sim threads drawing from the global RNG, so a world built
+  among them comes out differently from run to run: a check there is a
+  lottery ticket. One that fails in CI and not locally is usually that. Find
+  the case by probing many seeds single-threaded (`Worlds.demoTerrain(seed)`
+  from a small main against `engine/build/classes`), then pin it in SimTests.
+- **A check and the generator share one rule.** The ford check once measured
+  reaches that `layFords` skips on purpose (rock on both banks), and failed on
+  9 of 40 seeds while the generator was right. Put the rule in one public
+  method (`Worlds.crossable`) and have both call it.
+- **Reproduce a visual bug on the live seed.** `/api/world` reports the seed;
+  run the server locally with `SEED=<it>`, drive it at the reporter's viewport
+  (phone: 412x915 at DPR 2) and floor, and compare before/after at the same
+  camera. Bisect with the client's flags (`parallax=0`, `gl=0`, `flow=0`):
+  whatever a flag makes vanish is where the fault lives.
+
 ## Pull requests
 
 - Do not open a PR unless it was asked for.
