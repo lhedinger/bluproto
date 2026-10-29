@@ -151,7 +151,17 @@ One sun, straight overhead-north. The grammar:
   against rock that carries on down** (the world's border, a stack, the
   base of a higher table): there is no ground there to break off, only a
   sheer face carrying its own edge, and the lip along it drew every storey's
-  border as a ledge.
+  border as a ledge. Past the world's edge is rock too, for the same reason:
+  the border never fronts open ground, so it takes no face band there.
+- **A down ramp is cut into the pit's outline, not stood in it.** Its sprite
+  is a square, and the pit must not take that square from it. Where a ramp's
+  side opens onto a pit, the pit's edge scallops on past the tile in the
+  ramp's **own stone** at that point of the slope (`Grid.rampFlankAt`), the
+  sprite's dark channel on that side is lifted to the body shade so no crease
+  shows (`dropFlankPixel`), and the pit's rim runs along it as along any
+  ground. At its **foot** the pit opens as wide as the ramp: the laps from the
+  pit's sides start at nothing on the ramp's edge and deepen one art-px for
+  every two away from it, and no corner rounds there.
 - **A pit is a hole, not a picture of one.** Inside the lip, a hole with a
   level under it is one flat veil of **translucent black at
   `RenderFx.holeDepth` opacity** with real alpha beneath (`Grid.pitFloor`,
@@ -236,7 +246,13 @@ One sun, straight overhead-north. The grammar:
   there" from "someone painted rock on the lid", and no amount of texture in a
   painted stand-in can produce it. Nothing dims the lower floor on the way up;
   the darkness a pit needs is already carried by the void-shade scatter around
-  the openings.
+  the openings. Two rules keep the stack whole. **Floors draw deepest first
+  across the whole view**, never chunk by chunk: a deeper floor shrinks
+  further toward the centre, so a chunk's deep floors reach past its seam and,
+  drawn after the neighbour's upper floors, paint over their veils. And the
+  view down is **ranged for its deepest floor**, not the top one: the screen's
+  edge reaches further into the world the further down the floor, and where
+  the chunks run out a low map shows through under a second veil.
 - **Drop shadows**: one art-pixel south of the body, translucent black
   (~`alpha 110`), art-pixel-aligned blocks. Entities that stand (doors,
   shrubs, creatures) sit ON the ground because of this; nothing floats.
@@ -756,6 +772,37 @@ The precedents, so nobody pays twice:
   heading into a three-by-three of cells and asserts the neighbours are empty.
   The pincered scavenger failed it on the diagonals alone: a corner's reach
   is its radial distance, and every cardinal heading had passed.
+- **The seam only parallax could see** — seen from the top storey, a bright
+  line ran down one chunk seam, then (once that was fixed) a dark band down the
+  side of the screen, and the bottom of the map was a stack of ledges. Every
+  chunk, low map and alpha mask checked out clean on its own. What found it
+  was a toggle: with `parallax=0` all three vanished, so the fault was in how
+  the floors were stacked, not in any one picture. Dumping the rects the
+  below-pass drew showed the rest: a chunk's own z0..z4 drawn as one stack
+  before its neighbour's, so the neighbour's deep floors landed on top of this
+  chunk's upper veils for three pixels; and a chunk range taken from the top
+  floor's view, so the floors below ran out of chunks short of the screen's
+  edge. The ledges were not parallax at all but a bake fault that parallax
+  multiplied: the world's edge read as open ground, so the border on every
+  floor drew a cliff face over nothing, each at its own depth. Two lessons:
+  **turn the depth cue off before reading the pictures** — a flag that
+  removes the effect splits "wrong layer" from "wrong stacking" in one
+  screenshot; and **a fault on every floor is one fault**: the same bad edge
+  repeated at five parallax depths looks like a feature of the projection.
+- **The pier in the drop** — every climb onto a table is a down ramp at the
+  table's edge, and the pit beside it kept the ramp tile's straight sides and
+  square corners while the table round it scalloped: a square pier sticking
+  out of each drop. The first fix lapped the table's own ground (its uphill
+  neighbour's class) along the ramp's sides, and stuck a ribbon of grass to
+  the stone. The second lapped in the ramp's channel shade, which near the foot
+  is the void's near-black and drew a black outline darker than the veil it
+  sat on. What held was the ramp's own body shade, with the sprite's channel
+  on that side lifted to match. Then the foot turned up the opposite fault:
+  the pit's side laps pinched its mouth narrower than the ramp coming down
+  into it, a step at every descent, fixed by tapering the laps from nothing at
+  the ramp's edge. **The material that carries an outline on is the one on
+  the near side of it**, and **check both ends of a transition** -- the side
+  that was fixed made the end that was left alone the odd one out.
 
 ## 8. Conformance checklist
 
