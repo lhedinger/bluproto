@@ -1,5 +1,6 @@
 package net.hedinger.prototype.sim;
 
+import net.hedinger.prototype.engine.Flora;
 import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.Perf;
 import net.hedinger.prototype.engine.StopWatch;
@@ -1233,7 +1234,183 @@ public final class Worlds {
 		stillDeadEnds(w, cols, rows);
 		layFords(w, cols, rows, SURFACE_Z);
 		joinAcrossWater(w, cols, rows, SURFACE_Z);
+		// Last of all: the trees and big shrubs stand on the finished ground.
+		plantFlora(w, cols, rows, SURFACE_Z);
 		return w;
+	}
+
+	/**
+	 * Which large plants each ground grows, and how readily: per tile, before the
+	 * grove field and the spacing thin them. Meadow is broadleaf country with the
+	 * odd shrub; the thicket is dark oak, and monstera where it is humid; rocky
+	 * grassland and bare stone carry conifers; sand and scrub the flat-topped
+	 * acacia; the wet margins monstera; the bog the flytrap, which grows nowhere
+	 * else. Fractions of a tile -- a few in a hundred -- because a tree is a
+	 * landmark, not a texture.
+	 */
+	private static Object[][] floraFor(Tile.TileType t, boolean humid) {
+		switch (t) {
+		case TYPE_FLOOR:
+			return new Object[][] { { Flora.Kind.BROADLEAF, 0.022 }, { Flora.Kind.SHRUB, 0.010 }, { Flora.Kind.BERRY, 0.006 } };
+		case TYPE_TALLGRASS:
+			return new Object[][] { { Flora.Kind.SHRUB, 0.025 }, { Flora.Kind.BROADLEAF, 0.010 }, { Flora.Kind.BERRY, 0.006 } };
+		case TYPE_COVER:
+			return humid ? new Object[][] { { Flora.Kind.MONSTERA, 0.035 }, { Flora.Kind.OAK, 0.040 } }
+					: new Object[][] { { Flora.Kind.OAK, 0.070 }, { Flora.Kind.SHRUB, 0.010 } };
+		case TYPE_ROCKY:
+			return new Object[][] { { Flora.Kind.CONIFER, 0.030 }, { Flora.Kind.SHRUB, 0.010 } };
+		case TYPE_STONE:
+		case TYPE_RUBBLE:
+			return new Object[][] { { Flora.Kind.CONIFER, 0.010 } };
+		case TYPE_SAND:
+			return new Object[][] { { Flora.Kind.ACACIA, 0.010 } };
+		case TYPE_SCRUB:
+			return new Object[][] { { Flora.Kind.ACACIA, 0.020 } };
+		case TYPE_MUD:
+		case TYPE_REEDS:
+			return new Object[][] { { Flora.Kind.MONSTERA, 0.025 } };
+		case TYPE_PEAT:
+		case TYPE_SPHAGNUM:
+		case TYPE_SEDGE:
+		case TYPE_MIRE:
+			return new Object[][] { { Flora.Kind.FLYTRAP, 0.050 } };
+		default:
+			return null;
+		}
+	}
+
+	/** Natural open ground a plant's crown may stand over: none of it built,
+	 *  open water, a drop, rock, or a climb. */
+	private static boolean floraGround(Tile.TileType t) {
+		switch (t) {
+		case TYPE_FLOOR, TYPE_TALLGRASS, TYPE_COVER, TYPE_ROCKY, TYPE_STONE, TYPE_RUBBLE, TYPE_SAND, TYPE_SCRUB,
+				TYPE_MUD, TYPE_REEDS, TYPE_PEAT, TYPE_SPHAGNUM, TYPE_SEDGE, TYPE_MIRE:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	/** How far apart two feet must stand, in art-px: a tree claims three tiles
+	 *  of ground, anything lower two. Two plants keep the mean of their claims. */
+	public static final int FLORA_TREE_SPACING = 36, FLORA_LOW_SPACING = 22;
+	/** The grove field's scale: one swell of woodland and clearing every
+	 *  dozen tiles or so, so trees gather rather than sprinkle. */
+	private static final double FLORA_GROVE_FREQ = 0.085;
+	/** Where on the grove field woodland begins, and how much denser it is
+	 *  there: a steep edge, so trees stand in woods with clearings between
+	 *  rather than sprinkled evenly at a lower density. */
+	private static final double FLORA_GROVE_EDGE = 0.5, FLORA_GROVE_GAIN = 3.0;
+
+	/**
+	 * The trees and big shrubs, placed on one level by its ground.
+	 *
+	 * <p>Each candidate tile asks its ground what grows there ({@link #floraFor})
+	 * and draws one hash: under the summed chances, scaled by the grove field --
+	 * a smooth noise that makes woods and clearings -- it grows the kind its share
+	 * of the sum points to. A plant needs its whole footprint on natural ground
+	 * (a tree's crown overhangs the row north of its foot and a tile either side)
+	 * and nothing within two tiles of a climb, whose foot it would hide. Then the
+	 * candidates are taken in a hashed order and kept only where nothing already
+	 * kept stands too close. All of it is coordinate hashes: no RNG is drawn, so
+	 * nothing generated before this sees a different world for it.
+	 */
+	static void plantFlora(World w, int cols, int rows, int z) {
+		int A = GroundTextures.ART;
+		java.util.ArrayList<long[]> cand = new java.util.ArrayList<long[]>(); // {priority, x, y, kind}
+		for (int y = 3; y < rows - 3; y++) {
+			for (int x = 3; x < cols - 3; x++) {
+				Tile.TileType t = w.getTile(x, y, z).getType();
+				boolean humid = false;
+				for (int dy = -3; dy <= 3 && !humid; dy++) {
+					for (int dx = -3; dx <= 3; dx++) {
+						Tile.TileType n = w.getTile(x + dx, y + dy, z).getType();
+						if (n == Tile.TileType.TYPE_WATER || n == Tile.TileType.TYPE_SHALLOWS
+								|| n == Tile.TileType.TYPE_REEDS) {
+							humid = true;
+							break;
+						}
+					}
+				}
+				Object[][] grows = floraFor(t, humid);
+				if (grows == null) {
+					continue;
+				}
+				double sum = 0;
+				for (Object[] g : grows) {
+					sum += (Double) g[1];
+				}
+				double grove = Math.max(0, Math.min(1,
+						(Utils.noise2(x + 4100, y + 7300, FLORA_GROVE_FREQ) - FLORA_GROVE_EDGE) / 0.15)) * FLORA_GROVE_GAIN;
+				double u = GroundTextures.hash01(x, y, 211);
+				if (grove <= 0 || u >= sum * grove) {
+					continue;
+				}
+				// which kind: where the hash falls within the summed chances
+				double at = u / grove, acc = 0;
+				Flora.Kind kind = (Flora.Kind) grows[grows.length - 1][0];
+				for (Object[] g : grows) {
+					acc += (Double) g[1];
+					if (at < acc) {
+						kind = (Flora.Kind) g[0];
+						break;
+					}
+				}
+				if (!floraFootprintClear(w, x, y, z, kind.isTree())) {
+					continue;
+				}
+				long pri = (long) (GroundTextures.hash01(x, y, 223) * 1e9);
+				cand.add(new long[] { pri, x, y, kind.ordinal() });
+			}
+		}
+		cand.sort((a, b) -> Long.compare(a[0], b[0]));
+		java.util.ArrayList<Flora> kept = new java.util.ArrayList<Flora>();
+		for (long[] c : cand) {
+			int x = (int) c[1], y = (int) c[2];
+			Flora.Kind kind = Flora.Kind.values()[(int) c[3]];
+			// the foot wanders within its tile, on the lattice
+			int gx = x * A + 3 + (int) (GroundTextures.hash01(x, y, 227) * 6);
+			int gy = y * A + 4 + (int) (GroundTextures.hash01(x, y, 229) * 5);
+			int mine = kind.isTree() ? FLORA_TREE_SPACING : FLORA_LOW_SPACING;
+			boolean clear = true;
+			for (Flora f : kept) {
+				int theirs = f.kind.isTree() ? FLORA_TREE_SPACING : FLORA_LOW_SPACING;
+				long need = (mine + theirs) / 2, dx = f.gx - gx, dy = f.gy - gy;
+				if (dx * dx + dy * dy < need * need) {
+					clear = false;
+					break;
+				}
+			}
+			if (clear) {
+				kept.add(new Flora(kind, z, gx, gy, GroundTextures.hash01(x, y, 233) < 0.5 ? 0 : 1,
+						GroundTextures.hash01(x, y, 239) < 0.5));
+			}
+		}
+		for (Flora f : kept) {
+			w.addFlora(f);
+		}
+	}
+
+	/** Whether a plant footed on tile (x, y) has natural ground under all of
+	 *  it, and no climb within two tiles. */
+	private static boolean floraFootprintClear(World w, int x, int y, int z, boolean tree) {
+		int r = tree ? 1 : 0;
+		for (int dy = -1; dy <= 0; dy++) {
+			for (int dx = -r; dx <= r; dx++) {
+				if (!floraGround(w.getTile(x + dx, y + dy, z).getType())) {
+					return false;
+				}
+			}
+		}
+		for (int dy = -2; dy <= 2; dy++) {
+			for (int dx = -2; dx <= 2; dx++) {
+				Tile.TileType t = w.getTile(x + dx, y + dy, z).getType();
+				if (t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**

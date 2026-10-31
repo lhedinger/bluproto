@@ -1392,6 +1392,24 @@ public class World {
 		return flowPlunge(packed) && flowStep(packed) && flowSpeed(packed) == FLOW_FACE;
 	}
 
+	/** The large plants standing on each level (see {@link Flora}), in the order placed. */
+	private final java.util.List<Flora> flora = new java.util.ArrayList<Flora>();
+
+	public void addFlora(Flora f) {
+		flora.add(f);
+	}
+
+	/** The large plants on one level, unmodifiable. */
+	public java.util.List<Flora> flora(int l) {
+		java.util.ArrayList<Flora> out = new java.util.ArrayList<Flora>();
+		for (Flora f : flora) {
+			if (f.z == l) {
+				out.add(f);
+			}
+		}
+		return java.util.Collections.unmodifiableList(out);
+	}
+
 	/** A copy of one level's flow bytes, row-major (all zero where nothing moves). */
 	public byte[] flowLevel(int l) {
 		byte[] out = new byte[cols * rows];
