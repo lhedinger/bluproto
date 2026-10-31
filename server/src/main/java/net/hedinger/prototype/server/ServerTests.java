@@ -1326,6 +1326,9 @@ public final class ServerTests {
 		check("every cascade is in rapids: " + stepsInRapids + "/" + steps, stepsInRapids == steps);
 		check("the lakes stay still: " + stillWater + " still water tiles", stillWater > moving);
 		check("a level that does not exist has no flow", host.flow(99) == null);
+		int[][] plants = host.flora(z);
+		check("the surface has its trees and shrubs: " + (plants == null ? 0 : plants.length), plants != null && plants.length > 200);
+		check("a level that does not exist has no flora", host.flora(99) == null);
 
 		// Rivers run their length: the carver once ended every two-wide river at
 		// its first step east or south, on its own fresh channel, so none passed

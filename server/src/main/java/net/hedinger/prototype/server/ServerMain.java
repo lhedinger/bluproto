@@ -616,6 +616,17 @@ public final class ServerMain {
 					"data", java.util.Base64.getEncoder().encodeToString(c)));
 		});
 
+		// The trees and big shrubs of a level, [kind, gx, gy, layout, mirror] a
+		// row. Static, fetched once per level like the flow.
+		app.get("/api/world/flora/{z}", ctx -> {
+			int[][] f = host.flora(Integer.parseInt(ctx.pathParam("z")));
+			if (f == null) {
+				ctx.status(404);
+				return;
+			}
+			ctx.json(Map.of("plants", f));
+		});
+
 		// Tap-to-inspect a tile (debug): type, fertility, live vegetation/food.
 		app.get("/api/world/tile/{z}/{x}/{y}", ctx -> {
 			var d = host.tileDetail(Integer.parseInt(ctx.pathParam("x")),
