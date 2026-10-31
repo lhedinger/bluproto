@@ -350,7 +350,13 @@ One sun, straight overhead-north. The grammar:
   a hole through a leaf shows the ground. A signature colour stays itself
   however far back (a trap's red; dark, it reads as withered). It draws over
   the creatures, and at the veil's translucency (§4) while one is under the
-  crown. Natural, never cartoon: no teeth, no throat, no faces.
+  crown. Natural, never cartoon: no teeth, no throat, no faces. It grows in
+  **four stages** -- seedling, sapling, young, mature -- and each younger stage
+  is its own smaller arrangement of the same stamps (fewer clumps, a lower
+  tier count, one trap, a single uncut leaf), never the grown plant scaled
+  down: scaling falls off the lattice and thins the outline to nothing. A
+  sapling's trunk stands proud of its crown, so it reads as a young tree and
+  not a shrub; a seedling is a sprout, no lift and no trunk.
 - **Items** are compact glyphs with a shadow, a body, and one readable
   identity feature (leaf, braces, spikes).
 - **Authored beats computed.** Small fixtures and glyphs are hand-drawn
