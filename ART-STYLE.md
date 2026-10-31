@@ -334,6 +334,23 @@ One sun, straight overhead-north. The grammar:
   the 12-px grid, obeys the raised grammar, and its *state* is drawn state:
   leaves slide, plates sink, lamps light. Machinery signals with the signal
   colours; wiring is shown (lamp trails), not implied.
+- **Large flora** -- trees and big shrubs (`client/src/flora.ts`, placed by
+  `Worlds.plantFlora`) -- is authored parts placed by hand: leaf clumps, cone
+  tiers, trap lobes, split leaves, arranged differently per layout and mirrored,
+  never one stamp turned round a centre. It stands at the world's angle: the
+  crown lifted by the plant's height (four art-px for a broadleaf, at 1.5 tiles
+  across), a short band of shade under its south edge, a trunk stub, and the
+  §4 shadow on the ground at the foot. The light goes on after any flip, per
+  part: north edge lit, south edge shaded, from a **warm-over-cool ladder** (a
+  warm ramp's light over a cool ramp's shade, §2's meeting of two used for
+  light); a part further back sits a step down the ladder, and where a nearer
+  part lies over it, it darkens along the edge -- the **overlap shadow** -- so
+  overlapping leaves keep their own outlines. The outline is the outside's
+  only, dark to the south and east and the deepest shade to the north and west;
+  a hole through a leaf shows the ground. A signature colour stays itself
+  however far back (a trap's red; dark, it reads as withered). It draws over
+  the creatures, and at the veil's translucency (§4) while one is under the
+  crown. Natural, never cartoon: no teeth, no throat, no faces.
 - **Items** are compact glyphs with a shadow, a body, and one readable
   identity feature (leaf, braces, spikes).
 - **Authored beats computed.** Small fixtures and glyphs are hand-drawn
@@ -803,6 +820,24 @@ The precedents, so nobody pays twice:
   the ramp's edge. **The material that carries an outline on is the one on
   the near side of it**, and **check both ends of a transition** -- the side
   that was fixed made the end that was left alone the odd one out.
+- **The forest that took six sheets** -- trees and big shrubs were drawn on
+  comparison sheets before any code, and every sheet was a rule. On bare
+  ground the crowns were twice the size they should be and steeper than every
+  wall: only composited into a live capture, a wall and a creature in frame,
+  did size and angle read, and the trees came down to 1.5 tiles at a lift of
+  four art-px. Without an outline the dark crowns vanished into meadow. A
+  conifer drawn as a disc was what straight down looks like, and this view is
+  not; drawn as a tall tree it was steeper than the walls; a cone of tiers
+  between the two is the answer. The flytrap was a trap stamp turned round a
+  centre and read as a red cross, then a star, then (with cream bristles) lace;
+  given jaws and teeth it read as an animal; it reads as a plant once its traps
+  are placed by hand at different sizes and angles, one shut, red faces on a
+  hinge and a fringe of fine pale cilia. The monstera, eight turned leaves, was
+  a square; with speckle its slits vanished; in one green its leaves fused --
+  depth between parts, a step down the ladder further back and a shadow line
+  where a nearer leaf lies over one behind, is what separated them. Two
+  lessons over all of it: **judge art in the world, not on a swatch**, and
+  **organic is placed, not rotated** -- symmetry is what a symbol has.
 
 ## 8. Conformance checklist
 
