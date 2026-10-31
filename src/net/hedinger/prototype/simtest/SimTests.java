@@ -1,6 +1,7 @@
 package net.hedinger.prototype.simtest;
 
 import net.hedinger.prototype.engine.Entity;
+import net.hedinger.prototype.engine.Flora;
 import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.ProcCreature;
 import net.hedinger.prototype.engine.Tile;
@@ -12777,6 +12778,95 @@ public class SimTests {
 	 * its literals, the plans by their gut extents. If a ramp moves under it,
 	 * this fails and names the client as the thing that needs editing.
 	 */
+	/**
+	 * Trees and big shrubs grow where their ground says, stand clear of each
+	 * other and of anything that is not natural ground, and gather into woods.
+	 *
+	 * <p>Each kind's ground is the placement rule in one line: broadleaf on
+	 * meadow and tall grass, oak and monstera in the thicket, conifers on rock,
+	 * acacias on sand and scrub, monstera on the wet margins, the flytrap in the
+	 * bog. A plant's footprint -- a tree's crown overhangs its neighbours -- is
+	 * all natural ground, and no climb is within two tiles of a foot, whose top
+	 * or bottom it would hide. Feet keep the spacing their claims add up to. And
+	 * trees group: half of them have another within four tiles, about twice what
+	 * the same count scattered evenly would give. Built on a quiet stream over
+	 * fixed seeds (see TheGorgeSwallowsARiver), twice each, so the placement is
+	 * a pure function of the ground.
+	 */
+	static class LargeFloraStandsOnItsGround extends Scenario {
+		@Override
+		public void run() {
+			java.util.Map<Flora.Kind, java.util.Set<Tile.TileType>> ground = new java.util.EnumMap<>(Flora.Kind.class);
+			ground.put(Flora.Kind.BROADLEAF, java.util.EnumSet.of(Tile.TileType.TYPE_FLOOR, Tile.TileType.TYPE_TALLGRASS));
+			ground.put(Flora.Kind.OAK, java.util.EnumSet.of(Tile.TileType.TYPE_COVER));
+			ground.put(Flora.Kind.CONIFER, java.util.EnumSet.of(Tile.TileType.TYPE_ROCKY, Tile.TileType.TYPE_STONE, Tile.TileType.TYPE_RUBBLE));
+			ground.put(Flora.Kind.ACACIA, java.util.EnumSet.of(Tile.TileType.TYPE_SAND, Tile.TileType.TYPE_SCRUB));
+			ground.put(Flora.Kind.SHRUB, java.util.EnumSet.of(Tile.TileType.TYPE_FLOOR, Tile.TileType.TYPE_TALLGRASS,
+					Tile.TileType.TYPE_COVER, Tile.TileType.TYPE_ROCKY));
+			ground.put(Flora.Kind.BERRY, java.util.EnumSet.of(Tile.TileType.TYPE_FLOOR, Tile.TileType.TYPE_TALLGRASS));
+			ground.put(Flora.Kind.FLYTRAP, java.util.EnumSet.of(Tile.TileType.TYPE_PEAT, Tile.TileType.TYPE_SPHAGNUM,
+					Tile.TileType.TYPE_SEDGE, Tile.TileType.TYPE_MIRE));
+			ground.put(Flora.Kind.MONSTERA, java.util.EnumSet.of(Tile.TileType.TYPE_COVER, Tile.TileType.TYPE_MUD, Tile.TileType.TYPE_REEDS));
+			java.util.Set<Tile.TileType> natural = java.util.EnumSet.noneOf(Tile.TileType.class);
+			for (java.util.Set<Tile.TileType> s : ground.values()) {
+				natural.addAll(s);
+			}
+			java.util.Set<Flora.Kind> seen = java.util.EnumSet.noneOf(Flora.Kind.class);
+			for (long seed : new long[] { 1, 7, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int z = w.getSurfaceZ();
+				java.util.List<Flora> fs = w.flora(z);
+				assertGreater("seed " + seed + ": the surface grows its trees and shrubs", fs.size(), 300);
+				java.util.List<Flora> again = net.hedinger.prototype.sim.Worlds.demoTerrain(seed).flora(z);
+				assertEquals("seed " + seed + ": the same world grows the same plants", fs.size(), again.size());
+				int trees = 0, grouped = 0;
+				for (int i = 0; i < fs.size(); i++) {
+					Flora f = fs.get(i), g = again.get(i);
+					assertTrue("seed " + seed + ": plant " + i + " is the same plant both times",
+							f.kind == g.kind && f.gx == g.gx && f.gy == g.gy && f.layout == g.layout && f.mirror == g.mirror);
+					seen.add(f.kind);
+					int tx = f.tileX(), ty = f.tileY();
+					String at = "seed " + seed + ": a " + f.kind + " at " + tx + "," + ty;
+					assertTrue(at + " stands on its own ground (" + w.getTile(tx, ty, z).getType() + ")",
+							ground.get(f.kind).contains(w.getTile(tx, ty, z).getType()));
+					int r = f.kind.isTree() ? 1 : 0;
+					for (int dy = -1; dy <= 0; dy++) {
+						for (int dx = -r; dx <= r; dx++) {
+							assertTrue(at + " stands over natural ground only", natural.contains(w.getTile(tx + dx, ty + dy, z).getType()));
+						}
+					}
+					for (int dy = -2; dy <= 2; dy++) {
+						for (int dx = -2; dx <= 2; dx++) {
+							Tile.TileType t = w.getTile(tx + dx, ty + dy, z).getType();
+							assertTrue(at + " hides no climb", t != Tile.TileType.TYPE_RAMPUP && t != Tile.TileType.TYPE_RAMPDOWN);
+						}
+					}
+					int mine = f.kind.isTree() ? net.hedinger.prototype.sim.Worlds.FLORA_TREE_SPACING
+							: net.hedinger.prototype.sim.Worlds.FLORA_LOW_SPACING;
+					boolean near = false;
+					for (int j = 0; j < fs.size(); j++) {
+						Flora o = fs.get(j);
+						if (j == i) {
+							continue;
+						}
+						int theirs = o.kind.isTree() ? net.hedinger.prototype.sim.Worlds.FLORA_TREE_SPACING
+								: net.hedinger.prototype.sim.Worlds.FLORA_LOW_SPACING;
+						long need = (mine + theirs) / 2, ddx = o.gx - f.gx, ddy = o.gy - f.gy, d2 = ddx * ddx + ddy * ddy;
+						assertTrue(at + " keeps its distance from its neighbours", d2 >= need * need);
+						near |= f.kind.isTree() && o.kind.isTree() && d2 <= 48L * 48;
+					}
+					if (f.kind.isTree()) {
+						trees++;
+						grouped += near ? 1 : 0;
+					}
+				}
+				assertTrue("seed " + seed + ": trees gather into woods (" + grouped + " of " + trees + " have a tree within four tiles)",
+						grouped * 10 >= trees * 4);
+			}
+			assertEquals("every kind grows somewhere in these worlds", Flora.Kind.values().length, seen.size());
+		}
+	}
+
 	static class TheBodyScanIsPaintedFromRamps extends Scenario {
 		@Override
 		public void run() {
@@ -21005,6 +21095,7 @@ public class SimTests {
 				new PerceptionIsOneGatherOnTheClock(),
 				new AHostMendsWhatOneRiderDrinks(),
 				new TheBodyScanIsPaintedFromRamps(),
+				new LargeFloraStandsOnItsGround(),
 				new TheMovingWaterIsPaintedFromItsRamps(),
 				new TheGorgeSwallowsARiver(),
 				new ASpringFallsOffTheTable(),
