@@ -121,6 +121,14 @@ Put on every sheet: **all headings or states**, a **zoom ladder** (16→120px),
 and the glyph over **at least two different grounds**. Most failures are
 invisible at one size on one background.
 
+**Judge scale and angle in the world itself, not on a swatch.** Capture the
+live client (local server, the live seed) at a camera that puts the world's
+origin on a multiple of the art-pixel size — 48 px/tile at DPR 1 is 4 px an
+art-pixel — and composite the candidate into that screenshot on the same
+lattice. A wall and a creature in frame answer "how big" and "from what angle"
+at once; on a bare ground swatch the trees were drawn twice too large and
+steeper than every wall around them, and nothing on the sheet said so.
+
 **Compare variants side by side, do not iterate one at a time.** Six candidates
 in one screenshot settles in a single pass what six sequential attempts will
 not settle at all. Three drafts of the drone were rejected one at a time before
@@ -161,6 +169,39 @@ shadow and becomes a second dark object parked underneath. Use the blocky
 translucent oval (sanctioned translucency 2). It reads as ground because that is
 what a shadow on ground looks like from above, and it needs no rotation — the
 body turns, the light does not.
+
+## Living things: plants, and anything organic
+
+Plants were drawn six times before they read, and each failure was a rule:
+
+- **Match the world's angle.** The world is drawn nearly straight down with a
+  slight tilt from the south: a one-storey wall shows ~5 art-px of south face.
+  A tall thing is lifted by its height, shows a short band of shade under its
+  south edge and a stub of trunk, and its shadow lies on the ground at its foot.
+  So a cone is a point to the north and tiers widening south, never a disc
+  (straight down) and never a side-on Christmas tree (too steep).
+- **Organic is asymmetric.** A rosette of one stamp turned round a centre reads
+  as a symbol — a red cross, a star, a lace doily. Author the parts and *place
+  them by hand*: different sizes, ages and lean, one shut, one young. Variety
+  comes from second layouts of the same parts, never from rotating the whole.
+- **Natural, not cartoon.** Teeth, throats and gaping mouths turned a flytrap
+  into an animal. Draw what the plant is — two red-faced lobes on a hinge, a
+  fringe of fine pale cilia — and let the arrangement carry the character.
+- **Depth between parts.** Overlapping parts in one green fuse into a blob.
+  Give each part a depth: the further back, the further down the ladder; and
+  where a nearer part lies over one behind it, darken the one behind along the
+  edge (the overlap's shadow), so every leaf keeps its own outline. Keep
+  signature colours out of it — a trap's red stays red however far back, or it
+  reads as withered.
+- **Hue-shift by borrowing two ramps.** Light from a warm ramp (grass), shade
+  from a cool one (reeds): §2's "meeting of two" rule, used for light rather
+  than terrain. One ramp's three shades read flat.
+- **Selective outline, outside only.** Dark on the south and east, the deepest
+  shade on the north and west, and none inside — a hole through a leaf shows
+  the ground. An outline drawn round every hole fills the holes in.
+- **Let the light rule draw the detail.** A monstera's slits read only because
+  the per-part rule lights the cell below each slit and shades the one above;
+  hashed speckle on top of that buried them. Smooth tissue, cut shapes.
 
 ## Committing
 
