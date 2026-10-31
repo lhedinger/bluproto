@@ -26,6 +26,7 @@ import {
   ART, drawGlints, glintsFor, setFlowGrid,
 } from './render';
 import { flowLayers } from './flow';
+import { FLORA_KINDS, floraInView, floraSprite, setFlora, type FloraRow } from './flora';
 import { el, renderMechPage, syncNavPad } from './mechdoc';
 import { PLANS, SATED, bodyScanCanvas, type BodyState } from './bodyScan';
 
@@ -454,6 +455,15 @@ const moving = section('Moving water',
   + 'cliff, down its face and into a pool at the foot. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
   + 'second, since the page follows no world clock.');
 
+const floraSec = section('Large flora',
+  'Trees and big shrubs, from the world running now: each kind where it actually grew, drawn by the '
+  + 'live flora layer over that world\'s own bake, then its four faces -- two hand-placed layouts, each '
+  + 'mirrored. Every plant is authored parts lit in world space: a part further back a step down a '
+  + 'warm-over-cool ladder, an overlap shadow where a nearer part covers it, an outline round the outside '
+  + 'only. Broadleaf on meadow, oak and monstera in the thicket, conifers on rock, acacias on sand, '
+  + 'monstera on the wet margins, the flytrap in the bog; drawn over the creatures, at the veil\'s '
+  + 'translucency while one is under the crown.');
+
 const bakes = section('Atlas bakes',
   'What the viewer itself makes of a creature\'s server-baked sprite atlas: the living '
   + 'stamp and the drained corpse bake (colour stripped, body kept). '
@@ -684,6 +694,57 @@ for (const [act, name, meaning] of EXPR) {
     await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 128) !== 0 && (f & 32) !== 0);
     await reach(sz + 1, 'spring: off the table, from above', f => (f & 64) !== 0 && ((f >> 2) & 7) === 2);
     await reach(sz, 'spring: down the face, from its foot', f => (f & 160) === 160 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
+
+    // Large flora: each kind where it grew, the live layer over the live bake.
+    const fj = await fetch(`/api/world/flora/${sz}`).then(r => (r.ok ? r.json() : null)).catch(() => null) as { plants: FloraRow[] } | null;
+    if (fj) {
+      setFlora(sz, fj.plants);
+      for (let k = 0; k < FLORA_KINDS.length; k++) {
+        const one = fj.plants.find(r => r[0] === k);
+        if (!one) continue;
+        const x0 = Math.floor(one[1] / ART) - 3, y0 = Math.floor(one[2] / ART) - 4;
+        const mine: Array<[number, number, HTMLCanvasElement]> = [];
+        for (let cy = Math.floor(y0 / CT); cy <= Math.floor((y0 + N) / CT); cy++) {
+          for (let cx = Math.floor(x0 / CT); cx <= Math.floor((x0 + N) / CT); cx++) {
+            if (cx < 0 || cy < 0) continue;
+            const key = `${sz}/${cx}_${cy}`;
+            if (!chunks.has(key)) {
+              const cv = await loadCanvas(`/api/world/layers/${sz}/${cx}_${cy}.png?v=${hw.build}`);
+              if (cv) chunks.set(key, cv);
+            }
+            const cv = chunks.get(key);
+            if (cv) mine.push([cx, cy, cv]);
+          }
+        }
+        const cam = { scale: ART * px, screenX: (wx: number) => (wx - x0) * ART * px, screenY: (wy: number) => (wy - y0) * ART * px };
+        pair(floraSec, FLORA_KINDS[k] + ', where it grew', DC, DC, (g) => {
+          g.imageSmoothingEnabled = false;
+          for (const [cx, cy, cv] of mine) g.drawImage(cv, (cx * CT - x0) * ART * px, (cy * CT - y0) * ART * px, cv.width * px, cv.height * px);
+          for (const d of floraInView(sz, cam, DC, DC, [], VEIL_ALPHA)) { g.globalAlpha = d.alpha; g.drawImage(d.sprite.cv, d.x, d.y, d.w, d.h); }
+          g.globalAlpha = 1;
+        });
+        // its four faces on the same ground, and the veil a body under it brings
+        const fx = (one[1] / ART - x0) * ART * px, fy = (one[2] / ART - y0) * ART * px;
+        pair(floraSec, FLORA_KINDS[k] + ': two layouts, mirrored; the last veiled', DC * 2, DC / 2, (g) => {
+          g.imageSmoothingEnabled = false;
+          g.fillStyle = '#14161f'; g.fillRect(0, 0, DC * 2, DC / 2);
+          const faces: Array<[number, boolean, number]> = [[0, false, 1], [0, true, 1], [1, false, 1], [1, true, 1], [0, false, VEIL_ALPHA]];
+          faces.forEach(([layout, mir, a], i) => {
+            const sp = floraSprite(FLORA_KINDS[k], layout, mir);
+            const ox = i * (DC * 2 / faces.length), cell = DC * 2 / faces.length;
+            for (const [cx, cy, cv] of mine) {
+              g.save(); g.beginPath(); g.rect(ox, 0, cell, DC / 2); g.clip();
+              g.drawImage(cv, ox + (cx * CT - x0) * ART * px - fx + cell / 2, (cy * CT - y0) * ART * px - fy + DC / 2 - 10, cv.width * px, cv.height * px);
+              g.restore();
+            }
+            const s2 = px * 0.9;
+            g.globalAlpha = a;
+            g.drawImage(sp.cv, ox + cell / 2 - sp.fx * s2, DC / 2 - 10 - sp.fy * s2, sp.cv.width * s2, sp.cv.height * s2);
+            g.globalAlpha = 1;
+          });
+        });
+      }
+    }
   }
 
   // Concealment pairs: the client's veil code over the SAME staged ground the
