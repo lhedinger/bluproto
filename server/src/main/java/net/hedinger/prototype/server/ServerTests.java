@@ -1328,6 +1328,11 @@ public final class ServerTests {
 		check("a level that does not exist has no flow", host.flow(99) == null);
 		int[][] plants = host.flora(z);
 		check("the surface has its trees and shrubs: " + (plants == null ? 0 : plants.length), plants != null && plants.length > 200);
+		boolean staged = plants != null;
+		for (int i = 0; staged && i < plants.length; i++) {
+			staged = plants[i].length == 6 && plants[i][5] >= 0 && plants[i][5] < net.hedinger.prototype.engine.Flora.STAGES;
+		}
+		check("each plant row carries its growth stage", staged);
 		check("a level that does not exist has no flora", host.flora(99) == null);
 
 		// Rivers run their length: the carver once ended every two-wide river at

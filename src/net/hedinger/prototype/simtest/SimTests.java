@@ -12812,6 +12812,7 @@ public class SimTests {
 				natural.addAll(s);
 			}
 			java.util.Set<Flora.Kind> seen = java.util.EnumSet.noneOf(Flora.Kind.class);
+			int[] stages = new int[Flora.STAGES];
 			for (long seed : new long[] { 1, 7, 42 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
 				int z = w.getSurfaceZ();
@@ -12823,8 +12824,9 @@ public class SimTests {
 				for (int i = 0; i < fs.size(); i++) {
 					Flora f = fs.get(i), g = again.get(i);
 					assertTrue("seed " + seed + ": plant " + i + " is the same plant both times",
-							f.kind == g.kind && f.gx == g.gx && f.gy == g.gy && f.layout == g.layout && f.mirror == g.mirror);
+							f.kind == g.kind && f.gx == g.gx && f.gy == g.gy && f.layout == g.layout && f.mirror == g.mirror && f.stage == g.stage);
 					seen.add(f.kind);
+					stages[f.stage]++;
 					int tx = f.tileX(), ty = f.tileY();
 					String at = "seed " + seed + ": a " + f.kind + " at " + tx + "," + ty;
 					assertTrue(at + " stands on its own ground (" + w.getTile(tx, ty, z).getType() + ")",
@@ -12864,6 +12866,15 @@ public class SimTests {
 						grouped * 10 >= trees * 4);
 			}
 			assertEquals("every kind grows somewhere in these worlds", Flora.Kind.values().length, seen.size());
+			// a stand is mostly grown, with every younger stage among it
+			int all = 0;
+			for (int n : stages) {
+				all += n;
+			}
+			for (int st = 0; st < Flora.STAGES - 1; st++) {
+				assertGreater("plants at stage " + st + " grow among the grown ones", stages[st], all / 25);
+			}
+			assertGreater("most plants are grown", stages[Flora.STAGES - 1] * 2, all);
 		}
 	}
 

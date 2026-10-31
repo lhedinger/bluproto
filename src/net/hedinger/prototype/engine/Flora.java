@@ -13,7 +13,8 @@ package net.hedinger.prototype.engine;
  * body walking under it is judged against. The art is the client's
  * ({@code client/src/flora.ts}); {@code layout} picks which of the kind's
  * hand-placed arrangements it wears, and {@code mirror} flips it east-west, so
- * no two neighbours look alike.
+ * no two neighbours look alike. {@code stage} is how grown it is, from a
+ * seedling ({@code 0}) to mature ({@code STAGES - 1}); fixed when placed, for now.
  */
 public final class Flora {
 
@@ -27,11 +28,22 @@ public final class Flora {
 		}
 	}
 
+	/** Seedling, sapling, young, mature. */
+	public static final int STAGES = 4;
+
 	public final Kind kind;
-	public final int z, gx, gy, layout;
+	public final int z, gx, gy, layout, stage;
 	public final boolean mirror;
 
 	public Flora(Kind kind, int z, int gx, int gy, int layout, boolean mirror) {
+		this(kind, z, gx, gy, layout, mirror, STAGES - 1);
+	}
+
+	public Flora(Kind kind, int z, int gx, int gy, int layout, boolean mirror, int stage) {
+		if (stage < 0 || stage >= STAGES) {
+			throw new IllegalArgumentException("stage " + stage);
+		}
+		this.stage = stage;
 		this.kind = kind;
 		this.z = z;
 		this.gx = gx;
