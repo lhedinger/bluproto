@@ -17,6 +17,7 @@ import {
 } from './fixtures';
 import { VEG_STAGE_MASK, VEG_VARIANTS, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
 import { flowLayers } from './flow';
+import { floraInView } from './flora';
 
 // The split-out drawing modules are part of this one's public face: callers
 // import from './render' and need not know where a painter lives.
@@ -558,6 +559,7 @@ const PHERO_OFF = flagOff('phero');     // pheromone clouds
 const PARALLAX_OFF = flagOff('parallax'); // below-floor slide (floors still show)
 const BELOW_OFF = flagOff('below');       // bodies on the floor below the pits
 const CANOPY_OFF = flagOff('canopy');   // foliage veils + duct lids
+const FLORA_OFF = flagOff('flora');     // trees and big shrubs over the bodies
 const OVERLAY_OFF = flagOff('overlay'); // action badges, rings, carry links
 
 /** The map-view dot: a corpse is a spent grey block; a live body its colour. */
@@ -960,6 +962,29 @@ export function render(
     }
     g.globalAlpha = 1;
   }
+
+  // Trees and big shrubs, over everything that walks (see flora.ts): a crown
+  // with a body under it drops to the veil's translucency, as cover does.
+  if (!FLORA_OFF) {
+    g.imageSmoothingEnabled = false;
+    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA)) {
+      g.globalAlpha = d.alpha;
+      g.drawImage(d.sprite.cv, d.x, d.y, d.w, d.h);
+    }
+    g.globalAlpha = 1;
+  }
+}
+
+/** Where the living bodies on a level stand, in world art-pixels: what a
+ *  crown checks to know whether to draw at the veil's translucency. */
+function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const t of tracks) {
+    const e = t.curr;
+    if (!e.kind.startsWith('npc.') || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+    out.push([e.x * ART, e.y * ART]);
+  }
+  return out;
 }
 
 // ---- the WebGL world pass -------------------------------------------------
@@ -1635,6 +1660,12 @@ export function renderGL(
       const lid = ductLidTile(vert);
       glr.sprite('lid:' + (vert ? 'v' : 'h'), lid, 1, 0, 0, 12, 12,
         o2.x, o2.y, cam.scale, cam.scale, VEIL_ALPHA);
+    }
+  }
+
+  if (!FLORA_OFF) {
+    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA)) {
+      glr.sprite('flora:' + d.key, d.sprite.cv, 1, 0, 0, d.sprite.cv.width, d.sprite.cv.height, d.x, d.y, d.w, d.h, d.alpha);
     }
   }
 

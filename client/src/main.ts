@@ -10,6 +10,7 @@ import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
+import { setFlora, type FloraRow } from './flora';
 import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
@@ -329,6 +330,7 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['minimap', 'minimap'],
   ['glints', 'live glints on water'],
   ['parallax', 'below-floor parallax slide'],
+  ['flora', 'trees and big shrubs'],
   ['below', 'creatures on the floor below'],
   ['gl', 'webgl renderer (off = canvas2d)'],
 ];
@@ -466,6 +468,21 @@ async function fetchFlow(): Promise<void> {
 function syncFlow(): void {
   setFlowGrid(flowGrid && waterGrid ? flowGrid : null, waterGrid,
       meta?.cols ?? 0, meta?.rows ?? 0, currentLevel);
+}
+
+// The level's trees and big shrubs: static, so fetched once per level. A
+// stale answer (the viewer changed level while it was in flight) is dropped.
+async function fetchFlora(): Promise<void> {
+  const z = currentLevel, epoch = levelEpoch;
+  setFlora(z, null);
+  try {
+    const r = await fetch(`/api/world/flora/${z}`);
+    if (!r.ok) return;
+    const j = await r.json() as { plants: FloraRow[] };
+    if (epoch === levelEpoch && z === currentLevel) setFlora(z, j.plants);
+  } catch {
+    /* transient; the plants appear on the next fetch */
+  }
 }
 
 // The chosen climate field for the current level, fetched once per level and
@@ -623,6 +640,7 @@ function onMsg(m: ServerMsg, receivedAt: number): void {
       fetchCover();
       fetchWater();
       fetchFlow();
+      fetchFlora();
       fetchClimate();
       // Tell the server which level to stream. The client says this on every
       // connection now, not only when someone taps: after a reconnect the two
@@ -1744,6 +1762,7 @@ function goToLevel(z: number): void {
   fetchCover(); // cover mask is per-level
   fetchWater(); // so is the water mask
   fetchFlow(); // and which way it moves
+  fetchFlora(); // and what grows on it
   fetchClimate(); // and so is the climate field
   // The entity stream is filtered server-side to the watched level; asking
   // for the new one resyncs us with a full snapshot of it.
