@@ -26,7 +26,7 @@ import {
   ART, drawGlints, glintsFor, setFlowGrid,
 } from './render';
 import { flowLayers } from './flow';
-import { FLORA_KINDS, floraInView, floraSprite, setFlora, type FloraRow } from './flora';
+import { FLORA_KINDS, FLORA_STAGES, floraInView, floraSprite, setFlora, type FloraRow } from './flora';
 import { el, renderMechPage, syncNavPad } from './mechdoc';
 import { PLANS, SATED, bodyScanCanvas, type BodyState } from './bodyScan';
 
@@ -458,7 +458,8 @@ const moving = section('Moving water',
 const floraSec = section('Large flora',
   'Trees and big shrubs, from the world running now: each kind where it actually grew, drawn by the '
   + 'live flora layer over that world\'s own bake, then its four faces -- two hand-placed layouts, each '
-  + 'mirrored. Every plant is authored parts lit in world space: a part further back a step down a '
+  + 'mirrored, and the four stages it grows through, each its own smaller arrangement of the same '
+  + 'stamps rather than the grown plant scaled down. Every plant is authored parts lit in world space: a part further back a step down a '
   + 'warm-over-cool ladder, an overlap shadow where a nearer part covers it, an outline round the outside '
   + 'only. Broadleaf on meadow, oak and monstera in the thicket, conifers on rock, acacias on sand, '
   + 'monstera on the wet margins, the flytrap in the bog; drawn over the creatures, at the veil\'s '
@@ -742,6 +743,19 @@ for (const [act, name, meaning] of EXPR) {
             g.drawImage(sp.cv, ox + cell / 2 - sp.fx * s2, DC / 2 - 10 - sp.fy * s2, sp.cv.width * s2, sp.cv.height * s2);
             g.globalAlpha = 1;
           });
+        });
+        // growing up, on the same ground: seedling, sapling, young, mature
+        pair(floraSec, FLORA_KINDS[k] + ': seedling, sapling, young, mature', DC * 2, DC / 2, (g) => {
+          g.imageSmoothingEnabled = false;
+          const cell = DC * 2 / FLORA_STAGES;
+          for (let st = 0; st < FLORA_STAGES; st++) {
+            const sp = floraSprite(FLORA_KINDS[k], 0, false, st), ox = st * cell;
+            g.save(); g.beginPath(); g.rect(ox, 0, cell, DC / 2); g.clip();
+            for (const [cx, cy, cv] of mine) g.drawImage(cv, ox + (cx * CT - x0) * ART * px - fx + cell / 2, (cy * CT - y0) * ART * px - fy + DC / 2 - 10, cv.width * px, cv.height * px);
+            g.restore();
+            const s2 = px * 0.9;
+            g.drawImage(sp.cv, ox + cell / 2 - sp.fx * s2, DC / 2 - 10 - sp.fy * s2, sp.cv.width * s2, sp.cv.height * s2);
+          }
         });
       }
     }

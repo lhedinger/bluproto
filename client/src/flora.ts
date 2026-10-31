@@ -2,9 +2,9 @@
 // "living things".
 //
 // The world places them (Worlds.plantFlora) and serves them once per level as
-// rows of [kind, gx, gy, layout, mirror], the foot in world art-pixels; nothing
-// about a plant changes, so each (kind, layout, mirror) is baked once into a
-// small canvas at one pixel an art-pixel and stamped from there.
+// rows of [kind, gx, gy, layout, mirror, stage], the foot in world art-pixels;
+// nothing about a plant changes, so each (kind, layout, mirror, stage) is baked
+// once into a small canvas at one pixel an art-pixel and stamped from there.
 //
 // The art is authored, not computed (§5): leaf clumps, cone tiers, trap lobes and
 // split leaves are hand-drawn string stamps, and each plant is a hand-placed
@@ -34,7 +34,7 @@ export const FLORA_KINDS = ['broadleaf', 'oak', 'conifer', 'acacia', 'shrub', 'b
 export type FloraKind = typeof FLORA_KINDS[number];
 
 /** Flora.Kind's wire order: the server sends the ordinal. */
-export type FloraRow = [number, number, number, number, number]; // kind, gx, gy, layout, mirror
+export type FloraRow = [number, number, number, number, number, number]; // kind, gx, gy, layout, mirror, stage
 
 // ---- palette: ramps, verbatim, and shades derived off them -----------------------
 const derive = (hex: string, f: number): string => {
@@ -77,10 +77,9 @@ const MLEAF = ['....###....', '..#######..', '.####m####.', '...##m#####', '####
 const MLEAF_YOUNG = ['..###.', '.####.', '###m#.', '.##m..', '...m..']; // a new leaf, whole yet
 
 type Part = { st: string[]; x: number; y: number; t?: string; tone?: number };
-type Def = {
-  ladder: string[]; rib?: string; w: number; h: number; lift: number; faceH: number; trunk: number;
-  shadow: [number, number]; layouts: Part[][];
-};
+/** One growth stage's body: its box, how high the crown stands, its parts. */
+type Body = { w: number; h: number; lift: number; faceH: number; trunk: number; shadow: [number, number]; layouts: Part[][] };
+type Def = Body & { ladder: string[]; rib?: string };
 
 /** Clumps north of the crown's middle are further back: a step down the ladder. */
 const crown = (clumps: Array<[string[], number, number]>, mid: number): Part[] =>
@@ -129,6 +128,66 @@ export const FLORA: Record<FloraKind, Def> = {
     { st: ['s..', '.s.', '.s.'], x: 8, y: 12 }, { st: MLEAF, x: 7, y: 5, t: 'r' },
     { st: MLEAF_YOUNG, x: 1, y: 11, t: 'f' }]] },
 };
+
+// ---- growing up ------------------------------------------------------------------------
+// Four stages: seedling, sapling, young, mature (FLORA above). Each younger stage
+// is its own small arrangement of the same stamps -- fewer parts, a shorter
+// trunk, a smaller shadow -- not the mature plant scaled down: scaling breaks
+// the lattice and thins every outline to nothing.
+export const FLORA_STAGES = 4;
+const SPROUT = ['##.##', '.#s#.', '..s..'];
+const seed = (st: string[]): Body => ({ w: st[0].length, h: st.length, lift: 0, faceH: 0, trunk: 0, shadow: [2, 1], layouts: [[{ st, x: 0, y: 0 }]] });
+const YOUNG_SHRUB: Array<[string[], number, number]> = [[C_TINY, 1, 0], [C_TINY, 5, 0], [C_TINY, 3, 2], [C_TINY, 0, 3], [C_TINY, 5, 3]];
+const SAPLING_SHRUB: Array<[string[], number, number]> = [[C_TINY, 0, 1], [C_TINY, 3, 0]];
+
+const YOUNGER: Record<FloraKind, [Body, Body, Body]> = {
+  broadleaf: [seed(SPROUT),
+    { w: 9, h: 7, lift: 5, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 2, 3]], 2)] },
+    { w: 15, h: 11, lift: 3, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
+      crown([[C_SMALL, 3, 0], [C_TINY, 0, 2], [C_SMALL, 8, 1], [C_SMALL, 1, 4], [C_SMALL, 7, 5]], 3)] }],
+  oak: [seed(SPROUT),
+    { w: 10, h: 8, lift: 4, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 0], [C_TINY, 4, 1], [C_TINY, 1, 3], [C_TINY, 5, 4]], 2)] },
+    { w: 14, h: 11, lift: 3, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
+      crown([[C_SMALL, 1, 0], [C_SMALL, 7, 0], [C_SMALL, 0, 4], [C_SMALL, 7, 4], [C_TINY, 5, 7]], 3)] }],
+  conifer: [seed(['..#..', '.###.', '#####', '..s..']),
+    { w: 9, h: 8, lift: 2, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [[
+      { st: ['..#####..', '.#######.', '#########', '#.#.#.#.#'], x: 0, y: 4, tone: 1 },
+      { st: ['..#..', '.###.', '#####', '#####', '#.#.#'], x: 2, y: 0 }]] },
+    { w: 11, h: 11, lift: 3, faceH: 1, trunk: 2, shadow: [5, 3], layouts: [[
+      { st: ['..#######..', '.#########.', '###########', '###########', '#.##.#.##.#'], x: 0, y: 6, tone: 1 },
+      { st: ['..#####..', '.#######.', '#########', '#.#.#.#.#'], x: 1, y: 3 },
+      { st: ['..#..', '.###.', '#####', '#.#.#'], x: 3, y: 0 }]] }],
+  acacia: [seed(['##...##', '.##s##.', '...s...']),
+    { w: 13, h: 6, lift: 6, faceH: 1, trunk: 1, shadow: [6, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 8, 1], [C_TINY, 4, 2]], 1)] },
+    { w: 18, h: 7, lift: 5, faceH: 1, trunk: 1, shadow: [8, 3], layouts: [
+      crown([[C_TINY, 0, 2], [C_TINY, 4, 0], [C_TINY, 9, 0], [C_TINY, 13, 2], [C_TINY, 7, 3]], 2)] }],
+  shrub: [seed(['.#.#.', '#####', '.###.']),
+    { w: 8, h: 5, lift: 0, faceH: 1, trunk: 0, shadow: [4, 2], layouts: [crown(SAPLING_SHRUB, 1)] },
+    { w: 10, h: 7, lift: 1, faceH: 1, trunk: 0, shadow: [5, 2], layouts: [crown(YOUNG_SHRUB, 2)] }],
+  berry: [seed(['.#.#.', '#####', '.###.']),
+    { w: 8, h: 5, lift: 0, faceH: 1, trunk: 0, shadow: [4, 2], layouts: [[...crown(SAPLING_SHRUB, 1), ...berries([[3, 2, 0]])]] },
+    { w: 10, h: 7, lift: 1, faceH: 1, trunk: 0, shadow: [5, 2], layouts: [[...crown(YOUNG_SHRUB, 2), ...berries([[2, 4, 0], [7, 4, 0], [6, 1, 1]])]] }],
+  flytrap: [seed(['.c.c.', 'c#r#c', '.###.', '..s..']),
+    { w: 13, h: 9, lift: 0, faceH: 0, trunk: 0, shadow: [5, 2], layouts: [[
+      { st: BLADE, x: 5, y: 6, tone: 1 }, { st: BLADE, x: 0, y: 5, t: 'f', tone: 1 },
+      { st: ['s', 's'], x: 5, y: 5 }, { st: TRAP_SMALL, x: 3, y: 0 }]] },
+    { w: 15, h: 12, lift: 0, faceH: 0, trunk: 0, shadow: [7, 2], layouts: [[
+      { st: BLADE, x: 7, y: 9, tone: 1 }, { st: BLADE, x: 0, y: 9, t: 'f', tone: 1 },
+      { st: ['s', 's'], x: 8, y: 8 }, { st: ['s.', '.s'], x: 3, y: 8 },
+      { st: TRAP_SMALL, x: 0, y: 3, t: 'f', tone: 1 }, { st: TRAP_OPEN, x: 5, y: 1 }]] }],
+  monstera: [seed(MLEAF_YOUNG),
+    { w: 11, h: 7, lift: 0, faceH: 0, trunk: 0, shadow: [5, 2], layouts: [[
+      { st: MLEAF_YOUNG, x: 0, y: 0, t: 'f', tone: 1 }, { st: ['s.', '.s'], x: 4, y: 5 }, { st: MLEAF_YOUNG, x: 5, y: 1 }]] },
+    { w: 15, h: 13, lift: 0, faceH: 0, trunk: 0, shadow: [7, 2], layouts: [[
+      { st: MLEAF, x: 3, y: 0, tone: 1 }, { st: MLEAF_YOUNG, x: 0, y: 7, t: 'f', tone: 1 },
+      { st: ['.s.', 's.s'], x: 6, y: 11 }, { st: MLEAF_YOUNG, x: 9, y: 7 }]] }],
+};
+
+/** A kind at a growth stage, 0 a seedling to 3 mature: the stage's body in the kind's colours. */
+export function floraDef(kind: FloraKind, stage: number): Def {
+  const d = FLORA[kind];
+  return stage >= FLORA_STAGES - 1 ? d : { ...YOUNGER[kind][Math.max(0, stage)], ladder: d.ladder, rib: d.rib };
+}
 
 // ---- composing a plant ---------------------------------------------------------------
 // Quarter turns and flips are lossless on the lattice; the light goes on after.
@@ -213,11 +272,11 @@ const sprites = new Map<string, FloraSprite>();
 /** The plant drawn at the world's angle: the shadow on the ground at its foot,
  *  a trunk stub, the crown lifted by its height over a short band of shade
  *  under its south edge. One pixel an art-pixel. */
-export function floraSprite(kind: FloraKind, layout: number, mirror: boolean): FloraSprite {
-  const key = kind + ':' + layout + ':' + (mirror ? 1 : 0);
+export function floraSprite(kind: FloraKind, layout: number, mirror: boolean, stage = FLORA_STAGES - 1): FloraSprite {
+  const key = kind + ':' + layout + ':' + (mirror ? 1 : 0) + ':' + stage;
   const hit = sprites.get(key);
   if (hit) return hit;
-  const d = FLORA[kind];
+  const d = floraDef(kind, stage);
   const m = composeFlora(d, layout, mirror);
   const pad = 2, W = Math.max(d.w, d.shadow[0] * 2 + 1) + pad * 2;
   const H = d.h + d.lift + d.faceH + d.shadow[1] + pad * 2 + 2;
@@ -277,8 +336,8 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
   const out: FloraDraw[] = [];
   if (level !== rowsLevel || rows.length === 0) return out;
   const px = cam.scale / ART; // screen px an art-pixel
-  for (const [k, gx, gy, layout, mir] of rows) {
-    const kind = FLORA_KINDS[k], sp = floraSprite(kind, layout, mir === 1);
+  for (const [k, gx, gy, layout, mir, stage] of rows) {
+    const kind = FLORA_KINDS[k], sp = floraSprite(kind, layout, mir === 1, stage ?? FLORA_STAGES - 1);
     const x = cam.screenX(gx / ART) - sp.fx * px, y = cam.screenY(gy / ART) - sp.fy * px;
     const w = sp.cv.width * px, h = sp.cv.height * px;
     if (x > cvW || y > cvH || x + w < 0 || y + h < 0) continue;
@@ -287,7 +346,7 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
     const bx1 = gx - sp.fx + sp.box[2] + 1, by1 = gy - sp.fy + sp.box[3] + 1;
     let alpha = 1;
     for (const [ax, ay] of bodies) if (ax >= bx0 && ax < bx1 && ay >= by0 && ay < by1) { alpha = veil; break; }
-    out.push({ key: kind + ':' + layout + ':' + mir, sprite: sp, x, y, w, h, alpha });
+    out.push({ key: kind + ':' + layout + ':' + mir + ':' + stage, sprite: sp, x, y, w, h, alpha });
   }
   return out;
 }
