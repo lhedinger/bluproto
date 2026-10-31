@@ -12867,6 +12867,55 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * The flora is painted from the world's ramps, and the client and the world
+	 * agree on what each kind is called. Every hex literal in
+	 * {@code client/src/flora.ts} is a grass, cover, reeds or soil ramp colour,
+	 * or the bloom red a trap and a berry wear with its shade derived at x0.65
+	 * (the mushroom cap's pair) -- and no bloom cream: the teeth that made the
+	 * flytrap an animal are gone, and this keeps them gone. The kinds' order is
+	 * the wire format, so the client's list must be Flora.Kind's, name for name.
+	 */
+	static class TheFloraIsPaintedFromRamps extends Scenario {
+		@Override
+		public void run() {
+			String src;
+			try {
+				src = java.nio.file.Files.readString(java.nio.file.Path.of("client/src/flora.ts"));
+			} catch (java.io.IOException e) {
+				throw new AssertionError("the flora painter is not where the guide says", e);
+			}
+			java.util.Set<Integer> allowed = new java.util.HashSet<>();
+			for (int cls : new int[] { GroundTextures.CLS_GRASS, GroundTextures.CLS_COVER, GroundTextures.CLS_REEDS,
+					GroundTextures.CLS_SOIL }) {
+				for (int i = 0; i < 3; i++) {
+					allowed.add(GroundTextures.rampColor(cls, i));
+				}
+			}
+			int red = 0xE0455F;
+			allowed.add(red);
+			allowed.add(((int) (((red >> 16) & 255) * 0.65) << 16) | ((int) (((red >> 8) & 255) * 0.65) << 8) | (int) ((red & 255) * 0.65));
+			java.util.regex.Matcher m = java.util.regex.Pattern.compile("'#([0-9a-fA-F]{6})'").matcher(src);
+			int lits = 0;
+			while (m.find()) {
+				int c = Integer.parseInt(m.group(1), 16);
+				assertTrue("#" + m.group(1) + " is a ramp colour or the bloom red's pair", allowed.contains(c));
+				lits++;
+			}
+			assertGreater("the painter names its colours as literals this reads", lits, 10);
+			assertTrue("no bloom cream: a plant has no teeth", !src.toLowerCase().contains("f0e8c6"));
+			java.util.regex.Matcher km = java.util.regex.Pattern.compile("FLORA_KINDS = \\[([^\\]]*)\\]").matcher(src);
+			assertTrue("the client lists its kinds", km.find());
+			String[] names = km.group(1).replace("'", "").split(",\\s*");
+			Flora.Kind[] kinds = Flora.Kind.values();
+			assertEquals("one name a kind", kinds.length, names.length);
+			for (int i = 0; i < kinds.length; i++) {
+				assertTrue("kind " + i + " on the wire is " + kinds[i] + ", the client says " + names[i].trim(),
+						kinds[i].name().toLowerCase().equals(names[i].trim()));
+			}
+		}
+	}
+
 	static class TheBodyScanIsPaintedFromRamps extends Scenario {
 		@Override
 		public void run() {
@@ -21096,6 +21145,7 @@ public class SimTests {
 				new AHostMendsWhatOneRiderDrinks(),
 				new TheBodyScanIsPaintedFromRamps(),
 				new LargeFloraStandsOnItsGround(),
+				new TheFloraIsPaintedFromRamps(),
 				new TheMovingWaterIsPaintedFromItsRamps(),
 				new TheGorgeSwallowsARiver(),
 				new ASpringFallsOffTheTable(),
