@@ -1248,7 +1248,7 @@ final class WorldHost {
 
 	/**
 	 * The large plants standing on level z, one row each: {@code [kind, gx, gy,
-	 * layout, mirror]}, kind the {@link net.hedinger.prototype.engine.Flora.Kind}
+	 * layout, mirror, stage]}, kind the {@link net.hedinger.prototype.engine.Flora.Kind}
 	 * ordinal and the foot in world art-pixels. Static for the life of the world,
 	 * so the client fetches it once per level, like the flow beside it.
 	 */
@@ -1261,7 +1261,7 @@ final class WorldHost {
 		int[][] out = new int[fs.size()][];
 		for (int i = 0; i < out.length; i++) {
 			net.hedinger.prototype.engine.Flora f = fs.get(i);
-			out[i] = new int[] { f.kind.ordinal(), f.gx, f.gy, f.layout, f.mirror ? 1 : 0 };
+			out[i] = new int[] { f.kind.ordinal(), f.gx, f.gy, f.layout, f.mirror ? 1 : 0, f.stage };
 		}
 		return out;
 	}

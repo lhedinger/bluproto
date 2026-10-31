@@ -1383,12 +1383,27 @@ public final class Worlds {
 			}
 			if (clear) {
 				kept.add(new Flora(kind, z, gx, gy, GroundTextures.hash01(x, y, 233) < 0.5 ? 0 : 1,
-						GroundTextures.hash01(x, y, 239) < 0.5));
+						GroundTextures.hash01(x, y, 239) < 0.5, floraStage(GroundTextures.hash01(x, y, 241))));
 			}
 		}
 		for (Flora f : kept) {
 			w.addFlora(f);
 		}
+	}
+
+	/** How the stages share a stand, seedling to young; the rest are mature. */
+	public static final double[] FLORA_STAGE_SHARE = { 0.08, 0.12, 0.22 };
+
+	/** The growth stage a hash in [0, 1) falls on: mostly mature, a tail of young. */
+	static int floraStage(double u) {
+		double acc = 0;
+		for (int s = 0; s < FLORA_STAGE_SHARE.length; s++) {
+			acc += FLORA_STAGE_SHARE[s];
+			if (u < acc) {
+				return s;
+			}
+		}
+		return Flora.STAGES - 1;
 	}
 
 	/** Whether a plant footed on tile (x, y) has natural ground under all of
