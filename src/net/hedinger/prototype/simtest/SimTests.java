@@ -12778,6 +12778,55 @@ public class SimTests {
 	}
 
 	/**
+	 * A river on a table steps down to the plain: it crosses each table it
+	 * falls onto and goes over again, rather than ending in a pool on the first
+	 * table it lands on. Single-threaded, over
+	 * the scenario seeds at the demo's size and the small world's.
+	 */
+	static class ATableRiverStepsDownToThePlain extends Scenario {
+		@Override
+		public void run() {
+			int onward = 0, landings = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				for (int size = 0; size < 2; size++) {
+					World w = size == 0 ? net.hedinger.prototype.sim.Worlds.demoTerrain(seed)
+							: net.hedinger.prototype.sim.Worlds.demoTerrain(seed, 96, 120);
+					String at = "seed " + seed + (size == 0 ? "" : " (small)");
+					int s = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
+					for (int z = s + 1; z < w.getLevels(); z++) {
+						// Every fall onto a lower table, and whether a brook leaves its pool.
+						if (z - 1 == s) {
+							continue;
+						}
+						for (int y = 1; y < rows - 1; y++) {
+							for (int x = 1; x < cols - 1; x++) {
+								int f = w.getFlow(x, y, z);
+								if (!World.flowFalls(f)) {
+									continue;
+								}
+								int d = World.flowDirOf(f);
+								int hx = x + World.FLOW_DX[d], hy = y + World.FLOW_DY[d];
+								landings++;
+								boolean leaves = false;
+								for (int dy = -2; dy <= 2 && !leaves; dy++) {
+									for (int dx = -2; dx <= 2 && !leaves; dx++) {
+										int g = w.getFlow(hx + dx, hy + dy, z - 1);
+										leaves = World.flowSpeed(g) != World.FLOW_STILL && !World.flowPlunge(g)
+												|| World.flowFalls(g);
+									}
+								}
+								onward += leaves ? 1 : 0;
+							}
+						}
+					}
+				}
+			}
+			assertGreater("rivers fall onto lower tables (" + landings + ")", landings, 0);
+			assertTrue("and most go on across them (" + onward + " of " + landings + ")", onward * 2 > landings);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -21234,6 +21283,7 @@ public class SimTests {
 				new TheGorgeSwallowsARiver(),
 				new ASpringFallsOffTheTable(),
 				new EveryRiverRisesAtASpring(),
+				new ATableRiverStepsDownToThePlain(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),

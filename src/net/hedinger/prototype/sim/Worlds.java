@@ -1653,50 +1653,8 @@ public final class Worlds {
 	private static void springsOn(World w, int cols, int rows, int z, java.util.List<int[]> table,
 			double[][] elevation) {
 		double[] cost = new double[cols * rows];
-		int[] toward = new int[cols * rows], lipDir = new int[cols * rows];
-		java.util.Arrays.fill(cost, Double.MAX_VALUE);
-		java.util.Arrays.fill(toward, -1);
-		java.util.Arrays.fill(lipDir, -1);
-		java.util.PriorityQueue<double[]> q = new java.util.PriorityQueue<double[]>(
-				(a, b) -> a[0] != b[0] ? Double.compare(a[0], b[0]) : Double.compare(a[1], b[1]));
-		for (int[] p : table) {
-			for (int u = 0; u < 4; u++) {
-				int hx = p[0] + Tile.dirDx(u), hy = p[1] + Tile.dirDy(u);
-				if (w.getTile(hx, hy, z).getType() != Tile.TileType.TYPE_HOLE || !pourable(w, hx, hy, z - 1)) {
-					continue;
-				}
-				double c = Tile.dirDy(u) > 0 ? 0 : SPRING_FACE_BIAS;
-				int i = p[1] * cols + p[0];
-				if (c < cost[i]) {
-					cost[i] = c;
-					lipDir[i] = World.flowDir(Tile.dirDx(u), Tile.dirDy(u));
-				}
-			}
-			int i = p[1] * cols + p[0];
-			if (lipDir[i] >= 0) {
-				q.add(new double[] { cost[i], i });
-			}
-		}
-		while (!q.isEmpty()) {
-			double[] e = q.poll();
-			int i = (int) e[1];
-			if (e[0] > cost[i]) {
-				continue;
-			}
-			int x = i % cols, y = i / cols;
-			for (int u = 0; u < 4; u++) {
-				int nx = x + Tile.dirDx(u), ny = y + Tile.dirDy(u), j = ny * cols + nx;
-				if (w.getTile(nx, ny, z).getType() != Tile.TileType.TYPE_ROCKY) {
-					continue;
-				}
-				double c = cost[i] + 1 + 2 * Utils.noise2(nx + 5100, ny + 2300, 0.15);
-				if (c < cost[j]) {
-					cost[j] = c;
-					toward[j] = i;
-					q.add(new double[] { c, j });
-				}
-			}
-		}
+		int[][] course = tableCourse(w, cols, rows, z, java.util.Collections.<Integer>emptySet(), cost);
+		int[] toward = course[0], lipDir = course[1];
 		// The springs: the tiles farthest from any lip, spaced apart.
 		java.util.ArrayList<int[]> sites = new java.util.ArrayList<int[]>(table);
 		sites.removeIf(p -> cost[p[1] * cols + p[0]] == Double.MAX_VALUE);
@@ -1722,6 +1680,77 @@ public final class Worlds {
 		for (int[] s : springs) {
 			runRiver(w, cols, rows, s[0], s[1], z, toward, lipDir);
 		}
+	}
+
+	/**
+	 * A table's own way down: for every tile of the tables on level {@code z}
+	 * (rocky ground, or a plunge pool laid on it, {@code pool}), the next step
+	 * on the cheapest way to a lip, and at a lip the way over the edge. A lip
+	 * is a table tile with open drop beside it and ground a storey down to land
+	 * on, natural and clear of any climb; one off a south edge is cheaper, since
+	 * only a south face is drawn (§4). The way meanders over a smooth noise.
+	 * Returns {toward, lipDir}; {@code cost} is filled with each tile's cost.
+	 */
+	private static int[][] tableCourse(World w, int cols, int rows, int z, java.util.Set<Integer> pool,
+			double[] cost) {
+		int[] toward = new int[cols * rows], lipDir = new int[cols * rows];
+		java.util.Arrays.fill(cost, Double.MAX_VALUE);
+		java.util.Arrays.fill(toward, -1);
+		java.util.Arrays.fill(lipDir, -1);
+		java.util.PriorityQueue<double[]> q = new java.util.PriorityQueue<double[]>(
+				(a, b) -> a[0] != b[0] ? Double.compare(a[0], b[0]) : Double.compare(a[1], b[1]));
+		for (int i = 0; i < cols * rows; i++) {
+			int x = i % cols, y = i / cols;
+			if (w.getTile(x, y, z).getType() != Tile.TileType.TYPE_ROCKY) {
+				continue; // a pool is crossed, never poured from
+			}
+			for (int u = 0; u < 4; u++) {
+				if (!lipOver(w, x, y, z, u)) {
+					continue;
+				}
+				double c = Tile.dirDy(u) > 0 ? 0 : SPRING_FACE_BIAS;
+				if (c < cost[i]) {
+					cost[i] = c;
+					lipDir[i] = World.flowDir(Tile.dirDx(u), Tile.dirDy(u));
+				}
+			}
+			if (lipDir[i] >= 0) {
+				q.add(new double[] { cost[i], i });
+			}
+		}
+		while (!q.isEmpty()) {
+			double[] e = q.poll();
+			int i = (int) e[1];
+			if (e[0] > cost[i]) {
+				continue;
+			}
+			int x = i % cols, y = i / cols;
+			for (int u = 0; u < 4; u++) {
+				int nx = x + Tile.dirDx(u), ny = y + Tile.dirDy(u), j = ny * cols + nx;
+				if (!onTable(w, nx, ny, z, pool, cols)) {
+					continue;
+				}
+				double c = cost[i] + 1 + 2 * Utils.noise2(nx + 5100, ny + 2300, 0.15);
+				if (c < cost[j]) {
+					cost[j] = c;
+					toward[j] = i;
+					q.add(new double[] { c, j });
+				}
+			}
+		}
+		return new int[][] { toward, lipDir };
+	}
+
+	/** A tile a river crosses a table on: its rocky ground, or the pool it fell into. */
+	private static boolean onTable(World w, int x, int y, int z, java.util.Set<Integer> pool, int cols) {
+		return w.getTile(x, y, z).getType() == Tile.TileType.TYPE_ROCKY || pool.contains(y * cols + x);
+	}
+
+	/** Whether water at (x, y, z) can pour over the edge in direction {@code u}:
+	 *  open drop beside it, and ground a storey down to land on. */
+	private static boolean lipOver(World w, int x, int y, int z, int u) {
+		int hx = x + Tile.dirDx(u), hy = y + Tile.dirDy(u);
+		return w.getTile(hx, hy, z).getType() == Tile.TileType.TYPE_HOLE && pourable(w, hx, hy, z - 1);
 	}
 
 	/**
@@ -5255,12 +5284,14 @@ public final class Worlds {
 	 *
 	 * <p>A table is flat, so its downhill is the way to its lip: {@code toward}
 	 * gives each table tile its next step there and {@code lipDir} the way over
-	 * the edge, both from {@link #springsOn}. Up there the river is a brook of
-	 * shallows, so it walls nothing off on a table a ramp or two serve. At the
-	 * lip it falls a storey into a plunge pool and walks on from the pool's far
-	 * side -- on the ground, as the same river, at its own age: as wide, as
-	 * deep and forded as any river that far from its spring. A pool on a lower
-	 * table is a tarn, and the river ends in it.
+	 * the edge ({@link #tableCourse}). Up there the river is a brook of shallows, so it walls
+	 * nothing off on a table a ramp or two serve. At the lip it falls a storey
+	 * into a plunge pool. On a lower table it crosses that table the same way,
+	 * from the pool, and falls again; it steps down storey by storey until it
+	 * lands on the ground, and walks on from the pool's far side as the same
+	 * river, at its own age: as wide, as deep and forded as any river that far
+	 * from its spring. Only a pool on a table with no edge to go over is the
+	 * river's end, a tarn.
 	 *
 	 * <p>A river that rises on the ground is carved with the surface, before
 	 * anything is built: there it is the ground's own shape, and the passes
@@ -5282,34 +5313,50 @@ public final class Worlds {
 		// of the map dry.
 		java.util.HashSet<Integer> own = new java.util.HashSet<Integer>();
 		if (toward != null) {
-			// Across the table to its lip: a brook of shallows, rising at the spring.
+			// Across the table to its lip: a brook of shallows, rising at the spring
+			// -- and from each table it falls onto, on down to the ground.
+			java.util.Set<Integer> pool = new java.util.HashSet<Integer>(); // the pool it fell into on this table
 			int i = y * cols + x;
-			while (true) {
-				setBare(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
+			for (int guard = 0; guard < cols * rows; guard++) {
+				boolean inPool = pool.contains(i);
+				if (!inPool) {
+					setBare(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
+				}
 				int marks = steps == 0 ? World.FLOW_SPRING : 0;
 				steps++;
-				int next = toward[i];
+				int next = toward[i], d = lipDir[i];
 				if (next < 0) {
+					if (d < 0) {
+						return; // a pool with no way off its table: a tarn
+					}
 					// The lip: over the edge, and down into the pool a storey below.
-					int d = lipDir[i];
 					w.setFlow(x, y, z, d, World.FLOW_RAPIDS, false, World.FLOW_FALL);
 					int hx = x + World.FLOW_DX[d], hy = y + World.FLOW_DY[d];
 					z--;
 					layPlungePool(w, hx, hy, z, d);
-					if (z != SURFACE_Z) {
-						return; // a tarn on a lower table
-					}
 					// The pool is the river's own water: arriving back on it is not
 					// joining a lake. Only what the pool laid -- the ground round a
 					// fall's foot can be the rock the table stands on, and a channel
 					// laid there as its own would cut the table out from under it.
+					pool = new java.util.HashSet<Integer>();
 					for (int dy = -1; dy <= 1; dy++) {
 						for (int dx = -1; dx <= 1; dx++) {
 							if (World.flowPlunge(w.getFlow(hx + dx, hy + dy, z))) {
-								own.add((hy + dy) * cols + hx + dx);
+								pool.add((hy + dy) * cols + hx + dx);
 							}
 						}
 					}
+					if (z != SURFACE_Z) {
+						// Onto a lower table: across it the same way, from the pool.
+						int[][] course = tableCourse(w, cols, rows, z, pool, new double[cols * rows]);
+						toward = course[0];
+						lipDir = course[1];
+						x = hx;
+						y = hy;
+						i = hy * cols + hx;
+						continue;
+					}
+					own.addAll(pool);
 					// Out of the pool's far side and away from the cliff.
 					x = hx + World.FLOW_DX[d];
 					y = hy + World.FLOW_DY[d];
@@ -5321,13 +5368,18 @@ public final class Worlds {
 					break;
 				}
 				int nx = next % cols, ny = next / cols;
-				w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false, marks);
-				if (w.getFlow(nx, ny, z) != 0) {
+				if (!inPool) {
+					w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false, marks);
+				}
+				if (w.getFlow(nx, ny, z) != 0 && !pool.contains(next)) {
 					return; // into an earlier spring's brook
 				}
 				i = next;
 				x = nx;
 				y = ny;
+			}
+			if (z != SURFACE_Z) {
+				return;
 			}
 		}
 		boolean steepBefore = false; // the step before this one already broke the surface
