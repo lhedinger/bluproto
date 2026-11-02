@@ -12710,8 +12710,9 @@ public class SimTests {
 	 * runs out of, or water above its head -- a lake it leaves -- or comes in
 	 * at the edge of the world, from beyond it; the generator's own rule
 	 * ({@code Worlds.risingNowhere}) finds no reach left that rises nowhere.
-	 * A spring is water: it lies on water or shallows, and where it moves it
-	 * moves into more water. And the springs on the tables are rivers like any
+	 * A spring is water: it lies on water or shallows, where it moves it
+	 * moves into more water, and no hole, pit, shaft or open edge lies within
+	 * {@code Worlds.SPRING_CLEARANCE} tiles of it. And the springs on the tables are rivers like any
 	 * other: each one in the sky runs to a lip and falls, or joins another
 	 * table brook that does. Over the scenario seeds at the demo's size and
 	 * the small world's, single-threaded, since a world built on a busy random
@@ -12747,6 +12748,9 @@ public class SimTests {
 								Tile.TileType t = w.getTile(x, y, z).getType();
 								assertTrue(at + ": the spring at " + x + "," + y + "," + z + " is water",
 										t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS);
+								assertTrue(at + ": the spring at " + x + "," + y + "," + z + " stands clear of every drop",
+										!net.hedinger.prototype.sim.Worlds.dropNear(w, x, y, z,
+												net.hedinger.prototype.sim.Worlds.SPRING_CLEARANCE));
 								if (World.flowSpeed(f) != World.FLOW_STILL) {
 									int d = World.flowDirOf(f);
 									Tile.TileType n = w.getTile(x + World.FLOW_DX[d], y + World.FLOW_DY[d], z).getType();
