@@ -12847,6 +12847,115 @@ public class SimTests {
 	}
 
 	/**
+	 * A lake draws in the rivers near it: water finds the low ground a lake is
+	 * lying in, and does not run on past it a few tiles off. Of the river
+	 * tiles within five steps of a lake (nine or more tiles of still water),
+	 * fewer than one in five may run on without their water reaching the lake
+	 * within five tiles downstream -- and those are rivers another river stands
+	 * between and the lake, which a river never cuts across. On trunk's
+	 * rivers before lakes drew them it was one in three (168 of 495); now it
+	 * is about one in eight. Single-threaded, over the scenario seeds.
+	 */
+	static class ALakeDrawsInTheRiversNearIt extends Scenario {
+		private static boolean still(World w, int x, int y, int z) {
+			Tile.TileType t = w.getTile(x, y, z).getType();
+			return (t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS) && w.getFlow(x, y, z) == 0;
+		}
+
+		@Override
+		public void run() {
+			int near = 0, past = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int z = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
+				// The lakes: still water nine tiles or more together.
+				boolean[] lake = new boolean[cols * rows];
+				boolean[] seen = new boolean[cols * rows];
+				for (int i = 0; i < lake.length; i++) {
+					if (seen[i] || !still(w, i % cols, i / cols, z)) {
+						continue;
+					}
+					java.util.ArrayList<Integer> body = new java.util.ArrayList<Integer>();
+					body.add(i);
+					seen[i] = true;
+					for (int k = 0; k < body.size(); k++) {
+						int c = body.get(k);
+						for (int u = 0; u < 4; u++) {
+							int nx = c % cols + Tile.dirDx(u), ny = c / cols + Tile.dirDy(u), j = ny * cols + nx;
+							if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && !seen[j] && still(w, nx, ny, z)) {
+								seen[j] = true;
+								body.add(j);
+							}
+						}
+					}
+					if (body.size() >= 9) {
+						for (int c : body) {
+							lake[c] = true;
+						}
+					}
+				}
+				// How far each tile is from a lake, over open ground, up to five.
+				int[] dist = new int[cols * rows];
+				java.util.Arrays.fill(dist, 99);
+				java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+				for (int i = 0; i < lake.length; i++) {
+					if (lake[i]) {
+						dist[i] = 0;
+						q.add(i);
+					}
+				}
+				while (!q.isEmpty()) {
+					int c = q.poll();
+					if (dist[c] >= 5) {
+						continue;
+					}
+					for (int u = 0; u < 4; u++) {
+						int nx = c % cols + Tile.dirDx(u), ny = c / cols + Tile.dirDy(u), j = ny * cols + nx;
+						if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || dist[j] <= dist[c] + 1) {
+							continue;
+						}
+						Tile t = w.getTile(nx, ny, z);
+						if (t.getType() == Tile.TileType.TYPE_WALL || t.isDrop()) {
+							continue;
+						}
+						dist[j] = dist[c] + 1;
+						q.add(j);
+					}
+				}
+				for (int y = 0; y < rows; y++) {
+					for (int x = 0; x < cols; x++) {
+						int f = w.getFlow(x, y, z);
+						if (World.flowSpeed(f) == World.FLOW_STILL || World.flowFalls(f) || World.flowPlunge(f)
+								|| World.flowSpring(f) || dist[y * cols + x] > 5) {
+							continue;
+						}
+						near++;
+						boolean enters = false;
+						int cx = x, cy = y, g = f;
+						for (int k = 0; k < 6 && !enters; k++) {
+							for (int dy = -1; dy <= 1; dy++) {
+								for (int dx = -1; dx <= 1; dx++) {
+									int nx = cx + dx, ny = cy + dy;
+									enters |= nx >= 0 && ny >= 0 && nx < cols && ny < rows && lake[ny * cols + nx];
+								}
+							}
+							if (World.flowSpeed(g) == World.FLOW_STILL) {
+								break;
+							}
+							cx += World.FLOW_DX[World.flowDirOf(g)];
+							cy += World.FLOW_DY[World.flowDirOf(g)];
+							g = w.getFlow(cx, cy, z);
+						}
+						past += enters ? 0 : 1;
+					}
+				}
+			}
+			assertGreater("rivers come near lakes (" + near + " tiles)", near, 0);
+			assertTrue("and few run on past one: " + past + " of " + near, past * 5 < near);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -21304,6 +21413,7 @@ public class SimTests {
 				new ASpringFallsOffTheTable(),
 				new EveryRiverRisesAtASpring(),
 				new ATableRiverStepsDownToThePlain(),
+				new ALakeDrawsInTheRiversNearIt(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),

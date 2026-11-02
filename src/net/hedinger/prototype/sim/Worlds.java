@@ -5574,6 +5574,7 @@ public final class Worlds {
 		// river ended at its first such step: about fifty tiles each, the rest
 		// of the map dry.
 		java.util.HashSet<Integer> own = new java.util.HashSet<Integer>();
+		java.util.HashMap<Integer, Boolean> lakes = new java.util.HashMap<Integer, Boolean>(); // still water -> is it a lake
 		if (toward != null) {
 			// Across the table to its lip: a brook of shallows, rising at the spring
 			// -- and from each table it falls onto, on down to the ground.
@@ -5655,8 +5656,8 @@ public final class Worlds {
 				return; // reached the rim
 			}
 			Tile.TileType at = w.getTile(x, y, SURFACE_Z).getType();
-			if (steps > 4 && !own.contains(y * cols + x) && (at == Tile.TileType.TYPE_WATER
-					|| late && at == Tile.TileType.TYPE_SHALLOWS)) {
+			if (!own.contains(y * cols + x) && (steps > 4 && (at == Tile.TileType.TYPE_WATER
+					|| late && at == Tile.TileType.TYPE_SHALLOWS) || stillWater(w, x, y))) {
 				return; // joined a lake (or an earlier river)
 			}
 			// The channel: a brook near the spring, two tiles wide lower down.
@@ -5684,12 +5685,14 @@ public final class Worlds {
 			if (ford) {
 				sinceFord = 0;
 			}
+			// A lake within reach draws the river in, by the shortest way.
+			int[] lake = lakeWithin(w, cols, rows, x, y, own, late, lakes);
 			// Descend: the lowest of the four neighbours, with a whisper of
 			// deterministic jitter so parallel rivers don't run identical rails,
 			// and never straight back uphill the way we came.
 			int bx = 0, by = 0;
 			double bestE = Double.MAX_VALUE;
-			for (int k = 0; k < 4; k++) {
+			for (int k = 0; k < 4 && lake == null; k++) {
 				int dx = k == 0 ? 1 : k == 1 ? -1 : 0;
 				int dy = k == 2 ? 1 : k == 3 ? -1 : 0;
 				if (dx == -prevDx && dy == -prevDy && (dx != 0 || dy != 0)) {
@@ -5707,11 +5710,14 @@ public final class Worlds {
 					by = dy;
 				}
 			}
-			if (bestE == Double.MAX_VALUE) {
+			if (lake != null) {
+				bx = lake[0];
+				by = lake[1];
+			} else if (bestE == Double.MAX_VALUE) {
 				return; // hemmed in by what was built: the water stands where it got to
 			}
 			double here = Utils.noise2(x, y, 0.055);
-			if (bestE >= here + 0.045) {
+			if (lake == null && bestE >= here + 0.045) {
 				// A true basin with no lake: the river ponds and ends here.
 				for (int dx = -1; dx <= 1; dx++) {
 					for (int dy = -1; dy <= 1; dy++) {
@@ -5757,6 +5763,100 @@ public final class Worlds {
 			x += bx;
 			y += by;
 		}
+	}
+
+	/** How far a lake draws a river, in steps over open ground. */
+	private static final int LAKE_REACH = 5;
+	/** The least still water that is a lake rather than a puddle: a basin's pond. */
+	private static final int LAKE_TILES = 9;
+
+	/**
+	 * The first step of the shortest way from a river's head at (x, y) to a lake
+	 * within {@link #LAKE_REACH} steps, or null if none is that near: {dx, dy}.
+	 * A river does not run past a lake a few tiles off and on to somewhere
+	 * else; water finds the low ground the lake is lying in. The way goes over
+	 * open ground or the river's own channel -- never through rock, a drop or
+	 * another river -- and, laid late, only where the river may carve
+	 * ({@link #lateStep}). Of the ways as short, the one whose first step is
+	 * lowest.
+	 */
+	private static int[] lakeWithin(World w, int cols, int rows, int x, int y, java.util.Set<Integer> own,
+			boolean late, java.util.Map<Integer, Boolean> lakes) {
+		java.util.HashMap<Integer, Integer> first = new java.util.HashMap<Integer, Integer>();
+		java.util.ArrayList<Integer> ring = new java.util.ArrayList<Integer>();
+		int here = y * cols + x;
+		first.put(here, -1);
+		ring.add(here);
+		for (int depth = 1; depth <= LAKE_REACH && !ring.isEmpty(); depth++) {
+			int best = -1;
+			double bestE = Double.MAX_VALUE;
+			java.util.ArrayList<Integer> next = new java.util.ArrayList<Integer>();
+			for (int c : ring) {
+				int cx = c % cols, cy = c / cols;
+				for (int u = 0; u < 4; u++) {
+					int nx = cx + Tile.dirDx(u), ny = cy + Tile.dirDy(u), j = ny * cols + nx;
+					if (nx < 3 || ny < 3 || nx >= cols - 3 || ny >= rows - 3 || first.containsKey(j)) {
+						continue;
+					}
+					int step = c == here ? j : first.get(c);
+					if (!own.contains(j) && stillWater(w, nx, ny) && isLake(w, cols, rows, j, lakes)) {
+						double e = Utils.noise2(step % cols, step / cols, 0.055);
+						if (e < bestE) {
+							bestE = e;
+							best = step;
+						}
+						continue;
+					}
+					// Across open ground, or across the river's own channel: a
+					// two-wide river's far lane is no wall between it and a lake.
+					Tile t = w.getTile(nx, ny, SURFACE_Z);
+					boolean open = own.contains(j) ? !World.flowPlunge(w.getFlow(nx, ny, SURFACE_Z))
+							: late ? riverable(w, nx, ny, SURFACE_Z)
+							: t.getType() != Tile.TileType.TYPE_WALL && !t.isDrop() && !isWet(w, nx, ny, SURFACE_Z);
+					if (open) {
+						first.put(j, step);
+						next.add(j);
+					}
+				}
+			}
+			if (best >= 0) {
+				return new int[] { best % cols - x, best / cols - y };
+			}
+			ring = next;
+		}
+		return null;
+	}
+
+	/** Water that does not move: a lake, a pond, a river's stilled end. */
+	private static boolean stillWater(World w, int x, int y) {
+		return isWet(w, x, y, SURFACE_Z) && w.getFlow(x, y, SURFACE_Z) == 0;
+	}
+
+	/** Whether the still water at {@code i} is part of a lake ({@link #LAKE_TILES}
+	 *  or more still tiles together), remembered for the walk. */
+	private static boolean isLake(World w, int cols, int rows, int i, java.util.Map<Integer, Boolean> lakes) {
+		Boolean known = lakes.get(i);
+		if (known != null) {
+			return known;
+		}
+		java.util.ArrayList<Integer> body = new java.util.ArrayList<Integer>();
+		java.util.HashSet<Integer> seen = new java.util.HashSet<Integer>();
+		body.add(i);
+		seen.add(i);
+		for (int k = 0; k < body.size() && body.size() < LAKE_TILES; k++) {
+			int c = body.get(k), cx = c % cols, cy = c / cols;
+			for (int u = 0; u < 4; u++) {
+				int nx = cx + Tile.dirDx(u), ny = cy + Tile.dirDy(u), j = ny * cols + nx;
+				if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && stillWater(w, nx, ny) && seen.add(j)) {
+					body.add(j);
+				}
+			}
+		}
+		boolean lake = body.size() >= LAKE_TILES;
+		for (int c : body) {
+			lakes.put(c, lake);
+		}
+		return lake;
 	}
 
 	/** Where a river walked late may step: natural open ground, or water --
