@@ -1308,12 +1308,16 @@ public class World {
 	 * plunge pool the step bit marks the core, where the column lands; the
 	 * core's dir is the way the fall was travelling, and since a pool never
 	 * moves its speed field is free to say {@link #FLOW_FACE}: rock stands
-	 * under the lip, so the fall comes down that rock's face.
+	 * under the lip, so the fall comes down that rock's face. Both marks
+	 * together are a third, {@link #FLOW_SPRING}: the tile a river rises on,
+	 * which a fall's lip and a pool never are -- water leaves a lip and
+	 * arrives in a pool, and a spring is where it comes from.
 	 */
 	private byte[][] flow;
 	public static final int FLOW_STILL = 0, FLOW_SLOW = 1, FLOW_STREAM = 2, FLOW_RAPIDS = 3;
-	/** Flow marks (see {@link #flow}): the lip of a fall, a plunge pool. */
-	public static final int FLOW_FALL = 1 << 6, FLOW_PLUNGE = 1 << 7;
+	/** Flow marks (see {@link #flow}): the lip of a fall, a plunge pool, and
+	 *  both together a river's spring. */
+	public static final int FLOW_FALL = 1 << 6, FLOW_PLUNGE = 1 << 7, FLOW_SPRING = FLOW_FALL | FLOW_PLUNGE;
 	/** A plunge core's speed field where its fall comes down a rock face. */
 	public static final int FLOW_FACE = 1;
 	/** Unit steps of the eight flow directions, clockwise from east (y down). */
@@ -1337,8 +1341,8 @@ public class World {
 	}
 
 	/** As {@link #setFlow(int, int, int, int, int, boolean)}, with flow marks
-	 *  ({@link #FLOW_FALL}, {@link #FLOW_PLUNGE}); a marked tile keeps its byte
-	 *  even when still. */
+	 *  ({@link #FLOW_FALL}, {@link #FLOW_PLUNGE}, {@link #FLOW_SPRING}); a marked
+	 *  tile keeps its byte even when still. */
 	public void setFlow(int c, int r, int l, int dir, int speed, boolean step, int marks) {
 		if (!isValid(c, r, l)) {
 			return;
@@ -1379,12 +1383,17 @@ public class World {
 
 	/** The lip of a fall: this water pours over into the open drop ahead. */
 	public static boolean flowFalls(int packed) {
-		return (packed & FLOW_FALL) != 0;
+		return (packed & FLOW_SPRING) == FLOW_FALL;
 	}
 
 	/** A plunge pool: still water a fall lands in from the storey above. */
 	public static boolean flowPlunge(int packed) {
-		return (packed & FLOW_PLUNGE) != 0;
+		return (packed & FLOW_SPRING) == FLOW_PLUNGE;
+	}
+
+	/** A spring: the tile a river rises on, moving off the way the river goes. */
+	public static boolean flowSpring(int packed) {
+		return (packed & FLOW_SPRING) == FLOW_SPRING;
 	}
 
 	/** A plunge pool's core whose fall comes down a rock face (see {@link #flow}). */

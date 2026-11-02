@@ -58,9 +58,11 @@ function teal(rgb: number): boolean {
   return ((rgb >> 8) & 255) > 0.77 * (rgb & 255);
 }
 
-/** World.FLOW_FALL / FLOW_PLUNGE: the lip of a fall, a plunge pool; World.FLOW_FACE,
- *  a pool core's speed field where its fall comes down a rock face. */
-const FALL = 1 << 6, PLUNGE = 1 << 7, FACE = 1;
+/** World.FLOW_FALL / FLOW_PLUNGE: the lip of a fall, a plunge pool; both together,
+ *  World.FLOW_SPRING, where a river rises; World.FLOW_FACE, a pool core's speed
+ *  field where its fall comes down a rock face. The marks are exact: a spring is
+ *  neither a lip nor a pool. */
+const FALL = 1 << 6, PLUNGE = 1 << 7, MARKS = FALL | PLUNGE, FACE = 1;
 /** World.FLOW_DX / FLOW_DY: the eight directions, clockwise from east. */
 const FDX = [1, 1, 0, -1, -1, -1, 0, 1];
 const FDY = [0, 1, 1, 1, 0, -1, -1, -1];
@@ -201,7 +203,7 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
     const tx = i % cols, ty = (i / cols) | 0;
     const f = grid![i], kind = wet![i];
     if (kind !== 1 && kind !== 2) continue;
-    const falls = (f & FALL) !== 0, plunge = (f & PLUNGE) !== 0;
+    const mark = f & MARKS, falls = mark === FALL, plunge = mark === PLUNGE;
     const speed = f & 3, dir = (f >> 2) & 7, step = (f & 32) !== 0 && !plunge; // on a pool the bit is its core
     const fx = FDX[dir], fy = FDY[dir];
     const ramp = kind === 2 ? SHALLOWS : WATER;
@@ -401,7 +403,7 @@ function plungeAt(col: number, tx: number, ty: number, gx: number, gy: number, t
       const nx = tx + ox, ny = ty + oy;
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
       const g = grid![ny * cols + nx];
-      if ((g & PLUNGE) && (g & 32)) { cx = nx; cy = ny; break; }
+      if ((g & MARKS) === PLUNGE && (g & 32)) { cx = nx; cy = ny; break; }
     }
   }
   if (cx < 0) return col;

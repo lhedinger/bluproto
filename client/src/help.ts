@@ -689,12 +689,12 @@ for (const [act, name, meaning] of EXPR) {
     };
     await reach(sz, 'slow river', f => (f & 3) === 1 && !(f & 192));
     await reach(sz, 'brook', f => (f & 3) === 2 && !(f & 192));
-    await reach(sz, 'rapids', f => (f & 3) === 3 && !(f & 32) && !(f & 64));
+    await reach(sz, 'rapids', f => (f & 3) === 3 && !(f & 32) && !(f & 192));
     await reach(sz, 'cascade step', f => (f & 32) !== 0 && !(f & 192));
-    await reach(sz, 'waterfall: the lip, from above', f => (f & 64) !== 0);
-    await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 128) !== 0 && (f & 32) !== 0);
-    await reach(sz + 1, 'spring: off the table, from above', f => (f & 64) !== 0 && ((f >> 2) & 7) === 2);
-    await reach(sz, 'spring: down the face, from its foot', f => (f & 160) === 160 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
+    await reach(sz, 'waterfall: the lip, from above', f => (f & 192) === 64);
+    await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 192) === 128 && (f & 32) !== 0);
+    await reach(sz + 1, 'spring: off the table, from above', f => (f & 192) === 64 && ((f >> 2) & 7) === 2);
+    await reach(sz, 'spring: down the face, from its foot', f => (f & 192) === 128 && (f & 32) !== 0 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
 
     // Large flora: each kind where it grew, the live layer over the live bake.
     const fj = await fetch(`/api/world/flora/${sz}`).then(r => (r.ok ? r.json() : null)).catch(() => null) as { plants: FloraRow[] } | null;
