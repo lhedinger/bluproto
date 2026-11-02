@@ -450,9 +450,10 @@ const moving = section('Moving water',
   + 'live flow layer over that world\'s own bake. The drift is the bake\'s water pixels carried '
   + 'downstream (two copies half a tile apart, ordered-dithered so the loop never jumps), the '
   + 'dashes ride lanes fastest away from the banks, and rapids and cascades break white in the '
-  + 'shallows ramp; where a gorge swallows a river it pours over a lip into the drop and lands in a '
-  + 'plunge pool on the cave floor below, and a spring on a table runs to its edge and falls off the '
-  + 'cliff, down its face and into a pool at the foot. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
+  + 'shallows ramp. Every river rises at a spring, a sunk eye the water wells out of in slow rings; '
+  + 'where a gorge swallows a river it pours over a lip into the drop and lands in a '
+  + 'plunge pool on the cave floor below, and a river that rises on a table runs to its edge, falls off the '
+  + 'cliff, down its face and into a pool at the foot, and on across the plain. Flow is stored by the river carver, never guessed. Run here at 33 ticks a '
   + 'second, since the page follows no world clock.');
 
 const floraSec = section('Large flora',
@@ -689,12 +690,14 @@ for (const [act, name, meaning] of EXPR) {
     };
     await reach(sz, 'slow river', f => (f & 3) === 1 && !(f & 192));
     await reach(sz, 'brook', f => (f & 3) === 2 && !(f & 192));
+    await reach(sz, 'spring: where a river rises', f => (f & 192) === 192);
     await reach(sz, 'rapids', f => (f & 3) === 3 && !(f & 32) && !(f & 192));
     await reach(sz, 'cascade step', f => (f & 32) !== 0 && !(f & 192));
     await reach(sz, 'waterfall: the lip, from above', f => (f & 192) === 64);
     await reach(sz - 1, 'waterfall: the plunge pool, a storey down', f => (f & 192) === 128 && (f & 32) !== 0);
-    await reach(sz + 1, 'spring: off the table, from above', f => (f & 192) === 64 && ((f >> 2) & 7) === 2);
-    await reach(sz, 'spring: down the face, from its foot', f => (f & 192) === 128 && (f & 32) !== 0 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
+    await reach(sz + 1, 'spring: rising on a table', f => (f & 192) === 192);
+    await reach(sz + 1, 'table river: off the edge, from above', f => (f & 192) === 64 && ((f >> 2) & 7) === 2);
+    await reach(sz, 'table river: down the face, from its foot', f => (f & 192) === 128 && (f & 32) !== 0 && (f & 3) === 1 && ((f >> 2) & 7) === 2);
 
     // Large flora: each kind where it grew, the live layer over the live bake.
     const fj = await fetch(`/api/world/flora/${sz}`).then(r => (r.ok ? r.json() : null)).catch(() => null) as { plants: FloraRow[] } | null;

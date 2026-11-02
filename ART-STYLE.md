@@ -231,8 +231,15 @@ One sun, straight overhead-north. The grammar:
   is seen from the foot too, since only a south face is drawn: the **face
   sheet** runs down the wall's face band over the pool -- whitewater on the
   cornice row, streaks falling in the water ramp, spray on the foot row --
-  six art-px wide, a spring's brook being one tile of water, its outer lanes
-  dithered to half against the rock.
+  six art-px wide, a table's brook being one tile of water, its outer lanes
+  dithered to half against the rock. And every river **rises** somewhere you
+  can see (`World.FLOW_SPRING`, both marks at once on the tile it starts on):
+  the **spring** is a sunk thing, so it takes the sunken grammar -- a throat
+  in the water ramp's shadow, its north lip lit and crumbling, the rest of its
+  rim boiling in the shallows ramp -- and it wells out in the plunge pool's two
+  smaller rings at half the pool's beat. Not the pool's white churn: on a
+  shallows brook that vanished, as the cascade bar did (§7); a spring reads by
+  its dark.
 - **What shows through a hole moves with its own depth.** The client draws the
   level below scaled about the screen centre by `parallaxFactor(scale)` =
   1 / (1 + scale / `PARALLAX_ZOOM`), with `PARALLAX_ZOOM` 500 and the scale in

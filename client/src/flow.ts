@@ -207,6 +207,7 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
     const speed = f & 3, dir = (f >> 2) & 7, step = (f & 32) !== 0 && !plunge; // on a pool the bit is its core
     const fx = FDX[dir], fy = FDY[dir];
     const ramp = kind === 2 ? SHALLOWS : WATER;
+    const spring = springNear(tx, ty); // a river rising here, or just beside
     // A channel drags at its banks: a tile with dry ground beside it runs slower.
     const banked = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([ox, oy]) => {
       const nx = tx + ox, ny = ty + oy;
@@ -274,6 +275,8 @@ function paintChunk(L: Layer, tiles: number[], wx0: number, wy0: number, chunkTi
           else if (along >= 0.5 && hash01(lane, Math.floor((u - Math.floor(0.6 * t)) / 3), 89) < 0.3) col = SHALLOWS[1];
         } else if (plunge) {
           col = plungeAt(col, tx, ty, gx, gy, t);
+        } else if (spring >= 0) {
+          col = springAt(col, spring, gx, gy, t);
         } else if (step) {
           // A cascade: the bed drops, so it takes §4's grammar for a drop -- a
           // lit lip (whitewater flickering on the tick) and, just past it, the
@@ -412,6 +415,60 @@ function plungeAt(col: number, tx: number, ty: number, gx: number, gy: number, t
     return hash01(gx, gy + Math.floor(t / 2) * 13, 93) < 0.55 ? SHALLOWS[2] : SHALLOWS[1];
   }
   const phase = Math.floor(t / RING_TICKS) % RINGS.length;
+  const on = (r: number) => {
+    const st = RINGS[r], n = st.length >> 1;
+    const row = st[dy + n];
+    return row !== undefined && row[dx + n] === '#';
+  };
+  if (on(phase)) return WATER[2];
+  if (phase > 0 && on(phase - 1)) return WATER[1];
+  return col;
+}
+
+/**
+ * The eye of a spring, where a river rises (World.FLOW_SPRING): ART-STYLE §4's
+ * grammar for a sunken thing, since the water comes up out of a hole in the
+ * bed -- a throat in the water ramp's shadow, its north lip lit and crumbling,
+ * the rest of its rim boiling in the shallows ramp where the water wells over.
+ * Two rings leave it, the plunge pool's two smallest stamps at half the pool's
+ * beat: a spring wells, a pool churns. Drawn over the river's own water only,
+ * so the rings run up and down the channel and never onto the bank.
+ *
+ * Rejected: the plunge pool's white churn on the eye. On a brook of shallows,
+ * already as bright as whitewater, it vanished -- the lip-on-a-brook lesson
+ * (§7) -- and a spring is a hole the water comes out of, which reads by its
+ * dark, not its foam.
+ */
+const THROAT = ['.###.', '#####', '#####', '#####', '.###.'];
+/** Ticks each spring ring is shown: half the plunge pool's beat. */
+const SPRING_RING_TICKS = 16;
+
+/** The spring this tile is, or lies beside (its index), or -1. */
+function springNear(tx: number, ty: number): number {
+  for (let oy = -1; oy <= 1; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const nx = tx + ox, ny = ty + oy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      if ((grid![ny * cols + nx] & MARKS) === MARKS) return ny * cols + nx;
+    }
+  }
+  return -1;
+}
+
+function springAt(col: number, at: number, gx: number, gy: number, t: number): number {
+  const cx = at % cols, cy = (at / cols) | 0;
+  const dx = gx - (cx * ART + 6), dy = gy - (cy * ART + 6);
+  const throat = (x: number, y: number) => {
+    const row = THROAT[y + 2];
+    return row !== undefined && row[x + 2] === '#';
+  };
+  if (throat(dx, dy)) return WATER[0];
+  // The rim: lit along the north, crumbling, the way a pit's lip is; boiling elsewhere.
+  if (throat(dx, dy + 1)) return hash01(gx, gy, 101) < 0.75 ? SHALLOWS[2] : col;
+  if (throat(dx + 1, dy) || throat(dx - 1, dy) || throat(dx, dy - 1)) {
+    return hash01(gx, gy + Math.floor(t / 3) * 7, 103) < 0.5 ? SHALLOWS[1] : col;
+  }
+  const phase = Math.floor(t / SPRING_RING_TICKS) % 2;
   const on = (r: number) => {
     const st = RINGS[r], n = st.length >> 1;
     const row = st[dy + n];
