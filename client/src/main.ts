@@ -683,6 +683,11 @@ net.connect();
 
 // ---- interaction -----------------------------------------------------------
 
+// The tap handler runs when the finger LIFTS and decides then what was
+// tapped; what it returns is the action, which the camera runs once the
+// double-tap window has passed (or drops, if the tap was half of a double
+// tap). Picked after the wait instead, a fast creature had walked out of
+// finger reach and the tap fell through to the ground behind it.
 cam.attach(tap => {
   // Prefer selecting an entity under the finger: follow it and open its
   // inspector. Both creatures and items are selectable to inspect.
@@ -714,8 +719,8 @@ cam.attach(tap => {
     }
   }
   if (best !== null) {
-    select(best);
-    return;
+    const id = best;
+    return () => select(id);
   }
   const tx = Math.floor(tap.x), ty = Math.floor(tap.y);
   const inBounds = meta && tx >= 0 && ty >= 0 && tx < meta.cols && ty < meta.rows;
@@ -725,13 +730,13 @@ cam.attach(tap => {
   // already inspects the ground, in every mode, which makes the tap version a
   // second way to do one thing rather than the only way to do it.
   const kind = spawnSel.value;
+  const z = currentLevel;
   if (kind === 'genome' && inBounds) {
-    injectGenomeAt(tap.x, tap.y, currentLevel); // drop the remembered genome here
+    return () => injectGenomeAt(tap.x, tap.y, z); // drop the remembered genome here
   } else if (kind && inBounds) {
-    net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z: currentLevel });
-  } else {
-    deselect(); // tap on empty ground clears the selection
+    return () => net.send({ cmd: 'spawnItem', kind, x: tap.x, y: tap.y, z });
   }
+  return () => deselect(); // tap on empty ground clears the selection
 }, hold => {
   // A long press inspects the ground, and it is the ONLY way to: one gesture,
   // the same in every mode, debug or not. Tile inspection used to be reachable
