@@ -1232,6 +1232,9 @@ public final class Worlds {
 		// river end they left pointing at ground is stilled; before the fords,
 		// which only wade what is there and measure the river as it will stay.
 		stillDeadEnds(w, cols, rows);
+		// And every reach of river rises somewhere: one built across has its
+		// lower reach rise past the cut.
+		everyRiverRises(w, cols, rows);
 		layFords(w, cols, rows, SURFACE_Z);
 		joinAcrossWater(w, cols, rows, SURFACE_Z);
 		// Last of all: the trees and big shrubs stand on the finished ground.
@@ -4756,7 +4759,8 @@ public final class Worlds {
 
 	/**
 	 * The rivers that rise on the ground, as seeded droplet walks
-	 * (WORLDGEN-RESEARCH.md #2): each starts on high, damp ground and follows the elevation field downhill — the SAME noise the biome
+	 * (WORLDGEN-RESEARCH.md #2): each rises at a spring on high, damp ground
+	 * and follows the elevation field downhill — the SAME noise the biome
 	 * classifier reads, so rivers run where the terrain says they should —
 	 * carving a channel that widens as it runs, until it reaches standing
 	 * water, a basin with no way down (where it ponds), or the rim. The walk
@@ -5056,6 +5060,127 @@ public final class Worlds {
 		return dist;
 	}
 
+	/** How close to the map's edge a river's head may lie and still be water
+	 *  coming in from beyond it, which rises nowhere in the world. */
+	private static final int RIM_INFLOW = 4;
+
+	/**
+	 * Every river rises somewhere a body can see it rise. The carver marks a
+	 * spring where each river starts, but the passes after it can build across
+	 * a channel -- a station's apron, the ground relaid round a ramp -- and the
+	 * reach below the cut then ran out of the grass. A reach whose head has no
+	 * water upstream of it, along its own flow or flowing into it, rises at a
+	 * spring there: the river sinks under what was built and comes up past it.
+	 * A lip with nothing above it is a gorge's far-bank remnant, pouring water
+	 * from nowhere into the drop, and is stilled. The one head left as it is
+	 * lies at the edge of the world, where the water comes in from beyond it.
+	 */
+	private static void everyRiverRises(World w, int cols, int rows) {
+		int z = SURFACE_Z;
+		// Until none is left: stilling a lip can leave the water that ran into it
+		// a head of its own. Each round marks a spring or stills moving water, so
+		// it ends.
+		for (java.util.List<Integer> heads = risingNowhere(w); !heads.isEmpty(); heads = risingNowhere(w)) {
+			for (int head : heads) {
+				int x = head % cols, y = head / cols, f = w.getFlow(x, y, z), d = World.flowDirOf(f);
+				if (World.flowFalls(f)) {
+					w.setFlow(x, y, z, d, World.FLOW_STILL, false);
+				} else {
+					w.setFlow(x, y, z, d, World.flowSpeed(f), World.flowStep(f), World.FLOW_SPRING);
+				}
+			}
+		}
+	}
+
+	/**
+	 * The heads of the surface's reaches of moving water that rise nowhere:
+	 * no spring or plunge pool in the reach, no water upstream of any of its
+	 * heads, and its head not at the edge of the world, where water comes in
+	 * from beyond it. One head per reach, the highest. A finished world has
+	 * none; this is the rule {@link #everyRiverRises} makes true and the check
+	 * that it is.
+	 */
+	public static java.util.List<Integer> risingNowhere(World w) {
+		int z = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
+		java.util.ArrayList<Integer> out = new java.util.ArrayList<Integer>();
+		boolean[] seen = new boolean[cols * rows];
+		java.util.ArrayList<Integer> reach = new java.util.ArrayList<Integer>();
+		for (int i = 0; i < seen.length; i++) {
+			if (seen[i] || w.getFlow(i % cols, i / cols, z) == 0) {
+				continue;
+			}
+			// One reach: moving or marked water joined across its own width.
+			reach.clear();
+			reach.add(i);
+			seen[i] = true;
+			boolean rises = false;
+			for (int k = 0; k < reach.size(); k++) {
+				int c = reach.get(k), cx = c % cols, cy = c / cols, f = w.getFlow(cx, cy, z);
+				rises |= World.flowSpring(f) || World.flowPlunge(f);
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						int nx = cx + dx, ny = cy + dy;
+						if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && !seen[ny * cols + nx]
+								&& w.getFlow(nx, ny, z) != 0) {
+							seen[ny * cols + nx] = true;
+							reach.add(ny * cols + nx);
+						}
+					}
+				}
+			}
+			if (rises) {
+				continue;
+			}
+			// Its heads: moving water nothing in the reach flows into, and
+			// nothing of it lies upstream of. Fed if any head has water above it
+			// -- a lake it leaves, a stilled tile of its own channel.
+			java.util.HashSet<Integer> in = new java.util.HashSet<Integer>(reach);
+			int head = -1;
+			double highest = -1;
+			boolean fed = false;
+			for (int c : reach) {
+				int cx = c % cols, cy = c / cols, f = w.getFlow(cx, cy, z);
+				if (World.flowSpeed(f) == World.FLOW_STILL && !World.flowFalls(f)) {
+					continue;
+				}
+				int d = World.flowDirOf(f), ux = cx - World.FLOW_DX[d], uy = cy - World.FLOW_DY[d];
+				if (in.contains(uy * cols + ux) || flowsInto(w, cx, cy, z, in, cols)) {
+					continue;
+				}
+				fed |= isWet(w, ux, uy, z);
+				double e = Utils.noise2(cx, cy, 0.055);
+				if (e > highest) {
+					highest = e;
+					head = c;
+				}
+			}
+			if (fed || head < 0) {
+				continue;
+			}
+			int x = head % cols, y = head / cols;
+			if (x < RIM_INFLOW || y < RIM_INFLOW || x >= cols - RIM_INFLOW || y >= rows - RIM_INFLOW) {
+				continue; // from beyond the edge of the world
+			}
+			out.add(head);
+		}
+		return out;
+	}
+
+	/** Whether any tile of a reach flows into (x, y). */
+	private static boolean flowsInto(World w, int x, int y, int z, java.util.Set<Integer> reach, int cols) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				int nf = w.getFlow(x + dx, y + dy, z);
+				if ((dx != 0 || dy != 0) && reach.contains((y + dy) * cols + x + dx)
+						&& World.flowSpeed(nf) != World.FLOW_STILL
+						&& dx + World.FLOW_DX[World.flowDirOf(nf)] == 0 && dy + World.FLOW_DY[World.flowDirOf(nf)] == 0) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * A river's last reach is still water wherever the channel stops short:
 	 * at the rim, in a basin, against a causeway or a landing a later pass
@@ -5097,7 +5222,9 @@ public final class Worlds {
 				boolean headOn = nf != 0 && nx + World.FLOW_DX[World.flowDirOf(nf)] == x
 						&& ny + World.FLOW_DY[World.flowDirOf(nf)] == y;
 				if ((t != Tile.TileType.TYPE_WATER && t != Tile.TileType.TYPE_SHALLOWS) || headOn) {
-					w.setFlow(x, y, SURFACE_Z, 0, World.FLOW_STILL, false);
+					// A spring that goes nowhere is still a spring: the water rises and stands.
+					w.setFlow(x, y, SURFACE_Z, d, World.FLOW_STILL, false,
+							World.flowSpring(f) ? World.FLOW_SPRING : 0);
 				}
 			}
 		}
@@ -5117,7 +5244,8 @@ public final class Worlds {
 	 * every river in the world is carved by, whether it rises on the ground
 	 * or on a table in the sky.
 	 *
-	 * <p>On the ground it walks downhill with a light meander, carving as it
+	 * <p>It rises at a spring ({@link World#FLOW_SPRING}), the first tile it
+	 * lays. On the ground it walks downhill with a light meander, carving as it
 	 * goes: a brook near the spring, a slow river two tiles wide lower down,
 	 * rapids and cascades where the ground falls away under it, a ford every
 	 * ninth step, until it joins standing water or an earlier river, ponds in a
@@ -5154,10 +5282,11 @@ public final class Worlds {
 		// of the map dry.
 		java.util.HashSet<Integer> own = new java.util.HashSet<Integer>();
 		if (toward != null) {
-			// Across the table to its lip: a brook of shallows.
+			// Across the table to its lip: a brook of shallows, rising at the spring.
 			int i = y * cols + x;
 			while (true) {
 				setBare(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
+				int marks = steps == 0 ? World.FLOW_SPRING : 0;
 				steps++;
 				int next = toward[i];
 				if (next < 0) {
@@ -5192,7 +5321,7 @@ public final class Worlds {
 					break;
 				}
 				int nx = next % cols, ny = next / cols;
-				w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false);
+				w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false, marks);
 				if (w.getFlow(nx, ny, z) != 0) {
 					return; // into an earlier spring's brook
 				}
@@ -5303,7 +5432,7 @@ public final class Worlds {
 				int cx = cell[i], cy = cell[i + 1];
 				boolean kept = bx > 0 ? cx == x : bx < 0 ? cx == x + width - 1
 						: by > 0 ? cy == y : cy == y + width - 1;
-				w.setFlow(cx, cy, SURFACE_Z, dir, speed, lip && kept);
+				w.setFlow(cx, cy, SURFACE_Z, dir, speed, lip && kept, steps == 0 ? World.FLOW_SPRING : 0);
 			}
 			prevDx = bx;
 			prevDy = by;

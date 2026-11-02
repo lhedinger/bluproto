@@ -12705,6 +12705,79 @@ public class SimTests {
 	}
 
 	/**
+	 * Every river rises at a spring you can see. Every reach of moving water
+	 * on the ground has one ({@link World#FLOW_SPRING}) or a plunge pool it
+	 * runs out of, or water above its head -- a lake it leaves -- or comes in
+	 * at the edge of the world, from beyond it; the generator's own rule
+	 * ({@code Worlds.risingNowhere}) finds no reach left that rises nowhere.
+	 * A spring is water: it lies on water or shallows, and where it moves it
+	 * moves into more water. And the springs on the tables are rivers like any
+	 * other: each one in the sky runs to a lip and falls, or joins another
+	 * table brook that does. Over the scenario seeds at the demo's size and
+	 * the small world's, single-threaded, since a world built on a busy random
+	 * stream is not the one its seed names.
+	 */
+	static class EveryRiverRisesAtASpring extends Scenario {
+		@Override
+		public void run() {
+			int ground = 0, sky = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				for (int size = 0; size < 2; size++) {
+					World w = size == 0 ? net.hedinger.prototype.sim.Worlds.demoTerrain(seed)
+							: net.hedinger.prototype.sim.Worlds.demoTerrain(seed, 96, 120);
+					String at = "seed " + seed + (size == 0 ? "" : " (small)");
+					java.util.List<Integer> nowhere = net.hedinger.prototype.sim.Worlds.risingNowhere(w);
+					assertTrue(at + ": every reach of river rises somewhere ("
+							+ nowhere.size() + " rising nowhere, first at "
+							+ (nowhere.isEmpty() ? "-" : nowhere.get(0) % w.getColums() + "," + nowhere.get(0) / w.getColums())
+							+ ")", nowhere.isEmpty());
+					int s = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
+					for (int z = s; z < w.getLevels(); z++) {
+						for (int y = 1; y < rows - 1; y++) {
+							for (int x = 1; x < cols - 1; x++) {
+								int f = w.getFlow(x, y, z);
+								if (!World.flowSpring(f)) {
+									continue;
+								}
+								if (z == s) {
+									ground++;
+								} else {
+									sky++;
+								}
+								Tile.TileType t = w.getTile(x, y, z).getType();
+								assertTrue(at + ": the spring at " + x + "," + y + "," + z + " is water",
+										t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS);
+								if (World.flowSpeed(f) != World.FLOW_STILL) {
+									int d = World.flowDirOf(f);
+									Tile.TileType n = w.getTile(x + World.FLOW_DX[d], y + World.FLOW_DY[d], z).getType();
+									assertTrue(at + ": the spring at " + x + "," + y + "," + z + " runs into water",
+											n == Tile.TileType.TYPE_WATER || n == Tile.TileType.TYPE_SHALLOWS);
+								}
+								if (z > s) {
+									// Down the table brook to its lip, or into another spring's brook.
+									int cx = x, cy = y, g = f, guard = 0;
+									while (!World.flowFalls(g) && guard++ < cols + rows) {
+										int d = World.flowDirOf(g);
+										cx += World.FLOW_DX[d];
+										cy += World.FLOW_DY[d];
+										g = w.getFlow(cx, cy, z);
+										assertTrue(at + ": the table brook from " + x + "," + y + "," + z
+												+ " runs on at " + cx + "," + cy, g != 0);
+									}
+									assertTrue(at + ": the table brook from " + x + "," + y + "," + z
+											+ " reaches a lip", World.flowFalls(g));
+								}
+							}
+						}
+					}
+				}
+			}
+			assertGreater("rivers rise on the ground", ground, 0);
+			assertGreater("and on the tables", sky, 0);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -21160,6 +21233,7 @@ public class SimTests {
 				new TheMovingWaterIsPaintedFromItsRamps(),
 				new TheGorgeSwallowsARiver(),
 				new ASpringFallsOffTheTable(),
+				new EveryRiverRisesAtASpring(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
