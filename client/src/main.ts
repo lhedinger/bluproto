@@ -234,11 +234,24 @@ function getChunk(cx: number, cy: number, z: number, request: boolean): HTMLCanv
   chunkCache.set(key, null); // mark in-flight so we fetch once
   const img = new Image();
   img.onload = () => {
-    const copy = document.createElement('canvas');
-    copy.width = img.naturalWidth;
-    copy.height = img.naturalHeight;
-    copy.getContext('2d')!.drawImage(img, 0, 0);
-    chunkCache.set(key, copy);
+    // Decoded off the main thread first: drawImage of an undecoded image
+    // decodes it right there, inside whatever frame the load landed in.
+    img.decode().catch(() => { /* drawImage decodes it then */ }).then(() => {
+      if (chunkCache.get(key) !== null) return; // evicted while decoding
+      const copy = document.createElement('canvas');
+      copy.width = img.naturalWidth;
+      copy.height = img.naturalHeight;
+      // A CPU-backed canvas. Chunks are READ as well as drawn: the hole scan
+      // (render.hasHoles) reads every one once, and the canopy veil copies
+      // each covered tile out to pick its foliage pixels. From the default
+      // GPU-backed canvas each of those reads waited on the GPU and copied
+      // the pixels back -- 7.4 s of a 10 s pan on the phone profile, in
+      // single tasks of up to 1.3 s, and every pan and tap queued behind
+      // them. Read from memory they are a memcpy; drawn, a 192 px chunk
+      // uploads once.
+      copy.getContext('2d', { willReadFrequently: true })!.drawImage(img, 0, 0);
+      chunkCache.set(key, copy);
+    });
   };
   // A failed fetch must not leave a permanent hole: on a phone one flaky
   // radio moment used to freeze a black chunk into the world for the tab's
