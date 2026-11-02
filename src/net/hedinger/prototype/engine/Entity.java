@@ -158,6 +158,15 @@ public abstract class Entity {
 				age = -deathspan;
 			}
 		} else {
+			// A corpse is carried by nothing and rides nothing. It never runs
+			// executeMovement, which is what keeps a carried body at its
+			// carrier's side, so a captive or rider that died aboard stayed where
+			// it fell while the carrier walked on still bearing its weight -- and
+			// the viewer drew a tether across the map between them.
+			if (attachTarget != null) {
+				grabbed = false;
+				detach();
+			}
 			// A corpse ages toward removal: after `deathspan` ticks it drops past
 			// -deathspan and is purged next run. Without this a dead body with a
 			// positive deathspan only ever cleared if something scavenged it, so
