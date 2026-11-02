@@ -1235,6 +1235,8 @@ public final class Worlds {
 		// And every reach of river rises somewhere: one built across has its
 		// lower reach rise past the cut.
 		everyRiverRises(w, cols, rows);
+		// And no spring rises at the lip of a drop the passes after it opened.
+		springsClearOfDrops(w, cols, rows);
 		layFords(w, cols, rows, SURFACE_Z);
 		joinAcrossWater(w, cols, rows, SURFACE_Z);
 		// Last of all: the trees and big shrubs stand on the finished ground.
@@ -1673,9 +1675,11 @@ public final class Worlds {
 			for (int i = p[1] * cols + p[0]; toward[i] >= 0; i = toward[i]) {
 				run++;
 			}
-			// And not within reach of an edge, or its brook would go straight over.
+			// And not within reach of an edge, or its brook would go straight over;
+			// nor beside any drop at all, where water could not rise.
 			if (clear && run >= MIN_SPRING_RUN
-					&& nearestLip(w, cols, p[0], p[1], z, java.util.Collections.<Integer>emptySet()) == null) {
+					&& nearestLip(w, cols, p[0], p[1], z, java.util.Collections.<Integer>emptySet()) == null
+					&& !dropNear(w, p[0], p[1], z, SPRING_CLEARANCE)) {
 				springs.add(p);
 			}
 		}
@@ -4048,7 +4052,10 @@ public final class Worlds {
 				return false;
 			}
 		}
-		for (int attempt = 0; attempt < 60; attempt++) {
+		// Aimed at a river, the cut must also keep clear of every spring, which
+		// refuses more spans: on seed 42 all of the first sixty. Unaimed, sixty
+		// is as many as it ever was.
+		for (int attempt = 0; attempt < (swallow ? 200 : 60); attempt++) {
 			boolean horizontal = (attempt & 1) == 0;
 			int len = 26 + Utils.random(8);
 			int along = horizontal ? cols : rows;
@@ -4112,6 +4119,9 @@ public final class Worlds {
 					} else {
 						fits = ravineCarvable(w, cols, rows, x, y, swallow);
 					}
+					// Nor where a river rises: a spring stands clear of every drop.
+					// Checked last, so a span that keeps clear is the one it always was.
+					fits &= causeway || !springNear(w, x, y, SURFACE_Z, SPRING_CLEARANCE);
 				}
 			}
 			if (!fits || swallow && landings == 0) {
@@ -5293,6 +5303,155 @@ public final class Worlds {
 			out.add(head);
 		}
 		return out;
+	}
+
+	/** How many tiles of ground stand between a spring and the nearest drop --
+	 *  a hole, a pit, a shaft, the open edge of a table -- at the least. */
+	@net.hedinger.prototype.engine.Unit("tiles")
+	public static final int SPRING_CLEARANCE = 2;
+
+	/** Whether a spring lies within {@code r} tiles of (x, y, z), any way round. */
+	private static boolean springNear(World w, int x, int y, int z, int r) {
+		for (int dy = -r; dy <= r; dy++) {
+			for (int dx = -r; dx <= r; dx++) {
+				if (World.flowSpring(w.getFlow(x + dx, y + dy, z))) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Whether a drop lies within {@code r} tiles of (x, y, z), any way round. */
+	public static boolean dropNear(World w, int x, int y, int z, int r) {
+		for (int dy = -r; dy <= r; dy++) {
+			for (int dx = -r; dx <= r; dx++) {
+				if (w.getTile(x + dx, y + dy, z).isDrop()) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * No spring on the ground rises at the lip of a drop. The ground's rivers
+	 * are carved before anything opens the surface, and the station pits, the
+	 * shafts and the gorge laid after them can land two tiles from a river's
+	 * head: water welling up at the edge of a pit. Such a spring rises lower
+	 * down instead, at the first tile of its own river clear of every drop by
+	 * {@link #SPRING_CLEARANCE}, and the brook above it goes back to the bank
+	 * it was cut through -- the ground beside it, so the bank closes over
+	 * seamlessly. Fixing the carver instead would mean moving the pits and the
+	 * gorge, and every pass after them with them. (The gorge itself keeps its
+	 * cut clear of the springs there are when it is cut.)
+	 *
+	 * <p>A spring with no tile of its river clear of the drop is a remnant: a
+	 * few tiles of a river the gorge cut through, left at its rim with a
+	 * spring the rising pass gave them. It is no river, and becomes still
+	 * water, a pool at the rim ({@link #stillRemnant}).
+	 */
+	private static void springsClearOfDrops(World w, int cols, int rows) {
+		int z = SURFACE_Z;
+		for (int y = 1; y < rows - 1; y++) {
+			for (int x = 1; x < cols - 1; x++) {
+				int f = w.getFlow(x, y, z);
+				if (!World.flowSpring(f) || !dropNear(w, x, y, z, SPRING_CLEARANCE)) {
+					continue;
+				}
+				// Down the river to the first tile clear of drops.
+				java.util.ArrayList<Integer> above = new java.util.ArrayList<Integer>();
+				int cx = x, cy = y, g = f, at = -1;
+				for (int k = 0; k < 2 * SPRING_CLEARANCE + 4; k++) {
+					if (World.flowSpeed(g) == World.FLOW_STILL || World.flowFalls(g) || World.flowPlunge(g)) {
+						break; // the river stops, or goes over, before it clears the drop
+					}
+					if (!dropNear(w, cx, cy, z, SPRING_CLEARANCE)) {
+						at = cy * cols + cx;
+						break;
+					}
+					above.add(cy * cols + cx);
+					int d = World.flowDirOf(g);
+					cx += World.FLOW_DX[d];
+					cy += World.FLOW_DY[d];
+					g = w.getFlow(cx, cy, z);
+				}
+				if (at < 0) {
+					stillRemnant(w, cols, rows, x, y);
+					continue;
+				}
+				int ax = at % cols, ay = at / cols, af = w.getFlow(ax, ay, z);
+				w.setFlow(ax, ay, z, World.flowDirOf(af), World.flowSpeed(af), World.flowStep(af), World.FLOW_SPRING);
+				for (int c : above) {
+					int bx = c % cols, by = c / cols;
+					w.setFlow(bx, by, z, 0, World.FLOW_STILL, false);
+					Tile bank = null;
+					for (int k = 0; k < 8 && bank == null; k++) {
+						Tile n = w.getTile(bx + World.FLOW_DX[k], by + World.FLOW_DY[k], z);
+						if (naturalGround(n.getType()) && !isWet(w, bx + World.FLOW_DX[k], by + World.FLOW_DY[k], z)) {
+							bank = n;
+						}
+					}
+					w.setTile(bx, by, z, bank != null ? bank.getType() : Tile.TileType.TYPE_FLOOR);
+					w.getTile(bx, by, z).setFertility(bank != null ? bank.getFertility() : 0);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Stills the reach of moving water a remnant spring at (x, y) heads: its
+	 * water stays, a pool at the rim, but nothing moves, rises or goes over.
+	 * A lip of it that was the only fall into its plunge pool takes the pool's
+	 * marks with it, or the pool a storey down would churn under a fall that
+	 * is not there.
+	 */
+	private static void stillRemnant(World w, int cols, int rows, int x, int y) {
+		int z = SURFACE_Z;
+		java.util.ArrayList<Integer> reach = new java.util.ArrayList<Integer>();
+		java.util.HashSet<Integer> seen = new java.util.HashSet<Integer>();
+		reach.add(y * cols + x);
+		seen.add(y * cols + x);
+		for (int k = 0; k < reach.size(); k++) {
+			int c = reach.get(k), cx = c % cols, cy = c / cols;
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int nx = cx + dx, ny = cy + dy, n = ny * cols + nx;
+					int nf = w.getFlow(nx, ny, z);
+					if (nf != 0 && !World.flowPlunge(nf) && seen.add(n)) {
+						reach.add(n);
+					}
+				}
+			}
+		}
+		for (int c : reach) {
+			int cx = c % cols, cy = c / cols, f = w.getFlow(cx, cy, z);
+			w.setFlow(cx, cy, z, 0, World.FLOW_STILL, false);
+			if (!World.flowFalls(f)) {
+				continue;
+			}
+			int d = World.flowDirOf(f), hx = cx + World.FLOW_DX[d], hy = cy + World.FLOW_DY[d];
+			boolean another = false; // does any other fall still land in this pool?
+			for (int dy = -2; dy <= 2 && !another; dy++) {
+				for (int dx = -2; dx <= 2 && !another; dx++) {
+					int lf = w.getFlow(hx + dx, hy + dy, z);
+					if (World.flowFalls(lf)) {
+						int lx = hx + dx + World.FLOW_DX[World.flowDirOf(lf)], ly = hy + dy + World.FLOW_DY[World.flowDirOf(lf)];
+						another = Math.abs(lx - hx) <= 1 && Math.abs(ly - hy) <= 1;
+					}
+				}
+			}
+			if (!another) {
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						int pf = w.getFlow(hx + dx, hy + dy, z - 1);
+						if (World.flowPlunge(pf)) {
+							w.setFlow(hx + dx, hy + dy, z - 1, 0, World.FLOW_STILL, false);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	/** Whether any tile of a reach flows into (x, y). */
