@@ -2482,11 +2482,14 @@ function frame(now: number): void {
   // The minimap is ambient, not mission-critical: entity drift redraws at
   // 4 Hz, but a camera move redraws at once so the viewport rectangle never
   // visibly lags a pan or zoom.
-  if (!MINIMAP_OFF && meta && (now - lastMini > 250
+  const dotsDue = now - lastMini > 250;
+  if (!MINIMAP_OFF && meta && (dotsDue
       || cam.cx !== miniCx || cam.cy !== miniCy || cam.scale !== miniScale)) {
-    lastMini = now;
+    if (dotsDue) lastMini = now;
     miniCx = cam.cx; miniCy = cam.cy; miniScale = cam.scale;
-    drawMinimap(mm, cam, state, meta, cv, currentLevel);
+    // A camera move alone redraws the rectangle over the cached dots; the
+    // dots themselves keep their 4 Hz beat (see drawMinimap).
+    drawMinimap(mm, cam, state, meta, cv, currentLevel, dotsDue);
   }
 
   if (net.status === 'open' && now - lastStats > 250) {
