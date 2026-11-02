@@ -142,15 +142,15 @@ const SAPLING_SHRUB: Array<[string[], number, number]> = [[C_TINY, 0, 1], [C_TIN
 
 const YOUNGER: Record<FloraKind, [Body, Body, Body]> = {
   broadleaf: [seed(SPROUT),
-    { w: 9, h: 7, lift: 5, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 2, 3]], 2)] },
-    { w: 15, h: 11, lift: 3, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
+    { w: 9, h: 7, lift: 9, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 2, 3]], 2)] },
+    { w: 15, h: 11, lift: 5, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
       crown([[C_SMALL, 3, 0], [C_TINY, 0, 2], [C_SMALL, 8, 1], [C_SMALL, 1, 4], [C_SMALL, 7, 5]], 3)] }],
   oak: [seed(SPROUT),
-    { w: 10, h: 8, lift: 4, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 0], [C_TINY, 4, 1], [C_TINY, 1, 3], [C_TINY, 5, 4]], 2)] },
-    { w: 14, h: 11, lift: 3, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
+    { w: 10, h: 8, lift: 8, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [crown([[C_TINY, 0, 0], [C_TINY, 4, 1], [C_TINY, 1, 3], [C_TINY, 5, 4]], 2)] },
+    { w: 14, h: 11, lift: 5, faceH: 2, trunk: 2, shadow: [7, 3], layouts: [
       crown([[C_SMALL, 1, 0], [C_SMALL, 7, 0], [C_SMALL, 0, 4], [C_SMALL, 7, 4], [C_TINY, 5, 7]], 3)] }],
   conifer: [seed(['..#..', '.###.', '#####', '..s..']),
-    { w: 9, h: 8, lift: 2, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [[
+    { w: 9, h: 8, lift: 4, faceH: 1, trunk: 1, shadow: [4, 2], layouts: [[
       { st: ['..#####..', '.#######.', '#########', '#.#.#.#.#'], x: 0, y: 4, tone: 1 },
       { st: ['..#..', '.###.', '#####', '#####', '#.#.#'], x: 2, y: 0 }]] },
     { w: 11, h: 11, lift: 3, faceH: 1, trunk: 2, shadow: [5, 3], layouts: [[
@@ -158,8 +158,8 @@ const YOUNGER: Record<FloraKind, [Body, Body, Body]> = {
       { st: ['..#####..', '.#######.', '#########', '#.#.#.#.#'], x: 1, y: 3 },
       { st: ['..#..', '.###.', '#####', '#.#.#'], x: 3, y: 0 }]] }],
   acacia: [seed(['##...##', '.##s##.', '...s...']),
-    { w: 13, h: 6, lift: 6, faceH: 1, trunk: 1, shadow: [6, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 8, 1], [C_TINY, 4, 2]], 1)] },
-    { w: 18, h: 7, lift: 5, faceH: 1, trunk: 1, shadow: [8, 3], layouts: [
+    { w: 13, h: 6, lift: 7, faceH: 1, trunk: 1, shadow: [6, 2], layouts: [crown([[C_TINY, 0, 1], [C_TINY, 4, 0], [C_TINY, 8, 1], [C_TINY, 4, 2]], 1)] },
+    { w: 18, h: 7, lift: 6, faceH: 1, trunk: 1, shadow: [8, 3], layouts: [
       crown([[C_TINY, 0, 2], [C_TINY, 4, 0], [C_TINY, 9, 0], [C_TINY, 13, 2], [C_TINY, 7, 3]], 2)] }],
   shrub: [seed(['.#.#.', '#####', '.###.']),
     { w: 8, h: 5, lift: 0, faceH: 1, trunk: 0, shadow: [4, 2], layouts: [crown(SAPLING_SHRUB, 1)] },
