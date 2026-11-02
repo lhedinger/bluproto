@@ -967,7 +967,7 @@ export function render(
   // with a body under it drops to the veil's translucency, as cover does.
   if (!FLORA_OFF) {
     g.imageSmoothingEnabled = false;
-    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA)) {
+    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA, FLORA_BUILD_MS)) {
       g.globalAlpha = d.alpha;
       g.drawImage(d.sprite.cv, d.x, d.y, d.w, d.h);
     }
@@ -977,6 +977,10 @@ export function render(
 
 /** Where the living bodies on a level stand, in world art-pixels: what a
  *  crown checks to know whether to draw at the veil's translucency. */
+/** Milliseconds a frame may spend composing flora sprites it has not built yet
+ *  (see floraInView): about a quarter of a 60 Hz frame. */
+const FLORA_BUILD_MS = 4;
+
 function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   for (const t of tracks) {
@@ -1664,8 +1668,8 @@ export function renderGL(
   }
 
   if (!FLORA_OFF) {
-    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA)) {
-      glr.sprite('flora:' + d.key, d.sprite.cv, 1, 0, 0, d.sprite.cv.width, d.sprite.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA, FLORA_BUILD_MS)) {
+      glr.sprite(d.key, d.sprite.cv, 1, 0, 0, d.sprite.cv.width, d.sprite.cv.height, d.x, d.y, d.w, d.h, d.alpha);
     }
   }
 
