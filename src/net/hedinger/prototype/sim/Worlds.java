@@ -1226,7 +1226,7 @@ public final class Worlds {
 		raiseSkyline(w, cols, rows, elevation);
 		raiseSprings(w, cols, rows, elevation);
 		// ---- fords: no stretch of river is far from a place to wade it ----
-		// After the springs, whose brooks and pools change where a river can
+		// After the springs, whose rivers and pools change where a river can
 		// be waded; the skyline never reads water, so it can come before.
 		// After every pass that shapes the water or builds across it, so every
 		// river end they left pointing at ground is stilled; before the fords,
@@ -1603,25 +1603,28 @@ public final class Worlds {
 	 *  tiles of brook: only a south face is drawn (§4), so a fall down one is
 	 *  seen from the ground as well as from the table. */
 	private static final double SPRING_FACE_BIAS = 6;
-	/** How far the brook a table fall feeds runs out across the plain. */
-	private static final int BROOK_REACH = 48;
 
 	/**
-	 * Springs on the tables: a brook rises on a mesa or a step of the
-	 * escarpment, runs across it to the edge and falls off the cliff, into a
-	 * plunge pool at the foot and on across the plain as a brook.
+	 * The rivers that rise on the tables: a spring on a mesa or a step of the
+	 * escarpment, a brook across it to the edge, a fall off the cliff into a
+	 * plunge pool at the foot, and from the pool a river across the plain --
+	 * the same river the ground's own springs feed, carved by the same walker
+	 * ({@link #runRiver}). Here because the tables are only raised with the
+	 * skyline, near the end; the ground's rivers are carved with the surface.
 	 *
-	 * <p>The brook takes the cheapest way to a lip, over a cost field with a
-	 * smooth noise in it so the way meanders, and prefers a south edge: there
-	 * the cliff has a face (§4), and the fall is seen running down it from the
+	 * <p>Where a table's springs rise and the way each one runs to its lip are
+	 * chosen here. The springs go on the tiles farthest from any lip, spaced
+	 * apart. The way is the cheapest to a lip, over a cost field with a
+	 * smooth noise in it so it meanders, and prefers a south edge: there the
+	 * cliff has a face (§4), and the fall is seen running down it from the
 	 * ground. A lip needs open ground a storey down to land on, natural and
 	 * clear of any climb, or a pool would drown the foot of the ramp up. A
 	 * later spring that reaches an earlier one's brook joins it.
 	 *
-	 * <p>All of it is shallows bar the pool's core, so it walls nothing off:
-	 * a spring changes where water stands, never where a body can go. And it
-	 * draws no RNG -- everything is chosen off coordinate noise -- so every
-	 * pass after it sees the world it saw before springs.
+	 * <p>Up on the table it is shallows bar the pool's core, so it walls
+	 * nothing off up there; on the plain it keeps a river's depth, and the
+	 * fords pass after it guarantees a crossing within reach, as on any river.
+	 * Everything is chosen off coordinate noise, never the random stream.
 	 */
 	private static void raiseSprings(World w, int cols, int rows, double[][] elevation) {
 		for (int z = TOP_Z; z >= SKY_Z; z--) {
@@ -1714,89 +1717,7 @@ public final class Worlds {
 			}
 		}
 		for (int[] s : springs) {
-			int i = s[1] * cols + s[0];
-			while (true) {
-				int x = i % cols, y = i / cols;
-				setBare(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
-				int next = toward[i];
-				if (next < 0) {
-					// The lip: over the edge, and down into the pool a storey below.
-					int d = lipDir[i];
-					w.setFlow(x, y, z, d, World.FLOW_RAPIDS, false, World.FLOW_FALL);
-					fallFromTable(w, cols, rows, x + World.FLOW_DX[d], y + World.FLOW_DY[d], z - 1, d, elevation);
-					break;
-				}
-				int nx = next % cols, ny = next / cols;
-				w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false);
-				if (w.getFlow(nx, ny, z) != 0) {
-					break; // into an earlier spring's brook
-				}
-				i = next;
-			}
-		}
-	}
-
-	/** Where a fall off a table lands, a storey down: the pool, and on the
-	 *  ground the brook it feeds. A pool on a lower table is a tarn. */
-	private static void fallFromTable(World w, int cols, int rows, int hx, int hy, int z, int d,
-			double[][] elevation) {
-		layPlungePool(w, hx, hy, z, d);
-		if (z != SURFACE_Z) {
-			return;
-		}
-		int fx = World.FLOW_DX[d], fy = World.FLOW_DY[d];
-		// Out of the pool's far side and away from the cliff, downhill, never
-		// back toward it.
-		int x = hx + fx, y = hy + fy;
-		if (!World.flowPlunge(w.getFlow(x, y, z))) {
-			return;
-		}
-		java.util.HashSet<Integer> been = new java.util.HashSet<Integer>();
-		int px = x, py = y;
-		for (int step = 0; step < BROOK_REACH; step++) {
-			int bx = -1, by = -1;
-			double best = Double.MAX_VALUE;
-			for (int u = 0; u < 4; u++) {
-				int ux = Tile.dirDx(u), uy = Tile.dirDy(u);
-				if (ux == -fx && uy == -fy) {
-					continue;
-				}
-				int nx = x + ux, ny = y + uy;
-				if (nx < 4 || ny < 4 || nx >= cols - 4 || ny >= rows - 4 || been.contains(ny * cols + nx)
-						|| World.flowPlunge(w.getFlow(nx, ny, z))) {
-					continue;
-				}
-				boolean wet = isWet(w, nx, ny, z);
-				if (!wet && !pourable(w, nx, ny, z)) {
-					continue;
-				}
-				double e = elevation[nx][ny] + 0.04 * Utils.noise2(nx + 800, ny + 6100, 0.2)
-						- (ux == fx && uy == fy ? 0.01 : 0) - (wet ? 1 : 0);
-				if (e < best) {
-					best = e;
-					bx = nx;
-					by = ny;
-				}
-			}
-			if (bx < 0) {
-				break;
-			}
-			boolean joins = isWet(w, bx, by, z);
-			if (!World.flowPlunge(w.getFlow(x, y, z))) {
-				w.setFlow(x, y, z, World.flowDir(bx - x, by - y), World.FLOW_STREAM, false);
-			}
-			if (joins) {
-				return; // into standing or running water: it carries on as that
-			}
-			setBare(w, bx, by, z, Tile.TileType.TYPE_SHALLOWS);
-			been.add(by * cols + bx);
-			px = x;
-			py = y;
-			x = bx;
-			y = by;
-		}
-		if (!World.flowPlunge(w.getFlow(x, y, z))) {
-			w.setFlow(x, y, z, World.flowDir(x - px, y - py), World.FLOW_STILL, false); // ends in a pool, still
+			runRiver(w, cols, rows, s[0], s[1], z, toward, lipDir);
 		}
 	}
 
@@ -1831,21 +1752,43 @@ public final class Worlds {
 	private static boolean pourable(World w, int x, int y, int z) {
 		switch (w.getTile(x, y, z).getType()) {
 		case TYPE_FLOOR, TYPE_MUD, TYPE_SAND, TYPE_ROCKY, TYPE_STONE, TYPE_COVER, TYPE_RUBBLE, TYPE_REEDS:
-			break;
+			return !nearClimb(w, x, y, z);
 		default:
 			return false;
 		}
+	}
+
+	/** Ground a river walked after the world was built may carve: whatever the
+	 *  surface grows by nature -- meadow, scrub, bog, sand, scree -- but not
+	 *  water, rock, a drop or anything built, and nowhere near a climb. Wider
+	 *  than where a fall may land ({@link #pourable}): a river crossing the
+	 *  plain meets every kind of ground, and walled in by tall grass and
+	 *  scrub, one fell from its table and stood in a pond two tiles on. */
+	private static boolean riverable(World w, int x, int y, int z) {
+		switch (w.getTile(x, y, z).getType()) {
+		case TYPE_FLOOR, TYPE_MUD, TYPE_SAND, TYPE_ROCKY, TYPE_STONE, TYPE_COVER, TYPE_RUBBLE, TYPE_REEDS,
+				TYPE_QUICKSAND, TYPE_CACTUS, TYPE_TALLGRASS, TYPE_SCRUB, TYPE_PEAT, TYPE_SPHAGNUM, TYPE_POOL,
+				TYPE_MIRE, TYPE_SEDGE:
+			return !nearClimb(w, x, y, z);
+		default:
+			return false;
+		}
+	}
+
+	/** A ramp within two tiles, on this level or the one above: water laid
+	 *  here would drown the foot of a climb, or lap the head of one. */
+	private static boolean nearClimb(World w, int x, int y, int z) {
 		for (int l = z; l <= z + 1; l++) {
 			for (int dy = -2; dy <= 2; dy++) {
 				for (int dx = -2; dx <= 2; dx++) {
 					Tile.TileType t = w.getTile(x + dx, y + dy, l).getType();
 					if (t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN) {
-						return false;
+						return true;
 					}
 				}
 			}
 		}
-		return true;
+		return false;
 	}
 
 	/** The thin sward a wind-scoured mesa top keeps — well under the meadows
@@ -4812,11 +4755,13 @@ public final class Worlds {
 	}
 
 	/**
-	 * Rivers as seeded droplet walks (WORLDGEN-RESEARCH.md #2): each starts on
-	 * high, damp ground and follows the elevation field downhill — the SAME
-	 * noise the biome classifier reads, so rivers run where the terrain says
-	 * they should — carving a channel that widens as it runs, until it reaches
-	 * standing water, a basin with no way down (where it ponds), or the rim.
+	 * The rivers that rise on the ground, as seeded droplet walks
+	 * (WORLDGEN-RESEARCH.md #2): each starts on high, damp ground and follows the elevation field downhill — the SAME noise the biome
+	 * classifier reads, so rivers run where the terrain says they should —
+	 * carving a channel that widens as it runs, until it reaches standing
+	 * water, a basin with no way down (where it ponds), or the rim. The walk
+	 * is {@link #runRiver}, the one every river is carved by; the rivers that
+	 * rise on the tables are {@link #raiseSprings}'.
 	 *
 	 * <p>Crossable by construction: every few steps the whole cross-section is
 	 * laid as SHALLOWS (a ford), the shore pass later makes the brook near the
@@ -4845,7 +4790,7 @@ public final class Worlds {
 				}
 			}
 			if (sx >= 0) {
-				runRiver(w, cols, rows, sx, sy);
+				runRiver(w, cols, rows, sx, sy, SURFACE_Z, null, null);
 			}
 		}
 	}
@@ -5167,15 +5112,40 @@ public final class Worlds {
 	 */
 	static final double RAPIDS_DROP = 0.040, STEP_DROP = 0.052;
 
-	/** One river: walk downhill with a light meander, carving as it goes. The
-	 *  water it lays is given the way it flows -- the step the walk takes next
-	 *  -- and how fast: a brook near the spring, a slow river lower down,
-	 *  rapids and cascades where the ground falls away under it. Recording
-	 *  this draws on no random stream, so the world it carves is unchanged. */
-	private static void runRiver(World w, int cols, int rows, int x, int y) {
-		int prevDx = 0, prevDy = 0, sinceFord = 0;
-		boolean steepBefore = false; // the step before this one already broke the surface
-		int[] cell = new int[8]; // the channel cells this step laid, as x,y pairs
+	/**
+	 * One river, from its spring to wherever its water stops: the one walker
+	 * every river in the world is carved by, whether it rises on the ground
+	 * or on a table in the sky.
+	 *
+	 * <p>On the ground it walks downhill with a light meander, carving as it
+	 * goes: a brook near the spring, a slow river two tiles wide lower down,
+	 * rapids and cascades where the ground falls away under it, a ford every
+	 * ninth step, until it joins standing water or an earlier river, ponds in a
+	 * basin with no way down, or reaches the rim. Each tile it lays is given
+	 * the way it flows -- the step the walk takes next -- and how fast;
+	 * recording that draws on no random stream.
+	 *
+	 * <p>A table is flat, so its downhill is the way to its lip: {@code toward}
+	 * gives each table tile its next step there and {@code lipDir} the way over
+	 * the edge, both from {@link #springsOn}. Up there the river is a brook of
+	 * shallows, so it walls nothing off on a table a ramp or two serve. At the
+	 * lip it falls a storey into a plunge pool and walks on from the pool's far
+	 * side -- on the ground, as the same river, at its own age: as wide, as
+	 * deep and forded as any river that far from its spring. A pool on a lower
+	 * table is a tarn, and the river ends in it.
+	 *
+	 * <p>A river that rises on the ground is carved with the surface, before
+	 * anything is built: there it is the ground's own shape, and the passes
+	 * after it build around it. One that falls from a table walks the ground
+	 * after the floors are linked and the skyline raised, so it keeps to
+	 * natural ground ({@link #riverable}) and is not stopped by water it
+	 * laid itself; the shallows pass has run by then, so its brook is laid as
+	 * shallows and its ponds with their fringe, as that pass would have left
+	 * them.
+	 */
+	private static void runRiver(World w, int cols, int rows, int x, int y, int z, int[] toward, int[] lipDir) {
+		int prevDx = 0, prevDy = 0, sinceFord = 0, steps = 0;
+		boolean late = toward != null; // walked after the world was built around the ground's rivers
 		// Every tile this river has laid. Arriving on water ends a river only
 		// if the water was someone else's -- a lake, an earlier river. A two-wide
 		// channel's next step east or south lands on a cell it carved itself
@@ -5183,12 +5153,63 @@ public final class Worlds {
 		// river ended at its first such step: about fifty tiles each, the rest
 		// of the map dry.
 		java.util.HashSet<Integer> own = new java.util.HashSet<Integer>();
-		for (int steps = 0; steps < cols + rows; steps++) {
+		if (toward != null) {
+			// Across the table to its lip: a brook of shallows.
+			int i = y * cols + x;
+			while (true) {
+				setBare(w, x, y, z, Tile.TileType.TYPE_SHALLOWS);
+				steps++;
+				int next = toward[i];
+				if (next < 0) {
+					// The lip: over the edge, and down into the pool a storey below.
+					int d = lipDir[i];
+					w.setFlow(x, y, z, d, World.FLOW_RAPIDS, false, World.FLOW_FALL);
+					int hx = x + World.FLOW_DX[d], hy = y + World.FLOW_DY[d];
+					z--;
+					layPlungePool(w, hx, hy, z, d);
+					if (z != SURFACE_Z) {
+						return; // a tarn on a lower table
+					}
+					// The pool is the river's own water: arriving back on it is not
+					// joining a lake. Only what the pool laid -- the ground round a
+					// fall's foot can be the rock the table stands on, and a channel
+					// laid there as its own would cut the table out from under it.
+					for (int dy = -1; dy <= 1; dy++) {
+						for (int dx = -1; dx <= 1; dx++) {
+							if (World.flowPlunge(w.getFlow(hx + dx, hy + dy, z))) {
+								own.add((hy + dy) * cols + hx + dx);
+							}
+						}
+					}
+					// Out of the pool's far side and away from the cliff.
+					x = hx + World.FLOW_DX[d];
+					y = hy + World.FLOW_DY[d];
+					prevDx = World.FLOW_DX[d];
+					prevDy = World.FLOW_DY[d];
+					if (!World.flowPlunge(w.getFlow(x, y, z))) {
+						return; // no ground past the pool to run on: the pool is the river's end
+					}
+					break;
+				}
+				int nx = next % cols, ny = next / cols;
+				w.setFlow(x, y, z, World.flowDir(nx - x, ny - y), World.FLOW_STREAM, false);
+				if (w.getFlow(nx, ny, z) != 0) {
+					return; // into an earlier spring's brook
+				}
+				i = next;
+				x = nx;
+				y = ny;
+			}
+		}
+		boolean steepBefore = false; // the step before this one already broke the surface
+		int[] cell = new int[8]; // the channel cells this step laid, as x,y pairs
+		for (int walked = 0; walked < cols + rows; walked++, steps++) {
 			if (x < 3 || y < 3 || x >= cols - 3 || y >= rows - 3) {
 				return; // reached the rim
 			}
-			if (steps > 4 && w.getTile(x, y, SURFACE_Z).getType() == Tile.TileType.TYPE_WATER
-					&& !own.contains(y * cols + x)) {
+			Tile.TileType at = w.getTile(x, y, SURFACE_Z).getType();
+			if (steps > 4 && !own.contains(y * cols + x) && (at == Tile.TileType.TYPE_WATER
+					|| late && at == Tile.TileType.TYPE_SHALLOWS)) {
 				return; // joined a lake (or an earlier river)
 			}
 			// The channel: a brook near the spring, two tiles wide lower down.
@@ -5201,7 +5222,11 @@ public final class Worlds {
 					if (cx < 2 || cy < 2 || cx >= cols - 2 || cy >= rows - 2) {
 						continue;
 					}
-					w.setTile(cx, cy, SURFACE_Z, ford
+					if (late && (own.contains(cy * cols + cx) ? World.flowPlunge(w.getFlow(cx, cy, SURFACE_Z))
+							: !riverable(w, cx, cy, SURFACE_Z))) {
+						continue; // built, or someone else's water, or its own plunge pool
+					}
+					w.setTile(cx, cy, SURFACE_Z, ford || late && width == 1
 							? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_WATER);
 					w.getTile(cx, cy, SURFACE_Z).setFertility(0);
 					cell[laid++] = cx;
@@ -5223,6 +5248,9 @@ public final class Worlds {
 				if (dx == -prevDx && dy == -prevDy && (dx != 0 || dy != 0)) {
 					continue; // no immediate backtrack
 				}
+				if (late && !lateStep(w, x + dx, y + dy, own, cols)) {
+					continue;
+				}
 				double e = Utils.noise2(x + dx, y + dy, 0.055)
 						+ 0.06 * GroundTextures.hash01(x + dx, y + dy, 71)
 						+ 0.5 * escarpment(x + dx, y + dy, cols, rows); // a step is a storey uphill
@@ -5232,14 +5260,20 @@ public final class Worlds {
 					by = dy;
 				}
 			}
+			if (bestE == Double.MAX_VALUE) {
+				return; // hemmed in by what was built: the water stands where it got to
+			}
 			double here = Utils.noise2(x, y, 0.055);
 			if (bestE >= here + 0.045) {
 				// A true basin with no lake: the river ponds and ends here.
 				for (int dx = -1; dx <= 1; dx++) {
 					for (int dy = -1; dy <= 1; dy++) {
 						int cx = x + dx, cy = y + dy;
-						if (cx >= 2 && cy >= 2 && cx < cols - 2 && cy < rows - 2) {
-							w.setTile(cx, cy, SURFACE_Z, Tile.TileType.TYPE_WATER);
+						if (cx >= 2 && cy >= 2 && cx < cols - 2 && cy < rows - 2
+								&& (!late || riverable(w, cx, cy, SURFACE_Z))) {
+							// Laid late, the pond takes the fringe the shallows pass gave the others.
+							w.setTile(cx, cy, SURFACE_Z, late && (dx != 0 || dy != 0)
+									? Tile.TileType.TYPE_SHALLOWS : Tile.TileType.TYPE_WATER);
 							w.getTile(cx, cy, SURFACE_Z).setFertility(0);
 						}
 					}
@@ -5276,6 +5310,17 @@ public final class Worlds {
 			x += bx;
 			y += by;
 		}
+	}
+
+	/** Where a river walked late may step: natural open ground, or water --
+	 *  someone else's, which it joins, or its own channel -- but never back
+	 *  into its own plunge pool, and never over a drop. */
+	private static boolean lateStep(World w, int x, int y, java.util.Set<Integer> own, int cols) {
+		if (own.contains(y * cols + x)) {
+			return !World.flowPlunge(w.getFlow(x, y, SURFACE_Z));
+		}
+		return riverable(w, x, y, SURFACE_Z) || isWet(w, x, y, SURFACE_Z)
+				&& !World.flowPlunge(w.getFlow(x, y, SURFACE_Z));
 	}
 
 	/**
