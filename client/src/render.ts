@@ -17,7 +17,7 @@ import {
 } from './fixtures';
 import { VEG_STAGE_MASK, VEG_VARIANTS, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
 import { flowLayers } from './flow';
-import { floraInView } from './flora';
+import { floraAtlas, floraInView } from './flora';
 
 // The split-out drawing modules are part of this one's public face: callers
 // import from './render' and need not know where a painter lives.
@@ -1668,8 +1668,15 @@ export function renderGL(
   }
 
   if (!FLORA_OFF) {
-    for (const d of floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA, FLORA_BUILD_MS)) {
-      glr.sprite(d.key, d.sprite.cv, 1, 0, 0, d.sprite.cv.width, d.sprite.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+    const plants = floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA, FLORA_BUILD_MS);
+    const atlas = floraAtlas(); // read after floraInView, which may have just packed it
+    for (const d of plants) {
+      const sp = d.sprite;
+      if (sp.packed && atlas.cv) { // one texture for every plant: one draw call
+        glr.sprite('flora:atlas', atlas.cv, atlas.rev, sp.ax, sp.ay, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+      } else {
+        glr.sprite(d.key, sp.cv, 1, 0, 0, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+      }
     }
   }
 

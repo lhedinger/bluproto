@@ -265,9 +265,62 @@ export function composeFlora(def: Def, layout: number, mirror: boolean): Map<str
 }
 
 /** A baked plant: its canvas, the foot's pixel in it, and the crown's box
- *  (canvas pixels) a body must be inside for the crown to veil it. */
-export type FloraSprite = { cv: HTMLCanvasElement; fx: number; fy: number; box: [number, number, number, number] };
+ *  (canvas pixels) a body must be inside for the crown to veil it. Once
+ *  packed, (ax, ay) is where its canvas sits in the shared atlas. */
+export type FloraSprite = { cv: HTMLCanvasElement; fx: number; fy: number; box: [number, number, number, number];
+  ax: number; ay: number; packed: boolean };
 const sprites = new Map<string, FloraSprite>();
+
+// ---- the shared atlas ---------------------------------------------------------------
+// Every plant sprite in one texture, so the GL pass draws all the plants on
+// screen in ONE call. Each sprite as its own texture, drawn north to south,
+// almost never shared a texture with the plant drawn before it: the batcher
+// flushed on nearly every plant -- ~650 draw calls a frame at map zoom on the
+// live seed, the bulk of the 700 a frame cost. A draw call is cheap in our JS
+// and dear in the browser's GPU process, which is where a phone's frame went:
+// 120 ms a frame against 18 ms of our own script.
+//
+// Slots are 32 px cells, so a mip block never straddles two sprites until a
+// plant is under a pixel on screen. Packed once every plant of the level has
+// its sprite (until then they draw from their own canvases, as before), so
+// the texture is uploaded once per level, not once per sprite as they build.
+const SLOT = 32, ATLAS_W = 512;
+let atlasCv: HTMLCanvasElement | null = null;
+let atlasRev = 0;
+let shelfX = 0, shelfY = 0, shelfH = 0;
+const unpacked: FloraSprite[] = [];
+
+function packAtlas(): void {
+  if (unpacked.length === 0) return;
+  if (!atlasCv) {
+    atlasCv = document.createElement('canvas');
+    atlasCv.width = ATLAS_W;
+    atlasCv.height = 256;
+  }
+  let g = atlasCv.getContext('2d')!;
+  for (const sp of unpacked) {
+    const w = Math.ceil(sp.cv.width / SLOT) * SLOT, h = Math.ceil(sp.cv.height / SLOT) * SLOT;
+    if (shelfX + w > ATLAS_W) { shelfX = 0; shelfY += shelfH; shelfH = 0; }
+    while (shelfY + h > atlasCv.height) { // grow downwards, keeping what is packed
+      const grown = document.createElement('canvas');
+      grown.width = ATLAS_W;
+      grown.height = atlasCv.height * 2;
+      grown.getContext('2d')!.drawImage(atlasCv, 0, 0);
+      atlasCv = grown;
+      g = atlasCv.getContext('2d')!;
+    }
+    g.drawImage(sp.cv, shelfX, shelfY);
+    sp.ax = shelfX; sp.ay = shelfY; sp.packed = true;
+    shelfX += w; shelfH = Math.max(shelfH, h);
+  }
+  unpacked.length = 0;
+  atlasRev++;
+}
+
+/** The shared atlas and its revision (bumped whenever sprites are added). */
+export function floraAtlas(): { cv: HTMLCanvasElement | null; rev: number } {
+  return { cv: atlasCv, rev: atlasRev };
+}
 
 /** The plant drawn at the world's angle: the shadow on the ground at its foot,
  *  a trunk stub, the crown lifted by its height over a short band of shade
@@ -308,8 +361,9 @@ export function floraSprite(kind: FloraKind, layout: number, mirror: boolean, st
     g.fillStyle = col; g.fillRect(ox + x, oy + y, 1, 1);
     bx0 = Math.min(bx0, ox + x); by0 = Math.min(by0, oy + y); bx1 = Math.max(bx1, ox + x + 1); by1 = Math.max(by1, oy + y + 1);
   }
-  const s: FloraSprite = { cv, fx, fy, box: [bx0, by0, bx1, by1] };
+  const s: FloraSprite = { cv, fx, fy, box: [bx0, by0, bx1, by1], ax: 0, ay: 0, packed: false };
   sprites.set(key, s);
+  unpacked.push(s);
   return s;
 }
 
@@ -350,6 +404,7 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
   // redraws at least ten times a second), so the plants come in over a few
   // frames instead.
   const buildFrom = performance.now();
+  let unresolved = 0; // plants still waiting for their sprite
   if (level !== rowsLevel || rows.length === 0) return out;
   const px = cam.scale / ART; // screen px an art-pixel
   // The bodies by the tile they stand on, so a crown asks only the few tiles
@@ -367,7 +422,7 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
     if (!sp) {
       const kind = FLORA_KINDS[k], st = stage ?? FLORA_STAGES - 1;
       const built = sprites.get(kind + ':' + layout + ':' + (mir === 1 ? 1 : 0) + ':' + st);
-      if (!built && performance.now() - buildFrom > buildBudgetMs) continue; // next frame
+      if (!built && performance.now() - buildFrom > buildBudgetMs) { unresolved++; continue; } // next frame
       sp = rowSprite[i] = built ?? floraSprite(kind, layout, mir === 1, st);
       rowKey[i] = 'flora:' + kind + ':' + layout + ':' + mir + ':' + st;
     }
@@ -394,5 +449,8 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
     }
     out.push({ key: rowKey[i], sprite: sp, x, y, w, h, alpha });
   }
+  // Every plant of the level has its sprite: pack the new ones into the atlas
+  // in one go. The draws hold their sprites, so they read packed from here on.
+  if (unresolved === 0) packAtlas();
   return out;
 }
