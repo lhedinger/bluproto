@@ -316,13 +316,21 @@ export function floraSprite(kind: FloraKind, layout: number, mirror: boolean, st
 // ---- the level's plants ----------------------------------------------------------------
 let rows: FloraRow[] = [];
 let rowsLevel = -1;
+/** Each row's sprite and texture key, resolved on its first draw and kept:
+ *  looked up per plant per frame, the key string alone was rebuilt for every
+ *  plant on the map at every draw. */
+let rowSprite: Array<FloraSprite | undefined> = [];
+let rowKey: string[] = [];
 /** Hands the layer a level's plants, sorted north to south so a plant nearer
  *  the viewer is drawn over one behind it. */
 export function setFlora(level: number, plants: FloraRow[] | null): void {
   rows = (plants ?? []).filter(r => r[0] >= 0 && r[0] < FLORA_KINDS.length).slice().sort((a, b) => a[2] - b[2] || a[1] - b[1]);
   rowsLevel = level;
+  rowSprite = new Array(rows.length);
+  rowKey = new Array(rows.length);
 }
 
+/** `key` names the sprite's texture for the GL batcher. */
 export type FloraDraw = { key: string; sprite: FloraSprite; x: number; y: number; w: number; h: number; alpha: number };
 
 /**
@@ -332,12 +340,37 @@ export type FloraDraw = { key: string; sprite: FloraSprite; x: number; y: number
  * half-reads, exactly as in a thicket.
  */
 export function floraInView(level: number, cam: { scale: number; screenX(x: number): number; screenY(y: number): number },
-    cvW: number, cvH: number, bodies: Array<[number, number]>, veil: number): FloraDraw[] {
+    cvW: number, cvH: number, bodies: Array<[number, number]>, veil: number,
+    buildBudgetMs = Infinity): FloraDraw[] {
   const out: FloraDraw[] = [];
+  // Sprites not yet composed are built within a time budget per call. The
+  // first frame that showed plants composed every kind x layout x mirror x
+  // stage at once -- half a second in one task, the viewer frozen just as it
+  // opened. Past the budget a plant waits for a later frame (the frame pacer
+  // redraws at least ten times a second), so the plants come in over a few
+  // frames instead.
+  const buildFrom = performance.now();
   if (level !== rowsLevel || rows.length === 0) return out;
   const px = cam.scale / ART; // screen px an art-pixel
-  for (const [k, gx, gy, layout, mir, stage] of rows) {
-    const kind = FLORA_KINDS[k], sp = floraSprite(kind, layout, mir === 1, stage ?? FLORA_STAGES - 1);
+  // The bodies by the tile they stand on, so a crown asks only the few tiles
+  // under it. Testing every crown against every body was plants x bodies a
+  // frame -- at map zoom, every plant on the level against the whole herd.
+  const grid = new Map<number, Array<[number, number]>>();
+  for (const b of bodies) {
+    const k = Math.floor(b[1] / ART) * 65536 + Math.floor(b[0] / ART);
+    const cell = grid.get(k);
+    if (cell) cell.push(b); else grid.set(k, [b]);
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const [k, gx, gy, layout, mir, stage] = rows[i];
+    let sp = rowSprite[i];
+    if (!sp) {
+      const kind = FLORA_KINDS[k], st = stage ?? FLORA_STAGES - 1;
+      const built = sprites.get(kind + ':' + layout + ':' + (mir === 1 ? 1 : 0) + ':' + st);
+      if (!built && performance.now() - buildFrom > buildBudgetMs) continue; // next frame
+      sp = rowSprite[i] = built ?? floraSprite(kind, layout, mir === 1, st);
+      rowKey[i] = 'flora:' + kind + ':' + layout + ':' + mir + ':' + st;
+    }
     const x = cam.screenX(gx / ART) - sp.fx * px, y = cam.screenY(gy / ART) - sp.fy * px;
     const w = sp.cv.width * px, h = sp.cv.height * px;
     if (x > cvW || y > cvH || x + w < 0 || y + h < 0) continue;
@@ -345,8 +378,21 @@ export function floraInView(level: number, cam: { scale: number; screenX(x: numb
     const bx0 = gx - sp.fx + sp.box[0] - 1, by0 = gy - sp.fy + sp.box[1] - 1;
     const bx1 = gx - sp.fx + sp.box[2] + 1, by1 = gy - sp.fy + sp.box[3] + 1;
     let alpha = 1;
-    for (const [ax, ay] of bodies) if (ax >= bx0 && ax < bx1 && ay >= by0 && ay < by1) { alpha = veil; break; }
-    out.push({ key: kind + ':' + layout + ':' + mir + ':' + stage, sprite: sp, x, y, w, h, alpha });
+    if (grid.size > 0) {
+      const tx0 = Math.floor(bx0 / ART), tx1 = Math.floor((bx1 - 1) / ART);
+      const ty0 = Math.floor(by0 / ART), ty1 = Math.floor((by1 - 1) / ART);
+      search:
+      for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+          const cell = grid.get(ty * 65536 + tx);
+          if (!cell) continue;
+          for (const [ax, ay] of cell) {
+            if (ax >= bx0 && ax < bx1 && ay >= by0 && ay < by1) { alpha = veil; break search; }
+          }
+        }
+      }
+    }
+    out.push({ key: rowKey[i], sprite: sp, x, y, w, h, alpha });
   }
   return out;
 }
