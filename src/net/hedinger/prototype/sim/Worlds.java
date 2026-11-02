@@ -1673,7 +1673,9 @@ public final class Worlds {
 			for (int i = p[1] * cols + p[0]; toward[i] >= 0; i = toward[i]) {
 				run++;
 			}
-			if (clear && run >= MIN_SPRING_RUN) {
+			// And not within reach of an edge, or its brook would go straight over.
+			if (clear && run >= MIN_SPRING_RUN
+					&& nearestLip(w, cols, p[0], p[1], z, java.util.Collections.<Integer>emptySet()) == null) {
 				springs.add(p);
 			}
 		}
@@ -1681,6 +1683,10 @@ public final class Worlds {
 			runRiver(w, cols, rows, s[0], s[1], z, toward, lipDir);
 		}
 	}
+
+	/** How near an edge, in steps across a table, a river is drawn straight
+	 *  over it rather than on along its table's own way to a lip. */
+	private static final int EDGE_REACH = 2;
 
 	/**
 	 * A table's own way down: for every tile of the tables on level {@code z}
@@ -1746,16 +1752,100 @@ public final class Worlds {
 		return w.getTile(x, y, z).getType() == Tile.TileType.TYPE_ROCKY || pool.contains(y * cols + x);
 	}
 
+	/** Whether water at (x, y, z) could pour over an edge beside it: the rule a
+	 *  river on a table goes over by ({@link #lipOver}), and the one its check
+	 *  reads. Without {@code ontoWater} only an edge onto ground counts: still
+	 *  water at a cliff's foot can still after a river has passed (a reach
+	 *  stilled where it ran into a ramp), but ground never becomes a landing
+	 *  later, so only the ground half can be checked in a finished world. */
+	public static boolean edgeBeside(World w, int x, int y, int z, boolean ontoWater) {
+		for (int u = 0; u < 4; u++) {
+			int hx = x + Tile.dirDx(u), hy = y + Tile.dirDy(u);
+			if (lipOver(w, x, y, z, u) && (ontoWater || !isWet(w, hx, hy, z - 1))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Whether water at (x, y, z) can pour over the edge in direction {@code u}:
-	 *  open drop beside it, and ground a storey down to land on. */
+	 *  open drop beside it, and somewhere a storey down for it to land. */
 	private static boolean lipOver(World w, int x, int y, int z, int u) {
 		int hx = x + Tile.dirDx(u), hy = y + Tile.dirDy(u);
-		return w.getTile(hx, hy, z).getType() == Tile.TileType.TYPE_HOLE && pourable(w, hx, hy, z - 1);
+		return w.getTile(hx, hy, z).getType() == Tile.TileType.TYPE_HOLE && fallLands(w, hx, hy, z - 1);
 	}
 
 	/**
-	 * A plunge pool where a fall lands at (hx, hy, z): water at the core, the
-	 * shallows round it wherever the ground can take them. The core carries
+	 * Where a fall may land: still water -- a lake at the cliff's foot takes it
+	 * as it is, and is no more in anyone's way than it was -- or any ground the
+	 * surface grows by nature, bog and scrub included, so long as it is not a
+	 * climb or right beside one. Held to {@link #pourable}'s eight kinds of
+	 * ground two tiles off every ramp, an escarpment with a ramp every few
+	 * tiles had hardly an edge a river could go over, and a table's river ran
+	 * thirty tiles along one. What two tiles guarded against is kept another
+	 * way: near a climb the pool's core is shallows ({@link #layPlungePool}),
+	 * so a pool on a ramp's approach is waded, never a wall across it.
+	 */
+	private static boolean fallLands(World w, int x, int y, int z) {
+		Tile.TileType t = w.getTile(x, y, z).getType();
+		if (t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS) {
+			return w.getFlow(x, y, z) == 0; // still water; not across a river's current
+		}
+		return naturalGround(t) && !nearClimb(w, x, y, z, 1);
+	}
+
+	/**
+	 * The shortest way over an edge within {@link #EDGE_REACH} steps of (x, y)
+	 * across its table, or null if there is none: {next tile, or -1 to pour
+	 * from here; the way over the edge from the lip}. Nearest first; at one
+	 * distance a south edge first, whose face is drawn (§4).
+	 */
+	private static int[] nearestLip(World w, int cols, int x, int y, int z, java.util.Set<Integer> pool) {
+		java.util.HashMap<Integer, Integer> first = new java.util.HashMap<Integer, Integer>(); // tile -> first step
+		java.util.ArrayList<Integer> ring = new java.util.ArrayList<Integer>();
+		int here = y * cols + x;
+		first.put(here, -1);
+		ring.add(here);
+		for (int depth = 0; depth <= EDGE_REACH && !ring.isEmpty(); depth++) {
+			int[] best = null;
+			for (int c : ring) {
+				int cx = c % cols, cy = c / cols;
+				if (pool.contains(c) || c != here && w.getTile(cx, cy, z).getType() != Tile.TileType.TYPE_ROCKY) {
+					continue; // a pool is crossed, never poured from; the river's own tile is already water
+				}
+				for (int u = 0; u < 4; u++) {
+					if (!lipOver(w, cx, cy, z, u)) {
+						continue;
+					}
+					boolean south = Tile.dirDy(u) > 0;
+					if (best == null || south && best[2] == 0) { // the first found, unless a south edge is as near
+						best = new int[] { first.get(c), World.flowDir(Tile.dirDx(u), Tile.dirDy(u)), south ? 1 : 0 };
+					}
+				}
+			}
+			if (best != null) {
+				return new int[] { best[0], best[1] };
+			}
+			java.util.ArrayList<Integer> nextRing = new java.util.ArrayList<Integer>();
+			for (int c : ring) {
+				int cx = c % cols, cy = c / cols;
+				for (int u = 0; u < 4; u++) {
+					int nx = cx + Tile.dirDx(u), ny = cy + Tile.dirDy(u), j = ny * cols + nx;
+					if (!first.containsKey(j) && onTable(w, nx, ny, z, pool, cols)) {
+						first.put(j, c == here ? j : first.get(c));
+						nextRing.add(j);
+					}
+				}
+			}
+			ring = nextRing;
+		}
+		return null;
+	}
+
+	/**
+	 * A plunge pool where a fall lands at (hx, hy, z): water at the core -- or
+	 * shallows, where a climb is near or the fall lands on shallows already --
+	 * and shallows round it wherever the ground can take them. The core carries
 	 * the way the fall travelled, and the face flag where rock stands under
 	 * the lip -- the fall comes down that rock's face.
 	 */
@@ -1767,7 +1857,12 @@ public final class Worlds {
 				if (!core && (!pourable(w, px, py, z) || w.getFlow(px, py, z) != 0)) {
 					continue;
 				}
-				setBare(w, px, py, z, core ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_SHALLOWS);
+				// The core is deep, unless a climb is near: there it is shallows, waded
+				// like the ring, so a pool on a ramp's approach never closes it.
+				Tile.TileType was = w.getTile(px, py, z).getType();
+				boolean deep = core && (was == Tile.TileType.TYPE_WATER
+						|| was != Tile.TileType.TYPE_SHALLOWS && !nearClimb(w, px, py, z, 2));
+				setBare(w, px, py, z, deep ? Tile.TileType.TYPE_WATER : Tile.TileType.TYPE_SHALLOWS);
 				if (core) {
 					boolean face = w.getTile(hx - World.FLOW_DX[d], hy - World.FLOW_DY[d], z).getType()
 							== Tile.TileType.TYPE_WALL;
@@ -1784,7 +1879,7 @@ public final class Worlds {
 	private static boolean pourable(World w, int x, int y, int z) {
 		switch (w.getTile(x, y, z).getType()) {
 		case TYPE_FLOOR, TYPE_MUD, TYPE_SAND, TYPE_ROCKY, TYPE_STONE, TYPE_COVER, TYPE_RUBBLE, TYPE_REEDS:
-			return !nearClimb(w, x, y, z);
+			return !nearClimb(w, x, y, z, 2);
 		default:
 			return false;
 		}
@@ -1797,22 +1892,27 @@ public final class Worlds {
 	 *  plain meets every kind of ground, and walled in by tall grass and
 	 *  scrub, one fell from its table and stood in a pond two tiles on. */
 	private static boolean riverable(World w, int x, int y, int z) {
-		switch (w.getTile(x, y, z).getType()) {
+		return naturalGround(w.getTile(x, y, z).getType()) && !nearClimb(w, x, y, z, 2);
+	}
+
+	/** Ground the surface grows by nature: not water, rock, a drop or anything built. */
+	private static boolean naturalGround(Tile.TileType t) {
+		switch (t) {
 		case TYPE_FLOOR, TYPE_MUD, TYPE_SAND, TYPE_ROCKY, TYPE_STONE, TYPE_COVER, TYPE_RUBBLE, TYPE_REEDS,
 				TYPE_QUICKSAND, TYPE_CACTUS, TYPE_TALLGRASS, TYPE_SCRUB, TYPE_PEAT, TYPE_SPHAGNUM, TYPE_POOL,
 				TYPE_MIRE, TYPE_SEDGE:
-			return !nearClimb(w, x, y, z);
+			return true;
 		default:
 			return false;
 		}
 	}
 
-	/** A ramp within two tiles, on this level or the one above: water laid
-	 *  here would drown the foot of a climb, or lap the head of one. */
-	private static boolean nearClimb(World w, int x, int y, int z) {
+	/** A ramp within {@code r} tiles, on this level or the one above: water
+	 *  laid here would drown the foot of a climb, or lap the head of one. */
+	private static boolean nearClimb(World w, int x, int y, int z, int r) {
 		for (int l = z; l <= z + 1; l++) {
-			for (int dy = -2; dy <= 2; dy++) {
-				for (int dx = -2; dx <= 2; dx++) {
+			for (int dy = -r; dy <= r; dy++) {
+				for (int dx = -r; dx <= r; dx++) {
 					Tile.TileType t = w.getTile(x + dx, y + dy, l).getType();
 					if (t == Tile.TileType.TYPE_RAMPUP || t == Tile.TileType.TYPE_RAMPDOWN) {
 						return true;
@@ -5284,7 +5384,10 @@ public final class Worlds {
 	 *
 	 * <p>A table is flat, so its downhill is the way to its lip: {@code toward}
 	 * gives each table tile its next step there and {@code lipDir} the way over
-	 * the edge ({@link #tableCourse}). Up there the river is a brook of shallows, so it walls
+	 * the edge ({@link #tableCourse}). Within {@link #EDGE_REACH} steps of an
+	 * edge it can go over, though, it goes over by the shortest way
+	 * ({@link #nearestLip}) rather than on along the edge to the lip its table
+	 * would choose. Up there the river is a brook of shallows, so it walls
 	 * nothing off on a table a ramp or two serve. At the lip it falls a storey
 	 * into a plunge pool. On a lower table it crosses that table the same way,
 	 * from the pool, and falls again; it steps down storey by storey until it
@@ -5324,7 +5427,11 @@ public final class Worlds {
 				}
 				int marks = steps == 0 ? World.FLOW_SPRING : 0;
 				steps++;
-				int next = toward[i], d = lipDir[i];
+				// An edge within reach is gone over by the shortest way; else the
+				// table's own way to its lip.
+				int[] near = nearestLip(w, cols, x, y, z, pool);
+				int next = near != null ? near[0] : toward[i];
+				int d = near != null ? near[1] : lipDir[i];
 				if (next < 0) {
 					if (d < 0) {
 						return; // a pool with no way off its table: a tarn

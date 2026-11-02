@@ -12780,7 +12780,12 @@ public class SimTests {
 	/**
 	 * A river on a table steps down to the plain: it crosses each table it
 	 * falls onto and goes over again, rather than ending in a pool on the first
-	 * table it lands on. Single-threaded, over
+	 * table it lands on. And it never runs along an edge it could go over --
+	 * near one it takes the shortest way over ({@code Worlds.edgeBeside}, the
+	 * rule the carver goes over by): no tile of a table brook still running on
+	 * has an edge beside it a fall onto ground could be taken from. (Onto
+	 * still water is left out: water at a cliff's foot can still after the
+	 * river passed, and the check reads the finished world.) Single-threaded, over
 	 * the scenario seeds at the demo's size and the small world's.
 	 */
 	static class ATableRiverStepsDownToThePlain extends Scenario {
@@ -12794,6 +12799,17 @@ public class SimTests {
 					String at = "seed " + seed + (size == 0 ? "" : " (small)");
 					int s = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
 					for (int z = s + 1; z < w.getLevels(); z++) {
+						for (int y = 1; y < rows - 1; y++) {
+							for (int x = 1; x < cols - 1; x++) {
+								int f = w.getFlow(x, y, z);
+								if (World.flowSpeed(f) == World.FLOW_STILL || World.flowFalls(f) || World.flowPlunge(f)) {
+									continue;
+								}
+								assertTrue(at + ": the table brook at " + x + "," + y + "," + z
+										+ " runs on past an edge it could go over",
+										!net.hedinger.prototype.sim.Worlds.edgeBeside(w, x, y, z, false));
+							}
+						}
 						// Every fall onto a lower table, and whether a brook leaves its pool.
 						if (z - 1 == s) {
 							continue;
