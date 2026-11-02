@@ -1358,6 +1358,11 @@ public abstract class NPC extends Entity {
 		if (isDead() && grabbing != null) {
 			drop();
 		}
+		// Nor does anything keep hold of one: a captive that died in our grip
+		// has already let go of us (see Entity.run), so stop holding it.
+		if (grabbing != null && (grabbing.isDead() || grabbing.isRemoved())) {
+			drop();
+		}
 		if (attachCooldown > 0) {
 			attachCooldown--;
 		}

@@ -3935,6 +3935,53 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A body that dies while carried lets go, and its carrier stops holding it.
+	 *
+	 * <p>A corpse never runs the movement step that keeps a carried body at its
+	 * carrier's side, so a captive killed in a grip stayed where it fell while its
+	 * captor walked on, still holding it and bearing its weight; the viewer drew
+	 * the carry tether across the map between them. Same for a rider that died
+	 * aboard its host.
+	 */
+	static class TheDeadAreNotCarried extends Scenario {
+		@Override
+		public void run() {
+			seed(97);
+			World grab = room(12, 12);
+			TestNPC captor = TestNPC.roamer(5.5, 5.5, 0).withSize(6);
+			TestNPC captive = TestNPC.inert(5.55, 5.5, 0).withSize(4);
+			grab.spawnEntity(captor);
+			grab.spawnEntity(captive);
+			grab.think();
+			assertTrue("the captor takes hold", captor.grab(captive));
+			grab.think();
+			captive.kill();
+			tick(grab, 3);
+			assertTrue("the dead captive is not attached to anything", captive.getAttachTarget() == null);
+			assertTrue("nor held", !captive.isGrabbed());
+			assertTrue("the captor holds nothing", captor.getGrabbing() == null);
+			assertTrue("and bears no weight", captor.getCarriedLoad() == 0);
+
+			World ride = room(14, 12);
+			int[][] cling = { { Brain.SENSE, 0, AgentIO.S_BIAS, 0 },
+					{ Brain.WRITE, AgentIO.A_ATTACH, 0, 0 } };
+			Genome riderG = Genome.phenotype(8, 0.0, 5, 6, Math.PI * 2, 100000);
+			riderG.metabolism = 0.02;
+			riderG.brain = new Brain(deepCopy(cling));
+			TestNPC rider = TestNPC.brainedBreeder(4.05, 6.0, 0, riderG).withGlycogen(6.0);
+			TestNPC host = TestNPC.roamer(4.0, 6.0, 0).withSize(18).withSpeed(0.0);
+			ride.spawnEntity(rider);
+			ride.spawnEntity(host);
+			tick(ride, 6);
+			assertTrue("the rider is aboard", rider.getAttachTarget() == host);
+			rider.kill();
+			tick(ride, 2);
+			assertTrue("a rider that died aboard is no longer aboard", rider.getAttachTarget() == null);
+			assertTrue("and its host bears no weight", host.getCarriedLoad() == 0);
+		}
+	}
+
 	/** The action code the wire carries for one entity. */
 	static int actionCodeOf(World w, int id) {
 		for (net.hedinger.prototype.sim.EntityState e
@@ -21436,6 +21483,7 @@ public class SimTests {
 				new ASoundRingsForAsLongAsItSays(),
 				new HoleFallRespectsFlying(),
 				new CarryingAndRidingWearDifferentBadges(),
+				new TheDeadAreNotCarried(),
 				new GrabCarriesSmallerEntity(),
 				new GrabRespectsSizeAndReach(),
 				new DoorBlocksAndAdmits(),
