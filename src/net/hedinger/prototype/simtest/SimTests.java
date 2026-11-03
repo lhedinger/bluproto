@@ -13037,6 +13037,58 @@ public class SimTests {
 	}
 
 	/**
+	 * The ways down into the caves follow the terrain: a station is cut where
+	 * the bedrock opens, so it stands by rock -- a cliff, scree or rocky ground
+	 * within six tiles of its ramp -- and away from lakes, with no still water
+	 * within four. Allowed a few exceptions: a region with no rock or no site
+	 * clear of water still gets its one way down. Read off the finished world,
+	 * where the apron is paved stone, so stone does not count as rock here.
+	 * When a station went wherever a grid point fell, 63% of them stood by rock
+	 * and 22% by still water (seeds 1, 3, 7, 25, 42).
+	 */
+	static class AStationStandsByRockAndAwayFromWater extends Scenario {
+		@Override
+		public void run() {
+			int stations = 0, byRock = 0, byWater = 0;
+			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
+				int s = w.getSurfaceZ(), cols = w.getColums(), rows = w.getRows();
+				for (int y = 0; y < rows; y++) {
+					for (int x = 0; x < cols; x++) {
+						// One per station: its ramp's first tile, a descent over a climb.
+						if (w.getTile(x, y, s).getType() != Tile.TileType.TYPE_RAMPDOWN
+								|| w.getTile(x, y, s - 1).getType() != Tile.TileType.TYPE_RAMPUP
+								|| w.getTile(x - 1, y, s).getType() == Tile.TileType.TYPE_RAMPDOWN
+								|| w.getTile(x, y - 1, s).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+							continue;
+						}
+						stations++;
+						boolean rock = false, water = false;
+						for (int dy = -6; dy <= 6; dy++) {
+							for (int dx = -6; dx <= 6; dx++) {
+								int nx = x + dx, ny = y + dy;
+								if (nx < 2 || ny < 2 || nx >= cols - 2 || ny >= rows - 2) {
+									continue; // the world's border is not rock a station is cut into
+								}
+								Tile.TileType t = w.getTile(nx, ny, s).getType();
+								rock |= t == Tile.TileType.TYPE_WALL || t == Tile.TileType.TYPE_RUBBLE
+										|| t == Tile.TileType.TYPE_ROCKY;
+								water |= Math.max(Math.abs(dx), Math.abs(dy)) <= 4 && w.getFlow(nx, ny, s) == 0
+										&& (t == Tile.TileType.TYPE_WATER || t == Tile.TileType.TYPE_SHALLOWS);
+							}
+						}
+						byRock += rock ? 1 : 0;
+						byWater += water ? 1 : 0;
+					}
+				}
+			}
+			assertGreater("the worlds have stations (" + stations + ")", stations, 0);
+			assertTrue("stations stand by rock: " + byRock + " of " + stations, byRock * 10 >= stations * 9);
+			assertTrue("and away from lakes: " + byWater + " of " + stations + " by still water", byWater * 20 < stations);
+		}
+	}
+
+	/**
 	 * The moving-water layer paints only with the water and shallows ramps, and
 	 * reads the flow's directions in the order the engine packs them.
 	 *
@@ -21495,6 +21547,7 @@ public class SimTests {
 				new EveryRiverRisesAtASpring(),
 				new ATableRiverStepsDownToThePlain(),
 				new ALakeDrawsInTheRiversNearIt(),
+				new AStationStandsByRockAndAwayFromWater(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
