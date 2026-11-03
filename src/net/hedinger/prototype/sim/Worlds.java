@@ -4755,38 +4755,90 @@ public final class Worlds {
 			}
 		}
 
-		// 2 + 3. For each region: seal the tiny nooks, and give every substantial
-		// region at least one link station (a grid spread scaled to area gives big
-		// regions several). A region that can host no station at all — too cramped,
-		// or hard against a border — is itself isolated, so it is sealed too rather
-		// than left stranded with no way in or out.
+		// 2 + 3. Where the stations go is the terrain's to say. A station is where
+		// the bedrock opens -- the climb is cut into rock -- so it stands near rock
+		// and well away from water, and as many stand as the rock offers room
+		// for. Once they were a grid laid over the map, a point every forty tiles
+		// snapped to the nearest walkable tile: a third of them rose out of open
+		// meadow with no rock for fifteen tiles, one in six stood at a lake's
+		// edge, and their aprons paved over lakes, rivers, bog and quicksand.
 		final int MIN_REGION = 12;
-		int target = Math.max(1, (int) Math.round(cols * (double) rows / 1600.0));
-		int step = Math.max(16, (int) Math.round(Math.sqrt(cols * (double) rows / target)));
-		java.util.List<int[]> sites = new java.util.ArrayList<int[]>();
-		for (java.util.List<int[]> members : regions) {
-			boolean seal = members.size() < MIN_REGION;
-			if (!seal) {
-				int before = sites.size();
-				for (int gx = step / 2; gx < cols; gx += step) {
-					for (int gy = step / 2; gy < rows; gy += step) {
-						int[] s = nearestFittingSite(members, gx, gy, cols, rows, sites);
-						if (s != null) {
-							sites.add(s);
-						}
-					}
+		int[] rockDist = distanceTo(w, cols, rows, (x, y) -> rockAround(w, cols, rows, x, y));
+		int[] lakeDist = distanceTo(w, cols, rows, (x, y) -> isWet(w, x, y, SURFACE_Z) && w.getFlow(x, y, SURFACE_Z) == 0);
+		int[] riverDist = distanceTo(w, cols, rows, (x, y) -> isWet(w, x, y, SURFACE_Z) && w.getFlow(x, y, SURFACE_Z) != 0);
+		boolean[] sealed = new boolean[regions.size()];
+		java.util.List<int[]> cands = new java.util.ArrayList<int[]>();
+		for (int id = 0; id < regions.size(); id++) {
+			java.util.List<int[]> members = regions.get(id);
+			if (members.size() < MIN_REGION) {
+				sealed[id] = true;
+				continue;
+			}
+			for (int[] p : members) {
+				int i = p[1] * cols + p[0];
+				if (rockDist[i] <= STATION_ROCK_REACH && stationClear(w, cols, rows, p[0], p[1], lakeDist, riverDist)) {
+					cands.add(new int[] { p[0], p[1], rockDist[i] });
 				}
-				if (sites.size() == before) {
-					int[] s = bestFittingSite(members, cols, rows, sites); // grid missed it
-					if (s != null) {
-						sites.add(s);
-					} else {
-						seal = true; // no station fits anywhere: this region is unlinkable
+			}
+		}
+		// Nearest the rock first; a fixed hash breaks ties, so the choice is the seed's.
+		cands.sort((p, q) -> p[2] != q[2] ? Integer.compare(p[2], q[2])
+				: Double.compare(net.hedinger.prototype.engine.GroundTextures.hash01(p[0], p[1], 67),
+						net.hedinger.prototype.engine.GroundTextures.hash01(q[0], q[1], 67)));
+		java.util.List<int[]> sites = new java.util.ArrayList<int[]>();
+		for (int[] c : cands) {
+			if (clearOfStations(c[0], c[1], sites, STATION_GAP)) {
+				sites.add(new int[] { c[0], c[1] });
+			}
+		}
+		// Every substantial region still gets a way down: where it has no rock to
+		// cut into, its station goes at its clear site nearest rock; where no site
+		// is clear of water, at its dry site farthest from any; failing that at
+		// its centre, as before; where it cannot host one at all, it is sealed
+		// rather than left stranded.
+		for (int id = 0; id < regions.size(); id++) {
+			if (sealed[id]) {
+				continue;
+			}
+			boolean has = false;
+			for (int[] st : sites) {
+				has |= label[st[0]][st[1]] == id;
+			}
+			if (has) {
+				continue;
+			}
+			int[] best = null;
+			for (int[] p : regions.get(id)) {
+				int i = p[1] * cols + p[0];
+				if (stationClear(w, cols, rows, p[0], p[1], lakeDist, riverDist)
+						&& clearOfStations(p[0], p[1], sites, 6)
+						&& (best == null || rockDist[i] < rockDist[best[1] * cols + best[0]])) {
+					best = p;
+				}
+			}
+			if (best == null) {
+				int far = -1;
+				for (int[] p : regions.get(id)) {
+					int i = p[1] * cols + p[0], wet = Math.min(lakeDist[i], riverDist[i]);
+					if (wet > far && stationFits(p[0], p[1], cols, rows) && dryApron(w, p[0], p[1])
+							&& clearOfStations(p[0], p[1], sites, 6)) {
+						far = wet;
+						best = p;
 					}
 				}
 			}
-			if (seal) {
-				for (int[] p : members) {
+			if (best == null) {
+				best = bestFittingSite(regions.get(id), cols, rows, sites);
+			}
+			if (best != null) {
+				sites.add(new int[] { best[0], best[1] });
+			} else {
+				sealed[id] = true;
+			}
+		}
+		for (int id = 0; id < regions.size(); id++) {
+			if (sealed[id]) {
+				for (int[] p : regions.get(id)) {
 					w.setTile(p[0], p[1], SURFACE_Z, Tile.TileType.TYPE_WALL);
 					w.getTile(p[0], p[1], SURFACE_Z).setFertility(0);
 				}
@@ -4796,22 +4848,29 @@ public final class Worlds {
 			sites.add(new int[] { Math.min(cols - 5, Math.max(3, cols / 2)),
 					Math.min(rows - 4, Math.max(2, rows / 2)) });
 		}
+		// The tunnels link the stations nearest first, so each runs to a
+		// neighbour and not across the map to wherever the list happened to go.
+		java.util.List<int[]> chain = new java.util.ArrayList<int[]>();
+		java.util.List<int[]> left = new java.util.ArrayList<int[]>(sites);
+		chain.add(left.remove(0));
+		while (!left.isEmpty()) {
+			int[] last = chain.get(chain.size() - 1);
+			int bi = 0;
+			for (int k = 1; k < left.size(); k++) {
+				int[] c = left.get(k), b = left.get(bi);
+				if ((c[0] - last[0]) * (c[0] - last[0]) + (c[1] - last[1]) * (c[1] - last[1])
+						< (b[0] - last[0]) * (b[0] - last[0]) + (b[1] - last[1]) * (b[1] - last[1])) {
+					bi = k;
+				}
+			}
+			chain.add(left.remove(bi));
+		}
+		sites = chain;
 
-		// 4. Carve a station at each site, then link the cave landings. Stations
-		//    take their direction in turn rather than by lot: a world with four
-		//    of them has one facing each way by construction. Left to a hash the
-		//    four are only likely, and "likely" over the handful of stations a
-		//    map holds means a world that quietly has no north ramp in it — the
-		//    freedom would be in the engine and invisible in the world, which is
-		//    the state this whole change existed to leave. The starting cardinal
-		//    is hashed from the first site so the cycle does not always open the
-		//    same way.
-		int dirOffset = sites.isEmpty() ? 0
-				: (int) (net.hedinger.prototype.engine.GroundTextures.hash01(
-						sites.get(0)[0], sites.get(0)[1], 61) * 4) & 3;
-		for (int i = 0; i < sites.size(); i++) {
-			int[] s = sites.get(i);
-			linkStation(w, s[0], s[1], (i + dirOffset) & 3);
+		// 4. Carve a station at each site, its climb facing the nearest rock --
+		//    the rock it is cut into -- then link the cave landings.
+		for (int[] st : sites) {
+			linkStation(w, st[0], st[1], stationFacing(w, cols, rows, st[0], st[1], rockDist));
 		}
 		for (int i = 1; i < sites.size(); i++) {
 			carveCaveCorridor(w, sites.get(i - 1), sites.get(i), cols, rows);
@@ -4825,41 +4884,115 @@ public final class Worlds {
 		sealUnreachable(w, cols, rows, mainSeed != null ? mainSeed : sites.get(0));
 	}
 
-	/** The station-fitting region tile nearest {@code (gx,gy)} that isn't already
-	 *  crowded by an existing site; null if the region has none near this point. */
-	private static int[] nearestFittingSite(java.util.List<int[]> members, int gx, int gy,
-			int cols, int rows, java.util.List<int[]> taken) {
-		int[] best = null;
-		double bestD = Double.MAX_VALUE;
-		for (int[] p : members) {
-			int sx = p[0], sy = p[1];
-			// The station's footprint turns with the direction this site faces,
-			// so the room it needs is asked for in its own frame rather than as
-			// a fixed east-west box.
-			if (!stationFits(sx, sy, cols, rows)) {
-				continue;
+	/** How near rock a station is cut, in tiles from its site. */
+	private static final int STATION_ROCK_REACH = 4;
+	/** How far a station stands from still water (a lake, a pond) and from a
+	 *  river, in tiles from its site: its apron reaches two. */
+	private static final int STATION_LAKE_CLEAR = 6, STATION_RIVER_CLEAR = 4;
+	/** The least room between two stations along the rock, in tiles. */
+	private static final int STATION_GAP = 28;
+
+	/** Rock a station can be cut into: a cliff or outcrop, or the scree, stone
+	 *  and rocky ground round it -- not the wall at the edge of the world. */
+	private static boolean rockAround(World w, int cols, int rows, int x, int y) {
+		if (x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2) {
+			return false;
+		}
+		switch (w.getTile(x, y, SURFACE_Z).getType()) {
+		case TYPE_WALL, TYPE_RUBBLE, TYPE_STONE, TYPE_ROCKY:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	/** Each surface tile's distance, any way round, to the nearest tile {@code is}
+	 *  holds for (a large number where there is none). */
+	private static int[] distanceTo(World w, int cols, int rows, java.util.function.BiPredicate<Integer, Integer> is) {
+		int[] d = new int[cols * rows];
+		java.util.Arrays.fill(d, Integer.MAX_VALUE / 2);
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+		for (int i = 0; i < d.length; i++) {
+			if (is.test(i % cols, i / cols)) {
+				d[i] = 0;
+				q.add(i);
 			}
-			double d = (sx - gx) * (double) (sx - gx) + (sy - gy) * (double) (sy - gy);
-			if (d >= bestD || d > (double) (cols + rows)) {
-				continue; // only snap a grid point to a site reasonably near it
+		}
+		while (!q.isEmpty()) {
+			int c = q.poll(), cx = c % cols, cy = c / cols;
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int nx = cx + dx, ny = cy + dy;
+					if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && d[ny * cols + nx] > d[c] + 1) {
+						d[ny * cols + nx] = d[c] + 1;
+						q.add(ny * cols + nx);
+					}
+				}
 			}
-			boolean crowded = false;
-			for (int[] t : taken) {
-				if (Math.abs(t[0] - sx) < 6 && Math.abs(t[1] - sy) < 6) {
-					crowded = true;
+		}
+		return d;
+	}
+
+	/** Whether a station may stand at (x, y): inside the map, clear of still
+	 *  water and rivers, and its apron on dry ground -- never a lake's water, a
+	 *  bog pool or mire, or quicksand -- whichever way it faces. */
+	private static boolean stationClear(World w, int cols, int rows, int x, int y, int[] lakeDist, int[] riverDist) {
+		if (!stationFits(x, y, cols, rows)) {
+			return false;
+		}
+		int i = y * cols + x;
+		return lakeDist[i] > STATION_LAKE_CLEAR && riverDist[i] > STATION_RIVER_CLEAR && dryApron(w, x, y);
+	}
+
+	/** Whether a station's apron at (x, y), whichever way it faces, lies on dry
+	 *  open ground: no water, no bog pool or mire, no quicksand under it, and no
+	 *  cliff. A station stands beside the rock it is cut into, never quarries
+	 *  it: the tables are raised over the rock that is left, and an apron that
+	 *  paved a notch into a mesa's foot split its first storey, leaving the ramp
+	 *  to the storeys above on a pocket nothing could reach. */
+	private static boolean dryApron(World w, int x, int y) {
+		for (int dy = -2; dy <= 2; dy++) {
+			for (int dx = -2; dx <= 2; dx++) {
+				switch (w.getTile(x + dx, y + dy, SURFACE_Z).getType()) {
+				case TYPE_WATER, TYPE_SHALLOWS, TYPE_POOL, TYPE_MIRE, TYPE_QUICKSAND, TYPE_WALL:
+					return false;
+				default:
 					break;
 				}
 			}
-			if (!crowded) {
-				bestD = d;
-				best = new int[] { sx, sy };
+		}
+		return true;
+	}
+
+	private static boolean clearOfStations(int x, int y, java.util.List<int[]> sites, int gap) {
+		for (int[] st : sites) {
+			if ((st[0] - x) * (st[0] - x) + (st[1] - y) * (st[1] - y) < gap * gap) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** The way a station at (x, y) faces: its climb rises toward the nearest
+	 *  rock, so the head of the cut is in the rock it is cut into. */
+	private static int stationFacing(World w, int cols, int rows, int x, int y, int[] rockDist) {
+		int best = 0, bestD = Integer.MAX_VALUE;
+		for (int u = 0; u < 4; u++) {
+			int hx = x + 2 * Tile.dirDx(u), hy = y + 2 * Tile.dirDy(u);
+			if (hx < 0 || hy < 0 || hx >= cols || hy >= rows) {
+				continue;
+			}
+			if (rockDist[hy * cols + hx] < bestD) {
+				bestD = rockDist[hy * cols + hx];
+				best = u;
 			}
 		}
 		return best;
 	}
 
 	/** Any station-fitting tile in the region nearest its centroid (no distance
-	 *  cap), avoiding crowding — the fallback when the grid snapped nothing. Null
+	 *  cap), avoiding crowding — the fallback when a region has no site clear of
+	 *  water anywhere. Null
 	 *  only when the region can host no station at all. */
 	private static int[] bestFittingSite(java.util.List<int[]> members, int cols, int rows,
 			java.util.List<int[]> taken) {
@@ -4874,7 +5007,7 @@ public final class Worlds {
 		double bestD = Double.MAX_VALUE;
 		for (int[] p : members) {
 			int sx = p[0], sy = p[1];
-			if (sx < 3 || sx > cols - 5 || sy < 2 || sy > rows - 4) {
+			if (!stationFits(sx, sy, cols, rows)) {
 				continue;
 			}
 			boolean crowded = false;
@@ -6069,14 +6202,16 @@ public final class Worlds {
 	}
 
 	/**
-	 * Whether a station fits inside the map at {@code (sx, sy)}. A station's
-	 * footprint reaches 3 tiles along its slope and 2 across, so whichever way
-	 * it is turned it stays inside a 7x7 box centred on the site — ask for that
-	 * box and the site is safe to build in any of the four directions, which is
-	 * what lets the direction be chosen freely afterwards.
+	 * Whether a station fits inside the map at {@code (sx, sy)}. Its apron
+	 * reaches two tiles every way, whichever way it is turned, and must stay
+	 * off the world's two-tile border: paved, the border under the sky was
+	 * stone with the sky's rock standing over it, and a fall from a table
+	 * could land there. Once stations went where the grid put them this was
+	 * three tiles in, and none came near enough the edge to show it; following
+	 * the rock, they go to the escarpment, which runs along the edge.
 	 */
 	private static boolean stationFits(int sx, int sy, int cols, int rows) {
-		return sx >= 3 && sy >= 3 && sx < cols - 3 && sy < rows - 3;
+		return sx >= 4 && sy >= 4 && sx < cols - 4 && sy < rows - 4;
 	}
 
 	/**
