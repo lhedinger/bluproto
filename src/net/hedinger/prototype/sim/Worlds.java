@@ -4851,8 +4851,13 @@ public final class Worlds {
 			}
 			for (int[] p : members) {
 				int i = p[1] * cols + p[0];
-				if (rockDist[i] <= STATION_ROCK_REACH && stationClear(w, cols, rows, p[0], p[1], lakeDist, riverDist)) {
-					cands.add(new int[] { p[0], p[1], rockDist[i] });
+				int cliff = cliffFacing(w, cols, rows, p[0], p[1], lakeDist, riverDist);
+				if (cliff >= 0) {
+					// At a cliff's foot, the ramp leading in under it: these first,
+					// and of them those under a south face, the face that is drawn.
+					cands.add(new int[] { p[0], p[1], cliff == Tile.DIR_S ? -2 : -1, cliff });
+				} else if (rockDist[i] <= STATION_ROCK_REACH && stationClear(w, cols, rows, p[0], p[1], lakeDist, riverDist)) {
+					cands.add(new int[] { p[0], p[1], rockDist[i], stationFacing(w, cols, rows, p[0], p[1], rockDist) });
 				}
 			}
 		}
@@ -4863,7 +4868,7 @@ public final class Worlds {
 		java.util.List<int[]> sites = new java.util.ArrayList<int[]>();
 		for (int[] c : cands) {
 			if (clearOfStations(c[0], c[1], sites, STATION_GAP)) {
-				sites.add(new int[] { c[0], c[1] });
+				sites.add(new int[] { c[0], c[1], c[3] });
 			}
 		}
 		// Every substantial region still gets a way down: where it has no rock to
@@ -4906,7 +4911,7 @@ public final class Worlds {
 				best = bestFittingSite(regions.get(id), cols, rows, sites);
 			}
 			if (best != null) {
-				sites.add(new int[] { best[0], best[1] });
+				sites.add(new int[] { best[0], best[1], stationFacing(w, cols, rows, best[0], best[1], rockDist) });
 			} else {
 				sealed[id] = true;
 			}
@@ -4920,8 +4925,8 @@ public final class Worlds {
 			}
 		}
 		if (sites.isEmpty()) {
-			sites.add(new int[] { Math.min(cols - 5, Math.max(3, cols / 2)),
-					Math.min(rows - 4, Math.max(2, rows / 2)) });
+			int fx = Math.min(cols - 5, Math.max(4, cols / 2)), fy = Math.min(rows - 5, Math.max(4, rows / 2));
+			sites.add(new int[] { fx, fy, stationFacing(w, cols, rows, fx, fy, rockDist) });
 		}
 		// The tunnels link the stations nearest first, so each runs to a
 		// neighbour and not across the map to wherever the list happened to go.
@@ -4942,10 +4947,11 @@ public final class Worlds {
 		}
 		sites = chain;
 
-		// 4. Carve a station at each site, its climb facing the nearest rock --
-		//    the rock it is cut into -- then link the cave landings.
+		// 4. Carve a station at each site, its ramp leading down toward the rock
+		//    -- in under the cliff, where it stands at one -- then link the cave
+		//    landings.
 		for (int[] st : sites) {
-			linkStation(w, st[0], st[1], stationFacing(w, cols, rows, st[0], st[1], rockDist));
+			linkStation(w, st[0], st[1], st[2]);
 		}
 		for (int i = 1; i < sites.size(); i++) {
 			carveCaveCorridor(w, sites.get(i - 1), sites.get(i), cols, rows);
@@ -5048,21 +5054,71 @@ public final class Worlds {
 		return true;
 	}
 
-	/** The way a station at (x, y) faces: its climb rises toward the nearest
-	 *  rock, so the head of the cut is in the rock it is cut into. */
+	/** The way a station at (x, y) faces where no cliff stands at its foot: its
+	 *  ramp leads down toward the nearest rock, as one at a cliff's foot leads
+	 *  in under the cliff -- so the climb from the cave rises away from it. */
 	private static int stationFacing(World w, int cols, int rows, int x, int y, int[] rockDist) {
 		int best = 0, bestD = Integer.MAX_VALUE;
 		for (int u = 0; u < 4; u++) {
-			int hx = x + 2 * Tile.dirDx(u), hy = y + 2 * Tile.dirDy(u);
-			if (hx < 0 || hy < 0 || hx >= cols || hy >= rows) {
+			int bx = x - Tile.dirDx(u), by = y - Tile.dirDy(u); // just past the ramp's foot
+			if (bx < 0 || by < 0 || bx >= cols || by >= rows) {
 				continue;
 			}
-			if (rockDist[hy * cols + hx] < bestD) {
-				bestD = rockDist[hy * cols + hx];
+			if (rockDist[by * cols + bx] < bestD) {
+				bestD = rockDist[by * cols + bx];
 				best = u;
 			}
 		}
 		return best;
+	}
+
+	/**
+	 * The way a station at (x, y) can face to stand at a cliff's foot, its ramp
+	 * leading down in under the cliff, or -1 if it cannot: the cliff -- rock,
+	 * not the world's border -- right behind the ramp's foot across both lanes,
+	 * and before it, the foot, the slope, the head and the apron beside them,
+	 * dry open ground, with no still water or river near. A south face first,
+	 * the face the cliff is drawn with (§4). The rock behind the foot stays
+	 * rock; only the cave under it is opened, which is where the ramp goes.
+	 */
+	private static int cliffFacing(World w, int cols, int rows, int x, int y, int[] lakeDist, int[] riverDist) {
+		int i = y * cols + x;
+		if (!stationFits(x, y, cols, rows) || lakeDist[i] <= STATION_LAKE_CLEAR || riverDist[i] <= STATION_RIVER_CLEAR) {
+			return -1;
+		}
+		for (int u : new int[] { Tile.DIR_S, Tile.DIR_E, Tile.DIR_W, Tile.DIR_N }) {
+			int ax = Tile.dirDx(u), ay = Tile.dirDy(u), cx = Tile.dirDx((u + 1) & 3), cy = Tile.dirDy((u + 1) & 3);
+			boolean fits = true;
+			for (int t = -2; t <= 2 && fits; t++) {
+				for (int r = -1; r <= 2 && fits; r++) {
+					int tx = x + t * ax + r * cx, ty = y + t * ay + r * cy;
+					Tile.TileType ty0 = w.getTile(tx, ty, SURFACE_Z).getType();
+					boolean wall = ty0 == Tile.TileType.TYPE_WALL && rockAround(w, cols, rows, tx, ty);
+					if (t == -1 && (r == 0 || r == 1)) {
+						fits = wall; // the cliff, behind the foot
+					} else if (t < 0) {
+						fits = wall || openDry(ty0); // under or along the cliff: rock, or dry ground
+					} else {
+						fits = openDry(ty0); // where the station stands
+					}
+				}
+			}
+			if (fits) {
+				return u;
+			}
+		}
+		return -1;
+	}
+
+	/** Dry open ground an apron may be paved on: not water, bog pool, mire,
+	 *  quicksand or rock. */
+	private static boolean openDry(Tile.TileType t) {
+		switch (t) {
+		case TYPE_WATER, TYPE_SHALLOWS, TYPE_POOL, TYPE_MIRE, TYPE_QUICKSAND, TYPE_WALL:
+			return false;
+		default:
+			return true;
+		}
 	}
 
 	/** Any station-fitting tile in the region nearest its centroid (no distance
@@ -6337,7 +6393,11 @@ public final class Worlds {
 		for (int t = -2; t <= 2; t++) {
 			for (int r = -1; r <= 2; r++) {
 				int x = sx + t * ax + r * cx, y = sy + t * ay + r * cy;
-				carveTile(w, x, y, SURFACE_Z);
+				// Behind the foot the cliff a ramp leads under stays a cliff: only
+				// the cave beneath it opens.
+				if (t >= 0 || w.getTile(x, y, SURFACE_Z).getType() != Tile.TileType.TYPE_WALL) {
+					carveTile(w, x, y, SURFACE_Z);
+				}
 				carveTile(w, x, y, CAVE_Z);
 			}
 		}
