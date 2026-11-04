@@ -11497,45 +11497,38 @@ public class SimTests {
 			assertTrue("and not much more than that: whole groups only ("
 					+ newcomers.size() + ")", newcomers.size() < 2 * floor + group);
 			assertEquals("in whole groups", 0, newcomers.size() % group);
-			java.util.List<java.util.List<TestNPC>> groups = new java.util.ArrayList<>();
-			// Sorted into the group it is CLOSEST to, not the last one it happens
-			// to be within a kin step of. A reseed draws its founders from the
-			// standing population, so two of the groups can be near neighbours in
-			// marker space, and a newcomer then matches both: measured on seed 11,
-			// five of eighty newcomers matched more than one group. Taking the
-			// last match made the sorting depend on the order the groups were
-			// discovered in, which is the RNG stream -- so this assertion passed or
-			// failed on changes nowhere near it, and reported a reseed that had
-			// emitted sixteen clean groups of five as four and six. Nearest is
-			// deterministic and order-free, and it is what "which group is this
-			// one's" actually means.
-			//
-			// And kin that LANDED TOGETHER: a kin group is five bodies off one
-			// recipe within R of one anchor, so a newcomer belongs to the group it
-			// is both alike and beside. Markers alone were not enough: two recipes
-			// can draw within a kin step of each other, and nearest-in-marker-space
-			// then filed a body with the wrong group's siblings -- measured on seed
-			// 11 after a draw was appended to the founder recipe, a group of seven
-			// and a group of three where the reseed had landed sixteen of five.
-			// Members land within R on each axis of a shared anchor, so within
-			// 2R*sqrt(2) of each other in the plane.
-			double r2 = 2 * net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
+			// Which group a newcomer is in, read off the record rather than guessed.
+			// The warden lands a group's five one after another and writes each
+			// founder's birth down as it lands -- parentless, in order -- so the
+			// reseed's groups are the runs of five in that record. Sorting them by
+			// likeness and nearness instead (nearest group in marker space, then
+			// within reach of it too) passed or failed on changes nowhere near the
+			// seeding: two groups drawn alike and landed close were filed as a four
+			// and a six on seed 11 three times over, the last when the stations
+			// moved.
+			java.util.Map<Integer, TestNPC> byId = new java.util.HashMap<>();
 			for (TestNPC n : newcomers) {
-				java.util.List<TestNPC> mine = null;
-				double best = Double.MAX_VALUE;
-				for (java.util.List<TestNPC> g : groups) {
-					double d = separation(g.get(0), n);
-					if (sameSpecies(g.get(0), n) && d < best
-							&& n.distance(g.get(0).getX(), g.get(0).getY(), g.get(0).getZ()) <= r2) {
-						best = d;
-						mine = g;
-					}
+				byId.put(n.getID(), n);
+			}
+			java.util.List<TestNPC> landed = new java.util.ArrayList<>();
+			for (World.Birth b : w.childrenOf(-1)) {
+				TestNPC n = byId.get(b.child());
+				if (n != null && b.parentB() == -1) {
+					landed.add(n);
 				}
-				if (mine == null) {
-					mine = new java.util.ArrayList<>();
-					groups.add(mine);
+			}
+			assertEquals("every newcomer's landing is on record", newcomers.size(), landed.size());
+			java.util.List<java.util.List<TestNPC>> groups = new java.util.ArrayList<>();
+			for (int k = 0; k < landed.size(); k += group) {
+				groups.add(new java.util.ArrayList<>(landed.subList(k, Math.min(landed.size(), k + group))));
+			}
+			// Members land within R on each axis of a shared anchor, so within
+			// 2R*sqrt(2) of each other in the plane; and they are one recipe's kin.
+			double r2 = 2 * net.hedinger.prototype.sim.Worlds.SEED_CLUSTER_RADIUS * Math.sqrt(2) + 0.01;
+			for (java.util.List<TestNPC> g : groups) {
+				for (TestNPC n : g) {
+					assertTrue("a group is one recipe's kin", sameSpecies(g.get(0), n));
 				}
-				mine.add(n);
 			}
 			assertEquals("as whole kin groups", newcomers.size() / group, groups.size());
 			for (java.util.List<TestNPC> g : groups) {
@@ -18279,32 +18272,38 @@ public class SimTests {
 	 * in, and a minority of them produced half the births.
 	 *
 	 * <p>Pinned on the demo world's founders: both strategies are present in the
-	 * pack and in the herd, and in more than token numbers.
+	 * pack and in the herd, and in more than token numbers -- over five worlds.
+	 * A pack is eight kin groups of five, each group one draw, so a single
+	 * world's pack all on one side is a one-in-128 chance: seed 42's came up
+	 * forty budders once the stations moved and the stream with them. The
+	 * claim is about the draw, not about one world.
 	 */
 	static class TheFoundingPackBudsAndCourtsAlike extends Scenario {
 		@Override
 		public void run() {
-			World w = net.hedinger.prototype.sim.Worlds.demo(42);
 			int[] pack = new int[2], herd = new int[2];
-			for (Entity e : w.getEntities()) {
-				if (!(e instanceof TestNPC t) || t.getGenome() == null || t.generation() != 0) {
-					continue;
-				}
-				int[] tally = switch (t.ecoRole()) {
-				case "predator" -> pack;
-				case "herbivore" -> herd;
-				default -> null;
-				};
-				if (tally != null) {
-					tally[t.getGenome().isSexual() ? 1 : 0]++;
+			for (long seed : new long[] { 42, 1, 3, 7, 25 }) {
+				World w = net.hedinger.prototype.sim.Worlds.demo(seed);
+				for (Entity e : w.getEntities()) {
+					if (!(e instanceof TestNPC t) || t.getGenome() == null || t.generation() != 0) {
+						continue;
+					}
+					int[] tally = switch (t.ecoRole()) {
+					case "predator" -> pack;
+					case "herbivore" -> herd;
+					default -> null;
+					};
+					if (tally != null) {
+						tally[t.getGenome().isSexual() ? 1 : 0]++;
+					}
 				}
 			}
-			assertTrue("the founding pack has budders in it: " + pack[0] + " of " + (pack[0] + pack[1]),
-					pack[0] >= 3);
-			assertTrue("and courters: " + pack[1] + " of " + (pack[0] + pack[1]), pack[1] >= 3);
-			assertTrue("the founding herd has budders in it: " + herd[0] + " of " + (herd[0] + herd[1]),
-					herd[0] >= 10);
-			assertTrue("and courters: " + herd[1] + " of " + (herd[0] + herd[1]), herd[1] >= 10);
+			assertTrue("the founding packs have budders in them: " + pack[0] + " of " + (pack[0] + pack[1]),
+					pack[0] >= 15);
+			assertTrue("and courters: " + pack[1] + " of " + (pack[0] + pack[1]), pack[1] >= 15);
+			assertTrue("the founding herds have budders in them: " + herd[0] + " of " + (herd[0] + herd[1]),
+					herd[0] >= 50);
+			assertTrue("and courters: " + herd[1] + " of " + (herd[0] + herd[1]), herd[1] >= 50);
 		}
 	}
 
