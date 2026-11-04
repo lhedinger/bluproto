@@ -4122,9 +4122,14 @@ public final class Worlds {
 					// Nor where a river rises: a spring stands clear of every drop.
 					// Checked last, so a span that keeps clear is the one it always was.
 					fits &= causeway || !springNear(w, x, y, SURFACE_Z, SPRING_CLEARANCE);
+					// And over natural cave only: rock the cut goes on down through,
+					// or floor and water it lands on. Over the buried installation's
+					// concrete, a river's fall poured onto a roof it could neither
+					// go through nor land on.
+					fits &= causeway || naturalCave(w.getTile(x, y, CAVE_Z).getType());
 				}
 			}
-			if (!fits || swallow && landings == 0) {
+			if (!fits || swallow && (landings == 0 || !aRiverPoursIn(w, cols, rows, band, horizontal, s0, len, c1, c2))) {
 				continue;
 			}
 			for (int t = 0; t < len; t++) {
@@ -4149,6 +4154,76 @@ public final class Worlds {
 				pourIntoGorge(w, cols, rows, horizontal, len);
 			}
 			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a river would pour into the gorge laid as {@code band}: a moving
+	 * tile outside the cut flowing into one of its holes, with cave floor under
+	 * that hole to land on, and the river it belongs to still running back to
+	 * its spring. Crossing a river was not enough: aimed near a river's head,
+	 * the cut took the whole reach above it and nothing poured in; aimed across
+	 * a short reach, what was left above it was a remnant the rising pass then
+	 * stilled -- either way a gorge sited to swallow a river had no fall.
+	 */
+	private static boolean aRiverPoursIn(World w, int cols, int rows, int[][] band, boolean horizontal,
+			int s0, int len, int c1, int c2) {
+		java.util.HashSet<Integer> cut = new java.util.HashSet<Integer>();
+		for (int t = 0; t < len; t++) {
+			if (t == c1 || t == c1 + 1 || t == c2 || t == c2 + 1) {
+				continue;
+			}
+			for (int d = 0; d < band[t][1]; d++) {
+				int x = horizontal ? s0 + t : band[t][0] + d, y = horizontal ? band[t][0] + d : s0 + t;
+				cut.add(y * cols + x);
+			}
+		}
+		for (int c : cut) {
+			int hx = c % cols, hy = c / cols;
+			if (!w.getTile(hx, hy, CAVE_Z).isWalkable()) {
+				continue; // nowhere for a fall here to land
+			}
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int lx = hx + dx, ly = hy + dy, f = w.getFlow(lx, ly, SURFACE_Z);
+					if (cut.contains(ly * cols + lx) || World.flowSpeed(f) == World.FLOW_STILL
+							|| lx + World.FLOW_DX[World.flowDirOf(f)] != hx || ly + World.FLOW_DY[World.flowDirOf(f)] != hy) {
+						continue;
+					}
+					// Up its own river, outside the cut, to a spring.
+					java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<Integer>();
+					java.util.HashSet<Integer> seen = new java.util.HashSet<Integer>(cut);
+					q.add(ly * cols + lx);
+					seen.add(ly * cols + lx);
+					while (!q.isEmpty()) {
+						int r = q.poll(), rx = r % cols, ry = r / cols;
+						if (World.flowSpring(w.getFlow(rx, ry, SURFACE_Z))) {
+							return true;
+						}
+						// Upstream only: water flowing into this tile, or the river's
+						// other lane beside it running the same way.
+						int rd = World.flowDirOf(w.getFlow(rx, ry, SURFACE_Z));
+						for (int ey = -1; ey <= 1; ey++) {
+							for (int ex = -1; ex <= 1; ex++) {
+								int nx = rx + ex, ny = ry + ey, n = ny * cols + nx, nf = w.getFlow(nx, ny, SURFACE_Z);
+								if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || World.flowSpeed(nf) == World.FLOW_STILL
+										&& !World.flowSpring(nf) || seen.contains(n)) {
+									continue;
+								}
+								int nd = World.flowDirOf(nf);
+								boolean into = nx + World.FLOW_DX[nd] == rx && ny + World.FLOW_DY[nd] == ry;
+								boolean beside = nd == rd && (ex == 0) != (ey == 0)
+										&& (ex * World.FLOW_DX[rd] + ey * World.FLOW_DY[rd]) == 0;
+								if (into || beside) {
+									seen.add(n);
+									q.add(n);
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 		return false;
 	}
@@ -5442,6 +5517,17 @@ public final class Worlds {
 	 *  a hole, a pit, a shaft, the open edge of a table -- at the least. */
 	@net.hedinger.prototype.engine.Unit("tiles")
 	public static final int SPRING_CLEARANCE = 2;
+
+	/** Cave the gorge may open onto: rock it cuts on down through, or the
+	 *  cave's own floor, water, beds and pits it comes to rest on. */
+	private static boolean naturalCave(Tile.TileType t) {
+		switch (t) {
+		case TYPE_WALL, TYPE_STONE, TYPE_WATER, TYPE_FUNGUS, TYPE_CRYSTAL_BED, TYPE_CRYSTAL_SPARSE, TYPE_VENT, TYPE_HOLE:
+			return true;
+		default:
+			return false;
+		}
+	}
 
 	/** Whether a spring lies within {@code r} tiles of (x, y, z), any way round. */
 	private static boolean springNear(World w, int x, int y, int z, int r) {
