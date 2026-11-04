@@ -366,8 +366,10 @@ public final class Mechanics {
 						+ round(NPC.PLANT_DENSITY * NPC.PLANT_ASSIMILATION, 3) + " of it crosses."),
 				row("Absorbed", pct(NPC.PLANT_ASSIMILATION) + " of plant, "
 						+ pct(NPC.FLESH_ASSIMILATION) + " of flesh", "of what is swallowed",
-						"The rest is egesta, and fertilises the tile it was eaten on at "
-						+ num(NPC.EGESTA_FERTILITY) + " per unit."),
+						NPC.EGESTA_FERTILITY > 0
+								? "The rest is egesta, and fertilises the tile it was eaten on at "
+										+ num(NPC.EGESTA_FERTILITY) + " per unit."
+								: "The rest is egesta. Dung is off for now: it fertilises nothing."),
 				row("A whole carcass", num(TestNPC.LEAN_DENSITY) + " × the dead body's mass",
 						"energy, if every mouth got its share", "Reference-mass body: " + round(refBody, 2)
 						+ ", of which " + round(refBody * NPC.FLESH_ASSIMILATION, 2) + " is absorbed."

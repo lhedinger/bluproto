@@ -339,9 +339,10 @@ flesh crosses the gut wall and `PLANT_ASSIMILATION` 0.20 of plant matter
 does, so the same gutful is worth four times as much to a carnivore as to a
 herbivore — the honest reason a grazer eats all day and a hunter eats once,
 with no clade rule saying so. What does not cross is egesta: it drops where
-the animal fed and fertilises that tile at `EGESTA_FERTILITY`, the same worth
-per unit of matter a rotting body returns, so nutrients cycle while animals
-are alive and not only when they die. Conservation stops being an equality
+the animal fed, and would fertilise that tile at `EGESTA_FERTILITY` -- but
+dung is off (the rate is 0) until it is re-evaluated, because nothing draws
+fertility back out and every meal ratcheted its ground up to full. Only a
+rotting body returns matter to the ground for now. Conservation stops being an equality
 and becomes an inequality at both ends: building a unit of tissue costs
 `SYNTHESIS_COST` (1.35) times `LEAN_DENSITY`, because assembling it is work
 and the overhead leaves as heat, and eating it back returns 0.85 of
