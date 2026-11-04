@@ -438,11 +438,12 @@ knobs, and in life fat carries about six times what wet muscle does.
   structure nothing here has an enzyme for. **That difference, and no rule
   about clades, is why a grazer eats all day and a hunter eats once** — the
   same gutful is worth four times as much to the one as to the other.
-- **What is not absorbed is not lost.** Egesta drop where the animal fed and
-  fertilise that tile at `EGESTA_FERTILITY` per unit of energy, which is the
-  same worth per unit of matter a rotting body returns. So nutrients cycle
-  continuously rather than only at death, and a herd enriches the range it
-  works instead of stripping it.
+- **Dung is off for now.** Egesta drop where the animal fed and fertilise
+  that tile at `EGESTA_FERTILITY` per unit of energy, but the rate is 0 until
+  the mechanism is re-evaluated. Nothing draws fertility back out of a tile,
+  so at its old rate (0.0037, the same worth per unit of matter a rotting body
+  returns) every meal ratcheted its ground up to the 1.0 cap and pasture
+  could never run out. Rotting bodies still fertilise the ground.
 - **The trophic loss is now a mechanism, not a constant.** Building a unit of
   lean tissue costs `SYNTHESIS_COST · LEAN_DENSITY` out of glycogen —
   assembling tissue is work, and the overhead leaves as heat — while eating

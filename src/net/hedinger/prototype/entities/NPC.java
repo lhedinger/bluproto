@@ -240,17 +240,25 @@ public abstract class NPC extends Entity {
 	public static double FLESH_ASSIMILATION = 0.85;
 	/**
 	 * Fertility the ground gets back per unit of food energy that passed
-	 * through an animal without being absorbed.
+	 * through an animal without being absorbed -- dung.
 	 *
-	 * <p>Matter is worth the same to the ground however it arrives there: a
-	 * body that rots returns {@code ROT_FERTILITY} (0.10) per unit of mass, and
-	 * a unit of mass is {@link #LEAN_DENSITY} (27) of energy, so a unit of
-	 * energy is 0.0037 either way. Written out rather than derived because
-	 * either constant can be tuned at runtime and the ground's price should not
-	 * move when they are.
+	 * <p><b>Off (0) for now, pending a re-evaluation.</b> Nothing draws
+	 * fertility back out of a tile, so dung was a one-way ratchet: every
+	 * mouthful raised the ground it was eaten on, a grazed tile climbed to the
+	 * 1.0 cap and stayed there, and pasture could never run out. On the live
+	 * seed it turned the +3 sky level's rocky ground from a mean fertility of
+	 * 0.06 to 0.74, and a predator-free herd there grew to 794 on it. The
+	 * egesta path ({@code ingest} into {@code enrich}) is kept whole, and the
+	 * scenario that pins it runs it at the old rate.
+	 *
+	 * <p>The old rate, 0.0037, priced matter the same however it reached the
+	 * ground: a body that rots returns {@code ROT_FERTILITY} (0.10) per unit of
+	 * mass, and a unit of mass is {@link #LEAN_DENSITY} (27) of energy, so a
+	 * unit of energy is 0.0037 either way. Still tunable at runtime from the
+	 * constants panel.
 	 */
 	@Unit("fertility per energy")
-	public static double EGESTA_FERTILITY = 0.0037;
+	public static double EGESTA_FERTILITY = 0.0;
 	/**
 	 * What building tissue costs over and above what the tissue will hold.
 	 *

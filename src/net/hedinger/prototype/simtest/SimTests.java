@@ -862,8 +862,16 @@ public class SimTests {
 	 * tile gets and the energy a gut gets are two halves of the same mouthful,
 	 * so their quotient is fixed by the constants alone and does not depend on
 	 * how much the animal managed to eat.
+	 *
+	 * <p>Dung is switched off in the shipped world (EGESTA_FERTILITY 0,
+	 * pending a re-evaluation), so the first check is that a meal there leaves
+	 * the ground as it found it; the mechanism itself is then run at the rate
+	 * it shipped with, {@link #DUNG_RATE}, so it stays pinned while it is off.
 	 */
 	static class WhatIsNotAbsorbedFeedsTheGround extends Scenario {
+		/** The rate dung ran at before it was switched off (see NPC.EGESTA_FERTILITY). */
+		static final double DUNG_RATE = 0.0037;
+
 		private static Genome body() {
 			Genome g = new Genome();
 			g.size = 8;
@@ -879,6 +887,32 @@ public class SimTests {
 		@Override
 		public void run() {
 			seed(61);
+			// --- dung off, as shipped: a grazer eats and the ground is unmoved.
+			World off = room(6, 6);
+			for (int x = 1; x < 5; x++) {
+				for (int y = 1; y < 5; y++) {
+					off.getTile(x, y, 0).setFertility(0.5);
+				}
+			}
+			TestNPC still = TestNPC.grazer(3.5, 3.5, 0, body()).withMetabolic().grown()
+					.withSpeed(0).withHunger(1.0).withHydration(1.0).withReproCooldown(100_000_000);
+			off.spawnEntity(still);
+			tick(off, 600);
+			assertGreater("with dung off a grazer still eats", still.totalSwallowed(), 0.1);
+			assertNear("and leaves the ground's fertility as it found it", 0.5,
+					off.getTile(3, 3, 0).getFertility(), 1e-12);
+
+			double shipped = NPC.EGESTA_FERTILITY;
+			NPC.EGESTA_FERTILITY = DUNG_RATE;
+			try {
+				dungOn();
+			} finally {
+				NPC.EGESTA_FERTILITY = shipped;
+			}
+		}
+
+		/** The mechanism itself, at the rate it ran at. */
+		private void dungOn() {
 			// --- plant, cropped off the tile the animal is standing on. Parked
 			// (speed 0) so the ground it feeds is the ground it eats.
 			World w = room(6, 6);
