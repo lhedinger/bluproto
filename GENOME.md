@@ -503,9 +503,10 @@ knobs, and in life fat carries about six times what wet muscle does.
   poorer without starving the herd. Measured over 60k ticks at the current crop
   rate: below 0.75 *absorbed* per unit cropped predators fall to their floor on
   empty stores, and at a third of that the herd stops breeding and only the
-  steward keeps it alive. The shipped `PLANT_DENSITY` of 1.875 is that figure
-  grossed up through `PLANT_ASSIMILATION`, and it is the poorest grass the food
-  chain will carry.
+  steward keeps it alive. Both figures have moved since -- `PLANT_DENSITY` 10
+  at a crop rate of 0.003 today, about two ninths of the income before that
+  cut -- but the coupling has not: judge any change to either on the demo
+  world's guilds, not on one constant alone.
 - **A predator will not kill on full glycogen.** The opportunistic bite is gated on
   having room for the meal; without that, a full hunter killed prey whose energy
   the glycogen cap then discarded.

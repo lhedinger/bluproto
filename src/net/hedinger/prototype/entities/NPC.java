@@ -3194,9 +3194,15 @@ public abstract class NPC extends Entity {
 	 * food-backed this figure prices grass for real, and the ecology scenarios —
 	 * herd growth, hunter survival, the seeded demo world — are the gate that
 	 * re-verifies 0.75 still carries the food chain.
+	 *
+	 * <p>Cut from 15 to 10 together with the crop rate's cut to a third: the two
+	 * multiply, so a grazer's best income per tick is about two ninths of what it
+	 * was. Swept in CreaturesGrowToAdultSize's fixture at a crop rate of 0.00225,
+	 * growth held down to 8 and a childhood ran out of its bound at 7.5 --
+	 * digestion, not grazing, paces a childhood above that.
 	 */
 	@Unit("energy per vegetation")
-	public static double PLANT_DENSITY = 15.0;
+	public static double PLANT_DENSITY = 10.0;
 
 	/**
 	 * Grazes the tile underfoot: consumes up to {@code demand} vegetation from
