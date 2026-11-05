@@ -6392,13 +6392,37 @@ public final class Worlds {
 		// slope points.
 		for (int t = -2; t <= 2; t++) {
 			for (int r = -1; r <= 2; r++) {
+				carveTile(w, sx + t * ax + r * cx, sy + t * ay + r * cy, CAVE_Z);
+			}
+		}
+		// On the ground, one of a handful of drawn layouts, picked and mirrored by
+		// the site: stone round the opening ragged with scree, and pits where the
+		// ground has given way round the ramp's foot, each over the cave floor
+		// just opened. Never on the way in -- every pit is at or behind the foot
+		// -- and never on rock or water: the cliff a ramp leads under stays a
+		// cliff. A paved box with two pits in it was a hatch, not a place where
+		// the bedrock opens.
+		String[] layout = STATION_LAYOUTS[(int) (net.hedinger.prototype.engine.GroundTextures.hash01(sx, sy, 73)
+				* STATION_LAYOUTS.length) % STATION_LAYOUTS.length];
+		boolean flip = net.hedinger.prototype.engine.GroundTextures.hash01(sx, sy, 79) < 0.5;
+		for (int t = -2; t <= 3; t++) {
+			for (int r = -2; r <= 3; r++) {
+				char ch = layout[t + 2].charAt(flip ? 3 - r : r + 2);
 				int x = sx + t * ax + r * cx, y = sy + t * ay + r * cy;
-				// Behind the foot the cliff a ramp leads under stays a cliff: only
-				// the cave beneath it opens.
-				if (t >= 0 || w.getTile(x, y, SURFACE_Z).getType() != Tile.TileType.TYPE_WALL) {
-					carveTile(w, x, y, SURFACE_Z);
+				if (ch == '.' || x < 2 || y < 2 || x >= w.getColums() - 2 || y >= w.getRows() - 2
+						|| !openDry(w.getTile(x, y, SURFACE_Z).getType())) {
+					continue;
 				}
-				carveTile(w, x, y, CAVE_Z);
+				if (ch == 'O') {
+					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+					carveTile(w, x, y, CAVE_Z); // the floor it opens onto
+				} else {
+					carveTile(w, x, y, SURFACE_Z);
+					if (ch == 'b') {
+						w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_RUBBLE);
+						w.getTile(x, y, SURFACE_Z).setFertility(0);
+					}
+				}
 			}
 		}
 
@@ -6426,6 +6450,52 @@ public final class Worlds {
 			w.getTile(x2, y2, SURFACE_Z).setFertility(0);
 		}
 	}
+
+	/**
+	 * How a station's ground lies round its opening, drawn in the station's
+	 * frame: a row for each step {@code t} up the slope from -2 (behind the
+	 * foot, toward the rock) to 3 (out past the head), a column for each step
+	 * {@code r} across it from -2 to 3, the ramp's two lanes being 0 and 1.
+	 * {@code s} stone, {@code b} scree, {@code O} a pit onto the cave floor,
+	 * {@code .} the ground as it was. The foot's two pits, the ramp and its
+	 * head are laid over this by {@link #linkStation} whatever it says. Pits
+	 * only at or behind the foot, never on the head's row or past it, so the
+	 * way in from the open ground is always clear.
+	 */
+	private static final String[][] STATION_LAYOUTS = {
+		{ // a collapse beside the foot
+			"..bs..",
+			".Ossb.",
+			"bOFFs.",
+			".sRRsb",
+			".shhs.",
+			"..sb..",
+		},
+		{ // pits either side of the opening
+			".bssb.",
+			"..Oss.",
+			".sFFOb",
+			"bsRRs.",
+			".shhss",
+			"..bs..",
+		},
+		{ // a broken lip behind the foot
+			"..sb..",
+			"bssOO.",
+			"ssFFO.",
+			".sRRsb",
+			"bshhs.",
+			".sb...",
+		},
+		{ // one pit, and the scree spilling out
+			".sb...",
+			"sOss..",
+			"ssFFs.",
+			".bRRss",
+			".shhsb",
+			"..ss..",
+		},
+	};
 
 	/** Whether the cave tile at {@code (x, y)} is the rock an up ramp climbs
 	 *  into — the head of the cut, which holds up the surface tile the climb
