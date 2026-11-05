@@ -4622,6 +4622,16 @@ public class TestNPC extends NPC {
 				&& hunger <= NPC.FAT_STORE_BELOW && fat >= fatCap() - 1e-9;
 	}
 
+	/**
+	 * The tile this grazer has decided to walk off, held until it stands on
+	 * another. The line is crossed by a bite and the ground regrows from it,
+	 * so without the commitment a slow bite never got away: regrowth lifted the
+	 * tile back over the line within a few ticks, the grazer turned to settle
+	 * on it again, and it stood at its line for good, eating only what grew
+	 * while fresh grass stood a tile off.
+	 */
+	private net.hedinger.prototype.engine.Tile leavingTile;
+
 	/** Grazes for energy and buds a mutated child once well-fed. When
 	 *  {@link #vigilant} (the eco herbivore), it flees predators and herds. */
 	private void thinkBreeder() {
@@ -4642,7 +4652,14 @@ public class TestNPC extends NPC {
 		// decision comes before the bite, or a slow walker cropped its patch a
 		// further sixth of a tile on the way out and crossed the cliff it was
 		// leaving to avoid.
-		boolean leaving = standingUnderfoot() < leaveLevel();
+		net.hedinger.prototype.engine.Tile here = getWorld().getTile(X, Y, Z);
+		if (leavingTile != here) {
+			leavingTile = null; // off the tile it was leaving: the walk is done
+		}
+		boolean leaving = leavingTile != null || standingUnderfoot() < leaveLevel();
+		if (leaving) {
+			leavingTile = here;
+		}
 		double intake = sated() || leaving ? 0 : graze(grazeDemand());
 		totalIntake += intake;
 		if (tryReproduce()) {
