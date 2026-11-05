@@ -6405,6 +6405,7 @@ public final class Worlds {
 		String[] layout = STATION_LAYOUTS[(int) (net.hedinger.prototype.engine.GroundTextures.hash01(sx, sy, 73)
 				* STATION_LAYOUTS.length) % STATION_LAYOUTS.length];
 		boolean flip = net.hedinger.prototype.engine.GroundTextures.hash01(sx, sy, 79) < 0.5;
+		java.util.List<int[]> pits = new java.util.ArrayList<int[]>();
 		for (int t = -2; t <= 3; t++) {
 			for (int r = -2; r <= 3; r++) {
 				char ch = layout[t + 2].charAt(flip ? 3 - r : r + 2);
@@ -6416,6 +6417,7 @@ public final class Worlds {
 				if (ch == 'O') {
 					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
 					carveTile(w, x, y, CAVE_Z); // the floor it opens onto
+					pits.add(new int[] { x, y });
 				} else {
 					carveTile(w, x, y, SURFACE_Z);
 					if (ch == 'b') {
@@ -6449,6 +6451,37 @@ public final class Worlds {
 			w.setTile(x2, y2, SURFACE_Z, Tile.TileType.TYPE_STONE);
 			w.getTile(x2, y2, SURFACE_Z).setFertility(0);
 		}
+
+		// The opening is one hole. Where rock or water kept a pit from being
+		// laid -- at a cliff's foot the rock behind is never broken -- a pit the
+		// layout drew beyond it is left standing on its own; those close back
+		// to stone, so what shows is the foot's pit grown wider, not a scatter.
+		java.util.Set<Long> open = new java.util.HashSet<Long>();
+		java.util.ArrayDeque<int[]> reach = new java.util.ArrayDeque<int[]>();
+		for (int r = 0; r <= 1; r++) {
+			int x = sx + r * cx, y = sy + r * cy;
+			open.add(((long) x << 32) | y);
+			reach.add(new int[] { x, y });
+		}
+		java.util.Set<Long> drawn = new java.util.HashSet<Long>();
+		for (int[] p : pits) {
+			drawn.add(((long) p[0] << 32) | p[1]);
+		}
+		while (!reach.isEmpty()) {
+			int[] p = reach.poll();
+			for (int d = 0; d < 4; d++) {
+				long k = ((long) (p[0] + Tile.dirDx(d)) << 32) | (p[1] + Tile.dirDy(d));
+				if (drawn.contains(k) && open.add(k)) {
+					reach.add(new int[] { p[0] + Tile.dirDx(d), p[1] + Tile.dirDy(d) });
+				}
+			}
+		}
+		for (int[] p : pits) {
+			if (!open.contains(((long) p[0] << 32) | p[1])) {
+				w.setTile(p[0], p[1], SURFACE_Z, Tile.TileType.TYPE_STONE);
+				w.getTile(p[0], p[1], SURFACE_Z).setFertility(0);
+			}
+		}
 	}
 
 	/**
@@ -6460,39 +6493,43 @@ public final class Worlds {
 	 * {@code .} the ground as it was. The foot's two pits, the ramp and its
 	 * head are laid over this by {@link #linkStation} whatever it says. Pits
 	 * only at or behind the foot, never on the head's row or past it, so the
-	 * way in from the open ground is always clear.
+	 * way in from the open ground is always clear; every pit touches the
+	 * foot's or another that does, so the opening is one hole; and each
+	 * layout opens to both sides of the ramp alike. Drawn first with a pit off
+	 * to one side here and a lone one there, the openings read as a hatch with
+	 * holes knocked round it, and spilled one way.
 	 */
 	private static final String[][] STATION_LAYOUTS = {
-		{ // a collapse beside the foot
-			"..bs..",
-			".Ossb.",
-			"bOFFs.",
-			".sRRsb",
+		{ // a wide mouth: the foot's pit open to both sides and behind
+			".bssb.",
+			".sOOs.",
+			"bOFFOb",
+			".sRRs.",
 			".shhs.",
 			"..sb..",
 		},
-		{ // pits either side of the opening
+		{ // the ground fallen in behind the foot, the whole width of it
+			"..ss..",
+			".OOOO.",
+			"sOFFOs",
+			"bsRRsb",
+			".shhs.",
+			".sbbs.",
+		},
+		{ // a mouth that wraps back round the foot on both sides
 			".bssb.",
-			"..Oss.",
-			".sFFOb",
-			"bsRRs.",
-			".shhss",
+			".OssO.",
+			"sOFFOs",
+			".bRRb.",
+			".shhs.",
 			"..bs..",
 		},
-		{ // a broken lip behind the foot
-			"..sb..",
-			"bssOO.",
-			"ssFFO.",
-			".sRRsb",
-			"bshhs.",
-			".sb...",
-		},
-		{ // one pit, and the scree spilling out
-			".sb...",
-			"sOss..",
-			"ssFFs.",
-			".bRRss",
-			".shhsb",
+		{ // a deep throat behind the foot, flared at its lip
+			".bOOb.",
+			"bsOOsb",
+			".OFFO.",
+			".sRRs.",
+			"bshhsb",
 			"..ss..",
 		},
 	};
