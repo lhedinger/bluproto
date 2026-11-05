@@ -5112,6 +5112,46 @@ public final class Worlds {
 
 	/** Dry open ground an apron may be paved on: not water, bog pool, mire,
 	 *  quicksand or rock. */
+	/**
+	 * Whether opening a surface tile would part the walkable ground round it:
+	 * whether its walkable side neighbours fall into more than one group once
+	 * it is gone, joined only through walkable corners. A tile whose loss keeps
+	 * its own neighbourhood in one piece keeps the whole world in one piece.
+	 */
+	private static boolean splitsGround(World w, int x, int y) {
+		int[] rx = { 0, 1, 1, 1, 0, -1, -1, -1 }, ry = { -1, -1, 0, 1, 1, 1, 0, -1 };
+		boolean[] on = new boolean[8];
+		for (int i = 0; i < 8; i++) {
+			on[i] = w.getTile(x + rx[i], y + ry[i], SURFACE_Z).isWalkable();
+		}
+		int groups = 0;
+		for (int i = 0; i < 8; i += 2) { // each side neighbour starting a run round the ring
+			if (on[i] && !(on[(i + 7) & 7] && on[(i + 6) & 7])) {
+				groups++;
+			}
+		}
+		if (groups == 0) {
+			for (int i = 0; i < 8; i += 2) {
+				if (on[i]) {
+					return false; // the four sides join all the way round
+				}
+			}
+		}
+		return groups > 1;
+	}
+
+	/** Whether any of a surface tile's four neighbours is open water. */
+	private static boolean besideWater(World w, int x, int y) {
+		for (int d = 0; d < 4; d++) {
+			switch (w.getTile(x + Tile.dirDx(d), y + Tile.dirDy(d), SURFACE_Z).getType()) {
+			case TYPE_WATER, TYPE_SHALLOWS, TYPE_POOL:
+				return true;
+			default:
+			}
+		}
+		return false;
+	}
+
 	private static boolean openDry(Tile.TileType t) {
 		switch (t) {
 		case TYPE_WATER, TYPE_SHALLOWS, TYPE_POOL, TYPE_MIRE, TYPE_QUICKSAND, TYPE_WALL:
@@ -6406,20 +6446,27 @@ public final class Worlds {
 				* STATION_LAYOUTS.length) % STATION_LAYOUTS.length];
 		boolean flip = net.hedinger.prototype.engine.GroundTextures.hash01(sx, sy, 79) < 0.5;
 		java.util.List<int[]> pits = new java.util.ArrayList<int[]>();
-		for (int t = -2; t <= 3; t++) {
-			for (int r = -2; r <= 3; r++) {
-				char ch = layout[t + 2].charAt(flip ? 3 - r : r + 2);
+		int ft = 0, fr = 0; // where the foot is drawn: the first F
+		while (layout[ft].indexOf('F') < 0) {
+			ft++;
+		}
+		fr = layout[ft].indexOf('F');
+		for (int row = 0; row < layout.length; row++) {
+			for (int col = 0; col < layout[row].length(); col++) {
+				int t = row - ft, r = flip ? fr + 1 - col : col - fr;
+				char ch = layout[row].charAt(col);
 				int x = sx + t * ax + r * cx, y = sy + t * ay + r * cy;
 				if (ch == '.' || x < 2 || y < 2 || x >= w.getColums() - 2 || y >= w.getRows() - 2
 						|| !openDry(w.getTile(x, y, SURFACE_Z).getType())) {
 					continue;
 				}
+				if (ch == 'O' && besideWater(w, x, y)) {
+					ch = 's'; // a pit's lip is dry ground: water does not spill into the cave
+				}
+				carveTile(w, x, y, SURFACE_Z); // stone, until a pit opens here
 				if (ch == 'O') {
-					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
-					carveTile(w, x, y, CAVE_Z); // the floor it opens onto
 					pits.add(new int[] { x, y });
 				} else {
-					carveTile(w, x, y, SURFACE_Z);
 					if (ch == 'b') {
 						w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_RUBBLE);
 						w.getTile(x, y, SURFACE_Z).setFertility(0);
@@ -6452,85 +6499,92 @@ public final class Worlds {
 			w.getTile(x2, y2, SURFACE_Z).setFertility(0);
 		}
 
-		// The opening is one hole. Where rock or water kept a pit from being
-		// laid -- at a cliff's foot the rock behind is never broken -- a pit the
-		// layout drew beyond it is left standing on its own; those close back
-		// to stone, so what shows is the foot's pit grown wider, not a scatter.
-		java.util.Set<Long> open = new java.util.HashSet<Long>();
-		java.util.ArrayDeque<int[]> reach = new java.util.ArrayDeque<int[]>();
-		for (int r = 0; r <= 1; r++) {
-			int x = sx + r * cx, y = sy + r * cy;
-			open.add(((long) x << 32) | y);
-			reach.add(new int[] { x, y });
-		}
+		// The ground gives way outward from the foot, a pit at a time, each one
+		// beside a pit already open, so the opening is one hole; where rock or
+		// water kept a pit from being laid (at a cliff's foot the rock behind is
+		// never broken) whatever the layout drew beyond it stays stone. And no
+		// pit cuts the ground it stands in two: a strip of stone between a pit
+		// and the cliff, walled off by the pits round it, would be a ledge no
+		// creature could ever walk onto again.
 		java.util.Set<Long> drawn = new java.util.HashSet<Long>();
 		for (int[] p : pits) {
 			drawn.add(((long) p[0] << 32) | p[1]);
 		}
+		java.util.ArrayDeque<int[]> reach = new java.util.ArrayDeque<int[]>();
+		for (int r = 0; r <= 1; r++) {
+			reach.add(new int[] { sx + r * cx, sy + r * cy });
+		}
 		while (!reach.isEmpty()) {
 			int[] p = reach.poll();
 			for (int d = 0; d < 4; d++) {
-				long k = ((long) (p[0] + Tile.dirDx(d)) << 32) | (p[1] + Tile.dirDy(d));
-				if (drawn.contains(k) && open.add(k)) {
-					reach.add(new int[] { p[0] + Tile.dirDx(d), p[1] + Tile.dirDy(d) });
+				int x = p[0] + Tile.dirDx(d), y = p[1] + Tile.dirDy(d);
+				if (drawn.remove(((long) x << 32) | y) && !splitsGround(w, x, y)) {
+					w.setTile(x, y, SURFACE_Z, Tile.TileType.TYPE_HOLE);
+					carveTile(w, x, y, CAVE_Z); // the floor it opens onto
+					reach.add(new int[] { x, y });
 				}
-			}
-		}
-		for (int[] p : pits) {
-			if (!open.contains(((long) p[0] << 32) | p[1])) {
-				w.setTile(p[0], p[1], SURFACE_Z, Tile.TileType.TYPE_STONE);
-				w.getTile(p[0], p[1], SURFACE_Z).setFertility(0);
 			}
 		}
 	}
 
 	/**
 	 * How a station's ground lies round its opening, drawn in the station's
-	 * frame: a row for each step {@code t} up the slope from -2 (behind the
-	 * foot, toward the rock) to 3 (out past the head), a column for each step
-	 * {@code r} across it from -2 to 3, the ramp's two lanes being 0 and 1.
+	 * frame: a row for each step {@code t} up the slope, from behind the foot
+	 * (toward the rock) to out past the head, and a column for each step
+	 * {@code r} across it; the two {@code F}s are the foot's pits, so they fix
+	 * where the ramp's two lanes are, and the rest is read off them.
 	 * {@code s} stone, {@code b} scree, {@code O} a pit onto the cave floor,
 	 * {@code .} the ground as it was. The foot's two pits, the ramp and its
 	 * head are laid over this by {@link #linkStation} whatever it says. Pits
 	 * only at or behind the foot, never on the head's row or past it, so the
 	 * way in from the open ground is always clear; every pit touches the
 	 * foot's or another that does, so the opening is one hole; and each
-	 * layout opens to both sides of the ramp alike. Drawn first with a pit off
+	 * layout opens to both sides of the ramp alike, reaching up to three or four
+	 * tiles out rather than a single ring round the foot. A pit beside water
+	 * stays stone, so no lake or river runs over the lip. Drawn first with a pit off
 	 * to one side here and a lone one there, the openings read as a hatch with
 	 * holes knocked round it, and spilled one way.
 	 */
 	private static final String[][] STATION_LAYOUTS = {
-		{ // a wide mouth: the foot's pit open to both sides and behind
-			".bssb.",
-			".sOOs.",
-			"bOFFOb",
-			".sRRs.",
-			".shhs.",
-			"..sb..",
+		{ // a wide mouth, fallen in deep behind the foot
+			"...sbs....",
+			"..sOOsb...",
+			".bsOOOs.b.",
+			"bOOssOOOs.",
+			"sOOOFFOOOs",
+			".bssRRssb.",
+			"..sshhss..",
+			"...sbbs...",
 		},
-		{ // the ground fallen in behind the foot, the whole width of it
-			"..ss..",
-			".OOOO.",
-			"sOFFOs",
-			"bsRRsb",
-			".shhs.",
-			".sbbs.",
+		{ // a throat running back into the rock, flared at its lip
+			"...bOOb...",
+			"..bsOOsb..",
+			"..sOOOOs..",
+			".bOssOsOb.",
+			".sOOFFOOs.",
+			".bssRRssb.",
+			"..sshhs...",
+			"...ss.....",
 		},
-		{ // a mouth that wraps back round the foot on both sides
-			".bssb.",
-			".OssO.",
-			"sOFFOs",
-			".bRRb.",
-			".shhs.",
-			"..bs..",
+		{ // arms reaching out to both sides and curling back
+			"..........",
+			".bsb..bsb.",
+			"bOOs..sOOb",
+			"sOss..ssOs",
+			"sOOOFFOOOs",
+			"bsssRRsss.",
+			".bsshhssb.",
+			"...sbs....",
 		},
-		{ // a deep throat behind the foot, flared at its lip
-			".bOOb.",
-			"bsOOsb",
-			".OFFO.",
-			".sRRs.",
-			"bshhsb",
-			"..ss..",
+		{ // ragged: a tongue back on one side, a spread on the other
+			"....s.....",
+			"...bOs....",
+			".bsOOsbs..",
+			"bOOOsOOOb.",
+			"sOsOFFsOOs",
+			".bssRRssb.",
+			"..sshhsb..",
+			"...bs.....",
 		},
 	};
 

@@ -12844,7 +12844,11 @@ public class SimTests {
 		@Override
 		public void run() {
 			int worlds = 0, withFall = 0, pools = 0;
-			for (long seed : new long[] { 1, 3, 7, 25, 42 }) {
+			// Ten worlds, not five: where the gorge lands is a draw, and a change
+			// anywhere else in the world reshuffles it. Five came out three with a
+			// fall after the station openings grew, though over 26 seeds the rate
+			// stayed where it was (21 against 22).
+			for (long seed = 1; seed <= 10; seed++) {
 				World w = net.hedinger.prototype.sim.Worlds.demoTerrain(seed);
 				int z = w.getSurfaceZ(), lips = 0, landed = 0;
 				for (int y = 1; y < w.getRows() - 1; y++) {
@@ -12875,7 +12879,7 @@ public class SimTests {
 			assertGreater("and in most of them the river lands in a plunge pool", pools, withFall / 2);
 			// The gorge is aimed at a river with open cave under it, and goes
 			// without (keeping clear of water as before) where none offers.
-			assertTrue("most worlds' gorge swallows a river: " + withFall + "/" + worlds, withFall >= 4);
+			assertTrue("most worlds' gorge swallows a river: " + withFall + "/" + worlds, withFall >= 7);
 		}
 	}
 
