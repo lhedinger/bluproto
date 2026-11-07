@@ -606,6 +606,13 @@ public class SimTests {
 			return g;
 		}
 
+		/** As {@link #body}, as greedy as a lineage can be: it eats whenever it has room. */
+		private static Genome snacker(double size) {
+			Genome g = body(size);
+			g.greed = Genome.GREED_MAX;
+			return g;
+		}
+
 		private World barren() {
 			World w = room(20, 12);
 			for (int x = 1; x < 19; x++) {
@@ -673,12 +680,14 @@ public class SimTests {
 			control.kill();
 			tick(m, 1);
 			Mind feeder = (sensors, act) -> act[AgentIO.A_EAT] = 1;
-			TestNPC hunter = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
+			// As greedy as a lineage can be, so they eat whenever there is room:
+			// what is under test is the body, not their appetite for it.
+			TestNPC hunter = TestNPC.minded(10.5, 6.5, 0, snacker(12), feeder)
 					.withClade(Genome.Clade.PREDATOR).grown() // grown: what is asserted is an ADULT hunter's diet, and a cub scavenges (TestNPC.scavengesAsCub)
 					.withHunger(1.0);
-			TestNPC scav = TestNPC.minded(10.5, 6.5, 0, body(12), feeder)
+			TestNPC scav = TestNPC.minded(10.5, 6.5, 0, snacker(12), feeder)
 					.withClade(Genome.Clade.SCAVENGER).withHunger(1.0);
-			TestNPC para = TestNPC.minded(10.5, 6.5, 0, body(4), feeder)
+			TestNPC para = TestNPC.minded(10.5, 6.5, 0, snacker(4), feeder)
 					.withClade(Genome.Clade.PARASITE).withHunger(1.0);
 			m.spawnEntity(hunter);
 			m.spawnEntity(scav);
@@ -8661,7 +8670,12 @@ public class SimTests {
 			g.size = 6;
 			g.losRange = 3;
 			g.searchCast = cast;
-			TestNPC b = TestNPC.minded(x, y, 0, g, ALWAYS_SEARCHING).withSpeed(0.08).withHeading(heading);
+			// Feeding, so it looks: a full body waits for its greed's line. Started
+			// with the gut nearly full, because a walk is paid for off the gut and
+			// these measure ground covered: the same 3000 ticks from half empty
+			// walk 160 tiles where nine tenths full walks 200.
+			TestNPC b = TestNPC.minded(x, y, 0, g, ALWAYS_SEARCHING).withSpeed(0.08).withHeading(heading)
+					.withHunger(0.1);
 			w.spawnEntity(b);
 			w.think(); // spawned; its first think is the next tick
 			return b;
@@ -8802,7 +8816,8 @@ public class SimTests {
 				Genome g = new Genome();
 				g.size = 6;
 				g.searchCast = 1.0;
-				TestNPC b = TestNPC.minded(5.5, 5.5, 0, g, ALWAYS_SEARCHING).withHeading(i * 2 * Math.PI / 200);
+				TestNPC b = TestNPC.minded(5.5, 5.5, 0, g, ALWAYS_SEARCHING).withHeading(i * 2 * Math.PI / 200)
+						.withHunger(0.5); // hungry, so it looks
 				w.spawnEntity(b);
 				w.think(); // spawned
 				tick(w, 1); // its first think: explore picks a point before it steps
@@ -8954,7 +8969,7 @@ public class SimTests {
 			};
 			// Facing west, i.e. away from the patch: a body that ignores seek leaves.
 			TestNPC body = TestNPC.minded(20.5, 7.5, 0, g, ctrl).withSpeed(0.1)
-					.withHeading(Math.PI * 0.9);
+					.withHeading(Math.PI * 0.9).withHunger(0.5); // hungry: a full body waits
 			w.spawnEntity(body);
 			w.think();
 			tick(w, 150);
@@ -9390,10 +9405,12 @@ public class SimTests {
 			g.size = 6;
 			g.losRange = 3;
 			g.searchCast = 1.0;
+			// Hungry, so they search: nothing grows here, so neither ever fills and
+			// stops looking.
 			TestNPC climber = TestNPC.minded(2.5, 2.5, 0, g, ExploreScenario.ALWAYS_SEARCHING)
-					.withSpeed(0.08).withHeading(0);
+					.withSpeed(0.08).withHeading(0).withHunger(0.5);
 			TestNPC descender = TestNPC.minded(8.5, 2.5, 1, g, ExploreScenario.ALWAYS_SEARCHING)
-					.withSpeed(0.08).withHeading(Math.PI);
+					.withSpeed(0.08).withHeading(Math.PI).withHunger(0.5);
 			w.spawnEntity(climber);
 			w.spawnEntity(descender);
 			w.think();
@@ -9967,7 +9984,8 @@ public class SimTests {
 			// hitch-hiker seed would prove nothing here — it seeks what is BIGGER
 			// than it, so it closes on threats and never hunts anything.
 			hg.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, hg).grown(); // an adult: a cub would scavenge
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, hg).grown() // an adult: a cub would scavenge
+					.withHunger(0.5); // and hungry: a full one waits for its greed's line
 			w.spawnEntity(hunter);
 			assertEquals("the body really is a hunter",
 					Genome.Clade.PREDATOR.ordinal(), hunter.getGenome().clade.ordinal());
@@ -10033,7 +10051,9 @@ public class SimTests {
 			}
 			assertEquals("a hunter alone on a meadow has nothing to forage",
 					0, sawSomething);
-			assertGreater("and arriving at it kills", killed, 2);
+			// One meal is the proof: a hunter of the reference greed eats its fill
+			// and then waits for its line, so it will not kill again on demand.
+			assertGreater("and arriving at it kills", killed, 0);
 			// Measured on the LONE hunter, which is the only one of the two with
 			// nothing but grass around it. The other is standing among the animals
 			// it killed, and eating those is its living -- a hunter finishes its own
@@ -10420,7 +10440,8 @@ public class SimTests {
 			// Grown: growth is bought out of what a body eats, and a hunter with
 			// nothing but one parked quarry cannot buy any. The adult ratio is the
 			// one under test.
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker(), greed)).grown();
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 6.5, 0, body(hunterSize, preySeeker(), greed)).grown()
+					.withHunger(0.5); // hungry: what is under test is its reach, not its appetite
 			TestNPC quarry = TestNPC.grazer(6.9, 6.5, 0, body(quarrySize, null));
 			w.spawnEntity(hunter);
 			w.spawnEntity(quarry);
@@ -10749,7 +10770,7 @@ public class SimTests {
 			hg.greed = greed;
 			// A hunter that hunts for the kill: what is under test is the STANDARD a
 			// mind names, not the stomach. With the hunt's appetite in the score
-			// (AHunterHuntsForFoodOrForSport), a body is worth what the gut has room
+			// (AFullHunterHuntsOnlyIfItIsGreedy), a body is worth what the gut has room
 			// for, and this hunter grows up alone on a full one; at predatory 1 it
 			// wants every quarry whatever its stomach says, and the standard alone
 			// decides between the two.
@@ -10761,6 +10782,7 @@ public class SimTests {
 			tick(w, TestNPC.growthTicks(13) + 200);
 			assertTrue("the hunter is grown before it is offered a choice",
 					!hunter.isJuvenile());
+			hunter.withHunger(0.5); // and hungry: a full hunter waits for its greed's line
 
 			// Placed relative to where the hunter actually stands and pointed the
 			// way it is actually looking: it spends its childhood wandering, and a
@@ -10856,6 +10878,7 @@ public class SimTests {
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; an empty field grows nobody
 			w.spawnEntity(hunter);
 			tick(w, 200);
+			hunter.withHunger(0.5); // hungry: a full hunter waits for its greed's line
 
 			double hx = hunter.getX(), hy = hunter.getY();
 			double ahead = Math.atan2(15.0 - hy, 15.0 - hx);
@@ -11058,7 +11081,7 @@ public class SimTests {
 			//
 			// "Neither drained nor brimming" was read off the END of the run, and
 			// that held only while a fed hunter kept hunting. The hunt has an
-			// appetite now (AHunterHuntsForFoodOrForSport): full on its second
+			// appetite now (AFullHunterHuntsOnlyIfItIsGreedy): full on its second
 			// kill, this hunter sees no quarry, rests, and the mint fills its store
 			// from a full gut -- brimming is what two kills and a rest honestly
 			// leave. What the chase spends is read where it is spent: the store's
@@ -18570,29 +18593,33 @@ public class SimTests {
 	}
 
 	/**
-	 * A hunter hunts for food, or for sport, and its genes say which. The hunt
-	 * had no appetite: the scripted hunter stops killing at PRED_FULL_HUNGER,
-	 * but the minded one -- every hunter in the seeded world -- killed whatever
-	 * was in sight whenever its mind sought forage, which is always. Measured
-	 * on seed 42: two thirds of all kills were made at a gut under a fifth
-	 * empty, and the killer then ate 0.67 energy off a body carrying ten; a
-	 * hunter killing at three fifths empty ate seven. A kill it cannot eat is
-	 * a kill for nothing, and the comment on PRED_FULL_HUNGER had said so all
-	 * along.
+	 * A full hunter hunts only if it is greedy. The hunt had no appetite: the
+	 * scripted hunter stops killing at PRED_FULL_HUNGER, but the minded one --
+	 * every hunter in the seeded world -- killed whatever was in sight whenever
+	 * its mind sought forage, which is always. Measured on seed 42: two thirds
+	 * of all kills were made at a gut under a fifth empty, and the killer then
+	 * ate 0.67 energy off a body carrying ten; a hunter killing at three fifths
+	 * empty ate seven.
 	 *
-	 * <p>Now a quarry's value to a hunter is what its stomach has room for --
-	 * the meat on the body against the gut above the full line -- plus, for a
-	 * living body, what the lineage's {@code predatory} drive adds for the
-	 * kill itself. At predatory 0 a full hunter sees no quarry; at 1 it hunts
-	 * as it always did; greed, the exponent on value in every food scan, bites
-	 * on a hunter's choice for the first time. Which mix pays is selection's.
+	 * <p>The first answer scored a quarry by what the stomach had room for, plus
+	 * what the lineage's {@code predatory} drive added for the kill itself. It
+	 * was not enough: any room above the full line was room, and on the seed 7
+	 * demo world 28% of kills were still made more than nine tenths full. Now
+	 * when a body feeds at all is its greed's ({@link TestNPC#forageOnset}): it
+	 * starts at its line and stops when full. A full hunter of the reference
+	 * greed leaves prey in reach alone however predatory it is -- the drive now
+	 * weighs which quarry it takes while it feeds, not whether it feeds -- and
+	 * only the greediest lineage, whose line is an empty gut's, hunts with
+	 * almost no room to spare. Nothing hunts with none: a kill that cannot fit
+	 * is still worth nothing.
 	 *
-	 * <p>Pinned on three minded hunters with the hunter seed and prey in reach:
-	 * full and unpredatory, it leaves the animal alone; full and predatory, it
-	 * kills; hungry and unpredatory, it kills.
+	 * <p>Pinned on minded hunters with the hunter seed and prey in reach, fed
+	 * and then held at a hunger: full, predatory or not, it leaves the animal
+	 * alone; nine tenths full it leaves it alone too at the reference greed, and
+	 * kills as greedy as a lineage can be; hungry, it kills.
 	 */
-	static class AHunterHuntsForFoodOrForSport extends Scenario {
-		private int preyHealthAfter(double hunger, double predatory) {
+	static class AFullHunterHuntsOnlyIfItIsGreedy extends Scenario {
+		private int preyHealthAfter(double hunger, double predatory, double greed) {
 			seed(109);
 			World w = room(12, 9);
 			for (int x = 1; x < 11; x++) {
@@ -18604,14 +18631,20 @@ public class SimTests {
 			g.size = 20;
 			g.speed = 0;
 			g.predatory = predatory;
+			g.greed = greed;
 			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
-			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withReproCooldown(100_000_000);
+			// Fed to the full line, and then its hunger held where the case wants
+			// it: a hunter between meals, whose greed decides whether that is
+			// hungry enough to start again.
+			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withHunger(0.0)
+					.withReproCooldown(100_000_000);
 			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(6); // already in reach
 			w.spawnEntity(hunter);
 			w.spawnEntity(prey);
 			w.think();
+			tick(w, 1); // its first think, full: it is done feeding
 			for (int i = 0; i < 4 * TestNPC.SENSE_EVERY + 2 * TestNPC.PRED_BITE_PERIOD; i++) {
-				hunter.withHunger(hunger); // hold the appetite there
+				hunter.holdHunger(hunger); // hold the appetite there
 				tick(w, 1);
 			}
 			return prey.getHealth();
@@ -18620,9 +18653,15 @@ public class SimTests {
 		@Override
 		public void run() {
 			assertEquals("a full hunter with no taste for the kill leaves prey in reach alone",
-					100, preyHealthAfter(0.0, 0.0));
-			assertLess("a full hunter that hunts for sport kills it", preyHealthAfter(0.0, 1.0), 100);
-			assertLess("and a hungry hunter kills for food whatever its taste", preyHealthAfter(0.7, 0.0), 100);
+					100, preyHealthAfter(0.0, 0.0, 1.0));
+			assertEquals("and so does one that would kill for sport: it is not feeding",
+					100, preyHealthAfter(0.0, 1.0, 1.0));
+			assertEquals("nine tenths full, a hunter of the reference greed is still between meals",
+					100, preyHealthAfter(0.1, 0.0, 1.0));
+			assertLess("while the greediest lineage hunts with its stomach that full",
+					preyHealthAfter(0.1, 0.0, Genome.GREED_MAX), 100);
+			assertLess("and a hungry hunter kills for food whatever its taste",
+					preyHealthAfter(0.7, 0.0, 1.0), 100);
 		}
 	}
 
@@ -18680,26 +18719,29 @@ public class SimTests {
 
 	/**
 	 * A hunter at its meal is not hunting for sport. The sport in a hunt
-	 * ({@link AHunterHuntsForFoodOrForSport}) is a reason to take one up, never
-	 * a reason to leave a meal. A hunter fills its gut off a carcass in a dozen
-	 * ticks and then stays at the body, eating again as digestion makes room:
-	 * that is how a kill's fresh half gets eaten by the mouth that made it. The
-	 * day sport went in, a full hunter's appetite for its carcass was 0, the
-	 * held body was let go for it, and the sport in the first live animal in
-	 * sight took the hunter off to kill again: measured on seed 42, the meat
-	 * grown hunters ate off their kills fell from 55% to 36%, and hunger rose
-	 * back to where it had been.
+	 * ({@link AFullHunterHuntsOnlyIfItIsGreedy}) is a reason to take one up, never
+	 * a reason to leave a meal. The day sport went in, a full hunter's appetite
+	 * for its carcass was 0, the held body was let go for it, and the sport in
+	 * the first live animal in sight took the hunter off to kill again: measured
+	 * on seed 42, the meat grown hunters ate off their kills fell from 55% to
+	 * 36%, and hunger rose back to where it had been. So a held carcass is kept
+	 * while there is meat on it, and while one is held every body is scored by
+	 * the stomach alone.
 	 *
-	 * <p>So a held carcass is kept while there is meat on it, full stomach or
-	 * not, and while one is held every body is scored by the stomach alone.
-	 * Pinned on a hunter with the hunter seed, as sporty as a gene can be and
+	 * <p>Whether it goes back to the carcass as its gut empties is its greed's
+	 * ({@link TestNPC#forageOnset}). A greedy hunter tops up off its kill again
+	 * and again; one of the reference greed eats its fill and waits for its line,
+	 * which a day's digestion does not reach.
+	 *
+	 * <p>Pinned on a hunter with the hunter seed, as sporty as a gene can be and
 	 * as fickle (determination 1): it eats at a fresh carcass until it is full,
-	 * a living animal appears four tiles off, and the hunter stays with its
-	 * kill, eating again as its gut empties, with the animal untouched.
+	 * a living animal appears four tiles off and is left alone; then the
+	 * greediest lineage eats again as its gut empties, and the reference one
+	 * does not.
 	 */
 	static class AHunterAtItsMealIsNotHuntingForSport extends Scenario {
-		@Override
-		public void run() {
+		/** {prey health after, energy swallowed after the first fill}. */
+		private double[] atTheMeal(double greed) {
 			seed(119);
 			World w = room(16, 9);
 			for (int x = 1; x < 15; x++) {
@@ -18717,6 +18759,7 @@ public class SimTests {
 			Genome hg = new Genome();
 			hg.size = 8;
 			hg.speed = 0.06;
+			hg.greed = greed;
 			hg.predatory = 1.0; // hunts for the kill itself, whatever its stomach says
 			hg.determination = 1.0; // and holds nothing: the weakest grip a gene allows
 			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
@@ -18732,9 +18775,18 @@ public class SimTests {
 			TestNPC prey = TestNPC.inert(10.5, 4.5, 0).withSize(6); // four tiles beyond the meal, in plain sight
 			w.spawnEntity(prey);
 			tick(w, 800); // the gut makes room, and the kill is still well inside its fresh day
-			assertEquals("the living animal was left alone", 100, prey.getHealth());
-			assertGreater("the hunter stayed with its kill and ate again as its gut emptied",
-					hunter.totalSwallowed() - full, 0.0);
+			return new double[] { prey.getHealth(), hunter.totalSwallowed() - full };
+		}
+
+		@Override
+		public void run() {
+			double[] greedy = atTheMeal(Genome.GREED_MAX);
+			assertEquals("the living animal was left alone", 100, (int) greedy[0]);
+			assertGreater("a greedy hunter stayed with its kill and ate again as its gut emptied",
+					greedy[1], 0.0);
+			double[] plain = atTheMeal(1.0);
+			assertEquals("so was it by a hunter of the reference greed", 100, (int) plain[0]);
+			assertNear("which ate its fill and waits for its line", 0.0, plain[1], 1e-9);
 		}
 	}
 
@@ -21828,7 +21880,7 @@ public class SimTests {
 				new AFounderLandsWithinReachOfItsFood(),
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),
-				new AHunterHuntsForFoodOrForSport(),
+				new AFullHunterHuntsOnlyIfItIsGreedy(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),

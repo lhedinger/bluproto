@@ -273,6 +273,38 @@ public class TestNPC extends NPC {
 	 *  fit its gut, so the prey would die for nothing. */
 	@Unit("hunger level")
 	public static double PRED_FULL_HUNGER = 0.05;
+
+	/**
+	 * How empty a minded body's gut has to be before it starts to feed, by its
+	 * greed: {@link #STARVE_HUNGER} at greed 0, falling in a straight line to 0 at
+	 * {@link Genome#GREED_MAX}. Once it starts it feeds until the gut is full
+	 * ({@link #PRED_FULL_HUNGER}), then waits for the line again.
+	 *
+	 * <p>Nothing stood between a full stomach and the next meal. A hunter valued
+	 * a body by the room in its gut, and any room above the full line was room: on
+	 * the seed 7 demo world 28% of kills were made by a hunter more than nine
+	 * tenths full, and hunters fed in one and a half bouts a day, the median bout
+	 * starting 4% empty and refilling 1% of the gut. A grazer holding its eat
+	 * output high grazed whenever there was a mouthful of room, and a parasite
+	 * drank whenever there was a drop. Every one of them snacked, because no line
+	 * said otherwise and nothing could evolve one.
+	 *
+	 * <p>So the line is the lineage's, and it is greed's because greed is already
+	 * the gene for how much a body wants: the exponent on a prize's value, the
+	 * size of quarry a hunter will name, and how thin a patch a grazer will stand
+	 * on. One reading of it, the other way round, is how soon it wants more. At
+	 * zero a body waits until it is starving and then gorges; at the top it never
+	 * stops eating. The founders' spread of 0.5 to 2 starts at 0.75 to 0.3 empty,
+	 * and the reference greed of 1 at 0.6.
+	 *
+	 * <p>The latch is what makes "waits until starving" mean gorge-and-wait. A
+	 * line with no memory would have a body eat only while it stood past it, a
+	 * mouthful at a time, hovering at the edge of starvation for good.
+	 */
+	public static double forageOnset(double greed) {
+		double g = Math.max(0, Math.min(Genome.GREED_MAX, greed));
+		return STARVE_HUNGER * (1 - g / Genome.GREED_MAX);
+	}
 	/** Fraction of its (adult-sized) glycogen a world-seeded FOUNDER starts holding.
 	 *  A founder has no parents to be endowed by — it is placed into the world
 	 *  by the steward, not born — so this one number has to be chosen: fed
@@ -477,6 +509,10 @@ public class TestNPC extends NPC {
 		}
 	}
 	private double totalIntake = 0;
+	/** Whether this body is feeding: set when hunger reaches its
+	 *  {@link #forageOnset}, cleared when the gut is full. A body starts out
+	 *  feeding, so a newborn or a founder eats its fill before it first waits. */
+	private boolean feeding = true;
 	private double[] pinX, pinY; // trailing ring of recent positions (pin detection)
 	private int pinCount = 0; // ring entries filled so far (caps at PIN_WINDOW)
 	private int huntGiveUp = 0; // ticks left prowling after a pinned hunt
@@ -944,6 +980,9 @@ public class TestNPC extends NPC {
 		if (hunger <= 0 || !canExert() || age % bitePeriod() != 0) {
 			return;
 		}
+		if (isMinded() && !appetiteOpen()) {
+			return; // between meals: riding, not drinking
+		}
 		// What one point of this host is worth once it is across the gut wall,
 		// which is the currency the room is measured in.
 		double perPoint = LEAN_DENSITY * h.leanMass() * PARASITE_ASSIMILATION / FULL_BODY_HEALTH;
@@ -1214,8 +1253,18 @@ public class TestNPC extends NPC {
 		return this;
 	}
 
-	/** Starts this body at the given hunger, 0 sated .. 1 starving (tests). */
+	/** Starts this body at the given hunger, 0 sated .. 1 starving (tests), and
+	 *  feeding: it eats until full before its greed's line next applies, the way
+	 *  every body starts out. */
 	public TestNPC withHunger(double h) {
+		hunger = Math.max(0, Math.min(1, h));
+		feeding = true;
+		return this;
+	}
+
+	/** Holds this body's hunger where a test wants it, leaving whether it is
+	 *  feeding to its own greed ({@link #withHunger} starts it feeding). */
+	TestNPC holdHunger(double h) {
 		hunger = Math.max(0, Math.min(1, h));
 		return this;
 	}
@@ -3697,6 +3746,36 @@ public class TestNPC extends NPC {
 	}
 
 	/** Applies the actuator vector as engine intent (movement + gated actions). */
+	/** This body's {@link #forageOnset}, read off its greed (1 with no genome). */
+	double forageOnset() {
+		return forageOnset(genome == null ? 1.0 : genome.greed);
+	}
+
+	/** Whether this body is feeding now, moving the latch first: on at its
+	 *  onset, off once the gut is full. */
+	boolean appetiteOpen() {
+		if (hunger >= forageOnset()) {
+			feeding = true;
+		} else if (hunger <= PRED_FULL_HUNGER) {
+			feeding = false;
+		}
+		return feeding;
+	}
+
+	/** Whether a seek names this body's food. Forage does when the body's forage
+	 *  is food -- a quarry, a carcass, a host, or for a grazer the ground it asked
+	 *  for when that ground is food; asked for as cover, shade or damp it is a
+	 *  place, and wanting a place keeps no meal hours. A hunter's quarry is its
+	 *  food under its other name too. */
+	private boolean namesFood(int seekClass) {
+		if (seekClass == AgentIO.SEEK_PREY) {
+			return niche().hunts();
+		}
+		return seekClass == AgentIO.SEEK_FORAGE
+				&& (niche().hunts() || niche().scavenges() || niche().drains()
+						|| tileWanted == AgentIO.TILE_FOOD);
+	}
+
 	private void actFrom(double[] a) {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
@@ -3708,6 +3787,14 @@ public class TestNPC extends NPC {
 		double seekWish = a[AgentIO.A_SEEK];
 		int seekClass = AgentIO.seekTarget(seekWish);
 		boolean away = seekWish < 0;
+		// A body goes after food only when its lineage's appetite says so: one
+		// between meals that names its food goes nowhere for it, neither steering
+		// at one in sight nor searching for one out of it. Running from food is
+		// not foraging and is left alone.
+		boolean feedingNow = appetiteOpen();
+		if (!away && !feedingNow && namesFood(seekClass)) {
+			seekClass = AgentIO.SEEK_NONE;
+		}
 		boolean pursuing = false; // the goal is named AND the body can see one
 		boolean searching = false; // the goal is named and the body cannot see one yet
 		boolean explored = false; // explore steered and moved the body this tick
@@ -3810,7 +3897,7 @@ public class TestNPC extends NPC {
 		boolean eats = a[AgentIO.A_EAT] > 0.5;
 
 		double eaten = 0;
-		if (eats || intentGraze) {
+		if ((eats || intentGraze) && feedingNow) { // the mouth keeps the same hours as the forage
 			// "Forage" means the food THIS body eats. For a grazer that is the
 			// vegetation underfoot; for a scavenger it is the carcass it walked to.
 			// Routing both through the same intent is what lets a scavenger inherit
@@ -3835,7 +3922,7 @@ public class TestNPC extends NPC {
 							: standingUnderfoot() < leaveLevel() ? 0 : graze(grazeDemand());
 			totalIntake += eaten;
 		}
-		eaten += finishTheKill();
+		eaten += feedingNow ? finishTheKill() : 0;
 		boolean ateItem = false;
 		if (eats || intentTake) {
 			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach
