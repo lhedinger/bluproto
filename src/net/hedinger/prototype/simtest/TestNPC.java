@@ -1817,8 +1817,9 @@ public class TestNPC extends NPC {
 		for (double off : offs) {
 			double a = D + off;
 			double nx = X + Math.cos(a) * ESCAPE_PROBE, ny = Y + Math.sin(a) * ESCAPE_PROBE;
-			if (getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z)
-					&& (isFlying() || !getWorld().getTile(nx, ny, Z).isWater())) {
+			int lvl = getWorld().stepLevel(X, Y, Z, nx, ny); // off a ramp's edge is the next floor
+			if (getWorld().isConnectedSpace(X, Y, Z, nx, ny, lvl)
+					&& (isFlying() || !getWorld().getTile(nx, ny, lvl).isWater())) {
 				return a;
 			}
 		}
@@ -2564,8 +2565,8 @@ public class TestNPC extends NPC {
 		}
 		s[AgentIO.S_CLOCK] = Math.sin(now * 0.3 + getID());
 		double ax = getX() + Math.cos(D), ay = getY() + Math.sin(D);
-		s[AgentIO.S_BLOCKED] = getWorld().isConnectedSpace(getX(), getY(), getLvl(), ax, ay, getLvl())
-				? 0.0 : 1.0; // wall/edge one tile ahead in the heading
+		s[AgentIO.S_BLOCKED] = getWorld().isStepConnected(getX(), getY(), getLvl(), ax, ay)
+				? 0.0 : 1.0; // wall/edge one tile ahead in the heading; a ramp's edge is open
 		// Dedicated item sense: nearest inanimate object, its bearing and kind.
 		Item item = nearestItem();
 		if (item != null) {
@@ -3623,7 +3624,7 @@ public class TestNPC extends NPC {
 	/** 1 if a one-tile step along {@code heading} lands on impassable ground, else 0. */
 	private double blockedAt(double heading) {
 		double nx = X + Math.cos(heading), ny = Y + Math.sin(heading);
-		return getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z) ? 0.0 : 1.0;
+		return getWorld().isStepConnected(X, Y, Z, nx, ny) ? 0.0 : 1.0;
 	}
 
 	/** True if the tile one step along the current heading is impassable terrain (a
@@ -3631,10 +3632,14 @@ public class TestNPC extends NPC {
 	 *  ground where any standstill is a neighbour collision, not a terrain jam. */
 	private boolean terrainBlockedAhead() {
 		double nx = X + Math.cos(D), ny = Y + Math.sin(D);
-		if (!getWorld().isConnectedSpace(X, Y, Z, nx, ny, Z)) {
+		// Asked of the floor the step lands on: past a ramp's edge, this floor has
+		// the rock or the hole the ramp runs into, and reading that as a jam had
+		// the unstick reflex shove every body off the ramp it was walking up.
+		int lvl = getWorld().stepLevel(X, Y, Z, nx, ny);
+		if (!getWorld().isConnectedSpace(X, Y, Z, nx, ny, lvl)) {
 			return true;
 		}
-		net.hedinger.prototype.engine.Tile t = getWorld().getTile(nx, ny, Z);
+		net.hedinger.prototype.engine.Tile t = getWorld().getTile(nx, ny, lvl);
 		return t != null && !isFlying()
 				&& (t.isWater() || t.getType() == net.hedinger.prototype.engine.Tile.TileType.TYPE_HOLE);
 	}
@@ -4415,7 +4420,9 @@ public class TestNPC extends NPC {
 	 * flyable for a flier) and reachable from where it stands in one step
 	 * ({@link net.hedinger.prototype.engine.World#isConnectedSpace}, which refuses a diagonal squeezed
 	 * between two blocked orthogonals and a level change that is not a ramp's
-	 * own slope). A wall, a hole or water is never picked, so the engine's
+	 * own slope), each asked of the floor the step lands on -- past a ramp's
+	 * edge that is the next floor, so a ramp is ground like any other and the
+	 * search walks up or down it. A wall, a hole or water is never picked, so the engine's
 	 * collision test and the body's pin reflex are the backstop rather than
 	 * the method. Each candidate is weighted by where it lies against the
 	 * body's facing, a soft cone: full weight dead ahead, falling straight to
@@ -4495,17 +4502,20 @@ public class TestNPC extends NPC {
 		return exploreGround(tc, tr);
 	}
 
-	/** Whether a tile is ground this body can be on and step to from here. */
+	/** Whether a tile is ground this body can be on and step to from here, on the
+	 *  floor the step lands on ({@link net.hedinger.prototype.engine.World#stepLevel}):
+	 *  past a ramp's edge that is the next floor, which is how explore takes a ramp. */
 	private boolean exploreGround(int c, int r) {
 		net.hedinger.prototype.engine.World w = getWorld();
-		if (!w.isValid(c, r, (int) Z)) {
+		int lvl = w.stepLevel(X, Y, Z, c + 0.5, r + 0.5);
+		if (!w.isValid(c, r, lvl)) {
 			return false;
 		}
-		net.hedinger.prototype.engine.Tile t = w.getTile(c, r, (int) Z);
+		net.hedinger.prototype.engine.Tile t = w.getTile(c, r, lvl);
 		if (isFlying() ? !t.isFlyable() : !t.isWalkable()) {
 			return false;
 		}
-		return w.isConnectedSpace(X, Y, Z, c + 0.5, r + 0.5, Z);
+		return w.isConnectedSpace(X, Y, Z, c + 0.5, r + 0.5, lvl);
 	}
 
 	/** Draws the next point: a neighbouring tile by facing-weighted lot, then a
