@@ -7972,6 +7972,11 @@ public class SimTests {
 			return AgentIO.seekTarget(a[AgentIO.A_SEEK]) == AgentIO.SEEK_FORAGE && a[AgentIO.A_THROTTLE] > 0.02;
 		}
 
+		/** Whether two brains hold the same program, instruction for instruction. */
+		private static boolean sameProgram(Brain a, Brain b) {
+			return java.util.Arrays.deepEquals(a.code(), b.code());
+		}
+
 		@Override
 		public void run() {
 			seed(63);
@@ -8039,6 +8044,21 @@ public class SimTests {
 			assertTrue("and the calf carries the pair's program, give or take the schema's floor on mutation ("
 					+ calf.getGenome().brain.length() + " instructions against " + starter.length() + ")",
 					Math.abs(calf.getGenome().brain.length() - starter.length()) <= 1);
+			// What works is the pair's program, so the eating is asked of a calf that
+			// carries it. At the schema's mutation floor the first one sometimes
+			// does not -- one drew an inserted instruction, sought water and nothing
+			// else, and stood at the pond for two days -- and a pair breeds again.
+			for (int t = 0; t < 30000 && !sameProgram(calf.getGenome().brain, starter); t++) {
+				tick(w, 1);
+				for (Entity e : w.getEntities()) {
+					if (e instanceof TestNPC n && n.generation() == 1 && !n.isDead()
+							&& sameProgram(n.getGenome().brain, starter)) {
+						calf = n;
+					}
+				}
+			}
+			assertTrue("a calf of the pair carries its program exactly",
+					sameProgram(calf.getGenome().brain, starter));
 			double born = calf.maturity();
 			boolean ate = false;
 			for (int t = 0; t < 4000 && !calf.isDead(); t++) {
