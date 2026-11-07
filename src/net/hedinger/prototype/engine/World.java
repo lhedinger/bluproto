@@ -1205,6 +1205,54 @@ public class World {
 		return !getTile(x, y, z).isSolid();
 	}
 
+	/**
+	 * The level a step from {@code (x, y, z)} to {@code (nx, ny)} lands on — the
+	 * one rule for ramps, which movement and every probe of "can I step there"
+	 * share.
+	 *
+	 * <p>A ramp is floor that spans two levels: its foot joins the level it sits
+	 * on, its top the level above. Walk off the top and you come out one level up;
+	 * walk off the foot of a down ramp and you come out one level down. A ramp may
+	 * run along any cardinal: the tile carries which way its high side faces
+	 * ({@link Tile#getRampUphill}), and the step climbs when it carries the body up
+	 * that slope and descends when it carries it down. The change lands at the
+	 * tile edge, so a step that stays on the ramp's tile stays on its level.
+	 *
+	 * <p>Every probe needs this and not the plain level. On its own floor, the tile
+	 * past a ramp's edge is the rock the ramp climbs out of or the hole it pours
+	 * into — that is how worldgen lays every one of them — so a probe that asks
+	 * the same floor sees a wall where the body would in fact walk on. Roam, the
+	 * explore walker and the body's blocked-ahead senses all asked that way once,
+	 * and so nothing steered by them ever took a ramp.
+	 */
+	public int stepLevel(double x, double y, double z, double nx, double ny) {
+		int lvl = (int) z;
+		Tile here = getTile(x, y, z);
+		if (here == null) {
+			return lvl;
+		}
+		int sx = (int) nx - (int) x, sy = (int) ny - (int) y;
+		if (sx == 0 && sy == 0) {
+			return lvl; // still on this tile: the level only turns over at its edge
+		}
+		// How far the step carries along the slope: positive is uphill.
+		int up = here.getRampUphill();
+		int along = sx * Tile.dirDx(up) + sy * Tile.dirDy(up);
+		if (here.getType() == Tile.TileType.TYPE_RAMPUP && along > 0) {
+			return lvl + 1;
+		}
+		if (here.getType() == Tile.TileType.TYPE_RAMPDOWN && along < 0) {
+			return lvl - 1;
+		}
+		return lvl;
+	}
+
+	/** Whether a step from {@code (x, y, z)} to {@code (nx, ny)} is open ground
+	 *  to move into, on whichever level {@link #stepLevel} says it lands. */
+	public boolean isStepConnected(double x, double y, double z, double nx, double ny) {
+		return isConnectedSpace(x, y, z, nx, ny, stepLevel(x, y, z, nx, ny));
+	}
+
 	public boolean isConnectedSpace(double x, double y, double z, double x2, double y2, double z2) {
 		Tile t = getTile(x, y, z);
 		if (t == null) {

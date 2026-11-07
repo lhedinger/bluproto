@@ -446,37 +446,14 @@ public abstract class Entity {
 	}
 
 	/**
-	 * How far this step changes the body's level — entirely the ground's doing. A
-	 * ramp is floor that spans two levels: its foot joins the level it sits on, its
-	 * top the level above. Walk off the top and you come out one level up; walk off
-	 * the foot and you come out one level down. The body decides nothing and needs
-	 * no sense of height — to a creature a ramp is just ground that leads somewhere,
-	 * which is the whole point of expressing it this way instead of as an actuator.
-	 *
-	 * <p>A ramp may run along any cardinal: the tile carries which way its high
-	 * side faces ({@link Tile#getRampUphill}), and a body climbs when its step
-	 * carries it up that slope and descends when it carries it down. The change
-	 * lands at the tile edge, so crossing the ramp itself is ordinary walking.
+	 * How far this step changes the body's level — entirely the ground's doing,
+	 * by the rule {@link World#stepLevel} keeps for movement and every probe of
+	 * it alike. The body decides nothing and needs no sense of height — to a
+	 * creature a ramp is just ground that leads somewhere, which is the whole
+	 * point of expressing it this way instead of as an actuator.
 	 */
 	private double rampStep() {
-		Tile here = world.getTile(X, Y, Z);
-		if (here == null) {
-			return 0;
-		}
-		int sx = (int) (X + dX) - (int) X, sy = (int) (Y + dY) - (int) Y;
-		if (sx == 0 && sy == 0) {
-			return 0; // still on the ramp: the level only turns over at its edge
-		}
-		// How far the step carries along the slope: positive is uphill.
-		int up = here.getRampUphill();
-		int along = sx * Tile.dirDx(up) + sy * Tile.dirDy(up);
-		if (here.getType() == Tile.TileType.TYPE_RAMPUP && along > 0) {
-			return 1;
-		}
-		if (here.getType() == Tile.TileType.TYPE_RAMPDOWN && along < 0) {
-			return -1;
-		}
-		return 0;
+		return world.stepLevel(X, Y, Z, X + dX, Y + dY) - (int) Z;
 	}
 
 	private boolean jumpedTile() {
