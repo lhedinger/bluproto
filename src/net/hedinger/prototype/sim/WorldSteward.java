@@ -66,6 +66,7 @@ public final class WorldSteward extends Entity implements CullOrders {
 	private final int surfaceZ; // the open-air level the herd lives on
 	private final int caveZ; // the underground level, or -1 for a one-level world
 	private boolean seedBelow = false; // alternates minded reseeds between the levels
+	private int hunterLevel = -1; // the level the last hunter group went to; -1 before the first
 
 
 	/**
@@ -292,15 +293,55 @@ public final class WorldSteward extends Entity implements CullOrders {
 	 * restored niche is what was seeded and not a different animal. Herbivore
 	 * groups alternate between the surface and the underground (when the world
 	 * has one), so the cave cohort persists instead of draining one-way to the
-	 * surface. The others live where the herds are.
+	 * surface. Hunter groups go round every level the herd is on, starting at
+	 * the surface, and the round carries over from one reseed to the next: a
+	 * hunter only hunts the level it stands on, and the herd does not stay
+	 * where it was founded. Measured live on seed 7 at tick 3M, all 1025 grazers were in
+	 * the two cave levels and 91 of 107 hunters on the surface, 70 of those
+	 * reseeded founders living off the fat they were seeded with -- every
+	 * reseed landed where there was nothing to eat, starved in about eighteen
+	 * days and was put back in the same place. Each group still lands beside a
+	 * grazer on its level when there is one (Worlds.anchorFor). The others
+	 * live on the surface, where the herds are founded.
 	 */
 	private void seedGroup(Genome.Clade clade) {
 		int z = surfaceZ;
 		if (clade == Genome.Clade.HERBIVORE && caveZ >= 0) {
 			z = seedBelow ? caveZ : surfaceZ;
 			seedBelow = !seedBelow;
+		} else if (clade == Genome.Clade.PREDATOR) {
+			z = nextHunterLevel();
 		}
 		Worlds.foundGroup(getWorld(), clade, z);
+	}
+
+	/** The next level round from the last hunter group's that has a living
+	 *  grazer on it -- the surface when nothing grazes anywhere, which a
+	 *  predator floor (conditional on prey) does not reseed into anyway. */
+	private int nextHunterLevel() {
+		int levels = Math.max(1, getWorld().getLevels());
+		boolean[] prey = new boolean[levels];
+		for (Iterable<net.hedinger.prototype.engine.Entity> some
+				: java.util.List.of(getWorld().getEntities(), getWorld().getArrivals())) {
+			for (net.hedinger.prototype.engine.Entity e : some) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.getGenome() != null
+						&& t.getGenome().clade == Genome.Clade.HERBIVORE) {
+					int z = (int) t.getZ();
+					if (z >= 0 && z < levels) {
+						prey[z] = true;
+					}
+				}
+			}
+		}
+		int from = hunterLevel < 0 ? surfaceZ - 1 : hunterLevel;
+		for (int step = 1; step <= levels; step++) {
+			int z = Math.floorMod(from + step, levels);
+			if (prey[z]) {
+				hunterLevel = z;
+				return z;
+			}
+		}
+		return surfaceZ;
 	}
 
 	/** The cohort keys — the clades, whose declaration order is the fixed

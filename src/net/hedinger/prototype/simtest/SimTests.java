@@ -19141,6 +19141,69 @@ public class SimTests {
 	}
 
 	/**
+	 * The steward puts hunters back on every level the herd is on, not just
+	 * the surface.
+	 *
+	 * <p>A hunter only hunts the level it stands on, and the herd does not stay
+	 * where it was founded. Measured live on seed 7 at tick 3M: all 1025 grazers
+	 * were in the two cave levels and 91 of 107 hunters on the surface, 70 of
+	 * them reseeded founders. Every reseed landed where there was nothing to
+	 * eat, starved in about eighteen days on the fat it was seeded with, and was
+	 * put back in the same place. Hunter groups now go round the levels with
+	 * grazers on them, and the round carries over from one reseed to the next,
+	 * so a floor that buys fewer groups than the herd has levels still reaches
+	 * every one. A level with no grazer gets none: that would be the same
+	 * starvation somewhere else (and see AFounderLandsWithinReachOfItsFood).
+	 *
+	 * <p>Wipes the hunters out and lets the floor restore them, a few times,
+	 * reading the level of every hunter the tick it lands.
+	 */
+	static class TheStewardPutsHuntersBackWhereTheHerdIs extends Scenario {
+		private static java.util.Set<Integer> levelsOf(World w, String role) {
+			java.util.Set<Integer> out = new java.util.TreeSet<>();
+			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+				if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved() && t.ecoRole().equals(role)) {
+					out.add(t.getLvl());
+				}
+			}
+			return out;
+		}
+
+		@Override
+		public void run() {
+			seed(29);
+			World w = demoAtTheSizeItWasWrittenFor(29);
+			tick(w, 400); // let the herds grow into adult bodies
+			java.util.Set<Integer> herd = levelsOf(w, "herbivore");
+			assertGreater("the herd is on more than one level " + herd, herd.size(), 1);
+			java.util.Set<Integer> reached = new java.util.TreeSet<>();
+			for (int round = 0; round < 3; round++) {
+				int wiped = 0;
+				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
+					if (e instanceof TestNPC t && !t.isDead() && !t.isRemoved()
+							&& t.ecoRole().equals("predator")) {
+						t.kill();
+						wiped++;
+					}
+				}
+				assertGreater("round " + round + ": there were hunters to wipe out", wiped, 0);
+				java.util.Set<Integer> landed = java.util.Set.of();
+				for (int t = 0; t < 400 && landed.isEmpty(); t++) {
+					tick(w, 1); // one at a time: read where they land, not where they walk
+					landed = levelsOf(w, "predator");
+				}
+				herd = levelsOf(w, "herbivore");
+				assertGreater("round " + round + ": the steward put hunters back", landed.size(), 0);
+				assertTrue("round " + round + ": only where the herd is: hunters " + landed
+						+ ", herd " + herd, herd.containsAll(landed));
+				reached.addAll(landed);
+			}
+			assertTrue("the restores reached every level the herd is on: hunters " + reached
+					+ ", herd " + herd, reached.containsAll(herd));
+		}
+	}
+
+	/**
 	 * The warden signs its founders into the birth registry.
 	 *
 	 * <p>A reseed used to write nothing, so a founder and a record that had aged
@@ -21609,6 +21672,7 @@ public class SimTests {
 				new AParasiteDrinksOnlyWhatItHasRoomFor(),
 				new RockyGroundFeedsAGrazerPoorly(),
 				new TheStewardPutsParasitesBack(),
+				new TheStewardPutsHuntersBackWhereTheHerdIs(),
 				new AGrownBodyIsBigEnoughToRide(),
 				new PredatorsIgnoreParasites(),
 				new AParasiteCannotGraze(),
