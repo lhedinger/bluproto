@@ -9344,6 +9344,70 @@ public class SimTests {
 	}
 
 	/**
+	 * A mind's search takes a ramp too, and its senses read the ramp as open.
+	 *
+	 * <p>Explore is how a minded body walks while it looks for something it cannot
+	 * see, and every minded hunter and grazer on the demo world searches that way.
+	 * It picks its next point from the neighbouring tiles that are ground on its
+	 * own floor, so it had roam's fault exactly: the tile past a ramp's edge is
+	 * rock or a hole there, and was never a candidate. The body's other probes
+	 * asked the same question the same way -- the blocked-ahead sense, the jam
+	 * test behind the unstick reflex, the escape heading -- so a ramp read as a
+	 * wall to the mind, and a body walked onto one was shoved back off it as
+	 * pinned. Measured over 20k ticks, minded grazers were on a ramp tile in
+	 * about two body-samples of every sample, mostly labelled running, and
+	 * crossed about once per hundred body-days.
+	 *
+	 * <p>Every one of those now asks {@link World#stepLevel} where the step lands,
+	 * which is the rule the engine moves bodies by.
+	 */
+	static class AnExplorerTakesTheRamp extends Scenario {
+		@Override
+		public void run() {
+			seed(83);
+			World w = ARoamerTakesTheRamp.rampCorridors(this);
+			Genome g = new Genome();
+			g.size = 6;
+			g.losRange = 3;
+			g.searchCast = 1.0;
+			TestNPC climber = TestNPC.minded(2.5, 2.5, 0, g, ExploreScenario.ALWAYS_SEARCHING)
+					.withSpeed(0.08).withHeading(0);
+			TestNPC descender = TestNPC.minded(8.5, 2.5, 1, g, ExploreScenario.ALWAYS_SEARCHING)
+					.withSpeed(0.08).withHeading(Math.PI);
+			w.spawnEntity(climber);
+			w.spawnEntity(descender);
+			w.think();
+			// Each walks its corridor end to end and back: with the ramp read as
+			// ground that is a crossing every hundred-odd ticks. Read as a wall it
+			// was 0-2 crossings in 3000 ticks over seeds 83-88, the odd one made by
+			// blundering, against 18-21 for each body with it read as ground.
+			int climbs = 0, descents = 0;
+			int climberWas = climber.getLvl(), descenderWas = descender.getLvl();
+			double highest = 0;
+			for (int t = 0; t < 3000; t++) {
+				w.think();
+				if (climber.getLvl() != climberWas) {
+					climbs++;
+					climberWas = climber.getLvl();
+				}
+				if (descender.getLvl() != descenderWas) {
+					descents++;
+					descenderWas = descender.getLvl();
+				}
+				if (climber.getLvl() == 1) {
+					highest = Math.max(highest, climber.getX());
+				}
+			}
+			assertGreater("an explorer starting on the ground floor takes the ramp again and again",
+					climbs, 9.5);
+			assertGreater("and searches on along the upper floor", highest, 7.5);
+			assertGreater("one starting on the upper floor too", descents, 9.5);
+			assertTrue("neither fell through the hole and out of the world",
+					!climber.isRemoved() && !descender.isRemoved());
+		}
+	}
+
+	/**
 	 * A floor is opaque, and a ramp is the hole in it.
 	 *
 	 * <p>{@code hasLOS} used to trace within the SOURCE level's plane and ignore
@@ -21733,6 +21797,7 @@ public class SimTests {
 				new MindsChangeLevelByWalkingRamps(),
 				new RampsRunWhicheverWayTheyAreLaid(),
 				new ARoamerTakesTheRamp(),
+				new AnExplorerTakesTheRamp(),
 				new AFloorBlocksSightUnlessAnOpeningIsNear(),
 				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),
