@@ -1257,7 +1257,11 @@ public final class Mechanics {
 						+ "hunter the value is its appetite for the body (below), so greed also "
 						+ "says how much a full stomach dulls the hunt; and it sets the reach: "
 						+ "quarry up to 0.5 + greed times its own size, capped at "
-						+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×."),
+						+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×. It also sets when a meal starts: "
+						+ "a body forages and eats from the moment its gut is "
+						+ pct(TestNPC.STARVE_HUNGER) + " × (1 − greed ÷ " + num(Genome.GREED_MAX)
+						+ ") empty until it is full, so 0 waits until starving and gorges, and "
+						+ num(Genome.GREED_MAX) + " never stops snacking."),
 				row("determination", "1 – " + num(Genome.DETERMINATION_MAX), "× incumbent",
 						"How much better a rival target must score before the held one is "
 						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "

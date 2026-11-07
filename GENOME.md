@@ -396,6 +396,15 @@ life:
   some lineages strip a patch into the cliff and some leave before it, and the
   range selects. Measured before there was a line, half of every herbivore's
   ticks were spent on a tile past the cliff.
+- **Greed sets when a meal starts.** A minded body feeds from the moment its
+  gut is `STARVE_HUNGER · (1 − greed / GREED_MAX)` empty until it is full, and
+  between meals it neither forages nor eats: greed 0 waits until starving and
+  gorges, the reference greed of 1 starts at 0.6, and 3 never stops snacking.
+  Before the line there was nothing between a full stomach and the next meal:
+  on the seed 7 demo world hunters fed in one and a half bouts a day, the
+  median bout starting 4% empty, and 28% of kills were made more than nine
+  tenths full. Forage asked for as cover, shade or damp is a place, not a
+  meal, and keeps no hours.
 - **Mass buys time**, on `mass^0.25` — the same exponent, for the same reason,
   that already gives a bigger body its longer fast: capacities grow with mass
   while the Kleiber burn only grows with `mass^0.75`.

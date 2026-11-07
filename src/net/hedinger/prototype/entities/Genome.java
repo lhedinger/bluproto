@@ -206,6 +206,13 @@ public class Genome {
 	 * the range's own cliff -- a tile grazed below a quarter of its cap rests a
 	 * day before it regrows -- is what the range selects on.
 	 *
+	 * <p>And for every minded body it is when the next meal starts: one feeds
+	 * from the moment its gut is {@code TestNPC.forageOnset} empty until it is
+	 * full, and between meals neither forages nor eats. That line falls from
+	 * starving at greed 0 to an empty gut's at {@link #GREED_MAX}, so the least
+	 * greedy lineage waits until it is starving and gorges, and the greediest
+	 * never stops snacking.
+	 *
 	 * @see net.hedinger.prototype.entities.AgentIO#A_PREY
 	 */
 	public double greed = 1.0;
