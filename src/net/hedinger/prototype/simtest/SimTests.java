@@ -9253,6 +9253,80 @@ public class SimTests {
 	}
 
 	/**
+	 * A roamer takes a ramp the way it takes any other ground.
+	 *
+	 * <p>Roam picks its next waypoint on its own floor and refuses one that is not
+	 * walkable there. In a carved test room that costs nothing — the floor past a
+	 * ramp's edge is open, so a waypoint there is accepted and the step that
+	 * reaches it turns the level over. Worldgen never lays a ramp like that: past
+	 * the top of every up ramp on its own level is the rock it climbs out of, and
+	 * past the foot of every down ramp is the hole it pours into (seed 7: all 498
+	 * of them). So every waypoint across an edge was refused, and a creature that
+	 * only roams never changed level. Measured on the demo world, 2 of 54 hunter
+	 * crossings in 60k ticks were made roaming; the rest were minds, which steer
+	 * the body directly and never asked roam.
+	 *
+	 * <p>This builds the ramp the way the generator does — rock past the top, a
+	 * hole past the foot — in a one-tile corridor per level, so the only way off
+	 * either floor is the ramp, and asks a plain roamer on each floor to find the
+	 * other one.
+	 */
+	static class ARoamerTakesTheRamp extends Scenario {
+		@Override
+		public void run() {
+			seed(82);
+			World w = room(12, 5, 2);
+			for (int z = 0; z < 2; z++) {
+				for (int x = 1; x < 11; x++) {
+					for (int y = 1; y < 4; y++) {
+						w.setTile(x, y, z, Tile.TileType.TYPE_WALL);
+					}
+				}
+			}
+			// Ground floor: a corridor x=1..4 to an up ramp at x=5, rock at x=6.
+			for (int x = 1; x <= 4; x++) {
+				w.setTile(x, 2, 0, Tile.TileType.TYPE_FLOOR);
+			}
+			w.setTile(5, 2, 0, Tile.TileType.TYPE_RAMPUP);
+			w.getTile(5, 2, 0).setRampUphill(Tile.DIR_E);
+			// Upper floor: the ramp's top lands at x=6, a corridor on to x=10, and
+			// the down ramp at x=5 drops into a hole at x=4.
+			w.setTile(5, 2, 1, Tile.TileType.TYPE_RAMPDOWN);
+			w.getTile(5, 2, 1).setRampUphill(Tile.DIR_E);
+			w.setTile(4, 2, 1, Tile.TileType.TYPE_HOLE);
+			for (int x = 6; x <= 10; x++) {
+				w.setTile(x, 2, 1, Tile.TileType.TYPE_FLOOR);
+			}
+			w.alignTiles();
+			assertTrue("the same-level tile past the ramp's top is rock",
+					!w.getTile(6, 2, 0).isWalkable());
+			assertTrue("and past the down ramp's foot is a hole",
+					!w.getTile(4, 2, 1).isWalkable());
+
+			TestNPC climber = TestNPC.roamer(2.5, 2.5, 0);
+			TestNPC descender = TestNPC.roamer(8.5, 2.5, 1);
+			w.spawnEntity(climber);
+			w.spawnEntity(descender);
+			w.think();
+			boolean climbed = false, descended = false;
+			double highest = 0;
+			for (int t = 0; t < 4000; t++) {
+				w.think();
+				if (climber.getLvl() == 1) {
+					climbed = true;
+					highest = Math.max(highest, climber.getX());
+				}
+				descended |= descender.getLvl() == 0;
+			}
+			assertTrue("a roamer on the ground floor climbs the ramp", climbed);
+			assertGreater("and walks on along the upper floor, off the ramp", highest, 6.5);
+			assertTrue("a roamer on the upper floor descends it", descended);
+			assertTrue("neither fell through the hole and out of the world",
+					!climber.isRemoved() && !descender.isRemoved());
+		}
+	}
+
+	/**
 	 * A floor is opaque, and a ramp is the hole in it.
 	 *
 	 * <p>{@code hasLOS} used to trace within the SOURCE level's plane and ignore
@@ -21641,6 +21715,7 @@ public class SimTests {
 				new SeekYieldsWhenItNamesNothing(),
 				new MindsChangeLevelByWalkingRamps(),
 				new RampsRunWhicheverWayTheyAreLaid(),
+				new ARoamerTakesTheRamp(),
 				new AFloorBlocksSightUnlessAnOpeningIsNear(),
 				new RockOwnsTheRampCutIntoIt(),
 				new MindedBodyUnsticksFromWallJam(),

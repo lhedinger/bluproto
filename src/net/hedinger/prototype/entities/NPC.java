@@ -2256,6 +2256,17 @@ public abstract class NPC extends Entity {
 	}
 
 	protected boolean isValidMoveDestination() {
+		if ((int) tZ != (int) Z) {
+			// A waypoint across a ramp's edge. It holds while this body still stands
+			// on the ramp that leads there; sight is not asked, because what lies
+			// between is the ramp itself, and on this floor the target tile is the
+			// rock or the hole the ramp runs into.
+			if (levelPastRamp(tX, tY) != (int) tZ) {
+				return false;
+			}
+			net.hedinger.prototype.engine.Tile there = getWorld().getTile(tX, tY, tZ);
+			return there != null && (isFlying() ? there.isFlyable() : there.isWalkable());
+		}
 		if (!isFlying() && !getWorld().getTile(tX, tY, tZ).isWalkable()) {
 			return false;
 		}
@@ -2279,10 +2290,66 @@ public abstract class NPC extends Entity {
 	// |///////////////////////////////////////////////////////////////
 	// |///////////////////////////////
 
+	/**
+	 * The level a roam waypoint at {@code (x, y)} belongs to: this body's own, or,
+	 * standing on a ramp, the next one when the waypoint lies past the edge where
+	 * the ramp turns the level over.
+	 *
+	 * <p>Roam picks its waypoints on its own floor and refuses one that is not
+	 * walkable there. Past a ramp's edge, on its own floor, worldgen always puts
+	 * the rock the ramp climbs out of or the hole it pours into, so a waypoint
+	 * across the edge was always refused and nothing that only roams ever changed
+	 * level. The ground over that edge is the next floor's, which is where the step
+	 * that reaches it lands ({@code Entity.rampStep}); naming the waypoint's level
+	 * that way makes a ramp, to a wanderer, the ground that leads somewhere it is.
+	 */
+	private double waypointLevel(double x, double y) {
+		int past = levelPastRamp(x, y);
+		return past >= 0 ? past : Z;
+	}
+
+	/**
+	 * The level beyond the edge of the ramp this body stands on, when
+	 * {@code (x, y)} lies past that edge squarely (not off to its side), or -1.
+	 * Squarely, because a straight walk from the ramp to such a point crosses the
+	 * one edge the engine turns the level over at and no other.
+	 */
+	private int levelPastRamp(double x, double y) {
+		net.hedinger.prototype.engine.Tile here = getWorld().getTile(X, Y, Z);
+		if (here == null) {
+			return -1;
+		}
+		net.hedinger.prototype.engine.Tile.TileType type = here.getType();
+		boolean up = type == net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPUP;
+		if (!up && type != net.hedinger.prototype.engine.Tile.TileType.TYPE_RAMPDOWN) {
+			return -1;
+		}
+		int exit = here.rampExit();
+		int ex = net.hedinger.prototype.engine.Tile.dirDx(exit), ey = net.hedinger.prototype.engine.Tile.dirDy(exit);
+		int sx = (int) Math.floor(x) - (int) X, sy = (int) Math.floor(y) - (int) Y;
+		int along = sx * ex + sy * ey;
+		int aside = sx * ey - sy * ex;
+		if (along < 1 || aside != 0) {
+			return -1;
+		}
+		int lvl = (int) Z + (up ? 1 : -1);
+		return getWorld().isValid(x, y, lvl) ? lvl : -1;
+	}
+
+	/** Steers at the roam waypoint: by sight on this floor, and straight on
+	 *  across a ramp's edge, where there is nothing to see past but the ramp. */
+	private void walkToWaypoint(double speed, int turn) {
+		if ((int) tZ != (int) Z) {
+			steer(speed, turn);
+		} else {
+			chase(speed, turn);
+		}
+	}
+
 	protected void roam(double speed, int turn) {
 		boolean bool = isValidMoveDestination();
 
-		if (!bool || tZ != Z) {
+		if (!bool) {
 			tX = X;
 			tY = Y;
 			tZ = Z;
@@ -2306,10 +2373,10 @@ public abstract class NPC extends Entity {
 
 			tX = X + d * Math.cos(a);
 			tY = Y + d * Math.sin(a);
-			tZ = Z;
+			tZ = waypointLevel(tX, tY);
 
 		} else {
-			chase(speed, turn);
+			walkToWaypoint(speed, turn);
 		}
 
 	}
@@ -2317,7 +2384,7 @@ public abstract class NPC extends Entity {
 	protected void roam(double speed, int turn, double direction) {
 		boolean bool = isValidMoveDestination();
 
-		if (!bool || tZ != Z) {
+		if (!bool) {
 			tX = X;
 			tY = Y;
 			tZ = Z;
@@ -2341,10 +2408,10 @@ public abstract class NPC extends Entity {
 
 			tX = X + d * Math.cos(a);
 			tY = Y + d * Math.sin(a);
-			tZ = Z;
+			tZ = waypointLevel(tX, tY);
 
 		} else {
-			chase(speed, turn);
+			walkToWaypoint(speed, turn);
 		}
 
 	}
@@ -2356,6 +2423,13 @@ public abstract class NPC extends Entity {
 			dZ = 0;
 			return false;
 		}
+		steer(speed, turn);
+		return true;
+	}
+
+	/** Turns toward the target and, once roughly facing it, steps. Asks nothing
+	 *  about sight: that is the caller's to have settled. */
+	private void steer(double speed, int turn) {
 		double angle = Math.atan2(Y - tY, X - tX) + Math.PI;
 
 		if (D >= 2 * Math.PI) {
@@ -2396,7 +2470,6 @@ public abstract class NPC extends Entity {
 		} else {
 			move(speed, D);
 		}
-		return true;
 	}
 
 	protected boolean follow(double speed, int turn, Entity e, double radius) {
