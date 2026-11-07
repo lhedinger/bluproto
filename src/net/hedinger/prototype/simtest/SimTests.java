@@ -9272,10 +9272,13 @@ public class SimTests {
 	 * other one.
 	 */
 	static class ARoamerTakesTheRamp extends Scenario {
-		@Override
-		public void run() {
-			seed(82);
-			World w = room(12, 5, 2);
+		/** Two floors joined by one ramp pair, laid the way worldgen lays them:
+		 *  ground corridor x=1..4 to an up ramp at (5,2,0) with rock past its top;
+		 *  upper corridor x=6..10 from the ramp's top, and the down ramp at
+		 *  (5,2,1) with a hole past its foot. Nothing else is open on either
+		 *  floor, and nothing grows. */
+		static World rampCorridors(Scenario s) {
+			World w = s.room(12, 5, 2);
 			for (int z = 0; z < 2; z++) {
 				for (int x = 1; x < 11; x++) {
 					for (int y = 1; y < 4; y++) {
@@ -9298,11 +9301,25 @@ public class SimTests {
 				w.setTile(x, 2, 1, Tile.TileType.TYPE_FLOOR);
 			}
 			w.alignTiles();
-			assertTrue("the same-level tile past the ramp's top is rock",
+			// Barren, so a minded body never has food in view and keeps searching.
+			for (int z = 0; z < 2; z++) {
+				for (int x = 0; x < 12; x++) {
+					for (int y = 0; y < 5; y++) {
+						w.getTile(x, y, z).setFertility(0);
+					}
+				}
+			}
+			s.assertTrue("the same-level tile past the ramp's top is rock",
 					!w.getTile(6, 2, 0).isWalkable());
-			assertTrue("and past the down ramp's foot is a hole",
+			s.assertTrue("and past the down ramp's foot is a hole",
 					!w.getTile(4, 2, 1).isWalkable());
+			return w;
+		}
 
+		@Override
+		public void run() {
+			seed(82);
+			World w = rampCorridors(this);
 			TestNPC climber = TestNPC.roamer(2.5, 2.5, 0);
 			TestNPC descender = TestNPC.roamer(8.5, 2.5, 1);
 			w.spawnEntity(climber);
