@@ -545,9 +545,9 @@ public class Genome {
 	 *
 	 * <p>Sight is not free -- it is perception tissue, a surcharge on the resting
 	 * burn around the reference genome ({@code NPC.PERCEPTION_BURN}) -- so the
-	 * spread is a real trade and not a free upgrade: seeing sixteen tiles costs a
-	 * reference hunter about six per cent more burn than seeing ten, and seeing
-	 * four saves about as much. Centred on the old ten rather than moved, for the
+	 * spread is a real trade and not a free upgrade: at the reference field of
+	 * view each tile of range past ten adds about 0.3% to the resting burn and
+	 * each tile short of it saves as much. Centred on the old ten rather than moved, for the
 	 * reason every spread here is: founders are seeding, and which end pays is
 	 * the world's to settle. Floored at four, above the three the minded bodies
 	 * clamp to, so the draw never lands where the clamp would flatten it.
@@ -556,10 +556,8 @@ public class Genome {
 	 * the seed 7 demo world one was in sight on 9.1% of the samples where a hunter
 	 * could breed and asked to, with the nearest willing mate a median 49 tiles
 	 * off; four tiles at the bottom of the draw was blind to all but a body
-	 * underfoot. The price per tile is unchanged, so the wider draw is a wider
-	 * trade rather than a free upgrade: at the reference field of view each tile
-	 * past ten adds about 1.6% to the resting burn, so the new centre of twenty
-	 * costs about 16% more at rest and the top of thirty-two about 35%.
+	 * underfoot. Sight still has a price ({@code NPC.PERCEPTION_BURN}), so the
+	 * wider draw is a wider trade rather than a free upgrade.
 	 */
 	public static void spreadSight(Genome g) {
 		g.losRange = 8 + Utils.random() * 24;

@@ -151,9 +151,13 @@ public abstract class NPC extends Entity {
 	 */
 	@Unit("of the thirst rate per degree C")
 	public static double HEAT_THIRST = 0.05;
-	/** Energy/tick per unit of sight area beyond the reference, at mass 1. */
+	/** Energy/tick per unit of sight area beyond the reference, at mass 1. It
+	 *  was five times this: at the reference field of view a tile of range cost
+	 *  about 1.6% of the resting burn, so the far end of a founder's sight
+	 *  (8..32 tiles) cost a third again of the burn. Now that price buys five
+	 *  tiles, about 0.3% of the resting burn each. */
 	@Unit("energy/tick per tile·rad")
-	public static double PERCEPTION_BURN = 5.0e-6;
+	public static double PERCEPTION_BURN = 1.0e-6;
 	/** The light a body always has to see by, even where the rasters read
 	 *  none: a floor under the light the eye's law reads. None; a cave with no
 	 *  hole is pitch dark and nothing sees in it, which is the night niche's

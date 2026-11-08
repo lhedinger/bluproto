@@ -5858,8 +5858,15 @@ public class SimTests {
 			int T = 300;
 			double plain = burnOver(room(12, 12), hi, T), keen = burnOver(room(12, 12), lo, T), dimmed = burnOver(room(12, 12), Genome.NIGHT_EYE_MAX, T);
 			assertGreater("a resting body burned something", plain, 0.0);
-			assertGreater("a night eye costs more burn", keen, plain * 1.02);
-			assertLess("and a dim eye less", dimmed, plain * 0.995);
+			// Read against the law (NPC.restingBurn), so the pin follows the price of
+			// sight rather than a magnitude it once had. These bodies are fed, and
+			// digestion refills part of what they burn, so the store falls by only
+			// about a quarter of the priced difference (0.27 of it, measured at a
+			// price of 1e-6): more than a seventh of it has to show.
+			double nightLaw = NPC.restingBurn(eye(lo), 1.0) / NPC.restingBurn(eye(hi), 1.0);
+			double dimLaw = NPC.restingBurn(eye(Genome.NIGHT_EYE_MAX), 1.0) / NPC.restingBurn(eye(hi), 1.0);
+			assertGreater("a night eye costs more burn", keen, plain * (1 + (nightLaw - 1) / 7));
+			assertLess("and a dim eye less", dimmed, plain * (1 - (1 - dimLaw) / 7));
 		}
 	}
 
@@ -16148,7 +16155,11 @@ public class SimTests {
 			double plainBurn = burnOver(room(12, 12), plain, T);
 			double keenBurn = burnOver(room(12, 12), keen, T);
 			assertGreater("both resting bodies burned something", plainBurn, 0.0);
-			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * 1.15);
+			// At least three quarters of the surcharge the law prices for it, so the
+			// pin follows PERCEPTION_BURN rather than a magnitude it once had.
+			double keenLaw = NPC.restingBurn(keen, 1.25) / NPC.restingBurn(plain, 1.25);
+			assertGreater("the law prices keen sight above plain", keenLaw, 1.0);
+			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * (1 + 0.75 * (keenLaw - 1)));
 
 			// Brain: a long program burns more than a short one, same body. Both
 			// programs are all NOPs: a random program can write the throttle and
