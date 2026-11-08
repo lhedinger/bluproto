@@ -11236,7 +11236,7 @@ public class SimTests {
 					founder.metabolism = NPC.META_REF;
 					net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
 					if (d == 0) {
-						double bill = TestNPC.endowmentCost(adult, founder.speed);
+						double bill = TestNPC.endowmentCost(adult, founder);
 						double asked = founder.reproCostFraction * cap;
 						assertNear("a founder of " + adult + " px asks what the childhood costs ("
 								+ String.format("%.2f against a bill of %.2f", asked, bill) + ")",
@@ -18549,7 +18549,7 @@ public class SimTests {
 	static class AFounderLandsWithinReachOfItsFood extends Scenario {
 		private static double price(Genome g) {
 			double cap = NPC.GLYCOGEN_PER_MASS * g.size / NPC.REF_SIZE;
-			return Math.min(0.9, TestNPC.endowmentCost(g.size, g.speed) / cap); // the gene's own ceiling
+			return Math.min(0.9, TestNPC.endowmentCost(g.size, g) / cap); // the gene's own ceiling
 		}
 
 		private static java.util.List<TestNPC> living(World w, Genome.Clade clade) {

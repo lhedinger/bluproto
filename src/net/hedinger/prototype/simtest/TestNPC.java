@@ -4928,12 +4928,18 @@ public class TestNPC extends NPC {
 	 * at its leisure, while a lineage that asks too little buries its young
 	 * and has no descendants left to do any drifting. So a founder starts on
 	 * the generous side of its own arithmetic.
+	 *
+	 * <p>The upkeep is the child's own resting burn ({@link NPC#restingBurn}),
+	 * read off the genome it inherits: its metabolism and what its sight, its
+	 * turning and its brain add. It used to be the bare Kleiber rate, which was
+	 * near enough while founders' sight was drawn around the reference and
+	 * stopped being so the moment it was not.
 	 */
-	public static double endowmentCost(double adultSize, double speed) {
+	public static double endowmentCost(double adultSize, Genome g) {
 		double m = adultSize / NPC.REF_SIZE;
 		double ticks = PROVISION * NPC.growthTicks(adultSize);
-		double upkeep = NPC.BASAL_RATE * Math.pow(m, 0.75) * ticks;
-		double travel = NPC.TRANSPORT_COST * m * speed * speed * ticks;
+		double upkeep = NPC.restingBurn(g, m) * ticks;
+		double travel = NPC.TRANSPORT_COST * m * g.speed * g.speed * ticks;
 		return upkeep + travel;
 	}
 

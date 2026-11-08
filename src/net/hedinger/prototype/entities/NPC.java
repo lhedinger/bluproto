@@ -1262,23 +1262,33 @@ public abstract class NPC extends Entity {
 	}
 
 	private double metabolismRate() {
+		return restingBurn(genome, leanMass());
+	}
+
+	/**
+	 * The resting burn per tick of a body of {@code leanMass} built from
+	 * {@code g}: the one rule the living body burns by and anything that prices
+	 * a life ahead of time reads, so a price can never leave out a cost the body
+	 * then pays.
+	 */
+	public static double restingBurn(Genome g, double leanMass) {
 		// Resting burn scales with mass^0.75 (Kleiber). The genome's metabolism is
 		// a heritable efficiency multiplier normalised to META_REF, so an average
 		// genome burns exactly the size-based rate and mutations nudge it.
-		double m34 = Math.pow(leanMass(), 0.75);
-		double eff = genome != null ? genome.metabolism / META_REF : 1.0;
+		double m34 = Math.pow(leanMass, 0.75);
+		double eff = g != null ? g.metabolism / META_REF : 1.0;
 		double base = BASAL_RATE * m34 * eff;
-		if (genome == null) {
+		if (g == null) {
 			return base;
 		}
 		// Capability surcharges, priced at the margin around a reference genome
 		// (see the constants): keen sight, quick turns and a long brain each add to
 		// the burn, a myopic/sluggish/simple body saves — bounded below so nothing
 		// ever exists for free. All scale with mass^0.75, like the base.
-		double sight = genome.losRange * genome.losFov * eyeCost(genome.nightEye);
+		double sight = g.losRange * g.losFov * eyeCost(g.nightEye);
 		double perception = PERCEPTION_BURN * m34 * (sight - REF_SIGHT);
-		double agility = AGILITY_BURN * m34 * (genome.turnRate - REF_TURN);
-		int brainLen = genome.brain != null ? genome.brain.length() : (int) REF_BRAIN_LEN;
+		double agility = AGILITY_BURN * m34 * (g.turnRate - REF_TURN);
+		int brainLen = g.brain != null ? g.brain.length() : (int) REF_BRAIN_LEN;
 		double thought = BRAIN_BURN * m34 * (brainLen - REF_BRAIN_LEN);
 		double burn = base + perception + agility + thought;
 		return Math.max(burn, base * CAPABILITY_FLOOR);
