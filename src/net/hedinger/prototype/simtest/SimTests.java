@@ -13232,6 +13232,121 @@ public class SimTests {
 	}
 
 	/**
+	 * A station's opening is ground fallen in, so each drawn layout is held to
+	 * what makes it read that way rather than as something dug: one hole with
+	 * the foot's pits; no run of more than four pits straight across or back
+	 * (an eight-pit row read on the live world as a trench); no ground left
+	 * standing inside it, nor a gap wider than four in any row (arms reaching
+	 * back from that row closed a moat round grass); pits at or behind the
+	 * foot only; and both sides of the ramp opened, within three pits of
+	 * each other.
+	 */
+	static class StationOpeningsAreRaggedBlobs extends Scenario {
+		@Override
+		public void run() {
+			String[][] layouts = net.hedinger.prototype.sim.Worlds.stationLayouts();
+			assertGreater("there are layouts to choose from", layouts.length, 1);
+			for (int i = 0; i < layouts.length; i++) {
+				String[] l = layouts[i];
+				int rows = l.length, cols = l[0].length(), ft = -1, fr = -1;
+				for (int t = 0; t < rows && ft < 0; t++) {
+					if (l[t].indexOf('F') >= 0) {
+						ft = t;
+						fr = l[t].indexOf('F');
+					}
+				}
+				String at = "layout " + i + ": ";
+				assertTrue(at + "the foot is two pits side by side", ft >= 0 && l[ft].charAt(fr + 1) == 'F');
+				boolean[][] pit = new boolean[rows][cols];
+				int pits = 0, left = 0, right = 0;
+				for (int t = 0; t < rows; t++) {
+					assertTrue(at + "row " + t + " is as wide as the rest", l[t].length() == cols);
+					for (int c = 0; c < cols; c++) {
+						char ch = l[t].charAt(c);
+						pit[t][c] = ch == 'O' || ch == 'F';
+						if (ch == 'O') {
+							assertTrue(at + "the pit at row " + t + " is at or behind the foot", t <= ft);
+							pits++;
+							left += c < fr ? 1 : 0;
+							right += c > fr + 1 ? 1 : 0;
+						}
+					}
+				}
+				// One hole with the foot's.
+				boolean[][] seen = new boolean[rows][cols];
+				java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+				seen[ft][fr] = seen[ft][fr + 1] = true;
+				q.add(new int[] { ft, fr });
+				q.add(new int[] { ft, fr + 1 });
+				int joined = 0;
+				int[][] steps = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+				while (!q.isEmpty()) {
+					int[] p = q.poll();
+					joined++;
+					for (int[] d : steps) {
+						int t = p[0] + d[0], c = p[1] + d[1];
+						if (t >= 0 && c >= 0 && t < rows && c < cols && pit[t][c] && !seen[t][c]) {
+							seen[t][c] = true;
+							q.add(new int[] { t, c });
+						}
+					}
+				}
+				assertTrue(at + "every pit is one hole with the foot (" + joined + " of " + (pits + 2) + ")",
+						joined == pits + 2);
+				// No straight runs.
+				for (int t = 0; t < rows; t++) {
+					for (int c = 0, run = 0, last = -1; c < cols; c++) {
+						run = pit[t][c] ? run + 1 : 0;
+						assertTrue(at + "no more than four pits in a row (row " + t + ")", run <= 4);
+						if (pit[t][c]) {
+							assertTrue(at + "no gap wider than four in row " + t, last < 0 || c - last - 1 <= 4);
+							last = c;
+						}
+					}
+				}
+				for (int c = 0; c < cols; c++) {
+					for (int t = 0, run = 0; t < rows; t++) {
+						run = pit[t][c] ? run + 1 : 0;
+						assertTrue(at + "no more than four pits in a column (column " + c + ")", run <= 4);
+					}
+				}
+				// Nothing left standing inside: all ground reaches the frame's edge
+				// or the open side past the foot without crossing a pit.
+				boolean[][] out = new boolean[rows][cols];
+				for (int t = 0; t < rows; t++) {
+					for (int c = 0; c < cols; c++) {
+						if (!pit[t][c] && (t == 0 || c == 0 || c == cols - 1 || t >= ft)) {
+							out[t][c] = true;
+							q.add(new int[] { t, c });
+						}
+					}
+				}
+				while (!q.isEmpty()) {
+					int[] p = q.poll();
+					for (int[] d : steps) {
+						int t = p[0] + d[0], c = p[1] + d[1];
+						if (t >= 0 && c >= 0 && t < rows && c < cols && !pit[t][c] && !out[t][c]) {
+							out[t][c] = true;
+							q.add(new int[] { t, c });
+						}
+					}
+				}
+				for (int t = 0; t < rows; t++) {
+					for (int c = 0; c < cols; c++) {
+						assertTrue(at + "no ground standing inside the hole at row " + t + ", column " + c,
+								pit[t][c] || out[t][c]);
+					}
+				}
+				// Both sides.
+				assertGreater(at + "the left side opens (" + left + " pits)", left, 2);
+				assertGreater(at + "the right side opens (" + right + " pits)", right, 2);
+				assertLess(at + "the sides are near even (" + left + " and " + right + ")",
+						Math.abs(left - right), 4);
+			}
+		}
+	}
+
+	/**
 	 * The ways down into the caves follow the terrain: a station is cut where
 	 * the bedrock opens, so it stands by rock -- a cliff, scree or rocky ground
 	 * within six tiles of its ramp -- and away from lakes, with no still water
@@ -21778,6 +21893,7 @@ public class SimTests {
 				new ATableRiverStepsDownToThePlain(),
 				new ALakeDrawsInTheRiversNearIt(),
 				new AStationStandsByRockAndAwayFromWater(),
+				new StationOpeningsAreRaggedBlobs(),
 				new BogGroundSlowsByItsNature(),
 				new AMireSwallowsTheBigAndFloatsTheSmall(),
 				new APoolIsWaterToDrinkAndNotToCross(),
