@@ -726,12 +726,16 @@ public abstract class NPC extends Entity {
 	/** How much fat a body can carry, as a share of its lean mass. */
 	@Unit("of lean mass")
 	public static double FAT_CAP = 0.5;
-	/** A body lays down fat only while its gut is fuller than this and its
-	 *  glycogen is full: fat is what is left over once everything else is paid. */
+	/** On a gut fuller than this, fat is laid down straight from it at a share
+	 *  of the digestion rate that rises with how full glycogen is
+	 *  ({@link #fatStoreShare}); on an emptier one, only what a full store
+	 *  cannot hold is. Also the scripted grazer's sated line. */
 	@Unit("hunger")
 	public static double FAT_STORE_BELOW = 0.25;
-	/** A body draws on its fat once its gut is emptier than this, so the
-	 *  gut never pegs -- and starvation never bites -- while any fat is left. */
+	/** A body turns its fat back into glycogen once its gut is emptier than
+	 *  this. The gut itself keeps emptying -- burning fat fills no stomach --
+	 *  and starvation still never bites while any fat is left, because it
+	 *  waits for the fat and the store to be gone ({@link #starving}). */
 	@Unit("hunger")
 	public static double FAT_DRAW_ABOVE = 0.75;
 	/**
@@ -1503,23 +1507,25 @@ public abstract class NPC extends Entity {
 			// paid whether it rides or walks or stands.
 			double cold = coldCost();
 			double out = base + grip + travel + cold;
-			// Only conversion that lands in the books draws down the gut: at
-			// full glycogen the mint stops instead of burning the meal for nothing.
+			// Only conversion that lands in the books draws down the gut: what the
+			// store cannot hold is not minted, so a sated body never burns its meal
+			// for nothing.
 			double minted = Math.min(regen, Math.max(0, cap - glycogen + out));
 			hunger = Math.min(1.0, hunger + minted / (GUT_PER_MASS * adultMass()));
 			glycogen = Math.min(cap, glycogen + regen - out);
-			if (glycogen < 0) {
-				glycogen = 0; // collapse, never death — health is the only gate
-			}
-			// Fat, both ways, at the digestion rate and fat's own density. A
-			// gut running empty is refilled out of fat before it can peg; a
-			// gut that is full against full glycogen is laid down as fat.
+			// Fat, at the digestion rate and fat's own density.
 			double gut = GUT_PER_MASS * adultMass();
 			double digest = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * vigor;
-			if (fat > 0 && hunger > FAT_DRAW_ABOVE) {
-				double back = Math.min(fat * FAT_DENSITY, digest);
+			if (fat > 0 && hunger > FAT_DRAW_ABOVE && glycogen < cap) {
+				// Drawn straight into glycogen once the gut is running empty, and
+				// only into room the store has. It used to refill the gut, which kept
+				// a fat body's gut from ever emptying past this line -- so it never
+				// felt hungrier than that while it had fat, and an appetite with a
+				// line past it could not be reached until the fat was gone. Burning
+				// fat fills no stomach: the body stays as hungry as its gut is.
+				double back = Math.min(fat * FAT_DENSITY, Math.min(digest, cap - glycogen));
 				fat -= back / FAT_DENSITY;
-				hunger = Math.max(0, hunger - back / gut);
+				glycogen += back;
 			} else if (hunger < FAT_STORE_BELOW && fat < fatCap()) {
 				// Not "is glycogen full" but "how full": the share ramps from none
 				// at FAT_STORE_FROM to all of it at cap, so any sustained surplus
@@ -1533,6 +1539,18 @@ public abstract class NPC extends Entity {
 					fat += store / FAT_DENSITY;
 					hunger = Math.min(1.0, hunger + store / gut);
 				}
+			} else if (fat < fatCap() && regen > minted) {
+				// A full store on a gut below the line above: what digestion would
+				// have minted and the store could not hold is laid down as fat. It
+				// used to go nowhere -- digestion simply stopped behind a full tank,
+				// and the meal waited in the gut for the store to empty.
+				double store = Math.min(regen - minted,
+						Math.min((fatCap() - fat) * FAT_DENSITY, (1 - hunger) * gut));
+				fat += store / FAT_DENSITY;
+				hunger = Math.min(1.0, hunger + store / gut);
+			}
+			if (glycogen < 0) {
+				glycogen = 0; // collapse, never death — health is the only gate
 			}
 			// A collapsed captor cannot hold: restraint is exertion, and below the
 			// exhaustion floor there is none to spend — the grip opens and the captive

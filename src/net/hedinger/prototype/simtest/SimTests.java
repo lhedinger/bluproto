@@ -1576,8 +1576,10 @@ public class SimTests {
 	/**
 	 * Fat is the body's store. A fed body with full glycogen keeps digesting and
 	 * lays what glycogen cannot take down as mass, at the one price; a body
-	 * whose gut runs empty draws that mass back into the gut at the same
-	 * price, so fat is spent before health is. And fat is meat: a fat body's
+	 * whose gut runs empty turns that mass straight back into glycogen at the
+	 * same price, so fat is spent before health is. Burning it fills no
+	 * stomach: the fat body's gut empties as the lean one's does, and it is
+	 * the store, not the appetite, that fat keeps up. And fat is meat: a fat body's
 	 * carcass carries it, half fresh and half decayed, on top of the lean mass's
 	 * thirds, so a long fed life leaves a rich body and a starved one bones.
 	 */
@@ -1632,8 +1634,8 @@ public class SimTests {
 			// Both nearly out of glycogen as well as out of gut: an empty gut is
 			// appetite, not starvation, and what decides which of the two this is
 			// is whether the body has anything left to live on. The fat one has;
-			// it draws its store back through the gut and tops the glycogen up
-			// again. The lean one has nothing, and goes under.
+			// it turns its store back into glycogen. The lean one has nothing,
+			// and goes under.
 			fat.withGlycogen(0.08 * fat.glycogenCapacity());
 			lean.withGlycogen(0.08 * lean.glycogenCapacity());
 			b.spawnEntity(fat);
@@ -1641,14 +1643,15 @@ public class SimTests {
 			double f0 = fat.fat();
 			tick(b, 1200);
 			assertLess("an empty gut draws on the fat", fat.fat(), f0 - 0.01);
-			assertLess("and the gut never pegs while any is left", fat.getHunger(), NPC.DEPRIVED);
+			assertGreater("which fills no stomach: the gut is as empty as the lean twin's",
+					fat.getHunger(), NPC.DEPRIVED);
+			assertGreater("it goes into the store instead, well off the floor the twin sits on",
+					fat.getGlycogen(), 2 * lean.getGlycogen());
 			assertTrue("so starvation has not touched it past the arrival tick (" + fat.getHealth() + ")",
 					fat.getHealth() >= 99);
 			assertLess("the lean twin is starving", lean.getHealth(), fat.getHealth() - 5);
 			assertTrue("and it is starving because it has nothing left, not because it is hungry",
 					lean.starving() && !fat.starving());
-			assertGreater("and the fat body is the better fed of the two, out of its own store",
-					lean.getHunger(), fat.getHunger());
 
 			// --- an empty gut is not starvation while there is still a store to
 			// live on. A third twin, lean but with its glycogen full, is as hungry
@@ -19293,10 +19296,15 @@ public class SimTests {
 			// The pace is the drain gene's, a point every 250 ticks at the
 			// default, and the trickle keeps a rider fed without ever filling it:
 			// it used to be the gut that paced the bites, when a bite came every
-			// 30 ticks and banked the full carcass value of the point.
-			assertTrue("the trickle keeps it fed, well clear of starving ("
-					+ String.format("%.2f hunger", passenger.getHunger()) + ")",
-					passenger.getHunger() < 0.6);
+			// 30 ticks and banked the full carcass value of the point. Fed is read
+			// off the stores, not the gut: a full store sends digestion on into
+			// fat, so a well-provisioned rider's gut runs low while its fat grows.
+			assertTrue("the trickle keeps it fed, well clear of starving (store "
+					+ String.format("%.0f%%, fat %.0f%%, %.2f hunger",
+							100 * passenger.getGlycogen() / passenger.glycogenCapacity(),
+							100 * passenger.fat() / passenger.fatCap(), passenger.getHunger()) + ")",
+					!passenger.starving()
+							&& passenger.getGlycogen() > 0.95 * passenger.glycogenCapacity());
 			assertTrue("and the host is alive under it", !ridden.isDead());
 			assertGreater("with its health held, not sliding to nothing ("
 					+ ridden.getHealth() + " hp)", ridden.getHealth(), 89);

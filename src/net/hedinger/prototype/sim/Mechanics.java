@@ -463,11 +463,13 @@ public final class Mechanics {
 						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
 						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
 				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the lean mass", "mass",
-						"Laid down at the digestion rate while the gut is fuller than "
-						+ pct(1 - NPC.FAT_STORE_BELOW) + " against full glycogen; drawn back into the "
-						+ "gut once it is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes "
-						+ "before health does. Carried on every step, and on the carcass, half "
-						+ "fresh and half decayed."),
+						"Laid down at the digestion rate: on a gut fuller than "
+						+ pct(1 - NPC.FAT_STORE_BELOW) + ", a share rising from none at "
+						+ pct(NPC.FAT_STORE_FROM) + " glycogen to all of it at full; on an emptier "
+						+ "one, whatever a full store cannot hold. Turned straight back into glycogen once the gut "
+						+ "is emptier than " + pct(1 - NPC.FAT_DRAW_ABOVE) + ", so fat goes before "
+						+ "health does, and the gut keeps emptying while it burns. Carried on every "
+						+ "step, and on the carcass, half fresh and half decayed."),
 				row("Childhood", "(1 − born at) × adult size ÷ "
 						+ num(NPC.GROWTH_RATE), "ticks", "How long an individual grows for "
 						+ "depends on how big its parents built it. The figures below are the "

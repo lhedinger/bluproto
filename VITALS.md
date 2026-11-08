@@ -350,9 +350,12 @@ and the overhead leaves as heat, and eating it back returns 0.85 of
 so nothing that grows and is eaten breaks even. It is sized so a
 body is worth gut-fills rather than mouthfuls, which makes growing up the
 big purchase of a life; digestion and grazing are paced so a child can pay
-for it in minutes. A fed adult with full glycogen lays what it cannot use down
-as fat, mass on top of the lean mass, and draws it back into the gut before
-starvation can bite — the store a long fed life leaves on the carcass. The old fixed
+for it in minutes. What digestion mints fills glycogen, and fat takes what
+glycogen does not: a share that grows as the store fills, and everything a full
+store cannot hold. Fat is mass on top of the lean mass, turned straight back
+into glycogen once the gut runs low, before starvation can bite — the store a
+long fed life leaves on the carcass. Burning it fills no stomach: the gut keeps
+emptying, so a fat body still gets hungry. The old fixed
 growth rate becomes a well-fed ceiling: growth slows to what the surplus
 above the exhaustion floor affords, so childhood stretches with scarcity and a
 starving juvenile stops growing before it stops living. Because the mint
