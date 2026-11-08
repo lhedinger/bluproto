@@ -401,6 +401,9 @@ public final class Mechanics {
 						+ "undisturbed air leaves running. A body on a pond's margin turns and thins faster "
 						+ "than one on the sand; one at a vent's mouth gets some of its warm-air hurry back "
 						+ "from the heat having dried the air. Compounds with the warm-air term; read once."),
+				row("Freezing air, on a carcass", "below " + num(NPC.FREEZING), "deg C at the body",
+						"A body that falls in air below freezing keeps: nothing spoils and nothing rots, "
+						+ "and it lies there until something eats it. Read once, where the body fell."),
 				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
 						"Holds together early and thins out late, reaching nothing exactly as the corpse "
 						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "
