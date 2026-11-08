@@ -388,6 +388,13 @@ public abstract class NPC extends Entity {
 		return (int) Math.round((1 - BIRTH_SIZE_FRACTION) * adult / GROWTH_RATE);
 	}
 
+	/** Ticks a body of adult radius {@code adult} takes to rot away once its
+	 *  fresh meat has turned, in air at its floor's own temperature:
+	 *  {@link #ROT_SPAN} childhoods. The one rule the body and the suite read. */
+	public static int rotTicks(double adult) {
+		return (int) Math.round(ROT_SPAN * growthTicks(adult));
+	}
+
 	/** The adult body this creature is still growing toward, or 0 when it is
 	 *  not growing — in TILES, matching {@link #getSize()}'s wire convention
 	 *  (the raw fields are in pixels). Growth is deterministic
@@ -912,6 +919,14 @@ public abstract class NPC extends Entity {
 	 *  still turned in three days and was gone in five. */
 	@Unit("deg C")
 	public static double FREEZING = 0.0;
+	/** How many childhoods a body takes to rot away once it has turned: the rot
+	 *  clock ({@link #rotTicks}) is this times {@link #growthTicks} of its adult
+	 *  size. It was one --
+	 *  "a body takes as long to rot away as it took to build" -- which at the
+	 *  reference size cleared a turned carcass in under half a day; three gives
+	 *  scavengers three times as long at the decayed meat. */
+	@Unit("childhoods")
+	public static double ROT_SPAN = 3.0;
 	/** The air's multiplier on this corpse's clocks, fixed at death. */
 	private double rotPace = 1.0;
 

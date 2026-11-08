@@ -1072,8 +1072,8 @@ public class TestNPC extends NPC {
 		// give. A child's start is overwritten in spawnOffspring by what ITS
 		// parents chose, which is the only place the decision is actually made.
 		t.beginGrowth(adult, g.birthSize);
-		// A body takes as long to rot away as it took to build: the corpse span IS
-		// the childhood, read off the same two growth constants rather than a
+		// A body takes ROT_SPAN childhoods to rot away: the corpse span is read
+		// off the childhood, the same two growth constants rather than a
 		// separate figure that could drift out of step. Both are linear in adult
 		// size and so linear in mass, which is the scaling that matters -- a big
 		// animal leaves a big body, lying there for a big scavenger's window.
@@ -1083,7 +1083,7 @@ public class TestNPC extends NPC {
 		// child copied its parent's span rather than reading its own body, that 90
 		// spread from the steward's reseeds to the entire living population. Every
 		// carcass in the world lasted 2.6 seconds whatever it weighed.
-		t.deathspan = growthTicks(adult);
+		t.deathspan = NPC.rotTicks(adult);
 		// Speed is the genome's, scaled by what the clade does with it — a ranging
 		// factor derived here so a lineage keeps it, not a founder-only stamp.
 		t.speed = g.speed * Niche.of(g.clade).strideFactor();
