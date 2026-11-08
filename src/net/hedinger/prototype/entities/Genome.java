@@ -551,9 +551,18 @@ public class Genome {
 	 * reason every spread here is: founders are seeding, and which end pays is
 	 * the world's to settle. Floored at four, above the three the minded bodies
 	 * clamp to, so the draw never lands where the clamp would flatten it.
+	 *
+	 * <p>Doubled to 8..32. A courting hunter needs a willing mate in sight, and on
+	 * the seed 7 demo world one was in sight on 9.1% of the samples where a hunter
+	 * could breed and asked to, with the nearest willing mate a median 49 tiles
+	 * off; four tiles at the bottom of the draw was blind to all but a body
+	 * underfoot. The price per tile is unchanged, so the wider draw is a wider
+	 * trade rather than a free upgrade: at the reference field of view each tile
+	 * past ten adds about 1.6% to the resting burn, so the new centre of twenty
+	 * costs about 16% more at rest and the top of thirty-two about 35%.
 	 */
 	public static void spreadSight(Genome g) {
-		g.losRange = 4 + Utils.random() * 12;
+		g.losRange = 8 + Utils.random() * 24;
 	}
 
 	/** True if this genome reproduces sexually; false if it buds. */
