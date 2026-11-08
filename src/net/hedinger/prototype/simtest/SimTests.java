@@ -165,9 +165,10 @@ public class SimTests {
 	}
 
 	/**
-	 * A body takes as long to rot away as it took to build, and both scale with
-	 * mass. Pins the two to each other: the corpse span is read off the growth
-	 * constants, so tuning childhood retunes decay and neither can drift.
+	 * A body takes ROT_SPAN times as long to rot away as it took to build, and
+	 * both scale with mass. Pins the two to each other: the corpse span is read
+	 * off the growth constants, so tuning childhood retunes decay and neither
+	 * can drift.
 	 * Also pins the decay clock the renderers draw from.
 	 */
 	static class CorpseRotsForAsLongAsItTookToGrow extends Scenario {
@@ -186,10 +187,10 @@ public class SimTests {
 			w.spawnEntity(b);
 			tick(w, 2);
 
-			assertEquals("a small body rots for exactly its childhood",
-					net.hedinger.prototype.entities.NPC.growthTicks(6), s.getDeathspan());
-			assertEquals("and a big one for its own, longer childhood",
-					net.hedinger.prototype.entities.NPC.growthTicks(18), b.getDeathspan());
+			assertEquals("a small body rots for exactly its span of childhoods",
+					net.hedinger.prototype.entities.NPC.rotTicks(6), s.getDeathspan());
+			assertEquals("and a big one for its own, longer span",
+					net.hedinger.prototype.entities.NPC.rotTicks(18), b.getDeathspan());
 			assertGreater("mass is the variable factor: the bigger body lasts longer",
 					b.getDeathspan() - s.getDeathspan(), 0);
 
@@ -252,8 +253,8 @@ public class SimTests {
 			body.damage(500);
 			tick(w, 1);
 			assertTrue("a carcass lies at the far edge of scent range", body.isDead());
-			assertEquals("and it will lie there for as long as it took to build",
-					net.hedinger.prototype.entities.NPC.growthTicks(12), body.getDeathspan());
+			assertEquals("and it will lie there for its span of childhoods",
+					net.hedinger.prototype.entities.NPC.rotTicks(12), body.getDeathspan());
 
 			// A scavenger that simply walks at its food: the mind is not the
 			// variable here, the clock on the meal is.
@@ -310,7 +311,7 @@ public class SimTests {
 						double adult = Niche.of(n.getGenome().clade).expressedSize(n.getGenome().size);
 						assertEquals("a RESEEDED " + n.getGenome().clade
 								+ " leaves the carcass its body earns, not a flat span",
-								net.hedinger.prototype.entities.NPC.growthTicks(adult), n.getDeathspan());
+								net.hedinger.prototype.entities.NPC.rotTicks(adult), n.getDeathspan());
 						checked++;
 					}
 				}
@@ -3461,8 +3462,8 @@ public class SimTests {
 			// reseeds, spread to every carcass in the live world.
 			for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 				if (e instanceof TestNPC t && t != parent && !t.isRemoved()) {
-					assertEquals("a child's corpse lasts as long as ITS body took to build",
-							net.hedinger.prototype.entities.NPC.growthTicks(
+					assertEquals("a child's corpse lasts as long as ITS body's span",
+							net.hedinger.prototype.entities.NPC.rotTicks(
 									t.getGenome().size), t.getDeathspan());
 					assertTrue("not the span its parent was hand-given",
 							t.getDeathspan() != parent.getDeathspan());
@@ -6335,14 +6336,14 @@ public class SimTests {
 			assertNear("cost rises with the square of speed", ratio * ratio, fast / slow,
 					ratio * ratio * 0.02);
 
-			// A carcass is worth the dead body's mass, and rots over exactly the time
-			// that body took to build -- one constant behind both, by construction.
+			// A carcass is worth the dead body's mass, and rots over ROT_SPAN times the
+			// time that body took to build -- one rule behind both, by construction.
 			for (java.util.List<String> r : tableOf(secs, "food")) {
 				double size = Double.parseDouble(r.get(0));
 				assertNear("carcass at size " + size,
 						TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * (size / NPC.REF_SIZE),
 						Double.parseDouble(r.get(2)), 0.005);
-				assertEquals("rot time at size " + size, NPC.growthTicks(size),
+				assertEquals("rot time at size " + size, NPC.rotTicks(size),
 						Long.parseLong(r.get(4)));
 			}
 			for (java.util.List<String> r : tableOf(secs, "growth")) {
@@ -6350,12 +6351,12 @@ public class SimTests {
 				assertEquals("childhood at size " + size, NPC.growthTicks(size),
 						Long.parseLong(r.get(2)));
 			}
-			// Rot and childhood are the same figure; the page says so, so it had
-			// better still be true of what the page prints.
+			// Rot is ROT_SPAN childhoods; the page says so, so it had better still be
+			// true of what the page prints.
 			java.util.List<java.util.List<String>> food = tableOf(secs, "food");
 			java.util.List<java.util.List<String>> grow = tableOf(secs, "growth");
 			assertEquals("the tables agree on how long a body takes",
-					Long.parseLong(food.get(0).get(4)), Long.parseLong(grow.get(0).get(2)));
+					Math.round(NPC.ROT_SPAN * Long.parseLong(grow.get(0).get(2))), Long.parseLong(food.get(0).get(4)));
 
 			// Percentages come from the fractions the founder setup actually applies.
 			assertTrue("the breeding threshold is the reference lineage's gene",
@@ -8461,7 +8462,8 @@ public class SimTests {
 			w.spawnEntity(t);
 			w.think();
 			t.damage(1000); // killed outright
-			for (int i = 1; i <= 4000; i++) { // fresh window, then the span
+			int window = 3 * NPC.FRESH_TICKS + 2 * NPC.rotTicks(size);
+			for (int i = 1; i <= window; i++) { // fresh window, then the span
 				tick(w, 1);
 				if (t.isRemoved()) {
 					return i;

@@ -405,9 +405,11 @@ public final class Mechanics {
 						"A body that falls in air below freezing keeps: nothing spoils and nothing rots, "
 						+ "and it lies there until something eats it. Read once, where the body fell."),
 				row("Decayed meat", "rots on the decay clock", "1 - progress^" + num(NPC.ROT_SHAPE),
-						"Holds together early and thins out late, reaching nothing exactly as the corpse "
-						+ "dissolves. A scavenger's bite takes some and leaves less to rot; it does not "
-						+ "hurry the clock. What rots uneaten feeds the ground along with the bones."),
+						"The clock is " + num(NPC.ROT_SPAN) + " childhoods of the body's adult size, "
+						+ "started once the fresh meat is gone. Holds together early and thins out late, "
+						+ "reaching nothing exactly as the corpse dissolves. A scavenger's bite takes some "
+						+ "and leaves less to rot; it does not hurry the clock. What rots uneaten feeds the "
+						+ "ground along with the bones."),
 				row("Who eats the dead", "a rule of the body's clade", "",
 						"A hunter: only a corpse with fresh meat on it. A scavenger: any corpse "
 						+ "with meat, however old. A parasite: the living only. A fresh carcass is on "
@@ -431,10 +433,11 @@ public final class Mechanics {
 			double meal = TestNPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION * m;
 			t.add(List.of(num(size), round(m, 2), round(meal, 2),
 					round(meal / (NPC.PLANT_DENSITY * NPC.PLANT_ASSIMILATION), 1),
-					num(NPC.growthTicks(size)), round(NPC.growthTicks(size) / TPS, 1)));
+					num(NPC.rotTicks(size)), round(NPC.rotTicks(size) / TPS, 1)));
 		}
 		table(s, "What a body is worth once it stops moving, and how long it stays worth it — "
-				+ "a carcass takes as long to return to the world as the body took to build.",
+				+ "once its fresh meat has turned, a carcass takes " + num(NPC.ROT_SPAN)
+				+ " times as long to return to the world as the body took to build.",
 				List.of("Size", "Mass", "Whole carcass", "Grazes' worth", "Rots in (ticks)",
 						"Rots in (s)"),
 				t);
@@ -453,8 +456,8 @@ public final class Mechanics {
 				+ "of its current size, and growth slows to what the surplus affords: "
 				+ "childhood stretches with scarcity, and a starving juvenile stops growing "
 				+ "before it stops living. Rot is pinned to the nominal figure, so a body "
-				+ "takes as long to return to the world as it took to build — one constant, "
-				+ "not two that can drift apart.");
+				+ "takes " + num(NPC.ROT_SPAN) + " times as long to return to the world as it "
+				+ "took to build — one rule, not two that can drift apart.");
 		rows(s,
 				row("Born at", pct(NPC.BIRTH_SIZE_FRACTION), "of the adult body",
 						"A gene, and the reference lineage's value. The parents decide it: a "
