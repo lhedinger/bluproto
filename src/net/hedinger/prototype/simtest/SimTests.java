@@ -10594,7 +10594,8 @@ public class SimTests {
 			hg.patience = patience;
 			hg.determination = 4.0; // dogged, so only the clock can turn it
 			hg.losFov = Math.PI * 2; // all-round sight: the pick is by size and distance, never by facing
-			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg).grown(); // growth is eaten, and there is nothing to eat in a cell
+			TestNPC hunter = TestNPC.mindedPredator(6.5, 12.5, 0, hg).grown() // growth is eaten, and there is nothing to eat in a cell
+					.withHunger(0.5); // hungry, so it hunts from the moment the cell opens
 			w.spawnEntity(hunter);
 			tick(w, 200);
 			for (int x = 5; x <= 7; x++) {
