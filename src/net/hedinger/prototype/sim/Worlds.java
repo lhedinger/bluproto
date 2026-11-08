@@ -6544,52 +6544,66 @@ public final class Worlds {
 	 * foot's or another that does, so the opening is one hole; and each
 	 * layout opens to both sides of the ramp alike, reaching up to three or four
 	 * tiles out rather than a single ring round the foot. A pit beside water
-	 * stays stone, so no lake or river runs over the lip. Drawn first with a pit off
-	 * to one side here and a lone one there, the openings read as a hatch with
-	 * holes knocked round it, and spilled one way.
+	 * stays stone, so no lake or river runs over the lip.
+	 * <p>
+	 * And the hole is a blob, not a drawing: no more than four pits in a line
+	 * either way, no ground left standing inside it, no gap wider than four in
+	 * any row, and the stone round it hugs its edge rather than the frame's.
+	 * A layout of arms reaching back from an eight-pit row read on the live
+	 * world as a trench round a moat, and one wide bowl as a paved slab; the
+	 * scenario StationOpeningsAreRaggedBlobs holds the layouts to these rules.
 	 */
 	private static final String[][] STATION_LAYOUTS = {
-		{ // a wide mouth, fallen in deep behind the foot
-			"...sbs....",
-			"..sOOsb...",
-			".bsOOOs.b.",
-			"bOOssOOOs.",
-			"sOOOFFOOOs",
-			".bssRRssb.",
-			"..sshhss..",
-			"...sbbs...",
+		{ // a lopsided bowl, deepest on one side, reaching back over the other
+			"..bssb....",
+			".bsOOsbsb.",
+			".sOOOOsOs.",
+			".bsbOOOOb.",
+			"..sOFFOsb.",
+			"..bsRRsb..",
+			"...shhb...",
+			"...bssb...",
 		},
-		{ // a throat running back into the rock, flared at its lip
-			"...bOOb...",
-			"..bsOOsb..",
-			"..sOOOOs..",
-			".bOssOsOb.",
-			".sOOFFOOs.",
-			".bssRRssb.",
-			"..sshhs...",
-			"...ss.....",
-		},
-		{ // arms reaching out to both sides and curling back
+		{ // ground fallen in to both sides, a lobe off each
 			"..........",
-			".bsb..bsb.",
-			"bOOs..sOOb",
-			"sOss..ssOs",
-			"sOOOFFOOOs",
-			"bsssRRsss.",
-			".bsshhssb.",
-			"...sbs....",
+			"bbsb..bsb.",
+			"sOOsbssOsb",
+			"sOOOsOOOOs",
+			"bssOFFOsOb",
+			"..bsRRsbsb",
+			"...shhb...",
+			"...bssb...",
 		},
-		{ // ragged: a tongue back on one side, a spread on the other
-			"....s.....",
-			"...bOs....",
-			".bsOOsbs..",
-			"bOOOsOOOb.",
-			"sOsOFFsOOs",
-			".bssRRssb.",
-			"..sshhsb..",
-			"...bs.....",
+		{ // a throat winding back into the rock
+			"..sOObbsb.",
+			"..sOOObOs.",
+			".bbssOOOs.",
+			".sOOOOsOb.",
+			".bsOFFsOs.",
+			"..bsRRssb.",
+			"...shhb...",
+			"...bssb...",
+		},
+		{ // two lobes, back on one side and out on the other
+			"bssb......",
+			"sOOsb.bssb",
+			"sOOOsbsOOs",
+			"bsOOOsOOOs",
+			".bsOFFOssb",
+			"..bsRRsb..",
+			"...shhb...",
+			"...bssb...",
 		},
 	};
+
+	/** The drawn station layouts, for the scenarios that hold them to their rules. */
+	public static String[][] stationLayouts() {
+		String[][] out = new String[STATION_LAYOUTS.length][];
+		for (int i = 0; i < out.length; i++) {
+			out[i] = STATION_LAYOUTS[i].clone();
+		}
+		return out;
+	}
 
 	/** Whether the cave tile at {@code (x, y)} is the rock an up ramp climbs
 	 *  into — the head of the cut, which holds up the surface tile the climb
