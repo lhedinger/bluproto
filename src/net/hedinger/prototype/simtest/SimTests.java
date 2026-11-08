@@ -5915,6 +5915,57 @@ public class SimTests {
 
 
 	/**
+	 * A carcass keeps in freezing air. The Q10 alone only ever slowed the clocks:
+	 * a body in air at 0 degrees ran them at a third of the meadow's pace, so a
+	 * frozen kill still turned in three days and was gone in five. Below
+	 * FREEZING nothing spoils and nothing rots, and the body lies there until
+	 * something eats it.
+	 *
+	 * <p>Two identical bodies die on the same high floor, two degrees colder per
+	 * storey than the ground: one beside a coolant run, whose air is below
+	 * freezing, and one across the room from it, which is not. The cold one is
+	 * as fresh after twenty days as the tick it died; its twin turns, rots and
+	 * is gone.
+	 */
+	static class ACarcassKeepsWhileFrozen extends Scenario {
+		@Override
+		public void run() {
+			seed(74);
+			World w = room(14, 14, 8);
+			w.setSurfaceZ(0); // the ground at the bottom, so the bodies' floor is seven storeys up
+			int z = 7;
+			for (int x = 1; x <= 12; x++) {
+				w.setTile(x, 1, z, Tile.TileType.TYPE_COOLANT);
+			}
+			Genome g = Genome.phenotype(10, 0.0, 5, 6, Math.PI * 2, 100000);
+			TestNPC frozen = TestNPC.breeder(6.5, 2.5, z, g);
+			TestNPC thawed = TestNPC.breeder(6.5, 11.5, z, Genome.phenotype(10, 0.0, 5, 6, Math.PI * 2, 100000));
+			w.spawnEntity(frozen);
+			w.spawnEntity(thawed);
+			tick(w, 2);
+			double tCold = w.climate().temperatureAt(6.5, 2.5, z), tMild = w.climate().temperatureAt(6.5, 11.5, z);
+			assertLess("the air by the coolant on this floor is below freezing", tCold, NPC.FREEZING);
+			assertGreater("and across the room it is not", tMild, NPC.FREEZING);
+			frozen.damage(500);
+			thawed.damage(500);
+			tick(w, 1);
+			assertNear("the frozen body's clocks stand still", 0.0, frozen.rotPace(), 1e-12);
+			assertGreater("its twin's run", thawed.rotPace(), 0.0);
+			double fresh0 = frozen.freshMeat();
+			assertGreater("it died with fresh meat on it", fresh0, 0.1);
+			boolean thawedGone = false;
+			for (int t = 0; t < NPC.days(20); t++) {
+				tick(w, 1);
+				thawedGone |= thawed.isRemoved();
+			}
+			assertNear("twenty days on, the frozen body is as fresh as the tick it died",
+					fresh0, frozen.freshMeat(), 1e-12);
+			assertTrue("and still lying there", !frozen.isRemoved());
+			assertTrue("while its twin turned, rotted and is gone", thawedGone);
+		}
+	}
+
+	/**
 	 * A carcass rots faster in warm air and slower in cold. Decomposition has
 	 * a Q10 of two: spoilage and rot both run that much faster for every ten
 	 * degrees the air at the body is over its floor's own temperature, read
@@ -22069,6 +22120,7 @@ public class SimTests {
 				new AnEctothermIsAsSlowAsTheAirIsCold(),
 				new TheSwardGrowsAtThePaceOfItsAir(),
 				new ACarcassRotsFasterInWarmAir(),
+				new ACarcassKeepsWhileFrozen(),
 				new ACarcassTurnsFasterInDampAir(),
 				new TheSwardGrowsByItsLight(),
 				new ANightEyeSeesInDimLightAndPaysForIt(),

@@ -906,6 +906,12 @@ public abstract class NPC extends Entity {
 	 *  its warm-air hurry back. */
 	@Unit("share of the clock at zero humidity")
 	public static double ROT_DRY_SLOW = 0.5;
+	/** Below this the air freezes a body where it lies: nothing spoils and
+	 *  nothing rots, and the carcass keeps until something eats it. The Q10
+	 *  alone only slowed a body at 0 degrees to a third, so a frozen kill
+	 *  still turned in three days and was gone in five. */
+	@Unit("deg C")
+	public static double FREEZING = 0.0;
 	/** The air's multiplier on this corpse's clocks, fixed at death. */
 	private double rotPace = 1.0;
 
@@ -930,6 +936,9 @@ public abstract class NPC extends Entity {
 	 * @param href the floor's own undisturbed humidity
 	 */
 	public static double rotPace(double t, double base, double h, double href) {
+		if (t < FREEZING) {
+			return 0; // frozen: the clocks stand still
+		}
 		double wet = ROT_DRY_SLOW + (1 - ROT_DRY_SLOW) * h;
 		double ref = ROT_DRY_SLOW + (1 - ROT_DRY_SLOW) * href;
 		return Math.pow(ROT_Q10, (t - base) / 10.0) * wet / ref;
@@ -1068,6 +1077,9 @@ public abstract class NPC extends Entity {
 	 *  the body has turned the clock runs, and the meat rots with it. */
 	@Override
 	protected boolean decayHeld() {
+		if (rotPace <= 0) {
+			return true; // frozen where it fell: nothing turns, nothing rots, the clock is held
+		}
 		if (fresh > 0) {
 			spoil();
 			if (fresh > 0) {
@@ -2130,7 +2142,7 @@ public abstract class NPC extends Entity {
 				double h = getWorld().climate().humidityAt(X, Y, getLvl());
 				double href = net.hedinger.prototype.engine.Climate.referenceHumidity(getWorld(), getLvl());
 				rotPace = rotPace(t, base, h, href);
-				if (deathspan > 0) {
+				if (deathspan > 0 && rotPace > 0) {
 					deathspan = Math.max(1, (int) Math.round(deathspan / rotPace)); // 0 is "gone at once" and stays so
 				}
 			}
