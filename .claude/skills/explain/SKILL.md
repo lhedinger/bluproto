@@ -1,6 +1,6 @@
 ---
 name: explain
-description: Explain how or why something in the simulation behaves as it does — a mechanic, a population pattern, a creature's behaviour, a number in the viewer. Use whenever the user asks "how does X work", "why are/does…", "what makes…", "how are they surviving", "where does X come from", or otherwise wants system behaviour understood rather than changed. Answers are a short graphic plus a few lines, fast to produce and read, with no fix suggestions. Not for requests to change, tune or fix anything.
+description: Explain how or why something in the simulation behaves as it does — a mechanic, a population pattern, a creature's behaviour, a number in the viewer. Use whenever the user asks "how does X work", "why are/does…", "what makes…", "how are they surviving", "where does X come from", or otherwise wants system behaviour understood rather than changed. Answers are a sentence and a few lines, with a graphic only when it helps, a "why" followed down to its root cause, fast to produce and read, with no fix suggestions. Not for requests to change, tune or fix anything.
 ---
 
 # Explaining system behaviour
@@ -13,12 +13,15 @@ something readable in under a minute on a phone.
 ## The shape of every answer
 
 1. **One sentence that answers the question.** The mechanism in plain words,
-   first.
-2. **A simple graphic. Always.** Plain text in a fenced code block, so it
-   renders the same in the terminal and the app. At most about 12 lines and
-   56 characters wide, because the reader is often on a phone. Draw the
-   causal shape of the thing: a loop, a flow, a before/after, a sketch of the
-   levels. Put the one or two numbers that matter on the arrows.
+   first. For a "why", that is the root cause (see below), not the first
+   link in the chain.
+2. **A simple graphic, when it says it better than words.** A causal chain,
+   a loop, a before/after or a sketch of the levels often does; a single
+   fact or one number does not, and then the graphic is left out. When there
+   is one: plain text in a fenced code block, so it renders the same in the
+   terminal and the app; at most about 12 lines and 56 characters wide,
+   because the reader is often on a phone; the one or two numbers that
+   matter on the arrows.
 3. **At most three bullets** of supporting facts. Each carries its number
    where it has one, and each number comes from a constant just read in the
    code or a measurement just taken.
@@ -27,8 +30,32 @@ something readable in under a minute on a phone.
    looks wrong, saying so in one plain sentence is enough; what to do about
    it is a separate question the user will ask if they want it.
 
-About 150 words plus the graphic. If it is running longer, the answer is
+About 150 words, graphic included. If it is running longer, the answer is
 trying to cover the follow-up questions; cut them.
+
+## Finding the root cause
+
+A "why" is answered at its root, not at the first cause that comes to hand.
+Use the five-whys habit: take the first answer and ask why of it, then of
+that, until the chain reaches something the code states (a rule, a constant,
+a gate) or a measurement shows, and asking again would only be asking why
+the code is written that way. That is usually three to five steps, sometimes
+one; stop as soon as the next why has no answer in the code or the data.
+
+It is a way of thinking, not a format. Never print "Why 1 / Why 2"; lead
+with the root cause, and let the chain show only as much as the reader needs
+to believe it, in a sentence or as the arrows of the graphic. Each link has
+to be read in the code or measured, not reasoned to; a link that is inferred
+says so in the words that carry it.
+
+Use it when the question asks why something happens, or when the honest
+answer to a "how" is itself a symptom. A plain "how does X work" or "how
+long does Y take" needs no chain: answer it.
+
+For example, "why does a hunter only ever raise one cub?" One cub is what
+the founder's fat pays for, but that is the first link: fat is never laid
+down again, because fat is only banked from surplus, and a hunter's kills
+bring in less than its resting burn. The answer leads with that deficit.
 
 ### Example
 
@@ -63,6 +90,9 @@ Question: "How does the dung mechanism work?"
   investigation is better answered small now, with the open part named in a
   sentence, than late.
 - **Change nothing.** This skill reads; it does not edit, commit or ship.
+- **A root cause can need a measurement** the shallow answer did not. Take
+  the one cheap measurement for the link that matters most, and say which
+  links are the model's arithmetic instead.
 
 ## When the question is unclear
 
