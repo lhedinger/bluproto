@@ -552,14 +552,28 @@ public class Genome {
 	 * the world's to settle. Floored at four, above the three the minded bodies
 	 * clamp to, so the draw never lands where the clamp would flatten it.
 	 *
-	 * <p>Doubled to 8..32. A courting hunter needs a willing mate in sight, and on
-	 * the seed 7 demo world one was in sight on 9.1% of the samples where a hunter
-	 * could breed and asked to, with the nearest willing mate a median 49 tiles
-	 * off; four tiles at the bottom of the draw was blind to all but a body
-	 * underfoot. Sight still has a price ({@code NPC.PERCEPTION_BURN}), so the
-	 * wider draw is a wider trade rather than a free upgrade.
+	 * <p>Hunters draw twice this ({@link #spreadHunterSight}); everyone else
+	 * draws it as it was. Doubling it for every clade let the herd see grass and
+	 * danger four times the area off: on the seed 7 demo world it grew to the
+	 * steward's ceiling, about 1,500 against 200..600, the world held three times
+	 * the bodies, each scanning four times the area, and a tick cost 28 ms
+	 * against a 30 ms budget -- while hunters were refilled no less often.
 	 */
 	public static void spreadSight(Genome g) {
+		g.losRange = 4 + Utils.random() * 12;
+	}
+
+	/**
+	 * A founder hunter's sight: 8..32 tiles, twice everyone else's draw. A
+	 * courting hunter needs a willing mate in sight, and on the seed 7 demo world
+	 * one was in sight on 9.1% of the samples where a hunter could breed and
+	 * asked to, with the nearest willing mate a median 49 tiles off; a hunter is
+	 * also the one clade whose food has to be seen across open ground. Sight
+	 * still has a price ({@code NPC.PERCEPTION_BURN}), so the wider draw is a
+	 * wider trade rather than a free upgrade, and the childhood a founder prices
+	 * for its child counts it ({@code NPC.restingBurn}).
+	 */
+	public static void spreadHunterSight(Genome g) {
 		g.losRange = 8 + Utils.random() * 24;
 	}
 

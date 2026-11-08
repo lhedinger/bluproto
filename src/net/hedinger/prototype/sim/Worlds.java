@@ -264,6 +264,7 @@ public final class Worlds {
 		int amble = ambleOf(g.brain); // the pace mindedGenome drew, now a hunter's
 		g.brain = hunterBrain(amble < 0 ? drawAmble() : amble);
 		g.speed = HUNTER_SPEED_LO + Utils.random() * (HUNTER_SPEED_HI - HUNTER_SPEED_LO);
+		net.hedinger.prototype.entities.Genome.spreadHunterSight(g); // a hunter sees twice as far
 		return g;
 	}
 
