@@ -5709,6 +5709,9 @@ public final class Worlds {
 					}
 					w.setTile(bx, by, z, bank != null ? bank.getType() : Tile.TileType.TYPE_FLOOR);
 					w.getTile(bx, by, z).setFertility(bank != null ? bank.getFertility() : 0);
+					// And the bank's plant with it: a fresh tile is drawn as grass,
+					// and a reach dried back into a bog came out sphagnum of grass.
+					w.getTile(bx, by, z).setFlora(bank != null ? bank.getFlora() : Tile.FLORA_GRASS);
 				}
 			}
 		}
