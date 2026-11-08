@@ -4720,6 +4720,34 @@ public final class Worlds {
 	/** Whether the surface at (x, y) may become ravine: natural open ground,
 	 *  well inside the rim, nothing man-made or already sunken within three
 	 *  tiles, no water within one. */
+	/** Whether a surface tile is a ramp's head, or the ground one out from it:
+	 *  one or two steps uphill of a descending ramp. */
+	private static boolean rampHead(World w, int x, int y) {
+		for (int d = 0; d < 4; d++) {
+			for (int k = 1; k <= 2; k++) {
+				int rx = x - k * Tile.dirDx(d), ry = y - k * Tile.dirDy(d);
+				Tile t = w.getTile(rx, ry, SURFACE_Z);
+				if (t.getType() == Tile.TileType.TYPE_RAMPDOWN && t.getRampUphill() == d) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Whether a descending ramp stands within five tiles: a hole that near is
+	 *  part of a station's opening. */
+	private static boolean stationNear(World w, int x, int y) {
+		for (int dx = -5; dx <= 5; dx++) {
+			for (int dy = -5; dy <= 5; dy++) {
+				if (w.getTile(x + dx, y + dy, SURFACE_Z).getType() == Tile.TileType.TYPE_RAMPDOWN) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	private static boolean ravineCarvable(World w, int cols, int rows, int x, int y) {
 		return ravineCarvable(w, cols, rows, x, y, false);
 	}
@@ -4745,12 +4773,21 @@ public final class Worlds {
 		default:
 			return false;
 		}
+		// A gorge may run hard by a way down into the caves -- the ramp's side and
+		// its opening's pits are no worse for a drop beside them -- but never
+		// across the ramp's head or the ground just out from it, which is the
+		// only way onto the ramp from the surface.
+		if (rampHead(w, x, y)) {
+			return false;
+		}
 		for (int dx = -3; dx <= 3; dx++) {
 			for (int dy = -3; dy <= 3; dy++) {
 				Tile.TileType n = w.getTile(x + dx, y + dy, SURFACE_Z).getType();
 				boolean near = Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
-				if (n == Tile.TileType.TYPE_RAMPUP || n == Tile.TileType.TYPE_RAMPDOWN
-						|| n == Tile.TileType.TYPE_HOLE || n == Tile.TileType.TYPE_SHAFT
+				if (n == Tile.TileType.TYPE_HOLE && stationNear(w, x + dx, y + dy)) {
+					continue; // a station's opening: the gorge may meet it
+				}
+				if (n == Tile.TileType.TYPE_HOLE || n == Tile.TileType.TYPE_SHAFT
 						|| n == Tile.TileType.TYPE_PAVED || n == Tile.TileType.TYPE_PLATE
 						|| n == Tile.TileType.TYPE_DOCK || n == Tile.TileType.TYPE_RAIL) {
 					return false;
