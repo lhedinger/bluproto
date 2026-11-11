@@ -616,7 +616,11 @@ public final class Mechanics {
 						"At rest. Twice thirst's period — the rhythm anchor, held "
 						+ "by the gut's sizing rather than a clock."),
 				row("A full drink", num((long) NPC.DRINK_TICKS), "ticks at water",
-						round(NPC.DRINK_TICKS / TPS, 1) + " s; any water/shallows in the 3×3."),
+						round(NPC.DRINK_TICKS / TPS, 1) + " s at mass 1, × mass^0.25; any water/shallows "
+						+ "in the 3×3. Starts at thirst " + NPC.DRINK_ONSET + " and runs till quenched."),
+				row("A full meal", num((long) NPC.MEAL_TICKS), "ticks eating",
+						round(NPC.MEAL_TICKS / TPS, 1) + " s to swallow a full gut at mass 1, × mass^0.25: "
+						+ "a mouth's pace, whatever the food."),
 				row("The gut", num(NPC.GUT_PER_MASS) + " × mass", "food units",
 						"= resting burn × hunger period: a full gut IS "
 						+ "a hunger period of fuel. A sated body strips no ground."),

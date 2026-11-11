@@ -518,6 +518,7 @@ public class TestNPC extends NPC {
 	private int huntGiveUp = 0; // ticks left prowling after a pinned hunt
 	private double escLastX, escLastY; // position last give-up tick (zeroed-step detection)
 	private double lastThrottle = 0; // minded body's throttle last tick (gates the unstick reflex)
+	private boolean ateLastTick = false; // swallowed something last tick: at a meal, it stays
 	private TreeMap<Double, NPC> prey = null;
 	private TreeMap<Double, NPC> mates = null;
 	private Mind mind = null;
@@ -3796,6 +3797,12 @@ public class TestNPC extends NPC {
 		if (betweenMeals) {
 			seekClass = AgentIO.SEEK_NONE;
 		}
+		// A meal or a drink is a sitting. A body that swallowed last tick and is
+		// still feeding stays at its food, and one mid-drink at water stays at
+		// the water, until the gut or the thirst says it is done -- whatever pace
+		// the mind set for getting there. Flight and a walk to a mate (below)
+		// still take it away: a grazer eats with its head up.
+		boolean sitting = ((ateLastTick && feedingNow) || (drinkingNow() && nearWater())) && !away;
 		boolean pursuing = false; // the goal is named AND the body can see one
 		boolean searching = false; // the goal is named and the body cannot see one yet
 		boolean explored = false; // explore steered and moved the body this tick
@@ -3814,7 +3821,7 @@ public class TestNPC extends NPC {
 				// see explore. It walks the body itself, at the pace the mind's
 				// throttle sets, so the generic steer-and-move below stands down.
 				searching = true;
-				explored = explore(throttle > 0.02 ? throttle * speed : 0);
+				explored = !sitting && explore(throttle > 0.02 ? throttle * speed : 0);
 			}
 		}
 		// Speed is deliberately NOT the intent's business. An intent says where to go
@@ -3843,6 +3850,10 @@ public class TestNPC extends NPC {
 		if (betweenMeals && !mating) {
 			throttle = 0;
 			lastThrottle = 0; // resting, not pinned: the unstick reflex reads this
+		}
+		if (sitting && !mating) {
+			throttle = 0;
+			lastThrottle = 0;
 		}
 		if (mating && !Double.isNaN(mateSteer)) {
 			t = clamp(mateSteer / MAX_TURN, -1, 1); // walk to the partner
@@ -3939,6 +3950,14 @@ public class TestNPC extends NPC {
 			totalIntake += eaten;
 		}
 		eaten += feedingNow ? finishTheKill() : 0;
+		ateLastTick = eaten > 0;
+		if (eaten > 0 && hunger <= PRED_FULL_HUNGER) {
+			// The meal ends on the mouthful that fills the gut. The latch used to
+			// close at the next look, and a mouthful at the mouth's pace lands just
+			// under the full line, which a tick's digestion lifts back over it:
+			// the body found itself still feeding and took one more.
+			feeding = false;
+		}
 		boolean ateItem = false;
 		if (eats || intentTake) {
 			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach
@@ -4385,7 +4404,11 @@ public class TestNPC extends NPC {
 		// ledger, so what a hunter already ate is not paid again, and a carcass
 		// eaten out is cleared. Bites used to be priced by the whole body and
 		// paid out against the corpse's decay clock instead of its flesh.
-		Mouthful bite = carrion.eatCarrion(CARRION_BITE * carrion.carcassMass(),
+		// A mouthful is also no more than this mouth swallows in a tick
+		// (swallowRate): the carcass sets how much there is, the eater how fast
+		// it goes down, so a meal takes seconds rather than a blink.
+		double mouth = swallowRate() / (FLESH_ASSIMILATION * LEAN_DENSITY);
+		Mouthful bite = carrion.eatCarrion(Math.min(CARRION_BITE * carrion.carcassMass(), mouth),
 				actsAsHunter() && !scavengesAsCub()); // a cub eats the turned meat too
 		ingest(bite.energy(), FLESH_ASSIMILATION); // meat -> gut; satiation powers the body
 		setAction("eating", true);
