@@ -3792,7 +3792,8 @@ public class TestNPC extends NPC {
 		// at one in sight nor searching for one out of it. Running from food is
 		// not foraging and is left alone.
 		boolean feedingNow = appetiteOpen();
-		if (!away && !feedingNow && namesFood(seekClass)) {
+		boolean betweenMeals = !away && !feedingNow && namesFood(seekClass);
+		if (betweenMeals) {
 			seekClass = AgentIO.SEEK_NONE;
 		}
 		boolean pursuing = false; // the goal is named AND the body can see one
@@ -3821,13 +3822,28 @@ public class TestNPC extends NPC {
 		// locomotion worth leaving to selection, because movement costs the square of
 		// speed and so the throttle is where a lineage spends or saves its living. A
 		// body given a goal and no throttle wants something and stays put, which is a
-		// policy a mind is free to hold.
+		// policy a mind is free to hold. The one exception is a goal the body itself
+		// cancels -- food between meals, below -- whose pace goes with it.
 		// Mating is a commitment, so while it has a partner it takes the wheel: a
 		// creature walking to a mate is not also foraging, and one mid-exchange is
 		// standing still. A_SEEK resumes the moment the intent goes invalid.
 		boolean wantsMate = a[AgentIO.A_MATE] > 0.5;
 		double mateStatus = wantsMate ? mateIntent() : Double.NaN;
 		boolean mating = wantsMate && mateStatus == AgentIO.INTENT_PENDING;
+		// The one place the intent does touch speed: a goal the appetite has
+		// just cancelled takes its throttle with it. A mind that names its food
+		// and sets its pace from what it sees has not said how hard to push for
+		// nothing, and the seed hunter's chase rule ("flat out while prey is in
+		// sight") reads no appetite at all -- measured on the seed 7 demo world,
+		// grown hunters spent a quarter of their time full, ran on 29% of it with
+		// prey in sight on 95% of those runs, and that was 29% of all their
+		// travel energy, bought with no intake. So a body between meals that asked
+		// for food rests. A walk to a mate is a goal of its own and keeps its pace;
+		// so does running from a threat, which never names food in the first place.
+		if (betweenMeals && !mating) {
+			throttle = 0;
+			lastThrottle = 0; // resting, not pinned: the unstick reflex reads this
+		}
 		if (mating && !Double.isNaN(mateSteer)) {
 			t = clamp(mateSteer / MAX_TURN, -1, 1); // walk to the partner
 		}
