@@ -18849,6 +18849,55 @@ public class SimTests {
 	}
 
 	/**
+	 * A full hunter does not run at prey it will not eat. The hunter seed
+	 * sets its pace from what it sees -- flat out while prey is in sight --
+	 * and reads no appetite, while the body cancels the food it asks for
+	 * between meals. The goal went and the pace stayed: measured on the seed
+	 * 7 demo world, grown hunters were full a quarter of the time, ran on 29%
+	 * of it with prey in sight on 95% of those runs, and that was 29% of all
+	 * their travel energy, spent for nothing. A cancelled food goal now takes
+	 * its throttle with it.
+	 *
+	 * <p>Pinned on a minded hunter with the hunter seed and a living animal
+	 * four tiles off in plain sight: held full, it stays where it stands and
+	 * the animal is untouched; held hungry, it closes in.
+	 */
+	static class AFullHunterDoesNotRunAtPrey extends Scenario {
+		/** How far the hunter moved in 200 ticks at the given hunger. */
+		private double moved(double hunger) {
+			seed(131);
+			World w = room(16, 9);
+			for (int x = 1; x < 15; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome g = new Genome();
+			g.size = 8;
+			g.speed = 0.06;
+			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(3.5, 4.5, 0, g).grown().withHunger(hunger)
+					.withReproCooldown(100_000_000);
+			TestNPC prey = TestNPC.inert(7.5, 4.5, 0).withSize(6);
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.think();
+			double x0 = hunter.getX(), y0 = hunter.getY();
+			for (int i = 0; i < 200; i++) {
+				hunter.holdHunger(hunger);
+				tick(w, 1);
+			}
+			return Math.hypot(hunter.getX() - x0, hunter.getY() - y0);
+		}
+
+		@Override
+		public void run() {
+			assertLess("a full hunter stays put with prey in plain sight", moved(0.0), 0.05);
+			assertGreater("a hungry one goes after it", moved(0.8), 1.0);
+		}
+	}
+
+	/**
 	 * A hunter keeps its reserve before it runs. A chase is paid from the
 	 * store, and a hunter took one up at any glycogen above the exhaustion
 	 * floor: measured on seed 42, 415 of 3986 lost chases ended with the
@@ -22070,6 +22119,7 @@ public class SimTests {
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AFullHunterHuntsOnlyIfItIsGreedy(),
+				new AFullHunterDoesNotRunAtPrey(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
