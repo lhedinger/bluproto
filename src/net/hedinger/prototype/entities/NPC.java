@@ -1500,8 +1500,14 @@ public abstract class NPC extends Entity {
 			// water sips as it goes about its business, and walking off mid-drink
 			// keeps whatever partial refill had accrued. Some bodies carry their
 			// water with them; see drinksWithoutWater().
-			if (thirst > 0 && (nearWater() || drinksWithoutWater())) {
-				thirst = Math.max(0, thirst - 1.0 / DRINK_TICKS);
+			if (thirst >= DRINK_ONSET) {
+				drinking = true; // dry enough to go and drink, and to stay till done
+			}
+			if (drinking && thirst > 0 && (nearWater() || drinksWithoutWater())) {
+				thirst = Math.max(0, thirst - 1.0 / drinkTicks());
+			}
+			if (thirst <= 0) {
+				drinking = false; // drunk its fill: passing water is just water again
 			}
 			double base = metabolismRate();
 			// Rider bonus: a creature voluntarily riding a host spends less energy
@@ -1650,11 +1656,55 @@ public abstract class NPC extends Entity {
 	 *  Exertion adds appetite on top, which the old clock could not price. */
 	@Unit("ticks")
 	public static double HUNGER_PERIOD = 9.0 * DAY;
-	/** Ticks of standing at water for a full drink -- a couple of hours of world
-	 *  time, four seconds of watching: drinking is an act with a duration,
-	 *  interruptible by simply walking away. */
+	/** Ticks of standing at water for a full drink, for a body of mass 1 --
+	 *  three and a half hours of world time, nine seconds of watching: drinking
+	 *  is an act with a duration, interruptible by simply walking away. A drink
+	 *  from {@link #DRINK_ONSET} takes a quarter of it, a little over two
+	 *  seconds, and a drier or bigger body longer. */
 	@Unit("ticks")
-	public static double DRINK_TICKS = days(0.066);
+	public static double DRINK_TICKS = days(0.15);
+	/** Thirst at which a body starts to drink, and from which it keeps drinking
+	 *  until it has had its fill. A body used to sip whenever it stood by water,
+	 *  so a herd crossing a shore topped up a hundredth of its thirst in two or
+	 *  three ticks and walked on: measured on the seed 7 demo world, the median
+	 *  drink was 2-3 ticks, started at a thirst of 0.01-0.02, and 93-98% of
+	 *  drinking ticks were spent walking. A drink is now a sitting of its own. */
+	@Unit("thirst")
+	public static double DRINK_ONSET = 0.25;
+	/** Whether this body is mid-drink: set at {@link #DRINK_ONSET}, cleared
+	 *  once its thirst is gone -- the thirst half of the feeding latch. */
+	protected boolean drinking = false;
+
+	/** Ticks this body takes over a full drink: {@link #DRINK_TICKS} for a body
+	 *  of mass 1, longer for a bigger one by m^0.25 -- a mouth draws in
+	 *  proportion to the burn (m^0.75) while the need it fills scales with the
+	 *  body (m), so a big animal stands at the water longer. */
+	public double drinkTicks() {
+		return DRINK_TICKS * Math.pow(Math.max(1e-6, leanMass()), 0.25);
+	}
+
+	/** Whether this body is drinking or would be at water: thirsty past its
+	 *  onset and not yet quenched. */
+	public boolean drinkingNow() {
+		return drinking;
+	}
+
+	/** Ticks a body of mass 1 takes to swallow a full gut. Eating used to be
+	 *  as fast as the food would come away: a carcass gave up 1.5% of itself a
+	 *  tick whatever ate it, and on the seed 7 demo world a grown hunter's meal
+	 *  -- hunger 0.53 down to 0.12 -- took a median 23 ticks, under a second. A
+	 *  mouth has a pace: see {@link #swallowRate}. */
+	@Unit("ticks")
+	public static double MEAL_TICKS = days(0.15);
+
+	/** The most this body can swallow in a tick, in the assimilated energy the
+	 *  gut is counted in: a full gut over {@link #MEAL_TICKS}, scaled as the
+	 *  burn is (m^0.75) while the gut grows with the body (m), so a full meal
+	 *  takes {@code MEAL_TICKS * m^0.25} and a big animal eats for longer. Sized
+	 *  on the adult body, as the gut is ({@link #gutRoom}). */
+	public double swallowRate() {
+		return GUT_PER_MASS * Math.pow(Math.max(1e-6, adultMass()), 0.75) / MEAL_TICKS;
+	}
 	/** Gut of a reference body, in vegetation-energy units: eating
 	 *  {@code GUT_PER_MASS * adultMass()} worth of food takes hunger from starving
 	 *  to sated. Not a free knob: it equals {@code BASAL_RATE *
@@ -3325,8 +3375,11 @@ public abstract class NPC extends Entity {
 		// A sated body does not strip ground it cannot digest: the bite is
 		// bounded by the gut room left (converted back to grass units, through
 		// the share of a mouthful that will actually get there).
+		// And it is bounded by the mouth's pace (swallowRate), the same for
+		// every food.
 		double room = gutRoom() / (PLANT_DENSITY * PLANT_ASSIMILATION);
-		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, room));
+		double mouth = swallowRate() / (PLANT_DENSITY * PLANT_ASSIMILATION);
+		double eaten = w.getTile(X, Y, Z).graze(w.getTick(), Math.min(demand, Math.min(room, mouth)));
 		ingest(eaten * PLANT_DENSITY, PLANT_ASSIMILATION);
 		return eaten;
 	}

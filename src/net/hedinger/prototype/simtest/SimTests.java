@@ -450,6 +450,22 @@ public class SimTests {
 			double freshAtDeath = twin.freshMeat();
 			assertNear("triplets: the same fresh meat at death", freshAtDeath, bitten.freshMeat(), 1e-9);
 
+			// The meals here are the old blink: this scenario is about the fresh
+			// ledger, and its warm room turns a 20 px body in about 213 ticks,
+			// less than a 12 px hunter's meal at the mouth's real pace
+			// (AMealTakesItsTime). At that pace the first hunter would still be
+			// eating when the meat turned, which is a fact about meals, not about
+			// what a bite does to the rest.
+			double mealTicks = NPC.MEAL_TICKS;
+			NPC.MEAL_TICKS = 1;
+			try {
+				twinVsMeals(w, twin, bitten, shared, freshAtDeath);
+			} finally {
+				NPC.MEAL_TICKS = mealTicks;
+			}
+		}
+
+		private void twinVsMeals(World w, TestNPC twin, TestNPC bitten, TestNPC shared, double freshAtDeath) {
 			double twinBefore = twin.freshMeat();
 			double first = meal(w, bitten);
 			meal(w, shared);
@@ -832,7 +848,8 @@ public class SimTests {
 
 			// Needs, in the units a physiologist would quote them in.
 			inDays("thirst runs sated to parched in about four days", 4.5, NPC.THIRST_PERIOD);
-			inDays("a full drink takes a couple of hours", 0.066, NPC.DRINK_TICKS);
+			inDays("a full drink takes a few hours", 0.15, NPC.DRINK_TICKS);
+			inDays("and so does a full meal", 0.15, NPC.MEAL_TICKS);
 			inDays("a pegged need costs a point of health every half hour", 0.025, NPC.DEPRIVATION_PERIOD);
 			inDays("and a wound mends a point every couple of hours", 0.08, NPC.MEND_PERIOD);
 
@@ -18898,6 +18915,131 @@ public class SimTests {
 	}
 
 	/**
+	 * A meal takes its time. A carcass gave up 1.5% of itself a tick whatever
+	 * ate it, so a meal was as fast as the meat came away: measured on the seed
+	 * 7 demo world, a grown hunter's meal (hunger 0.53 down to 0.12) took a
+	 * median 23 ticks, under a second of watching. A mouth now swallows at
+	 * most a full gut over {@link NPC#MEAL_TICKS}, scaled as the burn is, so
+	 * a full meal takes {@code MEAL_TICKS * m^0.25}: longer the hungrier the
+	 * body, and longer the bigger it is.
+	 *
+	 * <p>Pinned on a minded hunter with the hunter seed standing at a fresh
+	 * carcass: from a light hunger the meal still takes over two seconds
+	 * (66 ticks), from a deep one longer, and a bigger hunter longer again.
+	 */
+	static class AMealTakesItsTime extends Scenario {
+		/** Ticks from the first mouthful until the hunter is full. */
+		private int mealTicks(int size, double hunger) {
+			seed(137);
+			World w = room(14, 9);
+			for (int x = 1; x < 13; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome mg = new Genome();
+			mg.size = 20;
+			mg.speed = 0;
+			TestNPC meal = TestNPC.grazer(6.5, 4.5, 0, mg).grown();
+			w.spawnEntity(meal);
+			tick(w, 1);
+			meal.kill();
+			Genome hg = new Genome();
+			hg.size = size;
+			hg.speed = 0.06;
+			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(6.0, 4.5, 0, hg).grown().withHunger(hunger)
+					.withReproCooldown(100_000_000);
+			w.spawnEntity(hunter);
+			int first = -1;
+			for (int t = 0; t < 2000; t++) {
+				tick(w, 1);
+				if (first < 0 && hunter.totalSwallowed() > 0) {
+					first = t;
+				}
+				if (first >= 0 && hunter.getHunger() <= TestNPC.PRED_FULL_HUNGER + 0.01) {
+					return t - first;
+				}
+			}
+			return Integer.MAX_VALUE;
+		}
+
+		@Override
+		public void run() {
+			int light = mealTicks(8, 0.3);
+			int deep = mealTicks(8, 0.9);
+			int big = mealTicks(16, 0.9);
+			assertGreater("a light meal still takes over two seconds", light, 66);
+			assertGreater("a hungrier hunter eats for longer", deep, light);
+			assertGreater("and a bigger one longer again", big, deep);
+			assertLess("but a meal is seconds, not a day", big, 1000);
+		}
+	}
+
+	/**
+	 * A drink is a sitting. A body used to sip whenever it stood by water, so
+	 * a herd crossing a shore topped up a hundredth of its thirst in two or
+	 * three ticks and walked on: measured on the seed 7 demo world, the median
+	 * drink was 2-3 ticks, started at a thirst of 0.01-0.02, and 93-98% of
+	 * drinking ticks were spent walking. Now a body starts to drink at
+	 * {@link NPC#DRINK_ONSET}, stays at the water till its thirst is gone, and
+	 * a full drink takes {@code DRINK_TICKS * m^0.25}.
+	 *
+	 * <p>Pinned on a minded grazer with the starter brain, hungry on bare
+	 * ground (so its forage would walk it off) and standing at the shallows:
+	 * thirsty, it stays put and drinks for over two seconds; drier, longer;
+	 * bigger, longer again; and below the onset it does not drink at all.
+	 */
+	static class ADrinkIsASitting extends Scenario {
+		/** {ticks until quenched, distance moved meanwhile, thirst after 100 ticks}. */
+		private double[] drink(int size, double thirst) {
+			seed(139);
+			World w = room(12, 9);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			w.setTile(3, 4, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome g = new Genome();
+			g.size = size;
+			g.speed = 0.05;
+			g.brain = net.hedinger.prototype.sim.Worlds.starterBrain();
+			TestNPC n = TestNPC.mindedForager(4.5, 4.5, 0, g).grown().withHunger(0.7)
+					.withHydration(1 - thirst).withReproCooldown(100_000_000);
+			w.spawnEntity(n);
+			double x0 = n.getX(), y0 = n.getY(), moved = 0, at100 = Double.NaN;
+			int quenched = Integer.MAX_VALUE;
+			for (int t = 0; t < 1500; t++) {
+				tick(w, 1);
+				if (t == 100) {
+					at100 = n.getThirst();
+				}
+				if (quenched == Integer.MAX_VALUE) {
+					moved = Math.max(moved, Math.hypot(n.getX() - x0, n.getY() - y0));
+					if (n.getThirst() <= 0) {
+						quenched = t;
+					}
+				}
+			}
+			return new double[] { quenched, moved, at100 };
+		}
+
+		@Override
+		public void run() {
+			double[] thirsty = drink(8, 0.4);
+			assertGreater("a thirsty body drinks for over two seconds", thirsty[0], 66);
+			assertLess("and stays at the water while it does", thirsty[1], 0.05);
+			double[] parched = drink(8, 0.9);
+			assertGreater("a drier one drinks for longer", parched[0], thirsty[0]);
+			assertGreater("and a bigger one longer again", drink(16, 0.9)[0], parched[0]);
+			double[] damp = drink(8, NPC.DRINK_ONSET / 2);
+			assertGreater("below the onset, standing at water is not a drink",
+					damp[2], NPC.DRINK_ONSET / 2 - 1e-9);
+		}
+	}
+
+	/**
 	 * A hunter keeps its reserve before it runs. A chase is paid from the
 	 * store, and a hunter took one up at any glycogen above the exhaustion
 	 * floor: measured on seed 42, 415 of 3986 lost chases ended with the
@@ -18998,7 +19140,7 @@ public class SimTests {
 			TestNPC hunter = TestNPC.mindedPredator(3.5, 4.5, 0, hg).grown().withHunger(0.3)
 					.withReproCooldown(100_000_000);
 			w.spawnEntity(hunter);
-			for (int t = 0; t < 600 && hunter.getHunger() > 0.06; t++) {
+			for (int t = 0; t < 600 && hunter.getHunger() > TestNPC.PRED_FULL_HUNGER; t++) {
 				tick(w, 1);
 			}
 			assertLess("the hunter walked to the carcass and ate its fill", hunter.getHunger(), 0.07);
@@ -22120,6 +22262,8 @@ public class SimTests {
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AFullHunterHuntsOnlyIfItIsGreedy(),
 				new AFullHunterDoesNotRunAtPrey(),
+				new AMealTakesItsTime(),
+				new ADrinkIsASitting(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
