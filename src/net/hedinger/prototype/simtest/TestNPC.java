@@ -3993,7 +3993,11 @@ public class TestNPC extends NPC {
 		// other plus a bonus.
 		// How the intent went, for the mind to read next tick. DONE is the terminal
 		// act actually firing -- grass eaten, a bite landed, an item taken -- not
-		// merely arriving; PENDING is a goal in sight and not yet reached; INVALID is
+		// merely arriving, with one exception: an item is done on arrival, taken or
+		// not. A crate cannot be taken, and an item intent that reached one read
+		// PENDING for as long as the body stood pressed against it, a goal in sight
+		// that would never be reached; PENDING is a goal in sight and not yet
+		// reached; INVALID is
 		// the guards failing, which covers both "there is no such thing here" and "the
 		// thing I was chasing is gone". Nothing reports a plain failure, because a
 		// latched intent never finishes losing: see AgentIO.S_INTENT.
@@ -4005,7 +4009,7 @@ public class TestNPC extends NPC {
 			intentStatus = AgentIO.INTENT_IDLE;
 		} else if (searching) {
 			intentStatus = AgentIO.INTENT_INVALID;
-		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && ateItem)
+		} else if ((intentGraze && eaten > 0) || (intentBite && bit) || (intentTake && (ateItem || itemInReach() != null))
 				|| intentPress
 				|| (chasing && seekClass == AgentIO.SEEK_FORAGE
 						&& tileWanted != AgentIO.TILE_FOOD && onWantedTile())) {

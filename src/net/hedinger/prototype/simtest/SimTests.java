@@ -8677,6 +8677,32 @@ public class SimTests {
 			tick(w, 5);
 			assertNear("a mind that wants nothing reports idle",
 					AgentIO.INTENT_IDLE, idle.intentStatus(), 1e-9);
+
+			// An item intent is done on arrival, whatever the item. Food is taken
+			// and gone; a crate cannot be taken, and reaching one used to read
+			// pending for as long as the body stood against it.
+			assertNear("walking to a crate in sight reports pending",
+					AgentIO.INTENT_PENDING, itemStatus(Item.crate(10.5, 8.5, 0), 5), 1e-9);
+			assertNear("reaching the crate reports done, though nothing can be taken",
+					AgentIO.INTENT_DONE, itemStatus(Item.crate(5.0, 8.5, 0), 5), 1e-9);
+			assertNear("and holding there still reads done, not pending",
+					AgentIO.INTENT_DONE, itemStatus(Item.crate(5.0, 8.5, 0), 60), 1e-9);
+		}
+
+		/** Status after {@code ticks} of a mind seeking items, beside {@code item}. */
+		private double itemStatus(Item item, int ticks) {
+			seed(98);
+			World w = room(16, 16);
+			Genome g = new Genome();
+			g.size = 8;
+			TestNPC body = TestNPC.minded(4.5, 8.5, 0, g, (sn, a) -> {
+				a[AgentIO.A_SEEK] = 2.0; // the item intent
+				a[AgentIO.A_THROTTLE] = 0.3;
+			}).withHeading(0);
+			w.spawnEntity(body);
+			w.spawnEntity(item);
+			tick(w, ticks);
+			return body.intentStatus();
 		}
 	}
 
