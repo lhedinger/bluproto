@@ -216,6 +216,17 @@ public class TestNPC extends NPC {
 
 	/** When this body last called, for {@link #CALL_PERIOD}. */
 	private long calledAt = Long.MIN_VALUE;
+	/**
+	 * The fewest ticks between two puffs of pheromone: the same two seconds as
+	 * {@link #CALL_PERIOD}. A held deposit actuator laid a puff every tick, so a
+	 * body that kept it high streamed scent wherever it walked -- free, and as
+	 * much of it as it liked. Now spraying is an act with a rhythm, like calling.
+	 */
+	@Unit("ticks")
+	public static final int SPRAY_PERIOD = CALL_PERIOD;
+	private long sprayedAt = Long.MIN_VALUE;
+	/** How the last spray went, for {@link AgentIO#S_DEPOSIT}. */
+	private double depositStatus = AgentIO.INTENT_IDLE;
 
 	/** The most recent sound to reach this body, and when — the sensed half of
 	 *  {@link AgentIO#S_SOUND_PROX}. Held here rather than on Entity because only
@@ -2661,6 +2672,7 @@ public class TestNPC extends NPC {
 			s[AgentIO.S_WATER_BEARING] = 0;
 		}
 		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
+		s[AgentIO.S_DEPOSIT] = depositStatus; // and last tick's spray
 		// What kind of ground to look for is the mind's standing choice, read before
 		// the scan so the channel answers the question actually being asked.
 		tileWanted = AgentIO.tileWanted(actuators[AgentIO.A_TILE]);
@@ -3962,9 +3974,7 @@ public class TestNPC extends NPC {
 		if (eats || intentTake) {
 			ateItem = eatNearestItem(); // devour a food (or bite a hazard) in reach
 		}
-		if (a[AgentIO.A_DEPOSIT] > 0.5) {
-			depositPheromone(NEST_DEPOSIT * 0.25);
-		}
+		spray(a[AgentIO.A_DEPOSIT] > 0.5);
 		boolean bit = false;
 		// The intent bites what it named. It used to bite whoever was nearest in
 		// reach, which on open ground was the quarry and in a pack was a packmate:
@@ -4200,9 +4210,33 @@ public class TestNPC extends NPC {
 		}
 		// Communicate: even pinned, a captive can still lay pheromone -- a distress
 		// marker other creatures could read.
-		if (actuators[AgentIO.A_DEPOSIT] > 0.5) {
-			depositPheromone(NEST_DEPOSIT * 0.25);
+		spray(actuators[AgentIO.A_DEPOSIT] > 0.5);
+	}
+
+	/**
+	 * The spray act: a puff of pheromone if one was asked for, the body can
+	 * exert, and the last puff is at least {@link #SPRAY_PERIOD} old -- and how
+	 * that went, on the intent's four values, for the mind to read on
+	 * {@link AgentIO#S_DEPOSIT}. A collapsed body cannot spray, as it cannot
+	 * call.
+	 */
+	private void spray(boolean wanted) {
+		if (!wanted) {
+			depositStatus = AgentIO.INTENT_IDLE;
+			return;
 		}
+		if (getWorld() == null || !canExert()) {
+			depositStatus = AgentIO.INTENT_INVALID;
+			return;
+		}
+		long now = getWorld().getTick();
+		if (sprayedAt != Long.MIN_VALUE && now - sprayedAt < SPRAY_PERIOD) {
+			depositStatus = AgentIO.INTENT_PENDING;
+			return;
+		}
+		sprayedAt = now;
+		depositPheromone(NEST_DEPOSIT * 0.25);
+		depositStatus = AgentIO.INTENT_DONE;
 	}
 
 	/**
