@@ -856,7 +856,11 @@ public final class Mechanics {
 								+ "landed. The only channel that tells a mind whether what it "
 								+ "wanted happened — without it, a creature can infer success "
 								+ "only from its glycogen drifting upward, several thoughts too "
-								+ "late.")));
+								+ "late."),
+						sense(AgentIO.S_DEPOSIT, "How the last spray went, on the same four "
+								+ "values: a pulse the tick a puff was laid, under way while the "
+								+ "actuator is held between puffs, impossible when collapsed, "
+								+ "idle when nothing was asked.")));
 		return s;
 	}
 
@@ -911,9 +915,10 @@ public final class Mechanics {
 								+ "tries to buck its riders off.")),
 				group("Breeding and signalling",
 						act(AgentIO.A_MATE, "Pair with a compatible neighbour."),
-						act(AgentIO.A_DEPOSIT, "Lay pheromone where it stands — the world's one "
-								+ "form of writing, and the only thing one creature leaves "
-								+ "behind for another to read.")),
+						act(AgentIO.A_DEPOSIT, "Lay a puff of pheromone where it stands — the world's "
+								+ "one form of writing, and the only thing one creature leaves "
+								+ "behind for another to read. One puff per "
+								+ TestNPC.SPRAY_PERIOD + " ticks, however long it is held.")),
 				group("Memory, and things",
 						act(AgentIO.A_MARK, "Remember this spot, or forget it. One waypoint, "
 								+ "held in the body — a mind could not do arithmetic on a "

@@ -265,7 +265,17 @@ public final class AgentIO {
 	 *  count as warm or cool ground: a degree, the field's own grain. */
 	@net.hedinger.prototype.engine.Unit("degrees C")
 	public static final double TILE_DEGREE = 1.0;
-	public static final int NUM_SENSORS = 51;
+	/**
+	 * How the last spray went ({@link #A_DEPOSIT}), on the same four values as
+	 * {@link #S_INTENT}: {@link #INTENT_DONE} a puff was laid last tick,
+	 * {@link #INTENT_PENDING} one was asked for while the last is still within
+	 * its period, {@link #INTENT_INVALID} one was asked for and the body could
+	 * not (collapsed), {@link #INTENT_IDLE} none was asked for. A spray is a
+	 * puff every couple of seconds, not a stream, so a mind holding the
+	 * actuator high reads one DONE and then PENDING until the next puff.
+	 */
+	public static final int S_DEPOSIT = 51;
+	public static final int NUM_SENSORS = 52;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -277,7 +287,7 @@ public final class AgentIO {
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
 			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile",
-			"bigger_prox", "bigger_bearing", "light", "humid", "warmth" };
+			"bigger_prox", "bigger_bearing", "light", "humid", "warmth", "deposit" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
@@ -286,7 +296,8 @@ public final class AgentIO {
 	public static final int A_THROTTLE = 1;
 	/** Graze the tile underfoot when > 0.5. */
 	public static final int A_EAT = 2;
-	/** Lay pheromone when > 0.5. */
+	/** Lay a puff of pheromone when > 0.5: at most one per
+	 *  {@code TestNPC.SPRAY_PERIOD}, reported on {@link #S_DEPOSIT}. */
 	public static final int A_DEPOSIT = 3;
 	/** Attack the nearest neighbour when > 0.5. */
 	public static final int A_ATTACK = 4;

@@ -8637,6 +8637,67 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A spray is a puff every couple of seconds, and says how it went. The
+	 * deposit actuator laid pheromone every tick it was held, free, so a body
+	 * that kept it high streamed scent wherever it walked. Now it lays one puff
+	 * per {@link TestNPC#SPRAY_PERIOD}, the same rhythm as a call, and reports
+	 * on {@link AgentIO#S_DEPOSIT} with the intent's four values.
+	 *
+	 * <p>Pinned on a body holding the actuator high for 200 ticks: it puffs at
+	 * ticks 0, 60, 120 and 180 and reads PENDING between; one that never asks
+	 * reads IDLE; a collapsed one that asks reads INVALID and lays nothing.
+	 */
+	static class ASprayIsAPuffEveryTwoSeconds extends Scenario {
+		/** The deposit status the mind read on each of its first 200 thinks. */
+		private double[] statuses(boolean ask, boolean collapsed) {
+			seed(141);
+			World w = room(10, 10);
+			double[] seen = new double[200];
+			int[] k = { 0 };
+			Genome g = new Genome();
+			g.size = 8;
+			TestNPC body = TestNPC.minded(5.5, 5.5, 0, g, (sn, a) -> {
+				if (k[0] < seen.length) {
+					seen[k[0]++] = sn[AgentIO.S_DEPOSIT];
+				}
+				a[AgentIO.A_DEPOSIT] = ask ? 1 : 0;
+			});
+			if (collapsed) {
+				body.withGlycogen(0);
+			}
+			w.spawnEntity(body);
+			for (int t = 0; t < 201; t++) {
+				if (collapsed) {
+					body.withGlycogen(0); // held down: it never recovers the strength
+				}
+				tick(w, 1);
+			}
+			return seen;
+		}
+
+		@Override
+		public void run() {
+			double[] held = statuses(true, false);
+			java.util.List<Integer> puffs = new java.util.ArrayList<>();
+			int pending = 0;
+			for (int i = 1; i < held.length; i++) { // the first think reads the tick before any act
+				if (held[i] == AgentIO.INTENT_DONE) {
+					puffs.add(i);
+				} else if (held[i] == AgentIO.INTENT_PENDING) {
+					pending++;
+				}
+			}
+			assertEquals("held for 200 ticks it puffs four times, not two hundred", 4, puffs.size());
+			assertEquals("a spray period apart", TestNPC.SPRAY_PERIOD, puffs.get(1) - puffs.get(0));
+			assertEquals("and reads pending on every tick between", held.length - 1 - puffs.size(), pending);
+			double[] quiet = statuses(false, false);
+			assertNear("a body that never asks reads idle", AgentIO.INTENT_IDLE, quiet[150], 1e-12);
+			double[] spent = statuses(true, true);
+			assertNear("a collapsed body that asks reads invalid", AgentIO.INTENT_INVALID, spent[150], 1e-12);
+		}
+	}
+
 	static class IntentReportsHowItWent extends Scenario {
 		private double statusAfter(boolean grassInWorld, int ticks) {
 			seed(98);
@@ -22288,6 +22349,7 @@ public class SimTests {
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AFullHunterHuntsOnlyIfItIsGreedy(),
 				new AFullHunterDoesNotRunAtPrey(),
+				new ASprayIsAPuffEveryTwoSeconds(),
 				new AMealTakesItsTime(),
 				new ADrinkIsASitting(),
 				new AHunterKeepsItsReserveBeforeItRuns(),
