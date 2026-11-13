@@ -587,17 +587,21 @@ public class Genome {
 	 * because the species pools bypass random() entirely -- the same trap the
 	 * first version of spreadSearch fell into, reaching a third of the world.
 	 *
-	 * <p>Centred on the old 0.35 rather than moved: founders are seeding, and
-	 * which way this pays is the question, not the answer. Both ends are real
-	 * strategies and the world can teach either -- a big newborn is dear, comes
-	 * out of a parent's fat and starts close to its adult body; a small one is
-	 * quick to afford and then has a long childhood to survive. The corners are
-	 * left for drift to reach rather than seeded onto, and the whole declared
-	 * range is affordable: at the top of it a reference hunter needs 0.50 of fat
-	 * to breed against a cap of 0.80, so no founder is drawn sterile.
+	 * <p>Drawn over the bottom of the range, 0.12..0.30. It was centred on
+	 * 0.35 (0.15..0.55), which built a founder's young at a third of its adult
+	 * body or more, where a wolf pup is about a hundredth of its mother and an
+	 * elk calf about a fourteenth. Those proportions cannot exist here: a body
+	 * is a whole number of pixels and a newborn is at least one, which for
+	 * founders of 5..17 px is already 6..20% of the adult -- the gene's own
+	 * floor, 0.12, is that pixel for a reference 8 px body. So the draw now
+	 * reaches down to that floor and stops at 0.30, a little under the old
+	 * centre. The bounds are untouched: both ends are still real strategies,
+	 * a big newborn dear and close to its adult body, a small one cheap and
+	 * facing a long childhood, and selection is free to take a lineage
+	 * either way.
 	 */
 	public static void spreadBirth(Genome g) {
-		g.birthSize = 0.15 + Utils.random() * 0.40;
+		g.birthSize = 0.12 + Utils.random() * 0.18;
 	}
 
 	/**
