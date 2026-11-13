@@ -833,8 +833,10 @@ async function refreshDetail(): Promise<void> {
     if (cam.followId === selectedId && typeof d.z === 'number') {
       goToLevel(d.z);
     }
-    // Two contexts: a compact card when just watching, the full dump in debug.
-    if (debugOn) renderInspectDebug(d); else renderInspectSimple(d);
+    // One inspector, in every mode. There used to be a compact card when just
+    // watching and this full panel in debug; the card showed a subset of the
+    // panel's attributes tab, so it was dropped and the panel made the default.
+    renderInspectDebug(d);
   } catch {
     /* transient; keep the last panel */
   }
@@ -881,48 +883,7 @@ function renderTileInspect(d: Record<string, any>): void {
   showInspect('card');
 }
 
-// Non-debug context: what you actually want while following a creature — what
-// it is doing right now, how fed it is, and how deep in its lineage it sits.
-// Everything else stays behind debug mode.
-function renderInspectSimple(d: Record<string, any>): void {
-  const kind = String(d.role ?? d.kind ?? 'entity').replace('npc.', '').replace('item.', '');
-  const swatch = state.tracks.get(selectedId!)?.curr.rgb ?? 0x888888;
-  const rows: string[] = [];
-  // Where it sits in the food chain, and whether a mind is driving it. The
-  // header shows the role as its title, but that alone cannot say "herbivore, and
-  // evolvable" — which for the hybrid cohort is most of what you want to know.
-  if (d.role) rows.push(row('role', d.minded ? `${d.role} · minded` : d.role));
-  if (d.diedOf) rows.push(row('died of', d.diedOf));
-  if (d.action) rows.push(row('doing', d.action));
-  if (d.state) rows.push(row('state', d.state));
-  // Without these a creature slung over another's back read as one standing still.
-  rows.push(...holdRows(d));
-  if (d.species) rows.push(row('species', d.species));
-  // A corpse's own facts sit under its identity: what it was comes first,
-  // then what is left of it, which is the part anything still alive cares about.
-  rows.push(...carcassRows(d));
-  if (d.carrying) rows.push(row('carrying', 'cargo'));
-  if ('pressed' in d) rows.push(row('pressed', d.pressed ? 'yes' : 'no'));
-  if ('wiredTo' in d) rows.push(row('wired to', `#${d.wiredTo}`));
-  // The books are for anyone following a creature, not a debug detail. Health
-  // only for a creature: every living thing has a life gate, but on a crate it
-  // is a number with nothing to say.
-  rows.push(...vitalsRows(d, !!d.role));
-  if ('light' in d) rows.push(row('climate', climateText(d)));
-  // gen 0 is a creature the world (or you) placed; every birth adds one.
-  if ('generation' in d) rows.push(row('generation', `gen ${d.generation}`));
-  if ('durability' in d) rows.push(row('durability', d.durability));
-  inspectEl.innerHTML = header(swatch, kind, d.id)
-      + (d.role ? '<div class="scan card"></div>' : '') + `<table>${rows.join('')}</table>`;
-  // A creature's card opens on its body: the scan at 3 px a cell, no callouts,
-  // the same books the bars below it count.
-  const thumb = inspectEl.querySelector('.scan');
-  if (thumb) thumb.appendChild(bodyScanCanvas(planFor(d.role), stateOf(d), 48, 24, 3, false));
-  showInspect('card');
-  syncMindPoll(); // leaving debug leaves the mind tab with nothing to show
-}
-
-// Debug context: the whole creature in ONE panel of tabs — attributes
+// The inspector: the whole creature in ONE panel of tabs — attributes
 // (identity + status), genome, lineage (its family line, from the world's
 // birth registry), and mind (the evolvable program) for a creature that has a
 // brain. The tab survives re-polls and re-selection, so a viewer walking a
@@ -940,7 +901,7 @@ function renderInspectSimple(d: Record<string, any>): void {
 // tree in the middle of one creature's biology.
 type InspectTab = 'attributes' | 'body' | 'genome' | 'mind' | 'lineage';
 let inspectTab: InspectTab = 'attributes';
-/** The debug panel's size, as the viewer last set it with the sizer -- or
+/** The inspector's size, as the viewer last set it with the sizer -- or
  *  null until they have: then a phone opens it as the half sheet, so the
  *  creature it describes stays in view above it, and a wide screen opens it
  *  full, where a whole creature's dump has the room it needs. */
@@ -960,6 +921,9 @@ function inspectTabsFor(d: Record<string, any>): InspectTab[] {
   // four books. An item or a fixture has neither, and a tab of an empty
   // outline would be a tab that wastes the click.
   const body = d.role ? ['body' as InspectTab] : [];
+  // Genome and lineage are for something born. A crate, a morsel or a plate
+  // was built, and two tabs saying so would waste two clicks.
+  if (!d.genome) return ['attributes', ...body];
   return minded
     ? ['attributes', ...body, 'genome', 'mind', 'lineage']
     : ['attributes', ...body, 'genome', 'lineage'];
@@ -1134,8 +1098,8 @@ function genomeTab(d: Record<string, any>): string {
  *  mass it amounts to. A fed life reads as a full bar; a starving body draws
  *  it down before its health goes. */
 /**
- * The four books (VITALS.md) and the store, in one order for the card and the
- * debug panel alike — health the life gate, glycogen the action budget, fed and
+ * The four books (VITALS.md) and the store, in one order wherever the
+ * inspector lists them — health the life gate, glycogen the action budget, fed and
  * watered the needs, all counting the SAME way up (see sated()), so a creature
  * in trouble is four draining bars. One function so the two panels cannot drift:
  * they had, once over which way the needs pointed and once over the labels.
@@ -1255,7 +1219,7 @@ function linNode(n2: Record<string, any>, glyph: string, rel: string, nowTick: n
 }
 
 function header(swatch: number, label: string, id: unknown, sizer = false): string {
-  // The ⛶/⊟ appears only on the debug panel: a card has no sizes to swap. It
+  // The ⛶/⊟ appears only on the creature panel: a card has no sizes to swap. It
   // is left EMPTY here and filled by syncSizeBtn from the panel's own anchor —
   // written out at render time it came back stale on every poll. Its own class
   // too, not "x": the close wiring takes the first ".x" it finds, and a size
@@ -1431,7 +1395,7 @@ let mindPollFor: number | null = null; // which entity the running poll is for
 /** Starts the mind poll while its tab is open and stops it otherwise — called
  *  wherever the tab, the selection, or the panel's existence can change. */
 function syncMindPoll(): void {
-  const want = debugOn && inspectTab === 'mind' && selectedId !== null
+  const want = inspectTab === 'mind' && selectedId !== null
     && inspectEl.classList.contains('open');
   // Idempotent: the panel's 1 Hz rebuild calls this too, and restarting the
   // poll every time doubled its requests and reset its phase.
@@ -2127,14 +2091,12 @@ tuneBtn.onclick = () => {
 // reveals can change the world — but only through the token gate, which is the
 // admin boundary; debug alone still only looks.) Enable it by tapping the tick
 // readout three times, pressing "d" (desktop), or opening with ?debug=true. When
-// on, the performance HUD shows, the constants button appears, and the
-// inspector opens as the full debug panel for whatever is selected rather
-// than the plain card. It does NOT change what the gestures mean: a tap
-// selects and a long press inspects the ground, in either mode.
+// on, the performance HUD shows and the constants button appears. It no longer
+// touches the inspector, which is the same full panel in every mode, and it
+// does NOT change what the gestures mean: a tap selects and a long press
+// inspects the ground, in either mode.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
 function applyDebug(): void {
-  // Re-render whatever is open in the new context (simple card <-> full dump).
-  if (selectedId !== null) refreshDetail();
   statsEl.title = debugOn ? 'debug on — tap 3× to turn off' : 'tap 3× for debug';
   tuneBtn.hidden = !debugOn;
   if (!debugOn) closeTuning();
@@ -2145,7 +2107,6 @@ function setDebug(on: boolean): void {
   // Tile inspection is no longer debug-only — a long press reaches it in any
   // mode — so leaving debug must not tear down a selection the user made.
   applyDebug();
-  syncMindPoll();
   // The performance HUD is debug's own readout: on with it, off with it. The
   // 'h' key still flips it alone on a desktop.
   hudOn = debugOn;
