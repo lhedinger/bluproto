@@ -1775,6 +1775,28 @@ final class WorldHost {
 	 * than a list of objects: the client plots four columns and this is a third of
 	 * the bytes with none of the key repetition.
 	 */
+	/**
+	 * The latest headcount, for the population button: the last reading of the
+	 * series, or a census taken now before the sampler has made one. The button
+	 * shows one number every few seconds, and the whole series it would
+	 * otherwise have to fetch for it is six thousand readings.
+	 */
+	java.util.Map<String, Object> headcount() {
+		java.util.List<PopSample> h = popHistory;
+		PopSample p;
+		if (h.isEmpty()) {
+			synchronized (runner) {
+				p = censusOf(runner.world(), runner.snapshot().tick());
+			}
+		} else {
+			p = h.get(h.size() - 1);
+		}
+		return java.util.Map.of("tick", p.tick(),
+				"total", p.herbivore() + p.predator() + p.scavenger() + p.parasite(),
+				"herbivore", p.herbivore(), "predator", p.predator(),
+				"scavenger", p.scavenger(), "parasite", p.parasite());
+	}
+
 	java.util.Map<String, Object> population() {
 		java.util.List<PopSample> h = popHistory;
 		long[] ticks = new long[h.size()];

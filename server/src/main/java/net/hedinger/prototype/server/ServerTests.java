@@ -75,6 +75,7 @@ public final class ServerTests {
 		anEventIsNotInspectedAsABody();
 		populationCensusCountsEveryLivingRole();
 		theChartIsSentTheBoundsActuallyEnforced();
+		theButtonCountsThePopulation();
 		lineageCensusIsTheSameWorldFiner();
 		lineageFlowsConserveEveryHead();
 		lineageFlowsTellBredFromReseeded();
@@ -926,6 +927,26 @@ public final class ServerTests {
 	 * whole failure surface between the two, and a swapped pair would draw a
 	 * ceiling below a floor without anything else noticing.
 	 */
+	/**
+	 * The population button's count is the population: creatures with a role,
+	 * the same census the chart draws, not the world's entity total, which
+	 * counts every crate and morsel too.
+	 */
+	static void theButtonCountsThePopulation() {
+		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
+		java.util.Map<String, Object> now = host.headcount();
+		int total = ((Number) now.get("total")).intValue();
+		int roles = 0;
+		for (String r : new String[] { "herbivore", "predator", "scavenger", "parasite" }) {
+			roles += ((Number) now.get(r)).intValue();
+		}
+		check("the button's total is the sum of the roles", total == roles);
+		check("the demo world has a population to count (" + total + ")", total > 0);
+		check("and it is fewer than the world's entities, items and all ("
+				+ total + " of " + host.runner().snapshot().entities().size() + ")",
+				total < host.runner().snapshot().entities().size());
+	}
+
 	static void theChartIsSentTheBoundsActuallyEnforced() {
 		WorldHost host = hostAtTheSizeTheTestsWereWrittenFor(11);
 		Object raw = host.population().get("bounds");

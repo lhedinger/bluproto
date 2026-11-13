@@ -146,6 +146,9 @@ public final class ServerMain {
 		// viewer who opens the page at tick nine million still sees the last few
 		// hours instead of starting from a blank chart.
 		app.get("/api/population", ctx -> ctx.json(host.population()));
+		// Just the latest of it: the living by role and their sum, which the
+		// toolbar's population button carries as its count.
+		app.get("/api/population/now", ctx -> ctx.json(host.headcount()));
 
 		// The same census one level finer: headcount by SPECIES over time, so a
 		// viewer can watch a lineage thin out, die, and the niche get reseeded
