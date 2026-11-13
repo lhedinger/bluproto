@@ -232,6 +232,8 @@
     #bar .bar-group--views { padding-left: 0; margin-left: 0; box-shadow: none; }
     #bar .bar-glabel { display: none; }
     #popBtn { margin-left: 10px; }
+    #popBtn .pop-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.8; }
+    #popBtn .pop-count:empty { display: none; }
     #barToggle { display: none; }
     .bar-burger { display: block; width: 14px; height: 10px;
       background: linear-gradient(currentColor 0 2px, transparent 2px 4px, currentColor 4px 6px, transparent 6px 8px, currentColor 8px 10px); }
@@ -436,7 +438,11 @@
     </div>
     <!-- Population stays on the row at every width: it is the panel people open most,
          and a phone's row has room for it beside the floor stepper. -->
-    <button class="bh-btn bh-btn--sm" id="popBtn" title="population by role over time (p)">population</button>
+    <!-- The count rides in the button: the population is what it opens. The
+         creatures with a role, the chart's own census -- not the world's entity
+         total, which counts every crate and morsel too. -->
+    <button class="bh-btn bh-btn--sm" id="popBtn" title="population by role over time (p)">population<span
+      class="pop-count" id="popCount" aria-live="off"></span></button>
     <!-- The rest, in groups: inline on a wide screen (a divider between groups), folded
          into a drop-down sheet on a phone (a label over each group). A group whose
          controls are all hidden hides itself -- see syncBarGroups in main.ts. -->

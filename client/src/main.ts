@@ -16,7 +16,7 @@ import { RENDER_DELAY_MS, WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
   CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize, isCompact } from './panels';
-import { fmtSpan, popOn } from './population';
+import { fmtSpan } from './population';
 import { bodyScanCanvas, comfortWord, planFor, stateOf } from './bodyScan';
 
 /** Every clock the viewer keeps, in ms, in one place. */
@@ -346,17 +346,6 @@ const PERF_FLAGS: Array<[string, string]> = [
   ['flora', 'trees and big shrubs'],
   ['below', 'creatures on the floor below'],
   ['gl', 'webgl renderer (off = canvas2d)'],
-];
-/**
- * The other kind of flag. Perf flags are default-ON and switched off with
- * `<flag>=0`; a panel is default-OFF and switched on with `<flag>=1`, because
- * nobody wants a chart over the world until they ask for one. Both live in the
- * same dialog — from the viewer's side "what is switched on" is one question,
- * not two — and the apply step knows which sense each family reads in.
- */
-const VIEW_FLAGS: Array<[string, string]> = [
-  ['pop', 'population graph'],
-  ['hud', 'performance HUD'],
 ];
 
 const VEG_OFF = flagOff('veg');
@@ -2138,8 +2127,9 @@ tuneBtn.onclick = () => {
 // reveals can change the world — but only through the token gate, which is the
 // admin boundary; debug alone still only looks.) Enable it by tapping the tick
 // readout three times, pressing "d" (desktop), or opening with ?debug=true. When
-// on, the inspector opens as the full debug panel for whatever is selected
-// rather than the plain card. It does NOT change what the gestures mean: a tap
+// on, the performance HUD shows, the constants button appears, and the
+// inspector opens as the full debug panel for whatever is selected rather
+// than the plain card. It does NOT change what the gestures mean: a tap
 // selects and a long press inspects the ground, in either mode.
 let debugOn = new URLSearchParams(location.search).get('debug') === 'true';
 function applyDebug(): void {
@@ -2156,6 +2146,10 @@ function setDebug(on: boolean): void {
   // mode — so leaving debug must not tear down a selection the user made.
   applyDebug();
   syncMindPoll();
+  // The performance HUD is debug's own readout: on with it, off with it. The
+  // 'h' key still flips it alone on a desktop.
+  hudOn = debugOn;
+  hudEl.hidden = !hudOn;
   toast(`debug mode ${debugOn ? 'on' : 'off'}`);
 }
 // Triple-tap the tick readout toggles debug — deliberate, so a stray tap on the
@@ -2191,9 +2185,9 @@ function toast(msg: string): void {
 // read live state and camera without any UI coupling.
 (window as unknown as Record<string, unknown>).__blu = { cam, state, select }; // select: a harness's way to open an inspector
 
-// ---- perf HUD ('h' key or ?hud=1): which clock is actually slipping? ------
+// ---- perf HUD (debug mode, 'h' key or ?hud=1): which clock is slipping? ----
 const hudEl = document.getElementById('hud') as HTMLElement;
-let hudOn = flagOn('hud');
+let hudOn = flagOn('hud') || debugOn;
 let hudGl = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0,
   secLayers: 0, secEnts: 0, secTail: 0 };
 let hudUpMax = 0; // worst texture-upload frame since the HUD last redrew
@@ -2227,24 +2221,15 @@ window.addEventListener('keydown', (ev) => {
 hudEl.hidden = !hudOn;
 
 // ---- the ⚙ settings dialog -------------------------------------------------
-// Checkboxes for the visual subsystems and the optional panels, applied by
-// reloading with the matching URL params (each perf flag is a load-time
-// constant, so a reload keeps the render paths branch-free).
+// Checkboxes for the visual subsystems, applied by reloading with the matching
+// URL params (each perf flag is a load-time constant, so a reload keeps the
+// render paths branch-free). Panels are not in here: each has its own control.
 //
 // Always in the bar. It used to appear only once the perf HUD was open, which
 // made every setting in here reachable only by someone who already knew to
-// press 'h' or to hand-edit the query string — including the two toggles that
-// are not about performance at all. A settings button you have to know a
-// keystroke to find is not a settings button.
+// press 'h' or to hand-edit the query string. A settings button you have to
+// know a keystroke to find is not a settings button.
 if (MINIMAP_OFF) mm.hidden = true;
-/** Whether a panel is showing right now. Live state, since both can be toggled
- *  by key; falls back to the query string for anything not wired to a variable. */
-function viewFlagOn(k: string): boolean {
-  if (k === 'pop') return popOn;
-  if (k === 'hud') return hudOn;
-  return flagOn(k);
-}
-
 const perfBtn = document.createElement('button');
 perfBtn.className = 'bh-btn bh-btn--sm bh-btn--icon';
 perfBtn.textContent = '⚙';
@@ -2303,11 +2288,11 @@ perfBtn.onclick = () => {
     }
     body.append(fs);
   };
+  // Only the render switches. The panels it also used to switch -- the
+  // population chart and the performance HUD -- have their own controls (the
+  // population button, and debug's triple-tap), and a checkbox that reloads the
+  // page to open a chart was a second, slower way to do one thing.
   groupOf('visual subsystems', PERF_FLAGS, k => !flagOff(k));
-  // From LIVE state, not the URL: both panels can be toggled by key without a
-  // reload, so reading the query string here would show a stale box and then
-  // silently undo the toggle on apply.
-  groupOf('panels', VIEW_FLAGS, k => viewFlagOn(k));
   const foot = document.createElement('footer');
   const cancel = document.createElement('button');
   cancel.className = 'bh-btn bh-btn--ghost';
@@ -2321,10 +2306,6 @@ perfBtn.onclick = () => {
     for (const [k] of PERF_FLAGS) {
       if (boxes.get(k)!.checked) sp.delete(k); // default-on: absent = enabled
       else sp.set(k, '0');
-    }
-    for (const [k] of VIEW_FLAGS) {
-      if (boxes.get(k)!.checked) sp.set(k, '1'); // default-off: present = enabled
-      else sp.delete(k);
     }
     location.search = sp.toString();
   };
@@ -2494,9 +2475,9 @@ function frame(now: number): void {
 
   if (net.status === 'open' && now - lastStats > 250) {
     lastStats = now;
-    // The seed is its own span so a phone can drop it (index.html): beside the
-    // minimap there is room for the tick and the count, not for all three.
-    statsEl.innerHTML = `tick ${state.tick} · ${worldTotal || state.tracks.size} entities` +
+    // The seed is its own span so a phone can drop it (index.html). The count
+    // that sat here is the population button's now.
+    statsEl.innerHTML = `tick ${state.tick}` +
         (hello ? `<span class="stat-seed"> · seed ${Number(hello.seed)}</span>` : '');
     droneLabel();
   }
