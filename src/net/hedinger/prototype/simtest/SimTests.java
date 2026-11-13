@@ -869,7 +869,7 @@ public class SimTests {
 			inDays("a reference reserve is six days of lying still", 6.0,
 					NPC.GLYCOGEN_PER_MASS / NPC.BASAL_RATE);
 			inDays("a reference gut is nine", 9.0, NPC.GUT_PER_MASS / NPC.BASAL_RATE);
-			inDays("a full fat store is nearly sixteen", 15.88,
+			inDays("a full fat store is about three months", 95.28,
 					NPC.FAT_CAP * NPC.FAT_DENSITY / NPC.BASAL_RATE);
 			inDays("and the lean body is thirty-one and three quarters", 31.76,
 					NPC.LEAN_DENSITY / NPC.BASAL_RATE);
@@ -1629,7 +1629,10 @@ public class SimTests {
 			w.spawnEntity(fed);
 			assertEquals("a body starts lean", 0, (long) Math.round(fed.fat() * 1000));
 			tick(w, 3000);
-			assertGreater("a fed body with full glycogen lays down fat", fed.fat(), 0.3 * fed.fatCap());
+			// In energy: fat is six times as dense as lean, so the same surplus is
+			// a sixth of the mass it was.
+			assertGreater("a fed body with full glycogen lays down fat", fed.fat() * NPC.FAT_DENSITY,
+					0.3 * fed.fatCap() * NPC.LEAN_DENSITY);
 			assertTrue("and never more than the body can carry", fed.fat() <= fed.fatCap() + 1e-9);
 			assertGreater("its glycogen is still full: fat is what was left over", fed.getGlycogen(), 0.95 * fed.glycogenCapacity());
 
@@ -1982,6 +1985,7 @@ public class SimTests {
 			TestNPC rich = TestNPC.grazer(6.5, 6.5, 0, g).grown().fattened();
 			w.spawnEntity(rich);
 			tick(w, 2);
+			double richFat = rich.fat();
 			rich.kill();
 			tick(w, 1);
 			assertGreater("a fat body carries more meat than its lean mass", rich.edibleMass(), edible + 0.2);
@@ -1990,8 +1994,12 @@ public class SimTests {
 			assertGreater("and pays out more to the mouths at it ("
 					+ String.format("%.2f against %.2f lean", richHunters[1] + richScavs[1], leanPaid) + ")",
 					richHunters[1] + richScavs[1], 1.2 * leanPaid);
+			// Fat is priced at its own density, so the ceiling is the meat taken at
+			// lean's price plus the richer price of whatever share of it was fat.
+			double eaten = rich.eatenMass();
 			assertTrue("still never more than was taken off it",
-					richHunters[1] + richScavs[1] <= NPC.LEAN_DENSITY * rich.eatenMass() + 1e-9);
+					richHunters[1] + richScavs[1] <= NPC.LEAN_DENSITY * eaten
+							+ (NPC.FAT_DENSITY - NPC.LEAN_DENSITY) * Math.min(eaten, richFat) + 1e-9);
 		}
 	}
 
@@ -3539,7 +3547,7 @@ public class SimTests {
 			TestNPC parent = TestNPC.minded(6.5, 6.5, 0, g, breeder).withMetabolic().withDeathspan(777);
 			parent.grown().withGlycogen(parent.glycogenCapacity());
 			double young = NPC.birthMass(Niche.of(g.clade).expressedSize(g.size), g.birthSize);
-			parent.withFat(fatInYoung * young);
+			parent.withFat(fatInYoung * NPC.fatForBody(young));
 			w.spawnEntity(parent);
 			w.think();
 			java.util.Set<Long> ticks = new java.util.TreeSet<>();
@@ -3557,7 +3565,7 @@ public class SimTests {
 					paid += fatBefore - parent.fat(); // on the birth tick: the young, and a tick's books
 				}
 			}
-			return new double[] { born, ticks.size(), paid / young };
+			return new double[] { born, ticks.size(), paid / NPC.fatForBody(young) };
 		}
 
 		@Override
@@ -11416,6 +11424,10 @@ public class SimTests {
 					// the endowment buys a childhood's worth of BURN, and metabolism
 					// scales every rate in it.
 					founder.metabolism = NPC.META_REF;
+					// And one young at a time: the claim is about pricing ONE
+					// childhood, and a parent that buds a litter beside it is a
+					// second variable in the room.
+					founder.litter = 1;
 					net.hedinger.prototype.sim.Worlds.pricedFounder(founder); // the price follows the body
 					if (d == 0) {
 						double bill = TestNPC.endowmentCost(adult, founder);
@@ -11453,8 +11465,8 @@ public class SimTests {
 					// draws its own birthSize like every other life-history gene. What
 					// the claim is about is conservation, that the body the child HAS is
 					// the fat the parent LOST, so both sides have to be this birth's.
-					assertNear("the child's body came out of the founder's fat, at birth mass",
-							child.bornMass(), fatBefore - parent.fat(), 1e-9);
+					assertNear("the child's body came out of the founder's fat, built at the synthesis price",
+							NPC.fatForBody(child.bornMass()), fatBefore - parent.fat(), 1e-9);
 					int provisioned = (int) Math.round(
 							TestNPC.PROVISION * TestNPC.growthTicks(child.getGenome().size));
 					tick(w, provisioned);
@@ -17229,11 +17241,11 @@ public class SimTests {
 					big[0], small[0] + 0.05);
 			assertGreater("and pays more fat for each one ("
 					+ String.format("%.3f against %.3f", big[1], small[1]) + ")",
-					big[1], small[1] + 0.05);
-			assertNear("exactly the matter the child arrived as, either way",
-					big[0], big[1], 1e-9);
+					big[1], small[1] + 0.01);
+			assertNear("exactly the fat that builds the body the child arrived as, either way",
+					NPC.fatForBody(big[0]), big[1], 1e-9);
 			assertNear("and the same for the small one: a body is what its parent gave up",
-					small[0], small[1], 1e-9);
+					NPC.fatForBody(small[0]), small[1], 1e-9);
 			assertLess("and the big one is done being a child sooner ("
 					+ String.format("%.0f ticks against %.0f", big[2], small[2]) + ")",
 					big[2], small[2] * 0.9);
@@ -17373,8 +17385,10 @@ public class SimTests {
 	/**
 	 * Birth conserves energy exactly, across both of a parent's books. What a
 	 * child is worth — its glycogen, the food in its gut and its meat-priced
-	 * body — equals what its parents lost, where what a parent holds is its
-	 * glycogen PLUS its undigested gut. Not "at most": equal. The audit is the
+	 * body — equals what its parents lost, less the heat of building that body
+	 * ({@link NPC#SYNTHESIS_COST}, the same price growing it would have paid),
+	 * where what a parent holds is its glycogen, its undigested gut and its fat
+	 * at fat's own density. Not "at most": equal. The audit is the
 	 * cannibal round trip — a parent that ate its own just-born child would
 	 * lose glycogen and the gut with the death and get the body back at its
 	 * meat price, so the loop can never profit — and the other half of it, a
@@ -17391,9 +17405,15 @@ public class SimTests {
 	 */
 	static class NoFreeEnergyAtBirth extends Scenario {
 		/** Everything a body holds, in one number: glycogen, undigested gut, and the
-		 *  fat a child's body is built out of, at the one price of mass. */
+		 *  fat a child's body is built out of, at fat's own density. */
 		private static double held(TestNPC n) {
-			return n.getGlycogen() + (1 - n.getHunger()) * gutOf(n) + NPC.LEAN_DENSITY * n.fat();
+			return n.getGlycogen() + (1 - n.getHunger()) * gutOf(n) + NPC.FAT_DENSITY * n.fat();
+		}
+
+		/** The heat of building a newborn's body: what synthesis costs over and
+		 *  above the energy the tissue ends up holding. */
+		private static double heat(TestNPC child) {
+			return (NPC.SYNTHESIS_COST - 1) * NPC.LEAN_DENSITY * child.leanMass();
 		}
 
 		/** The gut a body was sized for: GUT_PER_MASS at the ADULT mass the niche
@@ -17453,9 +17473,9 @@ public class SimTests {
 			TestNPC bud = breedOut(this, w, beforeBud, bidBud, parent);
 			assertTrue("a bud arrived", bud != null);
 			double budSpent = beforeBud[0] - held(parent);
-			assertNear("the bud is worth exactly what its parent gave up, glycogen and gut together ("
-					+ String.format("%.2f against %.2f", worth(bud), budSpent) + ")",
-					worth(bud), budSpent, eps);
+			assertNear("the bud is worth exactly what its parent gave up, less the heat of building its body ("
+					+ String.format("%.2f + %.2f against %.2f", worth(bud), heat(bud), budSpent) + ")",
+					worth(bud) + heat(bud), budSpent, eps);
 			// What the parent offered lands in the child, up to the only thing that
 			// can stop it: a newborn's own glycogen ceiling. What will not fit is
 			// not taken and therefore not charged either, so it stays with the
@@ -17496,9 +17516,9 @@ public class SimTests {
 			TestNPC kid = breedOut(this, m, beforeKid, bidKid, pa, pb);
 			assertTrue("the pair bred", kid != null);
 			double pairSpent = beforeKid[0] - held(pa) - held(pb);
-			assertNear("the child is worth exactly what BOTH parents gave up ("
-					+ String.format("%.2f against %.2f", worth(kid), pairSpent) + ")",
-					worth(kid), pairSpent, eps);
+			assertNear("the child is worth exactly what BOTH parents gave up, less the heat of its body ("
+					+ String.format("%.2f + %.2f against %.2f", worth(kid), heat(kid), pairSpent) + ")",
+					worth(kid) + heat(kid), pairSpent, eps);
 			assertNear("and the whole of BOTH offers landed in it -- a ceiling on a "
 					+ "newborn's glycogen used to burn the difference ("
 					+ String.format("%.2f against an offer of %.2f", worth(kid), bidKid[0]) + ")",
@@ -17533,9 +17553,9 @@ public class SimTests {
 			TestNPC cheap = breedOut(this, r, beforeCheap, bidCheap, poor);
 			assertTrue("the poor parent still bred", cheap != null);
 			double poorSpent = beforeCheap[0] - held(poor);
-			assertNear("its child is worth exactly what it gave up ("
-					+ String.format("%.2f against %.2f", worth(cheap), poorSpent) + ")",
-					worth(cheap), poorSpent, eps);
+			assertNear("its child is worth exactly what it gave up, less the heat of its body ("
+					+ String.format("%.2f + %.2f against %.2f", worth(cheap), heat(cheap), poorSpent) + ")",
+					worth(cheap) + heat(cheap), poorSpent, eps);
 			assertTrue("and the parent never went below zero (" + String.format("%.2f", poor.getGlycogen()) + ")",
 					poor.getGlycogen() >= 0);
 
@@ -17549,12 +17569,12 @@ public class SimTests {
 			gb2.reproFraction = 0.05;
 			gb2.reproCostFraction = 0.1;
 			TestNPC mean = TestNPC.breeder(6.5, 6.5, 0, gb2).grown().withHunger(0.0)
-					.withFat(0.5 * NPC.birthMass(gb2.size)); // half a child's body in fat: not enough
+					.withFat(0.5 * NPC.fatForBody(NPC.birthMass(gb2.size))); // half a child's body in fat: not enough
 			mean.withGlycogen(mean.glycogenCapacity());
 			b.spawnEntity(mean);
 			b.think();
 			assertLess("its fat will not build the body its child would need",
-					mean.fat(), NPC.birthMass(gb2.size));
+					mean.fat(), NPC.fatForBody(NPC.birthMass(gb2.size)));
 			double meanHeld = held(mean);
 			assertTrue("no child is minted out of matter that is not there",
 					mean.spawnOffspring() == null);

@@ -213,14 +213,18 @@ public abstract class NPC extends Entity {
 	 * draws back on when the gut runs dry.
 	 *
 	 * <p>Its own constant because fat and lean tissue are not the same stuff:
-	 * fat carries roughly six times the energy a gram of wet muscle does, muscle
-	 * being three quarters water. It is set equal to {@link #LEAN_DENSITY} here
-	 * so nothing moves as the name lands; the real ratio waits on the corpse
-	 * pools, which today mix a body's fat into its meat and cannot price the
-	 * two apart.
+	 * fat carries roughly six times the energy a gram of wet muscle does --
+	 * adipose about 33 kJ/g against lean meat's 5.5, muscle being three
+	 * quarters water -- and that is the ratio here. It sat at
+	 * {@link #LEAN_DENSITY}, waiting on carcasses that mixed a body's fat into
+	 * its meat; a mouthful now prices the two apart ({@code eatCarrion}), so
+	 * the real ratio can stand. Full fat stores ({@link #FAT_CAP}) hold about
+	 * three months of a resting body's burn instead of a fortnight, a fat
+	 * carcass is the richer meal, and a newborn built out of fat
+	 * ({@link #fatForBody}) takes a fraction of its own mass in it.
 	 */
 	@Unit("energy per mass")
-	public static double FAT_DENSITY = 31.76;
+	public static double FAT_DENSITY = 6 * 31.76;
 
 	/*
 	 * Assimilation: how much of a meal actually crosses the gut wall.
@@ -848,22 +852,42 @@ public abstract class NPC extends Entity {
 		return genome != null ? genome.milk : 0;
 	}
 
-	/** Fat this body must hold before it will try to breed: half a child of its
-	 *  own lean mass at its own lineage's birth size, since a pair pools two
-	 *  halves. A budder still needs the whole at the moment of birth -- see
-	 *  {@code spawnOffspring}. */
+	/** Fat this body must hold before it will try to breed: the fat for half
+	 *  a child of its own lineage's birth size ({@link #fatForBody}), since a
+	 *  pair pools two halves. A budder still needs the whole at the moment of
+	 *  birth -- see {@code spawnOffspring}. */
 	protected double fatToBreed() {
 		double adult = adultSize > 0 ? adultSize : (size > 0 ? size : REF_SIZE);
-		return birthMass(adult, birthFraction()) / 2;
+		return fatForBody(birthMass(adult, birthFraction())) / 2;
 	}
 
-	/** Takes up to {@code mass} of fat off this body for a child's birth mass
-	 *  and returns what was actually taken. Fat only: the lean mass is not for sale,
-	 *  so no parent can die of giving birth. */
+	/**
+	 * The fat it takes to build a newborn body of {@code mass}: the energy in
+	 * that much lean tissue at its {@link #SYNTHESIS_COST}, paid out of fat at
+	 * {@link #FAT_DENSITY}.
+	 *
+	 * <p>A newborn's body used to be its parents' fat moved across mass for
+	 * mass, so a unit of child cost one unit of fat -- the tissue's own energy
+	 * and nothing for building it -- while the same unit grown later, in
+	 * childhood, cost {@code SYNTHESIS_COST} times as much. Gestation is tissue
+	 * synthesis like any other: being born is now priced as growing is.
+	 */
+	public static double fatForBody(double mass) {
+		return mass * LEAN_DENSITY * SYNTHESIS_COST / FAT_DENSITY;
+	}
+
+	/** Pays, out of this body's fat, for up to {@code mass} of a child's body
+	 *  ({@link #fatForBody}), and returns how much body was paid for -- in body
+	 *  mass, so a partner can be charged for the rest. Fat only: the lean mass
+	 *  is not for sale, so no parent can die of giving birth. */
 	public double payBirthMass(double mass) {
-		double taken = Math.max(0, Math.min(mass, fat));
+		if (mass <= 0) {
+			return 0;
+		}
+		double need = fatForBody(mass);
+		double taken = Math.max(0, Math.min(need, fat));
 		fat -= taken;
-		return taken;
+		return mass * taken / need;
 	}
 
 	/** Everything a living body weighs: its lean mass plus its fat. On a corpse,

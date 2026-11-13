@@ -412,10 +412,12 @@ public class Genome {
 	 * bigger litter waits for a bigger surplus and then pays one cooldown for
 	 * the lot. Sexual births are one child; this is the budder's choice.
 	 *
-	 * <p>Two stores bound what a lineage can afford. Bodies are paid in matter,
-	 * and a body carries fat up to {@link NPC#FAT_CAP} of its lean mass, so a
-	 * litter of n needs n times the birth share ({@link #birthSize}) in fat:
-	 * at the smallest birth share that is four. Endowments are paid out of
+	 * <p>Two stores bound what a lineage can afford. Bodies are built out of
+	 * fat at the synthesis price ({@link NPC#fatForBody}), a little under a
+	 * quarter of the young's own mass in fat, and a body carries fat up to
+	 * {@link NPC#FAT_CAP} of its lean mass, so the fat for a litter of n
+	 * is n times that share of the birth share ({@link #birthSize}): room for
+	 * three at the largest young and six below about a third. Endowments are paid out of
 	 * glycogen, at {@link #reproCostFraction} of the store each, so n young
 	 * need {@code n * reproCostFraction} of a store (and the breeding line,
 	 * {@link #reproFraction}, at the least): two at most for the founders'
@@ -431,19 +433,26 @@ public class Genome {
 		return (int) Math.max(LITTER_MIN, Math.min(LITTER_MAX, Math.round(litter)));
 	}
 
+	/** The biggest litter this genome's stores can pay for when full: fat for
+	 *  the young's bodies ({@link NPC#fatForBody} of the birth share, out of
+	 *  {@link NPC#FAT_CAP}) and glycogen for their endowments
+	 *  ({@link #reproCostFraction} of a store each), at most {@link #LITTER_MAX}. */
+	public static int affordableLitter(Genome g) {
+		double byFat = NPC.FAT_CAP / Math.max(1e-9, NPC.fatForBody(g.birthSize));
+		double byGlycogen = 1 / Math.max(1e-9, g.reproCostFraction);
+		return (int) Math.max(LITTER_MIN, Math.min(LITTER_MAX, Math.floor(Math.min(byFat, byGlycogen))));
+	}
+
 	/**
 	 * Draws a founder's {@link #litter}: uniform over the litters it can pay for
-	 * -- in fat ({@code FAT_CAP / birthSize} young) and in glycogen
+	 * -- in fat ({@code FAT_CAP / fatForBody(birthSize)} young) and in glycogen
 	 * ({@code 1 / reproCostFraction} full endowments in a full store), at most
 	 * {@link #LITTER_MAX}. Drawn over 1..6 regardless, most founders would hold
 	 * a gene their stores could never cover and never breed at all; drawn this
 	 * way every founder is viable, and those whose genes leave room differ.
 	 */
 	public static void spreadLitter(Genome g) {
-		double byFat = NPC.FAT_CAP / Math.max(1e-9, g.birthSize);
-		double byGlycogen = 1 / Math.max(1e-9, g.reproCostFraction);
-		int afford = (int) Math.max(LITTER_MIN, Math.min(LITTER_MAX,
-				Math.floor(Math.min(byFat, byGlycogen))));
+		int afford = affordableLitter(g);
 		// One draw, uniform over the rounding bins of 1..afford, then held inside
 		// the gene's own bounds (which moves no value across a bin edge).
 		g.litter = Math.max(LITTER_MIN, Math.min(afford, LITTER_MIN - 0.5 + Utils.random() * afford));
