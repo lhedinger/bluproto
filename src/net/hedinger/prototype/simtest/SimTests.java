@@ -18595,27 +18595,25 @@ public class SimTests {
 	}
 
 	/**
-	 * The founding pack buds and courts alike. Reproductive strategy is a gene
-	 * with a boundary at 0.5, and the species pools the herd and the pack are
-	 * copied from never drew it: every body took the default, which sits exactly
-	 * on the sexual side. So every founder hunter had to find a fertile,
-	 * same-clade partner alike enough to breed with, in a world holding a few
-	 * dozen hunters, and whether a lineage of budders could do better was never
-	 * on the table. Measured on seed 42 over sixty thousand ticks: forty
-	 * founder hunters, forty sexual; the steward's reseeds brought the budders
-	 * in, and a minority of them produced half the births.
+	 * Every founder buds, and courtship is still within reach. Reproductive
+	 * strategy is a gene with a line at 0.5. Founders were drawn across both
+	 * sides of it, so half of every pack and herd had to find a fertile,
+	 * compatible partner of their own clade before they could breed -- and on
+	 * the seed 7 demo world a hunter had one in sight on 7-11% of the ticks its
+	 * breeding gate was open. Founders are now drawn over the asexual half,
+	 * 0..0.5, and differ in how near the line they sit; a kin copy of a draw
+	 * just under the line can land over it, so the odd founder courts.
+	 * The gene drifts additively, so a lineage near the line can cross it in a
+	 * birth, and one that does mates.
 	 *
-	 * <p>Pinned on the demo world's founders: both strategies are present in the
-	 * pack and in the herd, and in more than token numbers -- over five worlds.
-	 * A pack is eight kin groups of five, each group one draw, so a single
-	 * world's pack all on one side is a one-in-128 chance: seed 42's came up
-	 * forty budders once the stations moved and the stream with them. The
-	 * claim is about the draw, not about one world.
+	 * <p>Pinned on the demo world's founders over five worlds: all but a few
+	 * kin copies in the pack and the herd bud, a share of each sits within one
+	 * drift step of the line, and a budder near the line has courting children.
 	 */
-	static class TheFoundingPackBudsAndCourtsAlike extends Scenario {
+	static class TheFoundersBudAndCanLearnToCourt extends Scenario {
 		@Override
 		public void run() {
-			int[] pack = new int[2], herd = new int[2];
+			int[] pack = new int[3], herd = new int[3]; // budders, courters, within 0.1 of the line
 			for (long seed : new long[] { 42, 1, 3, 7, 25 }) {
 				World w = net.hedinger.prototype.sim.Worlds.demo(seed);
 				for (Entity e : w.getEntities()) {
@@ -18629,15 +18627,33 @@ public class SimTests {
 					};
 					if (tally != null) {
 						tally[t.getGenome().isSexual() ? 1 : 0]++;
+						if (t.getGenome().sexuality >= 0.4) {
+							tally[2]++;
+						}
 					}
 				}
 			}
-			assertTrue("the founding packs have budders in them: " + pack[0] + " of " + (pack[0] + pack[1]),
-					pack[0] >= 15);
-			assertTrue("and courters: " + pack[1] + " of " + (pack[0] + pack[1]), pack[1] >= 15);
-			assertTrue("the founding herds have budders in them: " + herd[0] + " of " + (herd[0] + herd[1]),
-					herd[0] >= 50);
-			assertTrue("and courters: " + herd[1] + " of " + (herd[0] + herd[1]), herd[1] >= 50);
+			assertLess("founding hunters bud: " + pack[1] + " of " + (pack[0] + pack[1]) + " court",
+					pack[1], 0.05 * (pack[0] + pack[1]));
+			assertLess("founding grazers bud: " + herd[1] + " of " + (herd[0] + herd[1]) + " court",
+					herd[1], 0.05 * (herd[0] + herd[1]));
+			assertGreater("the packs are founded at all", pack[0], 30);
+			assertGreater("some founding hunters sit a drift step from the line ("
+					+ pack[2] + " of " + pack[0] + ")", pack[2], 0);
+			assertGreater("and some founding grazers (" + herd[2] + " of " + herd[0] + ")", herd[2], 10);
+
+			// A budder near the line has courting children: the strategy is
+			// still selection's to change.
+			seed(143);
+			Genome near = new Genome();
+			near.sexuality = 0.45;
+			int courting = 0;
+			for (int i = 0; i < 200; i++) {
+				if (Genome.child(near, 0.1).isSexual()) {
+					courting++;
+				}
+			}
+			assertGreater("a budder at 0.45 has courting children (" + courting + " of 200)", courting, 10);
 		}
 	}
 
@@ -22343,7 +22359,7 @@ public class SimTests {
 				new ParasiteLatchesAndDrainsItsHost(),
 				new APredatoryParasiteSettlesForASmallerHost(),
 				new AParasiteDoesNotRideAHunter(),
-				new TheFoundingPackBudsAndCourtsAlike(),
+				new TheFoundersBudAndCanLearnToCourt(),
 				new AFounderLandsWithinReachOfItsFood(),
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),

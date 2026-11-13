@@ -490,9 +490,21 @@ public class Genome {
 	 * courters; the budders among the reseeds, a minority throughout, produced
 	 * half the clade's births. Which strategy a niche favours is selection's to
 	 * settle, and it can only settle it between founders that differ.
+	 *
+	 * <p>Founders now bud: the draw is spread over the asexual half, 0..0.5,
+	 * so founders differ in how far they sit from the line. A founding kin
+	 * group is one draw copied at the kin rate (Worlds.KIN_RATE, 0.03), so a
+	 * group drawn just under the line can have a sibling over it, and that
+	 * one courts: the odd courter from the start is the same crossing
+	 * selection is free to make later. Finding a willing, compatible, fertile partner was
+	 * the narrowest gate in a hunter's life -- on the seed 7 demo world one was
+	 * in sight on 7-11% of the ticks a hunter's breeding gate was open, about
+	 * 2-3% of its adult life -- and a budder answers to none of it. Courtship
+	 * is still there to be found: the gene drifts additively, so a lineage near
+	 * the line can cross it in a birth or two, and one that does mates.
 	 */
 	public static void spreadStrategy(Genome g) {
-		g.sexuality = Utils.random();
+		g.sexuality = Utils.random() * 0.5;
 	}
 
 	/**
