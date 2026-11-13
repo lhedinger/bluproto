@@ -5126,7 +5126,7 @@ public class TestNPC extends NPC {
 		}
 		double adult = Niche.of(genome.clade).expressedSize(genome.size);
 		double body = NPC.birthMass(adult, birthFraction());
-		return fat >= n * body && glycogen >= Math.max(reproThreshold, n * reproCost());
+		return fat >= n * NPC.fatForBody(body) && glycogen >= Math.max(reproThreshold, n * reproCost());
 	}
 
 	@Override
@@ -5140,7 +5140,7 @@ public class TestNPC extends NPC {
 		// How big to build it is the PARENT's gene, not the child's copy of it.
 		double adult = Niche.of(childG.clade).expressedSize(childG.size);
 		double share = birthFraction();
-		if (fat < NPC.birthMass(adult, share)) {
+		if (fat < NPC.fatForBody(NPC.birthMass(adult, share))) {
 			return null; // not the fat to build the body out of: no child, and nothing is charged
 		}
 		TestNPC child;
@@ -5169,7 +5169,7 @@ public class TestNPC extends NPC {
 		// A pair builds its young at the average of what the two lineages would.
 		double adult = Niche.of(childG.clade).expressedSize(childG.size);
 		double share = (birthFraction() + partner.birthFraction()) / 2;
-		if (fat + partner.fat() < NPC.birthMass(adult, share)) {
+		if (fat + partner.fat() < NPC.fatForBody(NPC.birthMass(adult, share))) {
 			return null; // between them the pair has not the fat to build the body out of
 		}
 		TestNPC child = behavior == Behavior.MINDED ? brainedBreeder(X, Y, Z, childG) : mater(X, Y, Z, childG);

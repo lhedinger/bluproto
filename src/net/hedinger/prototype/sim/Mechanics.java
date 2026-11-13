@@ -465,9 +465,13 @@ public final class Mechanics {
 						+ "spends less of its life small."),
 				row("Growth", num(NPC.GROWTH_RATE), "size/tick",
 						"The well-fed ceiling, not a guarantee."),
-				row("Mass costs", num(NPC.LEAN_DENSITY) + " × mass grown", "energy",
-						"The one price of mass: it grows flesh, lays down fat, mends a wound, "
-						+ "pays a parasite and pays every mouth at a carcass, so nothing mints."),
+				row("Mass costs", num(NPC.LEAN_DENSITY) + " × mass of lean, "
+						+ num(NPC.FAT_DENSITY) + " × mass of fat", "energy",
+						"What tissue holds: lean flesh like wet muscle, fat six times as much. "
+						+ "Building lean costs " + NPC.SYNTHESIS_COST + "× what it holds, whether "
+						+ "it is grown, mended or born -- a newborn's body is built out of its "
+						+ "parent's fat at that price. A carcass pays every mouth for its lean "
+						+ "and its fat apart, so nothing mints."),
 				row("Fat", "up to " + pct(NPC.FAT_CAP) + " of the lean mass", "mass",
 						"Laid down at the digestion rate: on a gut fuller than "
 						+ pct(1 - NPC.FAT_STORE_BELOW) + ", a share rising from none at "

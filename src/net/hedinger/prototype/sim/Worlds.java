@@ -253,6 +253,9 @@ public final class Worlds {
 		g.reproCostFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproC", price);
 		g.reproFraction = net.hedinger.prototype.entities.GeneSchema.clampTo("reproF",
 				g.reproCostFraction + 2 * net.hedinger.prototype.entities.NPC.EXHAUSTION);
+		// The litter was drawn against the unpriced endowment; held to what the
+		// priced one can pay for, so no founder carries a litter it can never bear.
+		g.litter = Math.min(g.litter, net.hedinger.prototype.entities.Genome.affordableLitter(g));
 		return g;
 	}
 
