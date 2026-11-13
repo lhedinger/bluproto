@@ -872,4 +872,22 @@ window.addEventListener('resize', () => { if (popOn) popDraw(); });
 // server nothing.
 setInterval(() => { if (popOn && !document.hidden) popPoll(); }, 1000);
 
+// The button's count: the latest headcount, on the server's own sampling beat
+// (a reading every five seconds), whether or not the chart is open -- it is
+// the number people glance at, and the chart is what they open for more.
+const popCountEl = document.getElementById('popCount') as HTMLElement;
+function popCountPoll(): void {
+  if (document.hidden) return;
+  fetch('/api/population/now').then(r => (r.ok ? r.json() : null)).then(h => {
+    if (h && typeof h.total === 'number') {
+      popCountEl.textContent = String(h.total);
+      popBtn.title = `${h.total} alive: ${h.herbivore} herbivores, ${h.predator} predators, `
+        + `${h.scavenger} scavengers, ${h.parasite} parasites -- population by role over time (p)`;
+    }
+  }).catch(() => { /* transient; keep the last count */ });
+}
+setInterval(popCountPoll, 5000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) popCountPoll(); });
+popCountPoll();
+
 popApply();
