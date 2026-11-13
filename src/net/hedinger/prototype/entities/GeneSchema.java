@@ -222,6 +222,9 @@ public final class GeneSchema {
 		// The store a hunter keeps before it will run (Genome.reserve). Appended.
 		add("reserve", "of glycogen", Drift.ADD, 0, Genome.RESERVE_MAX, false,
 				g -> g.reserve, (g, v) -> g.reserve = v);
+		// How many young a budder bears at once (Genome.litter). Appended.
+		add("litter", "young", Drift.ADD, Genome.LITTER_MIN, Genome.LITTER_MAX, false,
+				g -> g.litter, (g, v) -> g.litter = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},

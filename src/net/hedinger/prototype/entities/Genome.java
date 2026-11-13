@@ -396,6 +396,58 @@ public class Genome {
 	 * A carcass is a walk, not a sprint, and is not held to it.
 	 */
 	public double reserve = 0.0;
+
+	/** Fewest young a budder bears at once. */
+	@net.hedinger.prototype.engine.Unit("young")
+	public static final int LITTER_MIN = 1;
+	/** Most young a budder bears at once. */
+	@net.hedinger.prototype.engine.Unit("young")
+	public static final int LITTER_MAX = 6;
+	/**
+	 * How many young this lineage bears at once when it buds, as a continuous
+	 * gene expressed by rounding ({@link #litterSize}): it drifts a little at a
+	 * time and the count steps when it crosses a half. Every young costs what a
+	 * single child does -- its body out of the parent's fat and its endowment
+	 * out of its glycogen -- and a litter is born whole or not at all, so a
+	 * bigger litter waits for a bigger surplus and then pays one cooldown for
+	 * the lot. Sexual births are one child; this is the budder's choice.
+	 *
+	 * <p>Two stores bound what a lineage can afford. Bodies are paid in matter,
+	 * and a body carries fat up to {@link NPC#FAT_CAP} of its lean mass, so a
+	 * litter of n needs n times the birth share ({@link #birthSize}) in fat:
+	 * at the smallest birth share that is four. Endowments are paid out of
+	 * glycogen, at {@link #reproCostFraction} of the store each, so n young
+	 * need {@code n * reproCostFraction} of a store (and the breeding line,
+	 * {@link #reproFraction}, at the least): two at most for the founders'
+	 * draws, three once the endowment falls to a third. A big litter is therefore a lineage of
+	 * small, cheaply endowed young -- the many-small-young end of the r/K axis,
+	 * reached by selection on the same three genes.
+	 */
+	public double litter = 1.0;
+
+	/** The litter this genome bears: {@link #litter} rounded into
+	 *  {@link #LITTER_MIN}..{@link #LITTER_MAX}. */
+	public int litterSize() {
+		return (int) Math.max(LITTER_MIN, Math.min(LITTER_MAX, Math.round(litter)));
+	}
+
+	/**
+	 * Draws a founder's {@link #litter}: uniform over the litters it can pay for
+	 * -- in fat ({@code FAT_CAP / birthSize} young) and in glycogen
+	 * ({@code 1 / reproCostFraction} full endowments in a full store), at most
+	 * {@link #LITTER_MAX}. Drawn over 1..6 regardless, most founders would hold
+	 * a gene their stores could never cover and never breed at all; drawn this
+	 * way every founder is viable, and those whose genes leave room differ.
+	 */
+	public static void spreadLitter(Genome g) {
+		double byFat = NPC.FAT_CAP / Math.max(1e-9, g.birthSize);
+		double byGlycogen = 1 / Math.max(1e-9, g.reproCostFraction);
+		int afford = (int) Math.max(LITTER_MIN, Math.min(LITTER_MAX,
+				Math.floor(Math.min(byFat, byGlycogen))));
+		// One draw, uniform over the rounding bins of 1..afford, then held inside
+		// the gene's own bounds (which moves no value across a bin edge).
+		g.litter = Math.max(LITTER_MIN, Math.min(afford, LITTER_MIN - 0.5 + Utils.random() * afford));
+	}
 	/**
 	 * The temperature this lineage is built for, in degrees C: the centre of
 	 * its comfort band. With {@link #thermalBreadth} it is the whole of what a
@@ -665,6 +717,9 @@ public class Genome {
 		// And how much light its eye needs, appended after the thermal draws
 		// for the same reason again.
 		spreadNightEye(g);
+		// And how many young it bears at once, appended after the eye for the
+		// same reason again -- and after the birth share it is bounded by.
+		spreadLitter(g);
 		return g;
 	}
 

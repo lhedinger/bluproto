@@ -5103,6 +5103,32 @@ public class TestNPC extends NPC {
 		}
 	}
 
+	/** A budder bears its lineage's litter ({@link Genome#litterSize}); a
+	 *  courting lineage, and a body with no genome, one at a time. */
+	@Override
+	protected int litterSize() {
+		return genome == null || genome.isSexual() ? 1 : genome.litterSize();
+	}
+
+	/**
+	 * The whole bill for a litter of {@code n}, against what this body holds:
+	 * each young's body out of fat, and each one's full endowment
+	 * ({@link #reproCost}) out of glycogen -- and never less than the breeding
+	 * line, which is when a lineage breeds and not part of the price. So no
+	 * young in a litter is opened with less than an only child would be, and a
+	 * parent can spend its store down to the floor on one; that is its
+	 * lineage's to weigh. An only child keeps the gate it always had.
+	 */
+	@Override
+	protected boolean canAffordLitter(int n) {
+		if (genome == null || n <= 1) {
+			return true;
+		}
+		double adult = Niche.of(genome.clade).expressedSize(genome.size);
+		double body = NPC.birthMass(adult, birthFraction());
+		return fat >= n * body && glycogen >= Math.max(reproThreshold, n * reproCost());
+	}
+
 	@Override
 	protected net.hedinger.prototype.entities.NPC spawnOffspring() {
 		if (genome == null) {
