@@ -1076,6 +1076,9 @@ function genomeTab(d: Record<string, any>): string {
     row('mate thresh', g(gm.mateThreshold)),
     row('breeds at', g(gm.reproFraction)), row('spends', g(gm.reproCostFraction)),
     row('young born at', g(gm.birthSize)), row('milk', g(gm.milk)),
+    // How many young a budder bears at once: the count the gene rounds to,
+    // read off the genome rather than rounded here, and the gene itself.
+    row('litter', gm.litterSize === undefined ? '—' : `${gm.litterSize} · ${gm.litter}`),
     row('drinks at', g(gm.drainRate)),
     row('mutation', g(gm.mutationRate)),
   ]) + group('mind', [

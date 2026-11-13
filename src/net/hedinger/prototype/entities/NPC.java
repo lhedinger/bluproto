@@ -3454,7 +3454,8 @@ public abstract class NPC extends Entity {
 	 * Returns true only on the tick a child is actually born.
 	 */
 	protected boolean tryReproduce() {
-		if (!surplusForBreeding()) {
+		int litter = litterSize();
+		if (!surplusForBreeding() || !canAffordLitter(litter)) {
 			breedHoldStart = -1;
 			return false;
 		}
@@ -3465,15 +3466,38 @@ public abstract class NPC extends Entity {
 		if (age - breedHoldStart < BREED_HOLD_TICKS) {
 			return false; // still committing
 		}
-		NPC child = spawnOffspring();
-		if (child == null) {
+		// The litter, one child at a time through the single child's own
+		// transaction, so each is built and charged exactly as an only child
+		// would be; canAffordLitter has already seen the whole bill.
+		int born = 0;
+		for (int i = 0; i < litter; i++) {
+			NPC child = spawnOffspring();
+			if (child == null) {
+				break;
+			}
+			settleBirth(child, null);
+			getWorld().spawnEntity(child);
+			noteBirth(child, this, null);
+			born++;
+		}
+		if (born == 0) {
 			return false;
 		}
-		settleBirth(child, null);
-		reproCooldown = reproCooldownTicks();
+		reproCooldown = reproCooldownTicks(); // one cooldown for the whole litter
 		breedHoldStart = -1;
-		getWorld().spawnEntity(child);
-		noteBirth(child, this, null);
+		return true;
+	}
+
+	/** How many young this body bears at once when it buds. One, unless a
+	 *  genome says otherwise ({@code TestNPC} reads {@link Genome#litter}). */
+	protected int litterSize() {
+		return 1;
+	}
+
+	/** Whether this body holds what a litter of {@code n} costs right now --
+	 *  every young's body and endowment, not just the first's. A body that
+	 *  keeps no such books can always afford its one. */
+	protected boolean canAffordLitter(int n) {
 		return true;
 	}
 

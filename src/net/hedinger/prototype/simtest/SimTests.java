@@ -3508,6 +3508,77 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A budder bears its lineage's litter, whole, and pays for every young.
+	 * Reproduction was one child per birth for every lineage. A budder now bears
+	 * {@link Genome#litterSize} young at once: each built and endowed exactly as
+	 * an only child, so a litter of three costs three bodies of fat and three
+	 * endowments of glycogen, born together under one cooldown -- and not until
+	 * the parent holds the whole bill.
+	 *
+	 * <p>Pinned on a fed budder whose young are 15% of its body, endowed with
+	 * 0.3 of a store each above a line of 0.3: with a litter
+	 * of three and the fat for it, three young arrive on the same tick and the
+	 * parent's fat falls by three young's worth; with the fat for only two, none
+	 * arrive; a litter of one is one; and a courting lineage bears one whatever
+	 * its gene says.
+	 */
+	static class ALitterIsBornWholeAndPaidInFull extends Scenario {
+		/** {young born within 300 ticks, distinct birth ticks, parent fat lost}. */
+		private double[] bud(double litter, double fatInYoung) {
+			seed(147);
+			World w = room(14, 14);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			g.markers = new double[] { 0.5, 0.5, 0.5 };
+			g.sexuality = 0.0;
+			g.birthSize = 0.15;
+			g.reproFraction = 0.3; // a low line and a cheap endowment: room for three in one store
+			g.reproCostFraction = 0.3;
+			g.litter = litter;
+			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
+			TestNPC parent = TestNPC.minded(6.5, 6.5, 0, g, breeder).withMetabolic().withDeathspan(777);
+			parent.grown().withGlycogen(parent.glycogenCapacity());
+			double young = NPC.birthMass(Niche.of(g.clade).expressedSize(g.size), g.birthSize);
+			parent.withFat(fatInYoung * young);
+			w.spawnEntity(parent);
+			w.think();
+			java.util.Set<Long> ticks = new java.util.TreeSet<>();
+			int born = 0;
+			double paid = 0;
+			for (int t = 0; t < 300; t++) {
+				int before = w.getAliveCount();
+				parent.withGlycogen(parent.glycogenCapacity()); // the endowment is never the gate here
+				double fatBefore = parent.fat();
+				tick(w, 1);
+				int now = w.getAliveCount();
+				if (now > before) {
+					born += now - before;
+					ticks.add(w.getTick());
+					paid += fatBefore - parent.fat(); // on the birth tick: the young, and a tick's books
+				}
+			}
+			return new double[] { born, ticks.size(), paid / young };
+		}
+
+		@Override
+		public void run() {
+			double[] three = bud(3.0, 3.2);
+			assertEquals("a litter of three is three young", 3, (int) three[0]);
+			assertEquals("born on one tick", 1, (int) three[1]);
+			assertNear("and the parent's fat paid for three bodies", 3.0, three[2], 0.05);
+			double[] short2 = bud(3.0, 2.5);
+			assertEquals("with the fat for only two, no litter is born", 0, (int) short2[0]);
+			double[] one = bud(1.0, 3.2);
+			assertEquals("a litter of one is one", 1, (int) one[0]);
+
+			Genome sx = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
+			sx.sexuality = 1.0;
+			sx.litter = 4.0;
+			TestNPC courter = TestNPC.minded(3.5, 3.5, 0, sx, (sn, a) -> { });
+			assertEquals("a courting lineage bears one, whatever its litter gene", 1, courter.litterSize());
+		}
+	}
+
 	/** Counts live minded bodies whose {@code ecoRole} is not {@code role}. */
 	static int countRolesOtherThan(World w, String role) {
 		int n = 0;
@@ -22274,6 +22345,7 @@ public class SimTests {
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
+				new ALitterIsBornWholeAndPaidInFull(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),
 				new ScavengerCrossesToAMuchBetterCarcass(),

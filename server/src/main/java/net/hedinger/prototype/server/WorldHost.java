@@ -872,6 +872,11 @@ final class WorldHost {
 					gm.put("reproFraction", round(g.reproFraction));
 					gm.put("reproCostFraction", round(g.reproCostFraction));
 					gm.put("birthSize", round(g.birthSize));
+					// How many young a budder bears at once, and the count that gene
+					// rounds to -- the genome's own answer, for the same reason as
+					// "sexual" above.
+					gm.put("litter", round(g.litter));
+					gm.put("litterSize", g.litterSize());
 					gm.put("milk", round(g.milk));
 					gm.put("drainRate", round(g.drainRate));
 					gm.put("mutationRate", round(g.mutationRate));
