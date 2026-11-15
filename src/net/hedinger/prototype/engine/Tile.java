@@ -247,6 +247,23 @@ public class Tile {
 		return fertility;
 	}
 
+	/** The vegetation as written at {@link #vegetationTick()}: with the tick,
+	 *  the whole of a tile's grass, which regrows lazily from there. */
+	public double vegetationStored() {
+		return vegStored;
+	}
+
+	/** The tick {@link #vegetationStored()} was written at. */
+	public long vegetationTick() {
+		return vegTick;
+	}
+
+	/** Puts back the grass a save recorded, at the tick it recorded it. */
+	public void restoreVegetation(double stored, long atTick) {
+		vegStored = stored;
+		vegTick = atTick;
+	}
+
 	public void setFertility(double f) {
 		fertility = f < 0 ? 0 : (f > 1 ? 1 : f);
 	}

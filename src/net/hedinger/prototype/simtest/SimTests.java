@@ -10112,6 +10112,123 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A deploy can carry the world across. A demo world is run until it has
+	 * grazed, bred and died, written down, and put back onto the same ground
+	 * built afresh without founders: every creature returns under its id, with
+	 * its genome, generation, body and stores, the dead as carcasses with
+	 * their meat; every tile's grass and fertility return; the birth registry
+	 * and the clock continue. The restored world then runs. A save that
+	 * cannot mean the same thing -- another world size -- is refused whole.
+	 */
+	static class AWorldSurvivesADeploy extends Scenario {
+		@Override
+		public void run() {
+			seed(61);
+			int cols = 64, rows = 44;
+			net.hedinger.prototype.sim.SimulationRunner r = new net.hedinger.prototype.sim.SimulationRunner(
+					net.hedinger.prototype.sim.Worlds.demo(61, cols, rows));
+			r.advance(3000);
+			World a = r.world();
+			java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+			try {
+				net.hedinger.prototype.sim.WorldSave.write(a, 61, "none", 0, buf);
+			} catch (java.io.IOException e) {
+				throw new AssertionError(e);
+			}
+			byte[] save = buf.toByteArray();
+
+			java.util.Map<Integer, TestNPC> before = new java.util.HashMap<>();
+			int dead = 0;
+			for (Entity e : a.getEntities()) {
+				if (e instanceof TestNPC p && !p.isRemoved() && p.getGenome() != null) {
+					before.put(p.getID(), p);
+					dead += p.isDead() ? 1 : 0;
+				}
+			}
+			assertGreater("the world has creatures to carry", before.size(), 50);
+			assertGreater("and carcasses", dead, 0);
+			java.util.List<World.Birth> births = a.births();
+			assertTrue("and births beyond its founders", births.stream().anyMatch(b -> b.parentA() >= 0));
+
+			World b;
+			try {
+				b = net.hedinger.prototype.sim.WorldSave.restore(new java.io.ByteArrayInputStream(save),
+						net.hedinger.prototype.sim.Worlds.demoUnpeopled(61, cols, rows));
+			} catch (Exception e) {
+				throw new AssertionError("the save goes back on its own ground: " + e.getMessage(), e);
+			}
+			assertEquals("the clock continues", a.getTick(), b.getTick());
+			assertEquals("the registry comes back whole", births.size(), b.births().size());
+			assertTrue("in order", births.equals(b.births()));
+			int sameGrass = 0, tiles = 0;
+			for (int z = 0; z < a.getLevels(); z++) {
+				for (int y = 0; y < rows; y++) {
+					for (int x = 0; x < cols; x++) {
+						Tile ta = a.getTile(x, y, z), tb = b.getTile(x, y, z);
+						tiles++;
+						if (ta.vegetationStored() == tb.vegetationStored() && ta.vegetationTick() == tb.vegetationTick()
+								&& ta.getFertility() == tb.getFertility()) {
+							sameGrass++;
+						}
+					}
+				}
+			}
+			assertEquals("every tile's grass and fertility come back", tiles, sameGrass);
+
+			int found = 0, deadBack = 0;
+			for (Entity e : b.getEntities()) {
+				if (!(e instanceof TestNPC p) || p.getGenome() == null) {
+					continue;
+				}
+				TestNPC o = before.get(p.getID());
+				assertTrue("no creature appears that the save did not have: " + p.getID(), o != null);
+				found++;
+				deadBack += p.isDead() ? 1 : 0;
+				assertTrue("a creature keeps its genome",
+						net.hedinger.prototype.entities.GenomeCodec.encode(o.getGenome())
+								.equals(net.hedinger.prototype.entities.GenomeCodec.encode(p.getGenome())));
+				assertEquals("and its generation", o.generation(), p.generation());
+				assertTrue("and whether it is dead", o.isDead() == p.isDead());
+				assertNear("and where it stands", o.getX(), p.getX(), 1e-9);
+				assertNear("on its level", o.getZ(), p.getZ(), 1e-9);
+				if (o.isDead()) {
+					assertNear("a carcass keeps its meat", o.carcassMass(), p.carcassMass(), 1e-9);
+				} else {
+					assertNear("a body keeps its fat", o.fat(), p.fat(), 1e-9);
+					assertNear("and its size", o.getSize(), p.getSize(), 1e-9);
+				}
+			}
+			assertEquals("every creature comes back", before.size(), found);
+			assertEquals("the dead as carcasses", dead, deadBack);
+
+			net.hedinger.prototype.sim.SimulationRunner rb = new net.hedinger.prototype.sim.SimulationRunner(b);
+			rb.advance(500);
+			int alive = 0;
+			for (Entity e : b.getEntities()) {
+				if (e instanceof TestNPC p && !p.isDead() && !p.isRemoved() && p.getGenome() != null) {
+					alive++;
+				}
+			}
+			assertGreater("and the restored world lives on", alive, 50);
+			assertTrue("without the steward restocking a population it already has",
+					b.births().stream().noneMatch(x -> x.tick() == a.getTick() + 1 && x.parentA() < 0));
+			assertTrue("its births continue past the save's ids",
+					b.births().stream().filter(x -> x.tick() > a.getTick()).allMatch(x -> !before.containsKey(x.child())));
+
+			boolean refused = false;
+			try {
+				net.hedinger.prototype.sim.WorldSave.restore(new java.io.ByteArrayInputStream(save),
+						net.hedinger.prototype.sim.Worlds.demoUnpeopled(61, cols + 8, rows));
+			} catch (net.hedinger.prototype.sim.WorldSave.Incompatible e) {
+				refused = true;
+			} catch (java.io.IOException e) {
+				throw new AssertionError(e);
+			}
+			assertTrue("a save for another world size is refused", refused);
+		}
+	}
+
 	/** A program's working lines in order, its NOPs dropped. */
 	static int[][] active(int[][] code) {
 		return java.util.Arrays.stream(code)
@@ -22636,6 +22753,7 @@ public class SimTests {
 				new WaterWetsTheAirAndSunAndHeatDryIt(),
 				new ClimateIsReadOffTheGround(),
 				new SameSeedSameOutcome(),
+				new AWorldSurvivesADeploy(),
 		};
 	}
 

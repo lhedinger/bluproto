@@ -31,6 +31,60 @@ public class World {
 		return tick;
 	}
 
+	/** Puts every queued spawn into the world now. A tick does this after its
+	 *  entities have run; a restored world does it at once, so the first thing
+	 *  that runs in it -- the steward counting heads -- sees its population. */
+	public void admitSpawns() {
+		if (spawnQueue.size() > 0) {
+			for (Entity e : spawnQueue) {
+				// An entity removed while still queued must not claim a tile
+				// slot -- its markRemoved() purge already ran (or never will).
+				if (e != null && !e.isRemoved()) {
+					entities.put(e.getID(), e);
+					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
+				}
+			}
+			spawnQueue = new LinkedHashSet<Entity>();
+		}
+	}
+
+	/** Takes every entity {@code gone} accepts out of this world at once,
+	 *  queued or admitted, freeing its tile and its id. */
+	public void discard(java.util.function.Predicate<Entity> gone) {
+		IntObjectMap<Entity> keep = new IntObjectMap<Entity>();
+		for (Entity e : entities.values()) {
+			if (e == null) {
+				continue;
+			}
+			if (gone.test(e)) {
+				e.remove();
+			} else {
+				keep.put(e.getID(), e);
+			}
+		}
+		entities = keep;
+		spawnQueue.removeIf(gone);
+	}
+
+	/** Sets the clock of a world being restored from a save, before it first
+	 *  ticks, so ages, vegetation and births written against the old clock
+	 *  read the same here. */
+	public void resumeAt(long t) {
+		tick = t;
+	}
+
+	/** The spawn index the next entity gets: part of every id, so a restored
+	 *  world continues the count instead of reusing ids its records name. */
+	public int spawnCount() {
+		return spawnCounter;
+	}
+
+	/** Continues the spawn count of a restored world from {@code n}, never
+	 *  backwards. */
+	public void continueSpawnCount(int n) {
+		spawnCounter = Math.max(spawnCounter, n);
+	}
+
 	boolean fogofwar = false;
 
 	int max_view_depth = 3;
@@ -503,17 +557,7 @@ public class World {
 			entities = clone;
 		}
 
-		if (spawnQueue.size() > 0) {
-			for (Entity e : spawnQueue) {
-				// An entity removed while still queued must not claim a tile
-				// slot -- its markRemoved() purge already ran (or never will).
-				if (e != null && !e.isRemoved()) {
-					entities.put(e.getID(), e);
-					getTile(e.getX(), e.getY(), e.getZ()).addEntity(e.getID());
-				}
-			}
-			spawnQueue = new LinkedHashSet<Entity>();
-		}
+		admitSpawns();
 
 		for (int z = 0; z < lvls; z++) {
 			levels[z].think(this);
@@ -646,6 +690,23 @@ public class World {
 		}
 	}
 
+	/** Every remembered birth, oldest first: what a save carries. */
+	public java.util.List<Birth> births() {
+		synchronized (births) {
+			return new java.util.ArrayList<Birth>(births.values());
+		}
+	}
+
+	/** Replaces the registry with a saved one, in its order (oldest first). */
+	public void restoreBirths(java.util.List<Birth> saved) {
+		synchronized (births) {
+			births.clear();
+			for (Birth b : saved) {
+				births.put(b.child(), b);
+			}
+		}
+	}
+
 	/** The birth record of {@code id}, or null: world-seeded at the start, or
 	 *  the record has aged out of the registry. A steward reseed HAS a record,
 	 *  parentless (see {@link Birth}). */
@@ -668,6 +729,29 @@ public class World {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * Spawns {@code e} under the id it had in a saved world, so the birth
+	 * registry and the viewer's lineage keep naming it. False, and nothing
+	 * spawned, when the id is taken here or the spot is off the map.
+	 */
+	public boolean spawnEntityAs(Entity e, int id) {
+		if (e == null || id < 0 || entities.get(id) != null) {
+			return false;
+		}
+		for (Entity q : spawnQueue) {
+			if (q.getID() == id) {
+				return false;
+			}
+		}
+		if (!isValid(e.getCol(), e.getRow(), e.getLvl())) {
+			return false;
+		}
+		e.presetID(id);
+		e.buildID(this, spawnCounter); // keeps the preset id; binds the world
+		spawnQueue.add(e);
+		return true;
 	}
 
 	public boolean spawnEntity(Entity e) {
