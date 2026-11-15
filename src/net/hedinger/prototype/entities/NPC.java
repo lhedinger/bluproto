@@ -122,10 +122,10 @@ public abstract class NPC extends Entity {
 	 *  it pays no perception surcharge. */
 	@Unit("tiles·rad")
 	public static final double REF_SIGHT = 10.0 * (Math.PI * 0.5);
-	/** Reference turn rate and program length — the founder defaults, where agility
-	 *  and thought cost nothing extra. */
+	/** Reference turn rate — the founder default, where agility costs nothing
+	 *  extra. */
 	@Unit("")
-	public static final double REF_TURN = 5, REF_BRAIN_LEN = 16;
+	public static final double REF_TURN = 5;
 	/**
 	 * What cold costs an endotherm: the resting burn it adds per degree below
 	 * its comfort band, for a bare body of mass 1, as a share of the basal
@@ -174,11 +174,6 @@ public abstract class NPC extends Entity {
 	/** Energy/tick per turn-rate step beyond the reference, at mass 1. */
 	@Unit("energy/tick per step")
 	public static double AGILITY_BURN = 5.0e-6;
-	/** Energy/tick per brain instruction beyond the reference, at mass 1 — so a
-	 *  longer program is a slower thought AND a hungrier body, pricing intelligence
-	 *  against food the way everything else in the economy is priced. */
-	@Unit("energy/tick per instruction")
-	public static double BRAIN_BURN = 3.0e-6;
 	/** The floor a body's total burn cannot drop below, as a fraction of its
 	 *  size-based base — so a blind, sluggish, brainless lineage still pays to
 	 *  exist and the capability savings cannot drive burn to zero. */
@@ -1310,15 +1305,17 @@ public abstract class NPC extends Entity {
 			return base;
 		}
 		// Capability surcharges, priced at the margin around a reference genome
-		// (see the constants): keen sight, quick turns and a long brain each add to
-		// the burn, a myopic/sluggish/simple body saves — bounded below so nothing
+		// (see the constants): keen sight and quick turns each add to the burn, a
+		// myopic/sluggish body saves — bounded below so nothing
 		// ever exists for free. All scale with mass^0.75, like the base.
 		double sight = g.losRange * g.losFov * eyeCost(g.nightEye);
 		double perception = PERCEPTION_BURN * m34 * (sight - REF_SIGHT);
 		double agility = AGILITY_BURN * m34 * (g.turnRate - REF_TURN);
-		int brainLen = g.brain != null ? g.brain.length() : (int) REF_BRAIN_LEN;
-		double thought = BRAIN_BURN * m34 * (brainLen - REF_BRAIN_LEN);
-		double burn = base + perception + agility + thought;
+		// A long brain pays in time, not food: under one instruction per tick a
+		// longer program is a slower thought, and that is its whole price. It
+		// used to burn per line as well, which charged an inert NOP as much as
+		// a working instruction.
+		double burn = base + perception + agility;
 		return Math.max(burn, base * CAPABILITY_FLOOR);
 	}
 

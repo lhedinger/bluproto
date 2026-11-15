@@ -16358,10 +16358,12 @@ public class SimTests {
 	}
 
 	/**
-	 * Capability is priced. Keen sight, a quick turn and a long brain are metabolic
-	 * tissue, charged at the margin around a reference genome — so a body at the
-	 * defaults burns the base rate, a keener/bigger-brained one burns more, and a
-	 * myopic/simple one saves, bounded below so nothing exists for free. Measured
+	 * Capability is priced. Keen sight and a quick turn are metabolic tissue,
+	 * charged at the margin around a reference genome — so a body at the defaults
+	 * burns the base rate, a keener one burns more, and a myopic/sluggish one
+	 * saves, bounded below so nothing exists for free. A long brain is not: it
+	 * pays in time, a slower thought under one instruction per tick, and burns
+	 * what a short one does. Measured
 	 * as energy drained from a resting, starving, motionless body (no movement, no
 	 * regeneration), so the drop is pure burn.
 	 */
@@ -16397,7 +16399,7 @@ public class SimTests {
 			assertGreater("the law prices keen sight above plain", keenLaw, 1.0);
 			assertGreater("keen sight costs metabolism", keenBurn, plainBurn * (1 + 0.75 * (keenLaw - 1)));
 
-			// Brain: a long program burns more than a short one, same body. Both
+			// Brain: a long program burns what a short one does, same body. Both
 			// programs are all NOPs: a random program can write the throttle and
 			// walk, and then the drop is movement rather than the burn under test
 			// -- which is how a wider operand field once flipped this assertion.
@@ -16409,9 +16411,9 @@ public class SimTests {
 			deep.brain = new net.hedinger.prototype.entities.Brain(new int[60][4]);
 			double simpleBurn = burnOver(room(12, 12), simple, T);
 			double deepBurn = burnOver(room(12, 12), deep, T);
-			assertGreater("a long brain costs metabolism", deepBurn, simpleBurn * 1.1);
+			assertNear("a long brain costs no metabolism", simpleBurn, deepBurn, simpleBurn * 0.02);
 
-			// The floor holds: a near-blind, tiny-brained, sluggish body still pays to
+			// The floor holds: a near-blind, sluggish body still pays to
 			// exist — its burn does not collapse toward zero.
 			Genome frugal = new Genome();
 			frugal.size = 10;
