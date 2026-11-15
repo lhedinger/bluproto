@@ -257,14 +257,14 @@ public final class Mechanics {
 				+ "the size term sits a heritable efficiency multiplier from the genome, "
 				+ "normalised so an average genome burns exactly the size-based rate and "
 				+ "mutation nudges it either way.\n\n"
-				+ "Capability is priced on top, at the margin. Keen sight, a quick turn and a "
-				+ "long brain are all metabolic tissue, and each adds to the burn in proportion "
-				+ "to how far it sits ABOVE a reference genome — a body at the defaults pays "
-				+ "nothing extra, a keener/quicker/bigger-brained one pays more, and a "
-				+ "myopic/sluggish/simple one saves, down to a floor no body drops below. So a "
-				+ "gene that used to be free — sight range, field of view, turn rate, program "
-				+ "length — is now a real trade a lineage spends or saves its living on, priced "
-				+ "the way movement and mass already are.");
+				+ "Capability is priced on top, at the margin. Keen sight and a quick turn "
+				+ "are metabolic tissue, and each adds to the burn in proportion to how far "
+				+ "it sits ABOVE a reference genome — a body at the defaults pays nothing "
+				+ "extra, a keener/quicker one pays more, and a myopic/sluggish one saves, "
+				+ "down to a floor no body drops below. So sight range, field of view and "
+				+ "turn rate are a real trade a lineage spends or saves its living on, priced "
+				+ "the way movement and mass already are. A long brain pays in time instead: "
+				+ "under one instruction per tick it is a slower thought, and burns no more.");
 		rows(s,
 				row("Resting burn", num(NPC.BASAL_RATE) + " × mass^0.75 × efficiency",
 						"energy/tick", "Before capability surcharges."),
@@ -277,9 +277,6 @@ public final class Mechanics {
 						"energy/tick", "Keen eyes are dear tissue; a myopic lineage saves."),
 				row("Agility surcharge", sci(NPC.AGILITY_BURN) + " × mass^0.75 × (turn − "
 						+ num(NPC.REF_TURN) + ")", "energy/tick", "A quicker turn costs more."),
-				row("Brain surcharge", sci(NPC.BRAIN_BURN) + " × mass^0.75 × (length − "
-						+ num(NPC.REF_BRAIN_LEN) + ")", "energy/tick",
-						"A longer program is a slower thought AND a hungrier body."),
 				row("Burn floor", pct(NPC.CAPABILITY_FLOOR) + " of the base", "",
 						"The savings cannot drive the burn to zero — existing still costs."));
 		List<List<String>> t = new ArrayList<>();

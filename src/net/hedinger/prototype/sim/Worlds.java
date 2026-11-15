@@ -399,9 +399,9 @@ public final class Worlds {
 	 * clade-seed pairs of six, and every guild stayed alive.
 	 *
 	 * <p>Length is not free, and the padding pays for it like any other line: a
-	 * longer brain burns more ({@link net.hedinger.prototype.entities.NPC#BRAIN_BURN}),
-	 * reacts slower under one instruction per tick, and holds more targets at
-	 * once. Selection can shed it -- a deletion is as likely as an insertion.
+	 * longer brain reacts slower under one instruction per tick, and holds more
+	 * targets at once. Selection can shed it -- a deletion is as likely as an
+	 * insertion.
 	 */
 	public static net.hedinger.prototype.entities.Brain padded(net.hedinger.prototype.entities.Brain b) {
 		if (b == null) {
