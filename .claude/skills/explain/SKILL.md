@@ -1,6 +1,6 @@
 ---
 name: explain
-description: Explain how or why something in the simulation behaves as it does — a mechanic, a population pattern, a creature's behaviour, a number in the viewer. Use whenever the user asks "how does X work", "why are/does…", "what makes…", "how are they surviving", "where does X come from", or otherwise wants system behaviour understood rather than changed. Answers are a sentence and a few lines, with a graphic only when it helps, a "why" followed down to its root cause, fast to produce and read, with no fix suggestions. Not for requests to change, tune or fix anything.
+description: Explain how or why something in the simulation behaves as it does — a mechanic, a population pattern, a creature's behaviour, a number in the viewer. Use whenever the user asks "how does X work", "why are/does…", "what makes…", "how are they surviving", "where does X come from", or otherwise wants system behaviour understood rather than changed. Answers are a sentence and a few lines, with a graphic only when it helps, a "why" followed down to its root cause, fast to produce and read, written in ASD-STE100 Simplified Technical English, with no fix suggestions. Not for requests to change, tune or fix anything.
 ---
 
 # Explaining system behaviour
@@ -33,6 +33,35 @@ something readable in under a minute on a phone.
 About 150 words, graphic included. If it is running longer, the answer is
 trying to cover the follow-up questions; cut them.
 
+## Write it in ASD-STE100
+
+Every answer is written in ASD-STE100 Simplified Technical English: the
+sentence, the bullets and the labels in the graphic. The reader is often on a
+phone and reads quickly, and STE removes the second reading of a sentence.
+The rules that matter most here:
+
+- **One topic in each sentence.** A sentence that describes is at most 25
+  words; an instruction is at most 20. A paragraph is at most six sentences.
+- **Active voice, simple tenses.** Present, simple past or simple future.
+  "The hunter eats the body", not "the body is eaten" or "has been eaten".
+- **Approved words, with their approved meaning.** Use the STE dictionary
+  word where one fits ("start", not "commence"; "increase", not "boost";
+  "show", not "reveal"). One word has one meaning in an answer.
+- **The project's names are technical names.** Herbivore, glycogen,
+  fertility, steward, clade, tile and the other names that the code and the
+  viewer use are permitted as they are. Do not replace them with near words.
+- **No -ing forms** as nouns or adjectives, except in a technical name.
+  "When the herd grazes", not "while grazing".
+- **No phrasal verbs, no idioms, no contractions.** "Remove", not "take
+  out"; "does not", not "doesn't".
+- **Keep the articles.** "The tile gets 0.044", not "tile gets 0.044".
+- **Each bullet is a full sentence**, or a short list of nouns that
+  completes the line before it.
+
+Numbers, units, file names and code identifiers stay exactly as they are.
+STE controls the words; it does not change the facts or the shape of the
+answer above.
+
 ## Finding the root cause
 
 A "why" is answered at its root, not at the first cause that comes to hand.
@@ -61,9 +90,9 @@ bring in less than its resting burn. The answer leads with that deficit.
 
 Question: "How does the dung mechanism work?"
 
-> Every meal drops its undigested part on the tile the animal stands on, and
-> that raises the tile's fertility, which raises how much grass the tile can
-> hold.
+> Each meal puts its undigested part on the tile below the animal. This
+> increases the fertility of the tile, and the fertility sets how much grass
+> the tile can hold.
 >
 > ```
 >  grass ──eaten──▶ herbivore
@@ -74,9 +103,9 @@ Question: "How does the dung mechanism work?"
 >  (capped at 1.0, never falls)
 > ```
 >
-> - A rotting body adds 0.10 per unit of uneaten mass, 40% of that to each
->   neighbouring tile.
-> - Nothing lowers fertility: growing grass does not draw on it.
+> - A dead body adds 0.10 fertility for each unit of mass that is not eaten.
+>   Each adjacent tile gets 40% of that value.
+> - No process decreases fertility. The growth of grass does not use it.
 
 ## Producing it quickly
 
