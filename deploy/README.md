@@ -67,6 +67,48 @@ pull it without credentials — GitHub → your repo → **Packages** → `blupr
 → *Package settings* → **Change visibility** → *Public*. (Private also works,
 but then watchtower needs a registry login — see its docs.)
 
+### Kept or reset: the world across a deploy
+
+A deploy **keeps the live world** by default. The server writes it to the data
+volume (`/data/world.save.gz`) every 5 minutes and again as the container
+stops, and the new build boots that save: the same creatures under the same
+ids, with their genomes, bodies, stores, generations and lineage, the dead as
+carcasses, and every tile's grass and fertility, at the tick it stopped. Minds
+wake fresh -- registers, intents and targets are not carried -- and items, the
+steward and its drones are rebuilt from the seed.
+
+To **reset** instead, put a `World: reset` trailer in a commit message, in the
+trailer block at its end:
+
+```
+Grazers see water through cover
+
+...
+
+World: reset
+Co-Authored-By: ...
+```
+
+`publish.yml` stamps the image with the last such commit on master (its
+*epoch*). A build whose epoch differs from the save's starts fresh from
+`SEED`; every deploy and restart after that keeps the new world, until the
+next `World: reset`. Because the epoch is looked up in the history, a reset
+is not lost if its own build was skipped.
+
+The server also resets on its own, rather than restore something that would
+mean something else, when the save is for another world size, when the
+generator no longer builds the saved terrain, when genomes are encoded in a
+version this build cannot read, or when the save cannot be read at all. Which
+happened, and why, is in `/api/health`:
+
+```json
+"boot": "kept", "bootNote": "restored tick 1440213, saved 2026-11-15T16:02:11Z",
+"epoch": "none", "savedAt": "2026-11-15T16:07:11Z", "saveHeldMs": 140
+```
+
+A kept world is not reproducible from its seed: the recording and
+`/api/replay` cover the world since its last fresh start.
+
 Need an immediate update without waiting for the poll, or to change `.env`?
 Re-run the script — it pulls the latest image and restarts:
 
@@ -79,7 +121,7 @@ bash /opt/bluproto/deploy/setup.sh
 ```bash
 cd /opt/bluproto/deploy
 docker compose logs -f server     # world log
-docker compose restart server     # bounce the sim (fresh world, same seed)
+docker compose restart server     # bounce the sim (the saved world comes back)
 docker compose up -d --build      # rebuild after a manual git pull
 curl -s https://yourdomain/api/health   # {"ok":true,"tick":...}
 ```

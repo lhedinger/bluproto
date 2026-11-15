@@ -96,6 +96,7 @@ public final class ServerTests {
 		theDroneRankIsDronesAndOnlyDrones();
 		theTileCatalogListsEveryType();
 		theBeltPointsWhereItIsLaid();
+		aDeployKeepsTheWorldUnlessAResetIsAsked();
 		System.out.println(failed == 0 ? "server tests: all passed" : "server tests: " + failed + " FAILED");
 		if (failed > 0) {
 			System.exit(1);
@@ -1916,6 +1917,72 @@ public final class ServerTests {
 			check("belt " + dir + " slats sit centred on the belt (" + lo + ".." + hi + ")",
 					lo == 3 && hi == 8);
 		}
+	}
+
+	/**
+	 * A deploy keeps the world unless a reset is asked for. A host writes its
+	 * world into the durable dir; the next host on the same epoch -- the same
+	 * last {@code World: reset} in its history -- boots that world, at its tick,
+	 * with its creatures under their ids. A host whose build descends from a
+	 * newer reset starts fresh and says why, and so does one whose save cannot
+	 * be read; neither is a failed boot.
+	 */
+	static void aDeployKeepsTheWorldUnlessAResetIsAsked() {
+		java.io.File dir;
+		try {
+			dir = java.nio.file.Files.createTempDirectory("world-save").toFile();
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+		WorldHost first = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "none"));
+		first.runner().stop();
+		check("a host with no save starts fresh", "fresh".equals(first.bootInfo().get("boot")));
+		first.runner().advance(300);
+		first.saveWorld();
+		long tick = first.runner().world().getTick();
+		java.util.Set<Integer> ids = new java.util.HashSet<Integer>();
+		for (var e : first.runner().world().getEntities()) {
+			if (e instanceof net.hedinger.prototype.simtest.TestNPC p && p.getGenome() != null && !p.isRemoved()) {
+				ids.add(p.getID());
+			}
+		}
+		check("it writes its world down", new java.io.File(dir, WorldHost.SAVE_FILE).length() > 0
+				&& first.bootInfo().get("savedAt") != null);
+
+		WorldHost kept = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "none"));
+		kept.runner().stop();
+		int back = 0;
+		for (int id : ids) {
+			if (kept.runner().world().entityById(id) != null) {
+				back++;
+			}
+		}
+		check("the next deploy keeps it (" + kept.bootInfo().get("bootNote") + ")",
+				"kept".equals(kept.bootInfo().get("boot")));
+		check("at its tick", kept.runner().world().getTick() >= tick);
+		check("with its creatures under their ids (" + back + " of " + ids.size() + ")",
+				!ids.isEmpty() && back == ids.size());
+
+		WorldHost reset = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "abc1234def"));
+		reset.runner().stop();
+		check("a build after a World: reset starts fresh (" + reset.bootInfo().get("bootNote") + ")",
+				"reset".equals(reset.bootInfo().get("boot"))
+						&& String.valueOf(reset.bootInfo().get("bootNote")).contains("abc1234"));
+		reset.saveWorld();
+		WorldHost after = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "abc1234def"));
+		after.runner().stop();
+		check("and the deploy after that keeps the reset world",
+				"kept".equals(after.bootInfo().get("boot")));
+
+		try {
+			java.nio.file.Files.write(new java.io.File(dir, WorldHost.SAVE_FILE).toPath(), new byte[] { 1, 2, 3 });
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+		WorldHost broken = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "abc1234def"));
+		broken.runner().stop();
+		check("a save that cannot be read is a fresh world, not a failed boot ("
+				+ broken.bootInfo().get("bootNote") + ")", "reset".equals(broken.bootInfo().get("boot")));
 	}
 
 	private static void check(String what, boolean ok) {

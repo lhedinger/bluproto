@@ -25,6 +25,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the whole history: the world epoch is looked up in it
+
+      # The world epoch: the last commit on master with a `World: reset`
+      # trailer. A deploy keeps the live world (saved to the data volume)
+      # unless its epoch differs from the one the save was written under, so a
+      # reset is asked for once, in the commit that needs it, and holds for
+      # every later deploy and restart until the next one. Looked up in the
+      # history rather than in this push, so a push whose build was skipped or
+      # cancelled cannot lose a reset.
+      - name: World epoch
+        id: epoch
+        run: |
+          sha=$(git log --format='%H %(trailers:key=World,valueonly,separator=%x20)' \
+            | awk 'tolower($2) == "reset" { print $1; exit }')
+          echo "sha=${sha:-none}" >> "$GITHUB_OUTPUT"
+          echo "world epoch: ${sha:-none}"
 
       # buildx for BuildKit (layer caching); no QEMU needed for a native amd64
       # build. Re-add docker/setup-qemu-action@v3 if you restore arm64.
@@ -57,6 +74,7 @@ jobs:
           # Stamp the commit into the image so /api/health reports it.
           build-args: |
             GIT_SHA=${{ github.sha }}
+            WORLD_EPOCH=${{ steps.epoch.outputs.sha }}
           # GitHub Actions cache keeps the JVM/npm layers warm between pushes.
           cache-from: type=gha
           cache-to: type=gha,mode=max

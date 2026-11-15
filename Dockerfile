@@ -36,13 +36,18 @@ COPY res/ ./res/
 # Stamp the built commit so /api/health reports exactly what's live (set by
 # the publish workflow; "dev" for a plain local build).
 ARG GIT_SHA=dev
-ENV PORT=7070 SEED=7 BUILD_VERSION=$GIT_SHA
+# The reset this build descends from: the last commit on master carrying a
+# `World: reset` trailer (found by the publish workflow), or "none". The
+# server keeps the saved world across a deploy unless this differs from the
+# epoch the save was written under -- see WorldHost.boot.
+ARG WORLD_EPOCH=none
+ENV PORT=7070 SEED=7 BUILD_VERSION=$GIT_SHA WORLD_EPOCH=$WORLD_EPOCH
 # Heap ceiling for the 2 GB VPS. Per-chunk layer baking (no whole-level image
 # buffers) cut the bake's peak from >1 GB to under 384 MB; 768 MB leaves the
 # bake its headroom and a world of a few thousand bodies its live set. If the
 # heap still runs out, the JVM exits rather than sitting dead with the world
-# stopped -- compose restarts it (restart: unless-stopped), a fresh world from
-# the same seed -- and leaves a heap dump and a GC log on the data volume, so
+# stopped -- compose restarts it (restart: unless-stopped), from the last world
+# save -- and leaves a heap dump and a GC log on the data volume, so
 # the next such crash says what filled the heap instead of only that it filled.
 ENV JAVA_OPTS="-Xmx768m -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/oom.hprof -Xlog:gc:file=/data/gc.log:time,uptime:filecount=3,filesize=5m"
 EXPOSE 7070

@@ -58,6 +58,19 @@ final class WorldHost {
 	private volatile long startedAt = System.currentTimeMillis();
 	private final java.io.File recordDir; // durable recording dir, or null (off)
 
+	/** The world save: what a deploy carries across, written every
+	 *  {@link #SAVE_SEC} and at shutdown into the durable dir. */
+	static final String SAVE_FILE = "world.save.gz";
+	static final int SAVE_SEC = 300;
+	/** The reset this build descends from: the last commit in its history
+	 *  that asked for one ({@code World: reset}), stamped by the publish
+	 *  workflow, or "none". A save from another epoch is not restored. */
+	private final String epoch;
+	/** How this world began: "kept" (restored from the save), "reset" (a
+	 *  save was there and was not used), or "fresh" (there was none). */
+	private volatile String bootMode = "fresh";
+	private volatile String bootNote = "no save";
+
 	private final int worldCols; // <=0 means use Worlds' built-in default size
 	private final int worldRows;
 	/** Which world this host runs: "demo" (the living ecosystem, the default)
@@ -77,15 +90,30 @@ final class WorldHost {
 	 *  that size (so the deployed size can be tuned — or scaled down under a tight
 	 *  heap — from config without a rebuild); otherwise the built-in default. */
 	WorldHost(long seed, int cols, int rows, String kind) {
+		this(seed, cols, rows, kind, envDir("RECORD_DIR"), System.getenv("WORLD_EPOCH"));
+	}
+
+	private static java.io.File envDir(String key) {
+		String rd = System.getenv(key);
+		return (rd == null || rd.isBlank()) ? null : new java.io.File(rd);
+	}
+
+	/** A host with its durable dir and epoch given rather than read from the
+	 *  environment: what the server tests boot a deploy with. */
+	WorldHost(long seed, int cols, int rows, String kind, java.io.File dir, String epoch) {
 		this.worldCols = cols;
 		this.worldRows = rows;
 		this.worldKind = kind;
-		String rd = System.getenv("RECORD_DIR");
-		this.recordDir = (rd == null || rd.isBlank()) ? null : new java.io.File(rd);
+		this.recordDir = dir;
 		if (recordDir != null) {
 			recordDir.mkdirs();
 		}
-		buildWorld(seed);
+		this.epoch = (epoch == null || epoch.isBlank()) ? "none" : epoch.trim();
+		boot(seed);
+		// The save: on a slow beat, and once more as the container stops, so a
+		// deploy carries the world as it was at the moment it was replaced.
+		broadcaster.scheduleAtFixedRate(this::saveWorld, SAVE_SEC, SAVE_SEC, TimeUnit.SECONDS);
+		Runtime.getRuntime().addShutdownHook(new Thread(this::saveWorld, "world-save"));
 		broadcaster.scheduleAtFixedRate(this::broadcast, BROADCAST_MS, BROADCAST_MS, TimeUnit.MILLISECONDS);
 		// Durability: periodically dump the session's recording (seed + command
 		// log) so a crash or reboot never loses a viewer's spawns.
@@ -99,7 +127,121 @@ final class WorldHost {
 		broadcaster.scheduleAtFixedRate(this::sampleStage, 5, STAGE_SEC, TimeUnit.SECONDS);
 	}
 
-	private void buildWorld(long newSeed) {
+	/**
+	 * Starts this host's world: the saved one if there is a save this build
+	 * can carry on, else a fresh one from {@code envSeed}. Kept by default; a
+	 * save is passed over when the build descends from a reset the save does
+	 * not ({@code World: reset} in a commit since it was written), or when it
+	 * cannot mean the same thing here -- another size, a terrain the
+	 * generator no longer builds, genomes this build cannot read. Either way
+	 * the reason is in {@code /api/health}.
+	 */
+	private void boot(long envSeed) {
+		java.io.File f = saveFile();
+		if (f == null || !f.exists()) {
+			bootMode = "fresh";
+			bootNote = f == null ? "saves are off (no RECORD_DIR)" : "no save";
+			buildWorld(envSeed, null);
+			return;
+		}
+		net.hedinger.prototype.engine.World restored = null;
+		long useSeed = envSeed;
+		String note;
+		try {
+			net.hedinger.prototype.sim.WorldSave.Header h;
+			try (java.io.InputStream in = new java.util.zip.GZIPInputStream(
+					new java.io.FileInputStream(f), 1 << 16)) {
+				h = net.hedinger.prototype.sim.WorldSave.readHeader(in);
+			}
+			if (!h.epoch().equals(epoch)) {
+				note = "reset requested by " + shortSha(epoch);
+			} else {
+				net.hedinger.prototype.engine.World ground = worldCols > 0 && worldRows > 0
+						? Worlds.demoUnpeopled(h.seed(), worldCols, worldRows)
+						: Worlds.demoUnpeopled(h.seed());
+				try (java.io.InputStream in = new java.util.zip.GZIPInputStream(
+						new java.io.FileInputStream(f), 1 << 16)) {
+					restored = net.hedinger.prototype.sim.WorldSave.restore(in, ground);
+				}
+				useSeed = h.seed();
+				note = "restored tick " + h.tick() + ", saved "
+						+ java.time.Instant.ofEpochMilli(h.savedAt()).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+			}
+		} catch (net.hedinger.prototype.sim.WorldSave.Incompatible e) {
+			restored = null;
+			note = "save not usable: " + e.getMessage();
+		} catch (Exception e) {
+			restored = null;
+			note = "save not readable: " + e;
+		}
+		if (!"demo".equals(worldKind)) {
+			restored = null;
+			note = "saves cover the demo world only";
+		}
+		bootMode = restored != null ? "kept" : "reset";
+		bootNote = note;
+		System.out.println("world boot: " + bootMode + " (" + note + ")");
+		buildWorld(restored != null ? useSeed : envSeed, restored);
+	}
+
+	private static String shortSha(String s) {
+		return s.length() > 7 ? s.substring(0, 7) : s;
+	}
+
+	private java.io.File saveFile() {
+		return recordDir == null ? null : new java.io.File(recordDir, SAVE_FILE);
+	}
+
+	/**
+	 * Writes the world to the durable dir: captured between ticks, then
+	 * compressed and swapped in whole, so a crash mid-write leaves the last
+	 * good save. Off without RECORD_DIR, and for any world but the demo.
+	 */
+	void saveWorld() {
+		java.io.File f = saveFile();
+		SimulationRunner r = runner;
+		if (f == null || r == null || !"demo".equals(worldKind)) {
+			return;
+		}
+		try {
+			long t0 = System.nanoTime();
+			java.io.ByteArrayOutputStream raw = new java.io.ByteArrayOutputStream(1 << 22);
+			synchronized (r) {
+				net.hedinger.prototype.sim.WorldSave.write(r.world(), seed, epoch,
+						System.currentTimeMillis(), raw);
+			}
+			long held = System.nanoTime() - t0;
+			java.io.File tmp = new java.io.File(f.getPath() + ".tmp");
+			try (java.io.OutputStream out = new java.util.zip.GZIPOutputStream(
+					new java.io.FileOutputStream(tmp), 1 << 16)) {
+				raw.writeTo(out);
+			}
+			java.nio.file.Files.move(tmp.toPath(), f.toPath(),
+					java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+					java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+			lastSaveMillis = System.currentTimeMillis();
+			lastSaveHeldMs = held / 1_000_000;
+		} catch (Exception e) {
+			System.err.println("world save: " + e);
+		}
+	}
+
+	private volatile long lastSaveMillis = 0;
+	private volatile long lastSaveHeldMs = 0;
+
+	/** How this world began and when it was last saved, for /api/health. */
+	java.util.Map<String, Object> bootInfo() {
+		java.util.Map<String, Object> m = new java.util.LinkedHashMap<String, Object>();
+		m.put("boot", bootMode);
+		m.put("bootNote", bootNote);
+		m.put("epoch", shortSha(epoch));
+		m.put("savedAt", lastSaveMillis == 0 ? null
+				: java.time.Instant.ofEpochMilli(lastSaveMillis).truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString());
+		m.put("saveHeldMs", lastSaveMillis == 0 ? null : lastSaveHeldMs);
+		return m;
+	}
+
+	private void buildWorld(long newSeed, net.hedinger.prototype.engine.World ready) {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
 		popHistory = java.util.List.of(); // a new world starts its own series
@@ -107,7 +249,7 @@ final class WorldHost {
 		stageHistory = java.util.List.of(); // and the flow stages with them
 		boolean mesa = "blackmesa".equals(worldKind);
 		boolean sized = !mesa && worldCols > 0 && worldRows > 0; // the campus is authored at its own size
-		SimulationRunner r = new SimulationRunner(mesa
+		SimulationRunner r = new SimulationRunner(ready != null ? ready : mesa
 				? net.hedinger.prototype.sim.BlackMesa.build(newSeed)
 				: sized ? Worlds.demo(newSeed, worldCols, worldRows) : Worlds.demo(newSeed));
 		var terrain = mesa ? net.hedinger.prototype.sim.BlackMesa.build(newSeed)
@@ -423,7 +565,9 @@ final class WorldHost {
 			// A fresh recording is seed + log, and its log assumes the
 			// code-level constants: any live tuning dies with the old world.
 			net.hedinger.prototype.sim.Tuning.restoreDefaults();
-			buildWorld(newSeed);
+			buildWorld(newSeed, null);
+			bootMode = "reset";
+			bootNote = "reset by command";
 			forceFull = true; // every viewer resyncs on the next broadcast
 		}
 		announceStatus();
