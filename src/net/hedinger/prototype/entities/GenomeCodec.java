@@ -48,6 +48,11 @@ public final class GenomeCodec {
 	}
 
 	/** The genome as one whitespace-free line (see the class doc for the form). */
+	/** The encoding tag this build writes and reads. */
+	public static String version() {
+		return VERSION;
+	}
+
 	public static String encode(Genome g) {
 		StringBuilder b = new StringBuilder(VERSION);
 		for (GeneSchema.Gene gene : GeneSchema.genes()) {

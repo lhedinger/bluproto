@@ -6850,6 +6850,25 @@ public final class Worlds {
 	 * performance measurement honest.
 	 */
 	public static World demo(long seed, int cols, int rows) {
+		return demo(seed, cols, rows, true);
+	}
+
+	/**
+	 * The demo world with everything but its founders: terrain, items, the
+	 * steward, its drones and the loader. The ground a saved world's creatures
+	 * are put back onto -- a restored world brings its own population, and a
+	 * founding cohort under it would be one the save never had.
+	 */
+	public static World demoUnpeopled(long seed, int cols, int rows) {
+		return demo(seed, cols, rows, false);
+	}
+
+	/** {@link #demoUnpeopled(long, int, int)} at the built-in size. */
+	public static World demoUnpeopled(long seed) {
+		return demo(seed, COLS, ROWS, false);
+	}
+
+	private static World demo(long seed, int cols, int rows, boolean founders) {
 		World w = demoTerrain(seed, cols, rows);
 		double scale = cols * (double) rows / DENSITY_AREA;
 
@@ -6953,15 +6972,17 @@ public final class Worlds {
 		// seeded world is scripted: the scripted behaviours stay in TestNPC for
 		// the scenario suite, which is the one place a fixed, known-good animal
 		// is worth more than an evolving one.
-		int caveHerd = found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, CAVE_Z,
-				Math.max(3, sc(3, scale)));
-		found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, SURFACE_Z,
-				steward.floor(net.hedinger.prototype.entities.Genome.Clade.HERBIVORE) - caveHerd);
-		for (var clade : new net.hedinger.prototype.entities.Genome.Clade[] {
-				net.hedinger.prototype.entities.Genome.Clade.PREDATOR,
-				net.hedinger.prototype.entities.Genome.Clade.SCAVENGER,
-				net.hedinger.prototype.entities.Genome.Clade.PARASITE }) {
-			found(w, clade, SURFACE_Z, steward.floor(clade));
+		if (founders) {
+			int caveHerd = found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, CAVE_Z,
+					Math.max(3, sc(3, scale)));
+			found(w, net.hedinger.prototype.entities.Genome.Clade.HERBIVORE, SURFACE_Z,
+					steward.floor(net.hedinger.prototype.entities.Genome.Clade.HERBIVORE) - caveHerd);
+			for (var clade : new net.hedinger.prototype.entities.Genome.Clade[] {
+					net.hedinger.prototype.entities.Genome.Clade.PREDATOR,
+					net.hedinger.prototype.entities.Genome.Clade.SCAVENGER,
+					net.hedinger.prototype.entities.Genome.Clade.PARASITE }) {
+				found(w, clade, SURFACE_Z, steward.floor(clade));
+			}
 		}
 
 		// The warden's one machine, berthed in the buried base. It takes its

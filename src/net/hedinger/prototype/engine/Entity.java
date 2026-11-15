@@ -93,6 +93,14 @@ public abstract class Entity {
 		dZ = 0;
 	}
 
+	/** Gives a body restored from a save the id it had, before it is spawned;
+	 *  {@link #buildID} then keeps it. No effect once an id is set. */
+	public void presetID(int id) {
+		if (ID == -1) {
+			ID = id;
+		}
+	}
+
 	public void buildID(World w, int n) {
 		world = w;
 		if (ID != -1) {

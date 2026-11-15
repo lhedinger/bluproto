@@ -3756,4 +3756,91 @@ public abstract class NPC extends Entity {
 		return "NPC." + getNpcTypeName();
 	}
 
+
+	// ---- save and restore ---------------------------------------------------
+
+	/**
+	 * This body as a save carries it across a deploy: where it stands, how old
+	 * and how grown it is, its stores and needs, and for a corpse what is left
+	 * on it. Named values, so a field added or dropped between builds costs one
+	 * default and not the save. What a mind is doing -- its registers, intents
+	 * and targets -- is not here: a restored body wakes where it stood.
+	 */
+	public java.util.Map<String, Double> bodyState() {
+		java.util.LinkedHashMap<String, Double> m = new java.util.LinkedHashMap<String, Double>();
+		m.put("x", X);
+		m.put("y", Y);
+		m.put("z", Z);
+		m.put("d", D);
+		m.put("age", (double) age);
+		m.put("health", (double) health);
+		m.put("lifespan", (double) lifespan);
+		m.put("deathspan", (double) deathspan);
+		m.put("grown", grownSize);
+		m.put("adult", adultSize);
+		m.put("born", bornSize);
+		m.put("lean", lean);
+		m.put("glycogen", glycogen);
+		m.put("fat", fat);
+		m.put("hunger", hunger);
+		m.put("thirst", thirst);
+		m.put("cooldown", (double) reproCooldown);
+		if (isDead()) {
+			m.put("carcass", carcassMass);
+			m.put("freshFull", freshFull);
+			m.put("fresh", fresh);
+			m.put("freshFat", freshFat);
+			m.put("decayed", decayed);
+			m.put("decayedFat", decayedFat);
+			m.put("eaten", eaten);
+			m.put("spoiled", spoiled);
+			m.put("rot", rotPace);
+		}
+		return m;
+	}
+
+	/**
+	 * Puts back what {@link #bodyState} saved, on a body built from the same
+	 * genome and already spawned into its world. A key the save does not have
+	 * keeps what the genome built. A corpse is killed first, so everything
+	 * downstream of a death has run, and then given back the meat it had.
+	 */
+	public void restoreBody(java.util.Map<String, Double> m, String deathCause) {
+		X = m.getOrDefault("x", X);
+		Y = m.getOrDefault("y", Y);
+		Z = m.getOrDefault("z", Z);
+		D = m.getOrDefault("d", D);
+		health = (int) Math.round(m.getOrDefault("health", (double) health));
+		lifespan = (int) Math.round(m.getOrDefault("lifespan", (double) lifespan));
+		adultSize = m.getOrDefault("adult", adultSize);
+		grownSize = m.getOrDefault("grown", grownSize);
+		bornSize = m.getOrDefault("born", bornSize);
+		if (grownSize > 0) {
+			size = (int) Math.round(grownSize);
+		}
+		lean = m.getOrDefault("lean", lean);
+		glycogen = m.getOrDefault("glycogen", glycogen);
+		fat = m.getOrDefault("fat", fat);
+		hunger = m.getOrDefault("hunger", hunger);
+		thirst = m.getOrDefault("thirst", thirst);
+		reproCooldown = (int) Math.round(m.getOrDefault("cooldown", (double) reproCooldown));
+		double savedAge = m.getOrDefault("age", (double) age);
+		if (savedAge < 0) {
+			if (deathCause != null) {
+				recordDeath(deathCause);
+			}
+			kill();
+			carcassMass = m.getOrDefault("carcass", carcassMass);
+			freshFull = m.getOrDefault("freshFull", freshFull);
+			fresh = m.getOrDefault("fresh", fresh);
+			freshFat = m.getOrDefault("freshFat", freshFat);
+			decayed = m.getOrDefault("decayed", decayed);
+			decayedFat = m.getOrDefault("decayedFat", decayedFat);
+			eaten = m.getOrDefault("eaten", eaten);
+			spoiled = m.getOrDefault("spoiled", spoiled);
+			rotPace = m.getOrDefault("rot", rotPace);
+			deathspan = (int) Math.round(m.getOrDefault("deathspan", (double) deathspan));
+		}
+		age = (int) Math.round(savedAge);
+	}
 }
