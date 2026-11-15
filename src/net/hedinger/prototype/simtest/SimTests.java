@@ -6821,7 +6821,11 @@ public class SimTests {
 			for (int i = 0; i < code.length; i++) {
 				edited[i] = code[i].clone();
 			}
-			edited[3][0] = Brain.NOP; // whatever row 3 was, it is a nop now
+			int row = 3;
+			while (Math.floorMod(code[row][0], Brain.NUM_OPS) == Brain.NOP) {
+				row++; // a founder is padded: rewrite a working line, not an inert one
+			}
+			edited[row][0] = Brain.NOP; // whatever that row was, it is a nop now
 			Genome one = net.hedinger.prototype.entities.GenomeCodec.decode(la);
 			one.brain = new Brain(edited);
 			var diff = net.hedinger.prototype.sim.GenomeEditor.compare(la, net.hedinger.prototype.entities.GenomeCodec.encode(one));
@@ -10092,7 +10096,8 @@ public class SimTests {
 				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
 				hunterPaces.add(amble);
 				assertTrue("a founder hunter is the hunter seed at the pace it drew",
-						java.util.Arrays.deepEquals(net.hedinger.prototype.sim.Worlds.hunterBrain(amble).code(), b.code()));
+						java.util.Arrays.deepEquals(active(net.hedinger.prototype.sim.Worlds.hunterBrain(amble).code()), active(b.code())));
+				assertEquals("with an inert line beside every line of it", 2 * net.hedinger.prototype.sim.Worlds.hunterBrain(amble).length(), b.length());
 			}
 			java.util.Set<Integer> slots = new java.util.TreeSet<>();
 			for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
@@ -10104,6 +10109,50 @@ public class SimTests {
 					net.hedinger.prototype.sim.Worlds.ambleOf(net.hedinger.prototype.sim.Worlds.starterBrain()));
 			assertEquals("the hitch-hiker sets no forage pace", -1,
 					net.hedinger.prototype.sim.Worlds.ambleOf(net.hedinger.prototype.sim.Worlds.hitchhikerBrain()));
+		}
+	}
+
+	/** A program's working lines in order, its NOPs dropped. */
+	static int[][] active(int[][] code) {
+		return java.util.Arrays.stream(code)
+				.filter(in -> Math.floorMod(in[0], Brain.NUM_OPS) != Brain.NOP)
+				.toArray(int[][]::new);
+	}
+
+	/**
+	 * A founder carries its seed program with an inert line beside every line:
+	 * room for a mutation to add an instruction instead of overwriting one. The
+	 * working lines are the seed's, in its order; the padding is a NOP after
+	 * each, or before a skip, so every skip still guards the line it was
+	 * written to guard.
+	 */
+	static class AFounderIsPaddedWithRoomToMutate extends Scenario {
+		@Override
+		public void run() {
+			seed(23);
+			Genome.Clade[] clades = Genome.Clade.values();
+			for (int i = 0; i < 200; i++) {
+				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(clades[i % clades.length]).brain;
+				int[][] code = b.code();
+				int nops = 0;
+				for (int k = 0; k < code.length; k++) {
+					int op = Math.floorMod(code[k][0], Brain.NUM_OPS);
+					if (op == Brain.NOP) {
+						nops++;
+					}
+					if (op == Brain.SKIPZ || op == Brain.SKIPNZ) {
+						assertTrue("a skip is right before a working line, as its seed wrote it",
+								k + 1 < code.length && Math.floorMod(code[k + 1][0], Brain.NUM_OPS) != Brain.NOP);
+					}
+				}
+				assertEquals("half a founder's lines are padding", code.length / 2, nops);
+				assertTrue("and it fits inside the longest program", code.length <= Brain.MAX_LEN);
+			}
+			Brain plain = net.hedinger.prototype.sim.Worlds.hunterBrain(net.hedinger.prototype.sim.Worlds.REFERENCE_AMBLE);
+			Brain pad = net.hedinger.prototype.sim.Worlds.padded(plain);
+			assertTrue("padding keeps the program's working lines, in order",
+					java.util.Arrays.deepEquals(active(plain.code()), active(pad.code())));
+			assertEquals("and doubles its length", 2 * plain.length(), pad.length());
 		}
 	}
 
@@ -10173,14 +10222,14 @@ public class SimTests {
 				int[][] hunter = net.hedinger.prototype.sim.Worlds.hunterBrain(
 						net.hedinger.prototype.sim.Worlds.ambleOf(b)).code();
 				assertTrue("a founder hunter carries the hunter seed, at the pace it drew",
-						java.util.Arrays.deepEquals(hunter, b.code()));
+						java.util.Arrays.deepEquals(active(hunter), active(b.code())));
 			}
 			int hitchhikers = 0;
 			for (int i = 0; i < 300; i++) {
 				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
 				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
 				if (amble < 0 || !java.util.Arrays.deepEquals(
-						net.hedinger.prototype.sim.Worlds.starterBrain(amble).code(), b.code())) {
+						active(net.hedinger.prototype.sim.Worlds.starterBrain(amble).code()), active(b.code()))) {
 					hitchhikers++;
 				}
 			}
@@ -22511,6 +22560,7 @@ public class SimTests {
 				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
+				new AFounderIsPaddedWithRoomToMutate(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),

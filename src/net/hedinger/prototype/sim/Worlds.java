@@ -380,7 +380,53 @@ public final class Worlds {
 			g = pricedFounder(mindedGenome((int) (Utils.random() * 3)));
 		}
 		g.clade = clade;
+		g.brain = padded(g.brain);
 		return g;
+	}
+
+	/**
+	 * A seed program with an inert line after every line it has: a NOP with
+	 * random operands, or before a skip, so a skip keeps the line it guards
+	 * right behind it. The founder behaves as the program does; the padding is
+	 * room to mutate in.
+	 *
+	 * <p>A hand-written seed has no spare lines, so every edit that lands on it
+	 * rewrites working code. A padded seed carries as many lines again that do
+	 * nothing until a mutation turns one on: an operand redraw on a NOP changes
+	 * nothing, and an opcode redraw makes it a new instruction beside the old
+	 * ones instead of in place of one. Run to ten generations on three seeds,
+	 * padded lineages carried more lines with opcodes no seed uses on five
+	 * clade-seed pairs of six, and every guild stayed alive.
+	 *
+	 * <p>Length is not free, and the padding pays for it like any other line: a
+	 * longer brain burns more ({@link net.hedinger.prototype.entities.NPC#BRAIN_BURN}),
+	 * reacts slower under one instruction per tick, and holds more targets at
+	 * once. Selection can shed it -- a deletion is as likely as an insertion.
+	 */
+	public static net.hedinger.prototype.entities.Brain padded(net.hedinger.prototype.entities.Brain b) {
+		if (b == null) {
+			return null;
+		}
+		int[][] code = b.code();
+		java.util.List<int[]> out = new java.util.ArrayList<int[]>(code.length * 2);
+		for (int[] ins : code) {
+			int[] nop = { net.hedinger.prototype.entities.Brain.NOP, padOperand(), padOperand(), padOperand() };
+			int op = Math.floorMod(ins[0], net.hedinger.prototype.entities.Brain.NUM_OPS);
+			boolean skip = op == net.hedinger.prototype.entities.Brain.SKIPZ
+					|| op == net.hedinger.prototype.entities.Brain.SKIPNZ;
+			if (skip) {
+				out.add(nop);
+			}
+			out.add(ins.clone());
+			if (!skip) {
+				out.add(nop);
+			}
+		}
+		return new net.hedinger.prototype.entities.Brain(out.toArray(new int[0][]));
+	}
+
+	private static int padOperand() {
+		return (int) (Utils.random() * net.hedinger.prototype.entities.Brain.FIELD);
 	}
 
 	/**
