@@ -100,7 +100,7 @@ Question: "How does the dung mechanism work?"
 >    │ cap = fertility  │ passes through
 >    │       × moisture ▼
 >  fertility ◀─ +0.044 per unit eaten ── dung
->  (capped at 1.0, never falls)
+>  (maximum 1.0, does not decrease)
 > ```
 >
 > - A dead body adds 0.10 fertility for each unit of mass that is not eaten.
