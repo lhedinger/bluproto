@@ -64,7 +64,7 @@ public final class Brain {
 	 * added does not have to touch this. Raised from 48 to 60 when the three
 	 * climate senses took the count to 51.
 	 */
-	private static final int FIELD = 60;
+	public static final int FIELD = 60;
 
 	public static final int MAX_LEN = 64;
 	/** Instructions executed per tick unless the caller overrides it; with a
