@@ -135,6 +135,9 @@ public final class ServerMain {
 							? "" : ": " + died.getMessage()));
 			body.put("commit", commitShort);
 			body.put("deployedAt", deployedAt);
+			// How the world came through the deploy: kept from the save, reset,
+			// or fresh -- and why, so a reset nobody asked for is visible.
+			body.putAll(host.bootInfo());
 			ctx.status(ticking ? 200 : 503).json(body);
 		});
 
