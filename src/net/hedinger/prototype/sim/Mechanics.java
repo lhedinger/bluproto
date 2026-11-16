@@ -264,7 +264,7 @@ public final class Mechanics {
 				+ "down to a floor no body drops below. So sight range, field of view and "
 				+ "turn rate are a real trade a lineage spends or saves its living on, priced "
 				+ "the way movement and mass already are. A long brain pays in time instead: "
-				+ "under one instruction per tick it is a slower thought, and burns no more.");
+				+ "at two instructions per tick it is a slower thought, and burns no more.");
 		rows(s,
 				row("Resting burn", num(NPC.BASAL_RATE) + " × mass^0.75 × efficiency",
 						"energy/tick", "Before capability surcharges."),
@@ -956,7 +956,7 @@ public final class Mechanics {
 
 	private static Map<String, Object> intents() {
 		Map<String, Object> s = section("intents", "Wanting things",
-				"A mind gets one instruction per tick, so steering to something by hand — read "
+				"A mind gets two instructions per tick, so steering to something by hand — read "
 				+ "the bearing, compare, turn, repeat — costs more thought than a creature has. "
 				+ "An intent collapses that into a single write: name a kind of thing, and while "
 				+ "it is in sight the body steers there itself. The sign flips it, so fleeing "
@@ -1115,7 +1115,7 @@ public final class Mechanics {
 				+ "result still runs — which is what keeps the search landscape smooth enough "
 				+ "for evolution to climb at all. A language that could crash would spend most "
 				+ "of its mutations producing corpses.\n\n"
-				+ "The budget is one instruction per tick. Thinking is therefore genuinely "
+				+ "The budget is two instructions per tick. Thinking is therefore genuinely "
 				+ "scarce, and a longer program is a slower thought rather than a cleverer "
 				+ "one — which is the pressure that makes a single-instruction intent worth "
 				+ "having, and the reason a reflex beats a deliberation. Registers persist "

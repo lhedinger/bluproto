@@ -68,8 +68,12 @@ public final class Brain {
 
 	public static final int MAX_LEN = 64;
 	/** Instructions executed per tick unless the caller overrides it; with a
-	 * fixed budget, program length sets the length of one thought cycle. */
-	public static final int DEFAULT_STEPS_PER_TICK = 1;
+	 * fixed budget, program length sets the length of one thought cycle. Two
+	 * lines a tick: a 22-line forager goes round in 11 ticks instead of 22, so
+	 * a line inserted by mutation costs half a tick of reaction instead of a
+	 * whole one, while length is still time -- a long program is still a
+	 * slower thought than a short one. */
+	public static final int DEFAULT_STEPS_PER_TICK = 2;
 
 	private int[][] code; // heritable: each row is {op, x, y, z}
 	private final double[] reg = new double[NUM_REG]; // runtime memory
