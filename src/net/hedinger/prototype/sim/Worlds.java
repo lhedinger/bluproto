@@ -411,9 +411,7 @@ public final class Worlds {
 		java.util.List<int[]> out = new java.util.ArrayList<int[]>(code.length * 2);
 		for (int[] ins : code) {
 			int[] nop = { net.hedinger.prototype.entities.Brain.NOP, padOperand(), padOperand(), padOperand() };
-			int op = Math.floorMod(ins[0], net.hedinger.prototype.entities.Brain.NUM_OPS);
-			boolean skip = op == net.hedinger.prototype.entities.Brain.SKIPZ
-					|| op == net.hedinger.prototype.entities.Brain.SKIPNZ;
+			boolean skip = net.hedinger.prototype.entities.Brain.isSkip(ins[0]);
 			if (skip) {
 				out.add(nop);
 			}

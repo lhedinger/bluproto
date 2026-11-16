@@ -10378,6 +10378,42 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A skip can compare. SKIPGT skips the next line when one register is
+	 * above another and SKIPLT when it is below, so "act only if the threat
+	 * is closer than this" is one line instead of a GT into a scratch
+	 * register and a SKIPNZ that has to name the same one. Equal is neither,
+	 * and the opcodes every living genome already carries keep their meaning.
+	 */
+	static class ASkipCanCompare extends Scenario {
+		@Override
+		public void run() {
+			for (int op : new int[] { Brain.SKIPGT, Brain.SKIPLT }) {
+				for (double threat : new double[] { 0.1, 0.25, 0.6 }) {
+					int[][] prog = {
+							{ Brain.SET, 2, 9, 0 }, // R2 = 1
+							{ Brain.SET, 1, 7, 0 }, // R1 = 0.25
+							{ Brain.SENSE, 0, AgentIO.S_THREAT_PROX, 0 }, // R0 = threat proximity
+							{ op, 0, 1, 0 }, // skip if R0 > R1 (or <)
+							{ Brain.WRITE, AgentIO.A_THROTTLE, 2, 0 } };
+					Brain b = new Brain(deepCopy(prog));
+					double[] sensors = new double[AgentIO.NUM_SENSORS];
+					sensors[AgentIO.S_THREAT_PROX] = threat;
+					double[] act = new double[AgentIO.NUM_ACT];
+					b.step(sensors, act, prog.length);
+					boolean skipped = act[AgentIO.A_THROTTLE] == 0;
+					boolean want = op == Brain.SKIPGT ? threat > 0.25 : threat < 0.25;
+					assertTrue(Brain.OP_NAMES[op] + " with a threat at " + threat + (skipped ? " skips" : " runs")
+							+ " the next line", skipped == want);
+				}
+			}
+			assertTrue("the old opcodes keep their numbers",
+					Brain.SKIPNZ == 12 && Brain.SENSE == 13 && Brain.WRITE == 14 && Brain.OP_NAMES[14].equals("WRITE"));
+			assertTrue("and the listing reads the comparison",
+					new Brain(new int[][] { { Brain.SKIPLT, 3, 5, 0 } }).disassemble(null, null)[0].contains("skip next if R3 < R5"));
+		}
+	}
+
 	/** A program's working lines in order, its NOPs dropped. */
 	static int[][] active(int[][] code) {
 		return java.util.Arrays.stream(code)
@@ -10406,7 +10442,7 @@ public class SimTests {
 					if (op == Brain.NOP) {
 						nops++;
 					}
-					if (op == Brain.SKIPZ || op == Brain.SKIPNZ) {
+					if (Brain.isSkip(op)) {
 						assertTrue("a skip is right before a working line, as its seed wrote it",
 								k + 1 < code.length && Math.floorMod(code[k + 1][0], Brain.NUM_OPS) != Brain.NOP);
 					}
@@ -22848,6 +22884,7 @@ public class SimTests {
 				new AFounderDrawsItsForagePace(),
 				new AFounderIsPaddedWithRoomToMutate(),
 				new ASkipsZeroIsABand(),
+				new ASkipCanCompare(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),
