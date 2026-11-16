@@ -193,15 +193,32 @@ Plants were drawn six times before they read, and each failure was a rule:
   edge (the overlap's shadow), so every leaf keeps its own outline. Keep
   signature colours out of it — a trap's red stays red however far back, or it
   reads as withered.
-- **Hue-shift by borrowing two ramps.** Light from a warm ramp (grass), shade
-  from a cool one (reeds): §2's "meeting of two" rule, used for light rather
-  than terrain. One ramp's three shades read flat.
-- **Selective outline, outside only.** Dark on the south and east, the deepest
-  shade on the north and west, and none inside — a hole through a leaf shows
-  the ground. An outline drawn round every hole fills the holes in.
+- **Match the grammar of what it stands in.** The trees shipped with a
+  selective near-black outline and read as stickers on a world of tiles drawn
+  without one. Light a thing the way its ground is lit — no outline, ramp
+  values only — and when it then vanishes, widen its values (a crest in the
+  brightest green the ground has, a sunk underside, a heavier shadow) and
+  abstract it (one crown mass with a few lobes) before reaching for an edge.
 - **Let the light rule draw the detail.** A monstera's slits read only because
   the per-part rule lights the cell below each slit and shades the one above;
   hashed speckle on top of that buried them. Smooth tissue, cut shapes.
+
+## Creatures: specimens at true size
+
+- **One pixel size on screen.** A body drawn at its own finer pixel grid,
+  beside ground drawn at the world's, looks wrong before anyone can say why.
+  Creatures are drawn on the world's art-pixel lattice at their true size
+  (`engine/Specimen.java`, ART-STYLE §5), snapped to it, stepping an art-pixel
+  at a time.
+- **Small is drawn, not shrunk.** At 1–7 art-px a scaled drawing is a speck;
+  each form has three size classes, each its own drawing that keeps the one
+  mark naming the form. Check a class at true size on the live seed, not at
+  10x on a sheet.
+- **Specimens, not animals or icons.** Hand-drawn animals read as comical,
+  arrows and crescents as icons. Beads, pores, keels, plates, threads read as
+  organisms of this world.
+- **Pale on pale vanishes.** A pore or keel in the body's highlight disappears
+  on a pale body; mark it dark.
 
 ## Committing
 
