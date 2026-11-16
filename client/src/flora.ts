@@ -9,20 +9,29 @@
 // The art is authored, not computed (§5): leaf clumps, cone tiers, trap lobes and
 // split leaves are hand-drawn string stamps, and each plant is a hand-placed
 // arrangement of them. What the code adds is the light, applied in world space
-// after any flip, by four rules that came out of the comparison sheets:
+// after any flip -- the tile vegetation's grammar, so a tree belongs to the grass
+// it stands in ("direction C" on the comparison sheets):
 //
-//  - each part is lit on its own north edge and shaded on its south one, with
-//    light from a warm ramp and shade from a cool one (the plant borrows both,
-//    §2), so the shading shifts hue rather than going grey;
-//  - a part further back sits a step down that ladder, and where a nearer part
-//    lies over it, it darkens along the edge -- the overlap's shadow -- so
-//    overlapping leaves keep their own outlines instead of fusing;
-//  - the outline is the outside's only, dark to the south and east and the
-//    deepest shade to the north and west, so a hole through a leaf shows ground;
-//  - a red stays red however far back: a dark trap reads as withered.
+//  - no outline: a plant is told from the ground by value, not by a line. Each
+//    kind lights from a five-step ramp off the ground's own -- deep, shade, base,
+//    lit and a crest in the meadow's blade-tip highlight -- so a crown has a
+//    brighter top and a darker underside than anything around it;
+//  - a crown (broadleaf, oak, acacia, the shrubs) is ONE mass: the clumps'
+//    silhouette with its notches closed, lit like a cactus -- a bright crest
+//    along its north edge, the body, a sunk underside -- and only the front
+//    clumps keep their crest and the crevice above it, so it reads as two or
+//    three lobes, as the thicket canopy's caps do, not a dozen outlined leaves;
+//  - tiers and leaves (conifer, flytrap, monstera) keep their parts, each lit
+//    on its own, a part further back a step down, the crevice where a nearer
+//    one covers it in the ramp's deep -- never a near-black;
+//  - a red stays red however far back: a dark trap reads as withered;
+//  - it stands on a heavier, larger shadow, a pixel south: the contrast the
+//    outline used to give.
 //
-// Rejected on the way, so nobody walks it again: crowns without an outline (they
-// vanish into meadow); a conifer as a disc (straight down -- this view is not)
+// Rejected on the way, so nobody walks it again: crowns without any edge (they
+// vanish into meadow), and then with a selective near-black outline (crisp,
+// but the only outlined thing in a world of tiles drawn without one -- it
+// looked pasted on); a conifer as a disc (straight down -- this view is not)
 // and as a tall Christmas tree (steeper than every wall); a flytrap as one trap
 // stamp turned round a centre (a red cross, then a star, then lace) and as
 // jaws with teeth (an animal); a monstera as eight rotated leaves (a square),
@@ -36,27 +45,23 @@ export type FloraKind = typeof FLORA_KINDS[number];
 /** Flora.Kind's wire order: the server sends the ordinal. */
 export type FloraRow = [number, number, number, number, number, number]; // kind, gx, gy, layout, mirror, stage
 
-// ---- palette: ramps, verbatim, and shades derived off them -----------------------
-const derive = (hex: string, f: number): string => {
-  const v = parseInt(hex.slice(1), 16);
-  const c = (n: number) => Math.min(255, Math.round(((v >> n) & 255) * f)).toString(16).padStart(2, '0');
-  return '#' + c(16) + c(8) + c(0);
-};
-// GroundTextures.RAMP: grass, cover, reeds; soil for bark.
-const GRASS_HI = '#5f9850', GRASS = '#3f7a38';
-const COVER_HI = '#456c36', COVER = '#2b5422', COVER_LO = '#1b3a16';
-const REEDS_HI = '#4f8752', REEDS = '#2c5a36', REEDS_LO = '#14301f';
+// ---- palette: ramps, verbatim ---------------------------------------------------
+// GroundTextures.RAMP: grass, cover, reeds; soil for bark. The crest is the tile
+// grass's own blade tip (vegArt.ts GRASS_TIP), the one colour borrowed from the
+// vegetation sprites rather than the ground ramps.
+const GRASS_LO = '#2a4d24', GRASS = '#3f7a38', GRASS_HI = '#5f9850', GRASS_TIP = '#8fc46f';
+const COVER_LO = '#1b3a16', COVER = '#2b5422', COVER_HI = '#456c36';
+const REEDS_LO = '#14301f', REEDS = '#2c5a36', REEDS_HI = '#4f8752';
 const BARK = ['#40301f', '#63472e', '#866543'];
 // Bloom red as a body colour, its shade derived at x0.65 -- the mushroom cap's pair.
 const RED = '#e0455f', RED_LO = '#912c3d';
-const OUTLINE = derive(REEDS_LO, 0.65);
-/** §4's contact shadow weight. */
-const SHADOW = 'rgba(0,0,0,0.42)';
+/** A heavier contact shadow than §4's 0.42: with no outline, it is what sets a plant off the ground. */
+const SHADOW = 'rgba(0,0,0,0.5)';
 
-/** A plant's light ladder: lit, base, shade, deep -- warm light over cool shade. */
-const WARM = [GRASS_HI, GRASS, REEDS, REEDS_LO];
-const DARK = [COVER_HI, COVER, COVER_LO, REEDS_LO];
-const PINE = [REEDS_HI, REEDS, COVER_LO, REEDS_LO];
+/** A plant's ramp, dark to light: deep, shade, base, lit, crest. */
+const WARM = [COVER_LO, GRASS_LO, GRASS, GRASS_HI, GRASS_TIP];
+const DARK = [REEDS_LO, COVER_LO, COVER, COVER_HI, GRASS_HI];
+const PINE = [REEDS_LO, COVER_LO, REEDS, REEDS_HI, GRASS_TIP];
 
 // ---- the stamps --------------------------------------------------------------------
 // '#' tissue, 'm' a midrib, 's' a stalk, 'r' a trap's red face, 'R' its hinge,
@@ -79,7 +84,7 @@ const MLEAF_YOUNG = ['..###.', '.####.', '###m#.', '.##m..', '...m..']; // a new
 type Part = { st: string[]; x: number; y: number; t?: string; tone?: number };
 /** One growth stage's body: its box, how high the crown stands, its parts. */
 type Body = { w: number; h: number; lift: number; faceH: number; trunk: number; shadow: [number, number]; layouts: Part[][] };
-type Def = Body & { ladder: string[]; rib?: string };
+type Def = Body & { ladder: string[]; rib?: string; mass?: boolean };
 
 /** Clumps north of the crown's middle are further back: a step down the ladder. */
 const crown = (clumps: Array<[string[], number, number]>, mid: number): Part[] =>
@@ -90,10 +95,10 @@ const SHRUB_A: Array<[string[], number, number]> = [[C_TINY, 2, 0], [C_TINY, 7, 
 const SHRUB_B: Array<[string[], number, number]> = [[C_TINY, 4, 0], [C_TINY, 0, 2], [C_TINY, 8, 1], [C_TINY, 3, 3], [C_TINY, 7, 4], [C_TINY, 1, 6], [C_TINY, 5, 6]];
 
 export const FLORA: Record<FloraKind, Def> = {
-  broadleaf: { ladder: WARM, w: 19, h: 15, lift: 4, faceH: 2, trunk: 2, shadow: [9, 3], layouts: [
+  broadleaf: { ladder: WARM, mass: true, w: 19, h: 15, lift: 4, faceH: 2, trunk: 2, shadow: [9, 3], layouts: [
     crown([[C_SMALL, 5, 0], [C_TINY, 1, 2], [C_SMALL, 11, 1], [C_SMALL, 0, 5], [C_SMALL, 7, 5], [C_SMALL, 12, 6], [C_SMALL, 4, 9]], 4),
     crown([[C_SMALL, 2, 0], [C_SMALL, 9, 0], [C_SMALL, 0, 4], [C_SMALL, 6, 3], [C_SMALL, 11, 4], [C_SMALL, 3, 8], [C_SMALL, 9, 8]], 3)] },
-  oak: { ladder: DARK, w: 18, h: 14, lift: 4, faceH: 2, trunk: 2, shadow: [9, 3], layouts: [
+  oak: { ladder: DARK, mass: true, w: 18, h: 14, lift: 4, faceH: 2, trunk: 2, shadow: [9, 3], layouts: [
     crown([[C_SMALL, 2, 0], [C_SMALL, 9, 0], [C_SMALL, 0, 4], [C_SMALL, 6, 3], [C_SMALL, 11, 4], [C_SMALL, 3, 8], [C_SMALL, 9, 8]], 3),
     crown([[C_SMALL, 5, 0], [C_TINY, 1, 2], [C_SMALL, 11, 1], [C_SMALL, 0, 5], [C_SMALL, 7, 5], [C_SMALL, 11, 6], [C_SMALL, 4, 8]], 4)] },
   // The tier below sits behind the one above: a cone seen a little from the south.
@@ -104,11 +109,11 @@ export const FLORA: Record<FloraKind, Def> = {
     { st: ['..#########..', '.###########.', '#############', '#############', '##.##.#.##.#'], x: 0, y: 8, tone: 1 },
     { st: ['..#######..', '.#########.', '###########', '###########', '#.#.##.#.##'], x: 1, y: 4 },
     { st: ['...#...', '..###..', '.#####.', '#######', '#######', '.#.#.#.'], x: 3, y: 0 }]] },
-  acacia: { ladder: WARM, w: 23, h: 8, lift: 6, faceH: 1, trunk: 1, shadow: [10, 3], layouts: [
+  acacia: { ladder: WARM, mass: true, w: 23, h: 8, lift: 6, faceH: 1, trunk: 1, shadow: [10, 3], layouts: [
     crown([[C_TINY, 0, 2], [C_TINY, 4, 0], [C_TINY, 9, 0], [C_TINY, 14, 1], [C_TINY, 18, 3], [C_TINY, 6, 4], [C_TINY, 12, 4]], 2),
     crown([[C_TINY, 1, 3], [C_TINY, 5, 1], [C_TINY, 10, 0], [C_TINY, 15, 0], [C_TINY, 18, 2], [C_TINY, 8, 4], [C_TINY, 13, 4]], 2)] },
-  shrub: { ladder: DARK, w: 12, h: 10, lift: 1, faceH: 1, trunk: 0, shadow: [6, 2], layouts: [crown(SHRUB_A, 2), crown(SHRUB_B, 2)] },
-  berry: { ladder: DARK, w: 12, h: 10, lift: 1, faceH: 1, trunk: 0, shadow: [6, 2], layouts: [
+  shrub: { ladder: WARM, mass: true, w: 12, h: 10, lift: 1, faceH: 1, trunk: 0, shadow: [6, 2], layouts: [crown(SHRUB_A, 2), crown(SHRUB_B, 2)] },
+  berry: { ladder: DARK, mass: true, w: 12, h: 10, lift: 1, faceH: 1, trunk: 0, shadow: [6, 2], layouts: [
     [...crown(SHRUB_A, 2), ...berries([[2, 4, 0], [8, 5, 0], [5, 8, 0], [9, 1, 1]])],
     [...crown(SHRUB_B, 2), ...berries([[1, 3, 0], [8, 6, 0], [4, 4, 0], [6, 1, 1]])]] },
   flytrap: { ladder: WARM, w: 18, h: 16, lift: 0, faceH: 0, trunk: 0, shadow: [8, 2], layouts: [[
@@ -120,7 +125,7 @@ export const FLORA: Record<FloraKind, Def> = {
     { st: ['s', 's', 's', 's'], x: 7, y: 8 }, { st: ['..s', '.s.', 's..'], x: 9, y: 9 },
     { st: TRAP_SMALL, x: 11, y: 4, t: 'f', tone: 1 }, { st: TRAP_SHUT, x: 12, y: 10, tone: 1 },
     { st: TRAP_OPEN, x: 0, y: 2, t: 'f' }]] },
-  monstera: { ladder: WARM, rib: GRASS_HI, w: 18, h: 16, lift: 0, faceH: 0, trunk: 0, shadow: [8, 2], layouts: [[
+  monstera: { ladder: WARM, rib: GRASS_TIP, w: 18, h: 16, lift: 0, faceH: 0, trunk: 0, shadow: [8, 2], layouts: [[
     { st: MLEAF, x: 7, y: 0, t: 'r', tone: 1 }, { st: MLEAF, x: 0, y: 1, t: 'rrr', tone: 1 },
     { st: ['.s.', 's.s', 's.s', '.s.'], x: 7, y: 11 }, { st: MLEAF_YOUNG, x: 11, y: 9, t: 'r', tone: 1 },
     { st: MLEAF, x: 3, y: 5 }], [
@@ -186,7 +191,7 @@ const YOUNGER: Record<FloraKind, [Body, Body, Body]> = {
 /** A kind at a growth stage, 0 a seedling to 3 mature: the stage's body in the kind's colours. */
 export function floraDef(kind: FloraKind, stage: number): Def {
   const d = FLORA[kind];
-  return stage >= FLORA_STAGES - 1 ? d : { ...YOUNGER[kind][Math.max(0, stage)], ladder: d.ladder, rib: d.rib };
+  return stage >= FLORA_STAGES - 1 ? d : { ...YOUNGER[kind][Math.max(0, stage)], ladder: d.ladder, rib: d.rib, mass: d.mass };
 }
 
 // ---- composing a plant ---------------------------------------------------------------
@@ -215,50 +220,59 @@ export function composeFlora(def: Def, layout: number, mirror: boolean): Map<str
     const k = (p.x + x) + ',' + (p.y + y);
     cells.set(k, ch); part.set(k, i);
   })));
-  const L = def.ladder, m = new Map<string, string>();
+  const [DEEP, LO, BASE, HI, TIP] = def.ladder, m = new Map<string, string>();
+  if (def.mass) {
+    // One mass: close the notches between the clumps (a gap walled on three sides
+    // fills), then light every column like a cactus -- crest, lit, body, shade, deep.
+    for (let pass = 0; pass < 2; pass++) {
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      for (const k of cells.keys()) { const [x, y] = k.split(',').map(Number); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      const add: string[] = [];
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        if (cells.has(x + ',' + y)) continue;
+        const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => cells.has((x + dx) + ',' + (y + dy))).length;
+        if (n >= 3) add.push(x + ',' + y);
+      }
+      for (const k of add) { cells.set(k, '#'); part.set(k, -1); }
+    }
+    for (const k of cells.keys()) {
+      const [x, y] = k.split(',').map(Number);
+      let top = 0, bot = 0;
+      while (cells.has(x + ',' + (y - top - 1))) top++;
+      while (cells.has(x + ',' + (y + bot + 1))) bot++;
+      m.set(k, top === 0 ? TIP : top === 1 ? HI : bot === 0 ? DEEP : bot <= 1 ? LO : BASE);
+    }
+    // the front clumps' crests: a lit line, and the crevice just above it
+    for (const [k, i] of part) {
+      if (i < 0 || (parts[i].tone ?? 0) !== 0 || cells.get(k) !== '#') continue;
+      const [x, y] = k.split(',').map(Number), uk = x + ',' + (y - 1), up = part.get(uk);
+      if (up !== undefined && up !== i && m.get(k) === BASE) { m.set(k, HI); m.set(uk, LO); }
+    }
+    for (const [k, ch] of cells) if (ch === 'B') m.set(k, (parts[part.get(k)!]?.tone ?? 0) ? RED_LO : RED);
+    return m;
+  }
+  // Parts: each lit on its own -- its north edge the crest (a part behind, a step
+  // down), its south edge the shade -- and the crevice where a nearer part covers
+  // one behind in the deep.
   for (const [k, ch] of cells) {
-    const [x, y] = k.split(',').map(Number), i = part.get(k)!;
-    const tone = parts[i].tone ?? 0, at = (n: number) => L[Math.min(3, n + tone)];
-    const up = cells.get(x + ',' + (y - 1));
-    const upSame = up !== undefined && part.get(x + ',' + (y - 1)) === i;
+    const [x, y] = k.split(',').map(Number), i = part.get(k)!, t = parts[i].tone ?? 0;
+    const upSame = cells.has(x + ',' + (y - 1)) && part.get(x + ',' + (y - 1)) === i;
     const dnSame = cells.has(x + ',' + (y + 1)) && part.get(x + ',' + (y + 1)) === i;
     let col: string;
-    if (ch === '#') col = !upSame ? at(0) : !dnSame ? at(2) : at(1);
-    else if (ch === 'm') col = tone ? at(1) : (def.rib ?? L[2]);
-    else if (ch === 's') col = L[2];
+    if (ch === '#') col = !upSame ? (t ? HI : TIP) : !dnSame ? (t ? DEEP : LO) : BASE;
+    else if (ch === 'm') col = t ? HI : (def.rib ?? TIP);
+    else if (ch === 's') col = LO;
     else if (ch === 'r') col = RED; // red stays red however far back: a dark trap reads as withered
     else if (ch === 'R') col = RED_LO;
-    else if (ch === 'B') col = tone ? RED_LO : RED;
-    else col = L[0]; // 'c', a cilium
+    else if (ch === 'B') col = t ? RED_LO : RED;
+    else col = TIP; // 'c', a cilium
     m.set(k, col);
   }
-  // Where a nearer part lies over one behind it, the one behind darkens along
-  // the edge: the overlap's shadow.
   for (const [k, i] of part) {
     const [x, y] = k.split(',').map(Number);
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const n = (x + dx) + ',' + (y + dy), j = part.get(n);
-      if (j !== undefined && j < i && cells.get(n) !== 's') m.set(n, dy < 0 ? L[3] : OUTLINE);
-    }
-  }
-  // The outline: the outside's only, selective.
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (const k of cells.keys()) { const [x, y] = k.split(',').map(Number); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-  const out = new Set([(x0 - 1) + ',' + (y0 - 1)]), q: Array<[number, number]> = [[x0 - 1, y0 - 1]];
-  while (q.length) {
-    const [x, y] = q.pop()!;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
-      if (nx < x0 - 1 || ny < y0 - 1 || nx > x1 + 1 || ny > y1 + 1 || out.has(k) || cells.has(k)) continue;
-      out.add(k); q.push([nx, ny]);
-    }
-  }
-  for (const k of cells.keys()) {
-    if (cells.get(k) === 'c') continue; // a cilium is its own edge
-    const [x, y] = k.split(',').map(Number);
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const n = (x + dx) + ',' + (y + dy);
-      if (out.has(n)) m.set(n, dy > 0 || dx > 0 ? OUTLINE : L[3]);
+      const n = (x + dx) + ',' + (y + dy), j = part.get(n), ch = cells.get(n);
+      if (j !== undefined && j < i && ch !== 's' && ch !== 'r' && ch !== 'R') m.set(n, DEEP);
     }
   }
   return m;
@@ -331,15 +345,16 @@ export function floraSprite(kind: FloraKind, layout: number, mirror: boolean, st
   if (hit) return hit;
   const d = floraDef(kind, stage);
   const m = composeFlora(d, layout, mirror);
-  const pad = 2, W = Math.max(d.w, d.shadow[0] * 2 + 1) + pad * 2;
+  const pad = 2, W = Math.max(d.w, d.shadow[0] * 2 + 3) + pad * 2;
   const H = d.h + d.lift + d.faceH + d.shadow[1] + pad * 2 + 2;
   const fx = W >> 1, fy = H - pad - d.shadow[1] - 1;
   const ox = fx - (d.w >> 1), oy = fy - d.lift - d.h + 1;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
+  // the shadow a size larger than the crown's footprint and a pixel south
   g.fillStyle = SHADOW;
-  const [rx, ry] = d.shadow;
-  for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if (x * x / (rx * rx) + y * y / (ry * ry) <= 1) g.fillRect(fx + x, fy + y, 1, 1);
+  const rx = d.shadow[0] + 1, ry = d.shadow[1] + 1;
+  for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if (x * x / (rx * rx) + y * y / (ry * ry) <= 1) g.fillRect(fx + x, fy + y + 1, 1, 1);
   if (d.trunk) {
     const h = d.lift + 1;
     for (let j = 0; j < h; j++) for (let i = 0; i < d.trunk; i++) {
@@ -352,7 +367,7 @@ export function floraSprite(kind: FloraKind, layout: number, mirror: boolean, st
     for (const k of m.keys()) { const [x, y] = k.split(',').map(Number); low.set(x, Math.max(low.get(x) ?? -1e9, y)); }
     for (const [x, y] of low) for (let j = 1; j <= d.faceH; j++) {
       if (Math.abs(x - (d.w >> 1)) > (d.w >> 1) - 2 && j > 1) continue;
-      g.fillStyle = j === d.faceH ? OUTLINE : d.ladder[3]; g.fillRect(ox + x, oy + y + j, 1, 1);
+      g.fillStyle = d.ladder[0]; g.fillRect(ox + x, oy + y + j, 1, 1);
     }
   }
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
