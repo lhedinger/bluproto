@@ -67,6 +67,18 @@ public final class Brain {
 	public static final int FIELD = 60;
 
 	public static final int MAX_LEN = 64;
+	/**
+	 * How close to zero a register has to be for {@code SKIPZ} to call it zero
+	 * (and {@code SKIPNZ} to call it not). The test was exact, and a mind's
+	 * registers mostly hold sensor readings and arithmetic on them: a threat at
+	 * proximity 0.001 was "something" and a bearing of 1e-9 was "a direction",
+	 * so a decision hung on noise, and a line that should have gated on a
+	 * reading gated on whether the reading was exactly nothing. Within the
+	 * band, a skip treats a value as nothing. The band sits under the smallest
+	 * step in the constant pool (0.1), so a SET still reads as clearly zero or
+	 * clearly not, and a GT's 0 and 1 are untouched.
+	 */
+	public static final double ZERO_BAND = 0.05;
 	/** Instructions executed per tick unless the caller overrides it; with a
 	 * fixed budget, program length sets the length of one thought cycle. Two
 	 * lines a tick: a 22-line forager goes round in 11 ticks instead of 22, so
@@ -226,12 +238,12 @@ public final class Brain {
 			set(x, reg(y) > reg(z) ? 1 : 0);
 			break;
 		case SKIPZ:
-			if (reg(x) == 0) {
+			if (nearZero(reg(x))) {
 				skipNext = true;
 			}
 			break;
 		case SKIPNZ:
-			if (reg(x) != 0) {
+			if (!nearZero(reg(x))) {
 				skipNext = true;
 			}
 			break;
@@ -248,6 +260,11 @@ public final class Brain {
 		default: // NOP
 			break;
 		}
+	}
+
+	/** What a skip counts as zero: within {@link #ZERO_BAND} of it. */
+	static boolean nearZero(double v) {
+		return Math.abs(v) < ZERO_BAND;
 	}
 
 	private double reg(int i) {
@@ -322,10 +339,10 @@ public final class Brain {
 				body = "R" + imod(x, NUM_REG) + " = R" + imod(y, NUM_REG) + " > R" + imod(z, NUM_REG);
 				break;
 			case SKIPZ:
-				body = "skip next if R" + imod(x, NUM_REG) + " == 0";
+				body = "skip next if R" + imod(x, NUM_REG) + " ≈ 0";
 				break;
 			case SKIPNZ:
-				body = "skip next if R" + imod(x, NUM_REG) + " != 0";
+				body = "skip next if R" + imod(x, NUM_REG) + " ≉ 0";
 				break;
 			case SENSE:
 				body = "R" + imod(x, NUM_REG) + " = sense " + name(sensorNames, y);

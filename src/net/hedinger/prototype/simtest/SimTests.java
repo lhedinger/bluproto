@@ -10344,6 +10344,40 @@ public class SimTests {
 		}
 	}
 
+	/**
+	 * A skip's zero is a band, not a point. A line gated on a sensor reading
+	 * used to fire on any reading that was not exactly 0, so a threat at
+	 * proximity 0.01 counted as one; now anything within
+	 * {@link Brain#ZERO_BAND} of zero is nothing to SKIPZ and to SKIPNZ alike,
+	 * and the 0 and 1 a GT writes still read as no and yes.
+	 */
+	static class ASkipsZeroIsABand extends Scenario {
+		@Override
+		public void run() {
+			int[][] gate = {
+					{ Brain.SET, 1, 9, 0 }, // R1 = 1
+					{ Brain.SENSE, 0, AgentIO.S_THREAT_PROX, 0 }, // R0 = threat proximity
+					{ Brain.SKIPZ, 0, 0, 0 }, // nothing there: skip the write
+					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 } };
+			for (double reading : new double[] { 0.0, 0.001, 0.049, 0.051, 0.3, -0.01, -0.2 }) {
+				Brain b = new Brain(deepCopy(gate));
+				double[] sensors = new double[AgentIO.NUM_SENSORS];
+				sensors[AgentIO.S_THREAT_PROX] = reading;
+				double[] act = new double[AgentIO.NUM_ACT];
+				b.step(sensors, act, gate.length);
+				boolean fired = act[AgentIO.A_THROTTLE] == 1;
+				assertTrue("a reading of " + reading + (fired ? " fires" : " is skipped") + " the gated line",
+						fired == (Math.abs(reading) >= Brain.ZERO_BAND));
+			}
+			int[][] notZero = { { Brain.SET, 1, 9, 0 }, { Brain.SET, 0, 6, 0 }, // R0 = 0.1, the pool's smallest step
+					{ Brain.SKIPNZ, 0, 0, 0 }, { Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 } };
+			Brain b = new Brain(deepCopy(notZero));
+			double[] act = new double[AgentIO.NUM_ACT];
+			b.step(new double[AgentIO.NUM_SENSORS], act, notZero.length);
+			assertTrue("the smallest constant a SET can load still reads as something", act[AgentIO.A_THROTTLE] == 0);
+		}
+	}
+
 	/** A program's working lines in order, its NOPs dropped. */
 	static int[][] active(int[][] code) {
 		return java.util.Arrays.stream(code)
@@ -22813,6 +22847,7 @@ public class SimTests {
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
 				new AFounderIsPaddedWithRoomToMutate(),
+				new ASkipsZeroIsABand(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),
