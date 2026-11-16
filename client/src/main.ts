@@ -18,6 +18,7 @@ import {
   CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize, isCompact } from './panels';
 import { fmtSpan } from './population';
 import { bodyScanCanvas, comfortWord, planFor, stateOf } from './bodyScan';
+import { giveUpIfStalled } from './stall';
 
 /** Every clock the viewer keeps, in ms, in one place. */
 const MS = {
@@ -264,6 +265,8 @@ function getChunk(cx: number, cy: number, z: number, request: boolean): HTMLCanv
     }, MS.fetchRetry);
   };
   img.src = `/api/world/layers/${z}/${name}.png?v=${v}`;
+  // And one that never answers at all is forgotten the same way (see stall.ts).
+  giveUpIfStalled([img], () => chunkCache.get(key) === null, () => chunkCache.delete(key));
   return null;
 }
 /** The level's low map -- the whole floor in one small picture -- fetched and
@@ -306,6 +309,7 @@ function lowMapImage(z: number): HTMLCanvasElement | null {
   alpha.onerror = retry;
   img.src = `/api/world/layers/${z}/low.jpg?v=${v}`;
   alpha.src = `/api/world/layers/${z}/lowalpha.png?v=${v}`;
+  giveUpIfStalled([img, alpha], () => lowMapCache.get(key) === null, () => lowMapCache.delete(key));
   return null;
 }
 setLowMapSource(lowMapImage);
