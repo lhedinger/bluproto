@@ -1948,6 +1948,11 @@ public final class ServerTests {
 		}
 		check("it writes its world down", new java.io.File(dir, WorldHost.SAVE_FILE).length() > 0
 				&& first.bootInfo().get("savedAt") != null);
+		var disk = first.diskInfo();
+		check("and health reports the disk it is kept on (" + disk + ")",
+				((Number) disk.get("totalMB")).longValue() > 0
+						&& ((Number) disk.get("freeMB")).longValue() <= ((Number) disk.get("totalMB")).longValue()
+						&& disk.get("saveMB") != null);
 
 		WorldHost kept = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "none"));
 		kept.runner().stop();

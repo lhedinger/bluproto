@@ -100,8 +100,13 @@ happened, and why, is in `/api/health`:
 
 ```json
 "boot": "kept", "bootNote": "restored tick 1440213, saved 2026-11-15T16:02:11Z",
-"epoch": "none", "savedAt": "2026-11-15T16:07:11Z", "saveHeldMs": 140
+"epoch": "none", "savedAt": "2026-11-15T16:07:11Z", "saveHeldMs": 140,
+"disk": {"path": "/data", "totalMB": 38146, "freeMB": 21003, "usedPct": 44.9, "saveMB": 0.71}
 ```
+
+`disk` is the filesystem the data volume lives on -- the VPS's own disk, which
+also holds the images Watchtower pulls. A full disk does not crash the server;
+it quietly stops the save and the recording, so `usedPct` is worth a glance.
 
 A kept world is not reproducible from its seed: the recording and
 `/api/replay` cover the world since its last fresh start.

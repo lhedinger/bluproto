@@ -138,6 +138,9 @@ public final class ServerMain {
 			// How the world came through the deploy: kept from the save, reset,
 			// or fresh -- and why, so a reset nobody asked for is visible.
 			body.putAll(host.bootInfo());
+			// The disk the save and the recording live on: a full one stops
+			// both without an error anyone would see.
+			body.put("disk", host.diskInfo());
 			ctx.status(ticking ? 200 : 503).json(body);
 		});
 
