@@ -241,6 +241,28 @@ final class WorldHost {
 		return m;
 	}
 
+	/**
+	 * The disk the world is kept on: the durable dir's filesystem -- on the
+	 * VPS, the host disk the data volume lives on, which also holds the
+	 * images Watchtower pulls -- or the working directory when saves are off.
+	 * Sizes in MB; {@code saveMB} is the world save itself, null when there is
+	 * none. A full disk does not crash the server, it quietly stops the save
+	 * and the recording, so it is worth seeing from outside.
+	 */
+	java.util.Map<String, Object> diskInfo() {
+		java.io.File where = recordDir != null ? recordDir : new java.io.File(".");
+		long total = where.getTotalSpace(), free = where.getUsableSpace();
+		java.io.File save = saveFile();
+		java.util.Map<String, Object> m = new java.util.LinkedHashMap<String, Object>();
+		m.put("path", where.getAbsolutePath());
+		m.put("totalMB", total / (1024 * 1024));
+		m.put("freeMB", free / (1024 * 1024));
+		m.put("usedPct", total <= 0 ? null : Math.round(1000.0 * (total - free) / total) / 10.0);
+		m.put("saveMB", save == null || !save.exists() ? null
+				: Math.round(save.length() / (1024.0 * 1024.0) * 100) / 100.0);
+		return m;
+	}
+
 	private void buildWorld(long newSeed, net.hedinger.prototype.engine.World ready) {
 		seed = newSeed;
 		startedAt = System.currentTimeMillis();
