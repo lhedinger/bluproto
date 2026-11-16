@@ -48,6 +48,21 @@ public final class Brain {
 
 	/** General-purpose registers; persist across ticks (this is the memory). */
 	public static final int NUM_REG = 12;
+	/**
+	 * The carry: every instruction that produces a value also leaves it in
+	 * R0, so reading R0 reads "what the line before produced". SET, MOV, the
+	 * arithmetic, GT and SENSE carry their result; WRITE carries the value it
+	 * wrote. A skip, a NOP and a skipped line produce nothing and leave the
+	 * carry as it was, so junk between two lines does not break the chain.
+	 *
+	 * <p>It entangles the program. One source operand in twelve already names
+	 * R0, so a mutation that lands there wires a line to whatever ran before
+	 * it, instead of to a register some unrelated line wrote long ago; chains
+	 * form without two lines having to agree on a register, the way a stack
+	 * passes values in Push. Writing to R0 as a destination means "pass it on,
+	 * keep nothing".
+	 */
+	public static final int CARRY = 0;
 	/** Small constant pool the SET opcode draws immediates from. */
 	public static final double[] CONST = { -2, -1, -0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5, 1, 2, 4 };
 	/** Registers are clamped to this magnitude so arithmetic can't run away to
@@ -279,6 +294,7 @@ public final class Brain {
 			if (act.length > 0) {
 				act[imod(x, act.length)] = reg(y);
 			}
+			reg[CARRY] = reg(y); // what was written is passed on, like any result
 			break;
 		default: // NOP
 			break;
@@ -298,7 +314,9 @@ public final class Brain {
 		if (Double.isNaN(v)) {
 			v = 0;
 		}
-		reg[imod(i, NUM_REG)] = v < -REG_CLAMP ? -REG_CLAMP : (v > REG_CLAMP ? REG_CLAMP : v);
+		double c = v < -REG_CLAMP ? -REG_CLAMP : (v > REG_CLAMP ? REG_CLAMP : v);
+		reg[imod(i, NUM_REG)] = c;
+		reg[CARRY] = c;
 	}
 
 	// ---- inspection -------------------------------------------------------

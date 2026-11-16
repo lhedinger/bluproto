@@ -8086,11 +8086,11 @@ public class SimTests {
 			seed(60);
 			int[][] prog = {
 					{ net.hedinger.prototype.entities.Brain.SENSE, 1, 0, 0 }, // R1 = sense[0]
-					{ net.hedinger.prototype.entities.Brain.ADD, 0, 0, 1 },   // R0 += R1  (persists)
-					{ net.hedinger.prototype.entities.Brain.WRITE, 0, 0, 0 }, // act[0] = R0
+					{ net.hedinger.prototype.entities.Brain.ADD, 2, 2, 1 },   // R2 += R1  (persists; R0 is the carry)
+					{ net.hedinger.prototype.entities.Brain.WRITE, 0, 2, 0 }, // act[0] = R2
 			};
 			double got = runCount(prog, 25);
-			assertNear("register R0 accumulated the constant input across 25 ticks (memory)",
+			assertNear("register R2 accumulated the constant input across 25 ticks (memory)",
 					25.0, got, 1e-9);
 			assertNear("same program + inputs -> identical output (determinism)",
 					got, runCount(prog, 25), 1e-9);
@@ -8122,8 +8122,9 @@ public class SimTests {
 			int ADD = net.hedinger.prototype.entities.Brain.ADD;
 			int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
 			int NOP = net.hedinger.prototype.entities.Brain.NOP;
-			int[][] shortProg = { { SENSE, 1, 0, 0 }, { ADD, 0, 0, 1 }, { WRITE, 0, 0, 0 } };
-			int[][] longProg = { { SENSE, 1, 0, 0 }, { ADD, 0, 0, 1 }, { WRITE, 0, 0, 0 },
+			// The count lives in R2: R0 is the carry, overwritten by every line.
+			int[][] shortProg = { { SENSE, 1, 0, 0 }, { ADD, 2, 2, 1 }, { WRITE, 0, 2, 0 } };
+			int[][] longProg = { { SENSE, 1, 0, 0 }, { ADD, 2, 2, 1 }, { WRITE, 0, 2, 0 },
 					{ NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 },
 					{ NOP, 0, 0, 0 }, { NOP, 0, 0, 0 }, { NOP, 0, 0, 0 } };
 			double shortCount = runFixedBudget(shortProg, 90);
@@ -10375,6 +10376,31 @@ public class SimTests {
 			double[] act = new double[AgentIO.NUM_ACT];
 			b.step(new double[AgentIO.NUM_SENSORS], act, notZero.length);
 			assertTrue("the smallest constant a SET can load still reads as something", act[AgentIO.A_THROTTLE] == 0);
+		}
+	}
+
+	/**
+	 * R0 is the carry: every line that produces a value leaves it there, so
+	 * reading R0 reads what the line before produced. A NOP, a skip and a
+	 * skipped line produce nothing and pass it through untouched, and a WRITE
+	 * passes on what it wrote.
+	 */
+	static class TheCarryPassesTheLastResultOn extends Scenario {
+		@Override
+		public void run() {
+			int[][] prog = {
+					{ Brain.SENSE, 3, 0, 0 }, // R3 = 0.5, and so is the carry
+					{ Brain.NOP, 7, 7, 7 }, // junk: the carry goes through
+					{ Brain.SKIPZ, 9, 0, 0 }, // R9 is 0: skip the next line
+					{ Brain.WRITE, 1, 9, 0 }, // skipped: produces nothing
+					{ Brain.WRITE, 0, Brain.CARRY, 0 }, // act0 = the carry = 0.5
+					{ Brain.ADD, 5, 0, 0 }, // R5 = carry + carry = 1.0
+					{ Brain.WRITE, 1, Brain.CARRY, 0 } }; // act1 = 1.0
+			Brain b = new Brain(deepCopy(prog));
+			double[] act = new double[2];
+			b.step(new double[] { 0.5 }, act, prog.length);
+			assertNear("the sensed value reaches the WRITE past a NOP, a skip and a skipped line", 0.5, act[0], 1e-12);
+			assertNear("and a chain builds on it without naming a register", 1.0, act[1], 1e-12);
 		}
 	}
 
@@ -22885,6 +22911,7 @@ public class SimTests {
 				new AFounderIsPaddedWithRoomToMutate(),
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
+				new TheCarryPassesTheLastResultOn(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),
 				new AMindCanAskForShadeAndDamp(),
