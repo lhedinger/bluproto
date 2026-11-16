@@ -379,12 +379,17 @@ public final class ServerMain {
 			ctx.json(Map.of("ok", true, "seed", s));
 		});
 
-		// Baked procedural-creature sprite atlas for a SHAPE key (the `pheno`
-		// field on streamed entities). Colour-neutral: the client re-tints with
-		// the entity's rgb, so one sheet serves a shape's every colour variant.
-		// Immutable per key -> cache hard.
+		// Baked creature sprite atlas for a SHAPE key (the `pheno` field on
+		// streamed entities). Colour-neutral: the client re-tints with the
+		// entity's rgb, so one sheet serves a shape's every colour variant.
+		// Immutable per key (the client versions the URL) -> cache hard.
+		// With ?c= (a size class) it is the SPECIMEN atlas: the true-size bodies on
+		// the world's lattice (engine/Specimen); without, the old procedural one,
+		// for a client that has not reloaded since the change.
 		app.get("/api/world/atlas/{key}.png", ctx -> {
-			byte[] png = AtlasBaker.atlas(Long.parseLong(ctx.pathParam("key").replace(".png", "")));
+			long key = Long.parseLong(ctx.pathParam("key").replace(".png", ""));
+			String c = ctx.queryParam("c");
+			byte[] png = c == null ? AtlasBaker.atlas(key) : AtlasBaker.specimen(key, Integer.parseInt(c));
 			if (png == null) {
 				ctx.status(404);
 				return;
