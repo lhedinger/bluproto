@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, CELL, DIRS, MIP, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, decayStage, headingCol, tintedFor,
+  corpseMipFor, decayStage, headingCol, muted, specimenBox, specimenKey, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import { flagOff } from './flags';
@@ -590,6 +590,14 @@ function onScreen(rx: number, ry: number, reach: number, w: number, h: number): 
  *  horns, halos — see ART_RADIUS), rounded up. */
 const SPRITE_REACH = Math.ceil(CELL / (2 * ART_RADIUS));
 
+/** A screen point moved onto the world's art-pixel lattice -- the grid the ground and
+ *  the trees are drawn on, a twelfth of a tile -- so a specimen's pixels line up with
+ *  theirs and it steps an art-pixel at a time (ART-STYLE §1, §5 "specimens"). */
+function onLattice(cam: { scale: number; screenX(x: number): number; screenY(y: number): number }, sx: number, sy: number): [number, number] {
+  const a = cam.scale / 12, ox = cam.screenX(0), oy = cam.screenY(0);
+  return [ox + Math.round((sx - ox) / a) * a, oy + Math.round((sy - oy) / a) * a];
+}
+
 /** A second pose scratch, for the one place two live at once: a carried body
  *  and its carrier, whose tether needs both ends. */
 const CARRIER: Pose = { x: 0, y: 0, dir: 0 };
@@ -830,9 +838,11 @@ export function render(
       // A corpse keeps its body and loses its colour. It is not decoration: it
       // lingers for a span set by its mass, it can be scavenged, and it is worth
       // that mass as meat -- so what died, and how big it was, stays readable.
-      const dead = atlasFor(e.pheno);
+      const ak = specimenKey(e.pheno, e.size);
+      const dead = atlasFor(ak);
       if (dead) {
-        const box = r * 2 * (CELL / (2 * ART_RADIUS));
+        const box = specimenBox(cam.scale);
+        const [qx, qy] = onLattice(cam, sx, sy);
         // Frozen on one frame, not cell(dir, nowMs): the atlas rows are gait
         // phases, so feeding a corpse the clock had it walking on the spot for
         // its whole decay. It keeps the heading it died on -- that still says
@@ -847,10 +857,10 @@ export function render(
         // EntityState) -- energy means nothing to a corpse, so the slot is reused.
         const c = box <= CELL / MIP ? CELL / MIP : CELL;
         const src = c === CELL
-          ? corpseFor(e.pheno, dead, e.aux)
-          : corpseMipFor(e.pheno, dead, e.aux);
+          ? corpseFor(ak, dead, e.aux)
+          : corpseMipFor(ak, dead, e.aux);
         g.drawImage(src, dc * c, dr * c, c, c,
-          sx - box / 2, sy - box / 2, box, box);
+          qx - box / 2, qy - box / 2, box, box);
       } else {
         g.fillStyle = hex(PENDING_RGB); // no sprite yet: a spent dot, no marker over it
         g.beginPath(); g.arc(sx, sy, r, 0, 7); g.fill();
@@ -863,11 +873,16 @@ export function render(
     // ever glimpsed is how an old world's 800+ atlases (~2MB of canvas each)
     // ended up resident at once — zooming in shows a dot for the beat the
     // fetch takes instead.
-    const atlas = dots ? null : atlasFor(e.pheno);
+    const ak = specimenKey(e.pheno, e.size);
+    const atlas = dots ? null : atlasFor(ak);
     if (dots) {
       drawDot(g, sx, sy, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
     } else if (atlas) {
-      const box = r * 2 * (CELL / (2 * ART_RADIUS)); // scale cell so body ≈ 2r
+      // A specimen cell at the world's own art-pixel size, its centre on the
+      // world lattice: the body steps an art-pixel at a time, like everything
+      // else drawn on that grid (see atlas.ts, engine/Specimen).
+      const box = specimenBox(cam.scale);
+      const [qx, qy] = onLattice(cam, sx, sy);
       // Sticky heading bucket (see atlas.headingCol): neighbouring columns are
       // very different silhouettes, so bucket noise while walking reads as
       // flicker rather than turning.
@@ -881,11 +896,11 @@ export function render(
       if (box <= CELL / MIP) {
         // Far zoom: one stamp from the quarter-size mip, tinted at mip size.
         const c = CELL / MIP;
-        const src = tintedFor(e.pheno, e.rgb, atlasMipFor(e.pheno, atlas), true);
-        g.drawImage(src, cc * c, rr * c, c, c, sx - box / 2, sy - box / 2, box, box);
+        const src = tintedFor(ak, muted(e.rgb), atlasMipFor(ak, atlas), true);
+        g.drawImage(src, cc * c, rr * c, c, c, qx - box / 2, qy - box / 2, box, box);
       } else {
-        const src = tintedFor(e.pheno, e.rgb, atlas);
-        g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, sx - box / 2, sy - box / 2, box, box);
+        const src = tintedFor(ak, muted(e.rgb), atlas);
+        g.drawImage(src, cc * CELL, rr * CELL, CELL, CELL, qx - box / 2, qy - box / 2, box, box);
       }
     } else {
       // The colour string is built only here: the atlas path never needs it,
@@ -1573,9 +1588,11 @@ export function renderGL(
         glr.quad(sx - sq / 2, sy - sq / 2, sq, sq, CORPSE_F[0], CORPSE_F[1], CORPSE_F[2], 1);
         continue;
       }
-      const dead = atlasFor(e.pheno);
+      const ak = specimenKey(e.pheno, e.size);
+      const dead = atlasFor(ak);
       if (dead) {
-        const box = r * 2 * (CELL / (2 * ART_RADIUS));
+        const box = specimenBox(cam.scale);
+        const [qx, qy] = onLattice(cam, sx, sy);
         const dc = headingCol(p.dir, t.col ?? -1); // frozen gait: the legs stop (see render())
         t.col = dc;
         // Far zoom stamps from the quarter-size mip, same rule as the 2D path —
@@ -1583,9 +1600,9 @@ export function renderGL(
         // of distinct phenotypes stay GPU-resident at once (see gl.ts caps).
         const c = box <= CELL / MIP ? CELL / MIP : CELL;
         const corpse = c === CELL
-          ? corpseFor(e.pheno, dead, e.aux) : corpseMipFor(e.pheno, dead, e.aux);
-        glr.sprite((c === CELL ? 'corpse:' : 'corpsem:') + e.pheno + ':' + decayStage(e.aux),
-          corpse, 1, dc * c, 0, c, c, sx - box / 2, sy - box / 2, box, box);
+          ? corpseFor(ak, dead, e.aux) : corpseMipFor(ak, dead, e.aux);
+        glr.sprite((c === CELL ? 'corpse:' : 'corpsem:') + ak + ':' + decayStage(e.aux),
+          corpse, 1, dc * c, 0, c, c, qx - box / 2, qy - box / 2, box, box);
       } else {
         glr.quad(sx - r, sy - r, r * 2, r * 2, PENDING_F[0], PENDING_F[1], PENDING_F[2], 1);
       }
@@ -1594,7 +1611,8 @@ export function renderGL(
 
     // No atlas fetch at dot size — see render() above for why prefetching
     // every glimpsed phenotype is a memory cliff on long-evolved worlds.
-    const atlas = dots ? null : atlasFor(e.pheno);
+    const ak = specimenKey(e.pheno, e.size);
+    const atlas = dots ? null : atlasFor(ak);
     if (dots || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
       // block while the sprite streams in): solid quads, batched together.
@@ -1603,7 +1621,8 @@ export function renderGL(
       glr.quad(sx - sq / 2, sy - sq / 2, sq, sq,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, 1);
     } else {
-      const box = r * 2 * (CELL / (2 * ART_RADIUS));
+      const box = specimenBox(cam.scale); // the world's art-pixel size (see render())
+      const [qx, qy] = onLattice(cam, sx, sy);
       // Sticky heading bucket (see atlas.headingCol): bucket noise while
       // walking would otherwise flip the pose at frame rate.
       const cc = headingCol(p.dir, t.col ?? -1);
@@ -1613,11 +1632,12 @@ export function renderGL(
       // is not just fewer pixels — the herd view is where EVERY phenotype is on
       // screen at once, and only the small mip textures can all stay resident.
       const c = box <= CELL / MIP ? CELL / MIP : CELL;
-      const src = c === CELL ? atlas : atlasMipFor(e.pheno, atlas);
+      const src = c === CELL ? atlas : atlasMipFor(ak, atlas);
       // The atlas is colour-neutral (one per SHAPE); the creature's rgb rides
-      // the quad and the ramp shader re-tints it — see gl.ts mode 1.
-      glr.sprite(atlasKey(e.pheno, c !== CELL), src, 1,
-        cc * c, rr * c, c, c, sx - box / 2, sy - box / 2, box, box, 1, e.rgb);
+      // the quad and the ramp shader re-tints it — see gl.ts mode 1. Muted
+      // toward the world's palette first (atlas.muted).
+      glr.sprite(atlasKey(ak, c !== CELL), src, 1,
+        cc * c, rr * c, c, c, qx - box / 2, qy - box / 2, box, box, 1, muted(e.rgb));
     }
 
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
