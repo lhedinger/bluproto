@@ -1922,7 +1922,7 @@ public final class ServerTests {
 	/**
 	 * A deploy keeps the world unless a reset is asked for. A host writes its
 	 * world into the durable dir; the next host on the same epoch -- the same
-	 * last {@code World: reset} in its history -- boots that world, at its tick,
+	 * last {@code [reset-world]} in its history -- boots that world, at its tick,
 	 * with its creatures under their ids. A host whose build descends from a
 	 * newer reset starts fresh and says why, and so does one whose save cannot
 	 * be read; neither is a failed boot.
@@ -1965,7 +1965,7 @@ public final class ServerTests {
 
 		WorldHost reset = onAQuietStream(() -> new WorldHost(7, 144, 88, "demo", dir, "abc1234def"));
 		reset.runner().stop();
-		check("a build after a World: reset starts fresh (" + reset.bootInfo().get("bootNote") + ")",
+		check("a build after a [reset-world] starts fresh (" + reset.bootInfo().get("bootNote") + ")",
 				"reset".equals(reset.bootInfo().get("boot"))
 						&& String.valueOf(reset.bootInfo().get("bootNote")).contains("abc1234"));
 		reset.saveWorld();

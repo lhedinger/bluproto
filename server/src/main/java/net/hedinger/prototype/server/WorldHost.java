@@ -63,7 +63,7 @@ final class WorldHost {
 	static final String SAVE_FILE = "world.save.gz";
 	static final int SAVE_SEC = 300;
 	/** The reset this build descends from: the last commit in its history
-	 *  that asked for one ({@code World: reset}), stamped by the publish
+	 *  that asked for one ({@code [reset-world]} in its subject), stamped by the publish
 	 *  workflow, or "none". A save from another epoch is not restored. */
 	private final String epoch;
 	/** How this world began: "kept" (restored from the save), "reset" (a
@@ -131,7 +131,7 @@ final class WorldHost {
 	 * Starts this host's world: the saved one if there is a save this build
 	 * can carry on, else a fresh one from {@code envSeed}. Kept by default; a
 	 * save is passed over when the build descends from a reset the save does
-	 * not ({@code World: reset} in a commit since it was written), or when it
+	 * not ({@code [reset-world]} in a commit since it was written), or when it
 	 * cannot mean the same thing here -- another size, a terrain the
 	 * generator no longer builds, genomes this build cannot read. Either way
 	 * the reason is in {@code /api/health}.

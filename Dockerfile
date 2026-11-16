@@ -37,7 +37,7 @@ COPY res/ ./res/
 # the publish workflow; "dev" for a plain local build).
 ARG GIT_SHA=dev
 # The reset this build descends from: the last commit on master carrying a
-# `World: reset` trailer (found by the publish workflow), or "none". The
+# `[reset-world]` in its subject (found by the publish workflow), or "none". The
 # server keeps the saved world across a deploy unless this differs from the
 # epoch the save was written under -- see WorldHost.boot.
 ARG WORLD_EPOCH=none

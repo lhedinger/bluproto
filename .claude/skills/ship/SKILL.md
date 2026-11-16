@@ -143,9 +143,9 @@ it"), then a body explaining *why*, including what was measured and what was
 rejected. Keep model identifiers out of commits, PR titles and bodies entirely.
 
 **Kept or reset.** A deploy keeps the live world by default (see "Kept or
-reset" in `deploy/README.md`). Add a `World: reset` trailer to a commit only
-when the user asks for a reset deploy -- it goes in the trailer block at the
-end of the message, beside `Co-Authored-By`. Never add it on your own
+reset" in `deploy/README.md`). Add `[reset-world]` to a commit's subject line
+only when the user asks for a reset deploy; only the subject is read, so
+mentioning it in a body does nothing. Never add it on your own
 judgement; if a change looks like it cannot run on the kept world, say so and
 let the user decide. After the deploy, `/api/health` reports `boot` and
 `bootNote`: report them with the commit, since a reset nobody asked for (the
