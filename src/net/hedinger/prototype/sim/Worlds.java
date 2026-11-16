@@ -287,10 +287,12 @@ public final class Worlds {
 		for (int[] ins : seed) {
 			code.add(ins.clone());
 			// Right after the amble is set: raise it to a chase when prey is in
-			// sight. r0 is the one register the starter leaves untouched.
+			// sight. r6 is free until the starter's last lines set it for the
+			// mate write; r0 is the carry, which every line in between would
+			// overwrite (Brain.CARRY).
 			if (!paced && ins[0] == SET && ins[1] == 5 && ins[2] == amble) {
-				code.add(new int[] { SENSE, 0, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r0 = prey near?
-				code.add(new int[] { SKIPZ, 0, 0, 0 }); // nothing in sight -> keep the amble
+				code.add(new int[] { SENSE, 6, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r6 = prey near?
+				code.add(new int[] { SKIPZ, 6, 0, 0 }); // nothing in sight -> keep the amble
 				code.add(new int[] { SET, 5, 9, 0 }); // r5 = 1.0 (const[9]) -- chase flat out
 				paced = true;
 			}
