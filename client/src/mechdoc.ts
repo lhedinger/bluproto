@@ -72,7 +72,7 @@ function mechSection(m: MechSection, into: HTMLElement): void {
   // without smuggling markup through the wire.
   for (const para of m.intro.split('\n\n')) into.append(el('p', para, 'note'));
 
-  const t = el('table', undefined, 'facts');
+  const t = el('table', undefined, 'facts stack'); // stacks on a phone (docs.css)
   const tb = el('tbody');
   for (const r of m.rows) {
     const tr = el('tr');
