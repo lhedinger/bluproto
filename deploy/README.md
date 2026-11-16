@@ -77,23 +77,20 @@ carcasses, and every tile's grass and fertility, at the tick it stopped. Minds
 wake fresh -- registers, intents and targets are not carried -- and items, the
 steward and its drones are rebuilt from the seed.
 
-To **reset** instead, put a `World: reset` trailer in a commit message, in the
-trailer block at its end:
+To **reset** instead, put `[reset-world]` in the commit's subject line --
+the same bracket form as GitHub's own `[skip ci]`:
 
 ```
-Grazers see water through cover
-
-...
-
-World: reset
-Co-Authored-By: ...
+Grazers see water through cover [reset-world]
 ```
 
-`publish.yml` stamps the image with the last such commit on master (its
-*epoch*). A build whose epoch differs from the save's starts fresh from
-`SEED`; every deploy and restart after that keeps the new world, until the
-next `World: reset`. Because the epoch is looked up in the history, a reset
-is not lost if its own build was skipped.
+Only the subject is read, so a commit body that merely mentions the token
+(like the one that introduced it) does not reset anything. `publish.yml`
+stamps the image with the last such commit on master (its *epoch*). A build
+whose epoch differs from the save's starts fresh from `SEED`; every deploy and
+restart after that keeps the new world, until the next `[reset-world]`.
+Because the epoch is looked up in the history, a reset is not lost if its own
+build was skipped.
 
 The server also resets on its own, rather than restore something that would
 mean something else, when the save is for another world size, when the

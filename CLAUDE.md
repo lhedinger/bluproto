@@ -108,5 +108,5 @@ arithmetic, is what picked the number.
 - CI (`.github/workflows/ci.yml`) runs `./gradlew check`. Run it locally first;
   it is the same command.
 - Merge on green.
-- A deploy keeps the live world. A `World: reset` trailer in a commit message
-  makes it start fresh instead; add one only when the user asks for a reset.
+- A deploy keeps the live world. `[reset-world]` in a commit's subject line
+  makes it start fresh instead; add it only when the user asks for a reset.
