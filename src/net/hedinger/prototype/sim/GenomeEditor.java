@@ -60,6 +60,8 @@ public final class GenomeEditor {
 			{ REG, NONE, NONE }, // SKIPNZ
 			{ REG, SENSOR, NONE }, // SENSE
 			{ ACT, REG, NONE }, // WRITE
+			{ REG, REG, NONE }, // SKIPGT
+			{ REG, REG, NONE }, // SKIPLT
 	};
 
 	/** What the editor is made of: genes, clades and the instruction set. */

@@ -30,11 +30,21 @@ public final class Brain {
 	// are masked into range at execution so no field can be "invalid".
 	public static final int NOP = 0, SET = 1, MOV = 2, ADD = 3, SUB = 4, MUL = 5,
 			MIN = 6, MAX = 7, NEG = 8, TANH = 9, GT = 10, SKIPZ = 11, SKIPNZ = 12,
-			SENSE = 13, WRITE = 14;
-	public static final int NUM_OPS = 15;
+			SENSE = 13, WRITE = 14,
+			// Comparing skips, appended so every opcode a living genome already
+			// carries keeps its meaning (an opcode is taken modulo NUM_OPS).
+			SKIPGT = 15, SKIPLT = 16;
+	public static final int NUM_OPS = 17;
 	/** Opcode mnemonics, indexed by opcode. */
 	public static final String[] OP_NAMES = { "NOP", "SET", "MOV", "ADD", "SUB", "MUL",
-			"MIN", "MAX", "NEG", "TANH", "GT", "SKIPZ", "SKIPNZ", "SENSE", "WRITE" };
+			"MIN", "MAX", "NEG", "TANH", "GT", "SKIPZ", "SKIPNZ", "SENSE", "WRITE",
+			"SKIPGT", "SKIPLT" };
+
+	/** Whether {@code op} is one of the skips: it gates the line after it. */
+	public static boolean isSkip(int op) {
+		int o = imod(op, NUM_OPS);
+		return o == SKIPZ || o == SKIPNZ || o == SKIPGT || o == SKIPLT;
+	}
 
 	/** General-purpose registers; persist across ticks (this is the memory). */
 	public static final int NUM_REG = 12;
@@ -247,6 +257,19 @@ public final class Brain {
 				skipNext = true;
 			}
 			break;
+		case SKIPGT:
+			// A comparison in one line: "skip the next if x > y" did take a GT
+			// into a scratch register and a SKIPNZ on it, two lines that had to
+			// agree on a register for the decision to mean anything.
+			if (reg(x) > reg(y)) {
+				skipNext = true;
+			}
+			break;
+		case SKIPLT:
+			if (reg(x) < reg(y)) {
+				skipNext = true;
+			}
+			break;
 		case SENSE:
 			if (s.length > 0) {
 				set(x, s[imod(y, s.length)]);
@@ -343,6 +366,12 @@ public final class Brain {
 				break;
 			case SKIPNZ:
 				body = "skip next if R" + imod(x, NUM_REG) + " ≉ 0";
+				break;
+			case SKIPGT:
+				body = "skip next if R" + imod(x, NUM_REG) + " > R" + imod(y, NUM_REG);
+				break;
+			case SKIPLT:
+				body = "skip next if R" + imod(x, NUM_REG) + " < R" + imod(y, NUM_REG);
 				break;
 			case SENSE:
 				body = "R" + imod(x, NUM_REG) + " = sense " + name(sensorNames, y);
