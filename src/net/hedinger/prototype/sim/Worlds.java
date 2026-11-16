@@ -399,7 +399,7 @@ public final class Worlds {
 	 * clade-seed pairs of six, and every guild stayed alive.
 	 *
 	 * <p>Length is not free, and the padding pays for it like any other line: a
-	 * longer brain reacts slower under one instruction per tick, and holds more
+	 * longer brain reacts slower at a fixed budget of instructions per tick, and holds more
 	 * targets at once. Selection can shed it -- a deletion is as likely as an
 	 * insertion.
 	 */

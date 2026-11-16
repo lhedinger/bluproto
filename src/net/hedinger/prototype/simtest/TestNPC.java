@@ -3473,7 +3473,7 @@ public class TestNPC extends NPC {
 	 * about minds rather than about eyes.
 	 *
 	 * <p>Deriving it from program length rather than a gene of its own is the point:
-	 * length already sets reaction time under one-instruction-per-tick, so a longer
+	 * length already sets reaction time under a fixed instruction budget, so a longer
 	 * brain now buys a wider attention span and pays for it in reflexes. Selection
 	 * prices both ends of the same trade instead of being handed a free parameter.
 	 */

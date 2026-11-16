@@ -1311,7 +1311,7 @@ public abstract class NPC extends Entity {
 		double sight = g.losRange * g.losFov * eyeCost(g.nightEye);
 		double perception = PERCEPTION_BURN * m34 * (sight - REF_SIGHT);
 		double agility = AGILITY_BURN * m34 * (g.turnRate - REF_TURN);
-		// A long brain pays in time, not food: under one instruction per tick a
+		// A long brain pays in time, not food: at a fixed instructions per tick a
 		// longer program is a slower thought, and that is its whole price. It
 		// used to burn per line as well, which charged an inert NOP as much as
 		// a working instruction.
