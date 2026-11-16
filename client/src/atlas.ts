@@ -7,6 +7,8 @@
 // Must match server/AtlasBaker: CELL px cells, DIRS×ANIM grid, art drawn at
 // ART_RADIUS within each cell (so the client can scale a cell to make the
 // on-screen body match the entity's true radius).
+import { giveUpIfStalled } from './stall';
+
 export const CELL = 96;
 export const DIRS = 8;
 const ANIM = 8;
@@ -94,6 +96,8 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
     setTimeout(() => { if (cache.get(pheno) === null) cache.delete(pheno); }, 8000);
   };
   img.src = `/api/world/atlas/${pheno}.png`;
+  // One that never answers is forgotten too, or the shape stays a dot (stall.ts).
+  giveUpIfStalled([img], () => cache.get(pheno) === null, () => cache.delete(pheno));
   return null;
 }
 
