@@ -387,18 +387,25 @@ public final class Worlds {
 	}
 
 	/**
-	 * A seed program with an inert line after every line it has: a NOP with
-	 * random operands, or before a skip, so a skip keeps the line it guards
-	 * right behind it. The founder behaves as the program does; the padding is
-	 * room to mutate in.
+	 * A seed program with a random line after every line it has -- or before
+	 * a skip, so a skip keeps the line it guards right behind it. The working
+	 * lines are the seed's, in its order; each pad is a whole random
+	 * instruction, opcode and operands alike, as {@link
+	 * net.hedinger.prototype.entities.Brain#randomInstruction} draws one.
 	 *
-	 * <p>A hand-written seed has no spare lines, so every edit that lands on it
-	 * rewrites working code. A padded seed carries as many lines again that do
-	 * nothing until a mutation turns one on: an operand redraw on a NOP changes
-	 * nothing, and an opcode redraw makes it a new instruction beside the old
-	 * ones instead of in place of one. Run to ten generations on three seeds,
-	 * padded lineages carried more lines with opcodes no seed uses on five
-	 * clade-seed pairs of six, and every guild stayed alive.
+	 * <p>Founders are noisy seeding, and this is noise put where selection can
+	 * use it. The pads were inert NOPs with random operands: room to mutate
+	 * in, but every founder of a seed ran the same program, so a reseed began
+	 * with no variation in behaviour at all. A random pad runs: it may read a
+	 * sensor into a register the seed uses, write an actuator, or skip the
+	 * seed line after it, so no two founders behave quite alike, some worse
+	 * than their seed and a few, perhaps, better. That some founders are
+	 * unviable is accepted -- the steward reseeds a clade that falls below its
+	 * floor, and what persists is whatever breeds.
+	 *
+	 * <p>Before random pads, run to ten generations on three seeds, NOP-padded
+	 * lineages carried more lines with opcodes no seed uses on five clade-seed
+	 * pairs of six, and every guild stayed alive.
 	 *
 	 * <p>Length is not free, and the padding pays for it like any other line: a
 	 * longer brain reacts slower at a fixed budget of instructions per tick, and holds more
@@ -412,21 +419,17 @@ public final class Worlds {
 		int[][] code = b.code();
 		java.util.List<int[]> out = new java.util.ArrayList<int[]>(code.length * 2);
 		for (int[] ins : code) {
-			int[] nop = { net.hedinger.prototype.entities.Brain.NOP, padOperand(), padOperand(), padOperand() };
+			int[] pad = net.hedinger.prototype.entities.Brain.randomInstruction();
 			boolean skip = net.hedinger.prototype.entities.Brain.isSkip(ins[0]);
 			if (skip) {
-				out.add(nop);
+				out.add(pad);
 			}
 			out.add(ins.clone());
 			if (!skip) {
-				out.add(nop);
+				out.add(pad);
 			}
 		}
 		return new net.hedinger.prototype.entities.Brain(out.toArray(new int[0][]));
-	}
-
-	private static int padOperand() {
-		return (int) (Utils.random() * net.hedinger.prototype.entities.Brain.FIELD);
 	}
 
 	/**
