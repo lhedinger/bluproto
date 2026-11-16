@@ -10202,18 +10202,17 @@ public class SimTests {
 			java.util.Set<Integer> grazerPaces = new java.util.TreeSet<>(), hunterPaces = new java.util.TreeSet<>();
 			for (int i = 0; i < 300; i++) {
 				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
-				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
+				int amble = seedAmble(b.code(), false);
 				if (amble >= 0) {
 					grazerPaces.add(amble);
 				}
 			}
 			for (int i = 0; i < 100; i++) {
 				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain;
-				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
+				int amble = seedAmble(b.code(), true);
 				hunterPaces.add(amble);
-				assertTrue("a founder hunter is the hunter seed at the pace it drew",
-						java.util.Arrays.deepEquals(active(net.hedinger.prototype.sim.Worlds.hunterBrain(amble).code()), active(b.code())));
-				assertEquals("with an inert line beside every line of it", 2 * net.hedinger.prototype.sim.Worlds.hunterBrain(amble).length(), b.length());
+				assertTrue("a founder hunter is the hunter seed at the pace it drew, a random line beside every line of it",
+						amble >= 0);
 			}
 			java.util.Set<Integer> slots = new java.util.TreeSet<>();
 			for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
@@ -10246,6 +10245,15 @@ public class SimTests {
 					net.hedinger.prototype.sim.Worlds.demo(61, cols, rows));
 			r.advance(3000);
 			World a = r.world();
+			// A carcass for certain, so the dead leg does not hang on whether this
+			// world's hunters happened to kill in time.
+			for (Entity e : a.getEntities()) {
+				if (e instanceof TestNPC p && !p.isDead() && !p.isRemoved() && p.getGenome() != null) {
+					p.recordDeath("test");
+					p.kill();
+					break;
+				}
+			}
 			java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
 			try {
 				net.hedinger.prototype.sim.WorldSave.write(a, 61, "none", 0, buf);
@@ -10440,47 +10448,76 @@ public class SimTests {
 		}
 	}
 
-	/** A program's working lines in order, its NOPs dropped. */
-	static int[][] active(int[][] code) {
-		return java.util.Arrays.stream(code)
-				.filter(in -> Math.floorMod(in[0], Brain.NUM_OPS) != Brain.NOP)
-				.toArray(int[][]::new);
+	/** Whether {@code founder} is {@code seed} as {@link net.hedinger.prototype.sim.Worlds#padded} lays
+	 *  it out: seed line k at 2k, or at 2k+1 for a skip, a random line beside it. */
+	static boolean carriesSeed(int[][] seed, int[][] founder) {
+		if (founder.length != 2 * seed.length) {
+			return false;
+		}
+		for (int k = 0; k < seed.length; k++) {
+			if (!java.util.Arrays.equals(seed[k], founder[2 * k + (Brain.isSkip(seed[k][0]) ? 1 : 0)])) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** The pace a padded founder of the forager (or hunter) seed drew, or -1
+	 *  when it carries neither at any pace. */
+	static int seedAmble(int[][] founder, boolean hunter) {
+		for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
+			int[][] seed = (hunter ? net.hedinger.prototype.sim.Worlds.hunterBrain(slot) : net.hedinger.prototype.sim.Worlds.starterBrain(slot)).code();
+			if (carriesSeed(seed, founder)) {
+				return slot;
+			}
+		}
+		return -1;
 	}
 
 	/**
-	 * A founder carries its seed program with an inert line beside every line:
-	 * room for a mutation to add an instruction instead of overwriting one. The
-	 * working lines are the seed's, in its order; the padding is a NOP after
-	 * each, or before a skip, so every skip still guards the line it was
-	 * written to guard.
+	 * A founder carries its seed program with a random line beside every line:
+	 * the seed's lines in its order, each skip still right before the line it
+	 * guards, and between them whole random instructions -- opcode and
+	 * operands -- so founders of one seed do not all run the same program.
 	 */
-	static class AFounderIsPaddedWithRoomToMutate extends Scenario {
+	static class AFounderCarriesItsSeedThroughNoise extends Scenario {
 		@Override
 		public void run() {
 			seed(23);
 			Genome.Clade[] clades = Genome.Clade.values();
-			for (int i = 0; i < 200; i++) {
-				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(clades[i % clades.length]).brain;
-				int[][] code = b.code();
-				int nops = 0;
-				for (int k = 0; k < code.length; k++) {
-					int op = Math.floorMod(code[k][0], Brain.NUM_OPS);
-					if (op == Brain.NOP) {
-						nops++;
-					}
-					if (Brain.isSkip(op)) {
-						assertTrue("a skip is right before a working line, as its seed wrote it",
-								k + 1 < code.length && Math.floorMod(code[k + 1][0], Brain.NUM_OPS) != Brain.NOP);
+			java.util.Set<Integer> padOps = new java.util.HashSet<>();
+			java.util.Set<String> pads = new java.util.HashSet<>();
+			int founders = 200;
+			for (int i = 0; i < founders; i++) {
+				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(clades[i % clades.length]).brain.code();
+				int[][] seed = null;
+				for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
+					for (int[][] cand : new int[][][] { net.hedinger.prototype.sim.Worlds.hunterBrain(slot).code(), net.hedinger.prototype.sim.Worlds.starterBrain(slot).code() }) {
+						if (carriesSeed(cand, code)) {
+							seed = cand;
+						}
 					}
 				}
-				assertEquals("half a founder's lines are padding", code.length / 2, nops);
+				if (seed == null && carriesSeed(net.hedinger.prototype.sim.Worlds.hitchhikerBrain().code(), code)) {
+					seed = net.hedinger.prototype.sim.Worlds.hitchhikerBrain().code();
+				}
+				assertTrue("every founder is one of the seeds, line for line, with a line beside each", seed != null);
 				assertTrue("and it fits inside the longest program", code.length <= Brain.MAX_LEN);
+				StringBuilder mine = new StringBuilder();
+				for (int k = 0; k < seed.length; k++) {
+					int[] pad = code[2 * k + (Brain.isSkip(seed[k][0]) ? 0 : 1)];
+					padOps.add(Math.floorMod(pad[0], Brain.NUM_OPS));
+					mine.append(java.util.Arrays.toString(pad));
+				}
+				pads.add(mine.toString());
 			}
+			assertGreater("the pads are random instructions, not one kind: " + padOps.size() + " opcodes",
+					padOps.size(), Brain.NUM_OPS - 1);
+			assertEquals("and no two founders carry the same noise", founders, pads.size());
 			Brain plain = net.hedinger.prototype.sim.Worlds.hunterBrain(net.hedinger.prototype.sim.Worlds.REFERENCE_AMBLE);
 			Brain pad = net.hedinger.prototype.sim.Worlds.padded(plain);
-			assertTrue("padding keeps the program's working lines, in order",
-					java.util.Arrays.deepEquals(active(plain.code()), active(pad.code())));
-			assertEquals("and doubles its length", 2 * plain.length(), pad.length());
+			assertTrue("padding keeps the program's lines, in order, each skip before its line",
+					carriesSeed(plain.code(), pad.code()));
 		}
 	}
 
@@ -10547,17 +10584,13 @@ public class SimTests {
 
 			for (int i = 0; i < 50; i++) {
 				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR).brain;
-				int[][] hunter = net.hedinger.prototype.sim.Worlds.hunterBrain(
-						net.hedinger.prototype.sim.Worlds.ambleOf(b)).code();
 				assertTrue("a founder hunter carries the hunter seed, at the pace it drew",
-						java.util.Arrays.deepEquals(active(hunter), active(b.code())));
+						seedAmble(b.code(), true) >= 0);
 			}
 			int hitchhikers = 0;
 			for (int i = 0; i < 300; i++) {
 				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
-				int amble = net.hedinger.prototype.sim.Worlds.ambleOf(b);
-				if (amble < 0 || !java.util.Arrays.deepEquals(
-						active(net.hedinger.prototype.sim.Worlds.starterBrain(amble).code()), active(b.code()))) {
+				if (seedAmble(b.code(), false) < 0) {
 					hitchhikers++;
 				}
 			}
@@ -11559,6 +11592,10 @@ public class SimTests {
 			}
 			Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			founder.size = 16;
+			// And its brain, pinned to its seed at the pace it drew: a founder is its
+			// seed with a random line beside every line, and what is under test is
+			// the seed's hunt, not the noise this one founder happened to draw.
+			founder.brain = net.hedinger.prototype.sim.Worlds.hunterBrain(seedAmble(founder.brain.code(), true));
 			java.util.List<TestNPC> pack = new java.util.ArrayList<>();
 			for (int i = 0; i < net.hedinger.prototype.sim.WorldSteward.RESEED_GROUP; i++) {
 				double[] p = net.hedinger.prototype.sim.Worlds.spotNear(w, 8, 15, 0, false);
@@ -11627,6 +11664,10 @@ public class SimTests {
 			}
 			Genome hg = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			hg.size = 16;
+			// And its brain, pinned to its seed at the pace it drew: a founder is its
+			// seed with a random line beside every line, and what is under test is
+			// the seed's hunt, not the noise this one founder happened to draw.
+			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain(seedAmble(hg.brain.code(), true));
 			// And its sight, pinned as its size is. A founder draws losRange now,
 			// and what is under test is the CHASE -- that a running hunter pays from
 			// its store -- not whether this particular founder can see the herd.
@@ -22908,7 +22949,7 @@ public class SimTests {
 				new TheWorldSeedsOnlyProgramMinds(),
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsForagePace(),
-				new AFounderIsPaddedWithRoomToMutate(),
+				new AFounderCarriesItsSeedThroughNoise(),
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
 				new TheCarryPassesTheLastResultOn(),

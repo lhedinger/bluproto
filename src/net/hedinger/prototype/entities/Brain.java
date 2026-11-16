@@ -415,6 +415,12 @@ public final class Brain {
 
 	// ---- small helpers ----------------------------------------------------
 
+	/** A uniformly random instruction: what an insertion adds, and what a
+	 *  founder's padding is made of. */
+	public static int[] randomInstruction() {
+		return randInstr();
+	}
+
 	private static int[] randInstr() {
 		return new int[] { randInt(NUM_OPS), randInt(FIELD), randInt(FIELD), randInt(FIELD) };
 	}
