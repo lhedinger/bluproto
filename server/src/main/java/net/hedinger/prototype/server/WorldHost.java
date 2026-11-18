@@ -721,10 +721,10 @@ final class WorldHost {
 				if (b == null) {
 					break; // a root: world-seeded, reseeded, or faded from the registry
 				}
-				if (b.parentB() >= 0) {
+				if (b.parentB() != net.hedinger.prototype.engine.Entity.NO_ID) {
 					chain.get(chain.size() - 1).put("with", b.parentB());
 				}
-				if (b.parentA() < 0) {
+				if (b.parentA() == net.hedinger.prototype.engine.Entity.NO_ID) {
 					break;
 				}
 				cur = b.parentA();
@@ -744,7 +744,8 @@ final class WorldHost {
 			// chain that ended because the registry no longer remembers says so.
 			net.hedinger.prototype.engine.World.Birth last = chain.isEmpty() ? null
 					: w.birthOf((Integer) chain.get(chain.size() - 1).get("id"));
-			boolean rooted = !chain.isEmpty() && !faded && (last == null || last.parentA() < 0);
+			boolean rooted = !chain.isEmpty() && !faded
+					&& (last == null || last.parentA() == net.hedinger.prototype.engine.Entity.NO_ID);
 			return java.util.Map.of("id", id, "chain", chain, "children", children,
 					"rooted", rooted, "tick", runner.snapshot().tick());
 		}
@@ -1855,7 +1856,7 @@ final class WorldHost {
 				net.hedinger.prototype.engine.World.Birth rec = birthOf.apply(cur);
 				if (rec == null) {
 					k = new FlowKey(UNKNOWN, UNKNOWN, to);
-				} else if (rec.parentA() < 0) {
+				} else if (rec.parentA() == net.hedinger.prototype.engine.Entity.NO_ID) {
 					k = new FlowKey(RESEED, RESEED, to);
 				} else if (was.containsKey(rec.parentA())) {
 					k = new FlowKey(BRED, was.get(rec.parentA()), to);

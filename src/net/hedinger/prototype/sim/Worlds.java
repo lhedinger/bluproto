@@ -511,7 +511,7 @@ public final class Worlds {
 			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
 			};
 			w.spawnEntity(body.grown().fattened());
-			if (body.getID() >= 0 && body.getGenome() != null) {
+			if (body.getID() != net.hedinger.prototype.engine.Entity.NO_ID && body.getGenome() != null) {
 				w.recordBirth(body.getID(), -1, -1, 0,
 						net.hedinger.prototype.entities.Species.of(body.getGenome()).key());
 			}
