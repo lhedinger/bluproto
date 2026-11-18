@@ -8361,8 +8361,12 @@ public class SimTests {
 			}
 			assertTrue("the calf is alive after two days beside its parents", !calf.isDead());
 			assertTrue("it has eaten (" + String.format("%.2f swallowed", calf.totalSwallowed()) + ")", ate);
-			assertGreater("and it has grown (" + String.format("%.2f from %.2f", calf.maturity(), born) + ")",
-					calf.maturity(), born + 0.01);
+			// Growth over two days is the calf's meals, which fall where the draw
+			// puts them: measured +0.008 of adult size when the order bodies run
+			// in changed (ids became a spawn count) and nothing else did, against
+			// a +0.01 bound. Half of that is still growth and not rounding.
+			assertGreater("and it has grown (" + String.format("%.3f from %.3f", calf.maturity(), born) + ")",
+					calf.maturity(), born + 0.005);
 		}
 	}
 
@@ -10233,6 +10237,45 @@ public class SimTests {
 	}
 
 	/**
+	 * An entity's id is the world's spawn count: 0, 1, 2 and up, never
+	 * negative and never {@link Entity#NO_ID}, so "no parent" cannot be
+	 * mistaken for one. It used to be the spawn tile's index plus the count
+	 * times a million, which overflowed the int after 2,147 spawns and turned
+	 * half the live world's ids negative -- and the lineage view read every
+	 * negative parent as no parent. After Integer.MAX_VALUE spawns the count
+	 * starts again at 0 and steps over any id still alive.
+	 */
+	static class AnIdIsASpawnCount extends Scenario {
+		@Override
+		public void run() {
+			World w = room(12, 12);
+			java.util.List<Entity> made = new java.util.ArrayList<>();
+			for (int i = 0; i < 3000; i++) {
+				Entity e = new Sound(4.5, 4.5, 0);
+				w.spawnEntity(e);
+				made.add(e);
+			}
+			boolean counted = true;
+			for (int i = 0; i < made.size(); i++) {
+				counted &= made.get(i).getID() == i;
+			}
+			assertTrue("ids count up from 0, past where the old rule overflowed", counted);
+			w.think();
+			Entity keep = made.get(0);
+			assertTrue("the first is still alive under id 0", w.entityById(0) == keep);
+			w.continueSpawnCount(Integer.MAX_VALUE - 1);
+			Entity a = new Sound(4.5, 4.5, 0), b = new Sound(4.5, 4.5, 0),
+					c = new Sound(4.5, 4.5, 0);
+			w.spawnEntity(a);
+			w.spawnEntity(b);
+			w.spawnEntity(c);
+			assertEquals("the count runs to the int's limit", Integer.MAX_VALUE, b.getID());
+			assertTrue("then starts again past the living: 0 is taken, so " + c.getID(),
+					c.getID() >= 0 && c.getID() != keep.getID() && w.entityById(c.getID()) == null);
+		}
+	}
+
+	/**
 	 * A deploy can carry the world across. A demo world is run until it has
 	 * grazed, bred and died, written down, and put back onto the same ground
 	 * built afresh without founders: every creature returns under its id, with
@@ -10278,7 +10321,7 @@ public class SimTests {
 			assertGreater("the world has creatures to carry", before.size(), 50);
 			assertGreater("and carcasses", dead, 0);
 			java.util.List<World.Birth> births = a.births();
-			assertTrue("and births beyond its founders", births.stream().anyMatch(b -> b.parentA() >= 0));
+			assertTrue("and births beyond its founders", births.stream().anyMatch(b -> b.parentA() != Entity.NO_ID));
 
 			World b;
 			try {
@@ -10341,7 +10384,7 @@ public class SimTests {
 			}
 			assertGreater("and the restored world lives on", alive, 50);
 			assertTrue("without the steward restocking a population it already has",
-					b.births().stream().noneMatch(x -> x.tick() == a.getTick() + 1 && x.parentA() < 0));
+					b.births().stream().noneMatch(x -> x.tick() == a.getTick() + 1 && x.parentA() == Entity.NO_ID));
 			assertTrue("its births continue past the save's ids",
 					b.births().stream().filter(x -> x.tick() > a.getTick()).allMatch(x -> !before.containsKey(x.child())));
 
@@ -15825,14 +15868,14 @@ public class SimTests {
 				w.think();
 				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 					net.hedinger.prototype.engine.World.Birth b = w.birthOf(e.getID());
-					if (b != null && b.parentA() >= 0) {
+					if (b != null && b.parentA() != Entity.NO_ID) {
 						birth = b;
 						break;
 					}
 				}
 			}
 			assertTrue("ordinary life produced a recorded birth", birth != null);
-			assertTrue("the child knows a parent", birth.parentA() >= 0);
+			assertTrue("the child knows a parent", birth.parentA() != Entity.NO_ID);
 			assertTrue("a child is deeper than a world-seeded root", birth.generation() >= 1);
 			assertTrue("the species label is clade/name", birth.species().indexOf('/') > 0);
 			boolean listed = false;
@@ -15845,7 +15888,7 @@ public class SimTests {
 			int cur = birth.parentA(), steps = 0;
 			while (steps++ < 200) {
 				net.hedinger.prototype.engine.World.Birth b = w.birthOf(cur);
-				if (b == null || b.parentA() < 0) {
+				if (b == null || b.parentA() == Entity.NO_ID) {
 					break;
 				}
 				cur = b.parentA();
@@ -20471,12 +20514,12 @@ public class SimTests {
 				World.Birth b = w.birthOf(e.getID());
 				if (b == null) {
 					unsigned++;
-				} else if (b.parentA() < 0) {
+				} else if (b.parentA() == Entity.NO_ID) {
 					founders++;
 					assertEquals("a founder is generation zero", 0, b.generation());
 					assertTrue("under the species it landed as",
 							b.species().equals(Species.of(t.getGenome()).key()));
-					assertTrue("with no other parent either", b.parentB() < 0);
+					assertTrue("with no other parent either", b.parentB() == Entity.NO_ID);
 				}
 			}
 			assertGreater("the warden landed founders", founders, 0);
@@ -23032,6 +23075,7 @@ public class SimTests {
 				new ClimateIsReadOffTheGround(),
 				new SameSeedSameOutcome(),
 				new AWorldSurvivesADeploy(),
+				new AnIdIsASpawnCount(),
 		};
 	}
 

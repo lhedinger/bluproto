@@ -737,7 +737,7 @@ public class World {
 	 * spawned, when the id is taken here or the spot is off the map.
 	 */
 	public boolean spawnEntityAs(Entity e, int id) {
-		if (e == null || id < 0 || entities.get(id) != null) {
+		if (e == null || id == Entity.NO_ID || entities.get(id) != null) {
 			return false;
 		}
 		for (Entity q : spawnQueue) {
@@ -749,8 +749,48 @@ public class World {
 			return false;
 		}
 		e.presetID(id);
-		e.buildID(this, spawnCounter); // keeps the preset id; binds the world
+		e.buildID(this, id); // keeps the preset id; binds the world
+		checkIds = true;
 		spawnQueue.add(e);
+		return true;
+	}
+
+	/**
+	 * The next free id: the spawn count, which only goes up, so ids are never
+	 * reused while anything could still name them. After Integer.MAX_VALUE
+	 * spawns it starts again at 0, never negative (so never {@link
+	 * Entity#NO_ID}), and skips any id still in use. By then the birth
+	 * registry, which keeps the last {@link #BIRTHS_KEPT} births, has long
+	 * forgotten whoever first held it.
+	 */
+	private int nextId() {
+		while (true) {
+			int id = spawnCounter;
+			spawnCounter = spawnCounter == Integer.MAX_VALUE ? 0 : spawnCounter + 1;
+			if (spawnCounter == 0) {
+				checkIds = true;
+			}
+			if (!checkIds || idFree(id)) {
+				return id;
+			}
+		}
+	}
+
+	/** Set once ids can clash with the count: after the count has wrapped, or
+	 *  once a body has been spawned under an id it brought with it (a save
+	 *  restored, whose ids may be from an older rule). From then on a new id
+	 *  is checked against the living before it is handed out. */
+	private boolean checkIds = false;
+
+	private boolean idFree(int id) {
+		if (entities.get(id) != null) {
+			return false;
+		}
+		for (Entity q : spawnQueue) {
+			if (q.getID() == id) {
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -762,8 +802,7 @@ public class World {
 			return false;
 		}
 
-		e.buildID(this, spawnCounter);
-		spawnCounter++;
+		e.buildID(this, nextId());
 
 		spawnQueue.add(e);
 

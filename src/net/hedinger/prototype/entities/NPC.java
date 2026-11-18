@@ -3446,11 +3446,11 @@ public abstract class NPC extends Entity {
 	 *  "who came from whom" is knowable at all; see World.recordBirth. A spawn
 	 *  that failed (id still -1) writes nothing: there is no child to remember. */
 	private void noteBirth(NPC child, NPC a, NPC b) {
-		if (child.getID() == -1 || child.getGenome() == null) {
+		if (child.getID() == NO_ID || child.getGenome() == null) {
 			return;
 		}
 		getWorld().recordBirth(child.getID(),
-				a != null ? a.getID() : -1, b != null ? b.getID() : -1,
+				a != null ? a.getID() : NO_ID, b != null ? b.getID() : NO_ID,
 				child.generation(), Species.of(child.getGenome()).key());
 	}
 

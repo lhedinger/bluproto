@@ -17,7 +17,11 @@ public abstract class Entity {
 
 	protected int size_diameter = 25; // pixels
 
-	private int ID = -1;
+	/** The id of nothing: an entity not yet spawned, and a birth record's
+	 *  missing parent. Every spawned entity's id is a spawn count, never this. */
+	public static final int NO_ID = -1;
+
+	private int ID = NO_ID;
 	protected int age = 0;
 	protected int health = 100; // percent
 	protected int lifespan = -1; // live forever
@@ -96,26 +100,29 @@ public abstract class Entity {
 	/** Gives a body restored from a save the id it had, before it is spawned;
 	 *  {@link #buildID} then keeps it. No effect once an id is set. */
 	public void presetID(int id) {
-		if (ID == -1) {
+		if (ID == NO_ID) {
 			ID = id;
 		}
 	}
 
-	public void buildID(World w, int n) {
+	/**
+	 * Binds this entity to {@code w} under {@code id}, the world's spawn count
+	 * (see {@link World#spawnEntity}). An id already preset -- a body restored
+	 * from a save -- is kept.
+	 *
+	 * <p>The id used to be the spawn tile's index plus the spawn count times
+	 * the next power of ten above the tile count: 1,000,000 on the live map,
+	 * so the int overflowed after spawn 2,147 and every id after that was
+	 * effectively random, half of them negative. Nothing ever read the
+	 * location back out of it, and the negative ones were read as "no
+	 * parent" by the lineage view.
+	 */
+	public void buildID(World w, int id) {
 		world = w;
-		if (ID != -1) {
+		if (ID != NO_ID) {
 			return;
 		}
-		int max = world.getColums() * world.getRows() * world.getLevels();
-		int mult = 10;
-		while (max > mult) {
-			mult *= 10;
-		}
-
-		ID = world.hashCode(X, Y, Z) + n * mult;
-		// System.out.println("Spawning Entity " + ID);
-		// ID%max = spawn world location
-		// ID/max = spawn index position
+		ID = id;
 	}
 
 	public final boolean run() {
