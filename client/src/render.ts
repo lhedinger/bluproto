@@ -5,7 +5,7 @@
 
 import {
   ART_RADIUS, CELL, DIRS, MIP, atlasFor, atlasMipFor, cell, corpseFor,
-  corpseMipFor, decayStage, headingCol, muted, specimenBox, specimenKey, tintedFor,
+  corpseMipFor, decayStage, FINE_SCALE, headingCol, muted, specimenBox, specimenKey, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import { flagOff } from './flags';
@@ -592,9 +592,11 @@ const SPRITE_REACH = Math.ceil(CELL / (2 * ART_RADIUS));
 
 /** A screen point moved onto the world's art-pixel lattice -- the grid the ground and
  *  the trees are drawn on, a twelfth of a tile -- so a specimen's pixels line up with
- *  theirs and it steps an art-pixel at a time (ART-STYLE §1, §5 "specimens"). */
+ *  theirs and it steps an art-pixel at a time (ART-STYLE §1, §5 "specimens"); at the
+ *  closest zoom, onto the half-art-pixel lattice its fine drawing is made on. */
 function onLattice(cam: { scale: number; screenX(x: number): number; screenY(y: number): number }, sx: number, sy: number): [number, number] {
-  const a = cam.scale / 12, ox = cam.screenX(0), oy = cam.screenY(0);
+  // the half-art-pixel lattice at the closest zoom, where bodies are drawn at twice the fidelity
+  const a = cam.scale / (cam.scale >= FINE_SCALE ? 24 : 12), ox = cam.screenX(0), oy = cam.screenY(0);
   return [ox + Math.round((sx - ox) / a) * a, oy + Math.round((sy - oy) / a) * a];
 }
 
@@ -838,7 +840,7 @@ export function render(
       // A corpse keeps its body and loses its colour. It is not decoration: it
       // lingers for a span set by its mass, it can be scavenged, and it is worth
       // that mass as meat -- so what died, and how big it was, stays readable.
-      const ak = specimenKey(e.pheno, e.size);
+      const ak = specimenKey(e.pheno, e.size, cam.scale >= FINE_SCALE);
       const dead = atlasFor(ak);
       if (dead) {
         const box = specimenBox(cam.scale);
@@ -873,7 +875,7 @@ export function render(
     // ever glimpsed is how an old world's 800+ atlases (~2MB of canvas each)
     // ended up resident at once — zooming in shows a dot for the beat the
     // fetch takes instead.
-    const ak = specimenKey(e.pheno, e.size);
+    const ak = specimenKey(e.pheno, e.size, cam.scale >= FINE_SCALE);
     const atlas = dots ? null : atlasFor(ak);
     if (dots) {
       drawDot(g, sx, sy, bodyPx, '#' + e.rgb.toString(16).padStart(6, '0'), false);
@@ -1588,7 +1590,7 @@ export function renderGL(
         glr.quad(sx - sq / 2, sy - sq / 2, sq, sq, CORPSE_F[0], CORPSE_F[1], CORPSE_F[2], 1);
         continue;
       }
-      const ak = specimenKey(e.pheno, e.size);
+      const ak = specimenKey(e.pheno, e.size, cam.scale >= FINE_SCALE);
       const dead = atlasFor(ak);
       if (dead) {
         const box = specimenBox(cam.scale);
@@ -1611,7 +1613,7 @@ export function renderGL(
 
     // No atlas fetch at dot size — see render() above for why prefetching
     // every glimpsed phenotype is a memory cliff on long-evolved worlds.
-    const ak = specimenKey(e.pheno, e.size);
+    const ak = specimenKey(e.pheno, e.size, cam.scale >= FINE_SCALE);
     const atlas = dots ? null : atlasFor(ak);
     if (dots || !atlas) {
       // The dot LOD (and the pre-atlas placeholder, simplified to the same
