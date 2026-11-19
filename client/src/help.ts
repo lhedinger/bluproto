@@ -553,14 +553,14 @@ for (const [act, name, meaning] of EXPR) {
   // real body at all. Only the sections that genuinely stamp an atlas bow out.
   const atlas = pheno
     ? await new Promise<HTMLCanvasElement>((resolve) => {
-      const poll = () => { const a = atlasFor(pheno * 4 + 2); a ? resolve(a) : setTimeout(poll, 100); };
+      const poll = () => { const a = atlasFor(pheno * 8 + 6); a ? resolve(a) : setTimeout(poll, 100); };
       poll();
     })
     : null;
   // The re-tinted living body — one bake per (shape, colour), the 2D path's
   // equivalent of the GL ramp shader. The galleries stamp this; the corpse
   // bakes stay on the neutral sheet, exactly as the live view derives them.
-  const tinted = atlas ? tintedFor(pheno * 4 + 2, muted(found.rgb), atlas) : null; // the large specimen
+  const tinted = atlas ? tintedFor(pheno * 8 + 6, muted(found.rgb), atlas) : null; // the large specimen, fine
   const tk = pheno + ':' + found.rgb;
   // Hand it to the galleries that started without one; they repaint every frame,
   // so they pick the real body up on the next tick with no rebuild.
@@ -934,8 +934,8 @@ function refBody(b: RefBody, into: HTMLElement): void {
     const anim = Math.floor((t * 6) % 8);
     g.imageSmoothingEnabled = false;
     const tints = [0, 1, 2].map((c) => {
-      const sheet = atlasFor(b.pheno * 4 + c);
-      return sheet ? tintedFor(b.pheno * 4 + c, muted(b.rgb), sheet) : null;
+      const sheet = atlasFor(b.pheno * 8 + c);
+      return sheet ? tintedFor(b.pheno * 8 + c, muted(b.rgb), sheet) : null;
     });
     if (tints.every(Boolean)) {
       tints.forEach((tint, c) => g.drawImage(tint!, dir * CELL, anim * CELL, CELL, CELL,

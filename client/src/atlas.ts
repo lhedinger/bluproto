@@ -26,7 +26,10 @@ export const ART_RADIUS = 0.18 * CELL;
 export const SPECIMEN_ART = 6;
 export const SPECIMEN_CELL_ART = CELL / SPECIMEN_ART; // 16
 /** Bumped with the specimen drawings, so a viewer never keeps a day-cached old sheet. */
-const SPECIMEN_V = 1;
+const SPECIMEN_V = 2;
+/** From this zoom (px a tile) in, bodies are drawn at twice the fidelity: the half-art-pixel
+ *  drawings (Specimen.FINE), still at true size. The closest octave of zoom (max 256). */
+export const FINE_SCALE = 128;
 const ART_PER_TILE = 12;
 
 /** The size class a body of this radius (tiles) is drawn at: its diameter in world
@@ -35,10 +38,11 @@ export function sizeClass(radiusTiles: number): number {
   const d = radiusTiles * 2 * ART_PER_TILE;
   return d < 3 ? 0 : d < 5 ? 1 : 2;
 }
-/** The atlas key for a body: its shape and its size class, packed. Every cache below keys
- *  by it, so the three classes of a shape are three sheets. */
-export function specimenKey(pheno: number, radiusTiles: number): number {
-  return pheno * 4 + sizeClass(radiusTiles);
+/** The atlas key for a body: its shape, its size class, and whether it is the fine
+ *  (twice the fidelity) sheet, packed in three low bits. Every cache below keys by it, so
+ *  each class and fidelity of a shape is its own sheet. */
+export function specimenKey(pheno: number, radiusTiles: number, fine = false): number {
+  return pheno * 8 + sizeClass(radiusTiles) + (fine ? 4 : 0);
 }
 /** On-screen size of one specimen cell at a zoom (px per tile). */
 export function specimenBox(scale: number): number {
@@ -151,8 +155,8 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
   img.onerror = () => {
     setTimeout(() => { if (cache.get(pheno) === null) cache.delete(pheno); }, 8000);
   };
-  // `pheno` is a specimenKey: the shape, and the size class in its low two bits.
-  img.src = `/api/world/atlas/${Math.floor(pheno / 4)}.png?c=${pheno % 4}&v=${SPECIMEN_V}`;
+  // `pheno` is a specimenKey: the shape, then the size class and fidelity in its low three bits.
+  img.src = `/api/world/atlas/${Math.floor(pheno / 8)}.png?c=${pheno % 8}&v=${SPECIMEN_V}`;
   // One that never answers is forgotten too, or the shape stays a dot (stall.ts).
   giveUpIfStalled([img], () => cache.get(pheno) === null, () => cache.delete(pheno));
   return null;

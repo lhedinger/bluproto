@@ -59,17 +59,21 @@ final class AtlasBaker {
 	 */
 	static byte[] specimen(long shapeKey, int cls) {
 		ProcCreature.Phenotype ph = PhenoRegistry.get(shapeKey);
-		if (ph == null || cls < 0 || cls >= Specimen.CLASSES) {
+		// 0..2 the true-size classes on the world lattice; 4..6 the same classes at
+		// twice the fidelity, on the half-art-pixel lattice (the closest zoom).
+		boolean fine = cls >= 4;
+		int c = fine ? cls - 4 : cls;
+		if (ph == null || c < 0 || c >= Specimen.CLASSES) {
 			return null;
 		}
-		return SPECIMENS.computeIfAbsent(shapeKey * Specimen.CLASSES + cls, k -> {
+		return SPECIMENS.computeIfAbsent(shapeKey * 8 + cls, k -> {
 			ProcCreature.Phenotype n = ProcCreature.neutral(ph);
 			int dirs = ProcCreature.DIRS;
 			BufferedImage atlas = new BufferedImage(dirs * CELL, Specimen.FRAMES * CELL, BufferedImage.TYPE_INT_ARGB);
 			Graphics2D g = atlas.createGraphics();
 			for (int d = 0; d < dirs; d++) {
 				for (int a = 0; a < Specimen.FRAMES; a++) {
-					Specimen.paint(g, d * CELL + CELL / 2, a * CELL + CELL / 2, Specimen.ART, n, cls, a, d);
+					Specimen.paint(g, d * CELL + CELL / 2, a * CELL + CELL / 2, fine ? Specimen.ART / 2 : Specimen.ART, n, c, a, d, fine);
 				}
 			}
 			g.dispose();
