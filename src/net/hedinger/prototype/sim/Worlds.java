@@ -399,8 +399,19 @@ public final class Worlds {
 		}
 		g.clade = clade;
 		g.brain = padded(g.brain);
+		java.util.Arrays.fill(g.markers, FOUNDER_GREY);
 		return g;
 	}
+
+	/**
+	 * The colour every founder starts in, each marker channel at 0.5: grey,
+	 * the same for every clade and every reseed. A colour is a lineage's
+	 * distance from where it began, so a coloured creature is one whose line
+	 * has bred for a long time, and a grey one is new, or has stayed close to
+	 * the steward's stock. Founders used to draw their markers at random,
+	 * which named a reseed a species before it had done anything.
+	 */
+	public static final double FOUNDER_GREY = 0.5;
 
 	/**
 	 * A seed program with a random line after every line it has -- or before

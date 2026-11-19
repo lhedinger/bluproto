@@ -3747,8 +3747,8 @@ public class SimTests {
 			w.spawnEntity(grazer);
 			w.think();
 
-			assertTrue("the two are genome-compatible on markers alone",
-					grazer.getGenome().similarityTo(scav.getGenome()) >= grazer.getGenome().mateThreshold);
+			assertTrue("the two are close enough in colour to mate on colour alone",
+					grazer.getGenome().colourDistance(scav.getGenome()) <= grazer.getGenome().mateReach());
 			assertTrue("but a scavenger will not pair with a grazer", !scav.canMateWith(grazer));
 			assertTrue("nor a grazer with a scavenger", !grazer.canMateWith(scav));
 			tick(w, 220);
@@ -5001,12 +5001,12 @@ public class SimTests {
 			// grid rather than whatever the population happens to occupy.
 			java.util.Set<String> keys = new java.util.HashSet<>();
 			for (Genome.Clade c : Genome.Clade.values()) {
-				for (double[] m : new double[][] { { 0.15, 0.15, 0.15 }, { 0.85, 0.2, 0.2 },
-						{ 0.2, 0.85, 0.25 }, { 0.25, 0.3, 0.85 }, { 0.8, 0.8, 0.35 },
-						{ 0.5, 0.55, 0.6 } }) {
+				for (String name : Species.names()) {
+					int rgb = Species.rgbOf(name); // the centroid, as a colour
 					Genome g = new Genome();
 					g.clade = c;
-					g.markers = m.clone();
+					g.markers = new double[] { ((rgb >> 16) & 255) / 255.0, ((rgb >> 8) & 255) / 255.0,
+							(rgb & 255) / 255.0 };
 					keys.add(Species.of(g).key());
 				}
 			}
@@ -5036,7 +5036,6 @@ public class SimTests {
 			Genome grazer = new Genome();
 			grazer.markers = new double[] { 0.5, 0.5, 0.5 };
 			grazer.gregariousness = 1.0;
-			grazer.mateThreshold = 0.1;
 
 			Genome twin = grazer.copy();          // identical in every way
 			Genome hunter = grazer.copy();        // identical EXCEPT the clade
@@ -8836,8 +8835,7 @@ public class SimTests {
 		private TestNPC mater(World w, double x, double y, Mind m) {
 			Genome g = new Genome();
 			g.size = 8;
-			g.markers = new double[] { 0.5, 0.5, 0.5 };
-			g.mateThreshold = 0.1; // compatible with each other
+			g.markers = new double[] { 0.5, 0.5, 0.5 }; // one colour: compatible with each other
 			TestNPC t = TestNPC.minded(x, y, 0, g, m).withMetabolic().withSpeed(0.08).grown().fattened();
 			t.withGlycogen(t.glycogenCapacity());
 			w.spawnEntity(t);
@@ -10272,6 +10270,53 @@ public class SimTests {
 			assertEquals("the count runs to the int's limit", Integer.MAX_VALUE, b.getID());
 			assertTrue("then starts again past the living: 0 is taken, so " + c.getID(),
 					c.getID() >= 0 && c.getID() != keep.getID() && w.entityById(c.getID()) == null);
+		}
+	}
+
+	/**
+	 * Every founder starts grey, and colour is what a lineage has drifted.
+	 * Founders of every clade carry 0.5 in each marker channel and are named
+	 * ashen; a birth moves a channel only with the lineage's mutation rate,
+	 * and then by at most {@link net.hedinger.prototype.entities.GeneSchema#NUDGE_STEP}. Mating is by colour:
+	 * two creatures pair only when each finds the other's colour within its
+	 * own reach, which xenophobia shrinks.
+	 */
+	static class FoundersAreGreyAndColourIsDrift extends Scenario {
+		@Override
+		public void run() {
+			seed(71);
+			for (Genome.Clade c : Genome.Clade.values()) {
+				Genome f = net.hedinger.prototype.sim.Worlds.founderGenome(c);
+				assertTrue(c + " founders are grey", f.markers[0] == 0.5 && f.markers[1] == 0.5 && f.markers[2] == 0.5);
+				assertTrue("and named " + Species.FOUNDER_NAME, Species.of(f).name().equals(Species.FOUNDER_NAME));
+			}
+			Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE);
+			g.mutationRate = 0.1;
+			int moved = 0, births = 2000;
+			double biggest = 0;
+			for (int i = 0; i < births; i++) {
+				Genome child = Genome.child(g, g.mutationRate);
+				for (int k = 0; k < 3; k++) {
+					double d = Math.abs(child.markers[k] - g.markers[k]);
+					if (d > 0) {
+						moved++;
+					}
+					biggest = Math.max(biggest, d);
+				}
+			}
+			double share = moved / (3.0 * births);
+			assertNear("a channel moves at about the mutation rate (" + share + ")", 0.1, share, 0.03);
+			assertTrue("and only a little (" + biggest + ")", biggest <= net.hedinger.prototype.entities.GeneSchema.NUDGE_STEP + 1e-12);
+
+			Genome calm = new Genome(), wary = new Genome(), other = new Genome();
+			calm.markers = new double[] { 0.5, 0.5, 0.5 };
+			wary.markers = new double[] { 0.5, 0.5, 0.5 };
+			other.markers = new double[] { 0.5, 0.5, 0.7 }; // 0.2 away
+			calm.xenophobia = 0;
+			wary.xenophobia = 1;
+			assertNear("an unafraid genome reaches " + Genome.MATE_REACH, Genome.MATE_REACH, calm.mateReach(), 1e-12);
+			assertTrue("and will court a colour 0.2 away", calm.colourDistance(other) <= calm.mateReach());
+			assertTrue("a xenophobic one will not", wary.colourDistance(other) > wary.mateReach());
 		}
 	}
 
@@ -16440,7 +16485,6 @@ public class SimTests {
 			g.xenophobia = 0.11;
 			g.gregariousness = -0.4;
 			g.boldness = -0.2;
-			g.mateThreshold = 0.66;
 			g.greed = 1.7;
 			g.determination = 3.25;
 			g.patience = 777;
@@ -16456,7 +16500,7 @@ public class SimTests {
 			assertTrue("metabolism round-trips exactly", g.metabolism == back.metabolism);
 			assertTrue("predatory round-trips exactly", g.predatory == back.predatory);
 			assertTrue("boldness round-trips exactly", g.boldness == back.boldness);
-			assertTrue("mateThreshold round-trips exactly", g.mateThreshold == back.mateThreshold);
+			assertTrue("xenophobia round-trips exactly", g.xenophobia == back.xenophobia);
 			assertTrue("greed round-trips exactly", g.greed == back.greed);
 			assertTrue("determination round-trips exactly", g.determination == back.determination);
 			assertEquals("patience round-trips", g.patience, back.patience);
@@ -23076,6 +23120,7 @@ public class SimTests {
 				new SameSeedSameOutcome(),
 				new AWorldSurvivesADeploy(),
 				new AnIdIsASpawnCount(),
+				new FoundersAreGreyAndColourIsDrift(),
 		};
 	}
 

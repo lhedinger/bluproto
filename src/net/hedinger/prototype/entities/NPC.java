@@ -3583,10 +3583,10 @@ public abstract class NPC extends Entity {
 
 	/**
 	 * Whether this entity and a partner can produce sexual offspring right now:
-	 * both fertile and genome-compatible above the mate threshold. Compatibility
-	 * is mutual -- each must find the other similar enough (marker-based, the same
-	 * recognition {@link Genome#similarityTo} drives mate choice in {@code react})
-	 * -- so a pair only breeds when both would choose to.
+	 * both fertile and close enough in colour. Compatibility is mutual -- each
+	 * must find the other's colour within its own {@link Genome#mateReach},
+	 * which its xenophobia sets -- so a pair only breeds when both would choose
+	 * to.
 	 */
 	public boolean canMateWith(NPC other) {
 		if (other == null || other == this || !fertile() || !other.fertile()) {
@@ -3595,8 +3595,8 @@ public abstract class NPC extends Entity {
 		if (!isOrganic() || !other.isOrganic()) {
 			return false; // machinery does not breed, and nothing breeds with it
 		}
-		double sim = genome.similarityTo(other.genome);
-		return sim >= genome.mateThreshold && sim >= other.genome.mateThreshold;
+		double d = genome.colourDistance(other.genome);
+		return d <= genome.mateReach() && d <= other.genome.mateReach();
 	}
 
 	/**

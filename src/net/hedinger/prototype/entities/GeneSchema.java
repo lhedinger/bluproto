@@ -46,7 +46,22 @@ public final class GeneSchema {
 		ADD,
 		/** No drift and no draw: inherited exactly, jittered never. */
 		NONE,
+		/** A rare small step: with probability {@code rate} the value moves by
+		 *  up to {@link #NUDGE_STEP} either way, otherwise it is inherited
+		 *  exactly. For the colour markers, so a lineage keeps its colour
+		 *  through most births and drifts a shade at a time. */
+		NUDGE,
 	}
+
+	/**
+	 * The largest step a {@link Drift#NUDGE} gene takes when it moves: 0.02
+	 * of a colour channel's 0..1. A founder starts grey (0.5 in each), and the
+	 * nearest named colour is 0.15 to 0.27 away, so leaving grey is a random
+	 * walk of many births -- days of the live world for a grazer, which
+	 * breeds about fifty generations a day.
+	 */
+	@net.hedinger.prototype.engine.Unit("of a colour channel")
+	public static final double NUDGE_STEP = 0.02;
 
 	/** One heritable magnitude: its identity, its bounds, its drift, and the
 	 *  window onto the genome field that stores it. */
@@ -141,7 +156,7 @@ public final class GeneSchema {
 				g -> g.flying ? 1 : 0, (g, v) -> g.flying = v != 0);
 		for (int i = 0; i < Genome.MARKER_DIMS; i++) {
 			final int idx = i;
-			add("m" + i, "marker", Drift.ADD, 0, 1, false,
+			add("m" + i, "marker", Drift.NUDGE, 0, 1, false,
 					g -> g.markers[idx], (g, v) -> g.markers[idx] = v);
 		}
 		add("pred", "", Drift.ADD, 0, INF, false,
@@ -152,8 +167,6 @@ public final class GeneSchema {
 				g -> g.gregariousness, (g, v) -> g.gregariousness = v);
 		add("bold", "", Drift.ADD, 0, INF, false,
 				g -> g.boldness, (g, v) -> g.boldness = v);
-		add("mate", "similarity", Drift.ADD, 0, 1, false,
-				g -> g.mateThreshold, (g, v) -> g.mateThreshold = v);
 		add("greed", "value exponent", Drift.ADD, 0, Genome.GREED_MAX, false,
 				g -> g.greed, (g, v) -> g.greed = v);
 		add("det", "x incumbent", Drift.ADD, 1, Genome.DETERMINATION_MAX, false,
@@ -255,6 +268,11 @@ public final class GeneSchema {
 			switch (gene.drift) {
 			case MULT -> gene.set(g, gene.get(g) * (1 + jitter(rate)));
 			case ADD -> gene.set(g, gene.get(g) + jitter(rate));
+			case NUDGE -> {
+				if (Utils.random() < rate) {
+					gene.set(g, gene.get(g) + (Utils.random() * 2 - 1) * NUDGE_STEP);
+				}
+			}
 			case NONE -> { /* inherited exactly: no draw, no change */ }
 			}
 		}

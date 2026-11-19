@@ -524,8 +524,15 @@ public final class ServerTests {
 		}
 		check("species counts sum to the role census (" + linTotal + " of " + roleTotal + ")",
 				linTotal == roleTotal && linTotal > 0);
-		check("a seeded world has more species than roles ("
-				+ lin.keys().length + ")", lin.keys().length > 4);
+		// Every founder starts grey, so a world fresh from its seed holds one
+		// species per clade -- the ashen one -- and the rest of the colours are
+		// for its lineages to drift into.
+		boolean allAshen = lin.keys().length == 4;
+		for (String key : lin.keys()) {
+			allAshen &= key.endsWith("/" + net.hedinger.prototype.entities.Species.FOUNDER_NAME);
+		}
+		check("a seeded world is one grey species per clade ("
+				+ String.join(", ", lin.keys()) + ")", allAshen);
 
 		java.util.Set<String> clades = java.util.Set.of(
 				"herbivore", "predator", "scavenger", "parasite");
@@ -1030,7 +1037,7 @@ public final class ServerTests {
 						|| role.equals("scavenger") || role.equals("parasite"));
 		check("the species label rides along", detail.get("species") != null);
 		check("and it is one of the named species",
-				java.util.List.of("umbral", "vermil", "verdant", "cobalt", "ochre", "dusken")
+				net.hedinger.prototype.entities.Species.names()
 						.contains(String.valueOf(detail.get("species"))));
 	}
 

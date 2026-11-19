@@ -1029,7 +1029,7 @@ final class WorldHost {
 					// complete. Everything heritable now goes on the wire, and
 					// GenomeDetailIsTheWholeGenome fails the moment a gene is added
 					// without one.
-					gm.put("mateThreshold", round(g.mateThreshold));
+					gm.put("mateReach", round(g.mateReach()));
 					gm.put("sexuality", round(g.sexuality));
 					// The derived answer travels with the gene. Whether 0.5 is the line
 					// between budding and courting is the genome's rule

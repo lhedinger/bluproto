@@ -1191,9 +1191,12 @@ public final class Mechanics {
 						"Old age is a death nothing can dodge; heritable and drifting."),
 				row("Flying", "inherited, never mutated", "",
 						"Locomotion is a fact about a lineage; evolvable flight is future work."),
-				row("Markers", num(Genome.MARKER_DIMS), "genes",
-						"The neutral barcode: similarity in marker space is kinship, and the "
-						+ "first three map to the body's colour, so relatedness is visible."),
+				row("Markers", num(Genome.MARKER_DIMS) + ", grey at founding", "red, green, blue",
+						"The body's colour, and the barcode it is known by: similarity in colour "
+						+ "is kinship and mate choice. Every founder starts grey (0.5 each); at "
+						+ "a birth each channel moves with the lineage's mutation rate, by up to "
+						+ num(net.hedinger.prototype.entities.GeneSchema.NUDGE_STEP) + ", so a "
+						+ "colour is a lineage's distance from where it began."),
 				row("Drinks at", num(def.drainRate) + " host hp/tick", "",
 						"A parasite's pace, latent in anything that does not ride. Faster buys "
 						+ "nothing once its gut is full, and costs it the host it is riding."),
@@ -1289,9 +1292,10 @@ public final class Mechanics {
 						"How long a hunter keeps after a quarry with no bite landed before "
 						+ "it lets go; the animal it gave up on is off its menu for as long "
 						+ "again, so the next look finds something else."),
-				row("mateThreshold", "0 – 1", "similarity",
-						"How alike a partner must be before courtship: the gene that makes "
-						+ "species real, because drifted markers stop clearing it."),
+				row("Mate reach", num(Genome.MATE_REACH) + " ÷ (1 + 2 × xenophobia)", "colour distance",
+						"How close a partner's colour must be before courtship, both ways: "
+						+ "what makes species real, because drifted colours stop clearing it. "
+						+ "The more xenophobic, the closer."),
 				row("predatory", "0 – 1", "sport in the hunt",
 						"A quarry is worth what the gut has room for: the meat on it against "
 						+ "the stomach above the full line (" + pct(TestNPC.PRED_FULL_HUNGER)
@@ -1336,7 +1340,7 @@ public final class Mechanics {
 						+ "The reference lineage's rate; the same for both ways of being born "
 						+ "and for the brain's instruction fields."),
 				row("Crossover", "a coin per gene", "",
-						"Sexual only. Assortative mating (mateThreshold) keeps the mixing "
+						"Sexual only. Assortative mating (by colour) keeps the mixing "
 						+ "within a lineage, which is what lets species form."),
 				row("Brain inheritance", "copy, or two-point splice", "",
 						"Asexual copies and mutates; sexual splices a slice of one parent's "

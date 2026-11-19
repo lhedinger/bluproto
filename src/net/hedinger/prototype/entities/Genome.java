@@ -163,7 +163,7 @@ public class Genome {
 	 * is a mate barrier — a pair always agrees.
 	 *
 	 * <p>So clades are authored and species are emergent: nothing in the world can
-	 * create a new clade, while marker drift under {@link #mateThreshold} produces
+	 * create a new clade, while marker drift under {@link #mateReach} produces
 	 * real reproductive isolation within one.
 	 */
 	public Clade clade = Genome.Clade.HERBIVORE;
@@ -174,10 +174,43 @@ public class Genome {
 	 *  holds a host to: the less predatory, the bigger than itself a body has to
 	 *  be before it will ride it -- see {@code TestNPC.PARA_PICKINESS}. */
 	public double predatory = 0;
-	public double xenophobia = 0; // flee bigger & dissimilar
+	/** Flee bigger and dissimilar bodies -- and court only close colours:
+	 *  the more xenophobic, the nearer a mate's colour has to be (see
+	 *  {@link #mateReach}). */
+	public double xenophobia = 0;
 	public double gregariousness = 0; // approach the similar
 	public double boldness = 0; // reduces flight
-	public double mateThreshold = 0.85; // similarity above which mating is sought
+
+	/**
+	 * How far, in colour, a mate may be from this genome when xenophobia is
+	 * zero: the distance between the two marker colours, each channel 0..1,
+	 * so 0 (the same colour) to 1.73 (black against white). Xenophobia shrinks
+	 * it: 0.30 at none, 0.15 at 0.5, 0.10 at 1.
+	 *
+	 * <p>The colour is the identifier a body is drawn in, for the viewer and
+	 * for the creatures alike: a creature courts within its clade only those
+	 * that look like it, by its own standard. It replaces a separate
+	 * mate-threshold gene, which set the same standard without anything about
+	 * the body saying how choosy it was.
+	 */
+	@net.hedinger.prototype.engine.Unit("colour distance")
+	public static final double MATE_REACH = 0.30;
+
+	/** The colour distance within which this genome will mate: {@link
+	 *  #MATE_REACH} shrunk by xenophobia. */
+	public double mateReach() {
+		return MATE_REACH / (1 + 2 * Math.max(0, xenophobia));
+	}
+
+	/** Distance between the two marker colours: 0 the same, 1.73 the furthest. */
+	public double colourDistance(Genome other) {
+		double sum = 0;
+		for (int i = 0; i < MARKER_DIMS; i++) {
+			double d = markers[i] - other.markers[i];
+			sum += d * d;
+		}
+		return Math.sqrt(sum);
+	}
 
 	/**
 	 * How much this creature weighs the SIZE of a prize against the work of
@@ -690,7 +723,6 @@ public class Genome {
 		g.xenophobia = Utils.random();
 		g.gregariousness = Utils.random();
 		g.boldness = Utils.random() * 0.3;
-		g.mateThreshold = 0.7 + Utils.random() * 0.3;
 		spreadStrategy(g);
 		// Founders differ in appetite from the start, so selection has something to
 		// act on before mutation has had time to make any.
@@ -992,7 +1024,7 @@ public class Genome {
 		r.attack = predatory * dissim * Math.max(0, sizeAdv - 1);
 		r.flee = Math.max(0, xenophobia * dissim * Math.max(0, (1 / Math.max(1e-6, sizeAdv)) - 1) - boldness);
 		r.affiliate = sameClade ? gregariousness * s : 0;
-		r.mate = sameClade && s >= mateThreshold ? s : 0;
+		r.mate = sameClade && colourDistance(other) <= mateReach() ? s : 0;
 
 		// Dominant drive, survival-first on ties.
 		double best = 1e-4; // ignore threshold
@@ -1020,10 +1052,10 @@ public class Genome {
 	public String toString() {
 		return String.format(
 				"size %.1f spd %.3f turn %d los %.1f/%.0fdeg meta %.3f age %d%s "
-						+ "m[%.2f %.2f %.2f] pred %.2f xeno %.2f greg %.2f bold %.2f mate %.2f",
+						+ "m[%.2f %.2f %.2f] pred %.2f xeno %.2f greg %.2f bold %.2f reach %.2f",
 				size, speed, turnRate, losRange, Math.toDegrees(losFov), metabolism, maxAge,
 				flying ? " fly" : "", markers[0], markers[1], markers.length > 2 ? markers[2] : 0.5,
-				predatory, xenophobia, gregariousness, boldness, mateThreshold);
+				predatory, xenophobia, gregariousness, boldness, mateReach());
 	}
 
 	/** Labelled lines for an on-screen inspector panel (one gene group per line). */
@@ -1036,7 +1068,7 @@ public class Genome {
 						markers[0], markers[1], markers.length > 2 ? markers[2] : 0.5),
 				String.format("predatory %.2f   xeno %.2f", predatory, xenophobia),
 				String.format("gregarious %.2f   bold %.2f", gregariousness, boldness),
-				String.format("mateThreshold %.2f", mateThreshold),
+				String.format("mate reach %.2f", mateReach()),
 		};
 	}
 
