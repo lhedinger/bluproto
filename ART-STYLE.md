@@ -332,6 +332,14 @@ One sun, straight overhead-north. The grammar:
   `SpecimensAreDrawnAtTrueSize`), draws the cell at exactly the world's
   art-pixel size and snaps it to the lattice, so a body steps an art-pixel at a
   time.
+- **At the closest zoom a body doubles its fidelity, not its size.** From
+  `FINE_SCALE` (128 px a tile) in, each class is drawn on the HALF-art-pixel
+  lattice (`Specimen.FINE`) -- the drawing the comparison sheets made at that
+  size, every bead, pore and plate the coarse class compresses to one mark --
+  still at true size and still snapped, now to the half lattice, which nests in
+  the world's. The one sanctioned exception to "one pixel size on screen":
+  bodies are what a viewer zooms in to look at, and at 1-7 art-px the world's
+  own pixel left them too little to show.
 - **A plan wears specimen forms, not animals.** Grazers are amoebae (pseudopods
   round a dark nucleus) and diatoms (a capsule of pores); hunters crawlers
   (plates on legs) and lancets (a spindle with a dark keel); scavengers
@@ -934,7 +942,9 @@ Before a new visual merges, ask:
     served chunk is one level (§7, "the sky that baked the world into itself").
 15. Is it drawn on the **world's own art-pixel lattice**, at the world's pixel
    size -- one pixel size on screen, nothing finer or coarser beside the ground
-   (§5 "creatures are specimens", §7 "drawn at their own pixel size")?
+   (§5 "creatures are specimens", §7 "drawn at their own pixel size")? The one
+   exception is a creature at the closest zoom, at exactly twice the fidelity on
+   the half lattice that nests in the world's.
 16. Does it **scale exactly as the tiles do**, with no minimum on-screen size?
     A floor binds the smallest bodies first, and any band of zoom where it
     binds is a band where sizes lie (§7, "the floor that made every body one
