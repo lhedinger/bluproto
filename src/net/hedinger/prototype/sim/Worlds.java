@@ -275,30 +275,46 @@ public final class Worlds {
 		return hunterBrain(REFERENCE_AMBLE);
 	}
 
-	/** The hunter seed prowling at pool slot {@code amble}: the starter at that
-	 *  pace, chasing flat out on sight. See {@link #drawAmble} for the spread. */
+	/**
+	 * The hunter seed prowling at pool slot {@code amble}: the starter at that
+	 * pace, chasing flat out on sight. See {@link #drawAmble} for the spread.
+	 *
+	 * <p>The chase -- sense prey, skip if there is none, raise the pace to 1.0
+	 * -- sits right before the seek and throttle writes it feeds, not at the
+	 * top of the program beside the amble it raises. A founder's brain is this
+	 * seed with a random line beside every line, and every line between a
+	 * decision and the write that acts on it is a chance for a random skip to
+	 * silence it or a random write to overwrite its register. With the chase
+	 * at the top, twenty-odd random lines stood between seeing prey and the
+	 * throttle; on the live world every founder hunter of one group ran flat
+	 * out whether or not prey was in sight, because a random skip in front of
+	 * the prey check made the chase unconditional, and no hunter line got past
+	 * its first generation.
+	 */
 	public static net.hedinger.prototype.entities.Brain hunterBrain(int amble) {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
+		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
 		int[][] seed = starterBrain(amble).code();
 		java.util.List<int[]> code = new java.util.ArrayList<>();
-		boolean paced = false;
+		boolean chased = false;
 		for (int[] ins : seed) {
-			code.add(ins.clone());
-			// Right after the amble is set: raise it to a chase when prey is in
-			// sight. r6 is free until the starter's last lines set it for the
-			// mate write; r0 is the carry, which every line in between would
+			// Right before the seek write: raise the pace to a chase when prey is
+			// in sight, so the decision lands on the throttle a few lines later.
+			// r6 is free until the starter's last lines set it for the mate
+			// write; r0 is the carry, which every line in between would
 			// overwrite (Brain.CARRY).
-			if (!paced && ins[0] == SET && ins[1] == 5 && ins[2] == amble) {
+			if (!chased && ins[0] == WRITE && ins[1] == net.hedinger.prototype.entities.AgentIO.A_SEEK) {
 				code.add(new int[] { SENSE, 6, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r6 = prey near?
-				code.add(new int[] { SKIPZ, 6, 0, 0 }); // nothing in sight -> keep the amble
+				code.add(new int[] { SKIPZ, 6, 0, 0 }); // nothing in sight -> keep the pace
 				code.add(new int[] { SET, 5, 9, 0 }); // r5 = 1.0 (const[9]) -- chase flat out
-				paced = true;
+				chased = true;
 			}
+			code.add(ins.clone());
 		}
-		if (!paced) {
-			throw new IllegalStateException("the starter brain no longer sets its amble where the hunter seed expects");
+		if (!chased) {
+			throw new IllegalStateException("the starter brain no longer writes its seek where the hunter seed expects");
 		}
 		return new net.hedinger.prototype.entities.Brain(code.toArray(new int[0][]));
 	}
