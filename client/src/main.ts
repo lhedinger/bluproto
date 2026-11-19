@@ -1077,7 +1077,7 @@ function genomeTab(d: Record<string, any>): string {
     // a threshold re-implemented here would be a second copy free to drift.
     row('reproduction', gm.sexual === undefined ? '—'
       : `${gm.sexual ? 'sexual' : 'asexual'} · ${gm.sexuality}`),
-    row('mate thresh', g(gm.mateThreshold)),
+    row('mate reach', g(gm.mateReach)),
     row('breeds at', g(gm.reproFraction)), row('spends', g(gm.reproCostFraction)),
     row('young born at', g(gm.birthSize)), row('milk', g(gm.milk)),
     // How many young a budder bears at once: the count the gene rounds to,

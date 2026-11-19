@@ -7,7 +7,7 @@ import java.util.Locale;
  *
  * <p><b>Species are emergent here, and named lazily.</b> Nothing in the genome
  * stores one. Markers drift continuously under mutation and
- * {@link Genome#mateThreshold} turns that drift into real reproductive
+ * {@link Genome#mateReach} turns that drift into real reproductive
  * isolation, so speciation genuinely happens on its own — a discrete tag would
  * have had to be assigned by something, which would make speciation an authored
  * event rather than an evolved one.
@@ -31,33 +31,50 @@ import java.util.Locale;
  */
 public final class Species {
 
-	/** Species per clade. Six is enough to name the space without the labels
-	 *  becoming finer than a viewer can tell apart. */
-	public static final int PER_CLADE = 6;
+	/** Species per clade: ashen grey at the centre, where every founder
+	 *  starts, and eleven colours around it. */
+	public static final int PER_CLADE = 12;
 
 	/**
-	 * Centroids in marker space, one row per species, shared by every clade.
+	 * Centroids in marker space (red, green, blue), one row per species,
+	 * shared by every clade.
 	 *
-	 * <p>Spread across the unit cube so the nearest-centroid boundaries fall as
-	 * far as possible from where lineages actually sit: a creature has to drift a
-	 * long way to be relabelled, which is what makes the label steady enough to
-	 * put in a legend.
+	 * <p>Ashen grey is the centre, where every founder starts
+	 * ({@code Worlds.FOUNDER_GREY}). The eleven colours sit 0.29 to 0.55 from
+	 * it, so the boundary a lineage has to cross to be renamed is 0.15 to 0.27
+	 * away: many births of drift at {@code GeneSchema.NUDGE_STEP} a step, and
+	 * a reseed stays ashen.
 	 */
 	private static final double[][] CENTROIDS = {
-		{ 0.15, 0.15, 0.15 },
-		{ 0.85, 0.20, 0.20 },
-		{ 0.20, 0.85, 0.25 },
-		{ 0.25, 0.30, 0.85 },
-		{ 0.80, 0.80, 0.35 },
-		{ 0.50, 0.55, 0.60 },
+		{ 0.50, 0.50, 0.50 },
+		{ 0.18, 0.18, 0.18 },
+		{ 0.85, 0.25, 0.25 },
+		{ 0.90, 0.55, 0.20 },
+		{ 0.80, 0.70, 0.30 },
+		{ 0.25, 0.75, 0.30 },
+		{ 0.25, 0.70, 0.65 },
+		{ 0.25, 0.35, 0.85 },
+		{ 0.35, 0.70, 0.90 },
+		{ 0.60, 0.35, 0.85 },
+		{ 0.85, 0.35, 0.65 },
+		{ 0.50, 0.35, 0.25 },
 	};
 
 	/** Names, indexed to match {@link #CENTROIDS}. Deliberately plain: a species
 	 *  name is a handle for a viewer to say "the ochre ones are gone", not a
-	 *  taxonomy. */
+	 *  taxonomy. "ashen" is the grey every founder starts in. */
 	private static final String[] NAMES = {
-		"umbral", "vermil", "verdant", "cobalt", "ochre", "dusken",
+		"ashen", "umbral", "vermil", "amber", "ochre", "verdant",
+		"viridian", "cobalt", "azure", "amethyst", "fuchsia", "dusken",
 	};
+
+	/** Every species name, in centroid order. */
+	public static java.util.List<String> names() {
+		return java.util.List.of(NAMES);
+	}
+
+	/** The species every founder belongs to: the grey at the centre. */
+	public static final String FOUNDER_NAME = "ashen";
 
 	private final Genome.Clade clade;
 	private final int index;
@@ -125,7 +142,7 @@ public final class Species {
 				return new Species(Genome.Clade.HERBIVORE, i).rgb();
 			}
 		}
-		return new Species(Genome.Clade.HERBIVORE, NAMES.length - 1).rgb();
+		return new Species(Genome.Clade.HERBIVORE, 0).rgb(); // unknown: ashen
 	}
 
 	/** The species' own tint, as 0xRRGGBB — its centroid rendered as a colour, so
