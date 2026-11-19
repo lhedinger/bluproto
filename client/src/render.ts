@@ -632,7 +632,7 @@ export function render(
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
-  renderTime: number,
+  playTick: number,
   nowMs: number,
   level = 0,
   selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
@@ -659,7 +659,7 @@ export function render(
       for (const [, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
         g.drawImage(img, bx, by, bw, bh);
       }
-      drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the ground next
+      drawBelowBodies2D(g, cam, state, playTick, level); // occluded by the ground next
       g.drawImage(layer, o.x, o.y, meta.cols * cam.scale, meta.rows * cam.scale);
     }
   } else if (chunkTiles > 0) {
@@ -681,7 +681,7 @@ export function render(
         belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
       g.drawImage(img, bx, by, bw, bh);
     }
-    drawBelowBodies2D(g, cam, state, renderTime, level); // occluded by the chunks next
+    drawBelowBodies2D(g, cam, state, playTick, level); // occluded by the chunks next
     // A chunk not yet landed shows its patch of the low map, at the JPEG's
     // resolution, rather than the background. Its patch ONLY: the low map
     // carries the pit veil too, and laid under the whole view it veiled every
@@ -782,7 +782,7 @@ export function render(
     }
 
     if (!onScreen(rx, ry, e.size * cam.scale + stepPx, cvW, cvH)) continue;
-    const p = state.sample(t, renderTime);
+    const p = state.sample(t, playTick);
     const sx = cam.screenX(p.x), sy = cam.screenY(p.y);
 
     if (e.kind === 'phero') {
@@ -800,7 +800,7 @@ export function render(
     // Carry link under the bodies.
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
-      const cp = state.sample(carrier, renderTime, CARRIER);
+      const cp = state.sample(carrier, playTick, CARRIER);
       if (!OVERLAY_OFF) drawCarryLink(g, sx, sy, cam.screenX(cp.x), cam.screenY(cp.y), cam.scale);
     }
 
@@ -925,7 +925,7 @@ export function render(
     else if (e.flags & F_CARRYING) drawRing(g, 'carrying', sx, sy, r);
 
     // Follow highlight: a gentle pulsing ring around the tracked creature.
-    if (cam.followId === e.id) drawRing(g, 'follow', sx, sy, r, renderTime);
+    if (cam.followId === e.id) drawRing(g, 'follow', sx, sy, r, nowMs);
     // Selection highlight: a steady amber ring on the inspected creature, so it's
     // obvious which one the panel describes (distinct from the follow pulse).
     if (selection.id === e.id) drawRing(g, 'selected', sx, sy, r);
@@ -1404,7 +1404,7 @@ export function renderGL(
   veg: Uint8Array | null,
   vegRev: number,
   cover: Uint8Array | null,
-  renderTime: number,
+  playTick: number,
   nowMs: number,
   level = 0,
   selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
@@ -1461,7 +1461,7 @@ export function renderGL(
     }
     // Bodies on the floor below ride between the two layers: the batcher
     // draws in submission order, so the ground quad occludes them next.
-    drawBelowBodiesGL(glr, cam, state, renderTime, level, cv.width, cv.height);
+    drawBelowBodiesGL(glr, cam, state, playTick, level, cv.width, cv.height);
     if (ground) {
       if (lowZoom && groundLowCv) {
         glr.layer('groundlo:' + level, groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
@@ -1528,7 +1528,7 @@ export function renderGL(
     }
 
     if (!onScreen(rx, ry, e.size * cam.scale + stepPx, cvW, cvH)) continue;
-    const p = state.sample(t, renderTime);
+    const p = state.sample(t, playTick);
     const sx = cam.screenX(p.x), sy = cam.screenY(p.y);
 
     if (e.kind === 'phero') {
@@ -1544,7 +1544,7 @@ export function renderGL(
 
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
-      const cp = state.sample(carrier, renderTime, CARRIER);
+      const cp = state.sample(carrier, playTick, CARRIER);
       ovLinks.push([sx, sy, cam.screenX(cp.x), cam.screenY(cp.y)]);
     }
 
@@ -1717,7 +1717,7 @@ export function renderGL(
   if (!OVERLAY_OFF) {
     for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
     for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
-    for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, renderTime);
+    for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, nowMs);
   }
   lap('secTail');
   return { ...stats, ...sec };
@@ -1938,7 +1938,7 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 
 type BelowBody = { x: number; y: number; px: number; col: string; rgb: number; dead: boolean };
 
-function belowBodies(cam: Camera, state: WorldState, renderTime: number,
+function belowBodies(cam: Camera, state: WorldState, playTick: number,
     level: number, w: number, h: number): BelowBody[] {
   const out: BelowBody[] = [];
   if (BELOW_OFF || level - 1 < 0) return out;
@@ -1954,7 +1954,7 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
     // parallax shrinks the step along with everything else.
     const rx = cx + (cam.screenX(e.x) - cx) * f, ry = cy + (cam.screenY(e.y) - cy) * f;
     if (!onScreen(rx, ry, stepPx, w, h)) continue;
-    const p = state.sample(t, renderTime);
+    const p = state.sample(t, playTick);
     const sx = cx + (cam.screenX(p.x) - cx) * f, sy = cy + (cam.screenY(p.y) - cy) * f;
     out.push({
       x: sx, y: sy,
@@ -1968,8 +1968,8 @@ function belowBodies(cam: Camera, state: WorldState, renderTime: number,
 }
 
 function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
-    state: WorldState, renderTime: number, level: number): void {
-  const bodies = belowBodies(cam, state, renderTime, level, g.canvas.width, g.canvas.height);
+    state: WorldState, playTick: number, level: number): void {
+  const bodies = belowBodies(cam, state, playTick, level, g.canvas.width, g.canvas.height);
   if (bodies.length === 0) return;
   g.save();
   g.globalAlpha = BELOW_ALPHA;
@@ -1989,9 +1989,9 @@ function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
  *  the batch on nearly every one, a thousand draw calls and as many
  *  textures a frame, none of them ever evicted. */
 function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
-    state: WorldState, renderTime: number, level: number,
+    state: WorldState, playTick: number, level: number,
     w: number, h: number): void {
-  for (const b of belowBodies(cam, state, renderTime, level, w, h)) {
+  for (const b of belowBodies(cam, state, playTick, level, w, h)) {
     const rgb = b.dead ? CORPSE_RGB : b.rgb;
     glr.quad(b.x - b.px / 2, b.y - b.px / 2, b.px, b.px,
         ((rgb >> 16) & 255) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255, BELOW_ALPHA);

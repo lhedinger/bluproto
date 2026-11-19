@@ -42,7 +42,7 @@ const SOUND_ECHO_MS = 2200;
 const soundEchoes = new Map<number, { x: number; y: number; z: number; r: number; at: number }>();
 
 export function drawSenseHeat(g: CanvasRenderingContext2D, cam: Camera,
-    state: WorldState, renderTime: number, level: number,
+    state: WorldState, playTick: number, level: number,
     smell: boolean, sound: boolean, now: number): void {
   g.save();
   g.globalCompositeOperation = 'lighter';
@@ -51,7 +51,7 @@ export function drawSenseHeat(g: CanvasRenderingContext2D, cam: Camera,
     const e = t.curr;
     if (Math.round(e.z) !== level) continue;
     if (smell && e.kind === 'phero') {
-      const p = state.sample(t, renderTime);
+      const p = state.sample(t, playTick);
       const s = cam.worldToScreen(p.x, p.y);
       // The cloud's wire size is its drawn radius; the heat blooms wider so
       // adjacent deposits merge into a field, and strength sets the glow.
