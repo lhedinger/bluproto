@@ -12,7 +12,7 @@ import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
 import { setFlora, type FloraRow } from './flora';
 import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
-import { RENDER_DELAY_MS, WorldState } from './state';
+import { WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
   CLOSE_BTN, closePanel, isShortcut, openPanel, rightColumn, wirePanelChrome, type PanelSize, isCompact } from './panels';
@@ -2303,7 +2303,7 @@ function hudFrame(now: number, drawn: boolean): void {
     streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
     tex: hudGl.textures, atlases: atlasCount(),
     onLevel: state.tracks.size, world: worldTotal,
-    cbMs: hudCbEma, longN: hudLongN, longMax: hudLongMax,
+    cbMs: hudCbEma, longN: hudLongN, playSnaps: state.snaps, longMax: hudLongMax,
     scale: cam.scale, firstFullMs: firstFullAt, now,
   };
   if (!hudOn || now - hudLastText < MS.hudText) return;
@@ -2379,17 +2379,16 @@ function frame(now: number): void {
   const cb0 = performance.now();
   advanceGait(lastDrawAt ? now - lastDrawAt : 0, paused ? 0 : (parseFloat(speedSel.value) || 1));
   lastDrawAt = now;
-  // A fixed fraction behind the interval the stream is actually sending at:
-  // the server halves its rate for a big world, and a delay tuned to 10 Hz
-  // would run out of interpolation and hold every body still for the second
-  // half of each 200 ms gap.
-  const renderTime = now - Math.max(RENDER_DELAY_MS, 1.5 * Net.streamStats.intervalMs);
+  // Where every body is sampled this frame: a playhead in sim ticks, a fixed
+  // number of updates behind the newest, at whatever rate the stream is
+  // actually sending (the server halves it for a big world). See state.ts.
+  const playTick = state.playhead(now);
 
   // Follow: glue the camera to the tracked creature's interpolated position.
   if (cam.followId !== null) {
     const t = state.tracks.get(cam.followId);
     if (t) {
-      const p = state.sample(t, renderTime);
+      const p = state.sample(t, playTick);
       focusOn(p.x, p.y); // the centre of what the inspector leaves uncovered
     } else if (cam.followId !== selectedId) {
       // Nothing is polling this one, so there is no way to learn where it went.
@@ -2413,10 +2412,10 @@ function frame(now: number): void {
     g.clearRect(0, 0, g.canvas.width, g.canvas.height); // the world waits for its context
   } else if (glr) {
     hudGl = renderGL(glr, g, cam, state, meta, chunkTiles, chunkPx, getChunk,
-      vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
+      vegGrid, vegVersion, coverGrid, playTick, now, currentLevel, sel);
   } else {
     render(g, cam, state, meta, chunkTiles, chunkPx, getChunk,
-      vegGrid, vegVersion, coverGrid, renderTime, now, currentLevel, sel);
+      vegGrid, vegVersion, coverGrid, playTick, now, currentLevel, sel);
   }
   if (waterGrid && meta) {
     drawWaterGlints(g, cam, waterGrid, meta.cols, meta.rows, state.tick);
@@ -2425,7 +2424,7 @@ function frame(now: number): void {
     drawClimateLayer(g, cam, climChoice, climGrid, climRange, meta.cols, meta.rows);
   }
   if (ovlSmell || ovlSound) {
-    drawSenseHeat(g, cam, state, renderTime, currentLevel, ovlSmell, ovlSound, now);
+    drawSenseHeat(g, cam, state, playTick, currentLevel, ovlSmell, ovlSound, now);
   }
   hudFrame(now, true);
   // The minimap is ambient, not mission-critical: entity drift redraws at
