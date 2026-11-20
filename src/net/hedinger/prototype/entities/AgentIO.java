@@ -514,6 +514,9 @@ public final class AgentIO {
 	/** Steer to the nearest drinkable shore (the body computes the bearing
 	 *  from the tile map; drinking is adjacency, no act needed). */
 	public static final int SEEK_WATER = 8;
+	/** The value {@link Brain#SEEKWATER} writes to {@link #A_SEEK}: the middle
+	 *  of water's band, so a later nudge does not move it to another target. */
+	public static final double WATER_INTENT = 10.5;
 	/** Steer toward (or, signed negative, away from) the nearest LARGER body,
 	 *  {@link #S_BIGGER_PROX}. The hitch-hiker's lift. Encoded past water
 	 *  (magnitude >= 12): water had the open top of the scale, and a genome

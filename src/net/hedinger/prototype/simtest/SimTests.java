@@ -10427,7 +10427,10 @@ public class SimTests {
 					alive++;
 				}
 			}
-			assertGreater("and the restored world lives on", alive, 50);
+			// Measured against what was saved, not a headcount: the seed's
+			// programs change, and a number of bodies says nothing about
+			// whether the restore worked.
+			assertGreater("and the restored world lives on", alive, (before.size() - dead) / 2);
 			assertTrue("without the steward restocking a population it already has",
 					b.births().stream().noneMatch(x -> x.tick() == a.getTick() + 1 && x.parentA() == Entity.NO_ID));
 			assertTrue("its births continue past the save's ids",
@@ -10538,6 +10541,57 @@ public class SimTests {
 					Brain.SKIPNZ == 12 && Brain.SENSE == 13 && Brain.WRITE == 14 && Brain.OP_NAMES[14].equals("WRITE"));
 			assertTrue("and the listing reads the comparison",
 					new Brain(new int[][] { { Brain.SKIPLT, 3, 5, 0 } }).disassemble(null, null)[0].contains("skip next if R3 < R5"));
+		}
+	}
+
+	/**
+	 * Seeking water is one line. SEEKWATER Rx Ry steers to water while the
+	 * body's hydration is at or under the threshold in Ry and leaves Rx = 0;
+	 * above it, the intent is complete: Rx = 1 and the seek is left alone.
+	 * The drink reflex took nine lines -- sense, compare, build 10 from the
+	 * pool, skip, move -- and a random line anywhere in them lost it.
+	 */
+	static class SeekingWaterIsOneLine extends Scenario {
+		@Override
+		public void run() {
+			for (double thirst : new double[] { 0.2, 0.5, 0.8 }) {
+				int[][] prog = {
+						{ Brain.SET, 8, 8, 0 }, // R8 = 0.5
+						{ Brain.SEEKWATER, 9, 8, 0 } };
+				Brain b = new Brain(deepCopy(prog));
+				double[] sensors = new double[AgentIO.NUM_SENSORS];
+				sensors[AgentIO.S_THIRST] = thirst;
+				double[] act = new double[AgentIO.NUM_ACT];
+				act[AgentIO.A_SEEK] = 0.1; // foraging, as a line before it wrote
+				b.step(sensors, act, prog.length);
+				boolean done = 1 - thirst > 0.5;
+				assertNear("at thirst " + thirst + " the intent reports " + (done ? "complete" : "seeking"),
+						done ? 1.0 : 0.0, b.registers()[9], 0);
+				assertNear("and the result is carried", b.registers()[9], b.registers()[Brain.CARRY], 0);
+				assertEquals("at thirst " + thirst + " the seek is " + (done ? "left alone" : "set to water"),
+						done ? AgentIO.SEEK_FORAGE : AgentIO.SEEK_WATER, AgentIO.seekTarget(act[AgentIO.A_SEEK]));
+				assertTrue("toward it, not away", act[AgentIO.A_SEEK] > 0);
+			}
+			assertTrue("the old opcodes keep their numbers", Brain.SKIPLT == 16 && Brain.SEEKWATER == 17);
+			assertTrue("and the listing reads the intent",
+					new Brain(new int[][] { { Brain.SEEKWATER, 9, 8, 0 } }).disassemble(null, null)[0]
+							.contains("R9 = seek water until hydration > R8"));
+
+			// The seed drinks with it, and a threat still outranks a thirst.
+			for (boolean threat : new boolean[] { false, true }) {
+				LgpMind m = new LgpMind(net.hedinger.prototype.sim.Worlds.starterBrain());
+				double[] sensors = new double[AgentIO.NUM_SENSORS];
+				sensors[AgentIO.S_THIRST] = 0.8;
+				sensors[AgentIO.S_THREAT_PROX] = threat ? 0.6 : 0;
+				double[] act = new double[AgentIO.NUM_ACT];
+				for (int t = 0; t < 40; t++) {
+					m.think(sensors, act);
+				}
+				double seek = act[AgentIO.A_SEEK];
+				assertTrue("a parched seed " + (threat ? "flees a threat first" : "steers to water"),
+						threat ? seek < 0 && AgentIO.seekTarget(seek) == AgentIO.SEEK_THREAT
+								: seek > 0 && AgentIO.seekTarget(seek) == AgentIO.SEEK_WATER);
+			}
 		}
 	}
 
@@ -23044,6 +23098,7 @@ public class SimTests {
 				new AFounderCarriesItsSeedThroughNoise(),
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
+				new SeekingWaterIsOneLine(),
 				new TheCarryPassesTheLastResultOn(),
 				new AHashIsReplayableAndEven(),
 				new AMindSensesTheClimateUnderfoot(),

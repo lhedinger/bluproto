@@ -62,6 +62,7 @@ public final class GenomeEditor {
 			{ ACT, REG, NONE }, // WRITE
 			{ REG, REG, NONE }, // SKIPGT
 			{ REG, REG, NONE }, // SKIPLT
+			{ REG, REG, NONE }, // SEEKWATER
 	};
 
 	/** What the editor is made of: genes, clades and the instruction set. */
