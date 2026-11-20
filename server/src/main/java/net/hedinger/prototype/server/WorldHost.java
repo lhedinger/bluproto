@@ -1151,6 +1151,7 @@ final class WorldHost {
 			d.put("hasMind", true);
 			d.put("substrate", network ? "network" : "program");
 			d.put("generation", tn.generation()); // lineage depth: 0 = world-seeded
+			d.put("kills", tn.kills()); // living animals this body has killed
 			if (program) {
 				net.hedinger.prototype.entities.Brain b = lm.brain();
 				d.put("length", b.length());
