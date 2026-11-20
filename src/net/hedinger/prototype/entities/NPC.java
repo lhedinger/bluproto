@@ -3430,6 +3430,16 @@ public abstract class NPC extends Entity {
 		return w == null ? Double.NaN : w.pheromoneDirection(X, Y, getLvl(), radius);
 	}
 
+	/** Animals this body has killed: bites that took the last of a living
+	 *  animal's health. Book-keeping only -- nothing in the simulation reads
+	 *  it -- so a hunter's career can be read off it, in the inspector and in
+	 *  analysis. */
+	protected int kills = 0;
+
+	public int kills() {
+		return kills;
+	}
+
 	/** Overridden by entities that can breed asexually: a fresh offspring, or null. */
 	protected NPC spawnOffspring() {
 		return null;
@@ -3785,6 +3795,7 @@ public abstract class NPC extends Entity {
 		m.put("hunger", hunger);
 		m.put("thirst", thirst);
 		m.put("cooldown", (double) reproCooldown);
+		m.put("kills", (double) kills);
 		if (isDead()) {
 			m.put("carcass", carcassMass);
 			m.put("freshFull", freshFull);
@@ -3824,6 +3835,7 @@ public abstract class NPC extends Entity {
 		hunger = m.getOrDefault("hunger", hunger);
 		thirst = m.getOrDefault("thirst", thirst);
 		reproCooldown = (int) Math.round(m.getOrDefault("cooldown", (double) reproCooldown));
+		kills = (int) Math.round(m.getOrDefault("kills", (double) kills));
 		double savedAge = m.getOrDefault("age", (double) age);
 		if (savedAge < 0) {
 			if (deathCause != null) {
