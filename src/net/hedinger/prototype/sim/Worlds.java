@@ -508,8 +508,15 @@ public final class Worlds {
 	 * needed it. One recipe means a founding is what the warden would have put
 	 * there, and the warden puts back what was founded.
 	 *
-	 * <p>Each body arrives grown and fed, an adult with the fat to breed from,
-	 * and is signed into the birth registry as a founder: no parents,
+	 * <p>Each body arrives grown, with the glycogen to make a living
+	 * ({@code TestNPC.FOUNDER_FRACTION}) and no fat: the fat it breeds from is
+	 * fat it has to win, so what a founder leaves behind is what it could
+	 * earn. Founders used to land with a full fat store, enough to bud about
+	 * ten young of the median size without eating; measured over 75 world days
+	 * on three seeds, 64% of founder hunters' offspring came from founders
+	 * that never made a kill, and 97% of the young they flooded the world
+	 * with died before growing up. A founder is also signed into the birth
+	 * registry as one: no parents,
 	 * generation zero, the tick it landed. A founder used to write nothing,
 	 * which made a reseed indistinguishable from a record that had aged out --
 	 * and "did this line breed, or did the warden keep putting it back" is the
@@ -537,7 +544,7 @@ public final class Worlds {
 			case SCAVENGER -> TestNPC.mindedScavenger(p[0], p[1], z, g);
 			case PARASITE -> TestNPC.mindedParasite(p[0], p[1], z, g);
 			};
-			w.spawnEntity(body.grown().fattened());
+			w.spawnEntity(body.grown()); // no fat: it has to win the fat it breeds from
 			if (body.getID() != net.hedinger.prototype.engine.Entity.NO_ID && body.getGenome() != null) {
 				w.recordBirth(body.getID(), -1, -1, 0,
 						net.hedinger.prototype.entities.Species.of(body.getGenome()).key());

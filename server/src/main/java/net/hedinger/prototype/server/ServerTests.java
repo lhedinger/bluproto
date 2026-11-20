@@ -585,15 +585,17 @@ public final class ServerTests {
 	 * The Sankey's one law, restated for descent: every head of the later stage
 	 * has exactly one source, so the inflows sum to its count; and a head of the
 	 * earlier stage is held, or has ended, or is carried by its descendants --
-	 * never counted twice. Checked against a REAL interval -- the world runs a
-	 * thousand ticks between the two snapshots, so births, deaths and whatever
-	 * drift occurs are all in play, not staged.
+	 * never counted twice. Checked against a REAL interval -- the world runs
+	 * four thousand ticks between the two snapshots, so births, deaths and
+	 * whatever drift occurs are all in play, not staged. (Founders land with
+	 * no fat and must eat before they breed: the first birth on this world
+	 * comes at tick 2460.)
 	 */
 	static void lineageFlowsConserveEveryHead() {
 		net.hedinger.prototype.engine.Utils.seed(7);
 		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
 		WorldHost.StageSnap a = WorldHost.stageOf(w, 0);
-		for (int t = 0; t < 1000; t++) {
+		for (int t = 0; t < 4000; t++) {
 			w.think();
 		}
 		// One guaranteed death of a body the EARLIER stage knows, so the
@@ -615,7 +617,7 @@ public final class ServerTests {
 		}
 		check("a childless body of the earlier stage exists to kill", victim != null);
 		victim.kill();
-		WorldHost.StageSnap b = WorldHost.stageOf(w, 1000);
+		WorldHost.StageSnap b = WorldHost.stageOf(w, 4000);
 		check("the interval has heads on both sides (" + a.ids().length + " -> "
 				+ b.ids().length + ")", a.ids().length > 0 && b.ids().length > 0);
 
