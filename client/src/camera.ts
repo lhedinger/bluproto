@@ -32,6 +32,9 @@ export class Camera {
 
   private minScale = 2;
   private maxScale = 256;
+  /** The world's size in tiles, from fit(): how far a keyboard pan may go. */
+  private cols = 0;
+  private rows = 0;
 
   constructor(private canvas: HTMLCanvasElement) {}
 
@@ -39,6 +42,8 @@ export class Camera {
   fit(cols: number, rows: number): void {
     this.cx = cols / 2;
     this.cy = rows / 2;
+    this.cols = cols;
+    this.rows = rows;
     this.scale = Math.min(this.canvas.width / cols, this.canvas.height / rows);
     this.minScale = this.scale * 0.5;
   }
@@ -76,6 +81,26 @@ export class Camera {
   }
 
   private anim = 0;
+  /** Zooms by `factor` around the middle of the view, eased: the keyboard's
+   *  zoom. A followed body stays followed -- the main loop keeps it centred. */
+  zoomStep(factor: number): void {
+    this.animateZoom(this.canvas.width / 2, this.canvas.height / 2, factor);
+  }
+
+  /** Moves the view by a distance in screen pixels: the keyboard's pan. Like
+   *  a drag, it takes the camera back from a followed body. */
+  panBy(dxPx: number, dyPx: number): void {
+    this.cx += dxPx / this.scale;
+    this.cy += dyPx / this.scale;
+    // The centre stays over the world: a held key at the far zoom crosses two
+    // hundred tiles a second, and a view of empty black is a lost place.
+    if (this.cols > 0) {
+      this.cx = Math.min(this.cols, Math.max(0, this.cx));
+      this.cy = Math.min(this.rows, Math.max(0, this.cy));
+    }
+    this.followId = null;
+  }
+
   /** A discrete zoom step, eased over a quarter second rather than jumped:
    *  a jump loses the reader's place, an eased zoom shows where it went. The
    *  anchor stays put on screen throughout, and any new gesture cancels it. */

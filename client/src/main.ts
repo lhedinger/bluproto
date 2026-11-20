@@ -2097,7 +2097,7 @@ tuneBtn.onclick = () => {
 // selection reveals, never how the server behaves. (The constants panel it
 // reveals can change the world — but only through the token gate, which is the
 // admin boundary; debug alone still only looks.) Enable it by tapping the tick
-// readout three times, pressing "d" (desktop), or opening with ?debug=true. When
+// readout three times, or opening with ?debug=true. When
 // on, the performance HUD shows and the constants button appears. It no longer
 // touches the inspector, which is the same full panel in every mode, and it
 // does NOT change what the gestures mean: a tap selects and a long press
@@ -2121,7 +2121,7 @@ function setDebug(on: boolean): void {
   toast(`debug mode ${debugOn ? 'on' : 'off'}`);
 }
 // Triple-tap the tick readout toggles debug — deliberate, so a stray tap on the
-// status line never flips it. The "d" key does the same on desktop.
+// status line never flips it. (The "d" key used to as well; d pans now.)
 let tickTaps = 0;
 let tickTapTimer = 0;
 statsEl.title = 'tap 3× for debug';
@@ -2134,9 +2134,67 @@ statsEl.addEventListener('click', () => {
   }
   tickTapTimer = window.setTimeout(() => (tickTaps = 0), MS.tripleTap);
 });
+
+// ---- the keyboard: WASD pans, up/down change floor, left/right zoom ---------
+// For a desktop, where a drag is the only other way to move and the floor
+// stepper is a reach. W A S D are held: the view glides while a key is down,
+// from the frame loop, so the pan is as smooth as the frame rate; shift
+// doubles it. The arrows step: up and down a floor each press, left out and
+// right in by half again (held, they repeat). None of it fires while typing,
+// with a modifier (ctrl+s, cmd+w are the browser's), or on a focused control
+// that has arrows of its own -- the population chart's rail, a tab row, a
+// select.
+const PAN_PX_PER_S = 900;   // screen pixels a second: crosses a 1440 px screen in about 1.6 s
+const ZOOM_KEY_STEP = 1.5;  // one arrow press: half again in, or two thirds out
+const panKeys = new Set<string>();
+let panFast = false;
+let panAt = 0;
+function keysFree(ev: KeyboardEvent): boolean {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented) return false;
+  const t = ev.target as HTMLElement;
+  return !(t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)
+    || t.closest?.('[role=scrollbar], [role=tablist], [role=radiogroup], [role=slider]'));
+}
 window.addEventListener('keydown', ev => {
-  if ((ev.key === 'd' || ev.key === 'D') && isShortcut(ev)) setDebug(!debugOn);
+  if (!keysFree(ev)) return;
+  const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') {
+    if (panKeys.size === 0) panAt = performance.now();
+    panKeys.add(k);
+    panFast = ev.shiftKey;
+    ev.preventDefault();
+  } else if (k === 'ArrowUp' || k === 'ArrowDown') {
+    ev.preventDefault(); // the page must not scroll under the world
+    if (!ev.repeat) stepLevel(k === 'ArrowUp' ? 1 : -1);
+  } else if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    ev.preventDefault();
+    cam.zoomStep(k === 'ArrowRight' ? ZOOM_KEY_STEP : 1 / ZOOM_KEY_STEP);
+  } else if (k === 'Shift') {
+    panFast = true;
+  }
 });
+window.addEventListener('keyup', ev => {
+  const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+  panKeys.delete(k);
+  if (k === 'Shift') panFast = false;
+});
+// A key released while the window was elsewhere never sends its keyup: without
+// this the view would glide on, alone, after an alt-tab.
+window.addEventListener('blur', () => panKeys.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) panKeys.clear(); });
+/** Moves the view for the pan keys held, by the time since the last frame. */
+function keyPan(now: number): void {
+  if (panKeys.size === 0) return;
+  // A slow frame still moves the view as far as the time it took (or the pan
+  // would crawl exactly where the ground is loading); only a stall is capped.
+  const dt = Math.max(0, Math.min(250, now - panAt));
+  panAt = now;
+  const dx = (panKeys.has('d') ? 1 : 0) - (panKeys.has('a') ? 1 : 0);
+  const dy = (panKeys.has('s') ? 1 : 0) - (panKeys.has('w') ? 1 : 0);
+  if (dx === 0 && dy === 0) return;
+  const step = PAN_PX_PER_S * (panFast ? 2 : 1) * dt / 1000 / Math.hypot(dx, dy);
+  cam.panBy(dx * step, dy * step);
+}
 applyDebug(); // reflect ?debug=true on load
 
 let toastTimer = 0;
@@ -2369,6 +2427,7 @@ function paceMs(): number {
   return Math.min(PACE_FLOOR_MS, PACE_PX * Net.streamStats.intervalMs / stepPx);
 }
 function frame(now: number): void {
+  keyPan(now); // before the pacer looks: a held pan key is a moving camera
   const cameraMoved = cam.cx !== drawnCx || cam.cy !== drawnCy || cam.scale !== drawnScale
     || currentLevel !== drawnLevel || cv.width !== drawnW || cv.height !== drawnH;
   if (!cameraMoved && now - lastDrawAt < paceMs()) {
