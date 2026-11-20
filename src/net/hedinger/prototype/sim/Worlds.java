@@ -152,28 +152,15 @@ public final class Worlds {
 	 *  what a founder gets, with the slot drawn ({@link #drawAmble}). */
 	public static net.hedinger.prototype.entities.Brain starterBrain(int amble) {
 		final int SET = net.hedinger.prototype.entities.Brain.SET;
-		final int MOV = net.hedinger.prototype.entities.Brain.MOV;
-		final int ADD = net.hedinger.prototype.entities.Brain.ADD;
 		final int SENSE = net.hedinger.prototype.entities.Brain.SENSE;
 		final int WRITE = net.hedinger.prototype.entities.Brain.WRITE;
 		final int GT = net.hedinger.prototype.entities.Brain.GT;
 		final int SKIPZ = net.hedinger.prototype.entities.Brain.SKIPZ;
+		final int SEEKWATER = net.hedinger.prototype.entities.Brain.SEEKWATER;
 		int[][] code = {
 				{ SET, 1, 6, 0 }, // r1 = 0.1 (const[6]) -- the forage intent
 				{ SET, 5, amble, 0 }, // r5 = the forage pace, 0.25 for the reference seed; movement costs v^2
-				// The drink reflex: parched outranks foraging (a threat, below,
-				// still outranks both). SEEK_WATER lives at magnitude >= 9, so the
-				// intent value is composed as 4+4+2 from the const pool -- the warm
-				// seed knows how to drink; evolution tunes or loses it from here.
-				{ SENSE, 7, net.hedinger.prototype.entities.AgentIO.S_THIRST, 0 }, // r7 = how dry
-				{ SET, 8, 8, 0 }, // r8 = 0.5 (const[8]) -- the dry line
-				{ GT, 9, 7, 8 }, // r9 = parched?
-				{ SET, 10, 11, 0 }, // r10 = 4 (const[11])
-				{ ADD, 10, 10, 10 }, // r10 = 8
-				{ SET, 11, 10, 0 }, // r11 = 2 (const[10])
-				{ ADD, 10, 10, 11 }, // r10 = 10 -- names the water intent
-				{ SKIPZ, 9, 0, 0 }, // sated -> keep foraging
-				{ MOV, 1, 10, 0 }, // parched -> steer to water instead
+				{ SET, 8, 8, 0 }, // r8 = 0.5 (const[8]) -- the hydration to drink up to
 				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 },
 				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) threat threshold
 				{ GT, 4, 2, 3 }, // r4 = something bigger is close?
@@ -181,6 +168,13 @@ public final class Worlds {
 				{ SET, 1, 1, 0 }, // r1 = -1 (const[1]) -- flee the threat
 				{ SKIPZ, 4, 0, 0 }, // ...and only then
 				{ SET, 5, 9, 0 }, // r5 = 1.0 (const[9]) -- run flat out
+				{ SKIPZ, 4, 0, 0 }, // ...and only then
+				{ SET, 8, 1, 0 }, // r8 = -1 (const[1]) -- no thirst outranks a threat
+				// The drink reflex: one intent. Under the line in r8 it steers to
+				// water and leaves r9 = 0, which skips the seek write below; over
+				// it, r9 = 1 and the forage (or flee) intent is written as before.
+				{ SEEKWATER, 9, 8, 0 },
+				{ SKIPZ, 9, 0, 0 }, // drinking -> keep the water seek
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_SEEK, 1, 0 }, // where, and what to do there
 				{ WRITE, net.hedinger.prototype.entities.AgentIO.A_THROTTLE, 5, 0 }, // how hard: the mind's call
 				{ SET, 6, 9, 0 }, // r6 = 1.0 (const[9])
@@ -300,12 +294,14 @@ public final class Worlds {
 		java.util.List<int[]> code = new java.util.ArrayList<>();
 		boolean chased = false;
 		for (int[] ins : seed) {
-			// Right before the seek write: raise the pace to a chase when prey is
-			// in sight, so the decision lands on the throttle a few lines later.
+			// Right before the drink intent, three lines ahead of the seek write
+			// (the drink's skip has to stay right on the write it guards): raise
+			// the pace to a chase when prey is in sight, so the decision lands on
+			// the throttle a few lines later.
 			// r6 is free until the starter's last lines set it for the mate
 			// write; r0 is the carry, which every line in between would
 			// overwrite (Brain.CARRY).
-			if (!chased && ins[0] == WRITE && ins[1] == net.hedinger.prototype.entities.AgentIO.A_SEEK) {
+			if (!chased && ins[0] == net.hedinger.prototype.entities.Brain.SEEKWATER) {
 				code.add(new int[] { SENSE, 6, net.hedinger.prototype.entities.AgentIO.S_PREY_PROX, 0 }); // r6 = prey near?
 				code.add(new int[] { SKIPZ, 6, 0, 0 }); // nothing in sight -> keep the pace
 				code.add(new int[] { SET, 5, 9, 0 }); // r5 = 1.0 (const[9]) -- chase flat out
@@ -314,7 +310,7 @@ public final class Worlds {
 			code.add(ins.clone());
 		}
 		if (!chased) {
-			throw new IllegalStateException("the starter brain no longer writes its seek where the hunter seed expects");
+			throw new IllegalStateException("the starter brain no longer has the drink intent the hunter seed goes before");
 		}
 		return new net.hedinger.prototype.entities.Brain(code.toArray(new int[0][]));
 	}

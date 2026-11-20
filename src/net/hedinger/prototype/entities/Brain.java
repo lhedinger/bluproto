@@ -33,12 +33,14 @@ public final class Brain {
 			SENSE = 13, WRITE = 14,
 			// Comparing skips, appended so every opcode a living genome already
 			// carries keeps its meaning (an opcode is taken modulo NUM_OPS).
-			SKIPGT = 15, SKIPLT = 16;
-	public static final int NUM_OPS = 17;
+			SKIPGT = 15, SKIPLT = 16,
+			// An intent in one line, appended for the same reason.
+			SEEKWATER = 17;
+	public static final int NUM_OPS = 18;
 	/** Opcode mnemonics, indexed by opcode. */
 	public static final String[] OP_NAMES = { "NOP", "SET", "MOV", "ADD", "SUB", "MUL",
 			"MIN", "MAX", "NEG", "TANH", "GT", "SKIPZ", "SKIPNZ", "SENSE", "WRITE",
-			"SKIPGT", "SKIPLT" };
+			"SKIPGT", "SKIPLT", "SEEKWATER" };
 
 	/** Whether {@code op} is one of the skips: it gates the line after it. */
 	public static boolean isSkip(int op) {
@@ -285,6 +287,28 @@ public final class Brain {
 				skipNext = true;
 			}
 			break;
+		case SEEKWATER:
+			// The drink reflex as one instruction. It took nine: sense thirst,
+			// compare it with a line, build 10 from 4 + 4 + 2 (water's band on
+			// A_SEEK is past the constant pool), skip, move -- and any of the
+			// nine broken, by a random pad or a mutation, lost the reflex. In
+			// 2000 padded founders 13% still steered to water when parched,
+			// and 42% of hunter cubs died of thirst.
+			//
+			// Rx = 1: the intent is complete, hydration is above the threshold
+			// in Ry, and nothing is written. Rx = 0: it is not, and the seek
+			// is set to water. A skip on Rx keeps a later seek write from
+			// overriding the drink.
+			double hydration = s.length > AgentIO.S_THIRST ? 1.0 - s[AgentIO.S_THIRST] : 1.0;
+			if (hydration > reg(y)) {
+				set(x, 1);
+			} else {
+				if (act.length > AgentIO.A_SEEK) {
+					act[AgentIO.A_SEEK] = AgentIO.WATER_INTENT;
+				}
+				set(x, 0);
+			}
+			break;
 		case SENSE:
 			if (s.length > 0) {
 				set(x, s[imod(y, s.length)]);
@@ -390,6 +414,9 @@ public final class Brain {
 				break;
 			case SKIPLT:
 				body = "skip next if R" + imod(x, NUM_REG) + " < R" + imod(y, NUM_REG);
+				break;
+			case SEEKWATER:
+				body = "R" + imod(x, NUM_REG) + " = seek water until hydration > R" + imod(y, NUM_REG);
 				break;
 			case SENSE:
 				body = "R" + imod(x, NUM_REG) + " = sense " + name(sensorNames, y);
