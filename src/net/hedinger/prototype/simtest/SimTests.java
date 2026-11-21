@@ -10630,7 +10630,8 @@ public class SimTests {
 	 * A founder carries its seed program with a random line beside every line:
 	 * the seed's lines in its order, each skip still right before the line it
 	 * guards, and between them whole random instructions -- opcode and
-	 * operands -- so founders of one seed do not all run the same program.
+	 * operands -- so founders of one seed do not all run the same program. A
+	 * parasite founder carries no seed: its program is random throughout.
 	 */
 	static class AFounderCarriesItsSeedThroughNoise extends Scenario {
 		@Override
@@ -10640,8 +10641,24 @@ public class SimTests {
 			java.util.Set<Integer> padOps = new java.util.HashSet<>();
 			java.util.Set<String> pads = new java.util.HashSet<>();
 			int founders = 200;
+			int parasites = 0;
+			java.util.Set<String> parasiteCodes = new java.util.HashSet<>();
+			int seedLen = net.hedinger.prototype.sim.Worlds.starterBrain().length();
 			for (int i = 0; i < founders; i++) {
-				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(clades[i % clades.length]).brain.code();
+				Genome.Clade clade = clades[i % clades.length];
+				int[][] code = net.hedinger.prototype.sim.Worlds.founderGenome(clade).brain.code();
+				if (clade == Genome.Clade.PARASITE) {
+					// A parasite founder carries no seed: every line random, at a
+					// padded seed's length.
+					parasites++;
+					assertEquals("a parasite founder is as long as a padded seed", 2 * seedLen, code.length);
+					for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
+						assertTrue("and carries no seed program",
+								!carriesSeed(net.hedinger.prototype.sim.Worlds.starterBrain(slot).code(), code));
+					}
+					parasiteCodes.add(java.util.Arrays.deepToString(code));
+					continue;
+				}
 				int[][] seed = null;
 				for (int slot : net.hedinger.prototype.sim.Worlds.AMBLE_SLOTS) {
 					for (int[][] cand : new int[][][] { net.hedinger.prototype.sim.Worlds.hunterBrain(slot).code(), net.hedinger.prototype.sim.Worlds.starterBrain(slot).code() }) {
@@ -10662,7 +10679,9 @@ public class SimTests {
 			}
 			assertGreater("the pads are random instructions, not one kind: " + padOps.size() + " opcodes",
 					padOps.size(), Brain.NUM_OPS - 1);
-			assertEquals("and no two founders carry the same noise", founders, pads.size());
+			assertEquals("and no two founders carry the same noise", founders - parasites, pads.size());
+			assertGreater("some founders were parasites", parasites, 0);
+			assertEquals("and no two parasites run the same program", parasites, parasiteCodes.size());
 			Brain plain = net.hedinger.prototype.sim.Worlds.hunterBrain(net.hedinger.prototype.sim.Worlds.REFERENCE_AMBLE);
 			Brain pad = net.hedinger.prototype.sim.Worlds.padded(plain);
 			assertTrue("padding keeps the program's lines, in order, each skip before its line",
@@ -10736,7 +10755,7 @@ public class SimTests {
 				assertTrue("a founder hunter carries the hunter seed, at the pace it drew",
 						seedAmble(b.code(), true) >= 0);
 			}
-			for (Genome.Clade c : new Genome.Clade[] { Genome.Clade.HERBIVORE, Genome.Clade.SCAVENGER, Genome.Clade.PARASITE }) {
+			for (Genome.Clade c : new Genome.Clade[] { Genome.Clade.HERBIVORE, Genome.Clade.SCAVENGER }) {
 				for (int i = 0; i < 100; i++) {
 					Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(c).brain;
 					assertTrue("a founder " + c + " carries the forager, which drinks: never the hitch-hiker",

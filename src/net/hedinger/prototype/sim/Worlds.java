@@ -389,7 +389,14 @@ public final class Worlds {
 			g = pricedFounder(mindedGenome());
 		}
 		g.clade = clade;
-		g.brain = padded(g.brain);
+		if (clade == net.hedinger.prototype.entities.Genome.Clade.PARASITE) {
+			// A parasite starts from no idea at all: every line random, at the
+			// length a padded seed has, so it begins as long as its neighbours
+			// and has to find its living by selection from nothing.
+			g.brain = net.hedinger.prototype.entities.Brain.random(2 * g.brain.length());
+		} else {
+			g.brain = padded(g.brain);
+		}
 		java.util.Arrays.fill(g.markers, FOUNDER_GREY);
 		return g;
 	}
