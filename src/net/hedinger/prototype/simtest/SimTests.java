@@ -10338,6 +10338,11 @@ public class SimTests {
 					net.hedinger.prototype.sim.Worlds.demo(61, cols, rows));
 			r.advance(3000);
 			World a = r.world();
+			// Run on to a birth, so the registry has one to carry: when the
+			// first comes is the founders' business, not the save's.
+			for (int t = 0; t < 12000 && a.births().stream().noneMatch(b -> b.parentA() != Entity.NO_ID); t += 100) {
+				r.advance(100);
+			}
 			// A carcass for certain, so the dead leg does not hang on whether this
 			// world's hunters happened to kill in time.
 			for (Entity e : a.getEntities()) {
@@ -10645,9 +10650,6 @@ public class SimTests {
 						}
 					}
 				}
-				if (seed == null && carriesSeed(net.hedinger.prototype.sim.Worlds.hitchhikerBrain().code(), code)) {
-					seed = net.hedinger.prototype.sim.Worlds.hitchhikerBrain().code();
-				}
 				assertTrue("every founder is one of the seeds, line for line, with a line beside each", seed != null);
 				assertTrue("and it fits inside the longest program", code.length <= Brain.MAX_LEN);
 				StringBuilder mine = new StringBuilder();
@@ -10682,9 +10684,9 @@ public class SimTests {
 	 * reseeds of its clade: under the champion rule the bulk were its children,
 	 * within one mutation step of it on every marker; now none are, beyond what a
 	 * random founder lands on by chance (a 0.16 cube of the marker space, under
-	 * one in two hundred). Leg two pins the hunter's seed: a founder hunter always
-	 * carries the forager program, never the hitch-hiker that closes on what is
-	 * bigger than itself.
+	 * one in two hundred). Leg two pins the seeds: a founder hunter always
+	 * carries the hunter program, and every other founder the forager, never the
+	 * hitch-hiker that closes on what is bigger than itself and never drinks.
 	 */
 	static class AReseedIsAFounderNotAChampion extends Scenario {
 		private static final int SAMPLES = 200;
@@ -10734,14 +10736,13 @@ public class SimTests {
 				assertTrue("a founder hunter carries the hunter seed, at the pace it drew",
 						seedAmble(b.code(), true) >= 0);
 			}
-			int hitchhikers = 0;
-			for (int i = 0; i < 300; i++) {
-				Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE).brain;
-				if (seedAmble(b.code(), false) < 0) {
-					hitchhikers++;
+			for (Genome.Clade c : new Genome.Clade[] { Genome.Clade.HERBIVORE, Genome.Clade.SCAVENGER, Genome.Clade.PARASITE }) {
+				for (int i = 0; i < 100; i++) {
+					Brain b = net.hedinger.prototype.sim.Worlds.founderGenome(c).brain;
+					assertTrue("a founder " + c + " carries the forager, which drinks: never the hitch-hiker",
+							seedAmble(b.code(), false) >= 0);
 				}
 			}
-			assertGreater("a founder grazer still draws the hitch-hiker some of the time", hitchhikers, 50);
 		}
 	}
 

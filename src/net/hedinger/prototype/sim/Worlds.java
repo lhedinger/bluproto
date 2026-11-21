@@ -36,11 +36,14 @@ public final class Worlds {
 	 *  foothold to improve from, while every other gene stays random. */
 	/**
 	 * One founder body and mind: random dispositions, markers and a body inside
-	 * the sane size band, with the starting brain picked by index
-	 * so the cohort does not all begin with the same idea. Every third founder is a
-	 * {@link #hitchhikerBrain() hitch-hiker} rather than a plain forager, so both
-	 * strategies are in the world from the first tick and can be watched competing
-	 * — which is the whole point of the minded cohort.
+	 * the sane size band, and the {@link #starterBrain() forager} at a drawn pace.
+	 *
+	 * <p>Every third founder used to be a {@link #hitchhikerBrain() hitch-hiker},
+	 * so both strategies were in the world from the first tick. The hitch-hiker
+	 * seed never drank: it has no drink intent, so a third of every grazer,
+	 * scavenger and parasite cohort could only find water by riding to it, and
+	 * died of thirst when the ride did not go there. Riding is still in the
+	 * instruction set and the body, for a lineage to find.
 	 *
 	 * <p>Programs only, for now. The MLP substrate is still in the code and still
 	 * runs behind the same seam ({@code Genome.mlp}), but the world no longer
@@ -48,22 +51,15 @@ public final class Worlds {
 	 * tick, so a founder sprays pheromone, grabs and latches by arithmetic
 	 * accident, and its policy cannot be read in the inspector. The program
 	 * cohort is the one being watched, so it is the one being seeded.
-	 *
-	 * <p>The index only chooses a (fixed, RNG-free) program, so the deterministic
-	 * stream is identical to drawing every founder the old way.
 	 */
-	static net.hedinger.prototype.entities.Genome mindedGenome(int index) {
+	static net.hedinger.prototype.entities.Genome mindedGenome() {
 		net.hedinger.prototype.entities.Genome g = net.hedinger.prototype.entities.Genome.random();
 		g.size = 5 + Utils.random() * 12; // 5..17: room for both grazer and hunter builds
 		g.speed = 0.04 + Utils.random() * 0.03;
 		g.metabolism = 0.02;
-		// The founder's mind, by index so the cohort does not all begin with the
-		// same idea: of every three, two are LGP foragers and one an LGP
-		// hitch-hiker.
-		int pick = index % 3;
 		// The forage pace is drawn, not fixed: see drawAmble. Drawn after speed
 		// so every draw before it keeps the stream it had.
-		g.brain = (pick == 2) ? hitchhikerBrain() : starterBrain(drawAmble());
+		g.brain = starterBrain(drawAmble());
 		return g;
 	}
 
@@ -388,10 +384,9 @@ public final class Worlds {
 			net.hedinger.prototype.entities.Genome.Clade clade) {
 		net.hedinger.prototype.entities.Genome g;
 		if (clade == net.hedinger.prototype.entities.Genome.Clade.PREDATOR) {
-			g = pricedFounder(hunterFounder(mindedGenome(0)));
+			g = pricedFounder(hunterFounder(mindedGenome()));
 		} else {
-			// 0..2: the three founder programs
-			g = pricedFounder(mindedGenome((int) (Utils.random() * 3)));
+			g = pricedFounder(mindedGenome());
 		}
 		g.clade = clade;
 		g.brain = padded(g.brain);
