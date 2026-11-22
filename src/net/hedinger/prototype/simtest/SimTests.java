@@ -2208,44 +2208,39 @@ public class SimTests {
 	static class SpecimensAreDrawnAtTrueSize extends Scenario {
 		@Override
 		public void run() {
-			// both fidelities: the true-size classes on the world lattice, and the fine ones
-			// on the half-art-pixel lattice (the closest zoom) -- twice the pixels, so twice
-			// the span and the reach, still the same true size
-			for (boolean fine : new boolean[] { false, true }) {
-				int reach = fine ? 10 : 5, maxSpan = fine ? 14 : 7;
-				String fid = fine ? " (fine)" : "";
-				for (String form : Specimen.forms()) {
-					int[] n = new int[Specimen.CLASSES];
-					for (int cls = 0; cls < Specimen.CLASSES; cls++) {
-						int still = -1;
-						for (int frame = 0; frame < Specimen.FRAMES; frame++) {
-							for (int dir = 0; dir < ProcCreature.DIRS; dir++) {
-								java.util.Map<Long, Specimen.Cell> cells = Specimen.cells(form, false, cls, frame, dir, fine);
-								int[] b = Specimen.bounds(cells);
-								int mx = Math.floorDiv(b[0] + b[2], 2), my = Math.floorDiv(b[1] + b[3], 2);
-								for (java.util.Map.Entry<Long, Specimen.Cell> en : cells.entrySet()) {
-									char ch = en.getValue().ch;
-									assertTrue(form + fid + ": only the four marks (" + ch + ")", "#ple".indexOf(ch) >= 0);
-									// half a cell is 8 art-px: the body, its shadow one below and a flyer's lift of two
-									assertTrue(form + fid + " class " + cls + " fits its cell",
-											Math.abs(Specimen.cx(en.getKey()) - mx) <= reach && Math.abs(Specimen.cy(en.getKey()) - my) <= reach);
-								}
-								if (dir == 0) {
-									still = still < 0 ? cells.size() : still;
-								}
-								// a turn moves the silhouette, never adds to or loses from it
-								assertEquals(form + fid + " class " + cls + " keeps its mass at heading " + dir,
-										Specimen.cells(form, false, cls, frame, 0, fine).size(), cells.size());
-								// the diameter is the class's: true size, 1 to 7 art-px
-								int span = Math.max(b[2] - b[0], b[3] - b[1]) + 1;
-								assertTrue(form + fid + " class " + cls + " is " + span + " px across", span <= maxSpan);
+			java.util.Map<String, int[]> counts = new java.util.HashMap<>();
+			for (String form : Specimen.forms()) {
+				int[] n = new int[Specimen.CLASSES];
+				for (int cls = 0; cls < Specimen.CLASSES; cls++) {
+					int still = -1;
+					for (int frame = 0; frame < Specimen.FRAMES; frame++) {
+						for (int dir = 0; dir < ProcCreature.DIRS; dir++) {
+							java.util.Map<Long, Specimen.Cell> cells = Specimen.cells(form, false, cls, frame, dir);
+							int[] b = Specimen.bounds(cells);
+							int mx = Math.floorDiv(b[0] + b[2], 2), my = Math.floorDiv(b[1] + b[3], 2);
+							for (java.util.Map.Entry<Long, Specimen.Cell> en : cells.entrySet()) {
+								char ch = en.getValue().ch;
+								assertTrue(form + ": only the four marks (" + ch + ")", "#ple".indexOf(ch) >= 0);
+								// half a cell is 8 art-px: the body, its shadow one below and a flyer's lift of two
+								assertTrue(form + " class " + cls + " fits its cell",
+										Math.abs(Specimen.cx(en.getKey()) - mx) <= 5 && Math.abs(Specimen.cy(en.getKey()) - my) <= 5);
 							}
+							if (dir == 0) {
+								still = still < 0 ? cells.size() : still;
+							}
+							// a turn moves the silhouette, never adds to or loses from it
+							assertEquals(form + " class " + cls + " keeps its mass at heading " + dir,
+									Specimen.cells(form, false, cls, frame, 0).size(), cells.size());
+							// the diameter is the class's: true size, 1 to 7 art-px
+							int span = Math.max(b[2] - b[0], b[3] - b[1]) + 1;
+							assertTrue(form + " class " + cls + " is " + span + " art-px across", span <= 7);
 						}
-						n[cls] = still;
 					}
-					assertTrue(form + fid + " grows with its class: " + n[0] + " < " + n[1] + " < " + n[2],
-							n[0] < n[1] && n[1] < n[2]);
+					n[cls] = still;
 				}
+				counts.put(form, n);
+				assertTrue(form + " grows with its class: " + n[0] + " < " + n[1] + " < " + n[2],
+						n[0] < n[1] && n[1] < n[2]);
 			}
 			// within each plan the forms are different bodies, at every class but the specks
 			for (int plan : new int[] { 0, 1, 3, 4 }) {

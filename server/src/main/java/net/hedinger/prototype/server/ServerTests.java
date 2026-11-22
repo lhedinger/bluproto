@@ -1375,7 +1375,7 @@ public final class ServerTests {
 			ph.color = 0x808080;
 			long key = net.hedinger.prototype.sim.PhenoRegistry.register(ph);
 			boolean sized = true;
-			for (int c : new int[] { 0, 1, 2, 4, 5, 6 }) { // true-size classes, then the fine ones
+			for (int c = 0; c < net.hedinger.prototype.engine.Specimen.CLASSES; c++) {
 				byte[] png = AtlasBaker.specimen(key, c);
 				try {
 					java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
@@ -1385,7 +1385,7 @@ public final class ServerTests {
 				}
 			}
 			check("every size class bakes a specimen sheet of the atlas's grid", sized);
-			check("a size class that is not one bakes nothing", AtlasBaker.specimen(key, 3) == null && AtlasBaker.specimen(key, 7) == null);
+			check("a size class that is not one bakes nothing", AtlasBaker.specimen(key, 3) == null);
 		}
 
 		// Rivers run their length: the carver once ended every two-wide river at
