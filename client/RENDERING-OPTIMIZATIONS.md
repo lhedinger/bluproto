@@ -99,11 +99,16 @@ Ordered by expected gain for the effort.
   and 8.5 ms/s panning) is now within noise (0 and 1.2 ms/s). A creature under
   canopy is veiled with it on and crisp with it off, as before.
 
-### 3b. Glints animated in the shader
-- **Now:** water glints and river flow are rebuilt on the CPU and re-uploaded.
-- **Instead:** a static per-tile mask texture plus a time uniform; the shader
-  moves the pattern. The look is unchanged; the upload goes away.
-- **Done when:** `uploadMs` stays near zero while glints are on.
+### 3b. Water glints on the GPU -- done
+- **Shipped:** `GLINT_FS` (fx.ts): each art-pixel checks the one glint its
+  4-px cell can hold, hashed exactly as `glintsFor` hashes it, and whether it
+  is lit at this tick. The water mask is the only upload, once per level. The
+  per-frame list walk and Canvas2D fills on the overlay are gone from the
+  WebGL path.
+- A first cut checked the 3x3 cells around every pixel; a glint never leaves
+  its own cell, so one is enough, and a land pixel stops at one fetch.
+- **Measured:** glints on against off is within noise on software GL (0.5 ms
+  JS still, none panning).
 
 ### 4. Fewer full-screen passes
 - **Now:** ground, vegetation, canopy veil, flow and the below-floor parallax
