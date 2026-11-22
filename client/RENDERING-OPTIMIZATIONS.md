@@ -87,6 +87,15 @@ Ordered by expected gain for the effort.
   shows up as JS time a real GPU would not charge.
 - Side by side with the CPU painter at 48 px/tile, a spring, rapids and a
   fall read the same; rings are drawn as distance bands, not stamps.
+- **Clipped to the rivers:** run over the whole screen, the shader doubled a
+  near frame on software GL (p50 100 ms on, 50 ms off). `fullscreen()` now
+  scissors a pass to screen rects, and `flowBoxes()` gives one per chunk
+  with water: 66.6 ms on against 50.0 off.
+- **Compiled at load:** every pass starts compiling when the renderer is
+  built (`GLRenderer.warm`) and draws only when the compile is done
+  (`KHR_parallel_shader_compile`, else after 250 ms). Before, the flow
+  shader compiled when the first river came into view: a long task of about
+  150 ms in the middle of a pan.
 
 ### 3c. The concealment veil on the GPU -- done
 - **Shipped:** `VEIL_FS` (render.ts) makes veilTile's decision per pixel
@@ -132,16 +141,19 @@ Ordered by expected gain for the effort.
   own stutter; once the layers above are cheap, more redraws are affordable.
 - **Done when:** a slow pan and a resting herd both look continuous at fit zoom.
 
-### 7. Per-frame allocations
-- `renderGL` builds five overlay arrays, a `Set` for lids, object spreads and
-  string texture keys every frame; `cam.worldToScreen` returns a new object
-  per call; `GLRenderer.end()` runs a regex over every texture key twice a
-  frame (`gl.ts`, `evictPool`). Worth a pass guided by the long-task counter,
-  not a rewrite.
+### 7. Per-frame allocations -- partly done
+- **Done:** `GLRenderer.end()` counts its sprite pools with a prefix test and
+  trims only a pool over its cap (it ran two regex passes and built two
+  arrays every frame). The overlay canvas is cleared only when this frame or
+  the last one drew on it.
+- **Left:** `renderGL` builds five overlay arrays, a `Set` for lids, object
+  spreads and string texture keys every frame; `cam.worldToScreen` returns a
+  new object per call. Worth a pass guided by the long-task counter, not a
+  rewrite.
 
-### 8. Pixel-snapped camera
-- Round the camera to whole screen pixels at the current zoom so pans do not
-  shimmer, the usual pixel-art rule.
+### 8. Pixel-snapped camera -- done
+- `renderGL` and the glint pass round the world origin to whole screen
+  pixels, so the layers move as one picture and a pan does not shimmer.
 
 ## How to measure
 
