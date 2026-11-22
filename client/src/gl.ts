@@ -462,7 +462,7 @@ export class GLRenderer {
    * sits in the draw order exactly where it is called.
    */
   fullscreen(name: string, fs: string, textures: WebGLTexture[],
-      uniforms: Record<string, number | [number, number]>): void {
+      uniforms: Record<string, number | [number, number]>, clip: number[] | null = null): void {
     const gl = this.gl;
     this.flush();
     let p = this.passes.get(name);
@@ -497,8 +497,26 @@ export class GLRenderer {
       const v = uniforms[n], l = loc(n);
       if (typeof v === 'number') gl.uniform1f(l, v); else gl.uniform2f(l, v[0], v[1]);
     }
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    this.stats.drawCalls++;
+    if (clip === null) {
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.stats.drawCalls++;
+    } else {
+      // Only inside these screen rects (x, y, w, h, top-left origin): a pass
+      // that matters over a small part of the world -- the rivers -- costs
+      // nothing elsewhere, rather than running its whole shader on every
+      // pixel only to discard it.
+      gl.enable(gl.SCISSOR_TEST);
+      for (let i = 0; i + 3 < clip.length; i += 4) {
+        const x = Math.max(0, Math.floor(clip[i])), y = Math.max(0, Math.floor(clip[i + 1]));
+        const x1 = Math.min(this.vw, Math.ceil(clip[i] + clip[i + 2]));
+        const y1 = Math.min(this.vh, Math.ceil(clip[i + 1] + clip[i + 3]));
+        if (x1 <= x || y1 <= y) continue;
+        gl.scissor(x, this.vh - y1, x1 - x, y1 - y);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        this.stats.drawCalls++;
+      }
+      gl.disable(gl.SCISSOR_TEST);
+    }
     gl.useProgram(this.spriteProg);
     this.boundKey = null;
   }

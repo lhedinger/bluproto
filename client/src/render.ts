@@ -16,7 +16,7 @@ import {
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
 } from './fixtures';
 import { VEG_KINDS, VEG_STAGES, VEG_STAGE_MASK, VEG_VARIANTS, drawVegetationTile, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
-import { FLOW_FS, flowGpuData, flowGpuWanted, flowLayers } from './flow';
+import { FLOW_FS, flowBoxes, flowGpuData, flowGpuWanted, flowLayers } from './flow';
 import { floraAtlas, floraInView } from './flora';
 
 // The split-out drawing modules are part of this one's public face: callers
@@ -1101,6 +1101,7 @@ function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): 
  *  layer texture exactly when the canvas under it was repainted. */
 let groundRev = 0;
 let canopyRev = 0;
+const flowClip: number[] = []; // the river chunks' screen rects, reused each frame
 /** Whether the overlay canvas holds anything from the last frame (see the end
  *  of renderGL), so an empty overlay is not cleared again and again. */
 let overlayInk = true;
@@ -1559,9 +1560,21 @@ export function renderGL(
     const flowRec = groundTex ? flowGpuData(level) : null;
     if (groundTex && flowRec) {
       const recTex = glr.dataTex('flowrec', flowRec.data, flowRec.cols, flowRec.rows, 'rgba', flowRec.rev);
-      glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
-        uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
-      });
+      // Clipped to the river chunks on screen: the shader is long, and run on
+      // every pixel only to discard most of them it doubled a near frame.
+      const b = flowBoxes(chunkTiles);
+      flowClip.length = 0;
+      for (let i = 0; i < b.length; i += 4) {
+        const x = o0.x + b[i] * cam.scale, y = o0.y + b[i + 1] * cam.scale;
+        const w = (b[i + 2] - b[i]) * cam.scale, h = (b[i + 3] - b[i + 1]) * cam.scale;
+        if (x > cv.width || y > cv.height || x + w < 0 || y + h < 0) continue;
+        flowClip.push(x, y, w, h);
+      }
+      if (flowClip.length > 0) {
+        glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
+          uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
+        }, flowClip);
+      }
     }
     if (veg && veg.length === meta.cols * meta.rows) {
       vegAtlasStep();
