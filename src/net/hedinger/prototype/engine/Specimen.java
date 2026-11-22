@@ -131,67 +131,6 @@ public final class Specimen {
 				{ p(r("ll"), 0, 1, "thread"), p(r(".##", "###", ".##"), 2, 0) } });
 	}
 
-	/**
-	 * The same forms at TWICE the fidelity: on a half-art-pixel lattice, for the closest
-	 * zoom (the client switches at {@code FINE_SCALE} px a tile), still at true size --
-	 * a body twice as many pixels across, each half as big. Each class is the drawing
-	 * the comparison sheets made at that size (newborn, juvenile, adult), so the
-	 * close-up shows the detail the coarse classes compress to one mark: every bead,
-	 * every pore, every plate.
-	 */
-	static final Map<String, Part[][]> FINE = new HashMap<String, Part[][]>();
-
-	static {
-		FINE.put("cluster", new Part[][] {
-				{ p(r("##", "##"), 0, 0), p(r("##", "##"), 2, 1, "bead") },
-				{ p(r("##", "##"), 0, 1), p(r(".##.", "####", "####", ".##."), 2, 0), p(r("##", "##"), 5, 1, "bead") },
-				{ p(r(".##.", "####", "####", ".##."), 0, 1), p(r(".##.", "####", "####", ".##."), 3, 4), p(r(".##.", "####", "####", ".##."), 3, -1), p(r(".##.", "####", "####", ".##."), 6, 2), p(r("##", "##"), 9, 1, "bead") } });
-		FINE.put("sponge", new Part[][] {
-				{ p(r(".##.", "#.##", "####", ".##."), 0, 0) },
-				{ p(r(".#####.", "##.####", "#####.#", "#.#####", ".#####."), 0, 0) },
-				{ p(r(".########.", "##.####.##", "####.#####", "#.######.#", "#####.####", "##.####.##", ".########."), 0, 0) } });
-		FINE.put("shard", new Part[][] {
-				{ p(r("..##", ".###", "###.", ".#.."), 0, 0) },
-				{ p(r("...###", "..####", ".####.", "####..", "###..."), 0, 0) },
-				{ p(r("....######", "...######.", "..######..", ".######...", "######...."), 0, 0) } });
-		FINE.put("brush", new Part[][] {
-				{ p(r(".##.", "###.", ".##."), 0, 0), p(r("p", ".", "p"), 3, 0, "bristle") },
-				{ p(r(".####.", "#####.", "#####.", ".####."), 0, 0), p(r("p", ".", "p", "p"), 5, 0, "bristle") },
-				{ p(r(".######..", "########.", "#######..", "########.", "#######..", "########.", ".######.."), 0, 0),
-						p(r("p", ".", "p", "p", "p", ".", "p"), 8, 0, "bristle") } });
-		FINE.put("splinter", new Part[][] {
-				{ p(r("##.", ".##"), 0, 0) },
-				{ p(r("##..", ".##.", "..##"), 0, 0) },
-				{ p(r("##....", ".###..", "..###.", "...###", "....##"), 0, 0) } });
-		FINE.put("seed", new Part[][] {
-				{ p(r("l"), 0, 1, "thread"), p(r(".#.", "###", ".#."), 1, 0) },
-				{ p(r("ll"), 0, 1, "thread"), p(r(".##", "###", ".##"), 2, 0) },
-				{ p(r("ll"), 0, 2, "thread"), p(r("..##.", ".####", "#####", ".####", "..##."), 2, 0) } });
-		FINE.put("amoeba", new Part[][] {
-				{ p(r(".###", "####", "###.", ".#.."), 0, 0), p(r("e"), 1, 1, "pore") },
-				{ p(r("..###..", ".######", "#######", ".#####.", "##..##."), 0, 0), p(r("ee", "ee"), 2, 1, "pore") },
-				{ p(r("..###......", ".#####.##..", "##########.", ".##########", "..#########", ".#########.", "##..####...", "#....##...."), 0, 0, "popA"),
-						p(r("..###......", ".#####.##..", "##########.", ".##########", "..#########", ".#########.", ".##.####...", "....###...."), 0, 0, "popB"),
-						p(r(".ee.", "eeee", "eeee", ".ee."), 4, 2, "pore") } });
-		FINE.put("diatom", new Part[][] {
-				{ p(r(".####.", "######", ".####."), 0, 0), p(r("e.e"), 1, 1, "pore") },
-				{ p(r(".######.", "########", "########", ".######."), 0, 0), p(r("e.e.e", "e.e.e"), 1, 1, "pore") },
-				{ p(r("..########..", ".##########.", "############", "############", ".##########.", "..########.."), 0, 0),
-						p(r("e.e.e.e.e", ".........", "e.e.e.e.e"), 1, 1, "pore") } });
-		FINE.put("crawler", new Part[][] {
-				{ p(r("l.l."), 0, 0, "legN"), p(r("##", "##"), 0, 1), p(r("##", "##"), 2, 1), p(r("#", "#"), 4, 1), p(r("l.l."), 0, 3, "legS") },
-				{ p(r("l.l.l.l"), 1, -1, "legN"), p(r(".##", "###", "###", ".##"), 0, 0), p(r(".##", "###", "###", ".##"), 3, 0),
-						p(r(".##", "###", "###", ".##"), 6, 0), p(r("#.", "##", "#."), 9, 1), p(r("l.l.l.l"), 1, 4, "legS") },
-				{ p(r("l.l.l.l.l"), 2, -1, "legN"), p(r("##", "##"), 0, 1), p(r(".##", "###", "###", ".##"), 1, 0), p(r(".###", "####", "####", ".###"), 3, 0),
-						p(r(".###", "####", "####", ".###"), 6, 0), p(r(".##.", "####", "####", ".##."), 9, 0), p(r("#.", "##", "#."), 12, 1),
-						p(r("l.l.l.l.l"), 2, 4, "legS") } });
-		FINE.put("lancet", new Part[][] {
-				{ p(r(".###.", "#####", ".###."), 0, 0), p(r("eee"), 1, 1) },
-				{ p(r("..#####..", "#########", "..#####.."), 0, 0), p(r("eeeee"), 2, 1), p(r("#", ".", "#"), 9, 0) },
-				{ p(r("....######...", ".###########.", "#############", ".###########.", "....######..."), 0, 0), p(r("eeeeeee"), 3, 2),
-						p(r("#", ".", "#"), 13, 1) } });
-	}
-
 	/** The forms each plan wears, indexed by {@link ProcCreature.Phenotype#form}: 0 the
 	 *  grazer, 1 the parasite, 3 the scavenger, 4 the hunter. The unworn plans (2, 5)
 	 *  wear the grazer's, so any phenotype draws. */
@@ -279,12 +218,7 @@ public final class Specimen {
 	 * built east-facing, posed, mirrored if the variant says so, then turned.
 	 */
 	public static Map<Long, Cell> cells(String form, boolean mirror, int cls, int frame, int dir) {
-		return cells(form, mirror, cls, frame, dir, false);
-	}
-
-	/** As above, at twice the fidelity when {@code fine}: the half-art-pixel drawings. */
-	public static Map<Long, Cell> cells(String form, boolean mirror, int cls, int frame, int dir, boolean fine) {
-		Part[] parts = (fine ? FINE : FORMS).get(form)[Math.max(0, Math.min(CLASSES - 1, cls))];
+		Part[] parts = FORMS.get(form)[Math.max(0, Math.min(CLASSES - 1, cls))];
 		int f = Math.floorMod(frame, FRAMES), turns = turnsFor(dir);
 		Map<Long, Cell> out = new HashMap<Long, Cell>();
 		for (int i = 0; i < parts.length; i++) {
@@ -380,16 +314,10 @@ public final class Specimen {
 	 * A flyer is lifted two art-pixels with its shadow left on the ground below.
 	 */
 	public static void paint(Graphics2D g, int cx, int cy, int px, ProcCreature.Phenotype ph, int cls, int frame, int dir) {
-		paint(g, cx, cy, px, ph, cls, frame, dir, false);
-	}
-
-	/** As above; {@code fine} paints the half-art-pixel drawings, {@code px} then being
-	 *  pixels to the HALF art-pixel. */
-	public static void paint(Graphics2D g, int cx, int cy, int px, ProcCreature.Phenotype ph, int cls, int frame, int dir, boolean fine) {
-		Map<Long, Cell> cells = cells(formName(ph), mirrored(ph), cls, frame, dir, fine);
+		Map<Long, Cell> cells = cells(ph, cls, frame, dir);
 		int[] b = bounds(cells);
 		int mx = Math.floorDiv(b[0] + b[2], 2), my = Math.floorDiv(b[1] + b[3], 2);
-		int w = b[2] - b[0] + 1, h = b[3] - b[1] + 1, lift = ph.flying ? (fine ? 4 : 2) : 0;
+		int w = b[2] - b[0] + 1, h = b[3] - b[1] + 1, lift = ph.flying ? 2 : 0;
 		int rx = (int) Math.round(Math.max(w, h) * 0.46), ry = Math.max(1, (int) Math.round(Math.min(w, h) * 0.32));
 		rx = Math.max(1, rx);
 		g.setColor(new Color(0, 0, 0, ph.flying ? 80 : 115));
