@@ -1365,28 +1365,6 @@ public final class ServerTests {
 		}
 		check("each plant row carries its growth stage", staged);
 		check("a level that does not exist has no flora", host.flora(99) == null);
-		// The specimen atlas: one sheet per size class, the old grid of cells, and
-		// nothing for a class that is not one.
-		{
-			net.hedinger.prototype.engine.ProcCreature.Phenotype ph = new net.hedinger.prototype.engine.ProcCreature.Phenotype();
-			ph.form = 3;
-			ph.variant = 1;
-			ph.r = 3;
-			ph.color = 0x808080;
-			long key = net.hedinger.prototype.sim.PhenoRegistry.register(ph);
-			boolean sized = true;
-			for (int c = 0; c < net.hedinger.prototype.engine.Specimen.CLASSES; c++) {
-				byte[] png = AtlasBaker.specimen(key, c);
-				try {
-					java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
-					sized &= img.getWidth() == 8 * AtlasBaker.CELL && img.getHeight() == net.hedinger.prototype.engine.Specimen.FRAMES * AtlasBaker.CELL;
-				} catch (Exception e) {
-					sized = false;
-				}
-			}
-			check("every size class bakes a specimen sheet of the atlas's grid", sized);
-			check("a size class that is not one bakes nothing", AtlasBaker.specimen(key, 3) == null);
-		}
 
 		// Rivers run their length: the carver once ended every two-wide river at
 		// its first step east or south, on its own fresh channel, so none passed

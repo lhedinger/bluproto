@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.imageio.ImageIO;
 
 import net.hedinger.prototype.engine.ProcCreature;
-import net.hedinger.prototype.engine.Specimen;
 import net.hedinger.prototype.sim.PhenoRegistry;
 
 /**
@@ -44,47 +43,6 @@ final class AtlasBaker {
 			return null;
 		}
 		return CACHE.computeIfAbsent(shapeKey, k -> bake(ph));
-	}
-
-	private static final ConcurrentHashMap<Long, byte[]> SPECIMENS = new ConcurrentHashMap<Long, byte[]>();
-
-	/**
-	 * PNG bytes for a shape key's SPECIMEN atlas at one size class (see
-	 * {@link Specimen}), or null if the key was never registered or the class is not
-	 * one. Same layout as the old atlas -- {@link Specimen#FRAMES} gait rows by eight
-	 * heading columns of {@link #CELL}px -- but drawn at {@link Specimen#ART} atlas
-	 * pixels to the world art-pixel, a fixed scale, so the client draws a cell at
-	 * exactly the world's art-pixel size whatever the body: the size is in the
-	 * drawing, not in a stretch.
-	 */
-	static byte[] specimen(long shapeKey, int cls) {
-		ProcCreature.Phenotype ph = PhenoRegistry.get(shapeKey);
-		if (ph == null || cls < 0 || cls >= Specimen.CLASSES) {
-			return null;
-		}
-		return SPECIMENS.computeIfAbsent(shapeKey * Specimen.CLASSES + cls, k -> {
-			ProcCreature.Phenotype n = ProcCreature.neutral(ph);
-			int dirs = ProcCreature.DIRS;
-			BufferedImage atlas = new BufferedImage(dirs * CELL, Specimen.FRAMES * CELL, BufferedImage.TYPE_INT_ARGB);
-			Graphics2D g = atlas.createGraphics();
-			for (int d = 0; d < dirs; d++) {
-				for (int a = 0; a < Specimen.FRAMES; a++) {
-					Specimen.paint(g, d * CELL + CELL / 2, a * CELL + CELL / 2, Specimen.ART, n, cls, a, d);
-				}
-			}
-			g.dispose();
-			return png(atlas);
-		});
-	}
-
-	private static byte[] png(BufferedImage img) {
-		try {
-			ByteArrayOutputStream out = new ByteArrayOutputStream(1 << 14);
-			ImageIO.write(img, "png", out);
-			return out.toByteArray();
-		} catch (IOException e) {
-			throw new IllegalStateException("atlas bake failed", e);
-		}
 	}
 
 	private static byte[] bake(ProcCreature.Phenotype registered) {
