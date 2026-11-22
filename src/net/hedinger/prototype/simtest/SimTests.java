@@ -10457,6 +10457,21 @@ public class SimTests {
 						done ? AgentIO.SEEK_FORAGE : AgentIO.SEEK_WATER, AgentIO.seekTarget(act[AgentIO.A_SEEK]));
 				assertTrue("toward it, not away", act[AgentIO.A_SEEK] > 0);
 			}
+			// The threshold is clamped to 0..1, the range hydration lives in: a
+			// register at -2 is a threshold of 0, one at 4 a threshold of 1.
+			for (int slot : new int[] { 0, 11 }) { // const[0] = -2, const[11] = 4
+				for (double thirst : new double[] { 0.2, 1.0 }) {
+					Brain b = new Brain(new int[][] { { Brain.SET, 8, slot, 0 }, { Brain.SEEKWATER, 9, 8, 0 } });
+					double[] sensors = new double[AgentIO.NUM_SENSORS];
+					sensors[AgentIO.S_THIRST] = thirst;
+					double[] act = new double[AgentIO.NUM_ACT];
+					b.step(sensors, act, 2);
+					double threshold = slot == 0 ? 0 : 1;
+					boolean done = 1 - thirst > threshold;
+					assertNear("a threshold register at " + Brain.CONST[slot] + " acts as " + threshold
+							+ " at thirst " + thirst, done ? 1.0 : 0.0, b.registers()[9], 0);
+				}
+			}
 			assertTrue("the old opcodes keep their numbers", Brain.SKIPLT == 16 && Brain.SEEKWATER == 17);
 			assertTrue("and the listing reads the intent",
 					new Brain(new int[][] { { Brain.SEEKWATER, 9, 8, 0 } }).disassemble(null, null)[0]

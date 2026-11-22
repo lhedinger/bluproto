@@ -299,8 +299,14 @@ public final class Brain {
 			// in Ry, and nothing is written. Rx = 0: it is not, and the seek
 			// is set to water. A skip on Rx keeps a later seek write from
 			// overriding the drink.
+			//
+			// The threshold is clamped to the range hydration lives in. A random
+			// line reads whatever its register holds -- a done flag at 1, a full
+			// throttle, a counter in the thousands -- and on the live world a
+			// threshold out of range was a hunter seeking water it did not need.
 			double hydration = s.length > AgentIO.S_THIRST ? 1.0 - s[AgentIO.S_THIRST] : 1.0;
-			if (hydration > reg(y)) {
+			double threshold = Math.max(0.0, Math.min(1.0, reg(y)));
+			if (hydration > threshold) {
 				set(x, 1);
 			} else {
 				if (act.length > AgentIO.A_SEEK) {
