@@ -33,6 +33,7 @@
 
 import { ART, hash01 } from './artCore';
 import { flagOff } from './flags';
+import { chunkBoxes } from './clip';
 
 const FLOW_OFF = flagOff('flow');
 
@@ -556,29 +557,13 @@ export function flowGpuData(level: number): { data: Uint8Array; rev: number; col
   return { data: gpuData, rev: gpuRev, cols, rows };
 }
 
-/** Tile boxes [x0, y0, x1, y1) around the flowing water, one per chunk that
- *  has any, grown a tile each way for the drop a fall pours into and the rock
- *  face above a pool: where the GPU pass is clipped to (see fullscreen). */
-let boxes: number[] = [];
-let boxesFor: Uint8Array | null = null;
-let boxesChunk = 0;
-export function flowBoxes(chunkTiles: number): number[] {
-  if (!grid || chunkTiles <= 0) return [];
-  if (boxesFor === grid && boxesChunk === chunkTiles) return boxes;
-  index(chunkTiles);
-  const out: number[] = [];
-  for (const tiles of byChunk.values()) {
-    let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
-    for (const i of tiles) {
-      const x = i % cols, y = (i / cols) | 0;
-      if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
-    }
-    out.push(Math.max(0, x0 - 1), Math.max(0, y0 - 1), Math.min(cols, x1 + 2), Math.min(rows, y1 + 2));
-  }
-  boxes = out;
-  boxesFor = grid;
-  boxesChunk = chunkTiles;
-  return boxes;
+/** Tile boxes [x0, y0, x1, y1) around the flowing water, in 8-tile chunks
+ *  grown a tile each way for the drop a fall pours into and the rock face
+ *  above a pool: where the GPU pass is clipped to (clip.ts). Small chunks,
+ *  because a river runs diagonally through a large one and its box is then
+ *  mostly dry land the long shader runs over for nothing. */
+export function flowBoxes(): number[] {
+  return grid ? chunkBoxes(grid, cols, rows, 8, 1) : [];
 }
 
 /** True where the GPU pass should run: the flow is this level's and the view
