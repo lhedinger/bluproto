@@ -16,7 +16,7 @@ import {
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
 } from './fixtures';
 import { VEG_KINDS, VEG_STAGES, VEG_STAGE_MASK, VEG_VARIANTS, drawVegetationTile, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
-import { flowLayers } from './flow';
+import { FLOW_FS, flowGpuData, flowGpuWanted, flowLayers } from './flow';
 import { floraAtlas, floraInView } from './flora';
 
 // The split-out drawing modules are part of this one's public face: callers
@@ -1541,11 +1541,15 @@ export function renderGL(
         glr.layer('ground:' + level, ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
       }
     }
-    // Moving water over the still bake, under the plants and the bodies.
-    for (const f of flowInView(cam, cv.width, cv.height, chunkTiles, level, getChunk, state.tick)) {
-      const o = cam.worldToScreen(f.wx, f.wy);
-      const side = chunkTiles * cam.scale;
-      glr.layer('flow:' + level + ':' + f.key, f.cv, f.rev, null, o.x, o.y, side, side);
+    // Moving water over the still bake, under the plants and the bodies: one
+    // GPU pass that reads the ground just drawn (flow.ts, FLOW_FS).
+    const groundTex = flowGpuWanted(cam.scale, level) ? glr.layerTexture('ground:' + level) : null;
+    const flowRec = groundTex ? flowGpuData(level) : null;
+    if (groundTex && flowRec) {
+      const recTex = glr.dataTex('flowrec', flowRec.data, flowRec.cols, flowRec.rows, 'rgba', flowRec.rev);
+      glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
+        uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
+      });
     }
     if (veg && veg.length === meta.cols * meta.rows) {
       vegAtlasStep();
