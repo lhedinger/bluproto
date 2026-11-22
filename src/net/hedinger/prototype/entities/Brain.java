@@ -106,6 +106,17 @@ public final class Brain {
 	 * clearly not, and a GT's 0 and 1 are untouched.
 	 */
 	public static final double ZERO_BAND = 0.05;
+	/**
+	 * How short of its threshold hydration may be and still count as
+	 * complete for {@code SEEKWATER}: the body's own {@link NPC#DRINK_ONSET},
+	 * the thirst it starts drinking at. A body less thirsty than that would
+	 * not drink at the water if it went, so no threshold sends it there. On
+	 * the live world 19% of padded hunter founders, slaked, still sought
+	 * water through a random SEEKWATER line whose threshold sat at 1.
+	 */
+	public static double waterTolerance() {
+		return NPC.DRINK_ONSET; // read live: the onset is a tuning, not a constant
+	}
 	/** Instructions executed per tick unless the caller overrides it; with a
 	 * fixed budget, program length sets the length of one thought cycle. Two
 	 * lines a tick: a 22-line forager goes round in 11 ticks instead of 22, so
@@ -304,9 +315,14 @@ public final class Brain {
 			// line reads whatever its register holds -- a done flag at 1, a full
 			// throttle, a counter in the thousands -- and on the live world a
 			// threshold out of range was a hunter seeking water it did not need.
+			//
+			// And completion is fuzzy: within waterTolerance() of the threshold
+			// is near enough. Clamped alone, a threshold of 1 still sent a body
+			// with any thirst at all to the water, where it stood without
+			// drinking, since a body starts drinking only at DRINK_ONSET.
 			double hydration = s.length > AgentIO.S_THIRST ? 1.0 - s[AgentIO.S_THIRST] : 1.0;
 			double threshold = Math.max(0.0, Math.min(1.0, reg(y)));
-			if (hydration > threshold) {
+			if (hydration + waterTolerance() > threshold) {
 				set(x, 1);
 			} else {
 				if (act.length > AgentIO.A_SEEK) {
@@ -422,7 +438,7 @@ public final class Brain {
 				body = "skip next if R" + imod(x, NUM_REG) + " < R" + imod(y, NUM_REG);
 				break;
 			case SEEKWATER:
-				body = "R" + imod(x, NUM_REG) + " = seek water until hydration > R" + imod(y, NUM_REG);
+				body = "R" + imod(x, NUM_REG) + " = seek water until hydration > R" + imod(y, NUM_REG) + " - " + waterTolerance();
 				break;
 			case SENSE:
 				body = "R" + imod(x, NUM_REG) + " = sense " + name(sensorNames, y);

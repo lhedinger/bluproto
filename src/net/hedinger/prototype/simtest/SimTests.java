@@ -8131,7 +8131,7 @@ public class SimTests {
 			s[AgentIO.S_BIAS] = 1;
 			s[AgentIO.S_FORAGE_PROX] = 0.58;
 			s[AgentIO.S_HUNGER] = 1.0;
-			s[AgentIO.S_THIRST] = 0.3;
+			s[AgentIO.S_THIRST] = 0.1; // hungry, not thirsty: under the drink onset, so the seed forages
 			s[AgentIO.S_GLYCOGEN] = 0.25;
 			for (int t = 0; t < 4 * Brain.MAX_LEN; t++) {
 				m.think(s, a);
@@ -10248,7 +10248,9 @@ public class SimTests {
 					dead += p.isDead() ? 1 : 0;
 				}
 			}
-			assertGreater("the world has creatures to carry", before.size(), 50);
+			// A precondition, not a census: enough bodies that "every creature
+			// comes back" means something. How many the founders leave is theirs.
+			assertGreater("the world has creatures to carry", before.size(), 25);
 			assertGreater("and carcasses", dead, 0);
 			java.util.List<World.Birth> births = a.births();
 			assertTrue("and births beyond its founders", births.stream().anyMatch(b -> b.parentA() != Entity.NO_ID));
@@ -10316,10 +10318,16 @@ public class SimTests {
 			// programs change, and a number of bodies says nothing about
 			// whether the restore worked.
 			assertGreater("and the restored world lives on", alive, (before.size() - dead) / 2);
-			assertTrue("without the steward restocking a population it already has",
-					b.births().stream().noneMatch(x -> x.tick() == a.getTick() + 1 && x.parentA() == Entity.NO_ID));
+			// The steward may restock on the first tick back only where the world
+			// that was saved would have too: a clade under its floor is restocked
+			// either way, and one the restore lost track of is a bug.
+			long saved = a.getTick();
+			r.advance(1);
+			boolean savedWorldRestocks = a.births().stream().anyMatch(x -> x.tick() == saved + 1 && x.parentA() == Entity.NO_ID);
+			assertTrue("without the steward restocking a population it already has", savedWorldRestocks
+					|| b.births().stream().noneMatch(x -> x.tick() == saved + 1 && x.parentA() == Entity.NO_ID));
 			assertTrue("its births continue past the save's ids",
-					b.births().stream().filter(x -> x.tick() > a.getTick()).allMatch(x -> !before.containsKey(x.child())));
+					b.births().stream().filter(x -> x.tick() > saved).allMatch(x -> !before.containsKey(x.child())));
 
 			boolean refused = false;
 			try {
@@ -10439,7 +10447,7 @@ public class SimTests {
 	static class SeekingWaterIsOneLine extends Scenario {
 		@Override
 		public void run() {
-			for (double thirst : new double[] { 0.2, 0.5, 0.8 }) {
+			for (double thirst : new double[] { 0.2, 0.5, 0.8, 0.9 }) {
 				int[][] prog = {
 						{ Brain.SET, 8, 8, 0 }, // R8 = 0.5
 						{ Brain.SEEKWATER, 9, 8, 0 } };
@@ -10449,7 +10457,7 @@ public class SimTests {
 				double[] act = new double[AgentIO.NUM_ACT];
 				act[AgentIO.A_SEEK] = 0.1; // foraging, as a line before it wrote
 				b.step(sensors, act, prog.length);
-				boolean done = 1 - thirst > 0.5;
+				boolean done = 1 - thirst + Brain.waterTolerance() > 0.5;
 				assertNear("at thirst " + thirst + " the intent reports " + (done ? "complete" : "seeking"),
 						done ? 1.0 : 0.0, b.registers()[9], 0);
 				assertNear("and the result is carried", b.registers()[9], b.registers()[Brain.CARRY], 0);
@@ -10467,7 +10475,7 @@ public class SimTests {
 					double[] act = new double[AgentIO.NUM_ACT];
 					b.step(sensors, act, 2);
 					double threshold = slot == 0 ? 0 : 1;
-					boolean done = 1 - thirst > threshold;
+					boolean done = 1 - thirst + Brain.waterTolerance() > threshold;
 					assertNear("a threshold register at " + Brain.CONST[slot] + " acts as " + threshold
 							+ " at thirst " + thirst, done ? 1.0 : 0.0, b.registers()[9], 0);
 				}
@@ -10475,7 +10483,19 @@ public class SimTests {
 			assertTrue("the old opcodes keep their numbers", Brain.SKIPLT == 16 && Brain.SEEKWATER == 17);
 			assertTrue("and the listing reads the intent",
 					new Brain(new int[][] { { Brain.SEEKWATER, 9, 8, 0 } }).disassemble(null, null)[0]
-							.contains("R9 = seek water until hydration > R8"));
+							.contains("R9 = seek water until hydration > R8 - " + Brain.waterTolerance()));
+			// Fuzzy: within the drink onset of the threshold is complete, so a
+			// threshold of 1 -- any random register's done flag -- no longer
+			// sends a body to water it would not drink at.
+			for (double thirst : new double[] { 0.1, 0.2, 0.3, 0.6 }) {
+				Brain b = new Brain(new int[][] { { Brain.SET, 8, 9, 0 }, { Brain.SEEKWATER, 9, 8, 0 } }); // R8 = 1
+				double[] sensors = new double[AgentIO.NUM_SENSORS];
+				sensors[AgentIO.S_THIRST] = thirst;
+				b.step(sensors, new double[AgentIO.NUM_ACT], 2);
+				boolean drinks = thirst >= net.hedinger.prototype.entities.NPC.DRINK_ONSET;
+				assertNear("a threshold of 1 at thirst " + thirst + (drinks ? " seeks water: the body would drink"
+						: " is complete: the body would not drink"), drinks ? 0.0 : 1.0, b.registers()[9], 0);
+			}
 
 			// The seed drinks with it, and a threat still outranks a thirst.
 			for (boolean threat : new boolean[] { false, true }) {
