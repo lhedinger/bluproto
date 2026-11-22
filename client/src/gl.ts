@@ -235,11 +235,27 @@ export class GLRenderer {
   /** Flushes what remains and reports the frame's batching stats. */
   end(): { drawCalls: number; quads: number; uploadMs: number; textures: number } {
     this.flush();
-    this.evictPool(/^(atlas|corpse):/, GLRenderer.MAX_FULL_SPRITES);
-    this.evictPool(/^(atlasm|corpsem):/, GLRenderer.MAX_MIP_SPRITES);
+    // Counted first, with a prefix test per key and nothing allocated: the
+    // pools are almost always under their caps, and this runs every frame.
+    let full = 0, mip = 0;
+    for (const key of this.textures.keys()) {
+      const p = GLRenderer.pool(key);
+      if (p === 1) full++; else if (p === 2) mip++;
+    }
+    if (full > GLRenderer.MAX_FULL_SPRITES) this.evictPool(1, GLRenderer.MAX_FULL_SPRITES);
+    if (mip > GLRenderer.MAX_MIP_SPRITES) this.evictPool(2, GLRenderer.MAX_MIP_SPRITES);
     this.frameNo++;
     this.stats.textures = this.textures.size;
     return this.stats;
+  }
+
+  /** Which sprite pool a texture key belongs to: 1 the full-resolution
+   *  atlases (`atlas:`, `corpse:`), 2 their mips (`atlasm:`, `corpsem:`),
+   *  0 neither (layers, stamps: permanent). */
+  private static pool(key: string): number {
+    if (key.startsWith('atlas:') || key.startsWith('corpse:')) return 1;
+    if (key.startsWith('atlasm:') || key.startsWith('corpsem:')) return 2;
+    return 0;
   }
 
   /** LRU-trims one sprite pool to its cap — but NEVER a texture drawn this
@@ -248,10 +264,10 @@ export class GLRenderer {
    *  resulting frame-time spike trips the adaptive dot LOD and the whole
    *  view oscillates between sprites and blocks. Briefly exceeding the cap
    *  is the far cheaper failure. */
-  private evictPool(re: RegExp, cap: number): void {
+  private evictPool(which: number, cap: number): void {
     const pool: Array<[string, TexEntry]> = [];
     for (const ent of this.textures) {
-      if (re.test(ent[0])) pool.push(ent);
+      if (GLRenderer.pool(ent[0]) === which) pool.push(ent);
     }
     if (pool.length <= cap) return;
     pool.sort((a, b) => a[1].lastUse - b[1].lastUse);
