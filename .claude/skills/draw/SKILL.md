@@ -203,22 +203,16 @@ Plants were drawn six times before they read, and each failure was a rule:
   the per-part rule lights the cell below each slit and shades the one above;
   hashed speckle on top of that buried them. Smooth tissue, cut shapes.
 
-## Creatures: specimens at true size
+## Creatures: visible first
 
-- **One pixel size on screen.** A body drawn at its own finer pixel grid,
-  beside ground drawn at the world's, looks wrong before anyone can say why.
-  Creatures are drawn on the world's art-pixel lattice at their true size
-  (`engine/Specimen.java`, ART-STYLE §5), snapped to it, stepping an art-pixel
-  at a time.
-- **Small is drawn, not shrunk.** At 1–7 art-px a scaled drawing is a speck;
-  each form has three size classes, each its own drawing that keeps the one
-  mark naming the form. Check a class at true size on the live seed, not at
-  10x on a sheet.
-- **Specimens, not animals or icons.** Hand-drawn animals read as comical,
-  arrows and crescents as icons. Beads, pores, keels, plates, threads read as
-  organisms of this world.
-- **Pale on pale vanishes.** A pore or keel in the body's highlight disappears
-  on a pale body; mark it dark.
+- **A creature has to be visible before anything else.** Authored specimens
+  on the world's grid at true size (and at twice the fidelity up close) were
+  shipped and reverted: 3–7 art-px bodies lost on busy ground to the
+  `ProcCreature` bodies they replaced. Judge creature art in the live world at
+  the zooms people watch from, against the current bodies, before shipping.
+- **Small is drawn, not shrunk**, and **specimens, not animals or icons** still
+  hold for anything drawn small (ART-STYLE §7); the sheets for that round are
+  the record.
 
 ## Committing
 
