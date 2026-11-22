@@ -88,6 +88,17 @@ Ordered by expected gain for the effort.
 - Side by side with the CPU painter at 48 px/tile, a spring, rapids and a
   fall read the same; rings are drawn as distance bands, not stamps.
 
+### 3c. The concealment veil on the GPU -- done
+- **Shipped:** `VEIL_FS` (render.ts) makes veilTile's decision per pixel
+  from the ground texture already on the GPU and one byte of cover per tile:
+  colour-keyed covers keep their key pixels, canopy a hashed 2x2 dither of
+  its ground; far zoom shows each covered tile's ground at its kind's share.
+  The level-sized veil canvas (29 MB at 288 x 176), its patch uploads and its
+  far-zoom mirror are gone from the WebGL path. Duct lids stay sprites.
+- **Measured:** the canopy's upload cost (turning it off saved 3.5 ms/s still
+  and 8.5 ms/s panning) is now within noise (0 and 1.2 ms/s). A creature under
+  canopy is veiled with it on and crisp with it off, as before.
+
 ### 3b. Glints animated in the shader
 - **Now:** water glints and river flow are rebuilt on the CPU and re-uploaded.
 - **Instead:** a static per-tile mask texture plus a time uniform; the shader

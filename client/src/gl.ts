@@ -496,7 +496,7 @@ export class GLRenderer {
   /** A raw-bytes texture (index or average), re-uploaded only when `rev`
    *  moves. NEAREST, no mipmaps, never premultiplied: these are numbers. */
   dataTex(key: string, data: Uint8Array, w: number, h: number,
-      format: 'rg' | 'rgba', rev: number): WebGLTexture {
+      format: 'r' | 'rg' | 'rgba', rev: number): WebGLTexture {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
@@ -509,7 +509,8 @@ export class GLRenderer {
       gl.bindTexture(gl.TEXTURE_2D, e.tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-      const internal = format === 'rg' ? gl.RG8 : gl.RGBA8, fmt = format === 'rg' ? gl.RG : gl.RGBA;
+      const internal = format === 'r' ? gl.R8 : format === 'rg' ? gl.RG8 : gl.RGBA8;
+      const fmt = format === 'r' ? gl.RED : format === 'rg' ? gl.RG : gl.RGBA;
       if (e.w === w && e.h === h) {
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, fmt, gl.UNSIGNED_BYTE, data);
       } else {

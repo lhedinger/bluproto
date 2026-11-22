@@ -1101,6 +1101,8 @@ function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): 
  *  layer texture exactly when the canvas under it was repainted. */
 let groundRev = 0;
 let canopyRev = 0;
+let veilCoverFor: Uint8Array | null = null; // the cover grid the GPU veil last uploaded
+let veilCoverRev = 0;
 
 /** Bakes the nest stamp once at art resolution for the GL pass — painted by
  *  the same drawNest the 2D path and the catalog run. */
@@ -1712,11 +1714,15 @@ export function renderGL(
   lap('secEnts');
   // Concealment over the creatures, then lids over occupants (see render()).
   if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
-    const canopy = canopyLayer(meta, chunkTiles, tilePx, getChunk, cover, level, nowMs);
-    if (lowZoom && canopyLow) {
-      glr.layer('canopylo:' + level, canopyLow, canopyRev, null, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
-    } else {
-      glr.layer('canopy:' + level, canopy, canopyRev, canopyPatchRects, o0.x, o0.y, worldW, worldH, VEIL_ALPHA);
+    // The veil, from the ground already on the GPU (VEIL_FS): nothing painted.
+    const groundTex = glr.layerTexture((lowZoom ? 'groundlo:' : 'ground:') + level);
+    if (groundTex) {
+      if (cover !== veilCoverFor) { veilCoverFor = cover; veilCoverRev++; }
+      const coverTex = glr.dataTex('veilcover', cover, meta.cols, meta.rows, 'r', veilCoverRev);
+      glr.fullscreen('veil', VEIL_FS, [coverTex, groundTex], {
+        uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows],
+        uCell: lowZoom ? LAYER_LOW : ART, uLow: lowZoom ? 1 : 0, uAlpha: VEIL_ALPHA,
+      });
     }
     const lids = new Set<number>();
     const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
@@ -1819,6 +1825,58 @@ const SEDGE_HEAD = 0xf0e8c6;  // GroundTextures.BLOOM_CREAM
  *  stamps), so the cached layer itself stays opaque and composable. */
 export const VEIL_ALPHA = 0.75;
 
+/**
+ * The concealment veil on the GPU: the same decision veilTile makes, per
+ * pixel, from the ground texture already on the GPU and one byte of cover per
+ * tile. On the WebGL path the veil was a level-sized canvas (29 MB at 288 x
+ * 176) stamped on the CPU tile by tile as ground chunks landed, re-uploaded
+ * in patches, and mirrored small for the far zoom. Near, a pixel of a
+ * colour-keyed cover shows only where the ground there is one of its keys,
+ * and canopy shows its ground through a hashed 2x2 dither; far (uLow = 1),
+ * where the ground is the 3 px/tile mirror and a key colour no longer
+ * survives the smoothing, each covered tile shows its ground at the share of
+ * pixels its kind keeps.
+ */
+export const VEIL_FS = `#version 300 es
+precision highp float;
+precision highp int;
+uniform highp sampler2D uTex0; // cover, R8 per tile
+uniform highp sampler2D uTex1; // the ground: art resolution near, the low mirror far
+uniform vec2 uRes, uOrigin, uSize;
+uniform float uScale, uCell, uLow, uAlpha;
+out vec4 outColor;
+float h(int x, int y, int s) {
+  uint n = uint(x) * 374761393u + uint(y) * 668265263u + uint(s) * 2246822519u;
+  n = (n ^ (n >> 13u)) * 1274126177u;
+  n ^= n >> 16u;
+  return float(n & 0xffffffu) / 16777216.0;
+}
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 w = (px - uOrigin) / uScale;
+  if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
+  ivec2 tile = ivec2(floor(w));
+  int kind = int(texelFetch(uTex0, tile, 0).r * 255.0 + 0.5);
+  if (kind == 0 || kind == 2) discard; // 2 is the duct: it lids itself
+  ivec2 g = ivec2(floor(w * uCell));
+  vec4 t = texelFetch(uTex1, g, 0);
+  if (t.a <= 0.0) discard;
+  if (uLow > 0.5) {
+    float keep = kind == 1 ? 0.45 : kind == 3 ? 0.7 : kind == 4 ? 0.12 : kind == 5 ? 0.25 : 0.3;
+    outColor = t * (uAlpha * keep);
+    return;
+  }
+  ivec3 c = ivec3(t.rgb / t.a * 255.0 + 0.5);
+  bool keep;
+  if (kind == 3) keep = c != ivec3(20, 48, 31);
+  else if (kind == 4) keep = c == ivec3(95, 152, 80);
+  else if (kind == 5) keep = c == ivec3(63, 122, 56) || c == ivec3(42, 77, 36);
+  else if (kind == 6) keep = c == ivec3(44, 90, 54) || c == ivec3(79, 135, 82) || c == ivec3(240, 232, 198);
+  else keep = h(g.x >> 1, g.y >> 1, 61) <= 0.55; // canopy: a 2x2 dither of its own ground
+  if (!keep) discard;
+  outColor = t * uAlpha;
+}`;
+
 const VEIL_SCRATCH = document.createElement('canvas');
 VEIL_SCRATCH.width = 12;
 VEIL_SCRATCH.height = 12;
@@ -1912,7 +1970,6 @@ let canopyLevel = -1;
 // once a second for as long as any chunk was missing (see groundLayer).
 let canopyHoles: number[] = [];
 let canopyRetryAt = 0;
-let canopyPatchRects: Array<[number, number, number, number]> | null = null;
 
 function refreshCanopyLow(meta: WorldMeta): void {
   if (!canopyLow || canopyLow.width !== meta.cols * LAYER_LOW) {
@@ -1963,7 +2020,6 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     canopySrc = cover;
     canopyLevel = level;
     canopyRev++; // whole layer: the GL pass re-uploads its texture
-    canopyPatchRects = null;
     refreshCanopyLow(meta);
   } else {
     const ctx = canopyCv!.getContext('2d')!;
@@ -1975,9 +2031,6 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
     });
     if (filled.length > 0) {
       canopyRev++;
-      // A whole chunk's worth of veil tiles beats per-rect patching: past a
-      // few hundred rects, ship the layer wholesale.
-      canopyPatchRects = filled.length > 256 ? null : filled;
       refreshCanopyLow(meta);
     }
   }
