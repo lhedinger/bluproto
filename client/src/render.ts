@@ -1101,6 +1101,12 @@ function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): 
  *  layer texture exactly when the canvas under it was repainted. */
 let groundRev = 0;
 let canopyRev = 0;
+/** Whether the overlay canvas holds anything from the last frame (see the end
+ *  of renderGL), so an empty overlay is not cleared again and again. */
+let overlayInk = true;
+/** Something besides renderGL drew on the overlay this frame (the climate or
+ *  sense layers): the next frame must clear it. */
+export function overlayUsed(): void { overlayInk = true; }
 let veilCoverFor: Uint8Array | null = null; // the cover grid the GPU veil last uploaded
 let veilCoverRev = 0;
 
@@ -1491,8 +1497,7 @@ export function renderGL(
   const cv = og.canvas;
   const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
   glr.begin(cv.width, cv.height, VOID_F[0], VOID_F[1], VOID_F[2]);
-  og.clearRect(0, 0, cv.width, cv.height);
-  if (!meta) return { ...glr.end(), ...sec };
+  if (!meta) { og.clearRect(0, 0, cv.width, cv.height); overlayInk = false; return { ...glr.end(), ...sec }; }
 
   const o0 = cam.worldToScreen(0, 0);
   const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
@@ -1768,6 +1773,13 @@ export function renderGL(
   const stats = glr.end();
 
   // The overlay: the viewer's vector language, cheap at a few dozen calls.
+  // Touched only when it has something to show, or showed something last
+  // frame: most frames it is empty, and clearing an empty full-screen canvas
+  // every frame is still a full-screen canvas the browser re-rasterizes.
+  const ink = !!(selection.tile && selection.tile.z === level) || ovDoors.length > 0 || ovSwitches.length > 0
+    || (!OVERLAY_OFF && (ovLinks.length > 0 || ovGlyphs.length > 0 || ovRings.length > 0));
+  if (ink || overlayInk) og.clearRect(0, 0, cv.width, cv.height);
+  overlayInk = ink;
   if (selection.tile && selection.tile.z === level) {
     const o = cam.worldToScreen(selection.tile.x, selection.tile.y);
     const w = cam.scale;
