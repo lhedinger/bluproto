@@ -11,6 +11,7 @@ import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
 import { setFlora, type FloraRow } from './flora';
+import { GLINT_FS, glintsGpuWanted } from './fx';
 import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { WorldState } from './state';
 import { flagOff, flagOn } from './flags';
@@ -196,6 +197,8 @@ let paused = false;
 // entities of the level in view (the server filters per viewer), so the HUD
 // count comes with the messages instead of from tracks.size.
 let worldTotal = 0;
+let glintWaterFor: Uint8Array | null = null; // the water mask the GPU glints last uploaded
+let glintWaterRev = 0;
 let firstFullAt = 0; // when the first world snapshot landed (startup metric)
 
 // Baked ground streams as map chunks, fetched lazily and cached by "z/cx_cy"
@@ -2477,7 +2480,18 @@ function frame(now: number): void {
       vegGrid, vegVersion, coverGrid, playTick, now, currentLevel, sel);
   }
   if (waterGrid && meta) {
-    drawWaterGlints(g, cam, waterGrid, meta.cols, meta.rows, state.tick);
+    if (glr && !glLost) {
+      // On the GPU, over the world just drawn (fx.ts, GLINT_FS).
+      if (glintsGpuWanted(cam.scale)) {
+        if (waterGrid !== glintWaterFor) { glintWaterFor = waterGrid; glintWaterRev++; }
+        const o = cam.worldToScreen(0, 0);
+        glr.fullscreen('glints', GLINT_FS,
+          [glr.dataTex('glintwater', waterGrid, meta.cols, meta.rows, 'r', glintWaterRev)],
+          { uOrigin: [o.x, o.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick });
+      }
+    } else {
+      drawWaterGlints(g, cam, waterGrid, meta.cols, meta.rows, state.tick);
+    }
   }
   if (climChoice && climGrid && climRange && meta) {
     drawClimateLayer(g, cam, climChoice, climGrid, climRange, meta.cols, meta.rows);

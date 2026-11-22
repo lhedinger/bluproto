@@ -253,6 +253,65 @@ export function drawGlints(g: CanvasRenderingContext2D, glints: Glint[], tick: n
 let glintSrc: Uint8Array | null = null;
 let glintSet: Glint[] = [];
 
+/**
+ * The same glints, drawn by the GPU (the WebGL path): one full-screen pass
+ * that finds, for each art-pixel, the glint of its own 4-px cell -- hashed
+ * from the cell exactly as glintsFor does -- and whether it is lit at this
+ * tick. Nothing is listed, culled or filled
+ * on the CPU each frame; the water mask is the only upload, once per level.
+ */
+const glsl = (c: number) => `vec3(${((c >> 16) & 255) / 255}, ${((c >> 8) & 255) / 255}, ${(c & 255) / 255})`;
+export const GLINT_FS = `#version 300 es
+precision highp float;
+precision highp int;
+uniform highp sampler2D uTex0; // the water mask, R8 per tile
+uniform vec2 uRes, uOrigin, uSize;
+uniform float uScale, uT;
+out vec4 outColor;
+const vec3 WATER = ${glsl(GLINT_WATER)}, SHALLOWS = ${glsl(GLINT_SHALLOWS)};
+const vec3 COL[5] = vec3[5](vec3(0.0), WATER, SHALLOWS, WATER, WATER);
+const float PER[5] = float[5](0.0, 0.5, 1.2, 0.3, 0.15);
+const float PMIN[5] = float[5](1.0, 150.0, 90.0, 240.0, 270.0);
+const float PMAX[5] = float[5](1.0, 360.0, 210.0, 480.0, 540.0);
+float h(int x, int y, int s) {
+  uint n = uint(x) * 374761393u + uint(y) * 668265263u + uint(s) * 2246822519u;
+  n = (n ^ (n >> 13u)) * 1274126177u;
+  n ^= n >> 16u;
+  return float(n & 0xffffffu) / 16777216.0;
+}
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 w = (px - uOrigin) / uScale;
+  if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
+  int gx = int(floor(w.x * 12.0)), gy = int(floor(w.y * 12.0));
+  // A glint's pixels never leave its own 4-px cell (x and x+1 at most the
+  // cell's third column; the spark's y-1 and y+1 rows stay inside it), so a
+  // pixel has exactly one candidate: its own cell's. A land pixel stops at
+  // its first fetch.
+  int cx = gx / 4, cy = gy / 4;
+  int kind = int(texelFetch(uTex0, ivec2(gx / 12, gy / 12), 0).r * 255.0 + 0.5);
+  if (kind < 1 || kind > 4) discard;
+  if (h(cx, cy, 81) >= PER[kind] / 9.0) discard;
+  float period = PMIN[kind] + floor(h(cx, cy, 82) * (PMAX[kind] - PMIN[kind]));
+  float phase = floor(h(cx, cy, 83) * period);
+  float u = mod(uT + phase, period) / period;
+  if (u > 0.5) discard;
+  float s = u / 0.5;
+  int x = cx * 4 + 1 + int(floor(h(cx, cy, 84) * 2.0)), y = cy * 4 + 1 + int(floor(h(cx, cy, 85) * 2.0));
+  bool on = gy == y && (gx == x || gx == x + 1);
+  if (!on && s > 0.3 && s < 0.7) on = (gx == x && gy == y - 1) || (gx == x + 1 && gy == y + 1);
+  if (!on) discard;
+  float best = s < 0.5 ? s * 2.0 : (1.0 - s) * 2.0;
+  vec3 col = COL[kind];
+  if (best <= 0.0) discard;
+  outColor = vec4(col * best, best);
+}`;
+
+/** Whether the GPU glint pass should run: the same rule as drawWaterGlints. */
+export function glintsGpuWanted(scale: number): boolean {
+  return !GLINTS_OFF && scale >= ART;
+}
+
 /** The live glint layer over the viewport's water. Drawn only from 12 px a
  *  tile up: below that an art-pixel is less than a device pixel and a glint
  *  is a flicker of noise, which the far view does not need. */
