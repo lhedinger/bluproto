@@ -319,45 +319,22 @@ One sun, straight overhead-north. The grammar:
   and let the accent confirm the reading rather than carry it. A one-art-pixel
   protrusion is not an asymmetry: it is invisible at the size the thing is
   actually seen, and gone entirely at map zoom.
-- **Creatures are specimens** (`engine/Specimen.java`): authored bodies drawn
-  at their TRUE size on the world's own art-pixel lattice -- the grid the
-  ground and the large flora are drawn on, so every pixel on screen is one
-  size. A body is 1 to 7 art-px across, because a radius of 0.02 to 0.27 tile
-  is that big; at that size a shrunk drawing is a speck, so each form is drawn
-  **three times**, a size class each (small below 3 art-px of diameter, medium
-  below 5, large), every class its own arrangement that keeps the ONE mark
-  naming the form: the sponge's pore, the diatom's pores, the lancet's keel,
-  the crawler's legs, the seed's thread. The client picks the class from the
-  body's current radius by the server's rule (`atlas.ts sizeClass`, pinned by
-  `SpecimensAreDrawnAtTrueSize`), draws the cell at exactly the world's
-  art-pixel size and snaps it to the lattice, so a body steps an art-pixel at a
-  time.
-- **At the closest zoom a body doubles its fidelity, not its size.** From
-  `FINE_SCALE` (128 px a tile) in, each class is drawn on the HALF-art-pixel
-  lattice (`Specimen.FINE`) -- the drawing the comparison sheets made at that
-  size, every bead, pore and plate the coarse class compresses to one mark --
-  still at true size and still snapped, now to the half lattice, which nests in
-  the world's. The one sanctioned exception to "one pixel size on screen":
-  bodies are what a viewer zooms in to look at, and at 1-7 art-px the world's
-  own pixel left them too little to show.
-- **A plan wears specimen forms, not animals.** Grazers are amoebae (pseudopods
-  round a dark nucleus) and diatoms (a capsule of pores); hunters crawlers
-  (plates on legs) and lancets (a spindle with a dark keel); scavengers
-  clusters, sponges, shards and brushes; parasites splinters and seeds on a
-  thread. The third marker picks the form, and a variant past the plan's forms
-  wears it mirrored. Plankton, not animals: no faces, no heads, no icon shapes
-  (arrows, crescents, chevrons); the heading is carried by the mass. Lit in the
-  large flora's grammar -- each part's crest, body and sunk underside, the
-  crevice where a later part lies against an earlier one, no outline -- all of
-  it `shade()`/`mixWhite()` of the body colour, so a neutral bake re-tints per
-  creature; the genome colour is **muted** toward the world's palette first
-  (saturation halved, an eighth of sand mixed in), keeping the hue. Motion is
-  one art-pixel at a time over eight gait frames: legs step in antiphase, a
-  thread sways, bristles sweep, pores shimmer, a bead jostles, an amoeba
-  changes its outline. A diagonal heading wears the nearest cardinal: a
-  45-degree turn of a five-pixel body is the lumpy rasterisation this section
-  forbids. (`ProcCreature` still derives the phenotype and draws the old
-  bodies its own tests pin; it no longer reaches the screen.)
+- **Creatures** are `ProcCreature` organisms: procedural bodies on their own
+  small art-pixel grid (radius `ph.r` art-px), palette derived from genome
+  markers, 8 facings × 8 gait frames, plus shared **action envelopes**
+  (squash/stretch/offset/tint/dissolve — lunge, hurt, eat, court, alarm,
+  spawn, death). State changes are envelopes over the same body, never
+  separate sprites.
+- **A clade is one plan in eight bodies.** The plan says what a creature eats;
+  the third marker gene picks which of the plan's eight variants a lineage
+  wears (`ProcCreature.VARIANT_NAMES`), and every variant is an **outline**
+  difference — longer, broader, waisted, horned, hooked, forked — because
+  outline is the only thing that survives being drawn at the size a creature
+  is actually watched. A feature is a small disc **sized to `r`** and hung
+  off the body's **own extent**, never off `r`: a horn on a big body that is
+  the same one pixel as on a small one is a speck, and a feeler pinned to `r`
+  lands inside a long body and vanishes. Reach is budgeted by the smallest
+  body's atlas cell (r + 2.4 art-px), and `EveryBodyStaysInItsCell` pins it.
 - **Corpses** keep the body and lose the colour (saturation stripped by
   luminance, then a dark drain) — what died and how big stays readable.
 - **Furniture** (doors, switches, nests) is built from tile-ramp materials on
@@ -900,6 +877,16 @@ The precedents, so nobody pays twice:
   icons; what held were specimens -- beads, pores, keels, plates, threads.
   **One pixel size on screen**, and when that makes a thing tiny, draw it
   small rather than shrink it.
+- **The specimens that could not be seen** -- the specimens shipped, on the
+  world's grid at true size and then at twice the fidelity at the closest zoom,
+  and in the live world they lost to the bodies they replaced: 3 to 7 art-px
+  of bead or pore on busy ground does not carry, where the procedural bodies --
+  coarser in idea, finer in pixel, a clear outline with legs and feelers --
+  are picked out at a glance. They were reverted to the `ProcCreature` bodies.
+  The lesson is the order of the constraints: **a creature has to be visible
+  first**; pixel consistency is worth a lot, and not that. The specimen
+  sheets are the record if the question is asked again with a way round it --
+  drawing bodies larger than true size, which this world has so far refused.
 
 ## 8. Conformance checklist
 
@@ -942,9 +929,10 @@ Before a new visual merges, ask:
     served chunk is one level (§7, "the sky that baked the world into itself").
 15. Is it drawn on the **world's own art-pixel lattice**, at the world's pixel
    size -- one pixel size on screen, nothing finer or coarser beside the ground
-   (§5 "creatures are specimens", §7 "drawn at their own pixel size")? The one
-   exception is a creature at the closest zoom, at exactly twice the fidelity on
-   the half lattice that nests in the world's.
+   (§7 "the creatures drawn at their own pixel size")? The one standing
+   exception is the creatures: `ProcCreature` bodies on their own finer grid,
+   kept because on the world's grid at true size they were too small to see
+   (§7, "the specimens that could not be seen").
 16. Does it **scale exactly as the tiles do**, with no minimum on-screen size?
     A floor binds the smallest bodies first, and any band of zoom where it
     binds is a band where sizes lie (§7, "the floor that made every body one
