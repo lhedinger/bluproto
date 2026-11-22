@@ -56,6 +56,59 @@ void main() {
   outColor = vec4(c, 1.0) * (t.a * vCol.a);
 }`;
 
+// The tile layer: a whole level's worth of one-tile sprites in ONE draw, with
+// no per-tile work on the CPU. A single triangle covers the viewport; each
+// pixel finds its world tile, reads that tile's atlas cell from a small index
+// texture (two bytes a tile), and fetches its art-pixel from the cell. The CPU
+// only ever uploads the index: a few bytes a tile when the state changes,
+// instead of repainting and re-uploading chunk canvases.
+//
+// Below one screen pixel per art-pixel the cell's art would alias into
+// shimmer, so the shader fades to the cell's AVERAGE colour (one texel per
+// cell, precomputed) -- the GPU form of the old pre-smoothed far-zoom mirror.
+// Coordinates are highp: a level is thousands of art-pixels wide, past what
+// mediump can address exactly, and the classic mobile failure is art that
+// swims as precision runs out across the map.
+const TILE_VS = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const TILE_FS = `#version 300 es
+precision highp float;
+precision highp int;
+uniform highp sampler2D uIdx;   // RG8 per tile: r = atlas column (255 = empty), g = atlas row
+uniform highp sampler2D uAtlas; // cells of uCell x uCell art-pixels, premultiplied
+uniform highp sampler2D uAvg;   // one premultiplied texel per cell: its average
+uniform vec2 uRes;              // canvas size, px
+uniform vec2 uOrigin;           // screen px of world (0,0)
+uniform float uScale;           // screen px per tile
+uniform vec2 uSize;             // level size, tiles
+uniform float uCell;            // art-pixels per tile
+uniform float uAlpha;
+out vec4 outColor;
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 w = (px - uOrigin) / uScale;
+  if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
+  ivec2 tile = ivec2(floor(w));
+  vec2 id = texelFetch(uIdx, tile, 0).rg * 255.0 + 0.5;
+  int col = int(id.x), row = int(id.y);
+  if (col == 255) discard;
+  vec4 avg = texelFetch(uAvg, ivec2(col, row), 0);
+  // art-pixels per screen pixel: above 1 the art aliases, so fade to the average
+  float far = clamp((uCell / uScale - 0.75) * 2.0, 0.0, 1.0);
+  vec4 c = avg;
+  if (far < 1.0) {
+    int n = int(uCell);
+    ivec2 a = ivec2(floor(fract(w) * uCell));
+    vec4 t = texelFetch(uAtlas, ivec2(col * n + a.x, row * n + a.y), 0);
+    c = mix(t, avg, far);
+  }
+  if (c.a <= 0.0) discard;
+  outColor = c * uAlpha;
+}`;
+
 interface TexEntry {
   tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number;
   /** Identity of the source this texture was last uploaded from — see srcId. */
@@ -87,6 +140,10 @@ export class GLRenderer {
    *  copied here and uploaded from (0,0) — UNPACK_SKIP_* on DOM sources is
    *  spottier across browsers than a 12x12 blit is expensive. */
   private patchCv = document.createElement('canvas');
+  /** The tile-layer program and its uniforms, built on first use. */
+  private tileProg: WebGLProgram | null = null;
+  private tileU: Record<string, WebGLUniformLocation> = {};
+  private spriteProg!: WebGLProgram;
 
   constructor(cv: HTMLCanvasElement, allowSoftware = false) {
     const gl = cv.getContext('webgl2', { alpha: false, antialias: false });
@@ -123,6 +180,7 @@ export class GLRenderer {
       throw new Error('link: ' + gl.getProgramInfoLog(prog));
     }
     gl.useProgram(prog);
+    this.spriteProg = prog;
     this.uRes = gl.getUniformLocation(prog, 'uRes')!;
 
     // One interleaved dynamic VBO + a static index buffer of quad triangles.
@@ -163,8 +221,11 @@ export class GLRenderer {
   }
 
   /** Starts a frame: clears to the given colour at the given backing size. */
+  private vw = 1;
+  private vh = 1;
   begin(w: number, h: number, r: number, g2: number, b: number): void {
     const gl = this.gl;
+    this.vw = w; this.vh = h;
     gl.viewport(0, 0, w, h);
     gl.uniform2f(this.uRes, w, h);
     gl.clearColor(r, g2, b, 1);
@@ -375,6 +436,95 @@ export class GLRenderer {
         sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
         dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
     }
+  }
+
+  private buildTileProg(): WebGLProgram {
+    const gl = this.gl;
+    const prog = gl.createProgram()!;
+    for (const [type, src] of [[gl.VERTEX_SHADER, TILE_VS], [gl.FRAGMENT_SHADER, TILE_FS]] as const) {
+      const sh = gl.createShader(type)!;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error('tile shader: ' + gl.getShaderInfoLog(sh));
+      gl.attachShader(prog, sh);
+    }
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('tile link: ' + gl.getProgramInfoLog(prog));
+    for (const n of ['uIdx', 'uAtlas', 'uAvg', 'uRes', 'uOrigin', 'uScale', 'uSize', 'uCell', 'uAlpha']) {
+      this.tileU[n] = gl.getUniformLocation(prog, n)!;
+    }
+    return prog;
+  }
+
+  /** A raw-bytes texture (index or average), re-uploaded only when `rev`
+   *  moves. NEAREST, no mipmaps, never premultiplied: these are numbers. */
+  private dataTex(key: string, data: Uint8Array, w: number, h: number,
+      format: 'rg' | 'rgba', rev: number): WebGLTexture {
+    const gl = this.gl;
+    let e = this.textures.get(key);
+    if (!e) {
+      e = { tex: gl.createTexture()!, rev: -1, w: 0, h: 0, lastUse: 0, srcId: 0 };
+      this.textures.set(key, e);
+    }
+    e.lastUse = this.frameNo;
+    if (e.rev !== rev) {
+      const t0 = performance.now();
+      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      const internal = format === 'rg' ? gl.RG8 : gl.RGBA8, fmt = format === 'rg' ? gl.RG : gl.RGBA;
+      if (e.w === w && e.h === h) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, fmt, gl.UNSIGNED_BYTE, data);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, fmt, gl.UNSIGNED_BYTE, data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        e.w = w; e.h = h;
+      }
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      e.rev = rev;
+      this.boundKey = null; // the upload rebound TEXTURE_2D
+      this.stats.uploadMs += performance.now() - t0;
+    }
+    return e.tex;
+  }
+
+  /**
+   * Draws a tile layer (see TILE_FS): `index` is two bytes per tile, row-major
+   * over `cols` x `rows` (atlas column, 255 for nothing; atlas row), `atlas`
+   * a canvas of `cell`-pixel cells, `avg` one RGBA texel per atlas cell.
+   * `origin` is where world (0,0) lands on screen and `scale` the screen
+   * pixels per tile. One draw call, whatever the zoom.
+   */
+  tileLayer(key: string, index: Uint8Array, cols: number, rows: number, indexRev: number,
+      atlas: HTMLCanvasElement, atlasRev: number, avg: Uint8Array, avgCols: number, avgRows: number,
+      cell: number, ox: number, oy: number, scale: number, alpha = 1): void {
+    const gl = this.gl;
+    this.flush();
+    if (!this.tileProg) this.tileProg = this.buildTileProg();
+    const idxTex = this.dataTex(key + ':idx', index, cols, rows, 'rg', indexRev);
+    const avgTex = this.dataTex(key + ':avg', avg, avgCols, avgRows, 'rgba', atlasRev);
+    const atl = this.texFor(key + ':atlas', atlas, atlasRev);
+    gl.useProgram(this.tileProg);
+    const u = this.tileU;
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, idxTex);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, atl.tex);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, avgTex);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(u.uIdx, 1); gl.uniform1i(u.uAtlas, 2); gl.uniform1i(u.uAvg, 3);
+    gl.uniform2f(u.uRes, this.vw, this.vh);
+    gl.uniform2f(u.uOrigin, ox, oy);
+    gl.uniform1f(u.uScale, scale);
+    gl.uniform2f(u.uSize, cols, rows);
+    gl.uniform1f(u.uCell, cell);
+    gl.uniform1f(u.uAlpha, alpha);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.stats.drawCalls++;
+    gl.useProgram(this.spriteProg);
+    this.boundKey = null; // whatever the sprite path had bound may have moved
   }
 
   /** A solid premultiplied-colour quad (the dot LOD, fills). */
