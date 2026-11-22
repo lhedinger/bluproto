@@ -15,7 +15,7 @@ import {
   GLYPH_MIN_BODY_PX, drawActionGlyph, drawCarryLink, drawDoor, drawItem, drawNest,
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
 } from './fixtures';
-import { VEG_STAGE_MASK, VEG_VARIANTS, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
+import { VEG_KINDS, VEG_STAGES, VEG_STAGE_MASK, VEG_VARIANTS, drawVegetationTile, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
 import { flowLayers } from './flow';
 import { floraAtlas, floraInView } from './flora';
 
@@ -73,6 +73,93 @@ const VEG_LOW_MIN_MS = 1500;
 
 function vegVariant(tx: number, ty: number): number {
   return Math.floor(hash01(tx, ty, 11) * VEG_VARIANTS);
+}
+
+// ---- the vegetation layer on the GPU ---------------------------------------
+//
+// The WebGL path draws vegetation as a tile layer (GLRenderer.tileLayer): one
+// atlas of every sprite, built once; a two-byte-per-tile index naming each
+// tile's cell, rebuilt only when the grid changes; one draw call. The chunk
+// canvases above are the Canvas2D path's alone now. On the GL path they were
+// repainted on the CPU at up to two chunks a frame and re-uploaded, plus a
+// throttled far-zoom mirror -- the work this removes.
+const VEG_ATLAS_COLS = VEG_STAGES * VEG_VARIANTS; // stage-major, then variant
+let vegAtlas: HTMLCanvasElement | null = null;
+let vegAtlasG: CanvasRenderingContext2D | null = null;
+let vegAtlasAvg: Uint8Array | null = null;
+let vegAtlasRows = 0;     // kinds painted so far: one a frame, see vegAtlasStep
+let vegAtlasRev = 0;
+let vegIndex: Uint8Array | null = null;
+let vegVariants: Uint8Array | null = null; // per tile, fixed for a level size
+let vegIndexFor = -1;     // the vegRev the index was built from
+let vegIndexLevel = -1;
+let vegIndexRev = 0;
+/** Atlas row per vegetation byte's kind field (vegKindOf, as a table). */
+const VEG_ROW_OF_BYTE = new Uint8Array(256);
+for (let b = 0; b < 256; b++) VEG_ROW_OF_BYTE[b] = VEG_KINDS.indexOf(vegKindOf(b));
+
+/**
+ * Paints the next kind's row of the vegetation atlas -- every stage and
+ * variant of one plant, straight into the atlas -- and its cells' average
+ * premultiplied colours for the far zoom. One row a frame: the whole atlas in
+ * one go took 110-190 ms on software GL, a long task at the very moment the
+ * world first appears; a row costs a fraction of that, and the plants fill in
+ * over the first few frames.
+ */
+function vegAtlasStep(): void {
+  if (vegAtlasRows >= VEG_KINDS.length) return;
+  if (!vegAtlas) {
+    vegAtlas = document.createElement('canvas');
+    vegAtlas.width = VEG_ATLAS_COLS * ART;
+    vegAtlas.height = VEG_KINDS.length * ART;
+    vegAtlasG = vegAtlas.getContext('2d', { willReadFrequently: true })!;
+    vegAtlasAvg = new Uint8Array(VEG_ATLAS_COLS * VEG_KINDS.length * 4);
+  }
+  const g = vegAtlasG!, row = vegAtlasRows, kind = VEG_KINDS[row];
+  for (let st = 1; st <= VEG_STAGES; st++) {
+    for (let v = 0; v < VEG_VARIANTS; v++) {
+      drawVegetationTile(g, kind, st, v, ((st - 1) * VEG_VARIANTS + v) * ART, row * ART, 1);
+    }
+  }
+  const px = g.getImageData(0, row * ART, VEG_ATLAS_COLS * ART, ART).data, w = VEG_ATLAS_COLS * ART;
+  const avg = vegAtlasAvg!;
+  for (let col = 0; col < VEG_ATLAS_COLS; col++) {
+    let r = 0, gg = 0, b = 0, a = 0;
+    for (let y = 0; y < ART; y++) {
+      for (let x = 0; x < ART; x++) {
+        const o = (y * w + col * ART + x) * 4, al = px[o + 3] / 255;
+        r += px[o] * al; gg += px[o + 1] * al; b += px[o + 2] * al; a += px[o + 3];
+      }
+    }
+    const n = ART * ART, o = (row * VEG_ATLAS_COLS + col) * 4;
+    avg[o] = r / n; avg[o + 1] = gg / n; avg[o + 2] = b / n; avg[o + 3] = a / n;
+  }
+  vegAtlasRows++;
+  vegAtlasRev++;
+}
+
+/** Rebuilds the per-tile index when the vegetation grid or the level moved:
+ *  a table lookup and a stored variant per tile, a few ms for a whole level. */
+function vegIndexUpdate(meta: WorldMeta, veg: Uint8Array, vegRev: number, level: number): void {
+  if (vegRev === vegIndexFor && level === vegIndexLevel && vegIndex) return;
+  const n = meta.cols * meta.rows;
+  if (!vegIndex || vegIndex.length !== n * 2) vegIndex = new Uint8Array(n * 2);
+  if (!vegVariants || vegVariants.length !== n) {
+    vegVariants = new Uint8Array(n);
+    for (let gy = 0, i = 0; gy < meta.rows; gy++) {
+      for (let gx = 0; gx < meta.cols; gx++, i++) vegVariants[i] = vegVariant(gx, gy);
+    }
+  }
+  const idx = vegIndex, vars = vegVariants;
+  for (let i = 0; i < n; i++) {
+    const s = veg[i], stage = s & VEG_STAGE_MASK;
+    if (stage === 0) { idx[i * 2] = 255; idx[i * 2 + 1] = 0; continue; }
+    idx[i * 2] = (stage - 1) * VEG_VARIANTS + vars[i];
+    idx[i * 2 + 1] = VEG_ROW_OF_BYTE[s];
+  }
+  vegIndexFor = vegRev;
+  vegIndexLevel = level;
+  vegIndexRev++;
 }
 
 /** Scans for moved states, repaints its budget of dirty chunks, and keeps the
@@ -1460,23 +1547,11 @@ export function renderGL(
       const side = chunkTiles * cam.scale;
       glr.layer('flow:' + level + ':' + f.key, f.cv, f.rev, null, o.x, o.y, side, side);
     }
-    if (veg) {
-      vegLayerUpdate(meta, chunkTiles, veg, vegRev, level, nowMs);
-      if (lowZoom && vegLow) {
-        glr.layer('veglo:' + level, vegLow, vegLowRev, null, o0.x, o0.y, worldW, worldH);
-      } else {
-        // Visible chunks only: a handful of small quads/textures near zoom,
-        // and a repainted chunk re-uploads its own ~80KB texture wholesale —
-        // no giant-texture mutation for a mobile driver to ghost.
-        const cxN = Math.ceil(meta.cols / chunkTiles);
-        for (const [key, cvc] of vegChunkCvs) {
-          const wx = (key % cxN) * chunkTiles, wy = Math.floor(key / cxN) * chunkTiles;
-          const oc = cam.worldToScreen(wx, wy);
-          const wpx = chunkTiles * cam.scale;
-          if (oc.x > cv.width || oc.y > cv.height || oc.x + wpx < 0 || oc.y + wpx < 0) continue;
-          glr.layer('veg:' + level + ':' + key, cvc, vegChunkRevs.get(key) ?? 0, null, oc.x, oc.y, wpx, wpx);
-        }
-      }
+    if (veg && veg.length === meta.cols * meta.rows) {
+      vegAtlasStep();
+      vegIndexUpdate(meta, veg, vegRev, level);
+      glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
+        vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, o0.x, o0.y, cam.scale);
     }
   }
 

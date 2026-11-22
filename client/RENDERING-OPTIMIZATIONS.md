@@ -37,7 +37,23 @@ and reads `window.__bluPerf` (`frameMs`, `drawMs`, `cbMs`, `drawCalls`).
 
 Ordered by expected gain for the effort.
 
-### 1. Vegetation as a GPU tile layer
+### 1. Vegetation as a GPU tile layer -- done
+- **Shipped:** `GLRenderer.tileLayer` draws the level's vegetation in one
+  draw call: a two-byte-per-tile index (atlas column, atlas row) and a sprite
+  atlas painted a plant kind per frame; far zoom fades to each cell's average
+  colour. The chunk canvases remain for the Canvas2D path only.
+- **Measured** (same profile, 3 runs each, SwiftShader):
+  - first 8 s after load: JS per frame median 2.8 -> 1.2 ms, the layer
+    section's p95 5.7 -> 1.0 ms;
+  - near zoom, steady: JS per frame 3.4 -> 2.6 ms (still), 2.1 -> 1.8 ms
+    (panning); draw calls 38 -> 29 (still);
+  - frame intervals unchanged (p50 50 ms near): SwiftShader rasterizes on the
+    CPU, so a full-screen shader pass costs it what the blended quads did. The
+    GPU side of this change cannot be measured here; a phone can.
+- A first cut built the whole atlas in one go: a 110-190 ms long task as the
+  world first appeared. Built a row a frame, it is gone.
+
+#### What it replaced
 - **Now:** five grass states per tile, painted on the CPU into per-chunk
   canvases (`render.ts`, at most `VEG_CHUNKS_PER_FRAME = 2` repaints a frame),
   each its own texture and quad.
