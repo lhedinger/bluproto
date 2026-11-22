@@ -156,7 +156,7 @@ public final class Worlds {
 		int[][] code = {
 				{ SET, 1, 6, 0 }, // r1 = 0.1 (const[6]) -- the forage intent
 				{ SET, 5, amble, 0 }, // r5 = the forage pace, 0.25 for the reference seed; movement costs v^2
-				{ SET, 8, 8, 0 }, // r8 = 0.5 (const[8]) -- the hydration to drink up to
+				{ SET, 8, 9, 0 }, // r8 = 1.0 (const[9]) -- drink to full; SEEKWATER's tolerance makes it "from the drink onset"
 				{ SENSE, 2, net.hedinger.prototype.entities.AgentIO.S_THREAT_PROX, 0 },
 				{ SET, 3, 7, 0 }, // r3 = 0.25 (const[7]) threat threshold
 				{ GT, 4, 2, 3 }, // r4 = something bigger is close?
