@@ -2484,7 +2484,8 @@ function frame(now: number): void {
       // On the GPU, over the world just drawn (fx.ts, GLINT_FS).
       if (glintsGpuWanted(cam.scale)) {
         if (waterGrid !== glintWaterFor) { glintWaterFor = waterGrid; glintWaterRev++; }
-        const o = cam.worldToScreen(0, 0);
+        const o = cam.worldToScreen(0, 0); // on whole pixels, as renderGL's layers are
+        o.x = Math.round(o.x); o.y = Math.round(o.y);
         glr.fullscreen('glints', GLINT_FS,
           [glr.dataTex('glintwater', waterGrid, meta.cols, meta.rows, 'r', glintWaterRev)],
           { uOrigin: [o.x, o.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick });
