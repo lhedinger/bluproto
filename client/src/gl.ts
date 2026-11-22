@@ -77,9 +77,9 @@ void main() {
 const TILE_FS = `#version 300 es
 precision highp float;
 precision highp int;
-uniform highp sampler2D uIdx;   // RG8 per tile: r = atlas column (255 = empty), g = atlas row
-uniform highp sampler2D uAtlas; // cells of uCell x uCell art-pixels, premultiplied
-uniform highp sampler2D uAvg;   // one premultiplied texel per cell: its average
+uniform highp sampler2D uTex0;  // index, RG8 per tile: r = atlas column (255 = empty), g = atlas row
+uniform highp sampler2D uTex1;  // atlas, cells of uCell x uCell art-pixels, premultiplied
+uniform highp sampler2D uTex2;  // one premultiplied texel per cell: its average
 uniform vec2 uRes;              // canvas size, px
 uniform vec2 uOrigin;           // screen px of world (0,0)
 uniform float uScale;           // screen px per tile
@@ -92,17 +92,17 @@ void main() {
   vec2 w = (px - uOrigin) / uScale;
   if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
   ivec2 tile = ivec2(floor(w));
-  vec2 id = texelFetch(uIdx, tile, 0).rg * 255.0 + 0.5;
+  vec2 id = texelFetch(uTex0, tile, 0).rg * 255.0 + 0.5;
   int col = int(id.x), row = int(id.y);
   if (col == 255) discard;
-  vec4 avg = texelFetch(uAvg, ivec2(col, row), 0);
+  vec4 avg = texelFetch(uTex2, ivec2(col, row), 0);
   // art-pixels per screen pixel: above 1 the art aliases, so fade to the average
   float far = clamp((uCell / uScale - 0.75) * 2.0, 0.0, 1.0);
   vec4 c = avg;
   if (far < 1.0) {
     int n = int(uCell);
     ivec2 a = ivec2(floor(fract(w) * uCell));
-    vec4 t = texelFetch(uAtlas, ivec2(col * n + a.x, row * n + a.y), 0);
+    vec4 t = texelFetch(uTex1, ivec2(col * n + a.x, row * n + a.y), 0);
     c = mix(t, avg, far);
   }
   if (c.a <= 0.0) discard;
@@ -140,9 +140,6 @@ export class GLRenderer {
    *  copied here and uploaded from (0,0) — UNPACK_SKIP_* on DOM sources is
    *  spottier across browsers than a 12x12 blit is expensive. */
   private patchCv = document.createElement('canvas');
-  /** The tile-layer program and its uniforms, built on first use. */
-  private tileProg: WebGLProgram | null = null;
-  private tileU: Record<string, WebGLUniformLocation> = {};
   private spriteProg!: WebGLProgram;
 
   constructor(cv: HTMLCanvasElement, allowSoftware = false) {
@@ -438,27 +435,67 @@ export class GLRenderer {
     }
   }
 
-  private buildTileProg(): WebGLProgram {
+  /** Full-screen programs by name, each TILE_VS with its own fragment shader. */
+  private passes = new Map<string, { prog: WebGLProgram; u: Map<string, WebGLUniformLocation | null> }>();
+
+  /**
+   * One full-screen pass of a fragment shader of the caller's: the shape every
+   * GPU world layer takes (vegetation, flowing water). `textures` bind to
+   * units 1.. in order; `uniforms` maps names to a number or a 2-vector. The
+   * sprite batch is flushed first and its program restored after, so a pass
+   * sits in the draw order exactly where it is called.
+   */
+  fullscreen(name: string, fs: string, textures: WebGLTexture[],
+      uniforms: Record<string, number | [number, number]>): void {
     const gl = this.gl;
-    const prog = gl.createProgram()!;
-    for (const [type, src] of [[gl.VERTEX_SHADER, TILE_VS], [gl.FRAGMENT_SHADER, TILE_FS]] as const) {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error('tile shader: ' + gl.getShaderInfoLog(sh));
-      gl.attachShader(prog, sh);
+    this.flush();
+    let p = this.passes.get(name);
+    if (!p) {
+      const prog = gl.createProgram()!;
+      for (const [type, src] of [[gl.VERTEX_SHADER, TILE_VS], [gl.FRAGMENT_SHADER, fs]] as const) {
+        const sh = gl.createShader(type)!;
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(name + ' shader: ' + gl.getShaderInfoLog(sh));
+        gl.attachShader(prog, sh);
+      }
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(name + ' link: ' + gl.getProgramInfoLog(prog));
+      p = { prog, u: new Map() };
+      this.passes.set(name, p);
     }
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('tile link: ' + gl.getProgramInfoLog(prog));
-    for (const n of ['uIdx', 'uAtlas', 'uAvg', 'uRes', 'uOrigin', 'uScale', 'uSize', 'uCell', 'uAlpha']) {
-      this.tileU[n] = gl.getUniformLocation(prog, n)!;
+    gl.useProgram(p.prog);
+    const loc = (n: string) => {
+      let l = p!.u.get(n);
+      if (l === undefined) { l = gl.getUniformLocation(p!.prog, n); p!.u.set(n, l); }
+      return l;
+    };
+    for (let i = 0; i < textures.length; i++) {
+      gl.activeTexture(gl.TEXTURE1 + i);
+      gl.bindTexture(gl.TEXTURE_2D, textures[i]);
+      gl.uniform1i(loc('uTex' + i), 1 + i);
     }
-    return prog;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform2f(loc('uRes'), this.vw, this.vh);
+    for (const n in uniforms) {
+      const v = uniforms[n], l = loc(n);
+      if (typeof v === 'number') gl.uniform1f(l, v); else gl.uniform2f(l, v[0], v[1]);
+    }
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.stats.drawCalls++;
+    gl.useProgram(this.spriteProg);
+    this.boundKey = null;
+  }
+
+  /** The GPU copy of a layer already drawn this frame (see layer()), for a
+   *  pass that reads it -- or null if it has not been uploaded. */
+  layerTexture(key: string): WebGLTexture | null {
+    return this.textures.get(key)?.tex ?? null;
   }
 
   /** A raw-bytes texture (index or average), re-uploaded only when `rev`
    *  moves. NEAREST, no mipmaps, never premultiplied: these are numbers. */
-  private dataTex(key: string, data: Uint8Array, w: number, h: number,
+  dataTex(key: string, data: Uint8Array, w: number, h: number,
       format: 'rg' | 'rgba', rev: number): WebGLTexture {
     const gl = this.gl;
     let e = this.textures.get(key);
@@ -502,29 +539,13 @@ export class GLRenderer {
   tileLayer(key: string, index: Uint8Array, cols: number, rows: number, indexRev: number,
       atlas: HTMLCanvasElement, atlasRev: number, avg: Uint8Array, avgCols: number, avgRows: number,
       cell: number, ox: number, oy: number, scale: number, alpha = 1): void {
-    const gl = this.gl;
     this.flush();
-    if (!this.tileProg) this.tileProg = this.buildTileProg();
     const idxTex = this.dataTex(key + ':idx', index, cols, rows, 'rg', indexRev);
     const avgTex = this.dataTex(key + ':avg', avg, avgCols, avgRows, 'rgba', atlasRev);
     const atl = this.texFor(key + ':atlas', atlas, atlasRev);
-    gl.useProgram(this.tileProg);
-    const u = this.tileU;
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, idxTex);
-    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, atl.tex);
-    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, avgTex);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.uniform1i(u.uIdx, 1); gl.uniform1i(u.uAtlas, 2); gl.uniform1i(u.uAvg, 3);
-    gl.uniform2f(u.uRes, this.vw, this.vh);
-    gl.uniform2f(u.uOrigin, ox, oy);
-    gl.uniform1f(u.uScale, scale);
-    gl.uniform2f(u.uSize, cols, rows);
-    gl.uniform1f(u.uCell, cell);
-    gl.uniform1f(u.uAlpha, alpha);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    this.stats.drawCalls++;
-    gl.useProgram(this.spriteProg);
-    this.boundKey = null; // whatever the sprite path had bound may have moved
+    this.fullscreen('tile', TILE_FS, [idxTex, atl.tex, avgTex], {
+      uOrigin: [ox, oy], uScale: scale, uSize: [cols, rows], uCell: cell, uAlpha: alpha,
+    });
   }
 
   /** A solid premultiplied-colour quad (the dot LOD, fills). */
