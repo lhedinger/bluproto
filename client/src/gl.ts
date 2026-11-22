@@ -74,7 +74,7 @@ void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
-const TILE_FS = `#version 300 es
+export const TILE_FS = `#version 300 es
 precision highp float;
 precision highp int;
 uniform highp sampler2D uTex0;  // index, RG8 per tile: r = atlas column (255 = empty), g = atlas row
@@ -113,6 +113,15 @@ interface TexEntry {
   tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number;
   /** Identity of the source this texture was last uploaded from — see srcId. */
   srcId: number;
+}
+
+/** A full-screen program, compiled ahead of use (see `warm`). */
+interface Pass {
+  prog: WebGLProgram;
+  sh: WebGLShader[];
+  ok: boolean;
+  t0: number;
+  u: Map<string, WebGLUniformLocation | null>;
 }
 
 export class GLRenderer {
@@ -156,6 +165,7 @@ export class GLRenderer {
       }
     }
     this.gl = gl;
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile');
     const prog = gl.createProgram()!;
     for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]] as const) {
       const sh = gl.createShader(type)!;
@@ -452,7 +462,54 @@ export class GLRenderer {
   }
 
   /** Full-screen programs by name, each TILE_VS with its own fragment shader. */
-  private passes = new Map<string, { prog: WebGLProgram; u: Map<string, WebGLUniformLocation | null> }>();
+  private passes = new Map<string, Pass>();
+  /** Compiles off the main thread where the browser offers it (most do). */
+  private parallel: { COMPLETION_STATUS_KHR: number } | null = null;
+
+  /**
+   * Start compiling a pass's program without waiting for it. A shader the
+   * size of the flow one takes over a hundred milliseconds to compile in
+   * software and tens on a phone; asked for on first use, that is a hitch
+   * the first time a river scrolls into view. Started at load, it is done
+   * before it is needed.
+   */
+  warm(name: string, fs: string): void {
+    if (this.passes.has(name)) return;
+    const gl = this.gl, prog = gl.createProgram()!, sh: WebGLShader[] = [];
+    for (const [type, src] of [[gl.VERTEX_SHADER, TILE_VS], [gl.FRAGMENT_SHADER, fs]] as const) {
+      const s = gl.createShader(type)!;
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      gl.attachShader(prog, s);
+      sh.push(s);
+    }
+    gl.linkProgram(prog);
+    this.passes.set(name, { prog, sh, ok: false, t0: performance.now(), u: new Map() });
+  }
+
+  /**
+   * Whether a pass's program can draw now. Asking for the link status blocks
+   * until the compile ends, so it is asked only once the browser says the
+   * compile is done -- or, with no way to ask, a quarter second after it
+   * started: the browser compiles in its GPU process meanwhile, so the ask
+   * then finds the work finished rather than waiting on it.
+   * Until then the pass is skipped: a frame without the water is invisible,
+   * a frozen frame is not.
+   */
+  private ready(name: string, p: Pass): boolean {
+    if (p.ok) return true;
+    const gl = this.gl;
+    if (this.parallel ? !gl.getProgramParameter(p.prog, this.parallel.COMPLETION_STATUS_KHR)
+        : performance.now() - p.t0 < 250) return false;
+    if (!gl.getProgramParameter(p.prog, gl.LINK_STATUS)) {
+      const log = p.sh.map(s => gl.getShaderInfoLog(s)).join(' ');
+      throw new Error(name + ' link: ' + gl.getProgramInfoLog(p.prog) + ' ' + log);
+    }
+    for (const s of p.sh) gl.deleteShader(s);
+    p.sh = [];
+    p.ok = true;
+    return true;
+  }
 
   /**
    * One full-screen pass of a fragment shader of the caller's: the shape every
@@ -464,22 +521,10 @@ export class GLRenderer {
   fullscreen(name: string, fs: string, textures: WebGLTexture[],
       uniforms: Record<string, number | [number, number]>, clip: number[] | null = null): void {
     const gl = this.gl;
+    this.warm(name, fs);
+    const p = this.passes.get(name)!;
+    if (!this.ready(name, p)) return;
     this.flush();
-    let p = this.passes.get(name);
-    if (!p) {
-      const prog = gl.createProgram()!;
-      for (const [type, src] of [[gl.VERTEX_SHADER, TILE_VS], [gl.FRAGMENT_SHADER, fs]] as const) {
-        const sh = gl.createShader(type)!;
-        gl.shaderSource(sh, src);
-        gl.compileShader(sh);
-        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(name + ' shader: ' + gl.getShaderInfoLog(sh));
-        gl.attachShader(prog, sh);
-      }
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(name + ' link: ' + gl.getProgramInfoLog(prog));
-      p = { prog, u: new Map() };
-      this.passes.set(name, p);
-    }
     gl.useProgram(p.prog);
     const loc = (n: string) => {
       let l = p!.u.get(n);

@@ -9,10 +9,11 @@ import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
-import { GLRenderer } from './gl';
+import { GLRenderer, TILE_FS } from './gl';
 import { setFlora, type FloraRow } from './flora';
 import { GLINT_FS, glintsGpuWanted } from './fx';
-import { VEG_KIND_MASK, advanceGait, overlayUsed, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
+import { FLOW_FS } from './flow';
+import { VEG_KIND_MASK, VEIL_FS, advanceGait, overlayUsed, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
@@ -62,10 +63,19 @@ function glUsable(allowSoftware: boolean): boolean {
     return false;
   }
 }
+/** A renderer with every full-screen pass already compiling (GLRenderer.warm). */
+function makeGL(): GLRenderer {
+  const r = new GLRenderer(cv, glPref === '1');
+  r.warm('tile', TILE_FS);
+  r.warm('veil', VEIL_FS);
+  r.warm('flow', FLOW_FS);
+  r.warm('glints', GLINT_FS);
+  return r;
+}
 let glr: GLRenderer | null = null;
 if (glPref !== '0' && glUsable(glPref === '1')) {
   try {
-    glr = new GLRenderer(cv, glPref === '1');
+    glr = makeGL();
   } catch {
     glr = null; // constructor failure: #cv may be poisoned, but this is rare
   }
@@ -78,7 +88,7 @@ let glLost = false;
 cv.addEventListener('webglcontextlost', ev => { ev.preventDefault(); glLost = true; });
 cv.addEventListener('webglcontextrestored', () => {
   try {
-    glr = new GLRenderer(cv, glPref === '1');
+    glr = makeGL();
     glLost = false;
   } catch {
     location.reload(); // the overlay is already a 2D context, so #cv cannot fall back
