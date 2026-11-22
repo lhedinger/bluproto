@@ -80,6 +80,8 @@ precision highp int;
 uniform highp sampler2D uTex0;  // index, RG8 per tile: r = atlas column (255 = empty), g = atlas row
 uniform highp sampler2D uTex1;  // atlas, cells of uCell x uCell art-pixels, premultiplied
 uniform highp sampler2D uTex2;  // one premultiplied texel per cell: its average
+uniform highp sampler2D uTex3;  // the ground under the plants, premultiplied (when uGround > 0)
+uniform float uGround;          // ground texels per tile, or 0 to draw the plants alone
 uniform vec2 uRes;              // canvas size, px
 uniform vec2 uOrigin;           // screen px of world (0,0)
 uniform float uScale;           // screen px per tile
@@ -92,9 +94,16 @@ void main() {
   vec2 w = (px - uOrigin) / uScale;
   if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
   ivec2 tile = ivec2(floor(w));
+  // The ground first, when this pass draws it too: one pass writes each
+  // screen pixel once instead of a ground quad and a plant pass both.
+  vec4 base = uGround > 0.0 ? texelFetch(uTex3, ivec2(floor(w * uGround)), 0) : vec4(0.0);
   vec2 id = texelFetch(uTex0, tile, 0).rg * 255.0 + 0.5;
   int col = int(id.x), row = int(id.y);
-  if (col == 255) discard;
+  if (col == 255) {
+    if (base.a <= 0.0) discard;
+    outColor = base;
+    return;
+  }
   vec4 avg = texelFetch(uTex2, ivec2(col, row), 0);
   // art-pixels per screen pixel: above 1 the art aliases, so fade to the average
   float far = clamp((uCell / uScale - 0.75) * 2.0, 0.0, 1.0);
@@ -105,8 +114,10 @@ void main() {
     vec4 t = texelFetch(uTex1, ivec2(col * n + a.x, row * n + a.y), 0);
     c = mix(t, avg, far);
   }
+  c *= uAlpha;
+  c += base * (1.0 - c.a);
   if (c.a <= 0.0) discard;
-  outColor = c * uAlpha;
+  outColor = c;
 }`;
 
 interface TexEntry {
@@ -391,6 +402,14 @@ export class GLRenderer {
   layer(key: string, src: TexImageSource & { width: number; height: number }, rev: number,
       patches: Array<[number, number, number, number]> | null,
       dx: number, dy: number, dw: number, dh: number, alpha = 1): void {
+    const e = this.layerUpload(key, src, rev, patches);
+    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
+  }
+
+  /** A layer's texture brought up to date (patched where it can be) without
+   *  drawing it: for a pass that draws it itself (tileLayer's ground). */
+  layerUpload(key: string, src: TexImageSource & { width: number; height: number }, rev: number,
+      patches: Array<[number, number, number, number]> | null): TexEntry {
     const gl = this.gl;
     let e = this.textures.get(key);
     if (!e) {
@@ -438,7 +457,7 @@ export class GLRenderer {
       this.boundKey = key; // the upload left it bound
       this.stats.uploadMs += performance.now() - t0;
     }
-    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
+    return e;
   }
 
   /** A textured quad: source rect (pixels of `src`) to destination rect
@@ -614,17 +633,23 @@ export class GLRenderer {
    * over `cols` x `rows` (atlas column, 255 for nothing; atlas row), `atlas`
    * a canvas of `cell`-pixel cells, `avg` one RGBA texel per atlas cell.
    * `origin` is where world (0,0) lands on screen and `scale` the screen
-   * pixels per tile. One draw call, whatever the zoom.
+   * pixels per tile. One draw call, whatever the zoom. With `ground` (a
+   * layer's texture and its texels per tile) the pass draws that ground
+   * under the plants too, in place of the ground's own quad.
    */
   tileLayer(key: string, index: Uint8Array, cols: number, rows: number, indexRev: number,
       atlas: HTMLCanvasElement, atlasRev: number, avg: Uint8Array, avgCols: number, avgRows: number,
-      cell: number, ox: number, oy: number, scale: number, alpha = 1): void {
+      cell: number, ox: number, oy: number, scale: number, alpha = 1,
+      ground: { tex: WebGLTexture; perTile: number } | null = null): void {
     this.flush();
     const idxTex = this.dataTex(key + ':idx', index, cols, rows, 'rg', indexRev);
     const avgTex = this.dataTex(key + ':avg', avg, avgCols, avgRows, 'rgba', atlasRev);
     const atl = this.texFor(key + ':atlas', atlas, atlasRev);
-    this.fullscreen('tile', TILE_FS, [idxTex, atl.tex, avgTex], {
+    const tex = [idxTex, atl.tex, avgTex];
+    if (ground) tex.push(ground.tex);
+    this.fullscreen('tile', TILE_FS, tex, {
       uOrigin: [ox, oy], uScale: scale, uSize: [cols, rows], uCell: cell, uAlpha: alpha,
+      uGround: ground ? ground.perTile : 0,
     });
   }
 

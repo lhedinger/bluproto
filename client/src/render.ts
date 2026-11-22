@@ -1549,15 +1549,31 @@ export function renderGL(
     // Bodies on the floor below ride between the two layers: the batcher
     // draws in submission order, so the ground quad occludes them next.
     drawBelowBodiesGL(glr, cam, state, playTick, level, cv.width, cv.height);
+    const vegOn = !!veg && veg.length === meta.cols * meta.rows;
+    // Zoomed in, the plant pass draws the ground under itself (TILE_FS): one
+    // texel fetch per art-pixel is the ground quad's own nearest sampling
+    // there, and the screen is written once instead of twice. Zoomed out the
+    // ground keeps its quad, for the filtering its low mirror needs.
+    let groundUnder: { tex: WebGLTexture; perTile: number } | null = null;
     if (ground) {
       if (lowZoom && groundLowCv) {
         glr.layer('groundlo:' + level, groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
+      } else if (vegOn && !lowZoom) {
+        const e = glr.layerUpload('ground:' + level, ground, groundRev, groundPatchRects);
+        groundUnder = { tex: e.tex, perTile: ground.width / meta.cols };
       } else {
         glr.layer('ground:' + level, ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
       }
     }
-    // Moving water over the still bake, under the plants and the bodies: one
-    // GPU pass that reads the ground just drawn (flow.ts, FLOW_FS).
+    if (vegOn) {
+      vegAtlasStep();
+      vegIndexUpdate(meta, veg!, vegRev, level);
+      glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
+        vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, o0.x, o0.y, cam.scale,
+        1, groundUnder);
+    }
+    // Moving water over the still bake and the plants, under the bodies: one
+    // GPU pass that reads the ground texture (flow.ts, FLOW_FS).
     const groundTex = flowGpuWanted(cam.scale, level) ? glr.layerTexture('ground:' + level) : null;
     const flowRec = groundTex ? flowGpuData(level) : null;
     if (groundTex && flowRec) {
@@ -1570,12 +1586,6 @@ export function renderGL(
           uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
         }, flowClip);
       }
-    }
-    if (veg && veg.length === meta.cols * meta.rows) {
-      vegAtlasStep();
-      vegIndexUpdate(meta, veg, vegRev, level);
-      glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
-        vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, o0.x, o0.y, cam.scale);
     }
   }
 
