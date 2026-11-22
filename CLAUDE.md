@@ -110,3 +110,15 @@ arithmetic, is what picked the number.
 - Merge on green.
 - A deploy keeps the live world. `[reset-world]` in a commit's subject line
   makes it start fresh instead; add it only when the user asks for a reset.
+
+## Status updates
+
+Write status updates in ASD-STE100 Simplified Technical English, in the
+shortest form that keeps the meaning:
+
+- Approved words, one meaning each ("examine", not "read"; "give", not "offer").
+- Simple present or imperative, active voice.
+- One topic per sentence.
+
+This holds for every session and every agent in this project. When you brief
+a subagent, tell it to do the same.
