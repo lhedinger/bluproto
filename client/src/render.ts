@@ -16,6 +16,7 @@ import {
   drawPlaceholder, drawRing, drawSwitch, pheroPuff,
 } from './fixtures';
 import { VEG_KINDS, VEG_STAGES, VEG_STAGE_MASK, VEG_VARIANTS, drawVegetationTile, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
+import { chunkBoxes, screenRects } from './clip';
 import { FLOW_FS, flowBoxes, flowGpuData, flowGpuWanted, flowLayers } from './flow';
 import { floraAtlas, floraInView } from './flora';
 
@@ -1102,6 +1103,7 @@ function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): 
 let groundRev = 0;
 let canopyRev = 0;
 const flowClip: number[] = []; // the river chunks' screen rects, reused each frame
+const veilClip: number[] = []; // the canopy chunks' screen rects, the same way
 /** Whether the overlay canvas holds anything from the last frame (see the end
  *  of renderGL), so an empty overlay is not cleared again and again. */
 let overlayInk = true;
@@ -1562,14 +1564,7 @@ export function renderGL(
       const recTex = glr.dataTex('flowrec', flowRec.data, flowRec.cols, flowRec.rows, 'rgba', flowRec.rev);
       // Clipped to the river chunks on screen: the shader is long, and run on
       // every pixel only to discard most of them it doubled a near frame.
-      const b = flowBoxes(chunkTiles);
-      flowClip.length = 0;
-      for (let i = 0; i < b.length; i += 4) {
-        const x = o0.x + b[i] * cam.scale, y = o0.y + b[i + 1] * cam.scale;
-        const w = (b[i + 2] - b[i]) * cam.scale, h = (b[i + 3] - b[i + 1]) * cam.scale;
-        if (x > cv.width || y > cv.height || x + w < 0 || y + h < 0) continue;
-        flowClip.push(x, y, w, h);
-      }
+      screenRects(flowBoxes(chunkTiles), o0.x, o0.y, cam.scale, cv.width, cv.height, flowClip);
       if (flowClip.length > 0) {
         glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
           uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
@@ -1739,13 +1734,15 @@ export function renderGL(
   if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
     // The veil, from the ground already on the GPU (VEIL_FS): nothing painted.
     const groundTex = glr.layerTexture((lowZoom ? 'groundlo:' : 'ground:') + level);
-    if (groundTex) {
+    // Clipped to the chunks with cover on screen (clip.ts).
+    screenRects(chunkBoxes(cover, meta.cols, meta.rows), o0.x, o0.y, cam.scale, cv.width, cv.height, veilClip);
+    if (groundTex && veilClip.length > 0) {
       if (cover !== veilCoverFor) { veilCoverFor = cover; veilCoverRev++; }
       const coverTex = glr.dataTex('veilcover', cover, meta.cols, meta.rows, 'r', veilCoverRev);
       glr.fullscreen('veil', VEIL_FS, [coverTex, groundTex], {
         uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows],
         uCell: lowZoom ? LAYER_LOW : ART, uLow: lowZoom ? 1 : 0, uAlpha: VEIL_ALPHA,
-      });
+      }, veilClip);
     }
     const lids = new Set<number>();
     const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
