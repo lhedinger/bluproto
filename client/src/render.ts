@@ -1499,7 +1499,12 @@ export function renderGL(
   glr.begin(cv.width, cv.height, VOID_F[0], VOID_F[1], VOID_F[2]);
   if (!meta) { og.clearRect(0, 0, cv.width, cv.height); overlayInk = false; return { ...glr.end(), ...sec }; }
 
+  // The world's origin on whole screen pixels. Every layer and GPU pass is
+  // placed from it, and at a fractional offset nearest-pixel sampling rounds
+  // each art-pixel's edges differently from frame to frame -- a pan read as
+  // the whole ground shimmering. Snapped, the layers move as one picture.
   const o0 = cam.worldToScreen(0, 0);
+  o0.x = Math.round(o0.x); o0.y = Math.round(o0.y);
   const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
 
   // Ground and vegetation: art-resolution layers. Layer
