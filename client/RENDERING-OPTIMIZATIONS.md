@@ -119,26 +119,40 @@ Ordered by expected gain for the effort.
 - **Measured:** glints on against off is within noise on software GL (0.5 ms
   JS still, none panning).
 
-### 4. Fewer full-screen passes
-- **Now:** ground, vegetation, canopy veil, flow and the below-floor parallax
-  are separate blended quads over the same pixels.
-- **Instead:** one pass that samples several textures and composes them in the
-  shader, so each screen pixel is written once.
+### 4. Fewer full-screen passes -- partly done
+- **Done:**
+  - Zoomed in (>= ART px/tile), the vegetation pass draws the ground under
+    itself (`TILE_FS` with `uGround`), so the ground quad and the plant pass
+    are one pass. Near pan: 120 -> 143 frames in the phase, p95 83 -> 67 ms.
+  - The veil and the glints are scissored to the chunks that hold cover or
+    water (`clip.ts`), as flow is (8-tile boxes there). Past a rect cap the
+    rects merge into one, so far zoom stays at 12-13 draw calls. Near pan
+    p50 50 -> 33 ms.
+- **Left:** mean near frame on software GL is about 54 ms with every pass on
+  and 24 ms with all off. Flow and the veil are the largest at about 10 ms
+  each; the parallax floor below and the glints a few ms each.
 - **Done when:** the all-layers frame approaches the all-off frame.
 
 ### 5. One texture for every creature sprite, drawn instanced
 - **Now:** one texture per creature shape, so the batcher breaks its batch at
   every shape change (a draw call per run of one shape).
+- **Measured:** over the densest herd, sprites add 35-50 draw calls (12, 24
+  and 48 px/tile). On software GL the frame time does not move with them,
+  so the gain cannot be shown here; it is worth a test on a phone before
+  the refactor (shape atlases, their LRU and mips all change).
 - **Instead:** a `TEXTURE_2D_ARRAY` (or one shared atlas) with the shape as a
   layer index, and instanced quads carrying position, frame, tint and layer.
   The whole herd is one draw call. Check `MAX_ARRAY_TEXTURE_LAYERS`.
 - **Done when:** draw calls stop growing with the number of shapes on screen.
 
-### 6. Revisit the frame pacer
+### 6. Revisit the frame pacer -- examined, no change
 - **Now:** frames are skipped while little moves, down to a 10 fps floor
   (`PACE_FLOOR_MS = 100`, `main.ts`).
-- **Why later:** once creature motion is smooth, a 10 fps floor reads as its
-  own stutter; once the layers above are cheap, more redraws are affordable.
+- **Measured:** at 12 px/tile and closer, where the flow marks animate, the
+  pacer already asks for every frame (pace 16.7 ms over a river and over dry
+  land): the bodies move enough on screen. A per-tick floor while flow is on
+  screen was tried and changed nothing, so it was not kept. The floor
+  matters only zoomed out, where everything is dots.
 - **Done when:** a slow pan and a resting herd both look continuous at fit zoom.
 
 ### 7. Per-frame allocations -- partly done
