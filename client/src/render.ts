@@ -1580,7 +1580,7 @@ export function renderGL(
       const recTex = glr.dataTex('flowrec', flowRec.data, flowRec.cols, flowRec.rows, 'rgba', flowRec.rev);
       // Clipped to the river chunks on screen: the shader is long, and run on
       // every pixel only to discard most of them it doubled a near frame.
-      screenRects(flowBoxes(chunkTiles), o0.x, o0.y, cam.scale, cv.width, cv.height, flowClip);
+      screenRects(flowBoxes(), o0.x, o0.y, cam.scale, cv.width, cv.height, flowClip, 32);
       if (flowClip.length > 0) {
         glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
           uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
