@@ -478,3 +478,253 @@ function springAt(col: number, at: number, gx: number, gy: number, t: number): n
   if (phase > 0 && on(phase - 1)) return WATER[1];
   return col;
 }
+
+// ---- the same water, drawn by the GPU ----------------------------------------
+//
+// The WebGL path draws all of the above in one full-screen pass (FLOW_FS) and
+// paints nothing on the CPU: it rebuilt every visible river chunk pixel by
+// pixel every two ticks and re-uploaded it -- measured as the largest JS and
+// upload cost left after vegetation moved to the GPU. The shader reads the
+// ground at art resolution (the bake's own pixels, so the drift still carries
+// what the Java renderer drew) and a four-byte record per tile, built once per
+// level here:
+//
+//   r: the flow byte, World.getFlow's layout
+//   g: water kind (bits 0-1), banked (2), still water N, S, W, E (3-6)
+//   b: the spring beside this tile (bits 0-3) and the plunge core (4-7), each
+//      1 + (oy+1)*3 + (ox+1) for an offset in the 3x3 around it, 0 for none
+//   a: the fall pouring into this tile, 1 + its direction (bits 0-3), and
+//      whether this tile is the rock face a fall comes down (bit 4)
+//
+// It runs on the playback clock, so the marks move every frame rather than
+// every two ticks. The Canvas2D path keeps the painter above.
+
+let gpuData: Uint8Array | null = null;
+let gpuFor: Uint8Array | null = null; // the grid the data was built from
+let gpuRev = 0;
+
+/** The per-tile record for the GPU pass, or null when there is no flow here. */
+export function flowGpuData(level: number): { data: Uint8Array; rev: number; cols: number; rows: number } | null {
+  if (FLOW_OFF || !grid || !wet || level !== gridLevel) return null;
+  if (gpuFor !== grid || !gpuData) {
+    const n = cols * rows, d = new Uint8Array(n * 4), g = grid, w = wet;
+    const at = (x: number, y: number) => (x < 0 || y < 0 || x >= cols || y >= rows ? -1 : y * cols + x);
+    for (let ty = 0; ty < rows; ty++) {
+      for (let tx = 0; tx < cols; tx++) {
+        const i = ty * cols + tx, f = g[i];
+        if (!f) continue;
+        const kind = w[i] & 3;
+        let gb = kind;
+        for (let s = 0; s < 4; s++) {
+          const [ox, oy] = [[1, 0], [-1, 0], [0, 1], [0, -1]][s];
+          const j = at(tx + ox, ty + oy);
+          if (j < 0 || !w[j]) { gb |= 4; break; }
+        }
+        const still = (ox: number, oy: number) => { const j = at(tx + ox, ty + oy); return j >= 0 && !!w[j] && !g[j]; };
+        if (still(0, -1)) gb |= 8;
+        if (still(0, 1)) gb |= 16;
+        if (still(-1, 0)) gb |= 32;
+        if (still(1, 0)) gb |= 64;
+        let spring = 0, core = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const j = at(tx + ox, ty + oy);
+            if (j < 0) continue;
+            const code = 1 + (oy + 1) * 3 + (ox + 1);
+            if (!spring && (g[j] & MARKS) === MARKS) spring = code;
+            if (!core && (g[j] & MARKS) === PLUNGE && (g[j] & 32)) core = code;
+          }
+        }
+        d[i * 4] = f;
+        d[i * 4 + 1] = gb;
+        d[i * 4 + 2] = spring | (core << 4);
+        const mark = f & MARKS, dir = (f >> 2) & 7;
+        if (mark === FALL) {
+          const j = at(tx + FDX[dir], ty + FDY[dir]);
+          if (j >= 0 && !(d[j * 4 + 3] & 15)) d[j * 4 + 3] |= 1 + dir;
+        }
+        if (mark === PLUNGE && (f & 32) && (f & 3) === FACE && FDX[dir] === 0 && FDY[dir] === 1) {
+          const j = at(tx, ty - 1);
+          if (j >= 0) d[j * 4 + 3] |= 16;
+        }
+      }
+    }
+    gpuData = d;
+    gpuFor = grid;
+    gpuRev++;
+  }
+  return { data: gpuData, rev: gpuRev, cols, rows };
+}
+
+/** True where the GPU pass should run: the flow is this level's and the view
+ *  is near enough for an art-pixel to be at least a screen pixel. */
+export function flowGpuWanted(scale: number, level: number): boolean {
+  return !FLOW_OFF && !!grid && level === gridLevel && scale >= ART;
+}
+
+const rgb = (c: number) => `vec3(${((c >> 16) & 255) / 255}, ${((c >> 8) & 255) / 255}, ${(c & 255) / 255})`;
+export const FLOW_FS = `#version 300 es
+precision highp float;
+precision highp int;
+uniform highp sampler2D uTex0; // per-tile record, RGBA8
+uniform highp sampler2D uTex1; // the ground at art resolution, premultiplied
+uniform vec2 uRes, uOrigin, uSize;
+uniform float uScale, uT;
+out vec4 outColor;
+const vec3 W0 = ${rgb(WATER[0])}, W1 = ${rgb(WATER[1])}, W2 = ${rgb(WATER[2])};
+const vec3 S0 = ${rgb(SHALLOWS[0])}, S1 = ${rgb(SHALLOWS[1])}, S2 = ${rgb(SHALLOWS[2])};
+const int BAYER[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+const int FDX[8] = int[8](1, 1, 0, -1, -1, -1, 0, 1);
+const int FDY[8] = int[8](0, 1, 1, 1, 0, -1, -1, -1);
+const float SPEED[4] = float[4](0.0, 0.05, 0.12, 0.4);
+const float DASHES[4] = float[4](0.0, 0.08, 0.12, 0.14);
+float bayer(int x, int y) { return (float(BAYER[((y & 3) << 2) | (x & 3)]) + 0.5) / 16.0; }
+float fm(float a, float n) { return a - n * floor(a / n); }
+float h(float xf, float yf, int s) {
+  uint n = uint(int(xf)) * 374761393u + uint(int(yf)) * 668265263u + uint(s) * 2246822519u;
+  n = (n ^ (n >> 13u)) * 1274126177u;
+  n ^= n >> 16u;
+  return float(n & 0xffffffu) / 16777216.0;
+}
+float vnoise(float x, float y, int s) {
+  float xi = floor(x), yi = floor(y), xf = x - xi, yf = y - yi;
+  float u = xf * xf * (3.0 - 2.0 * xf), v = yf * yf * (3.0 - 2.0 * yf);
+  float a = h(xi, yi, s), b = h(xi + 1.0, yi, s), c = h(xi, yi + 1.0, s), d = h(xi + 1.0, yi + 1.0, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+ivec4 tileAt(int x, int y) {
+  if (x < 0 || y < 0 || float(x) >= uSize.x || float(y) >= uSize.y) return ivec4(0);
+  return ivec4(texelFetch(uTex0, ivec2(x, y), 0) * 255.0 + 0.5);
+}
+bool bake(int gx, int gy, out vec3 c) {
+  if (gx < 0 || gy < 0 || float(gx) >= uSize.x * 12.0 || float(gy) >= uSize.y * 12.0) return false;
+  vec4 t = texelFetch(uTex1, ivec2(gx, gy), 0);
+  if (t.a <= 0.0) return false;
+  c = t.rgb / t.a;
+  return true;
+}
+bool watery(vec3 c) { return c.b > 1.5 * c.r && c.b >= 0.75 * c.g; }
+bool teal(vec3 c) { return c.g > 0.77 * c.b; }
+bool ringOn(int r, int dx, int dy) {
+  float R = r == 0 ? 4.0 : r == 1 ? 7.0 : 10.0;
+  return abs(length(vec2(dx, dy)) - R) < 0.5;
+}
+bool throat(int x, int y) { return abs(x) <= 2 && abs(y) <= 2 && !(abs(x) == 2 && abs(y) == 2); }
+void offsetOf(int code, out int ox, out int oy) { ox = (code - 1) % 3 - 1; oy = (code - 1) / 3 - 1; }
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 w = (px - uOrigin) / uScale;
+  if (w.x < 0.0 || w.y < 0.0 || w.x >= uSize.x || w.y >= uSize.y) discard;
+  int gx = int(floor(w.x * 12.0)), gy = int(floor(w.y * 12.0));
+  int tx = gx / 12, ty = gy / 12, ai = gx - tx * 12, aj = gy - ty * 12;
+  ivec4 D = tileAt(tx, ty);
+  float t = uT;
+  vec3 col;
+  // A fall's sheet, in the drop past its lip (paintFall).
+  int drop = D.a & 15;
+  if (drop > 0) {
+    int fx = FDX[drop - 1], fy = FDY[drop - 1], lx = tx - fx, ly = ty - fy;
+    int fall = fx > 0 ? ai : fx < 0 ? 11 - ai : fy > 0 ? aj : 11 - aj;
+    int lipX = fx != 0 ? (fx > 0 ? lx * 12 + 11 : lx * 12) : gx;
+    int lipY = fy != 0 ? (fy > 0 ? ly * 12 + 11 : ly * 12) : gy;
+    vec3 lip;
+    if (!bake(lipX, lipY, lip) || !watery(lip)) discard;
+    if (bayer(gx, gy) >= 1.0 - float(fall) / 12.0) discard;
+    float lane = float(gy * fx - gx * fy);
+    float u = float(fall) - floor(0.9 * t) + floor(h(lane, 1.0, 67) * 97.0);
+    float seg = floor(u / 6.0), k = fm(u, 6.0);
+    col = h(seg, lane, 69) < 0.55 && k < 2.0 ? (k < 1.0 ? S1 : W2) : fall < 3 ? W1 : W0;
+    outColor = vec4(col, 1.0);
+    return;
+  }
+  // A fall seen down the rock face over its pool (paintFace).
+  if ((D.a & 16) != 0) {
+    if (aj < 6 || ai < 3 || ai > 8) discard;
+    bool outer = ai == 3 || ai == 8;
+    if (outer && bayer(gx, gy) >= 0.5) discard;
+    float fg = float(gx);
+    if (aj == 6) col = h(fg, floor(t / 2.0), 95) < 0.7 ? S2 : S1;
+    else if (aj == 11) col = h(fg, floor(t / 2.0), 91) < 0.6 ? S2 : S1;
+    else {
+      float u = float(aj) - floor(0.9 * t) + floor(h(fg, 3.0, 97) * 97.0);
+      float seg = floor(u / 4.0), k = fm(u, 4.0);
+      col = h(seg, fg, 99) < 0.7 && k < 3.0 ? (k >= 2.0 ? S1 : W2) : outer ? W0 : W1;
+    }
+    outColor = vec4(col, 1.0);
+    return;
+  }
+  int f = D.r, kind = D.g & 3;
+  if (f == 0 || (kind != 1 && kind != 2)) discard;
+  vec3 own;
+  if (!bake(gx, gy, own) || !watery(own)) discard; // bank laps stay the bake's
+  // fade out toward still water beside the tile
+  int edge = 6;
+  if ((D.g & 8) != 0) edge = min(edge, aj);
+  if ((D.g & 16) != 0) edge = min(edge, 11 - aj);
+  if ((D.g & 32) != 0) edge = min(edge, ai);
+  if ((D.g & 64) != 0) edge = min(edge, 11 - ai);
+  if (edge < 6 && bayer(gx, gy) >= (float(edge) + 0.5) / 6.0) discard;
+  int mark = f & 192, speed = f & 3, dir = (f >> 2) & 7;
+  bool falls = mark == 64, plunge = mark == 128, step = (f & 32) != 0 && !plunge;
+  int fx = FDX[dir], fy = FDY[dir];
+  vec3 r1 = kind == 2 ? S1 : W1, r2 = kind == 2 ? S2 : W2;
+  float shear = (D.g & 4) != 0 ? 0.45 : 1.0, spd = SPEED[speed];
+  // the drift: two copies of the bake half a cycle apart, dithered by weight
+  float a = fm(spd * 0.6 * t, 12.0);
+  float wA = 1.0 - abs(a / 6.0 - 1.0);
+  int o = int(bayer(gx, gy) < wA ? floor(a) : floor(fm(a + 6.0, 12.0)));
+  col = own;
+  int sx = gx - fx * o, sy = gy - fy * o;
+  vec3 src;
+  if ((tileAt(int(floor(float(sx) / 12.0)), int(floor(float(sy) / 12.0))).g & 3) == kind
+      && bake(sx, sy, src) && watery(src) && teal(src) == teal(own)) col = src;
+  float dashOff = floor(spd * (0.35 + 0.65 * shear) * t);
+  float u = float(gx * fx + gy * fy), lane = float(gy * fx - gx * fy);
+  if (speed == 3) {
+    bool rough = vnoise((u - floor(spd * 0.6 * t)) / 10.0, lane / 6.0, 55) > 0.55;
+    float uu = u - dashOff + floor(h(lane, 0.0, 51) * 97.0);
+    float seg = floor(uu / 7.0), k = fm(uu, 7.0);
+    if (h(seg, lane, 53) < (rough ? 0.5 : DASHES[3]) && k < 3.0) col = k >= 2.0 ? S1 : S2;
+    else if (rough && h(seg, lane, 57) < 0.25 && k < 4.0) col = S0;
+  } else {
+    float uu = u - dashOff + floor(h(lane, 0.0, 31) * 97.0);
+    float seg = floor(uu / 11.0), k = fm(uu, 11.0);
+    if (h(seg, lane, 33) < DASHES[speed] && k < 3.0) col = k < 1.0 ? r1 : r2;
+  }
+  if (falls) {
+    float along = float(fx) * (float(ai) - 5.5) + float(fy) * (float(aj) - 5.5);
+    if (along >= 3.5) col = h(floor(lane / 2.0), floor(t / 2.0), 87) < 0.75 ? S2 : S1;
+    else if (along >= 0.5 && h(lane, floor((u - floor(0.6 * t)) / 3.0), 89) < 0.3) col = S1;
+  } else if (plunge) {
+    int code = D.b >> 4;
+    if (code > 0) {
+      int ox, oy; offsetOf(code, ox, oy);
+      int dx = gx - ((tx + ox) * 12 + 6), dy = gy - ((ty + oy) * 12 + 6);
+      if (abs(dx) <= 3 && abs(dy) <= 3) col = h(float(gx), float(gy) + floor(t / 2.0) * 13.0, 93) < 0.55 ? S2 : S1;
+      else {
+        int phase = int(fm(floor(t / 8.0), 3.0));
+        if (ringOn(phase, dx, dy)) col = W2;
+        else if (phase > 0 && ringOn(phase - 1, dx, dy)) col = W1;
+      }
+    }
+  } else if ((D.b & 15) > 0) {
+    int ox, oy; offsetOf(D.b & 15, ox, oy);
+    int dx = gx - ((tx + ox) * 12 + 6), dy = gy - ((ty + oy) * 12 + 6);
+    if (throat(dx, dy)) col = W0;
+    else if (throat(dx, dy + 1)) col = h(float(gx), float(gy), 101) < 0.75 ? S2 : col;
+    else if (throat(dx + 1, dy) || throat(dx - 1, dy) || throat(dx, dy - 1)) {
+      col = h(float(gx), float(gy) + floor(t / 3.0) * 7.0, 103) < 0.5 ? S1 : col;
+    } else {
+      int phase = int(fm(floor(t / 16.0), 2.0));
+      if (ringOn(phase, dx, dy)) col = W2;
+      else if (phase > 0 && ringOn(phase - 1, dx, dy)) col = W1;
+    }
+  } else if (step) {
+    bool diag = fx != 0 && fy != 0;
+    float along = (float(fx) * (float(ai) - 5.5) + float(fy) * (float(aj) - 5.5)) / (diag ? 2.0 : 1.0);
+    vec3 deep = kind == 2 ? W1 : W0;
+    if (along >= 3.5) col = h(floor(lane / 2.0), floor(t / 3.0) + 9.0, 85) < 0.25 ? S1 : deep;
+    else if (along >= 1.5) col = h(floor(lane / 2.0), floor(t / 3.0), 83) < 0.7 ? S2 : S1;
+  }
+  outColor = vec4(col, 1.0);
+}`;

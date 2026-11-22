@@ -73,7 +73,22 @@ Ordered by expected gain for the effort.
 - **Done when:** `#fx` is gone from the GL path and the overlay row costs
   nothing measurable.
 
-### 3. Glints and flow animated in the shader
+### 3a. Flowing water on the GPU -- done
+- **Shipped:** `FLOW_FS` (flow.ts) draws every river feature in one
+  full-screen pass: the drift of the bake's own water pixels, dashes, rapids,
+  fall lips and sheets, cascades, plunge pools, springs and rock faces. It
+  reads the full-resolution ground texture and a four-byte record per tile
+  built once per level, and runs on the playback clock, so the marks move
+  every frame instead of every two ticks.
+- **Measured:** texture uploads in a still near view 6.0 ms/s -> 0; the CPU
+  per-pixel repaint of every visible river chunk is gone from the WebGL path.
+  JS per frame cannot settle it on software GL: two identical runs differ by
+  0.5 ms, and a heavy shader there blocks the next frame's GL calls, which
+  shows up as JS time a real GPU would not charge.
+- Side by side with the CPU painter at 48 px/tile, a spring, rapids and a
+  fall read the same; rings are drawn as distance bands, not stamps.
+
+### 3b. Glints animated in the shader
 - **Now:** water glints and river flow are rebuilt on the CPU and re-uploaded.
 - **Instead:** a static per-tile mask texture plus a time uniform; the shader
   moves the pattern. The look is unchanged; the upload goes away.
