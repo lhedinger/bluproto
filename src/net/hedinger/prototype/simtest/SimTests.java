@@ -4,7 +4,6 @@ import net.hedinger.prototype.engine.Entity;
 import net.hedinger.prototype.engine.Flora;
 import net.hedinger.prototype.engine.GroundTextures;
 import net.hedinger.prototype.engine.ProcCreature;
-import net.hedinger.prototype.engine.Specimen;
 import net.hedinger.prototype.engine.Tile;
 import net.hedinger.prototype.engine.World;
 import net.hedinger.prototype.entities.AgentIO;
@@ -2192,120 +2191,6 @@ public class SimTests {
 					}
 				}
 			}
-		}
-	}
-
-	/**
-	 * The specimens are drawn at true size on the world's lattice, and every one
-	 * of them keeps its shape under the motion and the turns.
-	 *
-	 * <p>Pinned here because nothing else would catch it: a stamp is a string, and
-	 * a stray mark, a body too big for its cell, two forms of one plan that came
-	 * out the same, a small class bigger than the medium one, or a client that
-	 * picks its size classes by a different rule from the server's would all draw
-	 * without complaint.
-	 */
-	static class SpecimensAreDrawnAtTrueSize extends Scenario {
-		@Override
-		public void run() {
-			java.util.Map<String, int[]> counts = new java.util.HashMap<>();
-			for (String form : Specimen.forms()) {
-				int[] n = new int[Specimen.CLASSES];
-				for (int cls = 0; cls < Specimen.CLASSES; cls++) {
-					int still = -1;
-					for (int frame = 0; frame < Specimen.FRAMES; frame++) {
-						for (int dir = 0; dir < ProcCreature.DIRS; dir++) {
-							java.util.Map<Long, Specimen.Cell> cells = Specimen.cells(form, false, cls, frame, dir);
-							int[] b = Specimen.bounds(cells);
-							int mx = Math.floorDiv(b[0] + b[2], 2), my = Math.floorDiv(b[1] + b[3], 2);
-							for (java.util.Map.Entry<Long, Specimen.Cell> en : cells.entrySet()) {
-								char ch = en.getValue().ch;
-								assertTrue(form + ": only the four marks (" + ch + ")", "#ple".indexOf(ch) >= 0);
-								// half a cell is 8 art-px: the body, its shadow one below and a flyer's lift of two
-								assertTrue(form + " class " + cls + " fits its cell",
-										Math.abs(Specimen.cx(en.getKey()) - mx) <= 5 && Math.abs(Specimen.cy(en.getKey()) - my) <= 5);
-							}
-							if (dir == 0) {
-								still = still < 0 ? cells.size() : still;
-							}
-							// a turn moves the silhouette, never adds to or loses from it
-							assertEquals(form + " class " + cls + " keeps its mass at heading " + dir,
-									Specimen.cells(form, false, cls, frame, 0).size(), cells.size());
-							// the diameter is the class's: true size, 1 to 7 art-px
-							int span = Math.max(b[2] - b[0], b[3] - b[1]) + 1;
-							assertTrue(form + " class " + cls + " is " + span + " art-px across", span <= 7);
-						}
-					}
-					n[cls] = still;
-				}
-				counts.put(form, n);
-				assertTrue(form + " grows with its class: " + n[0] + " < " + n[1] + " < " + n[2],
-						n[0] < n[1] && n[1] < n[2]);
-			}
-			// within each plan the forms are different bodies, at every class but the specks
-			for (int plan : new int[] { 0, 1, 3, 4 }) {
-				java.util.List<String> names = new java.util.ArrayList<>();
-				for (int v = 0; v < 8; v++) {
-					ProcCreature.Phenotype ph = new ProcCreature.Phenotype();
-					ph.form = plan;
-					ph.variant = v;
-					String f = Specimen.formName(ph);
-					assertTrue("plan " + plan + " variant " + v + " wears a drawn form", Specimen.forms().contains(f));
-					if (!names.contains(f)) {
-						names.add(f);
-					}
-				}
-				for (int cls = Specimen.MEDIUM; cls < Specimen.CLASSES; cls++) {
-					for (int i = 0; i < names.size(); i++) {
-						for (int j = i + 1; j < names.size(); j++) {
-							assertTrue("plan " + plan + ": " + names.get(i) + " and " + names.get(j) + " differ at class " + cls,
-									!Specimen.cells(names.get(i), false, cls, 0, 0).keySet()
-											.equals(Specimen.cells(names.get(j), false, cls, 0, 0).keySet()));
-						}
-					}
-				}
-			}
-			// lit from the north: every part's crest is the brightest tone, wherever it faces
-			int base = ProcCreature.NEUTRAL_COLOR, tip = 0, crests = 0;
-			for (String form : Specimen.forms()) {
-				for (int dir = 0; dir < ProcCreature.DIRS; dir += 2) {
-					java.util.Map<Long, Specimen.Cell> cells = Specimen.cells(form, false, Specimen.LARGE, 0, dir);
-					java.util.Map<Long, Integer> lit = Specimen.light(cells, base);
-					for (java.util.Map.Entry<Long, Specimen.Cell> en : cells.entrySet()) {
-						Specimen.Cell c = en.getValue();
-						if (c.ch != '#') {
-							continue;
-						}
-						Specimen.Cell up = cells.get(((long) Specimen.cx(en.getKey()) << 32) ^ ((Specimen.cy(en.getKey()) - 1) & 0xffffffffL));
-						boolean crevice = false; // a later part lying against it takes this cell for its crevice
-						for (int[] d : new int[][] { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) {
-							Specimen.Cell o = cells.get(((long) (Specimen.cx(en.getKey()) + d[0]) << 32)
-									^ ((Specimen.cy(en.getKey()) + d[1]) & 0xffffffffL));
-							crevice |= o != null && o.ch == '#' && o.part > c.part;
-						}
-						if (up == null && !crevice) {
-							crests++;
-							int col = lit.get(en.getKey());
-							tip = Math.max(tip, col & 255);
-							assertTrue(form + " heading " + dir + ": an open north edge is lit, not sunk ("
-									+ Integer.toHexString(col) + ")", (col & 255) > (base & 255));
-						}
-					}
-				}
-			}
-			assertTrue("crests were checked", crests > 100);
-			// the size classes: a body's diameter in world art-pixels, both ends agreeing
-			assertEquals("a newborn speck is small", Specimen.SMALL, Specimen.sizeClass(0.05));
-			assertEquals("a typical adult (0.125 tile) is medium", Specimen.MEDIUM, Specimen.sizeClass(0.125));
-			assertEquals("the biggest alive is large", Specimen.LARGE, Specimen.sizeClass(0.26));
-			String atlas;
-			try {
-				atlas = java.nio.file.Files.readString(java.nio.file.Path.of("client/src/atlas.ts"));
-			} catch (java.io.IOException e) {
-				throw new AssertionError("the client atlas is not where it should be", e);
-			}
-			assertTrue("the client picks size classes by the server's rule",
-					atlas.contains("d < 3 ? 0 : d < 5 ? 1 : 2") && atlas.contains("SPECIMEN_ART = " + Specimen.ART));
 		}
 	}
 
@@ -22919,7 +22804,6 @@ public class SimTests {
 				new ABodyIsShapedByWhatItEats(),
 				new EveryCladeWearsEightBodies(),
 				new EveryBodyStaysInItsCell(),
-				new SpecimensAreDrawnAtTrueSize(),
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
 				new TheDesertStandsCactiOfEveryAge(),

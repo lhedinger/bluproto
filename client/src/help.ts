@@ -11,7 +11,7 @@
 import './docs.css'; // the skin all three documentation pages share
 import {
   ART_RADIUS, CELL, DECAY_STEPS, MIP, atlasFor, atlasMipFor, corpseFor, corpseMipFor,
-  muted, tintedFor,
+  tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
 import {
@@ -553,14 +553,14 @@ for (const [act, name, meaning] of EXPR) {
   // real body at all. Only the sections that genuinely stamp an atlas bow out.
   const atlas = pheno
     ? await new Promise<HTMLCanvasElement>((resolve) => {
-      const poll = () => { const a = atlasFor(pheno * 4 + 2); a ? resolve(a) : setTimeout(poll, 100); };
+      const poll = () => { const a = atlasFor(pheno); a ? resolve(a) : setTimeout(poll, 100); };
       poll();
     })
     : null;
   // The re-tinted living body — one bake per (shape, colour), the 2D path's
   // equivalent of the GL ramp shader. The galleries stamp this; the corpse
   // bakes stay on the neutral sheet, exactly as the live view derives them.
-  const tinted = atlas ? tintedFor(pheno * 4 + 2, muted(found.rgb), atlas) : null; // the large specimen
+  const tinted = atlas ? tintedFor(pheno, found.rgb, atlas) : null;
   const tk = pheno + ':' + found.rgb;
   // Hand it to the galleries that started without one; they repaint every frame,
   // so they pick the real body up on the next tick with no rebuild.
@@ -900,17 +900,15 @@ const plans = section('Body plans',
 // the body differs.
 const variantSections: Record<string, HTMLElement> = {};
 for (const [clade, blurb] of [
-  ['herbivore', 'The grazer: an amoeba (pseudopods round a dark nucleus) or a diatom (a capsule of shimmering pores).'],
-  ['predator', 'The hunter: a crawler (plates on rippling legs) or a lancet (a spindle with a dark keel).'],
-  ['scavenger', 'The scavenger: a cluster of beads, a sponge of pores, an angular shard or a brush of sweeping bristles.'],
-  ['parasite', 'The parasite: a splinter, or a seed on a swaying thread.'],
+  ['herbivore', 'The grazer\'s ellipse, and what an ellipse can become.'],
+  ['predator', 'The hunter\'s wedge: broad at the shoulder, tapering back — longer, wider, narrower, armed.'],
+  ['scavenger', 'The segmented body, in more or fewer segments and with the mass moved about.'],
+  ['parasite', 'The round ciliate, and the rounds that are not quite round.'],
 ]) {
   variantSections[clade] = section(`${clade[0].toUpperCase()}${clade.slice(1)} bodies`,
-    `${blurb} The third marker gene picks which of these a lineage wears (a variant past the `
-    + 'plan\'s forms wears one mirrored), so a species keeps its body the way it keeps its colour. '
-    + 'Each is a specimen at TRUE size on the world\'s own art-pixel grid, so each is drawn three '
-    + 'times -- small, medium, large, shown here side by side at one scale -- every class its own '
-    + 'drawing that keeps the mark naming the form, never the large one shrunk.');
+    `${blurb} The third marker gene picks which of these a lineage wears, so a species `
+    + 'keeps its body the way it keeps its colour. Drawn at the middle art radius; the '
+    + 'smallest bodies carry the same outline with less room for it.');
 }
 const samples = section('Creatures',
   'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
@@ -923,23 +921,18 @@ const samples = section('Creatures',
 /** One body, spun through its facings with the idle gait — the live view's own
  *  stamp, waiting on the same atlas fetch the world waits on. */
 function refBody(b: RefBody, into: HTMLElement): void {
-  // The specimen's three size classes side by side at ONE scale (3 px an art-pixel),
-  // so small, medium and large stand in their true proportion -- spun through the
-  // facings with the gait, the live view's own stamps.
-  const W = 150, H = 150, cellPx = 48;
+  const W = 150, H = 150, box = W * 0.72;
   figure(liveCanvas(W, H, (g, t) => {
     g.fillStyle = GRASS;
     g.fillRect(0, 0, W, H);
     const dir = Math.floor((t / 1.2) % 8);
     const anim = Math.floor((t * 6) % 8);
     g.imageSmoothingEnabled = false;
-    const tints = [0, 1, 2].map((c) => {
-      const sheet = atlasFor(b.pheno * 4 + c);
-      return sheet ? tintedFor(b.pheno * 4 + c, muted(b.rgb), sheet) : null;
-    });
-    if (tints.every(Boolean)) {
-      tints.forEach((tint, c) => g.drawImage(tint!, dir * CELL, anim * CELL, CELL, CELL,
-        3 + c * cellPx, (H - cellPx) / 2, cellPx, cellPx));
+    const sheet = atlasFor(b.pheno);
+    const tint = sheet ? tintedFor(b.pheno, b.rgb, sheet) : null;
+    if (tint) {
+      g.drawImage(tint, anim * CELL, dir * CELL, CELL, CELL,
+        (W - box) / 2, (H - box) / 2, box, box);
     } else {
       // The same placeholder the live viewer shows while an atlas is in flight.
       drawPlaceholder(g, W / 2, H / 2, (W * 0.72) * (ART_RADIUS / CELL),

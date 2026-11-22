@@ -17,62 +17,6 @@ const ANIM = 8;
 // needs had to fit inside 48px. Moves only together with AtlasBaker.
 export const ART_RADIUS = 0.18 * CELL;
 
-// ---- specimens: the creatures at true size on the world's lattice -------------------
-// (engine/Specimen.java). A specimen atlas is the same grid of CELL px cells, drawn at a
-// FIXED SPECIMEN_ART atlas px to the world art-pixel -- so a cell is SPECIMEN_CELL_ART
-// art-pixels square and is drawn at exactly the world's art-pixel size, whatever the body.
-// The size is in the drawing: each body wears one of three size classes, picked from its
-// current radius by the same rule as Specimen.sizeClass.
-export const SPECIMEN_ART = 6;
-export const SPECIMEN_CELL_ART = CELL / SPECIMEN_ART; // 16
-/** Bumped with the specimen drawings, so a viewer never keeps a day-cached old sheet. */
-const SPECIMEN_V = 1;
-const ART_PER_TILE = 12;
-
-/** The size class a body of this radius (tiles) is drawn at: its diameter in world
- *  art-pixels, below 3 small, below 5 medium, else large. Must match Specimen.sizeClass. */
-export function sizeClass(radiusTiles: number): number {
-  const d = radiusTiles * 2 * ART_PER_TILE;
-  return d < 3 ? 0 : d < 5 ? 1 : 2;
-}
-/** The atlas key for a body: its shape and its size class, packed. Every cache below keys
- *  by it, so the three classes of a shape are three sheets. */
-export function specimenKey(pheno: number, radiusTiles: number): number {
-  return pheno * 4 + sizeClass(radiusTiles);
-}
-/** On-screen size of one specimen cell at a zoom (px per tile). */
-export function specimenBox(scale: number): number {
-  return SPECIMEN_CELL_ART * scale / ART_PER_TILE;
-}
-
-/**
- * A genome colour pulled toward the world's palette before it tints a body: saturation
- * halved, lightness kept off the extremes, and an eighth of the sand ramp's base mixed
- * in so every hue shares the ground's warmth. The hue -- the lineage -- is kept.
- */
-const muteCache = new Map<number, number>();
-export function muted(rgb: number): number {
-  const hit = muteCache.get(rgb);
-  if (hit !== undefined) return hit;
-  const r = ((rgb >> 16) & 255) / 255, g = ((rgb >> 8) & 255) / 255, b = (rgb & 255) / 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
-  let h = 0, sat = 0;
-  if (mx !== mn) {
-    const d = mx - mn;
-    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-    h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) / 6;
-  }
-  sat *= 0.5;
-  const L = Math.min(0.62, Math.max(0.3, l));
-  const q = L < 0.5 ? L * (1 + sat) : L + sat - L * sat, p = 2 * L - q;
-  const f = (t: number) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
-  const SAND = [0x98 / 255, 0x86 / 255, 0x5c / 255];
-  const out = [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v, i) => Math.round(255 * (v + (SAND[i] - v) * 0.12)));
-  const v = (out[0] << 16) | (out[1] << 8) | out[2];
-  muteCache.set(rgb, v);
-  return v;
-}
-
 /** The classic 4x4 ordered-dither matrix (row-major), shared threshold table
  *  for pixel-art style partial coverage — the ground bake's dithers, the
  *  depletion masks and the corpse dissolve all read from this one table so
@@ -151,8 +95,7 @@ export function atlasFor(pheno: number): HTMLCanvasElement | null {
   img.onerror = () => {
     setTimeout(() => { if (cache.get(pheno) === null) cache.delete(pheno); }, 8000);
   };
-  // `pheno` is a specimenKey: the shape, and the size class in its low two bits.
-  img.src = `/api/world/atlas/${Math.floor(pheno / 4)}.png?c=${pheno % 4}&v=${SPECIMEN_V}`;
+  img.src = `/api/world/atlas/${pheno}.png`;
   // One that never answers is forgotten too, or the shape stays a dot (stall.ts).
   giveUpIfStalled([img], () => cache.get(pheno) === null, () => cache.delete(pheno));
   return null;
