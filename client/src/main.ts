@@ -12,7 +12,7 @@ import { atlasCount } from './atlas';
 import { GLRenderer } from './gl';
 import { setFlora, type FloraRow } from './flora';
 import { GLINT_FS, glintsGpuWanted } from './fx';
-import { VEG_KIND_MASK, advanceGait, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
+import { VEG_KIND_MASK, advanceGait, overlayUsed, setFlowGrid, drawClimateLayer, drawWaterGlints, drawSenseHeat, render, renderGL, setLowMapSource, type ClimateField, type ClimateRange, type WorldMeta } from './render';
 import { WorldState } from './state';
 import { flagOff, flagOn } from './flags';
 import {
@@ -2495,9 +2495,11 @@ function frame(now: number): void {
   }
   if (climChoice && climGrid && climRange && meta) {
     drawClimateLayer(g, cam, climChoice, climGrid, climRange, meta.cols, meta.rows);
+    overlayUsed();
   }
   if (ovlSmell || ovlSound) {
     drawSenseHeat(g, cam, state, playTick, currentLevel, ovlSmell, ovlSound, now);
+    overlayUsed();
   }
   hudFrame(now, true);
   // The minimap is ambient, not mission-critical: entity drift redraws at
