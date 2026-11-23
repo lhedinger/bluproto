@@ -3,7 +3,9 @@
 
 import { ART, hash01 } from './artCore';
 import type { Camera } from './camera';
+import { chunkBoxes, screenRects } from './clip';
 import { flagOff } from './flags';
+import type { Frame } from './frame';
 import { F_DEAD } from './protocol';
 import type { WorldState } from './state';
 
@@ -310,6 +312,23 @@ void main() {
 /** Whether the GPU glint pass should run: the same rule as drawWaterGlints. */
 export function glintsGpuWanted(scale: number): boolean {
   return !GLINTS_OFF && scale >= ART;
+}
+
+let glintWaterFor: Uint8Array | null = null; // the water mask the GPU glints last uploaded
+let glintWaterRev = 0;
+const glintClip: number[] = []; // the water boxes' screen rects, reused each frame
+
+/** The glint layer of the GL frame: sparkles on open water (GLINT_FS),
+ *  clipped to the chunks with water on screen (clip.ts). */
+export function drawGlintsGL(f: Frame): void {
+  const { glr, meta, water, view: v } = f;
+  if (!water || !glintsGpuWanted(v.zoom)) return;
+  if (water !== glintWaterFor) { glintWaterFor = water; glintWaterRev++; }
+  screenRects(chunkBoxes(water, meta.cols, meta.rows), v.ox, v.oy, v.scale, v.w, v.h, glintClip);
+  if (glintClip.length === 0) return;
+  glr.fullscreen('glints', GLINT_FS,
+    [glr.dataTex('glintwater', water, meta.cols, meta.rows, 'r', glintWaterRev)],
+    { uOrigin: [v.ox, v.oy], uScale: v.scale, uSize: [meta.cols, meta.rows], uT: f.playTick }, glintClip);
 }
 
 /** The live glint layer over the viewport's water. Drawn only from 12 px a

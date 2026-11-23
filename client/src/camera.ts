@@ -48,6 +48,10 @@ export class Camera {
     this.minScale = this.scale * 0.5;
   }
 
+  /** The zoom, for code that takes any projection (frame.ts, Proj): for the
+   *  camera, its target is the screen, so the two are one number. */
+  get zoom(): number { return this.scale; }
+
   worldToScreen(x: number, y: number): { x: number; y: number } {
     return {
       x: this.canvas.width / 2 + (x - this.cx) * this.scale,
