@@ -325,6 +325,19 @@ One sun, straight overhead-north. The grammar:
   (squash/stretch/offset/tint/dissolve — lunge, hurt, eat, court, alarm,
   spawn, death). State changes are envelopes over the same body, never
   separate sprites.
+- **A body is carved, not inked.** Its plan is pressed into a relief and the
+  relief is lit (`ProcCreature.relief`): height rises from the outline as a
+  dome; a scavenger's segments are arched grooves of uneven pitch that fade
+  toward the flanks, a hunter's head and thorax are grooves with a valley down
+  its back, an even grazer carries a snail's shell (a dome ringed by a groove)
+  and an odd one a slug's mantle (a swell), a parasite a mouth-shield boss and
+  two dimples; the genome's core and pattern become a dimple, a bump or a keel
+  groove. The sun is the world's (§4, overhead-north). The light picks a step
+  on a **five-step ramp** -- deep, shade, base, lit, crest, all `shade` or
+  `mixWhite` of the base so the neutral atlas re-tints exactly -- ordered-
+  dithered between neighbours, with a mottle of hashed **two-pixel flecks**
+  one step down, off the rim. Limbs, feelers and tails keep their dark shades.
+  `TheCreaturesAreCarvedFromTheirRamp` pins the palette, the relief and the sun.
 - **A clade is one plan in eight bodies.** The plan says what a creature eats;
   the third marker gene picks which of the plan's eight variants a lineage
   wears (`ProcCreature.VARIANT_NAMES`), and every variant is an **outline**
@@ -887,6 +900,18 @@ The precedents, so nobody pays twice:
   first**; pixel consistency is worth a lot, and not that. The specimen
   sheets are the record if the question is asked again with a way round it --
   drawing bodies larger than true size, which this world has so far refused.
+- **The patterns that were drawn on** -- the bodies were relit after the
+  plants' grammar and given their animals' anatomy: a snail's spiral, a
+  woodlouse's plates, a beetle's seam, a tick's shield. Inked as lines they read
+  as cartoon -- a spiral on a blob is a drawing of a snail, not a snail. Carved
+  into a smooth relief and lit at twice the pixel they read as tissue, but that
+  was a finer grid beside the world's, a north-west sun and a smooth mottle:
+  three rules broken (§3, §4, checklist 15). Brought back to the creature's own
+  grid, the world's sun, a dithered five-step ramp and hashed flecks, the
+  shallow grooves dissolved into the dither; what survived was making the
+  anatomy **bolder** -- fewer, deeper grooves, a larger shell, flecks kept off
+  the rim. At a body's few pixels, organic is a matter of form and light, and
+  the form has to be cut deep enough for the light to find it.
 
 ## 8. Conformance checklist
 
