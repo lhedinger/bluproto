@@ -96,9 +96,24 @@ export interface Frame extends Scene {
   marks: Marks;
 }
 
+/**
+ * Where a layer draws. Zoomed in past one screen pixel per art-pixel, `world`
+ * and `veil` are offscreen targets at ART px per tile -- one pixel per
+ * art-pixel -- each composited onto the screen when its layers are done (see
+ * renderGL): every pass over them then runs once per art-pixel rather than
+ * once per screen pixel. Zoomed out, all three are the screen. Bodies stay
+ * `screen`: they move by fractions of an art-pixel, and drawn at screen
+ * resolution they keep that motion.
+ */
+export type TargetName = 'world' | 'veil' | 'screen';
+
 /** One job in the frame. `sec` names the HUD section its time counts to. */
 export interface Layer {
   name: string;
+  target: TargetName;
   sec: 'secLayers' | 'secEnts' | 'secTail';
   draw(f: Frame): void;
+  /** The rects (x, y, w, h in its target's px) the layer drew in this frame,
+   *  so the composite can be clipped to them; absent means anywhere. */
+  drawn?(): number[];
 }

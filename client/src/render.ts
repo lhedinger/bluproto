@@ -8,7 +8,7 @@ import {
   corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
-import type { Frame, Layer, Proj, Scene } from './frame';
+import type { Frame, Layer, Proj, Scene, TargetName } from './frame';
 import { View } from './frame';
 import { drawGlintsGL } from './fx';
 import { flagOff } from './flags';
@@ -1504,42 +1504,101 @@ export function renderGL(
   }
   const screen = new View(cam.cx, cam.cy, cam.scale, cam.scale, cv.width, cv.height);
   const tiled = scene.chunkTiles > 0 && scene.tilePx > 0;
+  const lowZoom = cam.scale < ART;
+  const art = artView(cam, cv.width, cv.height);
   const f: Frame = {
     ...scene, meta, glr, screen, view: screen, followId: cam.followId,
     // Below one screen pixel per art-pixel the full 12 px/tile textures would
     // minify 4-8x and thrash a phone GPU's texture cache, so the layers read
     // their quarter-res mirrors instead, exactly as the Canvas2D path does.
-    lowZoom: cam.scale < ART,
+    lowZoom,
     tiled,
     ground: tiled ? groundLayer(meta, scene.chunkTiles, scene.tilePx, scene.getChunk, scene.level,
       scene.nowMs, wantedChunks(screen, cv.width, cv.height, meta, scene.chunkTiles)) : null,
     tracks: scene.state.ordered(),
     marks: { doors: [], switches: [], links: [], glyphs: [], rings: [] },
   };
+  // Run the layers, switching targets where the list does. An offscreen
+  // target is composited onto the screen as the list leaves it, within the
+  // rects its layers drew (null: anywhere; empty: nothing to composite).
+  let current: TargetName = 'screen';
+  let offscreen: import('./gl').Target | null = null;
+  let clip: number[] | null = null;
+  const composite = () => {
+    if (!offscreen || !art) return;
+    glr.renderTo(null);
+    if (clip === null || clip.length > 0) glr.present(offscreen, art.k, art.sx, art.sy, clip);
+    offscreen = null;
+  };
   for (const layer of GL_LAYERS) {
+    if (layer.target !== current) {
+      composite();
+      current = layer.target;
+      f.view = screen;
+      if (art && current !== 'screen') {
+        const v = art.view;
+        offscreen = glr.renderTo(current, v.w, v.h, current === 'world' ? [VOID_F[0], VOID_F[1], VOID_F[2], 1] : [0, 0, 0, 0]);
+        f.view = v;
+        clip = [];
+      }
+    }
     layer.draw(f);
+    if (offscreen && art) {
+      // The layer's rects, in screen px for the composite.
+      const r = layer.drawn ? layer.drawn() : null;
+      if (r === null) clip = null;
+      else if (clip !== null) {
+        for (let i = 0; i < r.length; i += 4) {
+          clip.push(art.sx + r[i] * art.k, art.sy + r[i + 1] * art.k, r[i + 2] * art.k, r[i + 3] * art.k);
+        }
+      }
+    }
     const now = performance.now();
     sec[layer.sec] += now - t0;
     t0 = now;
   }
+  composite();
   const stats = glr.end();
   drawMarks(og, cam, f);
   sec.secTail += performance.now() - t0;
   return { ...stats, ...sec };
 }
 
-/** The GL frame's draw order, back to front. Each entry does one job. */
+/** The GL frame's draw order, back to front. Each entry does one job, into
+ *  the target it names (frame.ts, TargetName). */
 const GL_LAYERS: Layer[] = [
-  { name: 'floors below', sec: 'secLayers', draw: drawBelowFloors },
-  { name: 'bodies below', sec: 'secLayers', draw: drawBelowBodies },
-  { name: 'ground and plants', sec: 'secLayers', draw: drawGroundAndPlants },
-  { name: 'flowing water', sec: 'secLayers', draw: drawFlowGL },
-  { name: 'bodies', sec: 'secEnts', draw: drawBodies },
-  { name: 'veil', sec: 'secTail', draw: drawVeil },
-  { name: 'lids', sec: 'secTail', draw: drawLids },
-  { name: 'flora', sec: 'secTail', draw: drawFlora },
-  { name: 'glints', sec: 'secTail', draw: drawGlintsGL },
+  { name: 'floors below', target: 'world', sec: 'secLayers', draw: drawBelowFloors },
+  { name: 'bodies below', target: 'world', sec: 'secLayers', draw: drawBelowBodies },
+  { name: 'ground and plants', target: 'world', sec: 'secLayers', draw: drawGroundAndPlants },
+  { name: 'flowing water', target: 'world', sec: 'secLayers', draw: drawFlowGL },
+  { name: 'glints', target: 'world', sec: 'secLayers', draw: drawGlintsGL },
+  { name: 'bodies', target: 'screen', sec: 'secEnts', draw: drawBodies },
+  { name: 'veil', target: 'veil', sec: 'secTail', draw: drawVeil, drawn: () => veilClip },
+  { name: 'lids', target: 'screen', sec: 'secTail', draw: drawLids },
+  { name: 'flora', target: 'screen', sec: 'secTail', draw: drawFlora },
 ];
+
+const ART_OFF = flagOff('art'); // the world drawn straight onto the screen
+
+/**
+ * The art-resolution target for this camera, or null when the world draws
+ * straight onto the screen: zoomed out (an art-pixel is a screen pixel or
+ * less, so a target would save nothing) or with art=0. Its pixel (0, 0) is
+ * a whole art-pixel of the world, so every layer in it is on the art grid;
+ * the fraction of a screen pixel left over is `sx, sy`, where the composite
+ * puts the target's corner. `k` is screen px per art-pixel.
+ */
+function artView(cam: Camera, cvW: number, cvH: number): { view: View; k: number; sx: number; sy: number } | null {
+  const k = cam.scale / ART;
+  if (ART_OFF || k <= 1) return null;
+  // One art-pixel of margin each side, so the composite's edge blend never
+  // reaches past what was drawn.
+  const ax0 = Math.floor((cam.cx - cvW / 2 / cam.scale) * ART) - 1;
+  const ay0 = Math.floor((cam.cy - cvH / 2 / cam.scale) * ART) - 1;
+  const w = Math.ceil(cvW / k) + 3, h = Math.ceil(cvH / k) + 3;
+  const view = new View((ax0 + w / 2) / ART, (ay0 + h / 2) / ART, ART, cam.scale, w, h);
+  return { view, k, sx: cam.screenX(ax0 / ART), sy: cam.screenY(ay0 / ART) };
+}
 
 /** The floors below, FIRST, under their own parallax, so the ground layer's
  *  holes look onto them (see belowLows, belowChunks). Neither their low maps
@@ -1597,7 +1656,7 @@ function drawGroundAndPlants(f: Frame): void {
   vegAtlasStep();
   vegIndexUpdate(meta, f.veg!, f.vegRev, level);
   glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
-    vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, v.ox, v.oy, v.scale,
+    vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, v.ox, v.oy, v.scale, v.zoom,
     1, under);
 }
 
@@ -1751,11 +1810,13 @@ function drawBodies(f: Frame): void {
  *  GPU: nothing painted on the CPU. */
 function drawVeil(f: Frame): void {
   const { glr, meta, cover, view: v } = f;
+  veilClip.length = 0;
   if (CANOPY_OFF || !cover || !f.tiled) return;
   const groundTex = glr.layerTexture((f.lowZoom ? 'groundlo:' : 'ground:') + f.level);
   // Clipped to the chunks with cover on screen (clip.ts).
   screenRects(chunkBoxes(cover, meta.cols, meta.rows), v.ox, v.oy, v.scale, v.w, v.h, veilClip);
-  if (!groundTex || veilClip.length === 0) return;
+  if (!groundTex) { veilClip.length = 0; return; }
+  if (veilClip.length === 0) return;
   if (cover !== veilCoverFor) { veilCoverFor = cover; veilCoverRev++; }
   const coverTex = glr.dataTex('veilcover', cover, meta.cols, meta.rows, 'r', veilCoverRev);
   glr.fullscreen('veil', VEIL_FS, [coverTex, groundTex], {
