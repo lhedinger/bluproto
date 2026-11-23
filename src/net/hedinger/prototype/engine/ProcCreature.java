@@ -3,7 +3,13 @@ package net.hedinger.prototype.engine;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import net.hedinger.prototype.entities.Genome;
 
@@ -285,7 +291,7 @@ public final class ProcCreature {
 	 * still looking at the old body — the shape fixed on the server and wrong in the
 	 * browser, which is the most confusing way for a fix to fail.
 	 */
-	private static final int RENDER_VERSION = 3;
+	private static final int RENDER_VERSION = 4;
 
 	/** Packs everything about a phenotype that affects the pixels into a key. Public
 	 *  so the web layer can name a phenotype's atlas by the same stable id the live
@@ -472,28 +478,11 @@ public final class ProcCreature {
 				}
 			}
 		}
-		// Body, lit from screen-north.
+		// Body: a carved relief under the overhead-north sun (ART-STYLE §5).
+		int[] ramp = bodyRamp(ph.color);
+		Map<Integer, Integer> steps = relief(ph, body, ux, uy, seed);
 		for (int p : body) {
-			int dx = p / 128 - 32, dy = p % 128 - 32;
-			double ts = (dy + r) / (2.0 * r);
-			int col = ts < 0.4 ? mixWhite(ph.color, 0.4) : (ts > 0.72 ? shade(ph.color, 0.6) : ph.color);
-			stampMod(g, ox, oy, px, dx, dy, col, m, seed);
-		}
-		if (ph.core > 0) {
-			stampMod(g, ox, oy, px, 0, 0, ph.core == 1 ? shade(ph.color, 0.5) : mixWhite(ph.color, 0.55), m, seed);
-		}
-		if (ph.pattern == 1) {
-			for (double la = -r; la <= r; la += 0.5) {
-				int dx = w0(la * sA, 0, ux, rx), dy = w1(la * sA, 0, uy, ry);
-				if (body.contains(key(dx, dy))) {
-					stampMod(g, ox, oy, px, dx, dy, shade(ph.color, 0.72), m, seed);
-				}
-			}
-		} else if (ph.pattern == 2) {
-			int dx = w0((r - 0.3) * sA, 0, ux, rx), dy = w1((r - 0.3) * sA, 0, uy, ry);
-			if (body.contains(key(dx, dy))) {
-				stampMod(g, ox, oy, px, dx, dy, mixWhite(ph.color, 0.55), m, seed);
-			}
+			stampMod(g, ox, oy, px, p / 128 - 32, p % 128 - 32, ramp[steps.get(p)], m, seed);
 		}
 		if (ph.antennae) {
 			// Just beyond the front of THIS body. Pinned to r + 0.9 they landed
@@ -529,6 +518,156 @@ public final class ProcCreature {
 		if (m.glyph > 0) {
 			drawGlyph(g, cx, cy - (r + 3) * px, px, m.glyph);
 		}
+	}
+
+	// ---- relief ------------------------------------------------------------
+	//
+	// A body is not inked: its plan is CARVED into a relief and the relief is lit.
+	// Height rises from the outline as a dome; the plan presses into it -- a
+	// scavenger's segments as arched grooves of uneven pitch that fade toward the
+	// flanks, a hunter's head and thorax as grooves and its back as a valley, a
+	// snail's shell (the even grazers) as a dome ringed by a groove, a slug's mantle
+	// (the odd ones) as a swell, a parasite's mouth-shield as a boss beside two
+	// dimples -- and the genome's core and pattern marks become a dimple, a bump,
+	// a keel groove. The sun is overhead-north (§4): a slope facing north is lit,
+	// one facing south sunk, the flanks rimmed. The light picks a step on a FIVE-
+	// step ramp, ordered-dithered between neighbours (§2, §3: no in-betweens), and a
+	// mottle of hashed two-pixel flecks one step down lies off the rim (never a
+	// lone pixel). Drawn-on spirals, bars and seams were tried first and read as
+	// cartoon (§7, "the patterns that were drawn on"). Everything here is in
+	// body-local art-px, so the texture travels with the body and is a pure
+	// function of the phenotype.
+
+	/** The body ramp: deep, shade, base, lit, crest. All shade/mixWhite of the base,
+	 *  so a neutral bake carries it as greys the client re-tints exactly. */
+	public static int[] bodyRamp(int c) {
+		return new int[] { shade(c, 0.44), shade(c, 0.66), c, mixWhite(c, 0.22), mixWhite(c, 0.48) };
+	}
+
+	private static final int[][] BAYER4 = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+
+	private static double bayer(int x, int y) {
+		return (BAYER4[Math.floorMod(y, 4)][Math.floorMod(x, 4)] + 0.5) / 16;
+	}
+
+	/** The ramp step of every body cell (keys as {@link #key}). */
+	static Map<Integer, Integer> relief(Phenotype ph, Set<Integer> body, double ux, double uy, int seed) {
+		// distance from the outline, eight-way
+		Map<Integer, Double> dist = new HashMap<>();
+		ArrayDeque<Integer> q = new ArrayDeque<>();
+		for (int p : body) {
+			int x = p / 128 - 32, y = p % 128 - 32;
+			if (!body.contains(key(x + 1, y)) || !body.contains(key(x - 1, y))
+					|| !body.contains(key(x, y + 1)) || !body.contains(key(x, y - 1))) {
+				dist.put(p, 1.0);
+				q.add(p);
+			}
+		}
+		while (!q.isEmpty()) {
+			int p = q.poll();
+			int x = p / 128 - 32, y = p % 128 - 32;
+			double d = dist.get(p);
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int o = key(x + dx, y + dy);
+					if (body.contains(o) && !dist.containsKey(o)) {
+						dist.put(o, d + (dx != 0 && dy != 0 ? 1.4 : 1));
+						q.add(o);
+					}
+				}
+			}
+		}
+		double dmax = 1, sx = 0, sy = 0;
+		for (int p : body) {
+			dmax = Math.max(dmax, dist.get(p));
+			sx += p / 128 - 32;
+			sy += p % 128 - 32;
+		}
+		double cx = sx / body.size(), cy = sy / body.size();
+		double u0 = 1e9, u1 = -1e9, w = 1;
+		for (int p : body) {
+			double x = p / 128 - 32 - cx, y = p % 128 - 32 - cy;
+			double u = x * ux + y * uy, v = -x * uy + y * ux;
+			u0 = Math.min(u0, u);
+			u1 = Math.max(u1, u);
+			w = Math.max(w, Math.abs(v));
+		}
+		double len = u1 - u0;
+		List<Double> grooves = new ArrayList<>();
+		if (ph.form == 3) {
+			for (double u = u0 + 1.8; u < u1 - 1; u += 2.4 + 0.9 * hash(grooves.size(), 7, seed)) {
+				grooves.add(u);
+			}
+		} else if (ph.form == 4) {
+			grooves.add(u1 - 0.22 * len);
+			grooves.add(u1 - 0.45 * len);
+		}
+		Map<Integer, Double> h = new HashMap<>();
+		for (int p : body) {
+			double x = p / 128 - 32 - cx, y = p % 128 - 32 - cy;
+			double u = x * ux + y * uy, v = -x * uy + y * ux, vn = Math.min(1, Math.abs(v) / w);
+			double z = Math.sqrt(dist.get(p) / dmax);
+			for (double gu : grooves) {
+				double du = u - gu + 0.5 * vn * vn;
+				z -= 0.5 * Math.exp(-du * du / 0.35) * (1 - 0.6 * vn);
+			}
+			if (ph.form == 0 && ph.variant % 2 == 0) { // a snail's shell
+				double sc = u0 + 0.42 * len, rad = Math.min(w * 1.15, 0.4 * len), d = Math.hypot(u - sc, v);
+				if (d <= rad) {
+					z += 0.6 * Math.sqrt(1 - d / rad);
+				}
+				z -= 0.45 * Math.exp(-sq(d - rad) / 0.35);
+			} else if (ph.form == 0 && u > u1 - 0.55 * len && u < u1 - 0.18 * len) { // a slug's mantle
+				z += 0.3 * (1 - vn);
+			}
+			if (ph.form == 4 && u < u1 - 0.45 * len) {
+				z -= 0.3 * Math.exp(-v * v / 0.3);
+			}
+			if (ph.form == 1) {
+				if (u > u1 - 0.26 * len) {
+					z += 0.25 * (1 - vn);
+				}
+				for (int s = -1; s <= 1; s += 2) {
+					z -= 0.3 * Math.exp(-(sq(u + 0.12 * len) + sq(v - s * 0.42 * w)) / 0.5);
+				}
+			}
+			if (ph.core > 0) { // a dark core sinks, a pale one rises
+				z += (ph.core == 1 ? -0.35 : 0.35) * Math.exp(-(u * u + v * v) / 0.6);
+			}
+			if (ph.pattern == 1) {
+				z -= 0.25 * Math.exp(-v * v / 0.3);
+			} else if (ph.pattern == 2) {
+				z += 0.35 * Math.exp(-(sq(u - (u1 - 0.8)) + v * v) / 0.6);
+			}
+			h.put(p, z);
+		}
+		Map<Integer, Integer> step = new HashMap<>();
+		for (int p : body) {
+			int x = p / 128 - 32, y = p % 128 - 32;
+			double gx = (height(h, x + 1, y) - height(h, x - 1, y)) / 2;
+			double gy = (height(h, x, y + 1) - height(h, x, y - 1)) / 2;
+			double lum = 0.5 + 1.5 * gy - 0.5 * Math.abs(gx) + 0.3 * (h.get(p) - 0.5);
+			double t = Math.max(0, Math.min(4, lum * 4));
+			int i = (int) Math.floor(t);
+			step.put(p, Math.min(4, i + (t - i > bayer(x, y) ? 1 : 0)));
+		}
+		// the mottle: horizontal two-pixel flecks on alternate offsets, off the rim
+		for (int p : body) {
+			int x = p / 128 - 32, y = p % 128 - 32;
+			int p2 = key(x + 1, y);
+			if (Math.floorMod(x - (y & 1), 2) != 0 || !body.contains(p2) || hash(x, y, seed) > 0.16
+					|| dist.get(p) < 2 || dist.get(p2) < 2) {
+				continue;
+			}
+			step.put(p, Math.max(0, step.get(p) - 1));
+			step.put(p2, Math.max(0, step.get(p2) - 1));
+		}
+		return step;
+	}
+
+	private static double height(Map<Integer, Double> h, int x, int y) {
+		Double z = h.get(key(x, y));
+		return z == null ? -0.2 : z;
 	}
 
 	// ---- silhouette --------------------------------------------------------

@@ -2195,6 +2195,84 @@ public class SimTests {
 	}
 
 	/**
+	 * A creature's body is a carved relief lit from the overhead-north sun, painted
+	 * from its five-step ramp and nothing between (ART-STYLE §5, §7 "the patterns
+	 * that were drawn on").
+	 *
+	 * <p>Pinned on the neutral bake the atlases are served from: every opaque pixel is
+	 * a ramp step or one of the appendage shades (limbs, feelers, tail), so the
+	 * client's grey-ramp re-tint stays exact; a body of any size uses at least three
+	 * steps, so the relief is there to see; and on average the top of each column of
+	 * body is lighter than its bottom, so the sun is where every other raised thing's
+	 * sun is.
+	 */
+	static class TheCreaturesAreCarvedFromTheirRamp extends Scenario {
+		@Override
+		public void run() {
+			final int c = ProcCreature.NEUTRAL_COLOR, cell = 96, px = 4;
+			int[] ramp = ProcCreature.bodyRamp(c);
+			java.util.Map<Integer, Integer> stepOf = new java.util.HashMap<>();
+			for (int i = 0; i < ramp.length; i++) {
+				stepOf.put(ramp[i], i);
+			}
+			java.util.Set<Integer> appendage = new java.util.HashSet<>();
+			for (double f : new double[] { 0.5, 0.55, 0.6 }) {
+				int v = (int) (128 * f);
+				appendage.add((v << 16) | (v << 8) | v);
+			}
+			for (Genome.Clade clade : Genome.Clade.values()) {
+				for (int size : new int[] { 5, 9, 13 }) {
+					for (int v = 0; v < ProcCreature.VARIANTS; v++) {
+						Genome g = Genome.phenotype(size, 0.05, 5, 6, Math.PI / 2, 100000);
+						g.clade = clade;
+						g.markers = new double[] { 0.4, 0.5, (v + 0.5) / ProcCreature.VARIANTS };
+						ProcCreature.Phenotype ph = ProcCreature.neutral(ProcCreature.phenotype(g));
+						for (int dir = 0; dir < ProcCreature.DIRS; dir++) {
+							java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(cell, cell,
+									java.awt.image.BufferedImage.TYPE_INT_ARGB);
+							java.awt.Graphics2D gr = img.createGraphics();
+							ProcCreature.draw(gr, cell / 2, cell / 2, px * ph.r, ph, dir * Math.PI * 2 / ProcCreature.DIRS, 0.3);
+							gr.dispose();
+							String what = clade + " " + ProcCreature.variantName(ph.form, v) + " r=" + ph.r + " heading " + dir;
+							java.util.Set<Integer> used = new java.util.HashSet<>();
+							double top = 0, bottom = 0;
+							int cols = 0;
+							for (int x = 0; x < cell; x += px) {
+								int first = -1, last = -1;
+								for (int y = 0; y < cell; y += px) {
+									int argb = img.getRGB(x + px / 2, y + px / 2);
+									if ((argb >>> 24) != 255) {
+										continue;
+									}
+									int rgb = argb & 0xFFFFFF;
+									Integer s = stepOf.get(rgb);
+									assertTrue(what + ": #" + Integer.toHexString(rgb) + " is neither a ramp step nor an appendage shade",
+											s != null || appendage.contains(rgb));
+									if (s != null) {
+										used.add(s);
+										if (first < 0) {
+											first = s;
+										}
+										last = s;
+									}
+								}
+								if (first >= 0) {
+									top += first;
+									bottom += last;
+									cols++;
+								}
+							}
+							assertTrue(what + ": only " + used.size() + " ramp steps -- no relief", used.size() >= 3);
+							assertTrue(what + ": the top of the body is not lighter than its foot (" + top / cols + " vs "
+									+ bottom / cols + ")", top > bottom);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * The cover vegetation has more than one look, and every look is legal.
 	 *
 	 * <p>Reed beds were ONE shape: a plus, drawn by testing {@code |dx|==1} and
@@ -22839,6 +22917,7 @@ public class SimTests {
 				new ABodyIsShapedByWhatItEats(),
 				new EveryCladeWearsEightBodies(),
 				new EveryBodyStaysInItsCell(),
+				new TheCreaturesAreCarvedFromTheirRamp(),
 				new CoverVegetationHasVariety(),
 				new TheTallAndTheDryAreOpenCover(),
 				new TheDesertStandsCactiOfEveryAge(),
