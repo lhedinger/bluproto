@@ -20,7 +20,9 @@ const PHASES = [
   // [name, camera, held keys (each ms), duration ms]
   ['near, still', [144, 88, 24], [], 4000],
   ['near, panning', [144, 88, 24], [['d', 2500], ['s', 2500]], 5000],
-  ['far, panning', [144, 88, 6], [['a', 2000], ['w', 2000]], 4000],
+  // Back and forth: at 6 px/tile a held key reaches the world's edge in
+  // under two seconds, and a camera stopped at the edge is not a pan.
+  ['far, panning', [144, 88, 6], [['a', 600], ['d', 600], ['w', 600], ['s', 600]], 2400],
 ];
 
 const browser = await launch();

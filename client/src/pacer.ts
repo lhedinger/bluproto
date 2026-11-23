@@ -53,8 +53,8 @@ export class Pacer {
 
   /**
    * Called once per animation frame. `standMs` is how long a drawn picture
-   * may stand before motion would show; `force` draws as soon as the device
-   * can (the camera moved: a pan or a pinch never waits on the motion rate).
+   * may stand before motion would show; `force` draws on this refresh (the
+   * camera moved).
    * Returns whether this refresh draws.
    */
   frame(now: number, standMs: number, force: boolean): boolean {
@@ -86,7 +86,11 @@ export class Pacer {
       this.slowerAt = 0;
     }
 
-    const n = force ? this.floor : this.every;
+    // A camera move draws on the next refresh, floor or not: a pan or a pinch
+    // never waits. The floor's evenness is for frames paced by the bodies'
+    // motion; under a moving camera the throughput of drawing every refresh
+    // (frames overlap in flight) beats an even rate set by one frame's cost.
+    const n = force ? 1 : this.every;
     this.drewLast = this.lastDraw === 0 || now >= this.lastDraw + (n - 0.5) * this.refresh;
     if (this.drewLast) this.lastDraw = now;
     return this.drewLast;
