@@ -96,6 +96,11 @@ arithmetic, is what picked the number.
   reaches that `layFords` skips on purpose (rock on both banks), and failed on
   9 of 40 seeds while the generator was right. Put the rule in one public
   method (`Worlds.crossable`) and have both call it.
+- **Name levels the way the viewer does.** A level is `z - surfaceZ`: the
+  surface is level 0, the caves -1, the underdark -2, high ground +1 and up
+  (`levelName` in `client/src/main.ts`). Never report the raw `z` index: the
+  surface sits at z = 2 in the demo world, so "level 0" there means the
+  underdark, and a report in array indices reads as the opposite of the map.
 - **Reproduce a visual bug on the live seed.** `/api/world` reports the seed;
   run the server locally with `SEED=<it>`, drive it at the reporter's viewport
   (phone: 412x915 at DPR 2) and floor, and compare before/after at the same
