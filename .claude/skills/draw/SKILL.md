@@ -210,6 +210,10 @@ Plants were drawn six times before they read, and each failure was a rule:
   shipped and reverted: 3–7 art-px bodies lost on busy ground to the
   `ProcCreature` bodies they replaced. Judge creature art in the live world at
   the zooms people watch from, against the current bodies, before shipping.
+- **Carve anatomy, don't ink it.** Lines drawn on a body (spirals, bars, seams)
+  read as cartoon; the same plan pressed into the lit relief reads as tissue. On
+  a body's own few pixels the grooves must be cut deep enough to survive the
+  dither (ART-STYLE §5, §7 "the patterns that were drawn on").
 - **Small is drawn, not shrunk**, and **specimens, not animals or icons** still
   hold for anything drawn small (ART-STYLE §7); the sheets for that round are
   the record.
