@@ -16,20 +16,34 @@
 
 const MAX_QUADS = 4096;
 const FLOATS_PER_VERT = 9; // x, y, u, v, r, g, b, a, mode
+/** Textures one sprite batch may sample. A batch used to break at every
+ *  texture change, and the bodies are drawn in painter's order, so a herd of
+ *  mixed shapes ("A B A B ...") was a draw call per body. With several
+ *  textures bound at once (multi-texture batching, as PixiJS and Phaser do)
+ *  the batch breaks only when a ninth distinct texture arrives. */
+const SLOTS = 8;
+/** The unit uploads bind on: outside the batch's slots and the full-screen
+ *  passes' units (1-4), so an upload never disturbs a batch being built. */
+const UPLOAD_UNIT = SLOTS + 4;
 
 const VS = `#version 300 es
 in vec2 aPos; in vec2 aUV; in vec4 aCol; in float aMode;
 uniform vec2 uRes;
-out vec2 vUV; out vec4 vCol; out float vMode;
+out vec2 vUV; out vec4 vCol; flat out int vMode;
 void main() {
   gl_Position = vec4(aPos.x * 2.0 / uRes.x - 1.0, 1.0 - aPos.y * 2.0 / uRes.y, 0.0, 1.0);
   vUV = aUV;
   vCol = aCol;
-  vMode = aMode;
+  vMode = int(aMode + 0.5);
 }`;
 
-// Mode 0 is the plain premultiplied multiply every layer, stamp and dot uses.
-// Mode 1 is the creature tint: the texel is a COLOUR-NEUTRAL bake (the body's
+// A vertex's mode is its texture slot times two plus its shading: 0 the
+// plain premultiplied multiply every layer, stamp and dot uses, 1 the tint.
+// The slot picks one of SLOTS samplers by a branch: GLSL ES 3.0 indexes a
+// sampler array only by a constant.
+//
+// Shading 0 is the plain premultiplied multiply every layer, stamp and dot uses.
+// Shading 1 is the creature tint: the texel is a COLOUR-NEUTRAL bake (the body's
 // palette encoded as greys around a mid-grey pivot — see ProcCreature.neutral
 // server-side), and the quad's colour is the creature's rgb. Greys at or below
 // the pivot invert the bake's shade() (tint scaled toward black); greys above
@@ -39,12 +53,16 @@ void main() {
 // fringing.
 const FS = `#version 300 es
 precision mediump float;
-in vec2 vUV; in vec4 vCol; in float vMode;
-uniform sampler2D uTex;
+in vec2 vUV; in vec4 vCol; flat in int vMode;
+uniform sampler2D uTex[${SLOTS}];
 out vec4 outColor;
+vec4 slot(int i, vec2 uv) {
+${Array.from({ length: SLOTS }, (_, i) => `  if (i == ${i}) return texture(uTex[${i}], uv);`).join('\n')}
+  return vec4(0.0);
+}
 void main() {
-  vec4 t = texture(uTex, vUV);
-  if (vMode < 0.5) { outColor = t * vCol; return; }
+  vec4 t = slot(vMode >> 1, vUV);
+  if ((vMode & 1) == 0) { outColor = t * vCol; return; }
   float a = max(t.a, 1e-4);
   vec3 u = t.rgb / a;
   float hi = max(u.r, max(u.g, u.b)), lo = min(u.r, min(u.g, u.b));
@@ -176,7 +194,8 @@ export class GLRenderer {
   private uRes: WebGLUniformLocation;
   private textures = new Map<string, TexEntry>();
   private white: WebGLTexture;
-  private boundKey: string | null = null;
+  /** The textures bound to the batch's slots, unit i holding slotTex[i]. */
+  private slotTex: WebGLTexture[] = [];
   private stats = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0 };
   private frameNo = 0;
   /** Resident-texture caps. A long-evolved world breeds a new phenotype
@@ -234,6 +253,7 @@ export class GLRenderer {
     gl.useProgram(prog);
     this.spriteProg = prog;
     this.uRes = gl.getUniformLocation(prog, 'uRes')!;
+    gl.uniform1iv(gl.getUniformLocation(prog, 'uTex'), Array.from({ length: SLOTS }, (_, i) => i));
 
     // One interleaved dynamic VBO + a static index buffer of quad triangles.
     this.vbo = gl.createBuffer()!;
@@ -362,13 +382,12 @@ export class GLRenderer {
       if (t) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); }
       const cw = Math.ceil(w / 256) * 256, ch = Math.ceil(h / 256) * 256;
       const tex = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, tex);
+      this.bindForUpload(tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      this.boundKey = null; // the allocation rebound TEXTURE_2D
       const fb = gl.createFramebuffer()!;
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
@@ -399,7 +418,7 @@ export class GLRenderer {
     gl.clearColor(r, g2, b, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.vertCount = 0;
-    this.boundKey = null;
+    this.slotTex.length = 0; // textures evicted since may have left the slots
     this.stats = { drawCalls: 0, quads: 0, uploadMs: 0, textures: 0 };
   }
 
@@ -471,7 +490,7 @@ export class GLRenderer {
     if (e.rev !== rev) {
       const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample
-      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      this.bindForUpload(e.tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
@@ -481,7 +500,6 @@ export class GLRenderer {
       e.rev = rev;
       e.w = src.width;
       e.h = src.height;
-      this.boundKey = key; // texImage2D left it bound
       this.stats.uploadMs += performance.now() - t0;
     }
     return e;
@@ -553,7 +571,7 @@ export class GLRenderer {
       patches: Array<[number, number, number, number]> | null,
       dx: number, dy: number, dw: number, dh: number, alpha = 1): void {
     const e = this.layerUpload(key, src, rev, patches);
-    this.push(key, e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
+    this.push(e.tex, 0, 0, 1, 1, dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
   }
 
   /** A layer's texture brought up to date (patched where it can be) without
@@ -578,7 +596,7 @@ export class GLRenderer {
     if (e.rev !== rev || e.srcId !== id) {
       const t0 = performance.now();
       this.flush(); // never mutate a texture the buffered quads still sample
-      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      this.bindForUpload(e.tex);
       // Patching is only valid against the very same source, one revision on.
       const patchable = e.rev >= 0 && rev - e.rev === 1 && patches !== null
         && e.srcId === id && e.w === src.width && e.h === src.height;
@@ -604,7 +622,6 @@ export class GLRenderer {
       }
       e.rev = rev;
       e.srcId = id;
-      this.boundKey = key; // the upload left it bound
       this.stats.uploadMs += performance.now() - t0;
     }
     return e;
@@ -619,12 +636,12 @@ export class GLRenderer {
       dx: number, dy: number, dw: number, dh: number, alpha = 1, tint = -1): void {
     const e = this.texFor(key, src, rev);
     if (tint >= 0) {
-      this.push(key, e.tex,
+      this.push(e.tex,
         sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
         dx, dy, dw, dh,
         ((tint >> 16) & 255) / 255, ((tint >> 8) & 255) / 255, (tint & 255) / 255, alpha, 1);
     } else {
-      this.push(key, e.tex,
+      this.push(e.tex,
         sx / e.w, sy / e.h, (sx + sw) / e.w, (sy + sh) / e.h,
         dx, dy, dw, dh, alpha, alpha, alpha, alpha, 0);
     }
@@ -731,8 +748,16 @@ export class GLRenderer {
       }
       gl.disable(gl.SCISSOR_TEST);
     }
+    // Unbound again: a texture left on a unit the sprite program samples is
+    // a feedback loop the moment sprites draw into it (an offscreen target
+    // after its composite), and the slots no longer hold what they did.
+    for (let i = 0; i < textures.length; i++) {
+      gl.activeTexture(gl.TEXTURE1 + i);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    gl.activeTexture(gl.TEXTURE0);
     gl.useProgram(this.spriteProg);
-    this.boundKey = null;
+    this.slotTex.length = 0;
   }
 
   /** The GPU copy of a layer already drawn this frame (see layer()), for a
@@ -754,7 +779,7 @@ export class GLRenderer {
     e.lastUse = this.frameNo;
     if (e.rev !== rev) {
       const t0 = performance.now();
-      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      this.bindForUpload(e.tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       const internal = format === 'r' ? gl.R8 : format === 'rg' ? gl.RG8 : gl.RGBA8;
@@ -772,7 +797,6 @@ export class GLRenderer {
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
       e.rev = rev;
-      this.boundKey = null; // the upload rebound TEXTURE_2D
       this.stats.uploadMs += performance.now() - t0;
     }
     return e.tex;
@@ -803,21 +827,36 @@ export class GLRenderer {
     });
   }
 
+  /** Binds a texture to change it, on a unit no draw samples, and leaves
+   *  that unit active: texImage2D and texParameteri act on the active unit.
+   *  Every bind for drawing (push, fullscreen) picks its own unit. */
+  private bindForUpload(tex: WebGLTexture): void {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + UPLOAD_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+  }
+
   /** A solid premultiplied-colour quad (the dot LOD, fills). */
   quad(dx: number, dy: number, dw: number, dh: number,
       r: number, g: number, b: number, a: number): void {
-    this.push(' white', this.white, 0, 0, 1, 1, dx, dy, dw, dh, r * a, g * a, b * a, a, 0);
+    this.push(this.white, 0, 0, 1, 1, dx, dy, dw, dh, r * a, g * a, b * a, a, 0);
   }
 
-  private push(key: string, tex: WebGLTexture,
+  private push(tex: WebGLTexture,
       u0: number, v0: number, u1: number, v1: number,
       dx: number, dy: number, dw: number, dh: number,
       r: number, g: number, b: number, a: number, mode: number): void {
-    if (key !== this.boundKey || this.vertCount >= MAX_QUADS) {
-      this.flush();
-      this.gl.bindTexture(this.gl.TEXTURE_2D, tex);
-      this.boundKey = key;
+    if (this.vertCount >= MAX_QUADS) this.flush();
+    let slot = this.slotTex.indexOf(tex);
+    if (slot < 0) {
+      if (this.slotTex.length === SLOTS) { this.flush(); this.slotTex.length = 0; }
+      slot = this.slotTex.length;
+      const gl = this.gl;
+      gl.activeTexture(gl.TEXTURE0 + slot);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      this.slotTex.push(tex);
     }
+    mode += slot * 2;
     // Unrolled, no helper closure: this runs once per body per frame, and a
     // closure allocated per quad was measurable garbage at herd scale.
     const o = this.vertCount * 4 * FLOATS_PER_VERT;
