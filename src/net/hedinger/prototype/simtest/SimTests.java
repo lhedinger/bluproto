@@ -9420,6 +9420,61 @@ public class SimTests {
 	}
 
 	/**
+	 * A full hunter that lashes out fights; it does not hunt. A_ATTACK used to
+	 * give a hunter its hunting bite on any quarry in reach, with no appetite
+	 * gate, so a mind that held it high killed whatever came near, full or
+	 * not: on the live world the best cave hunter made 16 kills in 28k ticks
+	 * that way, five of them just after being seen at hunger under 0.3. The
+	 * lash-out now answers to the same appetite latch as the hunt: hungry, it
+	 * kills with the hunting bite; full, it gnaws with the generic one.
+	 */
+	static class AFullHunterLashesOutButDoesNotHunt extends Scenario {
+		private int[] lashOut(double hunger) {
+			seed(95);
+			World w = room(14, 8);
+			Genome g = new Genome();
+			g.clade = Genome.Clade.PREDATOR;
+			g.size = 10;
+			g.losRange = 8;
+			Mind ctrl = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_ATTACK] = 1; // lash out, every tick
+					a[AgentIO.A_SEEK] = 0; // and name nothing: no hunt intent
+					a[AgentIO.A_THROTTLE] = 0;
+				}
+			};
+			TestNPC hunter = TestNPC.minded(5.5, 4.0, 0, g, ctrl).withMetabolic().withHunger(hunger)
+					.withReproCooldown(1000000);
+			Genome pg = new Genome();
+			pg.size = 6;
+			Mind idle = new Mind() {
+				@Override
+				public void think(double[] s, double[] a) {
+					a[AgentIO.A_SEEK] = 0;
+					a[AgentIO.A_THROTTLE] = 0; // stands still, the way a grazing animal does
+				}
+			};
+			TestNPC quarry = TestNPC.minded(5.8, 4.0, 0, pg, idle).withReproCooldown(1000000); // within reach: sizes are in tiles
+			w.spawnEntity(hunter);
+			w.spawnEntity(quarry);
+			w.think();
+			int t = 0;
+			for (; t < 3000 && !quarry.isDead(); t++) {
+				tick(w, 1);
+			}
+			return new int[] { hunter.kills(), t };
+		}
+
+		@Override
+		public void run() {
+			int[] hungry = lashOut(0.95), full = lashOut(0.02);
+			assertEquals("a hungry hunter's lash-out is a hunting bite: it kills", 1, hungry[0]);
+			assertEquals("a full hunter's lash-out is no hunting kill", 0, full[0]);
+		}
+	}
+
+	/**
 	 * Spatial memory in two instructions. A_MARK latches where the body is standing;
 	 * A_SEEK = ±4 steers back to it later. The coordinate lives in the body on
 	 * purpose — a mind could hold two numbers in registers but could never turn them
@@ -10931,8 +10986,10 @@ public class SimTests {
 			seed(4);
 			World w = room(12, 12);
 			Genome g = body(16, biter());
-			TestNPC eater = (hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g)
-					: TestNPC.mindedForager(5.5, 5.5, 0, g)).grown(); // adults: growth is eaten, and this room has no food
+			// Hungry, so a hunter's lash-out is a hunting bite: a full one only
+			// fights (AFullHunterLashesOutButDoesNotHunt).
+			TestNPC eater = (hunter ? TestNPC.mindedPredator(5.5, 5.5, 0, g).grown().withHunger(0.9)
+					: TestNPC.mindedForager(5.5, 5.5, 0, g).grown()); // adults: growth is eaten, and this room has no food
 			w.spawnEntity(eater);
 			TestNPC prey = TestNPC.breeder(5.9, 5.5, 0, body(6, null)).grown().withSpeed(0); // parked: a grazer that wanders off its patch is a chase, not a bite
 			w.spawnEntity(prey);
@@ -23111,6 +23168,7 @@ public class SimTests {
 				new AFounderCarriesItsSeedThroughNoise(),
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
+				new AFullHunterLashesOutButDoesNotHunt(),
 				new SeekingWaterIsOneLine(),
 				new TheCarryPassesTheLastResultOn(),
 				new AHashIsReplayableAndEven(),

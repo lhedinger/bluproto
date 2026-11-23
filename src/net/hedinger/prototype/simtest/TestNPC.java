@@ -4290,7 +4290,17 @@ public class TestNPC extends NPC {
 		// Only for a hunter, and only on quarry: a grazer lashing out is fighting,
 		// not eating, and keeps the generic bite it always had -- and so does a
 		// hunter biting a rival it is not starving enough to eat.
-		if (niche().hunts() && edibleQuarry(near, hunger >= STARVE_HUNGER)) {
+		//
+		// And only while it would eat, the same appetite latch the hunt's own
+		// bite answers to (a bite on an intent is never asked for between meals).
+		// This path had no gate: a mind that held A_ATTACK high killed whatever
+		// quarry came into reach, full or not. On the live world the best cave
+		// hunter did -- a random line set attack to max(R8, carry) with the
+		// seed's drink threshold of 1.0 in R8 -- and made 16 kills in 28k ticks,
+		// five of them straight after being seen at hunger under 0.3. A full
+		// hunter that lashes out now fights, with the generic bite.
+		boolean hungry = !isMinded() || appetiteOpen();
+		if (niche().hunts() && hungry && edibleQuarry(near, hunger >= STARVE_HUNGER)) {
 			if (!biteDue()) {
 				return false; // still between bites: the intent stays pending
 			}
