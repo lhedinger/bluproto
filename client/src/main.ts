@@ -9,7 +9,7 @@ import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
-import { GLRenderer, TILE_FS } from './gl';
+import { GLRenderer, PRESENT_FS, TILE_FS } from './gl';
 import { setFlora, type FloraRow } from './flora';
 import { GLINT_FS } from './fx';
 import { FLOW_FS } from './flow';
@@ -70,6 +70,7 @@ function makeGL(): GLRenderer {
   r.warm('veil', VEIL_FS);
   r.warm('flow', FLOW_FS);
   r.warm('glints', GLINT_FS);
+  r.warm('present', PRESENT_FS);
   return r;
 }
 let glr: GLRenderer | null = null;

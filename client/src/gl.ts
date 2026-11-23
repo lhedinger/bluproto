@@ -84,7 +84,8 @@ uniform highp sampler2D uTex3;  // the ground under the plants, premultiplied (w
 uniform float uGround;          // ground texels per tile, or 0 to draw the plants alone
 uniform vec2 uRes;              // canvas size, px
 uniform vec2 uOrigin;           // screen px of world (0,0)
-uniform float uScale;           // screen px per tile
+uniform float uScale;           // target px per tile
+uniform float uZoom;            // screen px per tile: what the fade reads
 uniform vec2 uSize;             // level size, tiles
 uniform float uCell;            // art-pixels per tile
 uniform float uAlpha;
@@ -106,7 +107,7 @@ void main() {
   }
   vec4 avg = texelFetch(uTex2, ivec2(col, row), 0);
   // art-pixels per screen pixel: above 1 the art aliases, so fade to the average
-  float far = clamp((uCell / uScale - 0.75) * 2.0, 0.0, 1.0);
+  float far = clamp((uCell / uZoom - 0.75) * 2.0, 0.0, 1.0);
   vec4 c = avg;
   if (far < 1.0) {
     int n = int(uCell);
@@ -119,6 +120,38 @@ void main() {
   if (c.a <= 0.0) discard;
   outColor = c;
 }`;
+
+// The composite of an offscreen target onto the screen (GLRenderer.present).
+// A target holds the world at one pixel per art-pixel; the screen shows it
+// `uK` times larger, offset by `uShift` px, a fraction of a pixel included.
+// Plain nearest sampling at a scale that is not a whole number gives texels
+// of uneven widths, and under a moving fraction the unevenness crawls: the
+// shimmer pixel-art games avoid. This is the usual answer ("pixel art
+// filtering"): each texel is solid, and only across its edge -- one screen
+// pixel wide -- does a LINEAR fetch blend it with its neighbour. Crisp at any
+// scale, and it moves by fractions of a pixel without crawling.
+export const PRESENT_FS = `#version 300 es
+precision highp float;
+uniform highp sampler2D uTex0;  // the target, premultiplied, LINEAR
+uniform vec2 uRes;              // screen size, px
+uniform vec2 uShift;            // screen px of the target's top-left corner
+uniform float uK;               // screen px per target px
+uniform vec2 uSize;             // the part of the target drawn, px
+uniform vec2 uCap;              // the target texture's full size, px
+out vec4 outColor;
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec2 t = (px - uShift) / uK;
+  if (t.x < 0.0 || t.y < 0.0 || t.x >= uSize.x || t.y >= uSize.y) discard;
+  vec2 seam = floor(t + 0.5);
+  t = seam + clamp((t - seam) * uK, -0.5, 0.5);
+  vec4 c = texture(uTex0, vec2(t.x, uSize.y - t.y) / uCap);
+  if (c.a <= 0.0) discard;
+  outColor = c;
+}`;
+
+/** An offscreen colour target: `w` x `h` px drawn of a texture `cw` x `ch`. */
+export interface Target { fb: WebGLFramebuffer; tex: WebGLTexture; w: number; h: number; cw: number; ch: number }
 
 interface TexEntry {
   tex: WebGLTexture; rev: number; w: number; h: number; lastUse: number;
@@ -241,11 +274,71 @@ export class GLRenderer {
   /** Starts a frame: clears to the given colour at the given backing size. */
   private vw = 1;
   private vh = 1;
+  private screenW = 1;
+  private screenH = 1;
+  private targets = new Map<string, Target>();
+
+  /** Sizes every later draw to a w x h target. The sprite program is the
+   *  bound one between passes (fullscreen restores it). */
+  private viewport(w: number, h: number): void {
+    this.vw = w; this.vh = h;
+    this.gl.viewport(0, 0, w, h);
+    this.gl.uniform2f(this.uRes, w, h);
+  }
+
+  /**
+   * Draws from here on into the offscreen target `key`, w x h px, cleared to
+   * the premultiplied colour `clear` -- or, with `key` null, onto the screen
+   * again. A target's texture only grows, in steps of 256 px: its size
+   * follows the zoom, and reallocating it on every frame of a pinch would be
+   * an allocation a frame.
+   */
+  renderTo(key: string | null, w = 0, h = 0, clear: [number, number, number, number] = [0, 0, 0, 0]): Target | null {
+    const gl = this.gl;
+    this.flush();
+    if (key === null) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.viewport(this.screenW, this.screenH);
+      return null;
+    }
+    let t = this.targets.get(key);
+    if (!t || t.cw < w || t.ch < h) {
+      if (t) { gl.deleteFramebuffer(t.fb); gl.deleteTexture(t.tex); }
+      const cw = Math.ceil(w / 256) * 256, ch = Math.ceil(h / 256) * 256;
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.boundKey = null; // the allocation rebound TEXTURE_2D
+      const fb = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      t = { fb, tex, w, h, cw, ch };
+      this.targets.set(key, t);
+    }
+    t.w = w; t.h = h;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
+    this.viewport(w, h);
+    gl.clearColor(clear[0], clear[1], clear[2], clear[3]);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    return t;
+  }
+
+  /** Composites a target onto the screen, `k` screen px per target px, its
+   *  corner at (sx, sy) screen px (PRESENT_FS), within `clip` if given. */
+  present(t: Target, k: number, sx: number, sy: number, clip: number[] | null = null): void {
+    this.fullscreen('present', PRESENT_FS, [t.tex], {
+      uK: k, uShift: [sx, sy], uSize: [t.w, t.h], uCap: [t.cw, t.ch],
+    }, clip);
+  }
   begin(w: number, h: number, r: number, g2: number, b: number): void {
     const gl = this.gl;
-    this.vw = w; this.vh = h;
-    gl.viewport(0, 0, w, h);
-    gl.uniform2f(this.uRes, w, h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.screenW = w; this.screenH = h;
+    this.viewport(w, h);
     gl.clearColor(r, g2, b, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.vertCount = 0;
@@ -639,7 +732,7 @@ export class GLRenderer {
    */
   tileLayer(key: string, index: Uint8Array, cols: number, rows: number, indexRev: number,
       atlas: HTMLCanvasElement, atlasRev: number, avg: Uint8Array, avgCols: number, avgRows: number,
-      cell: number, ox: number, oy: number, scale: number, alpha = 1,
+      cell: number, ox: number, oy: number, scale: number, zoom: number, alpha = 1,
       ground: { tex: WebGLTexture; perTile: number } | null = null): void {
     this.flush();
     const idxTex = this.dataTex(key + ':idx', index, cols, rows, 'rg', indexRev);
@@ -648,7 +741,7 @@ export class GLRenderer {
     const tex = [idxTex, atl.tex, avgTex];
     if (ground) tex.push(ground.tex);
     this.fullscreen('tile', TILE_FS, tex, {
-      uOrigin: [ox, oy], uScale: scale, uSize: [cols, rows], uCell: cell, uAlpha: alpha,
+      uOrigin: [ox, oy], uScale: scale, uZoom: zoom, uSize: [cols, rows], uCell: cell, uAlpha: alpha,
       uGround: ground ? ground.perTile : 0,
     });
   }
