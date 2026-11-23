@@ -29,14 +29,18 @@ for (let run = 0; run < runs; run++) {
   const { page, errors } = await open(browser, { flags });
   // Per-frame recorder: rAF timestamps plus the renderer's own __bluPerf.
   await page.evaluate(() => {
-    const r = window.__rec = { t: [], cb: [], up: [], calls: [], gpu: [], on: false, longN: 0, longMax: 0 };
+    // Only drawn frames count (__bluPerf.draws moved): the pacer skips
+    // refreshes on purpose, and a skipped one is not a frame.
+    const r = window.__rec = { t: [], cb: [], up: [], calls: [], gpu: [], on: false, longN: 0, longMax: 0, last: 0 };
     try {
       new PerformanceObserver(l => { for (const e of l.getEntries()) if (r.on) { r.longN++; r.longMax = Math.max(r.longMax, e.duration); } })
         .observe({ type: 'longtask' });
     } catch { /* no long-task timing in this browser */ }
     const step = (now) => {
-      if (r.on) {
-        const q = window.__bluPerf;
+      const q = window.__bluPerf;
+      const drew = q.draws !== r.last;
+      r.last = q.draws;
+      if (r.on && drew) {
         r.t.push(now); r.cb.push(q.cbMs); r.up.push(q.uploadMs); r.calls.push(q.drawCalls);
         if (q.gpuMs >= 0) r.gpu.push(q.gpuMs);
       }

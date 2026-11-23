@@ -35,13 +35,17 @@ export function park(page, x, y, scale) {
   }, [x, y, scale]);
 }
 
-/** Frame intervals (ms) over `n` frames, the camera nudged by a hair each
- *  frame so the pacer draws every one. */
+/** Intervals (ms) between `n` drawn frames, the camera nudged by a hair
+ *  each refresh so the pacer draws as often as the device keeps up. A drawn
+ *  frame is one where __bluPerf.draws moved: the pacer skips refreshes, so
+ *  rAF intervals are not frame intervals. */
 export function intervals(page, n) {
   return page.evaluate((n) => new Promise(res => {
-    const c = window.__blu.cam, t = []; let s = 1;
+    const c = window.__blu.cam, t = []; let s = 1, last = window.__bluPerf.draws;
     const step = (now) => {
-      c.cx += 0.001 * s; s = -s; t.push(now);
+      c.cx += 0.001 * s; s = -s;
+      const d = window.__bluPerf.draws;
+      if (d !== last) { t.push(now); last = d; }
       if (t.length <= n) requestAnimationFrame(step); else res(t.slice(1).map((x, i) => x - t[i]));
     };
     requestAnimationFrame(step);

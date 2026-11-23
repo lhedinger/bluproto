@@ -9,6 +9,7 @@ import { Net } from './net';
 import type { HelloMsg, ServerMsg } from './protocol';
 import { F_DEAD } from './protocol';
 import { atlasCount } from './atlas';
+import { Pacer } from './pacer';
 import { GLRenderer, PRESENT_FS, TILE_FS } from './gl';
 import { setFlora, type FloraRow } from './flora';
 import { GLINT_FS } from './fx';
@@ -2354,10 +2355,12 @@ perfBtn.onclick = () => {
   apply.focus();
 };
 
+let hudDraws = 0; // frames drawn since load, for the bench's cadence
 function hudFrame(now: number, drawn: boolean): void {
   if (hudLastFrame > 0) hudFrameEma += (Math.min(200, now - hudLastFrame) - hudFrameEma) * 0.08;
   hudLastFrame = now;
   if (drawn) {
+    hudDraws++;
     if (hudLastDraw > 0) hudDrawEma += (Math.min(500, now - hudLastDraw) - hudDrawEma) * 0.08;
     hudLastDraw = now;
   }
@@ -2368,6 +2371,7 @@ function hudFrame(now: number, drawn: boolean): void {
   (window as unknown as Record<string, unknown>).__bluPerf = {
     renderer: glr ? 'webgl' : 'canvas2d',
     frameMs: hudFrameEma, drawMs: hudDrawEma, paceMs: paceMs(),
+    paceEvery: pacer.every, paceFloor: pacer.floor, refreshMs: pacer.refreshMs, draws: hudDraws,
     drawCalls: hudGl.drawCalls, quads: hudGl.quads, uploadMs: hudGl.uploadMs,
     secLayers: hudGl.secLayers, secEnts: hudGl.secEnts, secTail: hudGl.secTail,
     streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
@@ -2393,7 +2397,8 @@ function hudFrame(now: number, drawn: boolean): void {
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'}${perfOffStr ? ` · OFF: ${perfOffStr}` : ''}`
     + ` · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms · cb ${hudCbEma.toFixed(1)})`
-    + ` · draws ${(1000 / hudDrawEma).toFixed(0)}/s (pace ${paceMs().toFixed(0)} ms)`
+    + ` · draws ${(1000 / hudDrawEma).toFixed(0)}/s (pace ${paceMs().toFixed(0)} ms,`
+    + ` 1 in ${pacer.every} of ${(1000 / pacer.refreshMs).toFixed(0)} Hz, floor ${pacer.floor})`
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
       + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
@@ -2418,7 +2423,8 @@ let miniCx = NaN, miniCy = NaN, miniScale = NaN;
 // vegetation repaint all ride on the floor), and at once whenever the camera
 // moved, so a pan or a pinch never waits. Zoomed in, a body crosses PACE_PX in
 // a frame and the pacer asks for all sixty; zoomed out it settles near the
-// floor.
+// floor. The pacer (pacer.ts) turns that into a whole number of display
+// refreshes per frame, so the frames it draws are evenly spaced.
 //
 // "The fastest body" is the 90th-percentile mover (state.paceStep), not the
 // outright fastest: a single sprinting hunter was enough to hold the whole
@@ -2429,6 +2435,7 @@ let miniCx = NaN, miniCy = NaN, miniScale = NaN;
 const PACE_PX = 0.5;
 const PACE_FLOOR_MS = 100;
 let lastDrawAt = 0;
+const pacer = new Pacer();
 /** The camera as last drawn: a change forces a frame. */
 let drawnCx = NaN, drawnCy = NaN, drawnScale = NaN, drawnLevel = -1, drawnW = 0, drawnH = 0;
 /** Milliseconds a drawn frame may stand before motion would show. */
@@ -2442,7 +2449,7 @@ function frame(now: number): void {
   keyPan(now); // before the pacer looks: a held pan key is a moving camera
   const cameraMoved = cam.cx !== drawnCx || cam.cy !== drawnCy || cam.scale !== drawnScale
     || currentLevel !== drawnLevel || cv.width !== drawnW || cv.height !== drawnH;
-  if (!cameraMoved && now - lastDrawAt < paceMs()) {
+  if (!pacer.frame(now, paceMs(), cameraMoved)) {
     hudFrame(now, false);
     requestAnimationFrame(frame);
     return;
