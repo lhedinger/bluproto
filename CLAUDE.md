@@ -115,6 +115,9 @@ arithmetic, is what picked the number.
 - Merge on green.
 - A deploy keeps the live world. `[reset-world]` in a commit's subject line
   makes it start fresh instead; add it only when the user asks for a reset.
+  Put it on a commit that changes something: a rebase merge drops empty
+  commits, so an empty marker commit never reaches master and the deploy
+  keeps the world.
 
 ## Status updates
 
