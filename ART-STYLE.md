@@ -325,6 +325,13 @@ One sun, straight overhead-north. The grammar:
   (squash/stretch/offset/tint/dissolve — lunge, hurt, eat, court, alarm,
   spawn, death). State changes are envelopes over the same body, never
   separate sprites.
+- **The plans' outlines**: a grazer is an ellipse, a scavenger a chain of
+  segments, a hunter an oval behind **two claws** (`oval`), a parasite a
+  **comma** -- a round head and a tapering, wagging tail (`head`). The hunter was
+  a wedge, and a triangle read as an arrowhead, not an animal; the parasite was
+  a disc, and a disc among ellipses read as a small grazer. Both were chosen
+  from abstract sheets after organic ones (insects, amphibians) read as too
+  detailed at a body's size: the outline names the role, the relief does the rest.
 - **A body is carved, not inked.** Its plan is pressed into a relief and the
   relief is lit (`ProcCreature.relief`): height rises from the outline as a
   dome; a scavenger's segments are arched grooves of uneven pitch that fade
