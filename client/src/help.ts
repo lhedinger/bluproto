@@ -901,9 +901,9 @@ const plans = section('Body plans',
 const variantSections: Record<string, HTMLElement> = {};
 for (const [clade, blurb] of [
   ['herbivore', 'The grazer\'s ellipse, and what an ellipse can become.'],
-  ['predator', 'The hunter\'s wedge: broad at the shoulder, tapering back — longer, wider, narrower, armed.'],
+  ['predator', 'The hunter\'s pincers: an oval behind two claws — longer, broader, slimmer, fanged, snouted.'],
   ['scavenger', 'The segmented body, in more or fewer segments and with the mass moved about.'],
-  ['parasite', 'The round ciliate, and the rounds that are not quite round.'],
+  ['parasite', 'The comma: a round head and a tapering tail — ringed, spiked, hooked, oval, flat, twin-tailed.'],
 ]) {
   variantSections[clade] = section(`${clade[0].toUpperCase()}${clade.slice(1)} bodies`,
     `${blurb} The third marker gene picks which of these a lineage wears, so a species `
@@ -912,8 +912,8 @@ for (const [clade, blurb] of [
 }
 const samples = section('Creatures',
   'Hand-picked points in the genome space, wearing their trophic markings: a hunter '
-  + 'strides on the long pair and carries a tail, a scavenger is the segmented body with '
-  + 'the feelers it finds its food by, a parasite is the round ciliate that rides a '
+  + 'holds two claws ahead, strides on the long pair and carries a tail, a scavenger is the segmented body with '
+  + 'the feelers it finds its food by, a parasite is the comma that rides a '
   + 'bigger body and eats it slowly, anything airborne keeps a single pair of limbs. '
   + 'Fixed points rather than live phenotypes, so this stays a reference while the world '
   + 'evolves away from it.');

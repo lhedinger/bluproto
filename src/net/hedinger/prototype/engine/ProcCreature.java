@@ -441,9 +441,7 @@ public final class ProcCreature {
 			// Where a leg roots: a grazer's at its flank, a hunter's tucked under a
 			// body that is widest at the shoulder (a narrow hunter tucks them in
 			// further, a brute less). And how far along the body they may sit.
-			double half = (ph.form == 4
-					? Math.max(0.5, r - (v == 2 ? 0.5 : (v == 1 || v == 7) ? 1.3 : 1.0))
-					: ext[2] + 0.1) * sP;
+			double half = (ph.form == 4 ? Math.max(0.5, ext[2] - 0.3) : ext[2] + 0.1) * sP;
 			double len = (ph.form == 4 ? 2.4 : v == 2 ? 0.9 : 1.4) * sP;
 			double inset = ph.form == 4 ? 0.9 : 1.4;
 			double la0 = -(ext[0] - inset) * sA, la1 = (ext[1] - inset) * sA;
@@ -456,10 +454,11 @@ public final class ProcCreature {
 				}
 			}
 		} else if (ph.form == 1 && ph.variant == 2) { // four spikes, and no ring
+			double[] hd = head(ph);
 			for (int i = 0; i < 4; i++) {
 				double a = Math.PI / 4 + i * Math.PI / 2;
-				for (double d = r + 0.8; d <= r + 1.7; d += 0.8) {
-					double la = Math.cos(a) * d * sA, pe = Math.sin(a) * d * sP;
+				for (double d = 0.8; d <= 1.7; d += 0.8) {
+					double la = (hd[0] + Math.cos(a) * (hd[1] + d)) * sA, pe = Math.sin(a) * (hd[2] + d) * sP;
 					stampMod(g, ox, oy, px, w0(la, pe, ux, rx), w1(la, pe, uy, ry), limb, m, seed);
 				}
 			}
@@ -598,10 +597,10 @@ public final class ProcCreature {
 			for (double u = u0 + 1.8; u < u1 - 1; u += 2.4 + 0.9 * hash(grooves.size(), 7, seed)) {
 				grooves.add(u);
 			}
-		} else if (ph.form == 4) {
-			grooves.add(u1 - 0.22 * len);
-			grooves.add(u1 - 0.45 * len);
 		}
+		// the plan's own geometry, measured from the sprite's origin as the outline is
+		double front = ph.form == 4 || ph.form == 1 ? extent(ph)[1] : 0;
+		double neck = ph.form == 1 ? head(ph)[0] - head(ph)[1] : 0;
 		Map<Integer, Double> h = new HashMap<>();
 		for (int p : body) {
 			double x = p / 128 - 32 - cx, y = p % 128 - 32 - cy;
@@ -620,16 +619,16 @@ public final class ProcCreature {
 			} else if (ph.form == 0 && u > u1 - 0.55 * len && u < u1 - 0.18 * len) { // a slug's mantle
 				z += 0.3 * (1 - vn);
 			}
-			if (ph.form == 4 && u < u1 - 0.45 * len) {
-				z -= 0.3 * Math.exp(-v * v / 0.3);
+			double xo = p / 128 - 32, yo = p % 128 - 32, uo = xo * ux + yo * uy;
+			if (ph.form == 4) { // the claws cut off at the body's front, a valley down its back
+				z -= 0.5 * Math.exp(-sq(uo - front - 0.2) / 0.35);
+				if (uo < 0) {
+					z -= 0.3 * Math.exp(-v * v / 0.3);
+				}
 			}
-			if (ph.form == 1) {
-				if (u > u1 - 0.26 * len) {
-					z += 0.25 * (1 - vn);
-				}
-				for (int s = -1; s <= 1; s += 2) {
-					z -= 0.3 * Math.exp(-(sq(u + 0.12 * len) + sq(v - s * 0.42 * w)) / 0.5);
-				}
+			if (ph.form == 1) { // the head a dome, the tail meeting it at a neck
+				z += uo > neck ? 0.25 : 0;
+				z -= 0.4 * Math.exp(-sq(uo - neck) / 0.35);
 			}
 			if (ph.core > 0) { // a dark core sinks, a pale one rises
 				z += (ph.core == 1 ? -0.35 : 0.35) * Math.exp(-(u * u + v * v) / 0.6);
@@ -694,17 +693,10 @@ public final class ProcCreature {
 	private static double[] extent(Phenotype ph) {
 		int r = ph.r, v = ph.variant;
 		switch (ph.form) {
-		case 1:
-			switch (v) {
-			case 1: return new double[] { r + 0.5, r + 0.5, r + 0.5 };
-			case 3: return new double[] { r + 0.9, r + 0.9, Math.max(0.9, r - 0.5) };
-			case 5: return new double[] { r * 1.30, r * 1.17, r * 0.85 };
-			case 7: return new double[] { Math.max(0.9, r - 0.5), Math.max(0.9, r - 0.5), r + 0.9 };
-			default: {
-				double rr = Math.sqrt(r * r + r * 0.5);
-				return new double[] { rr, rr, rr };
-			}
-			}
+		case 1: {
+			double[] hd = head(ph);
+			return new double[] { 1.4 * r, hd[0] + hd[1], Math.max(hd[2], 0.45 * r) };
+		}
 		case 2:
 			return new double[] { r + 0.3, r + 0.3, r + 0.4 };
 		case 3: {
@@ -716,13 +708,10 @@ public final class ProcCreature {
 			}
 			return new double[] { rad[0] - c[0], c[c.length - 1] + rad[rad.length - 1], w };
 		}
-		case 4:
-			switch (v) {
-			case 1: return new double[] { r + 1.4, r + 1.0, (2 * r + 2.1) * 0.38 + 0.3 };
-			case 2: return new double[] { r + 0.3, r + 0.3, 2 * r * 0.7 + 0.6 };
-			case 7: return new double[] { r + 0.8, r + 0.6, (2 * r + 1.1) * 0.32 + 0.3 };
-			default: return new double[] { r + 0.3, r + 0.3, 2 * r * 0.5 + 0.4 };
-			}
+		case 4: {
+			double[] o = oval(ph);
+			return new double[] { o[1] - o[0], o[0] + o[1], o[2] };
+		}
 		case 5:
 			return new double[] { r + 0.6, r + 0.6, r + 0.6 };
 		default:
@@ -765,12 +754,40 @@ public final class ProcCreature {
 	 *  across}, so the fringe follows an oval body and the twin's rear lobe
 	 *  rather than a circle the body no longer is. */
 	private static double[] ciliaRing(Phenotype ph) {
+		return head(ph);
+	}
+
+	/**
+	 * The parasite's head: {centre along, radius along, radius across}. A parasite
+	 * is a COMMA -- a round head ahead and a tail tapering behind it, bent to one
+	 * side and wagging on the gait clock -- the shape of a thing that swims to its
+	 * host and rides it. It was a disc, and a disc among the grazers' ellipses read
+	 * as a small grazer. The variants are what the head and tail can become: an
+	 * oval head, a flat one, two tails; the cilia and spikes ring the head.
+	 */
+	private static double[] head(Phenotype ph) {
 		int r = ph.r;
 		switch (ph.variant) {
-		case 3: return new double[] { 0, r + 0.9, Math.max(0.9, r - 0.5) };
-		case 5: return new double[] { -r * 0.45, r * 0.85, r * 0.85 };
-		case 7: return new double[] { 0, Math.max(0.9, r - 0.5), r + 0.9 };
-		default: return new double[] { 0, r, r };
+		case 3: return new double[] { 0.45 * r, 0.85 * r, 0.5 * r };
+		case 7: return new double[] { 0.45 * r, 0.5 * r, 0.85 * r };
+		default: return new double[] { 0.45 * r, 0.65 * r, 0.65 * r };
+		}
+	}
+
+	/**
+	 * The hunter's body: an oval {centre along, half-length, half-width}, with two
+	 * claws held forward of it ({@link #blobs}). Pincers, because a predator's
+	 * outline should say what it does with its front end. It was a wedge, broad at
+	 * the shoulder and tapering back -- a triangle, and it read as an arrowhead, not
+	 * an animal. Its variants are longer, broader, slimmer, and in the claws.
+	 */
+	private static double[] oval(Phenotype ph) {
+		int r = ph.r;
+		switch (ph.variant) {
+		case 1: return new double[] { -0.15 * r, 1.05 * r, 0.55 * r };
+		case 2: return new double[] { -0.15 * r, 0.8 * r, 0.85 * r };
+		case 7: return new double[] { -0.15 * r, 1.1 * r, 0.4 * r };
+		default: return new double[] { -0.15 * r, 0.9 * r, 0.6 * r };
 		}
 	}
 
@@ -826,16 +843,19 @@ public final class ProcCreature {
 			default:
 				return NONE;
 			}
-		case 4:
-			switch (v) {
-			case 3: // fangs
-				return new double[][] { { f + 0.5, 0.9, k }, { f + 0.5, -0.9, k },
-						{ f + 1.1 + t * 0.4, 1.3 + t * 0.4, k }, { f + 1.1 + t * 0.4, -(1.3 + t * 0.4), k } };
-			case 6: // a snout
-				return new double[][] { { f + 0.5, 0, k }, { f + 1.2 + t * 0.4, 0, k } };
-			default: // the tail variants (4, 5) are tails, drawn with the tail
-				return NONE;
+		case 4: { // the claws: a base and a tip each side, a gap between them
+			double kc = (0.3 + 0.2 * r) * (v == 3 ? 1.3 : v == 7 ? 0.75 : 1), across = Math.max(w * (v == 2 ? 0.85 : 0.75), kc + 0.5);
+			double reach = 0.6 + t * 0.5 + (v == 3 ? 0.3 : 0), tipAcross = v == 3 ? across - 0.5 : across + 0.4; // fanged: the tips close inward
+			double[][] claws = { { f + 0.1, across, kc }, { f + 0.1, -across, kc },
+					{ f + reach, tipAcross, kc }, { f + reach, -tipAcross, kc } };
+			if (v != 6) { // the tail variants (4, 5) are tails, drawn with the tail
+				return claws;
 			}
+			double[][] snout = java.util.Arrays.copyOf(claws, 6); // a snout out between the claws
+			snout[4] = new double[] { f + 0.4, 0, k };
+			snout[5] = new double[] { f + 0.9 + t * 0.4, 0, k };
+			return snout;
+		}
 		default:
 			return NONE;
 		}
@@ -858,11 +878,6 @@ public final class ProcCreature {
 		return sq(la - cx) + sq(pe - cy) <= rad * rad;
 	}
 
-	/** Broad at the front and tapering to the back: the hunter's outline. */
-	private static boolean wedge(double la, double pe, double back, double front, double taper, double tip) {
-		return la >= -back && la <= front && Math.abs(pe) <= (back - 0.3 + la) * taper + tip;
-	}
-
 	private static boolean inForm(Phenotype ph, double la, double pe, int seed, double phase) {
 		return inBody(ph, la, pe, seed, phase) || inBlob(ph, la, pe);
 	}
@@ -870,13 +885,21 @@ public final class ProcCreature {
 	private static boolean inBody(Phenotype ph, double la, double pe, int seed, double phase) {
 		int r = ph.r, v = ph.variant;
 		switch (ph.form) {
-		case 1: // the parasite: round, and its variants are what round can become
-			switch (v) {
-			case 1: return disc(la, pe, 0, 0, r + 0.5);
-			case 3: return ellipse(la, pe, r + 0.9, Math.max(0.9, r - 0.5));
-			case 5: return disc(la, pe, r * 0.55, 0, r * 0.62) || disc(la, pe, -r * 0.45, 0, r * 0.85);
-			case 7: return ellipse(la, pe, Math.max(0.9, r - 0.5), r + 0.9);
-			default: return la * la + pe * pe <= r * r + r * 0.5;
+		case 1: // the parasite: a comma (see head())
+			{
+				double[] hd = head(ph);
+				if (ellipse(la - hd[0], pe, hd[1], hd[2])) {
+					return true;
+				}
+				double wag = 0.12 * r * Math.sin(phase), bend = v == 5 ? 0 : 0.1 * r, tip = Math.max(0.5, 0.18 * r);
+				if (ellipse(la + 0.4 * r, pe - bend - wag * 0.5, 0.5 * r, 0.33 * r)) {
+					return true;
+				}
+				if (v == 5) { // twin: the tail splits
+					return ellipse(la + 0.95 * r, pe - 0.5 * r - wag, 0.45 * r, tip)
+							|| ellipse(la + 0.95 * r, pe + 0.5 * r - wag, 0.45 * r, tip);
+				}
+				return ellipse(la + 0.95 * r, pe - 2.2 * bend - wag, 0.45 * r, tip);
 			}
 		case 2:
 			return la <= r + 0.3 && la >= -r - 0.3 && Math.abs(pe) <= (r - la) * 0.5 + 0.4;
@@ -893,19 +916,9 @@ public final class ProcCreature {
 			return false;
 		}
 		case 4:
-			// The hunter: broad across the shoulders and tapering to the back, the
-			// mirror of the scavenger's forward-pointing wedge and nothing like the
-			// grazer's ellipse. It used to be a circle a shade smaller than form 0,
-			// which meant a predator and a grazer differed only in leg length and a
-			// one-pixel tail -- true at the size a sprite sheet is baked, invisible
-			// at the size a creature is actually watched. Outline is the only thing
-			// that survives being drawn small, so the roles differ in outline -- and
-			// so do the variants: longer, wider, narrower, never just marked.
-			switch (v) {
-			case 1: return wedge(la, pe, r + 1.4, r + 1.0, 0.38, 0.3);
-			case 2: return wedge(la, pe, r + 0.3, r + 0.3, 0.7, 0.6);
-			case 7: return wedge(la, pe, r + 0.8, r + 0.6, 0.32, 0.3);
-			default: return wedge(la, pe, r + 0.3, r + 0.3, 0.5, 0.4);
+			{ // the hunter: an oval behind its claws (see oval())
+				double[] o = oval(ph);
+				return ellipse(la - o[0], pe, o[1], o[2]);
 			}
 		case 5:
 			int q = (int) Math.floor((Math.atan2(pe, la) + Math.PI) / (2 * Math.PI) * 6);
