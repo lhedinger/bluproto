@@ -1532,6 +1532,7 @@ export function renderGL(
   };
   for (const layer of GL_LAYERS) {
     if (layer.target !== current) {
+      glr.gpuSection('composite');
       composite();
       current = layer.target;
       f.view = screen;
@@ -1542,6 +1543,7 @@ export function renderGL(
         clip = [];
       }
     }
+    glr.gpuSection(layer.name);
     layer.draw(f);
     if (offscreen && art) {
       // The layer's rects, in screen px for the composite.
@@ -1557,7 +1559,9 @@ export function renderGL(
     sec[layer.sec] += now - t0;
     t0 = now;
   }
+  glr.gpuSection('composite');
   composite();
+  glr.gpuSection(null);
   const stats = glr.end();
   drawMarks(og, cam, f);
   sec.secTail += performance.now() - t0;
