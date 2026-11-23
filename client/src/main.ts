@@ -2374,6 +2374,7 @@ function hudFrame(now: number, drawn: boolean): void {
     paceEvery: pacer.every, paceFloor: pacer.floor, refreshMs: pacer.refreshMs, draws: hudDraws,
     drawCalls: hudGl.drawCalls, quads: hudGl.quads, uploadMs: hudGl.uploadMs,
     secLayers: hudGl.secLayers, secEnts: hudGl.secEnts, secTail: hudGl.secTail,
+    gpuMs: glr ? glr.gpuTotalMs : -1, gpuLayers: glr ? Object.fromEntries(glr.gpuMs) : {},
     streamMs: Net.streamStats.msgMs, streamKb: Net.streamStats.msgKb, msgs: Net.streamStats.count,
     tex: hudGl.textures, atlases: atlasCount(),
     onLevel: state.tracks.size, world: worldTotal,
@@ -2402,6 +2403,8 @@ function hudFrame(now: number, drawn: boolean): void {
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
       + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
+    + (glr && glr.gpuTotalMs >= 0 ? `\ngpu ${glr.gpuTotalMs.toFixed(1)}ms: ` + [...glr.gpuMs]
+      .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') : '')
     + `\nstream ${net2.msgMs.toFixed(1)}ms/${net2.msgKb.toFixed(0)}kb`
     + ` · tex ${hudGl.textures} · atlases ${atlasCount()}`
     + `\nlong ${longN}×/${longMax.toFixed(0)}ms`

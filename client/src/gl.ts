@@ -210,6 +210,7 @@ export class GLRenderer {
     }
     this.gl = gl;
     this.parallel = gl.getExtension('KHR_parallel_shader_compile');
+    this.timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
     const prog = gl.createProgram()!;
     for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]] as const) {
       const sh = gl.createShader(type)!;
@@ -278,6 +279,61 @@ export class GLRenderer {
   private screenH = 1;
   private targets = new Map<string, Target>();
 
+  // ---- GPU timing ---------------------------------------------------------
+  // EXT_disjoint_timer_query_webgl2, where the browser has it (many desktop
+  // and Android GPUs; never SwiftShader): GPU time per layer, which no JS
+  // clock can see. One query per section -- they cannot nest -- read back
+  // frames later, when the GPU has finished with them.
+  private timer: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null = null;
+  private timing: { q: WebGLQuery; name: string } | null = null;
+  private pending: Array<{ q: WebGLQuery; name: string }> = [];
+  private spareQueries: WebGLQuery[] = [];
+  /** GPU ms per section name (EMA), and their sum per frame; empty and -1
+   *  without timer queries. */
+  readonly gpuMs = new Map<string, number>();
+  gpuTotalMs = -1;
+
+  /** Ends the running GPU section, if any, and starts one named `name`
+   *  (null: none). Work batched before the call counts to the old one. */
+  gpuSection(name: string | null): void {
+    if (!this.timer) return;
+    const gl = this.gl;
+    this.flush();
+    if (this.timing) {
+      gl.endQuery(this.timer.TIME_ELAPSED_EXT);
+      this.pending.push(this.timing);
+      this.timing = null;
+    }
+    if (name === null || this.pending.length > 64) return; // a GPU that never answers: stop asking
+    const q = this.spareQueries.pop() ?? gl.createQuery()!;
+    gl.beginQuery(this.timer.TIME_ELAPSED_EXT, q);
+    this.timing = { q, name };
+  }
+
+  /** Reads back every finished query (in begin, once a frame). */
+  private gpuCollect(): void {
+    if (!this.timer || this.pending.length === 0) return;
+    const gl = this.gl;
+    const disjoint = gl.getParameter(this.timer.GPU_DISJOINT_EXT) as boolean;
+    let total = 0, any = false;
+    while (this.pending.length > 0) {
+      const p = this.pending[0];
+      if (!gl.getQueryParameter(p.q, gl.QUERY_RESULT_AVAILABLE)) break;
+      this.pending.shift();
+      if (!disjoint) {
+        const ms = (gl.getQueryParameter(p.q, gl.QUERY_RESULT) as number) / 1e6;
+        const old = this.gpuMs.get(p.name);
+        this.gpuMs.set(p.name, old === undefined ? ms : old + (ms - old) * 0.1);
+        any = true;
+      }
+      this.spareQueries.push(p.q);
+    }
+    if (any) {
+      for (const v of this.gpuMs.values()) total += v;
+      this.gpuTotalMs = total;
+    }
+  }
+
   /** Sizes every later draw to a w x h target. The sprite program is the
    *  bound one between passes (fullscreen restores it). */
   private viewport(w: number, h: number): void {
@@ -338,6 +394,7 @@ export class GLRenderer {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.screenW = w; this.screenH = h;
+    this.gpuCollect();
     this.viewport(w, h);
     gl.clearColor(r, g2, b, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
