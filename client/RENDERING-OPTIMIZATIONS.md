@@ -35,7 +35,7 @@ and reads `window.__bluPerf` (`frameMs`, `drawMs`, `cbMs`, `drawCalls`).
 
 ## The inventory
 
-Ordered by expected gain for the effort.
+Ordered by expected gain for the effort. Items 1-6 and 8 are done; 7 is partly done.
 
 ### 1. Vegetation as a GPU tile layer -- done
 - **Shipped:** `GLRenderer.tileLayer` draws the level's vegetation in one
@@ -119,41 +119,44 @@ Ordered by expected gain for the effort.
 - **Measured:** glints on against off is within noise on software GL (0.5 ms
   JS still, none panning).
 
-### 4. Fewer full-screen passes -- partly done
-- **Done:**
-  - Zoomed in (>= ART px/tile), the vegetation pass draws the ground under
-    itself (`TILE_FS` with `uGround`), so the ground quad and the plant pass
-    are one pass. Near pan: 120 -> 143 frames in the phase, p95 83 -> 67 ms.
-  - The veil and the glints are scissored to the chunks that hold cover or
-    water (`clip.ts`), as flow is (8-tile boxes there). Past a rect cap the
-    rects merge into one, so far zoom stays at 12-13 draw calls. Near pan
-    p50 50 -> 33 ms.
-- **Left:** mean near frame on software GL is about 54 ms with every pass on
-  and 24 ms with all off. Flow and the veil are the largest at about 10 ms
-  each; the parallax floor below and the glints a few ms each.
-- **Done when:** the all-layers frame approaches the all-off frame.
+### 4. Fewer full-screen passes -- done
+- **Merged and clipped:** zoomed in, the vegetation pass draws the ground
+  under itself (`TILE_FS`, `uGround`); flow, the veil and the glints are
+  scissored to the chunks that hold water or cover (`clip.ts`).
+- **Art-resolution targets:** past one screen pixel per art-pixel, the
+  world layers draw into an offscreen target at 12 px per tile, one pixel
+  per art-pixel, and the veil into a second; each is composited onto the
+  screen (`PRESENT_FS`) with the pixel-art filter (a solid texel, blended
+  only across a one-screen-pixel edge) and the fraction-of-a-pixel shift,
+  so the world stays crisp at any zoom and moves smoothly. Bodies, lids and
+  flora stay at screen resolution. `art=0` restores the direct path.
+  - Near still p50 66.6 -> 33.4 ms; near pan 112 -> 188 frames in the
+    phase; mean near frame 65.6 ms (`art=0`) -> 41.8 ms.
+- **Left:** the veil target and its composite cost about 14 ms of the near
+  frame on software GL.
 
-### 5. One texture for every creature sprite, drawn instanced
-- **Now:** one texture per creature shape, so the batcher breaks its batch at
-  every shape change (a draw call per run of one shape).
-- **Measured:** over the densest herd, sprites add 35-50 draw calls (12, 24
-  and 48 px/tile). On software GL the frame time does not move with them,
-  so the gain cannot be shown here; it is worth a test on a phone before
-  the refactor (shape atlases, their LRU and mips all change).
-- **Instead:** a `TEXTURE_2D_ARRAY` (or one shared atlas) with the shape as a
-  layer index, and instanced quads carrying position, frame, tint and layer.
-  The whole herd is one draw call. Check `MAX_ARRAY_TEXTURE_LAYERS`.
-- **Done when:** draw calls stop growing with the number of shapes on screen.
+### 5. Several textures per sprite batch -- done
+- The sprite shader has eight samplers; each vertex carries its texture
+  slot, so a batch breaks only at a ninth distinct texture (the PixiJS and
+  Phaser approach, chosen over a texture array: the per-shape atlases,
+  their LRU and their mips stay as they were).
+- Over the densest herd, draw calls 62 -> 33 at 12 px/tile, 47 -> 26 at 24,
+  31 -> 13 at 48; with sprites off, 31, 24 and 12. Sprites now add about
+  two draw calls.
 
-### 6. Revisit the frame pacer -- examined, no change
-- **Now:** frames are skipped while little moves, down to a 10 fps floor
-  (`PACE_FLOOR_MS = 100`, `main.ts`).
-- **Measured:** at 12 px/tile and closer, where the flow marks animate, the
-  pacer already asks for every frame (pace 16.7 ms over a river and over dry
-  land): the bodies move enough on screen. A per-tick floor while flow is on
-  screen was tried and changed nothing, so it was not kept. The floor
-  matters only zoomed out, where everything is dots.
-- **Done when:** a slow pan and a resting herd both look continuous at fit zoom.
+### 6. Frame pacer in whole refreshes -- done
+- `pacer.ts` draws once a whole number of display refreshes have passed
+  (read from rAF timestamps), as Android's Frame Pacing library does:
+  - it measures the refresh period, so 90 and 120 Hz displays pace in their
+    own refreshes;
+  - the motion's rate applies at once when faster, after 500 ms when
+    slower;
+  - a floor follows what the device can draw (the gap from a drawn frame's
+    rAF to the next, in refreshes), with a dead band, so a frame that costs
+    1.3 refreshes shows at an even two.
+- Uneven drawn intervals: 4 px/tile 39% -> 1%, 6 px/tile 53% -> 0%. At 12
+  px/tile the headless rAF is not aligned to a refresh, so that zoom stays
+  mixed in this harness; judge it on a device.
 
 ### 7. Per-frame allocations -- partly done
 - **Done:** `GLRenderer.end()` counts its sprite pools with a prefix test and
@@ -169,14 +172,34 @@ Ordered by expected gain for the effort.
 - `renderGL` and the glint pass round the world origin to whole screen
   pixels, so the layers move as one picture and a pan does not shimmer.
 
+## Architecture
+
+- `renderGL` prepares what the frame shares (`frame.ts`: `Frame`, `View`)
+  and runs `GL_LAYERS`, which is the draw order. Each layer is one function
+  of the `Frame`, in the module of its domain (flow in `flow.ts`, glints in
+  `fx.ts`, the rest in `render.ts`), and names its target.
+- Layers never call WebGL: `GLRenderer` owns the state (the rule Phaser 4's
+  render nodes follow).
+- A `View` carries both the target's scale (geometry) and the viewer's zoom
+  (levels of detail, parallax), which is what lets one layer draw into the
+  screen or an art-resolution target unchanged.
+
 ## How to measure
 
-- `npm run bench` (client/bench/bench.mjs) for the static zoom ladder.
-- The flag bisect above for per-layer cost.
-- A real phone for absolute numbers: SwiftShader only ranks.
-- Missing and worth adding: a scripted pan-and-zoom run reporting p99 and
-  worst frame (every recorded client failure so far happened in motion), and
-  GPU timer queries (`EXT_disjoint_timer_query_webgl2`) where available.
+All in `client/bench`, against `BENCH_URL` (default `http://localhost:7070`);
+set `CHROMIUM=/opt/pw-browsers/chromium` where Playwright's own browser is
+not installed.
+
+- `profile.mjs <label> [runs] [flags]`: near still, near pan, far pan; drawn
+  frame intervals, JS, uploads, draw calls, long tasks, GPU time.
+- `passes.mjs`: mean near frame with each perf flag off in turn.
+- `cadence.mjs`: how evenly the pacer spaces drawn frames.
+- `calls.mjs`: draw calls over the densest herd.
+- `shots.mjs pause | take <dir> | diff <a> <b> | resume`: fixed views of a
+  paused world, diffed pixel by pixel; a refactor must come out at zero.
+- `npm run bench` (`bench.mjs`): the static zoom ladder.
+- A real phone for absolute numbers. The HUD shows GPU time per layer where
+  the browser has `EXT_disjoint_timer_query_webgl2` (SwiftShader never does).
 
 ## Sources
 
