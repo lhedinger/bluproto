@@ -8,6 +8,9 @@ import {
   corpseMipFor, decayStage, headingCol, tintedFor,
 } from './atlas';
 import type { Camera } from './camera';
+import type { Frame, Layer, Proj, Scene } from './frame';
+import { View } from './frame';
+import { drawGlintsGL } from './fx';
 import { flagOff } from './flags';
 import { actionOf, F_CARRYING, F_DEAD, F_GRABBED } from './protocol';
 import { ART, CORPSE_RGB, PENDING_RGB, VOID_RGB, hash01, hex, rgbF } from './artCore';
@@ -17,7 +20,7 @@ import {
 } from './fixtures';
 import { VEG_KINDS, VEG_STAGES, VEG_STAGE_MASK, VEG_VARIANTS, drawVegetationTile, vegKindOf, vegetationTileFor, type VegKind } from './vegArt';
 import { chunkBoxes, screenRects } from './clip';
-import { FLOW_FS, flowBoxes, flowGpuData, flowGpuWanted, flowLayers } from './flow';
+import { drawFlowGL, flowLayers } from './flow';
 import { floraAtlas, floraInView } from './flora';
 
 // The split-out drawing modules are part of this one's public face: callers
@@ -31,12 +34,11 @@ export { setFlowGrid } from './flow';
 /** The moving water in view (flow.ts), as chunk canvases with their world
  *  origin: drawn over the ground and under everything standing on it, so a
  *  swimmer is never painted over. */
-function flowInView(cam: Camera, w: number, h: number, chunkTiles: number, level: number,
+function flowInView(cam: Proj, w: number, h: number, chunkTiles: number, level: number,
     getChunk: ChunkSource, tick: number) {
   const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(w, h);
-  return flowLayers(cam.scale, { x0: tl.x, y0: tl.y, x1: br.x, y1: br.y }, chunkTiles, level, getChunk, tick);
+  return flowLayers(cam.zoom, { x0: tl.x, y0: tl.y, x1: br.x, y1: br.y }, chunkTiles, level, getChunk, tick);
 }
-import type { EntityState } from './protocol';
 import type { Pose, WorldState } from './state';
 
 export interface WorldMeta { cols: number; rows: number; }
@@ -288,15 +290,15 @@ let getLowMap: (z: number) => HTMLCanvasElement | null = () => null;
 /** A chunk lookup. `fetch` false is a peek: the chunk if it has been decoded,
  *  and no request otherwise. Chunks are requested only for the viewport at
  *  near zoom; everything else is the low map's job. */
-type ChunkSource = (cx: number, cy: number, z: number, fetch: boolean) => HTMLCanvasElement | null;
+export type ChunkSource = (cx: number, cy: number, z: number, fetch: boolean) => HTMLCanvasElement | null;
 /** The chunk range a view wants, inclusive, one chunk of margin for panning --
  *  or null at far zoom, where the low map is the ground and no chunk is
  *  fetched at all. The doubled world is 198 chunks and 3.7 MB a level; at fit
  *  zoom on a phone that is 25 seconds of downloading for a picture the 34 KB
  *  low map already shows at 2 px a tile. */
-function wantedChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+function wantedChunks(cam: Proj, cvW: number, cvH: number, meta: WorldMeta,
     chunkTiles: number): [number, number, number, number] | null {
-  if (cam.scale < ART || chunkTiles <= 0) return null;
+  if (cam.zoom < ART || chunkTiles <= 0) return null;
   const cxN = Math.ceil(meta.cols / chunkTiles), cyN = Math.ceil(meta.rows / chunkTiles);
   const tl = cam.screenToWorld(0, 0), br = cam.screenToWorld(cvW, cvH);
   return [Math.max(0, Math.floor(tl.x / chunkTiles) - 1), Math.max(0, Math.floor(tl.y / chunkTiles) - 1),
@@ -492,7 +494,7 @@ function hasHoles(chunk: HTMLCanvasElement): boolean {
  *  first at the factor squared, a plane two storeys from the eye, so the stack reads
  *  as one deepening cut rather than a hole with a hole painted on its
  *  floor. */
-function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+function belowChunks(cam: Proj, cvW: number, cvH: number, meta: WorldMeta,
     chunkTiles: number, level: number,
     getChunk: ChunkSource,
 ): Array<[number, number, HTMLCanvasElement, number, number, number, number]> {
@@ -506,7 +508,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   // floor below ran out of chunks short of the edge, and there its low map
   // showed through with its own veil on top of the chunks' -- a dark band
   // down the side of the screen, doubly veiled.
-  const deep = parallaxFactor(cam.scale) ** level;
+  const deep = parallaxFactor(cam.zoom) ** level;
   const tl = cam.screenToWorld(mx - mx / deep, my - my / deep);
   const br = cam.screenToWorld(mx + (cvW - mx) / deep, my + (cvH - my) / deep);
   const cx0 = Math.max(0, Math.floor(tl.x / chunkTiles));
@@ -551,7 +553,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
       for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
         const below = getChunk(cx, cy, z, true);
         if (!below) break;
-        factor *= parallaxFactor(cam.scale);
+        factor *= parallaxFactor(cam.zoom);
         stack.push([key, z, below, ...rect(cx, cy, factor)]);
         above = below;
       }
@@ -580,7 +582,7 @@ function belowChunks(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
  *  alpha, so this is the view down wherever no chunk is there to give a
  *  sharper one; belowChunks draws over it where one is. Nothing is drawn for
  *  a level whose own low map is opaque: there is no hole to see it through. */
-function belowLows(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
+function belowLows(cam: Proj, cvW: number, cvH: number, meta: WorldMeta,
     level: number): Array<[number, HTMLCanvasElement, number, number, number, number]> {
   const out: Array<[number, HTMLCanvasElement, number, number, number, number]> = [];
   const mx = cvW / 2, my = cvH / 2;
@@ -597,7 +599,7 @@ function belowLows(cam: Camera, cvW: number, cvH: number, meta: WorldMeta,
   for (let z = level - 1; z >= 0 && above && hasHoles(above); z--) {
     const low = getLowMap(z);
     if (!low) break;
-    factor *= parallaxFactor(cam.scale);
+    factor *= parallaxFactor(cam.zoom);
     stack.push([z, low, factor]);
     above = low;
   }
@@ -1102,7 +1104,6 @@ function floraBodies(tracks: ReturnType<WorldState['ordered']>, level: number): 
  *  layer texture exactly when the canvas under it was repainted. */
 let groundRev = 0;
 let canopyRev = 0;
-const flowClip: number[] = []; // the river chunks' screen rects, reused each frame
 const veilClip: number[] = []; // the canopy chunks' screen rects, the same way
 /** Whether the overlay canvas holds anything from the last frame (see the end
  *  of renderGL), so an empty overlay is not cleared again and again. */
@@ -1475,134 +1476,140 @@ function bakeMachine(n: number,
   return cv;
 }
 
+/**
+ * The WebGL frame: the same picture as render(), from the GPU. It prepares
+ * what the whole frame shares (frame.ts, Frame), runs GL_LAYERS in order, and
+ * then draws the viewer's vector marks on the 2D overlay canvas `og`.
+ */
 export function renderGL(
   glr: import('./gl').GLRenderer,
   og: CanvasRenderingContext2D,
   cam: Camera,
-  state: WorldState,
-  meta: WorldMeta | null,
-  chunkTiles: number,
-  tilePx: number,
-  getChunk: ChunkSource,
-  veg: Uint8Array | null,
-  vegRev: number,
-  cover: Uint8Array | null,
-  playTick: number,
-  nowMs: number,
-  level = 0,
-  selection: { id: number | null; tile: { x: number; y: number; z: number } | null } =
-    { id: null, tile: null },
+  scene: Scene,
 ): { drawCalls: number; quads: number; uploadMs: number; textures: number;
      secLayers: number; secEnts: number; secTail: number } {
   let t0 = performance.now();
   const sec = { secLayers: 0, secEnts: 0, secTail: 0 };
-  const lap = (k: keyof typeof sec) => { const n = performance.now(); sec[k] += n - t0; t0 = n; };
   const cv = og.canvas;
-  const dots = SPRITES_OFF || cam.scale < DOT_LOD_SCALE;
   glr.begin(cv.width, cv.height, VOID_F[0], VOID_F[1], VOID_F[2]);
+  const meta = scene.meta;
   if (!meta) { og.clearRect(0, 0, cv.width, cv.height); overlayInk = false; return { ...glr.end(), ...sec }; }
-
-  // The world's origin on whole screen pixels. Every layer and GPU pass is
-  // placed from it, and at a fractional offset nearest-pixel sampling rounds
-  // each art-pixel's edges differently from frame to frame -- a pan read as
-  // the whole ground shimmering. Snapped, the layers move as one picture.
-  const o0 = cam.worldToScreen(0, 0);
-  o0.x = Math.round(o0.x); o0.y = Math.round(o0.y);
-  const worldW = meta.cols * cam.scale, worldH = meta.rows * cam.scale;
-
-  // Ground and vegetation: art-resolution layers. Layer
-  // textures carry NO mipmaps (they get patched), so at far zoom — where the
-  // full 12px/tile texture would minify 4-8x and thrash a phone GPU's texture
-  // cache — the quad samples the quarter-res mirror instead, exactly as the
-  // Canvas2D path always has.
-  const lowZoom = cam.scale < ART;
   // Layer textures are keyed by level, so leaving a floor strands its set on
   // the GPU. Hand them back the moment the viewer moves: a three-storey world
   // otherwise holds three worlds' worth of layers, and a phone has no room
   // for the two nobody is looking at.
-  if (glLayerLevel !== level) {
+  if (glLayerLevel !== scene.level) {
     if (glLayerLevel >= 0) glr.evictLevel(glLayerLevel);
-    glLayerLevel = level;
+    glLayerLevel = scene.level;
   }
-  if (chunkTiles > 0 && tilePx > 0) {
-    const ground = groundLayer(meta, chunkTiles, tilePx, getChunk, level, nowMs,
-      wantedChunks(cam, cv.width, cv.height, meta, chunkTiles));
-    // The floor below goes down FIRST, under its own parallax, so the ground
-    // layer's holes look onto it (see belowLows, belowChunks). Neither its
-    // low maps nor its chunks change once decoded, so each is a permanent
-    // texture at rev 0.
-    for (const [z, img, bx, by, bw, bh] of belowLows(cam, cv.width, cv.height, meta, level)) {
-      glr.layer('belowlo:' + z, img, 0, null, bx, by, bw, bh);
-    }
-    // Chunks sharpen the view down at near zoom only. Below ART the ground
-    // samples its low mirror, and the floors under it must do the same:
-    // these textures carry no mipmaps, and a chunk that had landed while
-    // zoomed in was drawn 2-4x minified — a crisp, moiré-striped rectangle
-    // on the smooth low map, its straight edges sliding against the ground
-    // under parallax as the viewer panned.
-    if (!lowZoom) {
-      for (const [key, z, img, bx, by, bw, bh] of
-          belowChunks(cam, cv.width, cv.height, meta, chunkTiles, level, getChunk)) {
-        glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
-      }
-    }
-    // Bodies on the floor below ride between the two layers: the batcher
-    // draws in submission order, so the ground quad occludes them next.
-    drawBelowBodiesGL(glr, cam, state, playTick, level, cv.width, cv.height);
-    const vegOn = !!veg && veg.length === meta.cols * meta.rows;
-    // Zoomed in, the plant pass draws the ground under itself (TILE_FS): one
-    // texel fetch per art-pixel is the ground quad's own nearest sampling
-    // there, and the screen is written once instead of twice. Zoomed out the
-    // ground keeps its quad, for the filtering its low mirror needs.
-    let groundUnder: { tex: WebGLTexture; perTile: number } | null = null;
-    if (ground) {
-      if (lowZoom && groundLowCv) {
-        glr.layer('groundlo:' + level, groundLowCv, groundRev, null, o0.x, o0.y, worldW, worldH);
-      } else if (vegOn && !lowZoom) {
-        const e = glr.layerUpload('ground:' + level, ground, groundRev, groundPatchRects);
-        groundUnder = { tex: e.tex, perTile: ground.width / meta.cols };
-      } else {
-        glr.layer('ground:' + level, ground, groundRev, groundPatchRects, o0.x, o0.y, worldW, worldH);
-      }
-    }
-    if (vegOn) {
-      vegAtlasStep();
-      vegIndexUpdate(meta, veg!, vegRev, level);
-      glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
-        vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, o0.x, o0.y, cam.scale,
-        1, groundUnder);
-    }
-    // Moving water over the still bake and the plants, under the bodies: one
-    // GPU pass that reads the ground texture (flow.ts, FLOW_FS).
-    const groundTex = flowGpuWanted(cam.scale, level) ? glr.layerTexture('ground:' + level) : null;
-    const flowRec = groundTex ? flowGpuData(level) : null;
-    if (groundTex && flowRec) {
-      const recTex = glr.dataTex('flowrec', flowRec.data, flowRec.cols, flowRec.rows, 'rgba', flowRec.rev);
-      // Clipped to the river chunks on screen: the shader is long, and run on
-      // every pixel only to discard most of them it doubled a near frame.
-      screenRects(flowBoxes(), o0.x, o0.y, cam.scale, cv.width, cv.height, flowClip, 32);
-      if (flowClip.length > 0) {
-        glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
-          uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows], uT: playTick,
-        }, flowClip);
-      }
+  const screen = new View(cam.cx, cam.cy, cam.scale, cam.scale, cv.width, cv.height);
+  const tiled = scene.chunkTiles > 0 && scene.tilePx > 0;
+  const f: Frame = {
+    ...scene, meta, glr, screen, view: screen, followId: cam.followId,
+    // Below one screen pixel per art-pixel the full 12 px/tile textures would
+    // minify 4-8x and thrash a phone GPU's texture cache, so the layers read
+    // their quarter-res mirrors instead, exactly as the Canvas2D path does.
+    lowZoom: cam.scale < ART,
+    tiled,
+    ground: tiled ? groundLayer(meta, scene.chunkTiles, scene.tilePx, scene.getChunk, scene.level,
+      scene.nowMs, wantedChunks(screen, cv.width, cv.height, meta, scene.chunkTiles)) : null,
+    tracks: scene.state.ordered(),
+    marks: { doors: [], switches: [], links: [], glyphs: [], rings: [] },
+  };
+  for (const layer of GL_LAYERS) {
+    layer.draw(f);
+    const now = performance.now();
+    sec[layer.sec] += now - t0;
+    t0 = now;
+  }
+  const stats = glr.end();
+  drawMarks(og, cam, f);
+  sec.secTail += performance.now() - t0;
+  return { ...stats, ...sec };
+}
+
+/** The GL frame's draw order, back to front. Each entry does one job. */
+const GL_LAYERS: Layer[] = [
+  { name: 'floors below', sec: 'secLayers', draw: drawBelowFloors },
+  { name: 'bodies below', sec: 'secLayers', draw: drawBelowBodies },
+  { name: 'ground and plants', sec: 'secLayers', draw: drawGroundAndPlants },
+  { name: 'flowing water', sec: 'secLayers', draw: drawFlowGL },
+  { name: 'bodies', sec: 'secEnts', draw: drawBodies },
+  { name: 'veil', sec: 'secTail', draw: drawVeil },
+  { name: 'lids', sec: 'secTail', draw: drawLids },
+  { name: 'flora', sec: 'secTail', draw: drawFlora },
+  { name: 'glints', sec: 'secTail', draw: drawGlintsGL },
+];
+
+/** The floors below, FIRST, under their own parallax, so the ground layer's
+ *  holes look onto them (see belowLows, belowChunks). Neither their low maps
+ *  nor their chunks change once decoded, so each is a permanent texture at
+ *  rev 0. */
+function drawBelowFloors(f: Frame): void {
+  if (!f.tiled) return;
+  const v = f.view;
+  for (const [z, img, bx, by, bw, bh] of belowLows(v, v.w, v.h, f.meta, f.level)) {
+    f.glr.layer('belowlo:' + z, img, 0, null, bx, by, bw, bh);
+  }
+  // Chunks sharpen the view down at near zoom only. Below ART the ground
+  // samples its low mirror, and the floors under it must do the same: these
+  // textures carry no mipmaps, and a chunk that had landed while zoomed in was
+  // drawn 2-4x minified — a crisp, moiré-striped rectangle on the smooth low
+  // map, its straight edges sliding against the ground under parallax as the
+  // viewer panned.
+  if (f.lowZoom) return;
+  for (const [key, z, img, bx, by, bw, bh] of
+      belowChunks(v, v.w, v.h, f.meta, f.chunkTiles, f.level, f.getChunk)) {
+    f.glr.layer('below:' + z + ':' + key, img, 0, null, bx, by, bw, bh);
+  }
+}
+
+/** Bodies on the floor below ride between the floors below and the ground:
+ *  the batcher draws in submission order, so the ground occludes them next. */
+function drawBelowBodies(f: Frame): void {
+  if (!f.tiled) return;
+  const v = f.view;
+  drawBelowBodiesGL(f.glr, v, f.state, f.playTick, f.level, v.w, v.h);
+}
+
+/** The ground, and the vegetation over it. Zoomed in, the plant pass draws
+ *  the ground under itself (TILE_FS): one texel fetch per art-pixel is the
+ *  ground quad's own nearest sampling there, and the target is written once
+ *  instead of twice. Zoomed out the ground keeps its quad, for the filtering
+ *  its low mirror needs. */
+function drawGroundAndPlants(f: Frame): void {
+  if (!f.tiled) return;
+  const { glr, meta, level, view: v, ground } = f;
+  const worldW = meta.cols * v.scale, worldH = meta.rows * v.scale;
+  const vegOn = !!f.veg && f.veg.length === meta.cols * meta.rows;
+  let under: { tex: WebGLTexture; perTile: number } | null = null;
+  if (ground) {
+    if (f.lowZoom && groundLowCv) {
+      glr.layer('groundlo:' + level, groundLowCv, groundRev, null, v.ox, v.oy, worldW, worldH);
+    } else if (vegOn && !f.lowZoom) {
+      const e = glr.layerUpload('ground:' + level, ground, groundRev, groundPatchRects);
+      under = { tex: e.tex, perTile: ground.width / meta.cols };
+    } else {
+      glr.layer('ground:' + level, ground, groundRev, groundPatchRects, v.ox, v.oy, worldW, worldH);
     }
   }
+  if (!vegOn) return;
+  vegAtlasStep();
+  vegIndexUpdate(meta, f.veg!, f.vegRev, level);
+  glr.tileLayer('vegtile', vegIndex!, meta.cols, meta.rows, vegIndexRev,
+    vegAtlas!, vegAtlasRev, vegAtlasAvg!, VEG_ATLAS_COLS, VEG_KINDS.length, ART, v.ox, v.oy, v.scale,
+    1, under);
+}
 
-  lap('secLayers');
-  // Vector work collected during the entity walk, drawn on the overlay after.
-  const ovDoors: EntityState[] = [];
-  const ovSwitches: Array<[EntityState, EntityState | undefined]> = [];
-  const ovLinks: Array<[number, number, number, number]> = [];
-  const ovGlyphs: Array<[number, number, number, number]> = [];
-  const ovRings: Array<['grabbed' | 'carrying' | 'follow' | 'selected', number, number, number]> = [];
-
-  // Painter's order (state.drawRank), sorted once per stream message.
-  const tracks = state.ordered();
+/** The bodies on this level, in painter's order: sprites, stamps and the dot
+ *  LOD. The vector marks they carry (rings, glyphs, carry links) and the
+ *  doors and switches are gathered into f.marks for the overlay. */
+function drawBodies(f: Frame): void {
+  const { glr, state, playTick, level, marks, screen: cam } = f;
+  const dots = SPRITES_OFF || cam.zoom < DOT_LOD_SCALE;
   const stepPx = state.maxStep() * cam.scale;
-  const cvW = cv.width, cvH = cv.height;
-
-  for (const t of tracks) {
+  const cvW = cam.w, cvH = cam.h;
+  for (const t of f.tracks) {
     const e = t.curr;
     if (Math.round(e.z) !== level) continue;
     // Cull on the RECEIVED pose, before interpolating (see onScreen).
@@ -1611,13 +1618,13 @@ export function renderGL(
     if (e.kind.startsWith('door.')) {
       const m = (e.size + 1) * cam.scale + CULL_PX;
       if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
-      ovDoors.push(e);
+      marks.doors.push(e);
       continue;
     }
     if (e.kind.startsWith('switch.')) {
       const m = 8 * cam.scale + CULL_PX;
       if (rx < -m || ry < -m || rx > cvW + m || ry > cvH + m) continue;
-      ovSwitches.push([e, state.tracks.get(e.pheno)?.curr]);
+      marks.switches.push([e, state.tracks.get(e.pheno)?.curr]);
       continue;
     }
 
@@ -1639,7 +1646,7 @@ export function renderGL(
     const carrier = e.attachedTo >= 0 ? state.tracks.get(e.attachedTo) : undefined;
     if (carrier) {
       const cp = state.sample(carrier, playTick, CARRIER);
-      ovLinks.push([sx, sy, cam.screenX(cp.x), cam.screenY(cp.y)]);
+      marks.links.push([sx, sy, cam.screenX(cp.x), cam.screenY(cp.y)]);
     }
 
     if (e.kind === 'nest') {
@@ -1731,82 +1738,95 @@ export function renderGL(
 
     if (e.size * cam.scale >= GLYPH_MIN_BODY_PX) {
       const act = actionOf(e.flags);
-      if (act) ovGlyphs.push([sx, sy - r * 2.0, r * 0.95, act]);
+      if (act) marks.glyphs.push([sx, sy - r * 2.0, r * 0.95, act]);
     }
-    if (e.flags & F_GRABBED) ovRings.push(['grabbed', sx, sy, r]);
-    else if (e.flags & F_CARRYING) ovRings.push(['carrying', sx, sy, r]);
-    if (cam.followId === e.id) ovRings.push(['follow', sx, sy, r]);
-    if (selection.id === e.id) ovRings.push(['selected', sx, sy, r]);
+    if (e.flags & F_GRABBED) marks.rings.push(['grabbed', sx, sy, r]);
+    else if (e.flags & F_CARRYING) marks.rings.push(['carrying', sx, sy, r]);
+    if (f.followId === e.id) marks.rings.push(['follow', sx, sy, r]);
+    if (f.selection.id === e.id) marks.rings.push(['selected', sx, sy, r]);
   }
+}
 
-  lap('secEnts');
-  // Concealment over the creatures, then lids over occupants (see render()).
-  if (!CANOPY_OFF && cover && chunkTiles > 0 && tilePx > 0) {
-    // The veil, from the ground already on the GPU (VEIL_FS): nothing painted.
-    const groundTex = glr.layerTexture((lowZoom ? 'groundlo:' : 'ground:') + level);
-    // Clipped to the chunks with cover on screen (clip.ts).
-    screenRects(chunkBoxes(cover, meta.cols, meta.rows), o0.x, o0.y, cam.scale, cv.width, cv.height, veilClip);
-    if (groundTex && veilClip.length > 0) {
-      if (cover !== veilCoverFor) { veilCoverFor = cover; veilCoverRev++; }
-      const coverTex = glr.dataTex('veilcover', cover, meta.cols, meta.rows, 'r', veilCoverRev);
-      glr.fullscreen('veil', VEIL_FS, [coverTex, groundTex], {
-        uOrigin: [o0.x, o0.y], uScale: cam.scale, uSize: [meta.cols, meta.rows],
-        uCell: lowZoom ? LAYER_LOW : ART, uLow: lowZoom ? 1 : 0, uAlpha: VEIL_ALPHA,
-      }, veilClip);
-    }
-    const lids = new Set<number>();
-    const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
-    for (const t of tracks) {
-      const e = t.curr;
-      if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
-      const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
-      if (rx < -lidPad || ry < -lidPad || rx > cvW + lidPad || ry > cvH + lidPad) continue;
-      const ex = Math.floor(e.x), ey = Math.floor(e.y);
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const tx = ex + dx, ty = ey + dy;
-          if (tx < 0 || ty < 0 || tx >= meta.cols || ty >= meta.rows) continue;
-          if (cover[ty * meta.cols + tx] === 2) lids.add(ty * meta.cols + tx);
-        }
-      }
-    }
-    for (const key of lids) {
-      const tx = key % meta.cols, ty = Math.floor(key / meta.cols);
-      const o2 = cam.worldToScreen(tx, ty);
-      if (o2.x < -cam.scale || o2.y < -cam.scale || o2.x > cv.width || o2.y > cv.height) continue;
-      const vert = (ty > 0 && cover[(ty - 1) * meta.cols + tx] === 2)
-        || (ty < meta.rows - 1 && cover[(ty + 1) * meta.cols + tx] === 2);
-      const lid = ductLidTile(vert);
-      glr.sprite('lid:' + (vert ? 'v' : 'h'), lid, 1, 0, 0, 12, 12,
-        o2.x, o2.y, cam.scale, cam.scale, VEIL_ALPHA);
-    }
-  }
+/** Concealment over the bodies (VEIL_FS), from the ground already on the
+ *  GPU: nothing painted on the CPU. */
+function drawVeil(f: Frame): void {
+  const { glr, meta, cover, view: v } = f;
+  if (CANOPY_OFF || !cover || !f.tiled) return;
+  const groundTex = glr.layerTexture((f.lowZoom ? 'groundlo:' : 'ground:') + f.level);
+  // Clipped to the chunks with cover on screen (clip.ts).
+  screenRects(chunkBoxes(cover, meta.cols, meta.rows), v.ox, v.oy, v.scale, v.w, v.h, veilClip);
+  if (!groundTex || veilClip.length === 0) return;
+  if (cover !== veilCoverFor) { veilCoverFor = cover; veilCoverRev++; }
+  const coverTex = glr.dataTex('veilcover', cover, meta.cols, meta.rows, 'r', veilCoverRev);
+  glr.fullscreen('veil', VEIL_FS, [coverTex, groundTex], {
+    uOrigin: [v.ox, v.oy], uScale: v.scale, uSize: [meta.cols, meta.rows],
+    uCell: f.lowZoom ? LAYER_LOW : ART, uLow: f.lowZoom ? 1 : 0, uAlpha: VEIL_ALPHA,
+  }, veilClip);
+}
 
-  if (!FLORA_OFF) {
-    const plants = floraInView(level, cam, cv.width, cv.height, floraBodies(tracks, level), VEIL_ALPHA, FLORA_BUILD_MS);
-    const atlas = floraAtlas(); // read after floraInView, which may have just packed it
-    for (const d of plants) {
-      const sp = d.sprite;
-      if (sp.packed && atlas.cv) { // one texture for every plant: one draw call
-        glr.sprite('flora:atlas', atlas.cv, atlas.rev, sp.ax, sp.ay, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
-      } else {
-        glr.sprite(d.key, sp.cv, 1, 0, 0, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+/** Duct lids over their occupants (see render()): a lid tile wherever a body
+ *  stands within a tile of a duct. */
+function drawLids(f: Frame): void {
+  const { glr, meta, cover, level, screen: cam } = f;
+  if (CANOPY_OFF || !cover || !f.tiled) return;
+  const lids = new Set<number>();
+  const lidPad = 2 * cam.scale; // a lid is at most one tile from its occupant
+  for (const t of f.tracks) {
+    const e = t.curr;
+    if (e.kind === 'phero' || e.kind === 'sound' || (e.flags & F_DEAD) || Math.round(e.z) !== level) continue;
+    const rx = cam.screenX(e.x), ry = cam.screenY(e.y);
+    if (rx < -lidPad || ry < -lidPad || rx > cam.w + lidPad || ry > cam.h + lidPad) continue;
+    const ex = Math.floor(e.x), ey = Math.floor(e.y);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const tx = ex + dx, ty = ey + dy;
+        if (tx < 0 || ty < 0 || tx >= meta.cols || ty >= meta.rows) continue;
+        if (cover[ty * meta.cols + tx] === 2) lids.add(ty * meta.cols + tx);
       }
     }
   }
+  for (const key of lids) {
+    const tx = key % meta.cols, ty = Math.floor(key / meta.cols);
+    const o2 = cam.worldToScreen(tx, ty);
+    if (o2.x < -cam.scale || o2.y < -cam.scale || o2.x > cam.w || o2.y > cam.h) continue;
+    const vert = (ty > 0 && cover[(ty - 1) * meta.cols + tx] === 2)
+      || (ty < meta.rows - 1 && cover[(ty + 1) * meta.cols + tx] === 2);
+    const lid = ductLidTile(vert);
+    glr.sprite('lid:' + (vert ? 'v' : 'h'), lid, 1, 0, 0, 12, 12,
+      o2.x, o2.y, cam.scale, cam.scale, VEIL_ALPHA);
+  }
+}
 
-  const stats = glr.end();
+/** Trees and the other standing plants, from one packed atlas. */
+function drawFlora(f: Frame): void {
+  if (FLORA_OFF) return;
+  const { glr, screen: cam } = f;
+  const plants = floraInView(f.level, cam, cam.w, cam.h, floraBodies(f.tracks, f.level), VEIL_ALPHA, FLORA_BUILD_MS);
+  const atlas = floraAtlas(); // read after floraInView, which may have just packed it
+  for (const d of plants) {
+    const sp = d.sprite;
+    if (sp.packed && atlas.cv) { // one texture for every plant: one draw call
+      glr.sprite('flora:atlas', atlas.cv, atlas.rev, sp.ax, sp.ay, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+    } else {
+      glr.sprite(d.key, sp.cv, 1, 0, 0, sp.cv.width, sp.cv.height, d.x, d.y, d.w, d.h, d.alpha);
+    }
+  }
+}
 
-  // The overlay: the viewer's vector language, cheap at a few dozen calls.
-  // Touched only when it has something to show, or showed something last
-  // frame: most frames it is empty, and clearing an empty full-screen canvas
-  // every frame is still a full-screen canvas the browser re-rasterizes.
-  const ink = !!(selection.tile && selection.tile.z === level) || ovDoors.length > 0 || ovSwitches.length > 0
-    || (!OVERLAY_OFF && (ovLinks.length > 0 || ovGlyphs.length > 0 || ovRings.length > 0));
+/** The overlay: the viewer's vector language, cheap at a few dozen calls.
+ *  Touched only when it has something to show, or showed something last
+ *  frame: most frames it is empty, and clearing an empty full-screen canvas
+ *  every frame is still a full-screen canvas the browser re-rasterizes. */
+function drawMarks(og: CanvasRenderingContext2D, cam: Camera, f: Frame): void {
+  const { marks, selection, level } = f;
+  const cv = og.canvas;
+  const tile = selection.tile && selection.tile.z === level ? selection.tile : null;
+  const ink = !!tile || marks.doors.length > 0 || marks.switches.length > 0
+    || (!OVERLAY_OFF && (marks.links.length > 0 || marks.glyphs.length > 0 || marks.rings.length > 0));
   if (ink || overlayInk) og.clearRect(0, 0, cv.width, cv.height);
   overlayInk = ink;
-  if (selection.tile && selection.tile.z === level) {
-    const o = cam.worldToScreen(selection.tile.x, selection.tile.y);
+  if (tile) {
+    const o = cam.worldToScreen(tile.x, tile.y);
     const w = cam.scale;
     og.strokeStyle = 'rgba(255,214,64,0.95)';
     og.lineWidth = Math.max(2, w * 0.06);
@@ -1814,15 +1834,12 @@ export function renderGL(
     og.fillStyle = 'rgba(255,214,64,0.12)';
     og.fillRect(o.x + 1, o.y + 1, w - 2, w - 2);
   }
-  for (const e of ovDoors) drawDoor(og, cam, e);
-  for (const [e, door] of ovSwitches) drawSwitch(og, cam, e, door);
-  if (!OVERLAY_OFF) {
-    for (const [x0, y0, x1, y1] of ovLinks) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
-    for (const [x, y, u, act] of ovGlyphs) drawActionGlyph(og, x, y, u, act);
-    for (const [kind, x, y, r] of ovRings) drawRing(og, kind, x, y, r, nowMs);
-  }
-  lap('secTail');
-  return { ...stats, ...sec };
+  for (const e of marks.doors) drawDoor(og, cam, e);
+  for (const [e, door] of marks.switches) drawSwitch(og, cam, e, door);
+  if (OVERLAY_OFF) return;
+  for (const [x0, y0, x1, y1] of marks.links) drawCarryLink(og, x0, y0, x1, y1, cam.scale);
+  for (const [x, y, u, act] of marks.glyphs) drawActionGlyph(og, x, y, u, act);
+  for (const [kind, x, y, r] of marks.rings) drawRing(og, kind, x, y, r, f.nowMs);
 }
 
 
@@ -2087,11 +2104,11 @@ function canopyLayer(meta: WorldMeta, chunkTiles: number, tilePx: number,
 
 type BelowBody = { x: number; y: number; px: number; col: string; rgb: number; dead: boolean };
 
-function belowBodies(cam: Camera, state: WorldState, playTick: number,
+function belowBodies(cam: Proj, state: WorldState, playTick: number,
     level: number, w: number, h: number): BelowBody[] {
   const out: BelowBody[] = [];
   if (BELOW_OFF || level - 1 < 0) return out;
-  const f = parallaxFactor(cam.scale); // the same factor the ground below slid by
+  const f = parallaxFactor(cam.zoom); // the same factor the ground below slid by
   const cx = w / 2, cy = h / 2;
   const stepPx = state.maxStep() * cam.scale * f;
   for (const t of state.tracks.values()) {
@@ -2137,7 +2154,7 @@ function drawBelowBodies2D(g: CanvasRenderingContext2D, cam: Camera,
  *  is the population -- eleven hundred bodies of alternating colour broke
  *  the batch on nearly every one, a thousand draw calls and as many
  *  textures a frame, none of them ever evicted. */
-function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Camera,
+function drawBelowBodiesGL(glr: import('./gl').GLRenderer, cam: Proj,
     state: WorldState, playTick: number, level: number,
     w: number, h: number): void {
   for (const b of belowBodies(cam, state, playTick, level, w, h)) {

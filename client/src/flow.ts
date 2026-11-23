@@ -33,7 +33,8 @@
 
 import { ART, hash01 } from './artCore';
 import { flagOff } from './flags';
-import { chunkBoxes } from './clip';
+import { chunkBoxes, screenRects } from './clip';
+import type { Frame } from './frame';
 
 const FLOW_OFF = flagOff('flow');
 
@@ -564,6 +565,26 @@ export function flowGpuData(level: number): { data: Uint8Array; rev: number; col
  *  mostly dry land the long shader runs over for nothing. */
 export function flowBoxes(): number[] {
   return grid ? chunkBoxes(grid, cols, rows, 8, 1) : [];
+}
+
+const flowClip: number[] = []; // the river boxes' screen rects, reused each frame
+
+/** The flow layer of the GL frame: moving water over the still bake and the
+ *  plants, under the bodies. One GPU pass that reads the ground texture,
+ *  clipped to the water on screen: the shader is long, and run on every pixel
+ *  only to discard most of them it doubled a near frame. */
+export function drawFlowGL(f: Frame): void {
+  if (!f.tiled) return;
+  const { glr, meta, level, view: v } = f;
+  const groundTex = flowGpuWanted(v.zoom, level) ? glr.layerTexture('ground:' + level) : null;
+  const rec = groundTex ? flowGpuData(level) : null;
+  if (!groundTex || !rec) return;
+  const recTex = glr.dataTex('flowrec', rec.data, rec.cols, rec.rows, 'rgba', rec.rev);
+  screenRects(flowBoxes(), v.ox, v.oy, v.scale, v.w, v.h, flowClip, 32);
+  if (flowClip.length === 0) return;
+  glr.fullscreen('flow', FLOW_FS, [recTex, groundTex], {
+    uOrigin: [v.ox, v.oy], uScale: v.scale, uSize: [meta.cols, meta.rows], uT: f.playTick,
+  }, flowClip);
 }
 
 /** True where the GPU pass should run: the flow is this level's and the view
