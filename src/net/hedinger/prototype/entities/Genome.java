@@ -460,6 +460,34 @@ public class Genome {
 	 */
 	public double litter = 1.0;
 
+	/**
+	 * How hard this body pushes when it walks somewhere, as a share of its top
+	 * {@link #speed}: to a target it can see that does not run, and while it
+	 * searches for one it cannot. It runs flat out only to chase living quarry
+	 * in sight, if it hunts, and to flee a threat in sight; it stands still with
+	 * no goal. Movement costs the square of speed, so this is where a lineage
+	 * spends or saves its living, and it is a gene so that selection prices it
+	 * smoothly.
+	 *
+	 * <p>It was the mind's: a throttle actuator any instruction could write. A
+	 * pace written by a program breaks the way programs break. On the live world
+	 * 32 of 36 hunters below the surface ran flat out with no prey and no threat
+	 * in sight, because a point mutation had the seed's threat test read the
+	 * throttle register instead of the threat sensor, so "a threat is near" was
+	 * true on every pass and the flee line set full speed: about 5 energy per 1k
+	 * ticks against 0.6 at rest. The actuator is now ignored.
+	 *
+	 * <p>The default, for a genome written before the gene existed, is the 0.25
+	 * the seed ambled at; founders draw {@link #PACE_LO}..{@link #PACE_HI}, the
+	 * spread the seed's amble was drawn from (0.1, 0.25 or 0.5 of top speed).
+	 */
+	public double pace = 0.25;
+	/** Founder draw for {@link #pace}. 0.5 is the ceiling the seed's amble had:
+	 *  with 1.0 in the draw a quarter of each cohort walked at the pace that
+	 *  drained a founder with a full gut (see {@code Worlds.AMBLE_SLOTS}' history). */
+	@Unit("of top speed")
+	public static final double PACE_LO = 0.1, PACE_HI = 0.5;
+
 	/** The litter this genome bears: {@link #litter} rounded into
 	 *  {@link #LITTER_MIN}..{@link #LITTER_MAX}. */
 	public int litterSize() {
@@ -765,6 +793,9 @@ public class Genome {
 		// And how many young it bears at once, appended after the eye for the
 		// same reason again -- and after the birth share it is bounded by.
 		spreadLitter(g);
+		// And how hard it pushes when it walks, appended last for the same
+		// reason again.
+		g.pace = PACE_LO + Utils.random() * (PACE_HI - PACE_LO);
 		return g;
 	}
 

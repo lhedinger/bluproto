@@ -598,6 +598,12 @@ public final class ServerTests {
 		for (int t = 0; t < 4000; t++) {
 			w.think();
 		}
+		// And on to a birth, so the interval has one to carry: when the first
+		// comes is the founders' business, not the flows'.
+		for (int t = 0; t < 30000 && w.births().stream().noneMatch(
+				x -> x.parentA() != net.hedinger.prototype.engine.Entity.NO_ID); t++) {
+			w.think();
+		}
 		// One guaranteed death of a body the EARLIER stage knows, so the
 		// died-flow is a certainty instead of a bet on the random stream. It has
 		// to be one with no descendants, or its line is carried and no death

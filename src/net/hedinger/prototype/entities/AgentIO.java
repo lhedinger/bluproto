@@ -292,7 +292,11 @@ public final class AgentIO {
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Steering, -1..1 (fraction of the max turn rate). */
 	public static final int A_TURN = 0;
-	/** Throttle, 0..1 (fraction of max speed). */
+	/** Walk, with no goal named: above 0.02 the body walks the heading
+	 *  {@link #A_TURN} steers. Its size is not read -- speed is the body's own:
+	 *  {@code Genome.pace} to walk or search, flat out only to flee a threat or
+	 *  chase living quarry in sight. It was the throttle, a fraction of top
+	 *  speed, until a pace a program wrote proved to break the way programs do. */
 	public static final int A_THROTTLE = 1;
 	/** Graze the tile underfoot when > 0.5. */
 	public static final int A_EAT = 2;

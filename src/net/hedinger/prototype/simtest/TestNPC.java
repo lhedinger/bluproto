@@ -2554,7 +2554,6 @@ public class TestNPC extends NPC {
 		}
 		senseInto(sensors);
 		mind.think(sensors, actuators);
-		lastThrottle = clampUnit(actuators[AgentIO.A_THROTTLE]);
 		actFrom(actuators);
 	}
 
@@ -3792,9 +3791,27 @@ public class TestNPC extends NPC {
 						|| tileWanted == AgentIO.TILE_FOOD);
 	}
 
+	/** This body's walking pace, as a share of top speed: its lineage's
+	 *  {@link Genome#pace}, or the seed's old amble with no genome. */
+	double pace() {
+		return genome == null ? 0.25 : genome.pace;
+	}
+
+	/** Whether this seek, with its target in sight, is a hunter after living
+	 *  quarry -- the one goal besides flight the body runs flat out for. */
+	private boolean chasesLivingQuarry(int seekClass) {
+		return niche().hunts() && (seekClass == AgentIO.SEEK_PREY || seekClass == AgentIO.SEEK_FORAGE)
+				&& huntPick != null && !huntPick.isDead() && !huntPick.isRemoved();
+	}
+
 	private void actFrom(double[] a) {
 		double t = clamp(a[AgentIO.A_TURN], -1, 1);
-		double throttle = clampUnit(a[AgentIO.A_THROTTLE]);
+		// The body's pace (see Genome.pace), never the mind's: a pace a program
+		// writes breaks the way programs do. A_THROTTLE keeps one bit -- with no
+		// goal named, above 0.02 it asks to walk the heading A_TURN steers, at
+		// this body's pace -- and its size is read no longer. A goal sets the
+		// pace below.
+		double throttle = clampUnit(a[AgentIO.A_THROTTLE]) > 0.02 ? pace() : 0;
 		// Intent steering. A_SEEK names a kind of thing rather than a turn rate; when
 		// the body can see one, it works out the turn and A_TURN is ignored. A
 		// negative value means the same target repels instead of attracting, so
@@ -3825,6 +3842,10 @@ public class TestNPC extends NPC {
 			double bearing = seekBearing(seekClass);
 			if (!Double.isNaN(bearing)) {
 				pursuing = true;
+				// Flat out only after what runs: away from a threat in sight, or
+				// after living quarry in sight if this body hunts. Anything else it
+				// can see -- grass, a carcass, water, kin, a mate -- it walks to.
+				throttle = (away || chasesLivingQuarry(seekClass)) ? 1.0 : pace();
 				if (away) {
 					bearing = wrap(bearing + Math.PI); // the far side of the same target
 				}
@@ -3836,24 +3857,25 @@ public class TestNPC extends NPC {
 				// see explore. It walks the body itself, at the pace the mind's
 				// throttle sets, so the generic steer-and-move below stands down.
 				searching = true;
+				throttle = pace();
 				explored = !sitting && explore(throttle > 0.02 ? throttle * speed : 0);
 			}
 		}
-		// Speed is deliberately NOT the intent's business. An intent says where to go
-		// and, on arrival, what to do there -- but how hard to push is the one part of
-		// locomotion worth leaving to selection, because movement costs the square of
-		// speed and so the throttle is where a lineage spends or saves its living. A
-		// body given a goal and no throttle wants something and stays put, which is a
-		// policy a mind is free to hold. The one exception is a goal the body itself
-		// cancels -- food between meals, below -- whose pace goes with it.
+		// Speed is the intent's and the gene's, no longer the mind's. How hard to
+		// push is still the part of locomotion left to selection -- movement costs
+		// the square of speed, so pace is where a lineage spends or saves its
+		// living -- but it is selected as a gene (Genome.pace), which moves
+		// smoothly, and not as a register a program writes, which breaks: the
+		// body walks at its pace, runs flat out only from a threat or after
+		// living quarry in sight, and stands still with no goal. A goal the body
+		// itself cancels -- food between meals, below -- takes its pace with it.
 		// Mating is a commitment, so while it has a partner it takes the wheel: a
 		// creature walking to a mate is not also foraging, and one mid-exchange is
 		// standing still. A_SEEK resumes the moment the intent goes invalid.
 		boolean wantsMate = a[AgentIO.A_MATE] > 0.5;
 		double mateStatus = wantsMate ? mateIntent() : Double.NaN;
 		boolean mating = wantsMate && mateStatus == AgentIO.INTENT_PENDING;
-		// The one place the intent does touch speed: a goal the appetite has
-		// just cancelled takes its throttle with it. A mind that names its food
+		// A goal the appetite has just cancelled takes its pace with it. A mind that names its food
 		// and sets its pace from what it sees has not said how hard to push for
 		// nothing, and the seed hunter's chase rule ("flat out while prey is in
 		// sight") reads no appetite at all -- measured on the seed 7 demo world,
@@ -3872,6 +3894,7 @@ public class TestNPC extends NPC {
 		}
 		if (mating && !Double.isNaN(mateSteer)) {
 			t = clamp(mateSteer / MAX_TURN, -1, 1); // walk to the partner
+			throttle = pace();
 		}
 		if (matingWith != null) {
 			throttle = 0; // hold station: the exchange happens in place
@@ -3888,6 +3911,7 @@ public class TestNPC extends NPC {
 		if (call > 0) {
 			call(call, clampUnit(a[AgentIO.A_LOUDNESS]));
 		}
+		lastThrottle = throttle; // the pace the body took: the unstick reflex reads this
 		if (!explored) {
 			D = wrap(D + t * MAX_TURN); // steer
 			// Throttle IS the desired speed: 0 is standing still, 1 is flat out at

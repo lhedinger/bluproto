@@ -1067,7 +1067,7 @@ function genomeTab(d: Record<string, any>): string {
     row('markers', Array.isArray(gm.markers)
       ? (gm.markers as number[]).map(m => m.toFixed(2)).join(', ') : '—'),
   ]) + group('body', [
-    row('size', g(gm.size)), row('speed', g(gm.speed)), row('turn rate', g(gm.turnRate)),
+    row('size', g(gm.size)), row('speed', g(gm.speed)), row('pace', g(gm.pace)), row('turn rate', g(gm.turnRate)),
     row('sight', `${g(gm.losRange)} / ${(gm.losFov * 180 / Math.PI).toFixed(0)}°`),
     // How much light the eye needs: the share of the sky at which it keeps
     // half its sight. Small is a night eye.

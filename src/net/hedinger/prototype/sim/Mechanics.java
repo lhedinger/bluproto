@@ -888,9 +888,9 @@ public final class Mechanics {
 		groups(s,
 				group("Moving",
 						act(AgentIO.A_TURN, "Steer, as a fraction of this body's turn rate."),
-						act(AgentIO.A_THROTTLE, "How hard to push, as a fraction of top speed. "
-								+ "Movement costs the square of pace, so this one slot is where "
-								+ "a lineage spends or saves its living."),
+						act(AgentIO.A_THROTTLE, "Walk the steered heading when no goal is named. "
+								+ "How fast is not the mind's: a body walks at its pace gene, and "
+								+ "runs flat out only to flee a threat or chase living quarry."),
 						act(AgentIO.A_SEEK, "Name a KIND OF THING to head for and the body "
 								+ "steers there by itself — see the next section."),
 						act(AgentIO.A_TILE, "Name a PROPERTY of ground to look for: edible, "
