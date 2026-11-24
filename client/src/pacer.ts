@@ -36,7 +36,7 @@ export class Pacer {
   private gapN = 0;
   private lastRaf = 0;
   private drewLast = false;
-  private refresh = 1000 / 60;
+  private refresh = 1000 / 30; // until measured; only ever shortens
   private lastDraw = 0;
   /** Draw once this many refreshes have passed. */
   every = 1;
@@ -48,7 +48,14 @@ export class Pacer {
 
   /** The display's refresh period, measured: many phones run at 90 or 120 Hz.
    *  A low quantile of recent rAF intervals, because a drawn frame's interval
-   *  is as long as its work; the refreshes the pacer skips show the period. */
+   *  is as long as its work; the refreshes the pacer skips show the period.
+   *  And the shortest such period seen this session, never a longer one: a
+   *  device that draws on every call it gets is called back at the rate it
+   *  draws, so a 120 Hz phone drawing 60 frames a second shows only 16.7 ms
+   *  gaps, and a recent window alone read it as a 60 Hz screen. Should the
+   *  display really slow down (a power-saving mode), the pacing still holds:
+   *  a frame then costs two of the remembered refreshes, and the floor and N
+   *  count in those. */
   get refreshMs(): number { return this.refresh; }
 
   /**
@@ -65,7 +72,7 @@ export class Pacer {
         if (this.gapN >= 8) {
           const n = Math.min(this.gapN, KEEP);
           const s = Array.from(this.gaps.subarray(0, n)).sort((a, b) => a - b);
-          this.refresh = s[Math.floor(n * 0.1)];
+          this.refresh = Math.min(this.refresh, s[Math.floor(n * 0.1)]);
         }
         if (this.drewLast) this.cost += (Math.max(1, Math.round(gap / this.refresh)) - this.cost) * 0.2;
       }
