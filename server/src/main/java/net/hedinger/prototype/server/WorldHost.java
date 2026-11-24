@@ -1048,6 +1048,7 @@ final class WorldHost {
 					gm.put("drainRate", round(g.drainRate));
 					gm.put("mutationRate", round(g.mutationRate));
 					gm.put("instinct", round(g.instinct));
+					gm.put("pace", round(g.pace)); // how hard it walks: the body's, not the mind's
 					// How this lineage looks for what it cannot see: the length of a
 					// search leg and how far the heading swings at the end of one.
 					gm.put("searchCast", round(g.searchCast));

@@ -238,6 +238,9 @@ public final class GeneSchema {
 		// How many young a budder bears at once (Genome.litter). Appended.
 		add("litter", "young", Drift.ADD, Genome.LITTER_MIN, Genome.LITTER_MAX, false,
 				g -> g.litter, (g, v) -> g.litter = v);
+		// How hard it walks, as a share of top speed (Genome.pace). Appended.
+		add("pace", "of top speed", Drift.ADD, 0.02, 1, false,
+				g -> g.pace, (g, v) -> g.pace = v);
 	}
 
 	/** Clamps {@code v} into the declared bounds of the gene named {@code key},
