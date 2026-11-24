@@ -135,7 +135,10 @@
     #hud { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(var(--bar-h) + 8px); /* clear of the minimap it used to sit on */ z-index: var(--z-panel);
            font: 11px/1.5 var(--f-ui); color: var(--ink);
            background: #14171de6; padding: 6px 8px; box-shadow: 0 0 0 2px var(--sh);
-           white-space: pre; pointer-events: none; }
+           white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none;
+           /* Never wider than the screen: anchored right, a long line used to
+              run off the left edge of a phone. It wraps instead. */
+           max-width: calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)); box-sizing: border-box; }
     /* The population graph. Its canvas is drawn at device resolution and
        CSS-scaled down, so the 1px series lines stay sharp on a phone -- unlike
        the world canvas it is a chart, not art, so `pixelated` would be exactly

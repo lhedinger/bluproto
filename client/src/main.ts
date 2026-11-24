@@ -2398,8 +2398,8 @@ function hudFrame(now: number, drawn: boolean): void {
   hudEl.textContent = `${glr ? 'webgl' : 'canvas2d'}${perfOffStr ? ` · OFF: ${perfOffStr}` : ''}`
     + ` · ${(1000 / hudFrameEma).toFixed(0)} fps`
     + ` (${hudFrameEma.toFixed(1)} ms · cb ${hudCbEma.toFixed(1)})`
-    + ` · draws ${(1000 / hudDrawEma).toFixed(0)}/s (pace ${paceMs().toFixed(0)} ms,`
-    + ` 1 in ${pacer.every} of ${(1000 / pacer.refreshMs).toFixed(0)} Hz, floor ${pacer.floor})`
+    + `\ndraws ${(1000 / hudDrawEma).toFixed(0)}/s · 1 in ${pacer.every} of ${(1000 / pacer.refreshMs).toFixed(0)} Hz`
+    + ` · floor ${pacer.floor} · pace ${paceMs().toFixed(0)} ms`
     + (glr ? `\n${hudGl.drawCalls} draw calls · ${hudGl.quads} quads · up ${upMax.toFixed(1)}ms` : '')
     + (glr ? `\njs: layers ${hudGl.secLayers.toFixed(1)} · ents ${hudGl.secEnts.toFixed(1)}`
       + ` · tail ${hudGl.secTail.toFixed(1)}ms` : '')
