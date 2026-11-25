@@ -2136,7 +2136,8 @@ public class TestNPC extends NPC {
 	 * standard is weighed by.
 	 *
 	 * <p>A living body is wanted in full while the hunter is feeding ({@link
-	 * #appetiteOpen}) and not at all between meals. A carcass is worth the meat
+	 * #appetiteOpen}) and its gut has room for the kill, and not at all
+	 * otherwise. A carcass is worth the meat
 	 * this mouth may take off it against the gut above the {@link
 	 * #PRED_FULL_HUNGER full line}: 1 if it could eat all of it, 0 with no room.
 	 *
@@ -2151,10 +2152,30 @@ public class TestNPC extends NPC {
 	private double appetite(NPC n) {
 		if (n.isDead()) {
 			double meatEnergy = n.freshMeat() * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
-			double room = Math.max(0, hunger - PRED_FULL_HUNGER) * NPC.GUT_PER_MASS * adultMass();
-			return meatEnergy <= 0 ? 0 : Math.min(1.0, room / meatEnergy);
+			return meatEnergy <= 0 ? 0 : Math.min(1.0, gutRoom(hunger) / meatEnergy);
 		}
-		return hunting() ? 1 : 0;
+		if (!hunting()) {
+			return 0;
+		}
+		if (!isMinded()) {
+			return 1;
+		}
+		// Room for the meal, or for as much as the gut held when this meal began:
+		// a hunter whose gut cannot take the kill does not make it. The latch stays
+		// open until the full line, and a hunter fed on one kill kept running the
+		// next one down: in an arena of standing grazers, after its first meal a
+		// hunter left its carcass at hunger 0.10 for the next animal, and over
+		// three demo worlds a fifth of all kills came at hunger 0.1-0.3, with room
+		// for a third of the meal. Capped at the onset's room, because a body
+		// bigger than the gut would otherwise never be worth taking.
+		double meal = NPC.FRESH_SHARE * n.leanMass() * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
+		return gutRoom(hunger) >= Math.min(meal, gutRoom(forageOnset())) ? 1 : 0;
+	}
+
+	/** The meat energy this hunter's gut can take at the given hunger, above
+	 *  the {@link #PRED_FULL_HUNGER full line}. */
+	private double gutRoom(double atHunger) {
+		return Math.max(0, atHunger - PRED_FULL_HUNGER) * NPC.GUT_PER_MASS * adultMass();
 	}
 
 	/** Whether this hunter takes up living quarry now: a minded one while its
