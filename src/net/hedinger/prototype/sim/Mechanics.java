@@ -887,8 +887,9 @@ public final class Mechanics {
 						"Kept so old genomes keep meaning what they meant."));
 		groups(s,
 				group("Moving",
-						act(AgentIO.A_TURN, "Steer, as a fraction of this body's turn rate."),
-						act(AgentIO.A_THROTTLE, "Walk the steered heading when no goal is named. "
+						act(AgentIO.A_TURN, "Read no longer: the body steers itself, to a target "
+								+ "it can see, along its search walk and to a mate."),
+						act(AgentIO.A_THROTTLE, "Walk on along the heading when no goal is named. "
 								+ "How fast is not the mind's: a body walks at its pace gene, and "
 								+ "runs flat out only to flee a threat or chase living quarry."),
 						act(AgentIO.A_SEEK, "Name a KIND OF THING to head for and the body "

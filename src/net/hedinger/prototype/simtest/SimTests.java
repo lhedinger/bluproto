@@ -8346,15 +8346,14 @@ public class SimTests {
 	static class MindDrivesAgent extends Scenario {
 		@Override
 		public void run() {
-			// An LGP "pursue the nearest" program: turn = relative bearing to the
-			// neighbour, throttle = 1. Four instructions, run as a full pass/tick.
+			// An LGP "pursue the smaller body" program: name prey as the goal and
+			// the body steers there itself. It wrote the turn from the neighbour's
+			// bearing; steering is the body's now (A_TURN is read no longer).
 			int[][] pursue = {
-					{ Brain.SENSE, 0, AgentIO.S_NEAR_BEARING, 0 }, // R0 = near_bearing
-					{ Brain.WRITE, AgentIO.A_TURN, 0, 0 },         // turn = R0
-					{ Brain.SET, 1, 9, 0 },                        // R1 = 1.0 (const[9])
-					{ Brain.WRITE, AgentIO.A_THROTTLE, 1, 0 },     // throttle = R1
+					{ Brain.SET, 0, 8, 0 },                        // R0 = 0.5 (const[8]): prey
+					{ Brain.WRITE, AgentIO.A_SEEK, 0, 0 },         // seek = R0
 			};
-			firstMind = new LgpMind(new Brain(deepCopy(pursue)), 4);
+			firstMind = new LgpMind(new Brain(deepCopy(pursue)), 2);
 			double lgp = pursuitDistance(firstMind);
 			assertLess("an LGP-brained body steers to its target through the sensor vector", lgp, 0.5);
 
@@ -8363,8 +8362,7 @@ public class SimTests {
 			Mind scripted = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_TURN] = s[AgentIO.S_NEAR_BEARING];
-					a[AgentIO.A_THROTTLE] = 1.0;
+					a[AgentIO.A_SEEK] = 0.5; // prey
 				}
 			};
 			assertLess("a scripted (dummy) mind on the same body pursues identically",
@@ -8385,17 +8383,22 @@ public class SimTests {
 			seed(63); // identical world/perception for every mind
 			World w = room(12, 12);
 			Genome g = Genome.phenotype(6, 0.05, 5, 6, Math.PI, 3000);
+			g.pace = 1.0;
 			TestNPC agent = TestNPC.minded(4.5, 4.5, 0, g, mind);
-			TestNPC target = TestNPC.inert(5.6, 4.5, 0); // adjacent tile: perceivable
+			Genome tg = Genome.phenotype(3, 0.05, 5, 6, Math.PI, 3000);
+			TestNPC target = TestNPC.minded(5.6, 4.5, 0, tg, (sn, act) -> { }) // adjacent tile, smaller: prey
+					.withReproCooldown(1000000);
 			w.spawnEntity(agent);
 			w.spawnEntity(target);
 			w.think();
-			if (mind == firstMind) {
+			// Closest approach over the run, not the final gap: a body that names
+			// prey keeps going at its pace once it gets there, past and round it.
+			double closest = Math.hypot(agent.getX() - target.getX(), agent.getY() - target.getY());
+			for (int i = 0; i < 250; i++) {
+				tick(w, 1);
+				closest = Math.min(closest, Math.hypot(agent.getX() - target.getX(), agent.getY() - target.getY()));
 			}
-			tick(w, 250);
-			if (mind == firstMind) {
-			}
-			return Math.hypot(agent.getX() - target.getX(), agent.getY() - target.getY());
+			return closest;
 		}
 
 		private Mind firstMind; // labels the snapshot for the LGP run only
@@ -8453,12 +8456,11 @@ public class SimTests {
 			pg.size = 12;
 			pg.speed = 0.05;
 			pg.losRange = 14;
-			pg.pace = 1.0; // run it down at full speed: steered by hand, so no chase intent sets it
+			pg.pace = 1.0; // not a hunter, so no chase sets the speed: its gait does
 			Mind hunt = new Mind() {
 				@Override
 				public void think(double[] s, double[] a) {
-					a[AgentIO.A_TURN] = s[AgentIO.S_PREY_BEARING]; // steer onto the prey
-					a[AgentIO.A_THROTTLE] = 1.0; // walk: the pace is the gene's
+					a[AgentIO.A_SEEK] = 0.5; // prey: the body steers along the prey channel
 				}
 			};
 			TestNPC pred = TestNPC.minded(4.5, 4.5, 0, pg, hunt).grown();
