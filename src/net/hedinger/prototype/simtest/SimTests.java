@@ -11671,7 +11671,7 @@ public class SimTests {
 			tick(w, TestNPC.growthTicks(13) + 200);
 			assertTrue("the hunter is grown before it is offered a choice",
 					!hunter.isJuvenile());
-			hunter.withHunger(0.5); // and hungry: a full hunter waits for its greed's line
+			hunter.withHunger(0.8); // and hungry, past its greed's line: room for either body
 
 			// Placed relative to where the hunter actually stands and pointed the
 			// way it is actually looking: it spends its childhood wandering, and a
@@ -11761,7 +11761,7 @@ public class SimTests {
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; an empty field grows nobody
 			w.spawnEntity(hunter);
 			tick(w, 200);
-			hunter.withHunger(0.5); // hungry: a full hunter waits for its greed's line
+			hunter.withHunger(0.8); // hungry, past its greed's line: room for either body
 
 			double hx = hunter.getX(), hy = hunter.getY();
 			double ahead = Math.atan2(15.0 - hy, 15.0 - hx);
@@ -19737,6 +19737,55 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter with no room for the kill lets it live. The appetite latch stays
+	 * open from a hunter's onset down to the full line, and a hunter fed on one
+	 * kill kept running the next one down: over three demo worlds a fifth of all
+	 * kills came at hunger 0.1-0.3, with room for a third of the meal, and the
+	 * rest of the body went to the scavengers. A living body is now wanted only
+	 * while the gut has room for its fresh share -- or, for a body bigger than
+	 * that, for as much as the gut held when the meal began.
+	 *
+	 * <p>Pinned on a size-20 hunter of the reference greed (onset room 0.55 of
+	 * its gut), feeding, held at a hunger, with an animal in reach: a size-6 body
+	 * (a meal of 0.45) is left alone at hunger 0.3 and killed at 0.6, and a
+	 * size-4 one (0.30) is killed at 0.4 -- the line is the meal, not the hunger.
+	 */
+	static class AHunterWithNoRoomForTheKillLetsItLive extends Scenario {
+		private int preyHealthAfter(double hunger, int preySize) {
+			seed(149);
+			World w = room(12, 9);
+			for (int x = 1; x < 11; x++) {
+				for (int y = 1; y < 8; y++) {
+					w.getTile(x, y, 0).setFertility(0.0);
+				}
+			}
+			Genome g = new Genome();
+			g.size = 20;
+			g.speed = 0;
+			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
+			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withHunger(hunger)
+					.withReproCooldown(100_000_000); // feeding: the latch is open
+			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(preySize); // already in reach
+			w.spawnEntity(hunter);
+			w.spawnEntity(prey);
+			w.think();
+			for (int i = 0; i < 4 * TestNPC.SENSE_EVERY + 2 * TestNPC.PRED_BITE_PERIOD; i++) {
+				hunter.holdHunger(hunger);
+				tick(w, 1);
+			}
+			return prey.getHealth();
+		}
+
+		@Override
+		public void run() {
+			assertEquals("with room for half the meal, a feeding hunter lets the animal live",
+					100, preyHealthAfter(0.3, 6));
+			assertLess("with room for all of it, it kills", preyHealthAfter(0.6, 6), 100);
+			assertLess("and a smaller animal fits a smaller room", preyHealthAfter(0.4, 4), 100);
+		}
+	}
+
+	/**
 	 * A full hunter does not run at prey it will not eat. The hunter seed
 	 * sets its pace from what it sees -- flat out while prey is in sight --
 	 * and reads no appetite, while the body cancels the food it asks for
@@ -23082,6 +23131,7 @@ public class SimTests {
 				new AHunterHoldsItsKillBetweenScans(),
 				new AHunterSmellsTheKillBehindTheReeds(),
 				new AFullHunterHuntsOnlyIfItIsGreedy(),
+				new AHunterWithNoRoomForTheKillLetsItLive(),
 				new AFullHunterDoesNotRunAtPrey(),
 				new ASprayIsAPuffEveryTwoSeconds(),
 				new AMealTakesItsTime(),
