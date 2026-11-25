@@ -3828,12 +3828,18 @@ public class TestNPC extends NPC {
 	}
 
 	private void actFrom(double[] a) {
-		double t = clamp(a[AgentIO.A_TURN], -1, 1);
+		// The body steers itself: at a target it can see, along its search walk,
+		// to a mate. A_TURN is read no longer. A steering value a program writes
+		// breaks the way programs do: on the live world a hunter lineage carried
+		// "act turn = R8", with the seed's drink threshold of 1.0 in R8, and every
+		// one of them spun right on the spot whenever it had no goal. With no goal
+		// a body that asks to walk keeps its heading.
+		double t = 0;
 		// The body's pace (see Genome.pace), never the mind's: a pace a program
 		// writes breaks the way programs do. A_THROTTLE keeps one bit -- with no
-		// goal named, above 0.02 it asks to walk the heading A_TURN steers, at
-		// this body's pace -- and its size is read no longer. A goal sets the
-		// pace below.
+		// goal named, above 0.02 it asks to walk on along the heading, at this
+		// body's pace -- and its size is read no longer. A goal sets the pace
+		// below.
 		double throttle = clampUnit(a[AgentIO.A_THROTTLE]) > 0.02 ? pace() : 0;
 		// Intent steering. A_SEEK names a kind of thing rather than a turn rate; when
 		// the body can see one, it works out the turn and A_TURN is ignored. A
