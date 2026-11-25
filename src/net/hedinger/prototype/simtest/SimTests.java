@@ -11606,12 +11606,11 @@ public class SimTests {
 	/**
 	 * What a hunter hunts is not decided here. The body finds the best instance;
 	 * WHICH standard "best" means is named by the mind on {@link AgentIO#A_PREY},
-	 * the way {@code A_TILE} names a kind of ground, and how hard that standard
-	 * weighs size is {@code Genome.greed}, a gene. Naming an individual is not
+	 * the way {@code A_TILE} names a kind of ground. Naming an individual is not
 	 * on offer -- no sensor carries a handle -- so a named preference over a body-
 	 * run argmax is what choosing prey can mean for a mind built like this one.
 	 *
-	 * <p>One world, one pair of animals, four hunters that differ ONLY in what
+	 * <p>One world, one pair of animals, three hunters that differ ONLY in what
 	 * they want. The lean one is nearer and the fat one is bigger, so the two pull
 	 * opposite ways and whichever dies first says which standard was applied:
 	 *
@@ -11619,9 +11618,6 @@ public class SimTests {
 	 * <li>naming nothing takes the near one -- the default has to be the old
 	 * behaviour, or a silent mind's hunting changes underneath it;</li>
 	 * <li>naming the biggest meal crosses the field for the fat one;</li>
-	 * <li>naming the biggest meal with a MISERLY greed gene takes the near one
-	 * again -- same instruction, different lineage, opposite outcome, which is
-	 * the gene doing work no actuator value could do;</li>
 	 * <li>naming the weakest takes a wounded animal that is neither nearest nor
 	 * biggest, on the strength of the bites left in it.</li>
 	 * </ul>
@@ -11630,8 +11626,7 @@ public class SimTests {
 	 * ratio in both directions ({@code biteDamage}), so meal per bite is the same
 	 * for any quarry up to the hunter's own size -- the prey's size cancels out of
 	 * {@code 2.5 * mass * damage/100}. Below parity "easiest" and "nearest" agree
-	 * and cannot tell these two bodies apart; biggest still can, and it is the
-	 * standard the greed gene actually bends.
+	 * and cannot tell these two bodies apart; biggest still can.
 	 */
 	static class AHuntersPreferenceDecidesItsQuarry extends Scenario {
 		/** Seeks prey, walks, and names a standard. Twelve instructions because
@@ -11669,13 +11664,6 @@ public class SimTests {
 			World w = room(30, 30);
 			Genome hg = body(13, 0.04, hunterBrain(preyConst));
 			hg.greed = greed;
-			// A hunter that hunts for the kill: what is under test is the STANDARD a
-			// mind names, not the stomach. With the hunt's appetite in the score
-			// (AFullHunterHuntsOnlyIfItIsGreedy), a body is worth what the gut has room
-			// for, and this hunter grows up alone on a full one; at predatory 1 it
-			// wants every quarry whatever its stomach says, and the standard alone
-			// decides between the two.
-			hg.predatory = 1.0;
 			TestNPC hunter = TestNPC.mindedPredator(15.0, 15.0, 0, hg).grown(); // growth is eaten; this hunter is offered a choice, not a meal
 			w.spawnEntity(hunter);
 			// Grow up alone: the ceiling on what counts as food rises with the body,
@@ -11719,34 +11707,28 @@ public class SimTests {
 					+ "the nearest body", firstToDie(5, 1.0, false).equals("lean"));
 			assertTrue("naming the biggest meal walks past the near one for the fat",
 					firstToDie(7, 1.0, false).equals("fat"));
-			assertTrue("and a miserly lineage naming the SAME thing takes the near "
-					+ "one: the gene decides what the instruction means",
-					firstToDie(7, 0.2, false).equals("lean"));
 			assertTrue("naming the weakest takes the wounded body, neither nearest "
 					+ "nor easiest", firstToDie(8, 1.0, true).equals("fat"));
 		}
 	}
 
 	/**
-	 * Doggedness is a gene, and it decides whether a hunter finishes what it
-	 * started. {@code determination} is the multiplier a rival quarry must clear to
-	 * take a committed hunter off its target -- the scavenger's
-	 * {@code CARRION_SWITCH_GAIN} idea, except that unlike a carcass a quarry
-	 * runs, so whether holding on beats looking again is a question about a
-	 * lineage rather than a constant worth choosing here.
+	 * A hunter finishes what it started. It used to turn off its quarry for a
+	 * rival that cleared its score times {@code determination}; now a held
+	 * quarry stands until it is eaten, lost or let go, and the gene is the
+	 * scavenger's alone.
 	 *
-	 * <p>Same world twice, same brain, same everything but the gene. The hunter
-	 * is set walking at a body across the field and then a second, better one is
-	 * put in front of it: an opportunist turns and takes the newcomer, and a
-	 * dogged one finishes what it was already running down. Which body dies first
-	 * is the whole measurement.
+	 * <p>The hunter is set walking at a body across the field and then a second,
+	 * better one is put in front of it. Even at the most fickle value the gene
+	 * allows, it finishes what it was already running down. Which body dies
+	 * first is the whole measurement.
 	 *
 	 * <p>The newcomer is placed off to one side rather than on the path, because a
 	 * body the hunter merely walks INTO gets bitten whatever its mind wanted --
 	 * the bite takes what is nearest on arrival. Putting it beside the route is
 	 * what keeps this a test of the choice rather than of the geometry.
 	 */
-	static class DoggednessIsALineagesOwnBusiness extends Scenario {
+	static class AHunterFinishesWhatItStarted extends Scenario {
 		private static Brain hunterBrain() {
 			int[][] p = new int[12][];
 			p[0] = new int[] { Brain.SET, 0, 8, 0 }; // r0 = 0.5 -> SEEK_PREY
@@ -11804,10 +11786,8 @@ public class SimTests {
 
 		@Override
 		public void run() {
-			assertTrue("an opportunist turns for the better body",
-					outcome(1.0).equals("newcomer"));
-			assertTrue("a dogged lineage finishes what it started",
-					outcome(6.0).equals("first"));
+			assertTrue("even the most fickle lineage finishes what it started",
+					outcome(1.0).equals("first"));
 		}
 	}
 
@@ -11906,6 +11886,11 @@ public class SimTests {
 					w.getTile(x, y, 0).setFertility(1.0);
 				}
 			}
+			// And water. Six thousand ticks is long enough for thirst to cross the
+			// seed's drink line, and in a dry room the mind then searches for water
+			// for the rest of the run, prey in plain sight -- a test of thirst, not
+			// of the chase.
+			w.setTile(4, 15, 0, Tile.TileType.TYPE_SHALLOWS);
 			Genome hg = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			hg.size = 16;
 			// And its brain, pinned to its seed at the pace it drew: a founder is its
@@ -16069,7 +16054,10 @@ public class SimTests {
 		public void run() {
 			World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
 			net.hedinger.prototype.engine.World.Birth birth = null;
-			for (int t = 0; t < 12000 && birth == null; t++) {
+			// Long enough for a herd of ten random founders: the first birth is a
+			// matter of who was drawn, and a change to the founder draws moved it
+			// from tick 2604 to 16128 on this seed with nothing broken.
+			for (int t = 0; t < 30000 && birth == null; t++) {
 				w.think();
 				for (net.hedinger.prototype.engine.Entity e : w.getEntities()) {
 					net.hedinger.prototype.engine.World.Birth b = w.birthOf(e.getID());
@@ -19690,8 +19678,8 @@ public class SimTests {
 	 * demo world 28% of kills were still made more than nine tenths full. Now
 	 * when a body feeds at all is its greed's ({@link TestNPC#forageOnset}): it
 	 * starts at its line and stops when full. A full hunter of the reference
-	 * greed leaves prey in reach alone however predatory it is -- the drive now
-	 * weighs which quarry it takes while it feeds, not whether it feeds -- and
+	 * greed leaves prey in reach alone however predatory it is -- the drive is
+	 * not read by the hunt at all now -- and
 	 * only the greediest lineage, whose line is an empty gut's, hunts with
 	 * almost no room to spare. Nothing hunts with none: a kill that cannot fit
 	 * is still worth nothing.
@@ -19923,58 +19911,6 @@ public class SimTests {
 	}
 
 	/**
-	 * A hunter keeps its reserve before it runs. A chase is paid from the
-	 * store, and a hunter took one up at any glycogen above the exhaustion
-	 * floor: measured on seed 42, 415 of 3986 lost chases ended with the
-	 * hunter collapsed, and grown hunters were exhausted on 14% of their
-	 * ticks. How much of its store a lineage keeps before it will sprint --
-	 * and the line at which it lets a chase go -- is {@code Genome.reserve},
-	 * weighed into the hunt's appetite with the stomach and the sport: a
-	 * living body is worth nothing below the line and everything from twice
-	 * it. A carcass is a walk, not a sprint, and is wanted on the stomach's
-	 * terms alone.
-	 *
-	 * <p>Pinned on minded hunters with the hunter seed, hungry, with prey in
-	 * reach: at a third of its store a hunter keeping a tenth kills, one
-	 * keeping a half does not, and the same prudent hunter kills on a full
-	 * store.
-	 */
-	static class AHunterKeepsItsReserveBeforeItRuns extends Scenario {
-		private int preyHealthAfter(double store, double reserve) {
-			seed(113);
-			World w = room(12, 9);
-			for (int x = 1; x < 11; x++) {
-				for (int y = 1; y < 8; y++) {
-					w.getTile(x, y, 0).setFertility(0.0);
-				}
-			}
-			Genome g = new Genome();
-			g.size = 20;
-			g.speed = 0;
-			g.reserve = reserve;
-			g.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
-			TestNPC hunter = TestNPC.mindedPredator(5.5, 4.5, 0, g).grown().withReproCooldown(100_000_000);
-			TestNPC prey = TestNPC.inert(5.9, 4.5, 0).withSize(6); // already in reach
-			w.spawnEntity(hunter);
-			w.spawnEntity(prey);
-			w.think();
-			for (int i = 0; i < 4 * TestNPC.SENSE_EVERY + 2 * TestNPC.PRED_BITE_PERIOD; i++) {
-				hunter.withHunger(0.8).withGlycogen(store * hunter.glycogenCapacity()); // hold the books there
-				tick(w, 1);
-			}
-			return prey.getHealth();
-		}
-
-		@Override
-		public void run() {
-			assertLess("at a third of its store, a hunter keeping a tenth runs the prey down",
-					preyHealthAfter(0.33, 0.1), 100);
-			assertEquals("one keeping a half leaves it alone", 100, preyHealthAfter(0.33, 0.5));
-			assertLess("and kills on a full store", preyHealthAfter(1.0, 0.5), 100);
-		}
-	}
-
-	/**
 	 * A hunter at its meal is not hunting for sport. The sport in a hunt
 	 * ({@link AFullHunterHuntsOnlyIfItIsGreedy}) is a reason to take one up, never
 	 * a reason to leave a meal. The day sport went in, a full hunter's appetite
@@ -20017,8 +19953,8 @@ public class SimTests {
 			hg.size = 8;
 			hg.speed = 0.06;
 			hg.greed = greed;
-			hg.predatory = 1.0; // hunts for the kill itself, whatever its stomach says
-			hg.determination = 1.0; // and holds nothing: the weakest grip a gene allows
+			hg.predatory = 1.0; // the old sport, no longer read by the hunt
+			hg.determination = 1.0; // and the old weakest grip, no longer read either
 			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
 			TestNPC hunter = TestNPC.mindedPredator(3.5, 4.5, 0, hg).grown().withHunger(0.3)
 					.withReproCooldown(100_000_000);
@@ -23150,7 +23086,6 @@ public class SimTests {
 				new ASprayIsAPuffEveryTwoSeconds(),
 				new AMealTakesItsTime(),
 				new ADrinkIsASitting(),
-				new AHunterKeepsItsReserveBeforeItRuns(),
 				new AHunterAtItsMealIsNotHuntingForSport(),
 				new AHunterIsNoThreatToItsOwnKind(),
 				new AThreatIsWhatWouldBiteYou(),
@@ -23239,7 +23174,7 @@ public class SimTests {
 				new PatienceIsWhenAHunterLetsGo(),
 				new AHunterIgnoresRivalsWhenSeekingPrey(),
 				new AHuntersPreferenceDecidesItsQuarry(),
-				new DoggednessIsALineagesOwnBusiness(),
+				new AHunterFinishesWhatItStarted(),
 				new APackDoesNotEatItself(),
 				new AFounderHunterChasesFlatOut(),
 				new AFounderPricesTheChildhoodItPaysFor(),

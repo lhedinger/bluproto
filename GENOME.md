@@ -348,22 +348,16 @@ life:
   rather than a meal, still climbs on anything bigger. A hunter is never a host,
   whatever its size: parasites drink the herd and the carrion-eaters, and the
   hunters are left to hunt.
-- **A hunter hunts for food, or for sport, and `predatory` says how much of
-  each.** A quarry's value in the prey scan is the hunter's appetite for it:
-  the meat it may take off the body against its gut above the full line
-  (`PRED_FULL_HUNGER`), so a full hunter wants nothing from it — plus, for a
-  living body, `predatory` of the rest for the kill itself. At 0 a hunter kills
-  only what it can eat; at 1 whatever is in sight. A carcass has no sport in
-  it. `greed`, the exponent on that value, thereby bites on a hunter's choice
-  for the first time: on the default standard it had been an exponent on a
-  constant 1.
-- **A hunter keeps its reserve before it runs.** `reserve` is the share of
-  its glycogen below which a hunter takes up no chase and lets one under way
-  go; from twice that share a chase is wanted in full, and in proportion
-  between. It multiplies the hunt's appetite above, for living bodies only —
-  a carcass is a walk, not a sprint. A chase is paid from the store, and a
-  hunter used to sprint at any glycogen above the exhaustion floor: one lost
-  chase in ten ended collapsed. Founders draw 0.05–0.5; zero is no line.
+- **A hunter hunts while it feeds, and takes the quarry its mind names.** A
+  living body is wanted in full while the hunter's appetite latch is open and
+  not at all between meals; a carcass is worth the meat the hunter can fit
+  above the full line (`PRED_FULL_HUNGER`). The best quarry by the mind's
+  standard (`A_PREY`) over distance is the pick, and the hunter keeps it until
+  it eats it, loses it, lets it go on `patience`, or the latch closes. The hunt
+  used to weigh `predatory` sport, `greed` as an exponent, `determination` for
+  switching and a `reserve` stamina line as well; the sport kept nearly full
+  hunters on the chase, and the stamina line, crossed on an empty gut, never
+  opened again.
 - **A lineage stands the air by four genes.** `thermalOptimum` and
   `thermalBreadth` are its comfort band, in degrees: the warmth sense reads the
   tile against the band, cold below it costs an endotherm burn, heat above it

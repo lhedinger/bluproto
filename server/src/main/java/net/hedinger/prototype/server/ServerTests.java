@@ -586,23 +586,35 @@ public final class ServerTests {
 	 * has exactly one source, so the inflows sum to its count; and a head of the
 	 * earlier stage is held, or has ended, or is carried by its descendants --
 	 * never counted twice. Checked against a REAL interval -- the world runs
-	 * four thousand ticks between the two snapshots, so births, deaths and
-	 * whatever drift occurs are all in play, not staged. (Founders land with
-	 * no fat and must eat before they breed: the first birth on this world
-	 * comes at tick 2460.)
+	 * on between the two snapshots to a birth, so births, deaths and whatever
+	 * drift occurs are all in play, not staged.
 	 */
 	static void lineageFlowsConserveEveryHead() {
 		net.hedinger.prototype.engine.Utils.seed(7);
 		net.hedinger.prototype.engine.World w = net.hedinger.prototype.sim.Worlds.demo(7, 64, 44);
-		WorldHost.StageSnap a = WorldHost.stageOf(w, 0);
 		for (int t = 0; t < 4000; t++) {
 			w.think();
 		}
 		// And on to a birth, so the interval has one to carry: when the first
-		// comes is the founders' business, not the flows'.
-		for (int t = 0; t < 30000 && w.births().stream().noneMatch(
-				x -> x.parentA() != net.hedinger.prototype.engine.Entity.NO_ID); t++) {
+		// comes is the founders' business, not the flows'. The earlier stage is
+		// re-taken every thousand ticks until a birth lands whose parent it
+		// holds: a world that has lost its first herd breeds from the steward's
+		// restock, and a stage taken before the restock knows no such parent.
+		WorldHost.StageSnap a = WorldHost.stageOf(w, 0);
+		java.util.Set<Integer> held = new java.util.HashSet<Integer>();
+		for (int t = 0; t < 40000; t++) {
+			if (t % 1000 == 0) {
+				a = WorldHost.stageOf(w, 0);
+				held.clear();
+				for (int id : a.ids()) {
+					held.add(id);
+				}
+			}
 			w.think();
+			if (w.births().stream().anyMatch(x -> x.parentA() != net.hedinger.prototype.engine.Entity.NO_ID
+					&& held.contains(x.parentA()) && !held.contains(x.child()))) {
+				break;
+			}
 		}
 		// One guaranteed death of a body the EARLIER stage knows, so the
 		// died-flow is a certainty instead of a bet on the random stream. It has

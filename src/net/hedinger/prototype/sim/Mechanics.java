@@ -1275,9 +1275,8 @@ public final class Mechanics {
 		rows(s,
 				row("greed", "0 – " + num(Genome.GREED_MAX), "value exponent",
 						"How much a BIG prize outranks a near one when food is scored value "
-						+ "over distance — 0 takes whatever is handy, above 1 holds out. For a "
-						+ "hunter the value is its appetite for the body (below), so greed also "
-						+ "says how much a full stomach dulls the hunt; and it sets the reach: "
+						+ "over distance — 0 takes whatever is handy, above 1 holds out. A hunter's "
+						+ "quarry is not weighed by it; for a hunter it sets the reach: "
 						+ "quarry up to 0.5 + greed times its own size, capped at "
 						+ num(TestNPC.PRED_PREY_RATIO_CAP) + "×. It also sets when a meal starts: "
 						+ "a body forages and eats from the moment its gut is "
@@ -1286,7 +1285,8 @@ public final class Mechanics {
 						+ num(Genome.GREED_MAX) + " never stops snacking."),
 				row("determination", "1 – " + num(Genome.DETERMINATION_MAX), "× incumbent",
 						"How much better a rival target must score before the held one is "
-						+ "dropped. Read by the hunter and the scavenger; a grazer commits by "
+						+ "dropped. Read by the scavenger; a hunter keeps its quarry until it eats "
+						+ "it, loses it or lets go, a grazer commits by "
 						+ "clock (" + num(TestNPC.FORAGE_SCAN_PERIOD) + "-tick scans) and a "
 						+ "parasite by grip, so neither reads a bar."),
 				row("patience", num(Genome.PATIENCE_MIN) + " – " + num(Genome.PATIENCE_MAX), "ticks",
@@ -1297,21 +1297,10 @@ public final class Mechanics {
 						"How close a partner's colour must be before courtship, both ways: "
 						+ "what makes species real, because drifted colours stop clearing it. "
 						+ "The more xenophobic, the closer."),
-				row("predatory", "0 – 1", "sport in the hunt",
-						"A quarry is worth what the gut has room for: the meat on it against "
-						+ "the stomach above the full line (" + pct(TestNPC.PRED_FULL_HUNGER)
-						+ " empty), so a full hunter wants nothing from it — plus, for a living "
-						+ "body, this much of the rest for the kill itself. At 0 a hunter kills "
-						+ "only what it can eat; at 1 whatever is in sight, as every hunter did "
-						+ "before the gene was read. Also the gain on a mind's prey channel, and "
-						+ "a parasite's standard for a host."),
-				row("reserve", "0 – " + num(Genome.RESERVE_MAX), "of glycogen",
-						"The store a hunter keeps before it will run: a living body is worth "
-						+ "nothing below this share of its glycogen, everything from twice it, "
-						+ "and a chase under way is let go at the line. A carcass is a walk, not "
-						+ "a sprint, and is not held to it. Founders draw " + num(Genome.RESERVE_LO)
-						+ " – " + num(Genome.RESERVE_HI) + "; zero is no line, which is every "
-						+ "hunter before the gene was read."),
+				row("predatory", "0 – 1", "",
+						"The gain on a mind's prey channel, and a parasite's standard for a "
+						+ "host. Which quarry a hunter takes no longer reads it: a living body "
+						+ "is wanted while the hunter is feeding and not at all between meals."),
 				row("xenophobia", "≥ 0", "",
 						"Flee-the-bigger weight of the scripted reaction model; inert for a "
 						+ "minded body, whose brain decides."),

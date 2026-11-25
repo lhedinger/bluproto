@@ -232,9 +232,6 @@ public final class GeneSchema {
 		// draw before it is unshifted.
 		add("dark", "share of the sky", Drift.MULT, Genome.NIGHT_EYE_MIN, Genome.NIGHT_EYE_MAX, false,
 				g -> g.nightEye, (g, v) -> g.nightEye = v);
-		// The store a hunter keeps before it will run (Genome.reserve). Appended.
-		add("reserve", "of glycogen", Drift.ADD, 0, Genome.RESERVE_MAX, false,
-				g -> g.reserve, (g, v) -> g.reserve = v);
 		// How many young a budder bears at once (Genome.litter). Appended.
 		add("litter", "young", Drift.ADD, Genome.LITTER_MIN, Genome.LITTER_MAX, false,
 				g -> g.litter, (g, v) -> g.litter = v);
