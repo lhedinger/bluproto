@@ -9430,6 +9430,54 @@ public class SimTests {
 	}
 
 	/**
+	 * A hunter sees in the dark at half its range. Sight is the gene's range
+	 * dimmed by the light where the viewer stands, and nothing sees in no
+	 * light; but a grazer's forage scan reads its whole range in any light and
+	 * fungus grows unlit, so the dark was a refuge from the hunter alone. On
+	 * the live world 1,023 of 1,028 grazers lived below the surface at a median
+	 * light of 0.00, where a hunter beside one did not see it. A hunter now
+	 * keeps half its sight gene in pitch black; a grazer keeps the light's rule.
+	 */
+	static class AHunterSeesInTheDarkAtHalfRange extends Scenario {
+		@Override
+		public void run() {
+			seed(31);
+			World w = room(30, 16, 2); // level 1 is the open top; level 0 is under it
+			double x = 6.5, y = 8.5;
+			assertNear("the floor under the roof is pitch black where the hunter stands", 0,
+					w.climate().lightAt(x, y, 0), 1e-9);
+			Mind still = (s, a) -> { };
+			Genome hg = new Genome();
+			hg.clade = Genome.Clade.PREDATOR;
+			hg.size = 12;
+			hg.losRange = 10;
+			hg.nightEye = 0.3;
+			TestNPC hunter = TestNPC.minded(x, y, 0, hg, still).grown();
+			Genome gg = new Genome();
+			gg.size = 5;
+			gg.losRange = 10;
+			gg.nightEye = 0.3;
+			TestNPC grazer = TestNPC.minded(x, y + 3, 0, gg, still).grown();
+			TestNPC near = TestNPC.minded(x + 4, y, 0, gg.copy(), still).grown();
+			TestNPC far = TestNPC.minded(x + 7, y, 0, gg.copy(), still).grown();
+			for (TestNPC b : new TestNPC[] { hunter, grazer, near, far }) {
+				w.spawnEntity(b);
+			}
+			w.think();
+			assertNear("in pitch black a hunter sees half its sight gene", 5.0, hunter.sightRange(), 1e-9);
+			assertTrue("so it sees a grazer four tiles off", hunter.sees(near));
+			assertTrue("and not one seven tiles off", !hunter.sees(far));
+			assertNear("a grazer in the same dark sees nothing", 0.0, grazer.sightRange(), 1e-9);
+
+			World lit = room(30, 16);
+			TestNPC up = TestNPC.minded(x, y, 0, hg.copy(), still).grown();
+			lit.spawnEntity(up);
+			lit.think();
+			assertNear("under the open sky it sees its whole range", 10.0, up.sightRange(), 1e-9);
+		}
+	}
+
+	/**
 	 * A full hunter that lashes out fights; it does not hunt. A_ATTACK used to
 	 * give a hunter its hunting bite on any quarry in reach, with no appetite
 	 * gate, so a mind that held it high killed whatever came near, full or
@@ -23155,6 +23203,7 @@ public class SimTests {
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
 				new AFullHunterLashesOutButDoesNotHunt(),
+				new AHunterSeesInTheDarkAtHalfRange(),
 				new SeekingWaterIsOneLine(),
 				new TheCarryPassesTheLastResultOn(),
 				new AHashIsReplayableAndEven(),

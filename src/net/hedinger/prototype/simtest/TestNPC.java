@@ -946,6 +946,29 @@ public class TestNPC extends NPC {
 	 * — in glycogen if it can afford to mend, in health if it cannot.
 	 */
 	/**
+	 * A hunter keeps half its sight in the dark: it hunts by scent and sound as
+	 * well as by eye, so in pitch black it still finds quarry within half its
+	 * sight gene, and in a light where its eye keeps more than half the eye
+	 * wins. Every other clade keeps the light's rule.
+	 *
+	 * <p>The dark was a refuge only from the hunter. A grazer's forage scan
+	 * reads its whole sight gene in any light, and fungus grows unlit, so the
+	 * herd fed in the dark; the hunter's prey scan read the light-dimmed range,
+	 * and in no light that is none. On the live world the herd moved below the
+	 * surface -- 1,023 of 1,028, at a median light of 0.00 -- where a hunter
+	 * standing beside a grazer did not see it, and the hunters starved on the
+	 * surface beside the last five grazers.
+	 */
+	@Override
+	protected double darkSight() {
+		return niche().hunts() ? HUNTER_DARK_SIGHT : 0;
+	}
+
+	/** See {@link #darkSight}. */
+	@Unit("of the sight gene")
+	public static double HUNTER_DARK_SIGHT = 0.5;
+
+	/**
 	 * A parasite dries out in about a day; everything else keeps an animal's
 	 * four and a half. See {@link Niche#PARASITE_THIRST_FACTOR}.
 	 */
