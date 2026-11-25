@@ -2081,8 +2081,7 @@ public class TestNPC extends NPC {
 	/**
 	 * What a quarry is worth from here, by the standard this hunter is currently
 	 * applying. The kind of quarry wanted is the mind's, read off {@link
-	 * AgentIO#A_PREY} into {@link #preyWanted}; how hard size weighs inside it is
-	 * the lineage's, {@code Genome.greed}. Neither is a number chosen here,
+	 * AgentIO#A_PREY} into {@link #preyWanted}, and not a number chosen here,
 	 * which is the whole point: whether it pays to cross a field for a big animal
 	 * depends on how thick the herd is and how hard it is to bring down, and those
 	 * are facts about a world rather than about hunting.
@@ -2117,18 +2116,18 @@ public class TestNPC extends NPC {
 		double want = appetite(n);
 		switch (preyWanted()) {
 		case AgentIO.PREY_BIGGEST:
-			return prize(want * n.leanMass(), dist);
+			return want * n.leanMass() / (1.0 + dist);
 		case AgentIO.PREY_WEAKEST: {
 			double left = Math.max(1, Math.ceil(Math.max(1, n.getHealth())
 					/ (double) biteDamage(n)));
-			return prize(want / left, dist);
+			return want / left / (1.0 + dist);
 		}
 		case AgentIO.PREY_EASIEST: {
 			double bites = Math.ceil(FULL_BODY_HEALTH / (double) biteDamage(n));
-			return prize(want * n.leanMass() / bites, dist);
+			return want * n.leanMass() / bites / (1.0 + dist);
 		}
 		default:
-			return prize(want, dist);
+			return want / (1.0 + dist);
 		}
 	}
 
@@ -2136,59 +2135,32 @@ public class TestNPC extends NPC {
 	 * What this hunter wants from {@code n}, 0..1: the appetite every quarry
 	 * standard is weighed by.
 	 *
-	 * <p>Food first: the meat this mouth may take off the body -- a living
-	 * body's fresh share, a carcass's fresh meat -- against the gut above the
-	 * {@link #PRED_FULL_HUNGER full line}, so a body it could eat all of is
-	 * worth 1 and one it has no room for is worth 0. Then, for a living body,
-	 * what the lineage's {@code Genome.predatory} drive adds for the kill
-	 * itself: at 1 a hunter wants every quarry whatever its stomach says, at 0
-	 * only what it can eat. A carcass has no sport in it.
+	 * <p>A living body is wanted in full while the hunter is feeding ({@link
+	 * #appetiteOpen}) and not at all between meals. A carcass is worth the meat
+	 * this mouth may take off it against the gut above the {@link
+	 * #PRED_FULL_HUNGER full line}: 1 if it could eat all of it, 0 with no room.
 	 *
-	 * <p>The hunt had no appetite. The scripted hunter stops killing at the full
-	 * line, but the minded one -- every hunter in the seeded world -- killed
-	 * whatever was in sight whenever its mind sought forage, which is always.
-	 * Measured on seed 42: two thirds of all kills were made at a gut under a
-	 * fifth empty, and the killer then ate 0.67 energy off a body carrying ten,
-	 * where one killing at three fifths empty ate seven. The rest fed scavengers
-	 * or rotted, and the herd paid for it either way. Putting the stomach into
-	 * the score, rather than a gate in front of the scan, leaves the decision
-	 * where every other food decision is: value over effort, with greed the
-	 * exponent -- which for a hunter on the default standard was an exponent on
-	 * a constant 1 until now -- and the sport in it a gene selection can price.
+	 * <p>The hunt used to weigh three more things here: the stomach's room for
+	 * a living body too, the {@code predatory} drive's sport on top of it, and a
+	 * stamina line drawn by a {@code reserve} gene. The sport kept a hunter with
+	 * a nearly full gut on the chase, and the stamina line, once crossed on an
+	 * empty gut, closed for good -- nothing refills glycogen but food -- so a
+	 * hunter could starve with prey standing in reach. The latch already says
+	 * when a hunter feeds; the scan only has to say what.
 	 */
 	private double appetite(NPC n) {
-		double meat = n.isDead() ? n.freshMeat() : NPC.FRESH_SHARE * n.leanMass();
-		double meatEnergy = meat * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
-		double room = Math.max(0, hunger - PRED_FULL_HUNGER) * NPC.GUT_PER_MASS * adultMass();
-		double food = meatEnergy <= 0 ? 0 : Math.min(1.0, room / meatEnergy);
 		if (n.isDead()) {
-			return food;
+			double meatEnergy = n.freshMeat() * NPC.LEAN_DENSITY * NPC.FLESH_ASSIMILATION;
+			double room = Math.max(0, hunger - PRED_FULL_HUNGER) * NPC.GUT_PER_MASS * adultMass();
+			return meatEnergy <= 0 ? 0 : Math.min(1.0, room / meatEnergy);
 		}
-		double sport = !sporting || genome == null ? 0 : Math.max(0, Math.min(1.0, genome.predatory));
-		return stamina() * (food + sport * (1 - food));
+		return hunting() ? 1 : 0;
 	}
 
-	/** Whether the sport in a hunt counts right now: not while a carcass is held
-	 *  (see {@link #scanPrey}). Set by the scan for the scoring it does. */
-	private boolean sporting = true;
-
-	/**
-	 * How much of a chase this hunter's store will fund, 0..1: nothing below
-	 * the share of its glycogen the lineage keeps ({@code Genome.reserve}),
-	 * all of it from twice that share, and in proportion between. A chase is
-	 * paid from the store, and a hunter took one up at any glycogen above the
-	 * exhaustion floor: measured on seed 42, 415 of 3986 lost chases ended with
-	 * the hunter collapsed. A line at zero is no line, which is every hunter
-	 * before the gene was read; the ramp above it is what gives selection a
-	 * gradient instead of a cliff. Living quarry only: a carcass is a walk.
-	 */
-	private double stamina() {
-		double reserve = genome == null ? 0 : genome.reserve;
-		if (reserve <= 0) {
-			return 1;
-		}
-		double fuel = glycogen / Math.max(1e-9, glycogenCapacity());
-		return Math.max(0, Math.min(1.0, (fuel - reserve) / reserve));
+	/** Whether this hunter takes up living quarry now: a minded one while its
+	 *  appetite latch is open, a scripted one until it is full. */
+	private boolean hunting() {
+		return isMinded() ? appetiteOpen() : hunger > PRED_FULL_HUNGER;
 	}
 
 	/** The kind of quarry this hunter is currently after -- the mind's standing
@@ -2256,8 +2228,8 @@ public class TestNPC extends NPC {
 		if (t.getLvl() != getLvl() || !edibleQuarry(t, cannibal)
 				|| (!t.isDead() && (!isInLOS(t) || appetite(t) <= 0))) {
 			// Gone, a floor away, inedible (a carcass eaten out of what this mouth
-			// may take), or living prey lost to cover or no longer wanted -- a
-			// store run down to its reserve, a stomach filled on the way. A held
+			// may take), or living prey lost to cover or no longer wanted -- the
+			// appetite latch closed on the way. A held
 			// CARCASS is kept while there is meat on it, full stomach or not: a
 			// hunter fills off a kill in a dozen ticks and then stays, eating again
 			// as digestion makes room, which is how a kill's fresh half gets eaten
@@ -2394,23 +2366,22 @@ public class TestNPC extends NPC {
 	}
 
 	/**
-	 * Points the hunt at the best quarry in sight and keeps it there: the held
-	 * target stands unless something clears its score times
-	 * {@link #determination()}. With nothing held the bar is zero and the best
-	 * quarry in range simply wins.
+	 * Points the hunt at the best quarry in sight and keeps it there: a held
+	 * target stands until {@link #heldPrey} lets it go, and only then does the
+	 * scan look again, when the best quarry in range simply wins. A hunter used
+	 * to turn off its target for a rival that cleared its score times {@code
+	 * Genome.determination}; it finishes what it started now.
 	 *
 	 * <p>Sweeps in id order and keeps the first strict maximum, so ties break
 	 * identically on every replay.
 	 */
 	private NPC scanPrey(boolean cannibal) {
 		NPC held = heldPrey(cannibal);
+		if (held != null) {
+			return held; // committed: kept until eaten, lost, let go or between meals
+		}
 		NPC best = null;
-		// A hunter at its meal is not hunting for sport: with a carcass held, every
-		// body is scored by the stomach alone (see appetite), so the sport in a
-		// live animal two tiles off cannot outscore the meal underfoot. Sport is
-		// a reason to take up a hunt, never a reason to leave a meal.
-		sporting = held == null || !held.isDead();
-		double bar = held == null ? 0 : preyScore(held) * determination();
+		double bar = 0;
 		// Census walk: live same-level non-item bodies only.
 		for (NPC n : getWorld().census().creaturesNear(getLvl(), X, Y, LOS_RANGE)) {
 			if (!edibleQuarry(n, cannibal)) {

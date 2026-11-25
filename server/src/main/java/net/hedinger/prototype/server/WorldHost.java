@@ -1014,7 +1014,6 @@ final class WorldHost {
 					gm.put("greed", round(g.greed));
 					gm.put("determination", round(g.determination));
 					gm.put("patience", g.patience);
-					gm.put("reserve", round(g.reserve));
 					// How it stands the air: its comfort band, how much of its warmth it
 					// makes, how much coat it wears.
 					gm.put("thermalOptimum", round(g.thermalOptimum));

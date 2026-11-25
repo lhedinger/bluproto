@@ -417,18 +417,6 @@ public class Genome {
 	 * unaffected. Instinct in the genome, deliberation in the mind.
 	 */
 	public double instinct = 0.0;
-	/**
-	 * The share of its glycogen a hunter keeps before it will run, 0..1: below
-	 * it no chase is taken up and one under way is let go, and from twice it a
-	 * chase is wanted in full (see {@code TestNPC.appetite}). A chase is paid
-	 * from the store, and a hunter used to take one up at any glycogen above
-	 * the exhaustion floor -- measured on seed 42, one lost chase in ten ended
-	 * with the hunter collapsed. How much to keep back is a question about a
-	 * lineage: a lean line that sprints on fumes against a prudent one that
-	 * rests first, and the herd decides between them. Zero is no line at all.
-	 * A carcass is a walk, not a sprint, and is not held to it.
-	 */
-	public double reserve = 0.0;
 
 	/** Fewest young a budder bears at once. */
 	@net.hedinger.prototype.engine.Unit("young")
@@ -780,12 +768,8 @@ public class Genome {
 		spreadBirth(g);
 		// And how far it sees, appended after the birth size for the same reason.
 		spreadSight(g);
-		// And the store it keeps before it will run: from just above the
-		// exhaustion floor to half the store, appended after sight for the same
-		// reason again.
-		g.reserve = RESERVE_LO + Utils.random() * (RESERVE_HI - RESERVE_LO);
-		// And how it stands the air, appended after the reserve for the same
-		// reason again.
+		// And how it stands the air, appended after sight for the same reason
+		// again.
 		spreadThermal(g);
 		// And how much light its eye needs, appended after the thermal draws
 		// for the same reason again.
@@ -833,12 +817,6 @@ public class Genome {
 		g.insulation = Utils.random();
 	}
 
-	/** Where founders' {@link #reserve} lines are drawn from: just above the
-	 *  exhaustion floor to half the store. The gene's own ceiling is
-	 *  {@link #RESERVE_MAX}; a line at the top of the store is a hunter that
-	 *  never runs, which is selection's to try and not a founder's to start at. */
-	@net.hedinger.prototype.engine.Unit("of glycogen")
-	public static final double RESERVE_LO = 0.05, RESERVE_HI = 0.5, RESERVE_MAX = 0.9;
 
 	/** Where founders' comfort bands are drawn: centred on the ground's own
 	 *  temperature, five degrees either side. */
