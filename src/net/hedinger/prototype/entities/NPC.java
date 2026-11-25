@@ -2129,7 +2129,15 @@ public abstract class NPC extends Entity {
 			return LOS_RANGE;
 		}
 		double dark = genome != null ? genome.nightEye : Genome.NIGHT_EYE_HI;
-		return LOS_RANGE * dimSight(getWorld().climate().lightAt(X, Y, getLvl()), dark);
+		double kept = dimSight(getWorld().climate().lightAt(X, Y, getLvl()), dark);
+		return LOS_RANGE * Math.max(darkSight(), kept);
+	}
+
+	/** The share of its sight gene this body keeps in any light, pitch black
+	 *  included: 0 by default -- nothing sees in no light -- and more for a
+	 *  clade whose senses are not its eyes alone (see TestNPC). */
+	protected double darkSight() {
+		return 0;
 	}
 
 	/** Whether this body sees {@code e} from where it stands: in its field of
