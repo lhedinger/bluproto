@@ -602,17 +602,21 @@ public final class ServerTests {
 		// restock, and a stage taken before the restock knows no such parent.
 		WorldHost.StageSnap a = WorldHost.stageOf(w, 0);
 		java.util.Set<Integer> held = new java.util.HashSet<Integer>();
+		long[] since = { 0 };
 		for (int t = 0; t < 40000; t++) {
 			if (t % 1000 == 0) {
 				a = WorldHost.stageOf(w, 0);
+				since[0] = w.getTick();
 				held.clear();
 				for (int id : a.ids()) {
 					held.add(id);
 				}
 			}
 			w.think();
+			// A birth since this stage was taken, of a parent it holds: an older
+			// record is a child that may be dead by now, and carries no ribbon.
 			if (w.births().stream().anyMatch(x -> x.parentA() != net.hedinger.prototype.engine.Entity.NO_ID
-					&& held.contains(x.parentA()) && !held.contains(x.child()))) {
+					&& x.tick() > since[0] && held.contains(x.parentA()))) {
 				break;
 			}
 		}
