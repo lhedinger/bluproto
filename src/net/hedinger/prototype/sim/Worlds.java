@@ -533,6 +533,15 @@ public final class Worlds {
 	 * mouths the other floors put back.
 	 */
 	private static final int HERD_FLOOR = 40;
+	/**
+	 * The scavengers' and parasites' floor, a quarter of the hunters': 10 on
+	 * the live map, restocked as 20 in four kin groups. Every restock of
+	 * either lands on the surface beside a grazer, 80 at a time at the shared
+	 * floor, and on the live world 82 of its 92 parasites stood on the surface
+	 * while 440 of its 448 grazers lived below it. A smaller floor keeps the
+	 * niche from going empty and puts a fifth of the bodies on the herd.
+	 */
+	private static final double SCAV_PARA_FLOOR = CLADE_FLOOR / 4.0;
 
 	/** Level indices. The engine treats a HIGHER index as physically UP (a HOLE
 	 *  drops you to the level below, index-1; a RAMPUP climbs to index+1), so the
@@ -6859,7 +6868,7 @@ public final class Worlds {
 				// map, which with diet as a mate barrier is not a breeding
 				// population -- the warden was keeping the niche occupied and extinct
 				// at the same time.
-				new int[] { Math.max(6, sc(CLADE_FLOOR, scale)), Math.max(100, sc(100, scale)) },
+				new int[] { Math.max(6, sc(SCAV_PARA_FLOOR, scale)), Math.max(100, sc(100, scale)) },
 				// Parasites. A floor so the niche survives its own learning curve
 				// (a mindless parasite that never latches starves), and a ceiling
 				// raised 30 -> 100 for the same reason as the other two.
@@ -6874,7 +6883,7 @@ public final class Worlds {
 				// to be. If a plague is what the herd actually produces, the herd
 				// should be what stops it; if nothing stops it, that is a finding
 				// about the ecology rather than a reason to hide it behind a cap.
-				new int[] { Math.max(6, sc(CLADE_FLOOR, scale)), Math.max(100, sc(100, scale)) });
+				new int[] { Math.max(6, sc(SCAV_PARA_FLOOR, scale)), Math.max(100, sc(100, scale)) });
 		w.spawnEntity(steward);
 
 		// The founding population: every clade at its floor, through the one
@@ -7029,6 +7038,10 @@ public final class Worlds {
 
 	/** Scale a base count by the map's area ratio, never below 1. */
 	private static int sc(int base, double scale) {
+		return Math.max(1, (int) Math.round(base * scale));
+	}
+
+	private static int sc(double base, double scale) {
 		return Math.max(1, (int) Math.round(base * scale));
 	}
 }
