@@ -287,30 +287,40 @@ public final class Worlds {
 	public static final double FOUNDER_GREY = 0.5;
 
 	/**
-	 * A seed program with a random line after every line it has -- or before
-	 * a skip, so a skip keeps the line it guards right behind it. The working
-	 * lines are the seed's, in its order; each pad is a whole random
-	 * instruction, opcode and operands alike, as {@link
+	 * A seed program followed by as many random lines as it has: the working
+	 * lines are the seed's, in its order and in one block, and each pad is a
+	 * whole random instruction, opcode and operands alike, as {@link
 	 * net.hedinger.prototype.entities.Brain#randomInstruction} draws one.
 	 *
 	 * <p>Founders are noisy seeding, and this is noise put where selection can
 	 * use it. The pads were inert NOPs with random operands: room to mutate
 	 * in, but every founder of a seed ran the same program, so a reseed began
 	 * with no variation in behaviour at all. A random pad runs: it may read a
-	 * sensor into a register the seed uses, write an actuator, or skip the
-	 * seed line after it, so no two founders behave quite alike, some worse
-	 * than their seed and a few, perhaps, better. That some founders are
-	 * unviable is accepted -- the steward reseeds a clade that falls below its
-	 * floor, and what persists is whatever breeds.
+	 * sensor into a register, write an actuator, or skip the line after it, so
+	 * no two founders behave quite alike. That some founders are unviable is
+	 * accepted -- the steward reseeds a clade that falls below its floor, and
+	 * what persists is whatever breeds.
+	 *
+	 * <p>The pads sit after the seed, not between its lines. Interleaved, a pad
+	 * landed between a test and the skip that reads it, or between a register
+	 * the seed sets and the line that uses it, and half the herd's founders
+	 * could not feed: of 2000 grazer founders, hungry with food in view and no
+	 * threat, 49% sought it, 16% fled a threat that was not there and 18% sought
+	 * nothing; on the live world a restock's searching grazers stood at hunger
+	 * 1.0 in full grass. The seed sets every register it reads at the top of a
+	 * pass, so a block of pads after it can change a register only between
+	 * passes, and a pad's skip can only jump a pad or the seed's first line.
+	 * In one block, 93% forage, and 96% flee a threat in sight (57% before).
+	 * What still breaks a founder is a pad that writes an actuator.
 	 *
 	 * <p>Before random pads, run to ten generations on three seeds, NOP-padded
 	 * lineages carried more lines with opcodes no seed uses on five clade-seed
 	 * pairs of six, and every guild stayed alive.
 	 *
 	 * <p>Length is not free, and the padding pays for it like any other line: a
-	 * longer brain reacts slower at a fixed budget of instructions per tick, and holds more
-	 * targets at once. Selection can shed it -- a deletion is as likely as an
-	 * insertion.
+	 * longer brain reacts slower at a fixed budget of instructions per tick, and
+	 * holds more targets at once. Selection can shed it -- a deletion is as
+	 * likely as an insertion.
 	 */
 	public static net.hedinger.prototype.entities.Brain padded(net.hedinger.prototype.entities.Brain b) {
 		if (b == null) {
@@ -318,17 +328,12 @@ public final class Worlds {
 		}
 		int[][] code = b.code();
 		java.util.List<int[]> out = new java.util.ArrayList<int[]>(code.length * 2);
+		java.util.List<int[]> pads = new java.util.ArrayList<int[]>(code.length);
 		for (int[] ins : code) {
-			int[] pad = net.hedinger.prototype.entities.Brain.randomInstruction();
-			boolean skip = net.hedinger.prototype.entities.Brain.isSkip(ins[0]);
-			if (skip) {
-				out.add(pad);
-			}
 			out.add(ins.clone());
-			if (!skip) {
-				out.add(pad);
-			}
+			pads.add(net.hedinger.prototype.entities.Brain.randomInstruction());
 		}
+		out.addAll(pads);
 		return new net.hedinger.prototype.entities.Brain(out.toArray(new int[0][]));
 	}
 

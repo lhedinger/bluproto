@@ -1142,7 +1142,7 @@ public class TestNPC extends NPC {
 	/** The forage-intent value seeded into a newborn's steering by its
 	 *  {@link Genome#instinct} — a magnitude squarely inside the SEEK_FORAGE band,
 	 *  so the born instinct is "look for food". */
-	private static final double INSTINCT_FORAGE = 0.1;
+	static final double INSTINCT_FORAGE = 0.1;
 
 	/** Seeds a minded newborn's actuators from its instinct gene, so a body with a
 	 *  born-in foraging drive starts seeking food before its mind decides anything.

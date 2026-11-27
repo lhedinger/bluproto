@@ -10275,7 +10275,7 @@ public class SimTests {
 			for (Genome.Clade c : new Genome.Clade[] { Genome.Clade.HERBIVORE, Genome.Clade.PREDATOR }) {
 				for (int i = 0; i < 200; i++) {
 					Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(c);
-					assertTrue("a founder " + c + " carries the seed, a random line beside every line of it",
+					assertTrue("a founder " + c + " carries the seed, and as many random lines after it",
 							carriesStarter(g.brain.code()));
 					lo = Math.min(lo, g.pace);
 					hi = Math.max(hi, g.pace);
@@ -10689,13 +10689,13 @@ public class SimTests {
 	}
 
 	/** Whether {@code founder} is {@code seed} as {@link net.hedinger.prototype.sim.Worlds#padded} lays
-	 *  it out: seed line k at 2k, or at 2k+1 for a skip, a random line beside it. */
+	 *  it out: the seed's lines first, in one block, then as many random lines. */
 	static boolean carriesSeed(int[][] seed, int[][] founder) {
 		if (founder.length != 2 * seed.length) {
 			return false;
 		}
 		for (int k = 0; k < seed.length; k++) {
-			if (!java.util.Arrays.equals(seed[k], founder[2 * k + (Brain.isSkip(seed[k][0]) ? 1 : 0)])) {
+			if (!java.util.Arrays.equals(seed[k], founder[k])) {
 				return false;
 			}
 		}
@@ -10709,10 +10709,10 @@ public class SimTests {
 	}
 
 	/**
-	 * A founder carries its seed program with a random line beside every line:
-	 * the seed's lines in its order, each skip still right before the line it
-	 * guards, and between them whole random instructions -- opcode and
-	 * operands -- so founders of one seed do not all run the same program. A
+	 * A founder carries its seed program and as many random lines after it:
+	 * the seed's lines in its order, in one block, then whole random
+	 * instructions -- opcode and operands -- so founders of one seed do not
+	 * all run the same program. A
 	 * parasite founder carries no seed: its program is random throughout.
 	 */
 	static class AFounderCarriesItsSeedThroughNoise extends Scenario {
@@ -10742,11 +10742,11 @@ public class SimTests {
 				if (carriesStarter(code)) {
 					seed = net.hedinger.prototype.sim.Worlds.starterBrain().code();
 				}
-				assertTrue("every founder is one of the seeds, line for line, with a line beside each", seed != null);
+				assertTrue("every founder is one of the seeds, line for line, with as many lines after it", seed != null);
 				assertTrue("and it fits inside the longest program", code.length <= Brain.MAX_LEN);
 				StringBuilder mine = new StringBuilder();
 				for (int k = 0; k < seed.length; k++) {
-					int[] pad = code[2 * k + (Brain.isSkip(seed[k][0]) ? 0 : 1)];
+					int[] pad = code[seed.length + k];
 					padOps.add(Math.floorMod(pad[0], Brain.NUM_OPS));
 					mine.append(java.util.Arrays.toString(pad));
 				}
@@ -10759,8 +10759,60 @@ public class SimTests {
 			assertEquals("and no two parasites run the same program", parasites, parasiteCodes.size());
 			Brain plain = net.hedinger.prototype.sim.Worlds.hunterBrain();
 			Brain pad = net.hedinger.prototype.sim.Worlds.padded(plain);
-			assertTrue("padding keeps the program's lines, in order, each skip before its line",
+			assertTrue("padding keeps the program's lines, in order and in one block",
 					carriesSeed(plain.code(), pad.code()));
+		}
+	}
+
+	/**
+	 * A founder forages through its noise. With the random pads between the
+	 * seed's lines, half the herd's founders could not feed: of 2000 grazer
+	 * founders, hungry with food in view and no threat, 49% sought it, and a
+	 * restock's searching grazers stood at hunger 1.0 in full grass on the live
+	 * world. The pads sit after the seed now, which leaves the seed's own lines
+	 * in one block.
+	 *
+	 * <p>Pinned on five hundred grazer founders, each brain run on its own for
+	 * six hundred steps in a quiet scene -- hungry, not thirsty, food in view --
+	 * and then with a threat in sight: what each one asks for over the last two
+	 * hundred steps is what it does. Nine in ten forage, and nine in ten flee.
+	 */
+	static class AFounderForagesThroughItsNoise extends Scenario {
+		/** The share of founders whose seek, most of the time, is {@code want}. */
+		private double share(boolean threat, int wantClass, boolean wantToward) {
+			seed(151);
+			int n = 500, hits = 0;
+			for (int i = 0; i < n; i++) {
+				Genome g = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.HERBIVORE);
+				Brain b = new Brain(g.brain.code());
+				double[] s = new double[AgentIO.NUM_SENSORS], act = new double[AgentIO.NUM_ACT];
+				act[AgentIO.A_SEEK] = TestNPC.INSTINCT_FORAGE;
+				int match = 0;
+				for (int t = 0; t < 600; t++) {
+					s[AgentIO.S_BIAS] = 1;
+					s[AgentIO.S_HUNGER] = 0.8;
+					s[AgentIO.S_THIRST] = 0.1;
+					s[AgentIO.S_FORAGE_PROX] = 0.5;
+					s[AgentIO.S_THREAT_PROX] = threat ? 0.5 : 0;
+					b.step(s, act, 1);
+					double v = act[AgentIO.A_SEEK];
+					if (t >= 400 && AgentIO.seekTarget(v) == wantClass && (v > 0) == wantToward) {
+						match++;
+					}
+				}
+				if (match > 100) {
+					hits++;
+				}
+			}
+			return hits / (double) n;
+		}
+
+		@Override
+		public void run() {
+			assertGreater("nine founders in ten forage with food in view and no threat",
+					share(false, AgentIO.SEEK_FORAGE, true), 0.9);
+			assertGreater("and nine in ten flee a threat in sight",
+					share(true, AgentIO.SEEK_THREAT, false), 0.9);
 		}
 	}
 
@@ -11817,7 +11869,7 @@ public class SimTests {
 			Genome founder = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			founder.size = 16;
 			// And its brain, pinned to its seed at the pace it drew: a founder is its
-			// seed with a random line beside every line, and what is under test is
+			// seed and as many random lines after it, and what is under test is
 			// the seed's hunt, not the noise this one founder happened to draw.
 			founder.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
 			java.util.List<TestNPC> pack = new java.util.ArrayList<>();
@@ -11894,7 +11946,7 @@ public class SimTests {
 			Genome hg = net.hedinger.prototype.sim.Worlds.founderGenome(Genome.Clade.PREDATOR);
 			hg.size = 16;
 			// And its brain, pinned to its seed at the pace it drew: a founder is its
-			// seed with a random line beside every line, and what is under test is
+			// seed and as many random lines after it, and what is under test is
 			// the seed's hunt, not the noise this one founder happened to draw.
 			hg.brain = net.hedinger.prototype.sim.Worlds.hunterBrain();
 			// And its sight, pinned as its size is. A founder draws losRange now,
@@ -23187,6 +23239,7 @@ public class SimTests {
 				new MindedCohortSustainedBySteward(),
 				new AFounderDrawsItsPace(),
 				new AFounderCarriesItsSeedThroughNoise(),
+				new AFounderForagesThroughItsNoise(),
 				new ASkipsZeroIsABand(),
 				new ASkipCanCompare(),
 				new AFullHunterLashesOutButDoesNotHunt(),
