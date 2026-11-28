@@ -58,6 +58,9 @@ The rules that matter most here:
 - **Each bullet is a full sentence**, or a short list of nouns that
   completes the line before it.
 
+- **No safety labels and no capitals for emphasis.** No "WARNING",
+  "CAUTION" or "NOTE"; normal sentence case only.
+
 Numbers, units, file names and code identifiers stay exactly as they are.
 STE controls the words; it does not change the facts or the shape of the
 answer above.

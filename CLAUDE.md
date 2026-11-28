@@ -119,14 +119,27 @@ arithmetic, is what picked the number.
   commits, so an empty marker commit never reaches master and the deploy
   keeps the world.
 
-## Status updates
+## Writing to the user
 
-Write status updates in ASD-STE100 Simplified Technical English, in the
-shortest form that keeps the meaning:
+Be brief. Say the result, the numbers that matter, and what is next; stop
+there.
+
+- No preamble, no recap of the question, no narration of the steps you are
+  about to take or just took.
+- No praise, no apology, no filler ("great question", "let me", "I'll now").
+- A status update during work is one line, or nothing.
+- Report the outcome, not the process. Mention a step only if it changes
+  what the user should believe or do.
+- Ask a question only when the answer changes the work.
+
+Write in ASD-STE100 Simplified Technical English, in the shortest form that
+keeps the meaning:
 
 - Approved words, one meaning each ("examine", not "read"; "give", not "offer").
 - Simple present or imperative, active voice.
 - One topic per sentence.
+- No safety labels: no "WARNING", "CAUTION" or "NOTE" headings or prefixes.
+- No capitals for emphasis or for terms; normal sentence case only.
 
 This holds for every session and every agent in this project. When you brief
 a subagent, tell it to do the same.
