@@ -1020,6 +1020,7 @@ function attributesTab(d: Record<string, any>): string {
   if (d.action) status.push(row('action', d.action));
   if ('generation' in d) status.push(row('generation', `gen ${d.generation}`));
   status.push(row('age', d.age));
+  if (d.stats) status.push(row('kills', d.stats.kills));
   if (d.juvenile) status.push(row('grown', d.grown));
   status.push(...vitalsRows(d, true));
   if ('light' in d) status.push(row('climate', climateText(d)));

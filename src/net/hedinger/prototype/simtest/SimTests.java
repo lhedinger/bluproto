@@ -9523,7 +9523,7 @@ public class SimTests {
 			for (; t < 3000 && !quarry.isDead(); t++) {
 				tick(w, 1);
 			}
-			return new int[] { hunter.kills(), t };
+			return new int[] { hunter.stats().kills(), t };
 		}
 
 		@Override

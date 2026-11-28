@@ -1804,7 +1804,7 @@ public class TestNPC extends NPC {
 		if (!prey.isDead()) {
 			prey.damage(bite, "predation"); // a bite into a carcass wounds nothing
 			if (prey.getHealth() <= 0) {
-				kills++; // the bite that took the last of its health: this hunter's kill
+				stats.recordKill(); // the bite that took the last of its health: this hunter's kill
 			}
 		}
 		// Violence is audible. The scream comes from the quarry, not the hunter,

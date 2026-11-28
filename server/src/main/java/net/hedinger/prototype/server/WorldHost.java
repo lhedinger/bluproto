@@ -974,6 +974,8 @@ final class WorldHost {
 					d.put("juvenile", true);
 					d.put("grown", Math.round(n.maturity() * 100) + "%");
 				}
+				// The career (CreatureStats): what this body has done in its life.
+				d.put("stats", java.util.Map.of("kills", n.stats().kills()));
 				if (n instanceof net.hedinger.prototype.simtest.TestNPC tn) {
 					d.put("minded", tn.isMinded());
 					d.put("generation", tn.generation()); // 0 = world-spawned, +1 per birth
@@ -1151,7 +1153,6 @@ final class WorldHost {
 			d.put("hasMind", true);
 			d.put("substrate", network ? "network" : "program");
 			d.put("generation", tn.generation()); // lineage depth: 0 = world-seeded
-			d.put("kills", tn.kills()); // living animals this body has killed
 			if (program) {
 				net.hedinger.prototype.entities.Brain b = lm.brain();
 				d.put("length", b.length());

@@ -3438,14 +3438,12 @@ public abstract class NPC extends Entity {
 		return w == null ? Double.NaN : w.pheromoneDirection(X, Y, getLvl(), radius);
 	}
 
-	/** Animals this body has killed: bites that took the last of a living
-	 *  animal's health. Book-keeping only -- nothing in the simulation reads
-	 *  it -- so a hunter's career can be read off it, in the inspector and in
-	 *  analysis. */
-	protected int kills = 0;
+	/** This body's career (kills, ...): book-keeping the simulation never
+	 *  reads, kept with the body and shown in the inspector. */
+	protected final CreatureStats stats = new CreatureStats();
 
-	public int kills() {
-		return kills;
+	public CreatureStats stats() {
+		return stats;
 	}
 
 	/** Overridden by entities that can breed asexually: a fresh offspring, or null. */
@@ -3803,7 +3801,7 @@ public abstract class NPC extends Entity {
 		m.put("hunger", hunger);
 		m.put("thirst", thirst);
 		m.put("cooldown", (double) reproCooldown);
-		m.put("kills", (double) kills);
+		m.put("kills", (double) stats.kills());
 		if (isDead()) {
 			m.put("carcass", carcassMass);
 			m.put("freshFull", freshFull);
@@ -3843,7 +3841,7 @@ public abstract class NPC extends Entity {
 		hunger = m.getOrDefault("hunger", hunger);
 		thirst = m.getOrDefault("thirst", thirst);
 		reproCooldown = (int) Math.round(m.getOrDefault("cooldown", (double) reproCooldown));
-		kills = (int) Math.round(m.getOrDefault("kills", (double) kills));
+		stats.restoreKills((int) Math.round(m.getOrDefault("kills", (double) stats.kills())));
 		double savedAge = m.getOrDefault("age", (double) age);
 		if (savedAge < 0) {
 			if (deathCause != null) {
