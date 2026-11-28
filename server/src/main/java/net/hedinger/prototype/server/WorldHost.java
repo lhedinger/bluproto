@@ -932,6 +932,13 @@ final class WorldHost {
 					// its mass, so a fed life reads as a fat body and a lean one as bones-to-be.
 					d.put("fat", round(n.fatLeft()));
 					d.put("fatMass", round(n.fat()));
+					// The womb: whether it carries young, how full it is of what they
+					// need, and how many there are.
+					d.put("pregnant", n.pregnant());
+					d.put("womb", round(n.wombCapacity() > 0 ? n.womb() / n.wombCapacity() : 0));
+					if (n instanceof net.hedinger.prototype.simtest.TestNPC tn && n.pregnant()) {
+						d.put("young", tn.embryoCount());
+					}
 				}
 				// What this body weighs to an eater: the body it HAS, not the one its
 				// genome describes. A juvenile is worth its juvenile mass, and the

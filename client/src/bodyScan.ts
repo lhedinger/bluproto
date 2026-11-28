@@ -24,7 +24,9 @@
  *  shallows ramp, the tank the crystal ramp, the gut the grass ramp or the
  *  bloom red the rest of the world's flesh wears, fat the sand ramp, the coat
  *  a pale fur a step lighter than the fat it wraps, so the two bands never
- *  read as one. Each pair is {bright, dim}: an edge and a fill. */
+ *  read as one, and the womb the cave fungus's living teal: bloom red merged
+ *  it with a meat-eater's gut, and cream on red was two hues in one small
+ *  organ. Each pair is {bright, dim}: an edge and a fill. */
 const SCAN = {
   bg: '#0b0f17', grid: '#10192a', band: '#12303a',
   skin: ['#D0ECFF', '#2b6a78'] as const,
@@ -34,6 +36,7 @@ const SCAN = {
   gutBlood: ['#E0455F', '#7c2434'] as const,
   tank: ['#7d96c8', '#38466e'] as const,
   water: ['#63becd', '#2b6a78'] as const,
+  womb: ['#54c78e', '#2a6b4f'] as const,
   coat: ['#c0aa7e', '#98865c'] as const,
   mind: '#ffffff', mouth: '#F0E8C6', sense: '#2b6a78', label: '#8b93a3',
 };
@@ -48,6 +51,8 @@ export interface Plan {
   rx: number; ry: number; wob: number; seed: number;
   diet: 'grass' | 'meat' | 'blood';
   gut: Organ; tank: Organ; water: Organ | null;
+  /** Below the gut, clear of the other organs: empty until fertilised. */
+  womb: Organ;
   mind: [number, number];
   /** Authored cell runs, as grid fractions: feelers, mouth, hooks. */
   sense: [number, number][]; mouth: [number, number][]; grip: [number, number][];
@@ -66,6 +71,8 @@ export interface Thermal {
 
 export interface BodyState {
   hunger: number; thirst: number; fat: number; glycogen: number; health: number;
+  /** The womb: whether it carries young, and how full it is of what they need. */
+  pregnant?: boolean; womb?: number;
   /** Absent for a body with no lineage (an item, a corpse). */
   thermal?: Thermal;
 }
@@ -95,15 +102,18 @@ export const SATED: BodyState = { hunger: 0.1, thirst: 0.15, fat: 1, glycogen: 0
 export const PLANS: Record<string, Plan> = {
   herbivore: { rx: 0.30, ry: 0.30, wob: 0.10, seed: 1, diet: 'grass',
     gut: [0.54, 0.47, 0.15, 0.15], tank: [0.70, 0.60, 0.035, 0.06], water: [0.38, 0.60, 0.03, 0.07],
+    womb: [0.55, 0.70, 0.045, 0.045],
     mind: [0.27, 0.42], sense: [[0.24, 0.36], [0.25, 0.38]],
     mouth: [[0.19, 0.52], [0.20, 0.52], [0.21, 0.52]], grip: [] },
   predator: { rx: 0.33, ry: 0.25, wob: 0.14, seed: 5, diet: 'meat',
     gut: [0.44, 0.48, 0.07, 0.10], tank: [0.62, 0.48, 0.08, 0.11], water: [0.34, 0.58, 0.025, 0.06],
+    womb: [0.48, 0.65, 0.04, 0.05],
     mind: [0.25, 0.44], sense: [[0.21, 0.38], [0.22, 0.40], [0.18, 0.48], [0.20, 0.47]],
     // two fangs, each a two-cell drop below the jaw line
     mouth: [[0.18, 0.56], [0.18, 0.60], [0.18, 0.64], [0.23, 0.56], [0.23, 0.60], [0.23, 0.64]], grip: [] },
   scavenger: { rx: 0.31, ry: 0.29, wob: 0.22, seed: 9, diet: 'meat',
     gut: [0.53, 0.46, 0.12, 0.12], tank: [0.70, 0.60, 0.03, 0.05], water: [0.38, 0.60, 0.03, 0.06],
+    womb: [0.55, 0.67, 0.04, 0.05],
     mind: [0.28, 0.44],
     // three feelers: authored diagonals from the brow, long enough to read as scent
     sense: [[0.25, 0.38], [0.23, 0.34], [0.21, 0.30], [0.19, 0.26], [0.17, 0.22],
@@ -112,6 +122,7 @@ export const PLANS: Record<string, Plan> = {
     mouth: [[0.19, 0.50], [0.17, 0.46], [0.15, 0.42], [0.19, 0.56], [0.17, 0.60], [0.15, 0.64]], grip: [] },
   parasite: { rx: 0.17, ry: 0.20, wob: 0.26, seed: 13, diet: 'blood',
     gut: [0.54, 0.48, 0.055, 0.075], tank: [0.62, 0.58, 0.02, 0.035], water: null,
+    womb: [0.45, 0.60, 0.022, 0.022],
     mind: [0.40, 0.46], sense: [[0.36, 0.38], [0.37, 0.40], [0.33, 0.46], [0.35, 0.47]],
     mouth: [[0.35, 0.52], [0.33, 0.52], [0.31, 0.52], [0.29, 0.52], [0.27, 0.52], [0.25, 0.52], [0.23, 0.52], [0.21, 0.52]],
     grip: [[0.44, 0.72], [0.44, 0.76], [0.50, 0.73], [0.50, 0.77], [0.56, 0.73], [0.56, 0.77], [0.62, 0.72], [0.62, 0.76]] },
@@ -186,6 +197,9 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
   organ(plan.gut, plan.seed + 1, plan.diet === 'grass' ? SCAN.gutGrass : SCAN.gutBlood, 1 - clamp01(s.hunger));
   organ(plan.tank, plan.seed + 2, SCAN.tank, s.glycogen);
   if (plan.water) organ(plan.water, plan.seed + 3, SCAN.water, 1 - clamp01(s.thirst));
+  // the womb: the dim outline alone until it is fertilised, then a gauge of
+  // how much of what its young need it holds
+  organ(plan.womb, plan.seed + 4, SCAN.womb, s.pregnant ? clamp01(s.womb ?? 0) : 0);
   // skin: outline cells bright, one dithered ring outside dim -- the glow
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (body(x, y)) {
@@ -220,6 +234,8 @@ function drawBodyScan(g: CanvasRenderingContext2D, plan: Plan, s: BodyState,
     [0.30, 0.76, 0.10, 0.86, SCAN.water, 'water', plan.water ? pct(1 - s.thirst) : 'host'],
     [0.28, 0.24, 0.10, 0.14, SCAN.fat, 'fat', pct(s.fat)],
     [0.86, 0.46, 0.90, 0.46, skin, 'hp', `${Math.round(health * 100)}`],
+    [plan.womb[0], plan.womb[1] + plan.womb[3] + 0.06, plan.womb[0] + 0.02, 0.92, SCAN.womb, 'womb',
+      s.pregnant ? pct(s.womb ?? 0) : 'empty'],
   ];
   // the coat is the one thermal the picture carries as shape, so it gets a
   // leader like the stores do: the left flank, on the row between the brow's
@@ -311,6 +327,8 @@ export function stateOf(d: Record<string, any>): BodyState {
     fat: num(d.fat, SATED.fat),
     glycogen: cap > 0 ? num(d.glycogen, 0) / cap : SATED.glycogen,
     health: 'health' in d ? num(d.health, 100) / 100 : 1,
+    pregnant: d.pregnant === true,
+    womb: num(d.womb, 0),
     thermal,
   };
 }

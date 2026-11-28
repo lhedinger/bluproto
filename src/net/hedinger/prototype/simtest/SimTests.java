@@ -14689,7 +14689,8 @@ public class SimTests {
 			}
 			java.util.Set<Integer> allowed = new java.util.HashSet<>();
 			for (int cls : new int[] { GroundTextures.CLS_GRASS, GroundTextures.CLS_SAND,
-					GroundTextures.CLS_SHALLOWS, GroundTextures.CLS_CRYSTAL, GroundTextures.CLS_CRYSTAL_BED }) {
+					GroundTextures.CLS_SHALLOWS, GroundTextures.CLS_CRYSTAL, GroundTextures.CLS_CRYSTAL_BED,
+					GroundTextures.CLS_FUNGUS }) { // the fungus ramp is the womb's
 				for (int i = 0; i < 3; i++) {
 					allowed.add(GroundTextures.rampColor(cls, i));
 				}
@@ -14720,6 +14721,13 @@ public class SimTests {
 				gutArea.put(pm.group(1), Double.parseDouble(pm.group(4)) * Double.parseDouble(pm.group(5)));
 			}
 			assertEquals("all four plans are drawn", 4, gutArea.size());
+			java.util.regex.Matcher wm = java.util.regex.Pattern
+					.compile("(herbivore|predator|scavenger|parasite): \\{[^}]*?womb: \\[").matcher(src);
+			int wombs = 0;
+			while (wm.find()) {
+				wombs++;
+			}
+			assertEquals("every plan carries a womb", 4, wombs);
 			assertTrue("the grazer's gut is the biggest",
 					gutArea.get("herbivore") > gutArea.get("predator") && gutArea.get("herbivore") > gutArea.get("scavenger"));
 			assertTrue("the parasite's is the smallest",

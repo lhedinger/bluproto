@@ -868,7 +868,7 @@ interface RefBody { group: string; label: string; pheno: number; worn: boolean; 
 // shown here is what a viewer is shown there.
 const scans = section('Body scan',
   'A creature\'s cross-section as the inspector shows it: the gut, the fat band, the '
-  + 'glycogen tank and the water, each a gauge of the body\'s books, on the plan its '
+  + 'glycogen tank, the water and the womb, each a gauge of the body\'s books, on the plan its '
   + 'trophic role wears. A grazer is mostly gut; a hunter has a small gut and the '
   + 'biggest tank; a scavenger has the feelers it finds carrion by; a parasite has a '
   + 'proboscis, hooks under the belly and no water of its own. Every mark is a cell, '
@@ -880,6 +880,8 @@ const day: [string, BodyState][] = [
   ['half', { hunger: 0.5, thirst: 0.45, fat: 0.6, glycogen: 0.5, health: 1 }],
   ['starving', { hunger: 0.95, thirst: 0.6, fat: 0.02, glycogen: 0.12, health: 0.85 }],
   ['hurt', { hunger: 0.25, thirst: 0.2, fat: 0.8, glycogen: 0.6, health: 0.3 }],
+  ['carrying, a third of the way', { hunger: 0.3, thirst: 0.2, fat: 0.5, glycogen: 0.7, health: 1, pregnant: true, womb: 0.33 }],
+  ['carrying, near term', { hunger: 0.3, thirst: 0.2, fat: 0.5, glycogen: 0.7, health: 1, pregnant: true, womb: 0.9 }],
 ];
 for (const [name, st] of day) {
   figure(bodyScanCanvas(PLANS.herbivore, st, 96, 48, 3, true), `a grazer, ${name}`, scans);

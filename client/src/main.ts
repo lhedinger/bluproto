@@ -1134,6 +1134,7 @@ function vitalsRows(d: Record<string, any>, health: boolean): string[] {
   if ('hunger' in d) out.push(bar('fed', ...sated(d.hunger)));
   if ('thirst' in d) out.push(bar('watered', ...sated(d.thirst)));
   if ('fat' in d) out.push(fatRow(d));
+  if ('pregnant' in d) out.push(wombRow(d));
   return out;
 }
 
@@ -1147,6 +1148,15 @@ function holdRows(d: Record<string, any>): string[] {
   }
   if ('hauling' in d) out.push(row('hauling', `#${d.hauling}`));
   return out;
+}
+
+/** The womb: empty until fertilised, then how much of what its young need
+ *  it holds, and how many young there are. */
+function wombRow(d: Record<string, any>): string {
+  if (!d.pregnant) return row('womb', 'empty');
+  const f = Math.max(0, Math.min(1, Number(d.womb)));
+  const young = typeof d.young === 'number' ? ` (${d.young} young)` : '';
+  return bar('womb', `${Math.round(f * 100)}%${young}`, f);
 }
 
 function fatRow(d: Record<string, any>): string {
