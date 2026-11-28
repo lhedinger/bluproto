@@ -495,47 +495,35 @@ public final class Mechanics {
 
 	private static Map<String, Object> breeding() {
 		Map<String, Object> s = section("breeding", "Breeding",
-				"Reproduction is a surplus signal across all four books, not an energy "
-				+ "checkout. It needs energy banked past a threshold that scales with mass — a "
-				+ "big creature must eat MORE than a small one before it can breed — AND both "
-				+ "needs low AND sound health: a parched, starving or badly wounded body does "
-				+ "not court. Budding is a held act: the commitment must be sustained for "
-				+ "seconds before the child arrives, and breaking off (fleeing, doing anything "
-				+ "else) resets it — the cost is paid on completion, not intent. The cooldown "
-				+ "scales with the childhood the offspring itself will spend growing, so big "
-				+ "slow-growing bodies are also slow breeders.");
-		double refReproF = new Genome().reproFraction;
+				"Every creature in the world breeds through a womb. The mate intent "
+				+ "fertilises it: a budder's alone, and both partners' when a courting pair "
+				+ "has held station. Age is the only gate -- any grown body with an empty "
+				+ "womb can be fertilised -- and while it is, the mate intent reads invalid. "
+				+ "A fertilised womb fills from digestion ahead of glycogen and fat, so a fed "
+				+ "body fills it quickly and a hungry one slowly; nothing is drawn back out "
+				+ "of it, and a pregnant body can starve. When it holds what its young need "
+				+ "they are born, and it can be fertilised again at once. The scripted "
+				+ "scenario animals keep the older surplus gate and cooldown.");
 		double refReproC = new Genome().reproCostFraction;
 		rows(s,
-				row("Breeds above", pct(refReproF), "of glycogen",
-						"A per-lineage gene; reference lineage "
-						+ round(refReproF * NPC.GLYCOGEN_PER_MASS, 2) + " at a reference body."),
-				row("And only while", "hunger and thirst are under " + pct(NPC.NEED_LOW)
-						+ ", health at 60+", "", "Surplus across all four books."),
-				row("Costs", pct(refReproC), "of glycogen, each parent",
-						"Also a gene — the r/K trade. Backed by glycogen AND gut together "
-						+ "and drawn proportionally from both, so neither book is a loophole "
-						+ "and a full gut can pay for a child on its own."),
-				row("Founders ask", "what the childhood costs", "",
-						"A world-seeded founder does not draw its price: it is the body's own "
-						+ "bill — the matter of the newborn, the flesh it must buy to finish "
-						+ "growing, its birth meal, and the burn of the whole childhood. No "
-						+ "clade carries a price of its own; it is a gene from there on."),
-				row("Offspring is worth", "exactly what its parents paid", "",
-						"Fat-built body + glycogen = the payment, to the penny — nothing "
-						+ "minted, nothing burnt. A pair pools two offers, so mating "
-						+ "genuinely buys a better-funded child."),
-				row("Born hungry", "empty gut, endowed glycogen", "",
-						"A gut holds food nothing has digested yet, and there is no way to "
-						+ "put food in one but the way every other meal gets there. A newborn "
-						+ "is hungry from its first tick; what its lineage decides is how much "
-						+ "it can live on while it goes looking."),
-				row("Budding takes", num(NPC.BREED_HOLD_TICKS), "held ticks",
-						round(NPC.BREED_HOLD_TICKS / TPS, 1) + " s of commitment; interruptible."),
-				row("Cooldown", "half the offspring's childhood, at least "
-						+ num(NPC.REPRO_COOLDOWN) + " ticks", "",
-						"Reference body: ~" + num(NPC.growthTicks(NPC.REF_SIZE) / 2) + " ticks ("
-						+ round(NPC.growthTicks(NPC.REF_SIZE) / 2 / TPS, 1) + " s)."),
+				row("Fertilised by", "the mate intent", "",
+						"A budder alone; a courting pair fertilises both wombs, and each "
+						+ "carries one crossover young."),
+				row("Takes", pct(NPC.WOMB_SHARE), "of digestion",
+						"Out of the gut, before glycogen or fat see any of it, so the hungrier "
+						+ "the body the slower the womb fills."),
+				row("Holds", "each young's body + endowment", "",
+						"The body at the price of building it out of fat, and an endowment of "
+						+ pct(refReproC) + " of the mother's store (a gene). A litter of n is "
+						+ "n of each."),
+				row("Young per birth", "the litter gene; one for a pair", "",
+						"Each young built at the lineage's birth size; a pair's at the average "
+						+ "of the two."),
+				row("Weighs", "its energy at fat's density", "",
+						"Carried on every step like fat; on a corpse it is meat."),
+				row("Offspring is worth", "exactly what the womb held", "",
+						"Body + gut + glycogen = the womb, to the penny; what a young cannot "
+						+ "hold goes back to its mother's glycogen and fat."),
 				row("Mating takes", num(TestNPC.MATING_TICKS), "ticks",
 						round(TestNPC.MATING_TICKS / TPS, 1) + " s, both parents occupied."));
 		return s;
@@ -1212,10 +1200,11 @@ public final class Mechanics {
 						"The mind's program rides in the genome and evolves with it; a genome "
 						+ "without one drives a scripted body instead."),
 				row("Breeds above", pct(def.reproFraction) + " of glycogen", "",
-						"Life history: how full a reserve this lineage breeds off — the r/K "
-						+ "axis, low is breed-early, high is bank-first."),
+						"Read by the scripted scenario animals only: a womb is fertilised at "
+						+ "any grown age."),
 				row("Spends per child", pct(def.reproCostFraction) + " of glycogen", "",
-						"The other half of the r/K trade: cheap-and-many vs dear-and-few."),
+						"Each young's endowment, held in the womb with its body: "
+						+ "cheap-and-many vs dear-and-few."),
 				row("Mutation rate", "± " + num(def.mutationRate) + " per gene",
 						num(Genome.MUT_FLOOR) + " – " + num(Genome.MUT_MAX),
 						"Evolvability, itself heritable — meta-evolution. In a steady world selection "

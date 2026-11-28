@@ -796,6 +796,47 @@ public abstract class NPC extends Entity {
 		return fat;
 	}
 
+	/**
+	 * The womb: the energy this body has put by for the young it carries, and
+	 * the energy those young need in all. An unfertilised womb is empty and
+	 * costs nothing. Fertilised (on the mate intent: alone for a budder, both
+	 * partners for a courting pair), it takes {@link #WOMB_SHARE} of each tick's
+	 * digestion ahead of glycogen and fat, so a hungry body fills it slowly and
+	 * a fed one quickly, and it never gives anything back: a pregnant body can
+	 * starve with a full womb. At capacity the young are born and the womb is
+	 * empty again. It is carried like fat, and on a corpse it is meat.
+	 */
+	protected double womb = 0;
+	/** The energy the embryos in the womb need in all; 0 when unfertilised. */
+	protected double wombCapacity = 0;
+	/** Whether the womb is fertilised: young on the way. */
+	protected boolean wombFertile = false;
+	/** The share of each tick's digestion a fertilised womb takes, ahead of
+	 *  glycogen and fat. */
+	@Unit("of digestion")
+	public static double WOMB_SHARE = 0.5;
+
+	/** The energy in the womb. */
+	public double womb() {
+		return womb;
+	}
+
+	/** The energy the womb's young need in all; 0 when unfertilised. */
+	public double wombCapacity() {
+		return wombCapacity;
+	}
+
+	/** Whether this body carries young. */
+	public boolean pregnant() {
+		return wombFertile;
+	}
+
+	/** What the womb weighs, in body-mass units: its energy at fat's density,
+	 *  since it is put by the same way. */
+	public double wombMass() {
+		return womb / FAT_DENSITY;
+	}
+
 	/** The most fat this body can carry, in body-mass units. */
 	public double fatCap() {
 		return FAT_CAP * leanMass();
@@ -888,7 +929,7 @@ public abstract class NPC extends Entity {
 	/** Everything a living body weighs: its lean mass plus its fat. On a corpse,
 	 *  what it weighed when it died. */
 	public double bodyMass() {
-		return isDead() ? carcassMass : leanMass() + fat;
+		return isDead() ? carcassMass : leanMass() + fat + wombMass();
 	}
 
 	/** What this corpse weighed the instant it died, lean mass and fat together;
@@ -1546,7 +1587,7 @@ public abstract class NPC extends Entity {
 			// Charged on the ground actually covered -- a step cancelled by a
 			// collision moved nothing and costs nothing, so this prices travel rather
 			// than intent, and standing still under a load is nearly free.
-			double travel = TRANSPORT_COST * travelEfficiency() * (leanMass() + fat + carriedMass()) * lastStep * lastStep;
+			double travel = TRANSPORT_COST * travelEfficiency() * (leanMass() + fat + wombMass() + carriedMass()) * lastStep * lastStep;
 			// Regeneration: the body converts the gut's contents into energy
 			// over time — food never becomes energy directly (feed() fills the
 			// gut), and the mint drains the meal it is minted from, 1:1 in
@@ -1571,6 +1612,19 @@ public abstract class NPC extends Entity {
 			double exertion = Math.min(1.0, EXERTION_WALK * base / Math.max(travel, 1e-12));
 			double regen = ASSIMILATION_RATE * Math.pow(leanMass(), 0.75) * eff * satiation * vigor * exertion
 					* thermalPerformance(); // a cold ectotherm digests as slowly as it walks
+			// The womb first: a fertilised one takes its share of what digestion
+			// turns over this tick, straight out of the gut, before glycogen or fat
+			// see any of it. A body on an empty gut digests little and so fills it
+			// slowly; nothing is ever drawn back out of it.
+			if (wombFertile && womb < wombCapacity) {
+				double take = Math.min(WOMB_SHARE * regen,
+						Math.min(wombCapacity - womb, (1 - hunger) * GUT_PER_MASS * adultMass()));
+				if (take > 0) {
+					womb += take;
+					hunger = Math.min(1.0, hunger + take / (GUT_PER_MASS * adultMass()));
+					regen -= take;
+				}
+			}
 			// Cold: what a warm-blooded body burns to stay warm below its band,
 			// paid whether it rides or walks or stands.
 			double cold = coldCost();
@@ -2231,6 +2285,11 @@ public abstract class NPC extends Entity {
 			// Fat is all meat -- bones do not get fatter -- half fresh, half
 			// decayed, so a fed life leaves a richer body for hunter and scavenger
 			// alike, and a starved one leaves bones.
+			// The womb is meat too: what it held joins the fat it was put by as.
+			fat += wombMass();
+			womb = 0;
+			wombCapacity = 0;
+			wombFertile = false;
 			double m = leanMass();
 			carcassMass = m + fat;
 			freshFull = FRESH_SHARE * m * lean + fat / 2;
@@ -3464,12 +3523,16 @@ public abstract class NPC extends Entity {
 	 *  "who came from whom" is knowable at all; see World.recordBirth. A spawn
 	 *  that failed (id still -1) writes nothing: there is no child to remember. */
 	private void noteBirth(NPC child, NPC a, NPC b) {
+		noteBirth(child, a != null ? a.getID() : NO_ID, b != null ? b.getID() : NO_ID);
+	}
+
+	/** {@link #noteBirth(NPC, NPC, NPC)} by id: a womb's sire may be dead or gone
+	 *  by the time its young are born, and is still their parent. */
+	protected void noteBirth(NPC child, int a, int b) {
 		if (child.getID() == NO_ID || child.getGenome() == null) {
 			return;
 		}
-		getWorld().recordBirth(child.getID(),
-				a != null ? a.getID() : NO_ID, b != null ? b.getID() : NO_ID,
-				child.generation(), Species.of(child.getGenome()).key());
+		getWorld().recordBirth(child.getID(), a, b, child.generation(), Species.of(child.getGenome()).key());
 	}
 
 	/** This body's lineage depth: 0 for a world-seeded creature, a child is one

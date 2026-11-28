@@ -3556,7 +3556,10 @@ public class SimTests {
 			parent.grown().withGlycogen(parent.glycogenCapacity()).fattened();
 			w.spawnEntity(parent);
 			w.think();
-			tick(w, 200); // budding is a held act: ~165 ticks of commitment first
+			tick(w, 5); // the mate intent fertilises the womb
+			assertTrue("the scavenger's womb is fertilised", parent.pregnant());
+			parent.fillWomb(); // what is under test is the young, not the term
+			tick(w, 5);
 			assertGreater("the scavenger budded", w.getAliveCount(), 1);
 			assertEquals("and every one of its young is a scavenger too",
 					0, countRolesOtherThan(w, "scavenger"));
@@ -3590,7 +3593,9 @@ public class SimTests {
 			pair.spawnEntity(a);
 			pair.spawnEntity(b);
 			pair.think();
-			tick(pair, 220); // courtship holds station for MATING_TICKS before a birth
+			tick(pair, 220); // courtship holds station for MATING_TICKS before fertilising
+			fillWombs(pair);
+			tick(pair, 5);
 			assertGreater("the pair bred", pair.getAliveCount(), 2);
 			assertEquals("and the crossover child is a scavenger",
 					0, countRolesOtherThan(pair, "scavenger"));
@@ -3598,66 +3603,122 @@ public class SimTests {
 	}
 
 	/**
-	 * A budder bears its lineage's litter, whole, and pays for every young.
-	 * Reproduction was one child per birth for every lineage. A budder now bears
-	 * {@link Genome#litterSize} young at once: each built and endowed exactly as
-	 * an only child, so a litter of three costs three bodies of fat and three
-	 * endowments of glycogen, born together under one cooldown -- and not until
-	 * the parent holds the whole bill.
+	 * A womb fills from the gut once it is fertilised, and only then. The mate
+	 * intent fertilises it -- a budder's alone -- and from then on it takes its
+	 * share of each tick's digestion ahead of glycogen and fat, so a fed body
+	 * bears sooner than a hungry one, and a body that never asks carries an
+	 * empty womb that costs it nothing. At term the young are born and the womb
+	 * can be fertilised again at once: there is no rest.
 	 *
-	 * <p>Pinned on a fed budder whose young are 15% of its body, endowed with
-	 * 0.3 of a store each above a line of 0.3: with a litter
-	 * of three and the fat for it, three young arrive on the same tick and the
-	 * parent's fat falls by three young's worth; with the fat for only two, none
-	 * arrive; a litter of one is one; and a courting lineage bears one whatever
-	 * its gene says.
+	 * <p>Pinned on a size-9 budder at the water, its hunger held: one that never
+	 * asks has nothing in its womb after two thousand ticks; one that asks is
+	 * fertilised at once; held fed it bears in under a third of the time it takes
+	 * held hungry; and within a few ticks of the birth it is carrying again.
+	 */
+	static class AWombFillsFromTheGutOnceFertilised extends Scenario {
+		/** {ticks to the first birth, womb after 2000 ticks, carrying 5 ticks after the birth}. */
+		private double[] term(boolean ask, double hunger) {
+			seed(157);
+			World w = room(14, 14);
+			w.setTile(6, 6, 0, Tile.TileType.TYPE_SHALLOWS);
+			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 1000000);
+			g.sexuality = 0.0;
+			TestNPC p = TestNPC.minded(6.5, 6.5, 0, g, (sn, a) -> a[AgentIO.A_MATE] = ask ? 1 : 0).withMetabolic();
+			p.grown().withGlycogen(p.glycogenCapacity());
+			w.spawnEntity(p);
+			w.think();
+			double at2000 = Double.NaN;
+			int born = -1;
+			for (int t = 0; t < 40000 && born < 0; t++) {
+				p.holdHunger(hunger);
+				int before = w.getAliveCount();
+				tick(w, 1);
+				if (t == 2000) {
+					at2000 = p.womb();
+					if (!ask) {
+						break;
+					}
+				}
+				if (w.getAliveCount() > before) {
+					born = t;
+				}
+			}
+			boolean again = false;
+			if (born >= 0) {
+				tick(w, 5);
+				again = p.pregnant();
+			}
+			return new double[] { born, at2000, again ? 1 : 0 };
+		}
+
+		@Override
+		public void run() {
+			double[] idle = term(false, 0.0);
+			assertNear("a womb nobody fertilised stays empty", 0.0, idle[1], 1e-12);
+			double[] fed = term(true, 0.0);
+			double[] hungry = term(true, 0.8);
+			assertGreater("a fed body bears", fed[0], 0);
+			assertGreater("and a hungry one too, in the end", hungry[0], 0);
+			assertLess("but the fed one in under a third of the hungry one's time (" + (int) fed[0]
+					+ " against " + (int) hungry[0] + " ticks)", fed[0], hungry[0] / 3);
+			assertEquals("and it carries again within a few ticks of the birth: no rest", 1, (int) fed[2]);
+		}
+	}
+
+	/**
+	 * A budder bears its lineage's litter, whole, and its womb holds the bill for
+	 * every young. A budder carries {@link Genome#litterSize} young at once, each
+	 * built and endowed exactly as an only child, so its womb must hold three
+	 * bodies at their price and three endowments before a litter of three is
+	 * born -- together, on one tick.
+	 *
+	 * <p>Pinned on a fed budder whose young are 15% of its body: a litter of
+	 * three fertilises a womb three times an only child's, and three young
+	 * arrive on one tick once it is full; a litter of one is one; and a courting
+	 * lineage bears one whatever its gene says.
 	 */
 	static class ALitterIsBornWholeAndPaidInFull extends Scenario {
-		/** {young born within 300 ticks, distinct birth ticks, parent fat lost}. */
-		private double[] bud(double litter, double fatInYoung) {
+		/** {young born, distinct birth ticks, womb capacity in only children}. */
+		private double[] bud(double litter) {
 			seed(147);
 			World w = room(14, 14);
 			Genome g = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
 			g.markers = new double[] { 0.5, 0.5, 0.5 };
 			g.sexuality = 0.0;
 			g.birthSize = 0.15;
-			g.reproFraction = 0.3; // a low line and a cheap endowment: room for three in one store
 			g.reproCostFraction = 0.3;
 			g.litter = litter;
 			Mind breeder = (sensors, act) -> act[AgentIO.A_MATE] = 1;
 			TestNPC parent = TestNPC.minded(6.5, 6.5, 0, g, breeder).withMetabolic().withDeathspan(777);
 			parent.grown().withGlycogen(parent.glycogenCapacity());
-			double young = NPC.birthMass(Niche.of(g.clade).expressedSize(g.size), g.birthSize);
-			parent.withFat(fatInYoung * NPC.fatForBody(young));
 			w.spawnEntity(parent);
 			w.think();
+			tick(w, 5);
+			double young = NPC.birthMass(Niche.of(g.clade).expressedSize(g.size), g.birthSize);
+			double one = NPC.fatForBody(young) * NPC.FAT_DENSITY + parent.reproCost();
+			double capacity = parent.wombCapacity() / one;
+			parent.fillWomb();
 			java.util.Set<Long> ticks = new java.util.TreeSet<>();
 			int born = 0;
-			double paid = 0;
-			for (int t = 0; t < 300; t++) {
+			for (int t = 0; t < 20; t++) {
 				int before = w.getAliveCount();
-				parent.withGlycogen(parent.glycogenCapacity()); // the endowment is never the gate here
-				double fatBefore = parent.fat();
 				tick(w, 1);
 				int now = w.getAliveCount();
 				if (now > before) {
 					born += now - before;
 					ticks.add(w.getTick());
-					paid += fatBefore - parent.fat(); // on the birth tick: the young, and a tick's books
 				}
 			}
-			return new double[] { born, ticks.size(), paid / NPC.fatForBody(young) };
+			return new double[] { born, ticks.size(), capacity };
 		}
 
 		@Override
 		public void run() {
-			double[] three = bud(3.0, 3.2);
+			double[] three = bud(3.0);
+			assertNear("a litter of three fills a womb three young deep", 3.0, three[2], 0.05);
 			assertEquals("a litter of three is three young", 3, (int) three[0]);
 			assertEquals("born on one tick", 1, (int) three[1]);
-			assertNear("and the parent's fat paid for three bodies", 3.0, three[2], 0.05);
-			double[] short2 = bud(3.0, 2.5);
-			assertEquals("with the fat for only two, no litter is born", 0, (int) short2[0]);
-			double[] one = bud(1.0, 3.2);
+			double[] one = bud(1.0);
 			assertEquals("a litter of one is one", 1, (int) one[0]);
 
 			Genome sx = Genome.phenotype(9, 0.0, 5, 6, Math.PI * 2, 100000);
@@ -6543,9 +6604,8 @@ public class SimTests {
 					Math.round(NPC.ROT_SPAN * Long.parseLong(grow.get(0).get(2))), Long.parseLong(food.get(0).get(4)));
 
 			// Percentages come from the fractions the founder setup actually applies.
-			assertTrue("the breeding threshold is the reference lineage's gene",
-					find(secs, "breeding", "Breeds above")
-					.startsWith(pctOf(new Genome().reproFraction)));
+			assertTrue("the womb's share of digestion is the one the body takes",
+					find(secs, "breeding", "Takes").startsWith(pctOf(NPC.WOMB_SHARE)));
 			assertTrue("the born-at fraction is the one the world uses",
 					find(secs, "glycogen", "Founders hold").startsWith(pctOf(TestNPC.FOUNDER_FRACTION)));
 			assertTrue("the tick rate is the one the world runs at",
@@ -8320,15 +8380,20 @@ public class SimTests {
 					sameProgram(calf.getGenome().brain, starter));
 			double born = calf.maturity();
 			boolean ate = false;
-			for (int t = 0; t < 4000 && !calf.isDead(); t++) {
+			// Four days, not two. Each partner now carries its own calf and endows it
+			// alone, where a pair used to pool both endowments into one child; this
+			// founder line endows at a quarter of its store, so its calf is born under
+			// the growth reserve (0.55 of 1.43) and eats for about two and a half
+			// days before it starts to grow.
+			for (int t = 0; t < 8000 && !calf.isDead(); t++) {
 				tick(w, 1);
 				if (calf.totalSwallowed() > 0.5) {
 					ate = true;
 				}
 			}
-			assertTrue("the calf is alive after two days beside its parents", !calf.isDead());
+			assertTrue("the calf is alive after four days beside its parents", !calf.isDead());
 			assertTrue("it has eaten (" + String.format("%.2f swallowed", calf.totalSwallowed()) + ")", ate);
-			// Growth over two days is the calf's meals, which fall where the draw
+			// Growth over four days is the calf's meals, which fall where the draw
 			// puts them: measured +0.008 of adult size when the order bodies run
 			// in changed (ids became a spawn count) and nothing else did, against
 			// a +0.01 bound. Half of that is still growth and not rounding.
@@ -8797,9 +8862,13 @@ public class SimTests {
 			assertEquals("...and no child yet: mating is not instant", start,
 					w.getAliveCount());
 
-			tick(w, 200); // now let it run to term
-            assertGreater("a child arrives once the pair have held station",
-					w.getAliveCount(), start);
+			tick(w, 200); // now let the exchange finish
+			assertTrue("holding station fertilised both wombs", a.pregnant() && b.pregnant());
+			assertEquals("and the young wait for their term", start, w.getAliveCount());
+			fillWombs(w);
+			tick(w, 5);
+			assertEquals("each partner bears a child once its womb is full",
+					start + 2, w.getAliveCount());
 		}
 
 		private TestNPC mater(World w, double x, double y, Mind m) {
@@ -10684,6 +10753,16 @@ public class SimTests {
 				assertTrue("a parched seed " + (threat ? "flees a threat first" : "steers to water"),
 						threat ? seek < 0 && AgentIO.seekTarget(seek) == AgentIO.SEEK_THREAT
 								: seek > 0 && AgentIO.seekTarget(seek) == AgentIO.SEEK_WATER);
+			}
+		}
+	}
+
+	/** Tops up every fertilised womb in {@code w}: for scenarios about what a birth
+	 *  does, not how long a pregnancy takes. */
+	static void fillWombs(World w) {
+		for (Entity e : w.getEntities()) {
+			if (e instanceof TestNPC t && !t.isDead()) {
+				t.fillWomb();
 			}
 		}
 	}
@@ -12744,6 +12823,7 @@ public class SimTests {
 			// is a much longer job than it was, so the boom takes longer to arrive.
 			for (int step = 0; step < 150; step++) {
 				tick(w, 20);
+				fillWombs(w); // the term is not under test: the young and their minds are
 				peak = Math.max(peak, w.getAliveCount());
 				for (Entity e : w.getEntities()) {
 					if (e instanceof net.hedinger.prototype.entities.NPC && !e.isDead()) {
@@ -12975,6 +13055,7 @@ public class SimTests {
 			// crossover the test watches for needs a couple of rounds to appear.
 			for (int step = 0; step < 120; step++) {
 				tick(w, 10);
+				fillWombs(w); // they do not eat, so no womb would fill: the crossover is under test
 				peak = Math.max(peak, w.getAliveCount());
 				recombinant |= hasRecombinantMind(w);
 			}
@@ -23092,6 +23173,7 @@ public class SimTests {
 				new AFlyerAndAWalkerDoNotShoveEachOther(),
 				new AFloorIsSolidToTheTouch(),
 				new ScavengerYoungAreScavengers(),
+				new AWombFillsFromTheGutOnceFertilised(),
 				new ALitterIsBornWholeAndPaidInFull(),
 				new ScavengersDoNotBreedWithGrazers(),
 				new ScavengerHoldsTheCarcassItChose(),

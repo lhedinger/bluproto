@@ -2561,6 +2561,7 @@ public class TestNPC extends NPC {
 	 * at a wall shoved it for good — measured on seed 42, 4.2% of all thirsty
 	 * minded ticks were spent pinned like that, walls with water just beyond. */
 	private void thinkMinded() {
+		deliverIfDue(); // a full womb gives birth, whatever the mind is doing
 		if (mind == null) {
 			return;
 		}
@@ -4042,9 +4043,10 @@ public class TestNPC extends NPC {
 		boolean bred = mateStatus == AgentIO.INTENT_DONE;
 		boolean asexual = genome == null || !genome.isSexual();
 		if (wantsMate && asexual) {
-			// The body's whole answer for an asexual lineage: bud, alone, whenever it
-			// can afford to. It will not court and does not care who is nearby.
-			bred = tryReproduce();
+			// The body's whole answer for an asexual lineage: alone, whenever it can.
+			// It will not court and does not care who is nearby. A womb body is
+			// fertilised here, and its young come when the womb is full.
+			bred = usesWomb() ? fertiliseAlone() : tryReproduce();
 		}
 		// A sexual body has no fallback: with nobody to court it simply waits. That is
 		// what makes the two strategies genuinely different, rather than one being the
@@ -5185,6 +5187,137 @@ public class TestNPC extends NPC {
 		double adult = Niche.of(genome.clade).expressedSize(genome.size);
 		double body = NPC.birthMass(adult, birthFraction());
 		return fat >= n * NPC.fatForBody(body) && glycogen >= Math.max(reproThreshold, n * reproCost());
+	}
+
+	// ---- the womb ------------------------------------------------------------
+
+	/** One young in the womb: its genome, fixed when the womb was fertilised,
+	 *  the share of its adult body it is built at and the milk it is endowed
+	 *  with (its parents' genes, averaged for a pair), its sire, and its depth. */
+	private record Embryo(Genome genome, double share, double milk, int sire, int generation) {
+	}
+
+	/** The young this body carries; empty when the womb is not fertilised. */
+	private final java.util.List<Embryo> embryos = new java.util.ArrayList<>();
+
+	/** Whether this body breeds through a womb: every minded body with a genome
+	 *  and the books to fill one. The scripted fixtures keep the old path. */
+	boolean usesWomb() {
+		return isMinded() && genome != null && metabolic;
+	}
+
+	/** How many young this body carries. */
+	public int embryoCount() {
+		return embryos.size();
+	}
+
+	/** Tops a fertilised womb up to what its young need, for scenarios that test
+	 *  what a birth does and not how long a pregnancy takes. The young are born
+	 *  on the next tick. */
+	public TestNPC fillWomb() {
+		if (wombFertile) {
+			womb = wombCapacity;
+		}
+		return this;
+	}
+
+	/** A womb body can be fertilised whenever it is grown and its womb is empty:
+	 *  age is the only gate. */
+	@Override
+	protected boolean fertile() {
+		if (!usesWomb()) {
+			return super.fertile();
+		}
+		return !isDead() && !isJuvenile() && !wombFertile;
+	}
+
+	/** A courting pair's exchange fertilises both wombs: each carries one young,
+	 *  a crossover of the two, and bears it when its own womb is full. */
+	@Override
+	protected boolean reproduceWith(net.hedinger.prototype.entities.NPC partner) {
+		if (!usesWomb() || !(partner instanceof TestNPC mate) || !mate.usesWomb()) {
+			return super.reproduceWith(partner);
+		}
+		if (!canMateWith(partner)) {
+			return false;
+		}
+		double share = (birthFraction() + mate.birthFraction()) / 2;
+		double milk = (milkShare() + mate.milkShare()) / 2;
+		int gen = Math.max(generation, mate.generation) + 1;
+		conceive(java.util.List.of(new Embryo(Genome.child(genome, mate.genome, genome.mutationRate),
+				share, milk, mate.getID(), gen)));
+		mate.conceive(java.util.List.of(new Embryo(Genome.child(mate.genome, genome, mate.genome.mutationRate),
+				share, milk, getID(), gen)));
+		return true;
+	}
+
+	/** A budder fertilises its own womb: a litter of mutated copies, as many as
+	 *  its lineage bears ({@link #litterSize}). */
+	private boolean fertiliseAlone() {
+		if (!fertile()) {
+			return false;
+		}
+		java.util.List<Embryo> litter = new java.util.ArrayList<>();
+		for (int i = 0; i < litterSize(); i++) {
+			litter.add(new Embryo(Genome.child(genome, genome.mutationRate), birthFraction(), milkShare(),
+					NO_ID, generation + 1));
+		}
+		conceive(litter);
+		return true;
+	}
+
+	/** Fertilises the womb with {@code litter}: what it must hold before they
+	 *  are born is each young's body at its price and its endowment. */
+	private void conceive(java.util.List<Embryo> litter) {
+		embryos.clear();
+		embryos.addAll(litter);
+		double need = 0;
+		for (Embryo e : litter) {
+			need += bodyEnergy(e) + reproCost();
+		}
+		wombCapacity = need;
+		womb = 0;
+		wombFertile = true;
+	}
+
+	/** The energy a young's body costs: the fat that builds it, at fat's density. */
+	private static double bodyEnergy(Embryo e) {
+		double adult = Niche.of(e.genome().clade).expressedSize(e.genome().size);
+		return NPC.fatForBody(NPC.birthMass(adult, e.share())) * NPC.FAT_DENSITY;
+	}
+
+	/** Bears the young once the womb holds what they need. Each is built at its
+	 *  share and endowed out of the womb, in the milk's split; whatever a young
+	 *  cannot hold goes back to its mother's glycogen and then her fat, so the
+	 *  books balance to the penny. No rest follows: the womb can be fertilised
+	 *  again at once. */
+	private void deliverIfDue() {
+		if (!wombFertile || womb < wombCapacity || embryos.isEmpty()) {
+			return;
+		}
+		double left = womb;
+		for (Embryo e : embryos) {
+			Genome childG = e.genome();
+			double adult = Niche.of(childG.clade).expressedSize(childG.size);
+			TestNPC child = brainedBreeder(X, Y, Z, childG);
+			passBodyTraitsTo(child);
+			child.beginGrowth(adult, e.share());
+			child.withGeneration(e.generation());
+			left -= NPC.fatForBody(child.bornMass()) * NPC.FAT_DENSITY;
+			left -= endow(child, Math.min(reproCost(), Math.max(0, left)), e.milk());
+			getWorld().spawnEntity(child);
+			noteBirth(child, getID(), e.sire());
+		}
+		embryos.clear();
+		womb = 0;
+		wombCapacity = 0;
+		wombFertile = false;
+		if (left > 0) {
+			double room = Math.max(0, glycogenCapacity() - glycogen);
+			double toGlycogen = Math.min(left, room);
+			glycogen += toGlycogen;
+			fat += (left - toGlycogen) / NPC.FAT_DENSITY;
+		}
 	}
 
 	@Override

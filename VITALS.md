@@ -175,6 +175,14 @@ Reproduction stops being an energy checkout and becomes a **surplus signal**:
   (`growthTicks`), so big slow bodies are also slow breeders — the same two
   constants that already set growth keep the whole life cycle in proportion.
 
+**Amendment — the womb.** Minded bodies, which is every creature in the
+seeded world, no longer breed off a surplus gate. The mate intent fertilises a
+womb (a budder's alone, both partners' for a pair), age is the only gate, and
+the womb takes `WOMB_SHARE` of each tick's digestion ahead of glycogen and fat
+until it holds each young's body and endowment. Then the young are born, with
+no cooldown. A hungry body fills it slowly and can starve pregnant. The
+eligibility, hold and cooldown above still drive the scripted scenario animals.
+
 ## 7. What changes against today
 
 | today | target |
