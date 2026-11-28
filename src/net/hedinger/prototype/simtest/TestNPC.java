@@ -2691,6 +2691,7 @@ public class TestNPC extends NPC {
 		}
 		s[AgentIO.S_INTENT] = intentStatus; // how last tick's intent went
 		s[AgentIO.S_DEPOSIT] = depositStatus; // and last tick's spray
+		s[AgentIO.S_WOMB] = !wombFertile ? -1 : wombCapacity > 0 ? Math.min(1, womb / wombCapacity) : 0;
 		// What kind of ground to look for is the mind's standing choice, read before
 		// the scan so the channel answers the question actually being asked.
 		tileWanted = AgentIO.tileWanted(actuators[AgentIO.A_TILE]);

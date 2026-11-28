@@ -3616,7 +3616,8 @@ public class SimTests {
 	 * held hungry; and within a few ticks of the birth it is carrying again.
 	 */
 	static class AWombFillsFromTheGutOnceFertilised extends Scenario {
-		/** {ticks to the first birth, womb after 2000 ticks, carrying 5 ticks after the birth}. */
+		/** {ticks to the first birth, womb after 2000 ticks, carrying 5 ticks after the birth,
+		 *  the womb sensor after 2000 ticks}. */
 		private double[] term(boolean ask, double hunger) {
 			seed(157);
 			World w = room(14, 14);
@@ -3627,7 +3628,7 @@ public class SimTests {
 			p.grown().withGlycogen(p.glycogenCapacity());
 			w.spawnEntity(p);
 			w.think();
-			double at2000 = Double.NaN;
+			double at2000 = Double.NaN, sensed = Double.NaN;
 			int born = -1;
 			for (int t = 0; t < 40000 && born < 0; t++) {
 				p.holdHunger(hunger);
@@ -3635,6 +3636,7 @@ public class SimTests {
 				tick(w, 1);
 				if (t == 2000) {
 					at2000 = p.womb();
+					sensed = p.sensorSnapshot()[AgentIO.S_WOMB];
 					if (!ask) {
 						break;
 					}
@@ -3648,13 +3650,14 @@ public class SimTests {
 				tick(w, 5);
 				again = p.pregnant();
 			}
-			return new double[] { born, at2000, again ? 1 : 0 };
+			return new double[] { born, at2000, again ? 1 : 0, sensed };
 		}
 
 		@Override
 		public void run() {
 			double[] idle = term(false, 0.0);
 			assertNear("a womb nobody fertilised stays empty", 0.0, idle[1], 1e-12);
+			assertNear("and the mind reads it as -1", -1.0, idle[3], 1e-12);
 			double[] fed = term(true, 0.0);
 			double[] hungry = term(true, 0.8);
 			assertGreater("a fed body bears", fed[0], 0);
@@ -3662,6 +3665,7 @@ public class SimTests {
 			assertLess("but the fed one in under a third of the hungry one's time (" + (int) fed[0]
 					+ " against " + (int) hungry[0] + " ticks)", fed[0], hungry[0] / 3);
 			assertEquals("and it carries again within a few ticks of the birth: no rest", 1, (int) fed[2]);
+			assertTrue("a mind reads a filling womb between 0 and 1 (" + fed[3] + ")", fed[3] > 0 && fed[3] < 1);
 		}
 	}
 

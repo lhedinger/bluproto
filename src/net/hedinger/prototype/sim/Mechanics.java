@@ -849,7 +849,10 @@ public final class Mechanics {
 						sense(AgentIO.S_DEPOSIT, "How the last spray went, on the same four "
 								+ "values: a pulse the tick a puff was laid, under way while the "
 								+ "actuator is held between puffs, impossible when collapsed, "
-								+ "idle when nothing was asked.")));
+								+ "idle when nothing was asked."),
+						sense(AgentIO.S_WOMB, "The womb: -1 while it is empty, and from "
+								+ "fertilisation how full it is of what the young need, 0 to 1. "
+								+ "A birth empties it back to -1. No seed reads it.")));
 		return s;
 	}
 

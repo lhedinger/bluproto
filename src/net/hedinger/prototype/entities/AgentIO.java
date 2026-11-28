@@ -275,7 +275,15 @@ public final class AgentIO {
 	 * actuator high reads one DONE and then PENDING until the next puff.
 	 */
 	public static final int S_DEPOSIT = 51;
-	public static final int NUM_SENSORS = 52;
+	/**
+	 * The womb: -1 while it is empty and unfertilised, and from fertilisation
+	 * how full it is of what its young need, 0..1. A birth empties it back to
+	 * -1. Read only; no seed reads it, so what a lineage does with it is
+	 * selection's to find -- eat harder while carrying, say, or court only
+	 * when it is empty.
+	 */
+	public static final int S_WOMB = 52;
+	public static final int NUM_SENSORS = 53;
 	public static final String[] SENSOR_NAMES = {
 			"bias", "glycogen", "food", "phero", "near_prox", "near_bearing",
 			"near_sim", "near_sizeadv", "clock", "blocked",
@@ -287,7 +295,7 @@ public final class AgentIO {
 			"thirst", "water_prox", "water_bearing", "hunger",
 			"sound_prox", "sound_bearing", "near_clade", "sound_fwd", "sound_side",
 			"sound_kind", "ridden", "sound_clade", "sound_kin", "sound_call", "on_tile",
-			"bigger_prox", "bigger_bearing", "light", "humid", "warmth", "deposit" };
+			"bigger_prox", "bigger_bearing", "light", "humid", "warmth", "deposit", "womb" };
 
 	// ---- actuators (mind -> body) -----------------------------------------
 	/** Read no longer: the body steers itself, at a target it can see, along
